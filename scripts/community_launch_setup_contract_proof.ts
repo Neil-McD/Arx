@@ -24,9 +24,15 @@ function assertToolSchemaRequiresEveryProperty(value: unknown, label: string) {
   );
   const schema = value as Record<string, unknown>;
   assert.equal(schema.type, "object", `${label} schema must be an object`);
-  assert.equal(schema.additionalProperties, false, `${label} must reject extra top-level args`);
+  assert.equal(
+    schema.additionalProperties,
+    false,
+    `${label} must reject extra top-level args`,
+  );
   const properties =
-    schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+    schema.properties &&
+    typeof schema.properties === "object" &&
+    !Array.isArray(schema.properties)
       ? (schema.properties as Record<string, unknown>)
       : null;
   assert.ok(properties, `${label} must define properties`);
@@ -46,33 +52,58 @@ const convexSchema = read("convex/schema.ts");
 const launchQuery = read("convex/communityLaunchSetup.ts");
 const communityBarrel = read("convex/community.ts");
 const workflowImports = read("convex/communityWorkflowImports.ts");
-const workflowImportTools = read("shared/communityWorkflowImportToolProtocol.ts");
+const workflowImportTools = read(
+  "shared/communityWorkflowImportToolProtocol.ts",
+);
 const workflowImportPrompt = read("shared/communityWorkflowImportPrompt.ts");
-const workflowImportHarnessProfiles = read("shared/communityWorkflowImportHarnessProfiles.ts");
+const workflowImportHarnessProfiles = read(
+  "shared/communityWorkflowImportHarnessProfiles.ts",
+);
 const workflowExportPackage = read("shared/communityWorkflowExportPackage.ts");
-const workflowImportCandidateIds = read("shared/communityWorkflowImportCandidateIds.ts");
-const workflowImportCatalogResolver = read("shared/communityWorkflowImportCatalogResolver.ts");
-const workflowImportRepositoryIdentity = read("shared/communityWorkflowImportRepositoryIdentity.ts");
-const workflowImportReviewProjection = read("shared/communityWorkflowImportReviewProjection.ts");
+const workflowImportCandidateIds = read(
+  "shared/communityWorkflowImportCandidateIds.ts",
+);
+const workflowImportCatalogResolver = read(
+  "shared/communityWorkflowImportCatalogResolver.ts",
+);
+const workflowImportMcpRegistry = read(
+  "shared/communityWorkflowImportMcpRegistry.ts",
+);
+const workflowImportRepositoryIdentity = read(
+  "shared/communityWorkflowImportRepositoryIdentity.ts",
+);
+const workflowImportReviewProjection = read(
+  "shared/communityWorkflowImportReviewProjection.ts",
+);
 const discoverCatalog = read("shared/discoverCatalog.ts");
 const effectiveSkills = read("shared/effectiveSkills.ts");
 const cloudEffectiveSkillGateway = read("shared/cloudEffectiveSkillGateway.ts");
 const harnessSkills = read("convex/harnessSkills.ts");
-const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
-const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
-const integrationsSettingsSection = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
-const harnessImportSources = read("apps/web/src/lib/communityHarnessImportSources.ts");
+const setupCard = read(
+  "apps/web/src/components/WebCommunityLaunchSetupCard.tsx",
+);
+const setupModal = read(
+  "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
+);
+const integrationsSettingsSection = read(
+  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+);
+const harnessImportSources = read(
+  "apps/web/src/lib/communityHarnessImportSources.ts",
+);
 const baseCss = read("apps/web/src/base.css");
 const appShell = read("apps/web/src/App.tsx");
-const shellChromeHostProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
-const mobileShellController = read("apps/web/src/controllers/useWebMobileShellController.ts");
+const shellChromeHostProps = read(
+  "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
+);
+const mobileShellController = read(
+  "apps/web/src/controllers/useWebMobileShellController.ts",
+);
 const workspaceLandingProjection = read(
   "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
 );
 
-function buildWorkflowExportZip(
-  files: Record<string, string>,
-): Uint8Array {
+function buildWorkflowExportZip(files: Record<string, string>): Uint8Array {
   return zipSync(
     Object.fromEntries(
       Object.entries(files).map(([path, value]) => [path, strToU8(value)]),
@@ -136,7 +167,8 @@ const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
             portableToPolynet: true,
             classification: "needs_auth",
             recommendedPolynetAction: "create_mount_needs_auth",
-            reason: "Remote MCP endpoint exists, but PolyNet must authorize independently.",
+            reason:
+              "Remote MCP endpoint exists, but PolyNet must authorize independently.",
           },
           runtimeValidationHints: {
             expectedToolNames: ["search_repositories"],
@@ -164,7 +196,9 @@ const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
       visibility: "public",
       recommendedNextStep: "connect_public_github",
     }),
-    "evidence.json": JSON.stringify([{ source: "skills/frontend-skill/SKILL.md" }]),
+    "evidence.json": JSON.stringify([
+      { source: "skills/frontend-skill/SKILL.md" },
+    ]),
   }),
   {
     communityId: "community_123",
@@ -176,7 +210,11 @@ const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
 
 assert.equal(validWorkflowExportPackage.summary.skill_count, 1);
 assert.equal(validWorkflowExportPackage.summary.mcp_count, 1);
-const validWorkflowExportMcp = (validWorkflowExportPackage.ledger.mcp_servers as Array<Record<string, unknown>>)[0];
+const validWorkflowExportMcp = (
+  validWorkflowExportPackage.ledger.mcp_servers as Array<
+    Record<string, unknown>
+  >
+)[0];
 assert.deepEqual(
   {
     sourceHarness: validWorkflowExportMcp?.sourceHarness,
@@ -208,46 +246,104 @@ assert.deepEqual(
       portableToPolynet: true,
       classification: "needs_auth",
       recommendedPolynetAction: "create_mount_needs_auth",
-      reason: "Remote MCP endpoint exists, but PolyNet must authorize independently.",
+      reason:
+        "Remote MCP endpoint exists, but PolyNet must authorize independently.",
     },
   },
   "workflow export package parser must preserve nested MCP portability records for downstream registry matching",
 );
 assert.equal(
-  (validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
-    ?.proposedInstructionsMd,
+  (
+    validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>
+  )[0]?.proposedInstructionsMd,
   "# Frontend Skill\n\nUse this complete standalone behavior to review and improve frontend work in PolyNet communities.",
 );
 assert.match(
-  String((validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]?.bodySha256 ?? ""),
+  String(
+    (
+      validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>
+    )[0]?.bodySha256 ?? "",
+  ),
   /^[a-f0-9]{64}$/,
   "workflow export package parser must stamp imported skill bodies with a server-computed sha256 identity",
 );
-const inferredSupabaseCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
-  name: "Supabase",
-  record: {
-    name: "supabase",
-    providerName: "Supabase",
-    packageName: "@supabase/mcp-server-supabase",
-    command: "npx",
-  },
-});
+const inferredSupabaseCatalogMatch =
+  resolveCommunityWorkflowImportMcpCatalogMatch({
+    name: "Supabase",
+    record: {
+      name: "supabase",
+      providerName: "Supabase",
+      packageName: "@supabase/mcp-server-supabase",
+      command: "npx",
+    },
+  });
 assert.deepEqual(
   {
     catalogAppId: inferredSupabaseCatalogMatch.catalogAppId,
+    registryId: inferredSupabaseCatalogMatch.registryId,
     endpointUrl: inferredSupabaseCatalogMatch.endpointUrl,
     authType: inferredSupabaseCatalogMatch.authType,
     connectable: inferredSupabaseCatalogMatch.connectable,
+    status: inferredSupabaseCatalogMatch.status,
+    matchedBy: inferredSupabaseCatalogMatch.matchedBy,
   },
   {
     catalogAppId: "supabase",
+    registryId: "supabase",
     endpointUrl: "https://mcp.supabase.com/mcp",
     authType: "bearer",
     connectable: true,
+    status: "ready",
+    matchedBy: "package",
   },
   "workflow import catalog resolver must make vetted Supabase candidates mountable without explicit ledger catalog ids",
 );
-const inferredGitHubCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+const inferredGitHubCatalogMatch =
+  resolveCommunityWorkflowImportMcpCatalogMatch({
+    name: "Imported MCP",
+    record: {
+      officialConnection: {
+        remoteEndpoint: "https://api.githubcopilot.com/mcp/readonly",
+        remoteTransport: "streamable_http",
+        requiredSecretNames: ["GITHUB_TOKEN"],
+        requiredConfigParams: ["owner"],
+      },
+      portability: {
+        classification: "needs_auth",
+      },
+    },
+  });
+assert.deepEqual(
+  {
+    catalogAppId: inferredGitHubCatalogMatch.catalogAppId,
+    registryId: inferredGitHubCatalogMatch.registryId,
+    endpointUrl: inferredGitHubCatalogMatch.endpointUrl,
+    authType: inferredGitHubCatalogMatch.authType,
+    connectable: inferredGitHubCatalogMatch.connectable,
+    status: inferredGitHubCatalogMatch.status,
+    matchedBy: inferredGitHubCatalogMatch.matchedBy,
+    remoteTransport: inferredGitHubCatalogMatch.remoteTransport,
+    requiredSecretNames: inferredGitHubCatalogMatch.requiredSecretNames,
+    requiredConfigParams: inferredGitHubCatalogMatch.requiredConfigParams,
+    portabilityClassification:
+      inferredGitHubCatalogMatch.portabilityClassification,
+  },
+  {
+    catalogAppId: "github",
+    registryId: "github",
+    endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
+    authType: "bearer",
+    connectable: true,
+    status: "ready",
+    matchedBy: "endpoint_host",
+    remoteTransport: "streamable_http",
+    requiredSecretNames: ["GITHUB_TOKEN"],
+    requiredConfigParams: ["owner"],
+    portabilityClassification: "needs_auth",
+  },
+  "workflow import catalog resolver must match GitHub only through exact known endpoint hosts or aliases",
+);
+const flatGitHubCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
   name: "Imported MCP",
   record: {
     endpoint_url: "https://api.githubcopilot.com/mcp/readonly",
@@ -255,42 +351,69 @@ const inferredGitHubCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch
 });
 assert.deepEqual(
   {
-    catalogAppId: inferredGitHubCatalogMatch.catalogAppId,
-    endpointUrl: inferredGitHubCatalogMatch.endpointUrl,
-    authType: inferredGitHubCatalogMatch.authType,
-    connectable: inferredGitHubCatalogMatch.connectable,
+    catalogAppId: flatGitHubCatalogMatch.catalogAppId,
+    registryId: flatGitHubCatalogMatch.registryId,
+    connectable: flatGitHubCatalogMatch.connectable,
+    matchedBy: flatGitHubCatalogMatch.matchedBy,
   },
   {
     catalogAppId: "github",
-    endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
-    authType: "bearer",
+    registryId: "github",
     connectable: true,
+    matchedBy: "endpoint_host",
   },
-  "workflow import catalog resolver must match GitHub only through exact known endpoint hosts or aliases",
+  "workflow import catalog resolver must keep old flat MCP endpoint records compatible",
 );
-const inferredVercelCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
-  name: "Vercel",
-  record: {
-    endpoint_url: "https://mcp.vercel.com",
-  },
-});
+const inferredVercelCatalogMatch =
+  resolveCommunityWorkflowImportMcpCatalogMatch({
+    name: "Vercel",
+    record: {
+      endpoint_url: "https://mcp.vercel.com",
+    },
+  });
 assert.equal(
   inferredVercelCatalogMatch.catalogAppId,
   "vercel",
   "workflow import catalog resolver must recognize Vercel catalog identity",
 );
 assert.equal(
+  inferredVercelCatalogMatch.status,
+  "needs_auth",
+  "workflow import catalog resolver must keep Vercel classified as auth-blocked until the catalog connection is ready",
+);
+assert.equal(
   inferredVercelCatalogMatch.connectable,
   false,
   "workflow import catalog resolver must keep recognized catalog apps manual until the catalog connection profile is ready",
 );
-const fakeGitHubProxyCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
-  name: "Imported proxy",
-  record: {
-    endpoint_url: "https://example.com/github-proxy",
-    sourceUrl: "https://github.com/modelcontextprotocol/server-github",
+const genericCatalogEndpointMatch =
+  resolveCommunityWorkflowImportMcpCatalogMatch({
+    name: "Imported MCP",
+    record: {
+      endpoint_url: "https://mcp.linear.app/mcp",
+    },
+  });
+assert.deepEqual(
+  {
+    catalogAppId: genericCatalogEndpointMatch.catalogAppId,
+    connectable: genericCatalogEndpointMatch.connectable,
+    matchedBy: genericCatalogEndpointMatch.matchedBy,
   },
-});
+  {
+    catalogAppId: "linear",
+    connectable: true,
+    matchedBy: "endpoint_host",
+  },
+  "workflow import catalog resolver must preserve exact Discover endpoint matching for catalog apps that are not yet in the MCP registry",
+);
+const fakeGitHubProxyCatalogMatch =
+  resolveCommunityWorkflowImportMcpCatalogMatch({
+    name: "Imported proxy",
+    record: {
+      endpoint_url: "https://example.com/github-proxy",
+      sourceUrl: "https://github.com/modelcontextprotocol/server-github",
+    },
+  });
 assert.equal(
   fakeGitHubProxyCatalogMatch.catalogAppId,
   null,
@@ -301,18 +424,44 @@ assert.equal(
   false,
   "workflow import catalog resolver must leave fake GitHub-looking endpoints manual",
 );
-const localContext7CatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
-  name: "Context7",
-  record: {
-    name: "context7",
-    packageName: "@upstash/context7-mcp",
-    command: "npx",
+const unrelatedOfficialGitHubSourceCatalogMatch =
+  resolveCommunityWorkflowImportMcpCatalogMatch({
+    name: "Imported MCP",
+    record: {
+      officialIdentity: {
+        sourceUrl: "https://github.com/example/not-the-github-mcp-server",
+      },
+    },
+  });
+assert.equal(
+  unrelatedOfficialGitHubSourceCatalogMatch.catalogAppId,
+  null,
+  "workflow import catalog resolver must not match official source URLs by broad repository host alone",
+);
+const localContext7CatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch(
+  {
+    name: "Context7",
+    record: {
+      name: "context7",
+      packageName: "@upstash/context7-mcp",
+      command: "npx",
+    },
   },
-});
+);
 assert.equal(
   localContext7CatalogMatch.connectable,
   false,
   "workflow import catalog resolver must keep non-catalog local MCP candidates out of automatic mounting",
+);
+assert.equal(
+  localContext7CatalogMatch.registryId,
+  "context7",
+  "workflow import catalog resolver must still classify known non-catalog MCP candidates by registry identity",
+);
+assert.equal(
+  localContext7CatalogMatch.status,
+  "needs_config",
+  "workflow import catalog resolver must explain why recognized non-catalog MCP candidates stay manual",
 );
 assert.equal(
   localContext7CatalogMatch.reviewLogoUrl,
@@ -331,6 +480,16 @@ assert.equal(
   "workflow import catalog resolver must not auto-connect Fly from local CLI shape",
 );
 assert.equal(
+  localFlyCatalogMatch.registryId,
+  "fly",
+  "workflow import catalog resolver must classify local CLI MCP shapes without turning them into catalog apps",
+);
+assert.equal(
+  localFlyCatalogMatch.status,
+  "needs_runtime",
+  "workflow import catalog resolver must mark local CLI MCP shapes as runtime-blocked",
+);
+assert.equal(
   localFlyCatalogMatch.reviewLogoUrl,
   "/app-logos/fly-light.svg",
   "workflow import catalog resolver may provide Fly review-only logos while keeping it manual",
@@ -340,10 +499,16 @@ const rankedSkillFiles: Record<string, string> = {
   "manifest.json": JSON.stringify({
     schemaVersion: "polynet_workflow_export_v1",
     sourceHarness: "Codex",
-    summary: { name: "Ranked Codex skill surface", purpose: "Import the most relevant actual skills" },
+    summary: {
+      name: "Ranked Codex skill surface",
+      purpose: "Import the most relevant actual skills",
+    },
     scanSummary: {
       searchedLocations: ["~/.codex/skills", "~/.codex/plugins/cache"],
-      skillSearchLocations: ["~/.codex/skills/**/SKILL.md", "~/.codex/plugins/cache/**/skills/**/SKILL.md"],
+      skillSearchLocations: [
+        "~/.codex/skills/**/SKILL.md",
+        "~/.codex/plugins/cache/**/skills/**/SKILL.md",
+      ],
       skillLikeItemsSeen: 85,
       selectedSkillCandidates: 30,
       packagedSkillLimit: 30,
@@ -359,9 +524,10 @@ for (let index = 0; index < 30; index += 1) {
   rankedSkillFiles[`skills/${slug}/metadata.json`] = JSON.stringify({
     name: `Codex Skill ${index + 1}`,
     originKind: index < 2 ? "existing_skill_file" : "plugin_skill",
-    sourcePath: index < 2
-      ? `/Users/neilmcdevitt/.codex/skills/${slug}/SKILL.md`
-      : `/Users/neilmcdevitt/.codex/plugins/cache/plugin/skills/${slug}/SKILL.md`,
+    sourcePath:
+      index < 2
+        ? `/Users/neilmcdevitt/.codex/skills/${slug}/SKILL.md`
+        : `/Users/neilmcdevitt/.codex/plugins/cache/plugin/skills/${slug}/SKILL.md`,
     bodyExtraction: "copied_exact",
     isActualHarnessSkill: true,
     shouldDefaultImport: index < 2,
@@ -388,13 +554,18 @@ await assert.rejects(
         "skills/extra/metadata.json": JSON.stringify({
           name: "Extra Skill",
           originKind: "plugin_skill",
-          sourcePath: "/Users/neilmcdevitt/.codex/plugins/cache/plugin/skills/extra/SKILL.md",
+          sourcePath:
+            "/Users/neilmcdevitt/.codex/plugins/cache/plugin/skills/extra/SKILL.md",
           bodyExtraction: "copied_exact",
           isActualHarnessSkill: true,
           shouldDefaultImport: false,
         }),
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_too_many_skills/,
 );
@@ -402,10 +573,16 @@ await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
       buildWorkflowExportZip({
-        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "manifest.json": JSON.stringify({
+          schemaVersion: "polynet_workflow_export_v1",
+        }),
         "../evil.txt": "bad",
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_relative_path_rejected|workflow_export_unexpected_path/,
 );
@@ -413,10 +590,16 @@ await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
       buildWorkflowExportZip({
-        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "manifest.json": JSON.stringify({
+          schemaVersion: "polynet_workflow_export_v1",
+        }),
         ".env": "SECRET=value",
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_junk_path_rejected|workflow_export_unexpected_path/,
 );
@@ -424,14 +607,21 @@ await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
       buildWorkflowExportZip({
-        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "manifest.json": JSON.stringify({
+          schemaVersion: "polynet_workflow_export_v1",
+        }),
         "checksums.json": JSON.stringify({
           sha256: {
-            "manifest.json": "0000000000000000000000000000000000000000000000000000000000000000",
+            "manifest.json":
+              "0000000000000000000000000000000000000000000000000000000000000000",
           },
         }),
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_checksum_mismatch:manifest\.json/,
 );
@@ -441,7 +631,11 @@ await assert.rejects(
       buildWorkflowExportZip({
         "manifest.json": JSON.stringify({ sourceHarness: "Codex" }),
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_schema_version_required/,
 );
@@ -449,44 +643,69 @@ await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
       buildWorkflowExportZip({
-        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "manifest.json": JSON.stringify({
+          schemaVersion: "polynet_workflow_export_v1",
+        }),
         "mcp/servers.json": JSON.stringify({
           mcpServers: Array.from({ length: 101 }, (_, index) => ({
             name: `MCP ${index + 1}`,
           })),
         }),
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_too_many_mcp_servers/,
 );
-const oversizedWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
-  buildWorkflowExportZip({
-    "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
-    "skills/big/SKILL.md": "A".repeat(41_000),
-    "skills/big/metadata.json": JSON.stringify({ name: "Big Skill" }),
-  }),
-  { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
-);
+const oversizedWorkflowExportPackage =
+  await parseCommunityWorkflowExportPackage(
+    buildWorkflowExportZip({
+      "manifest.json": JSON.stringify({
+        schemaVersion: "polynet_workflow_export_v1",
+      }),
+      "skills/big/SKILL.md": "A".repeat(41_000),
+      "skills/big/metadata.json": JSON.stringify({ name: "Big Skill" }),
+    }),
+    {
+      communityId: "community_123",
+      builderUserId: "user_123",
+      sourceHarness: "Codex",
+    },
+  );
 assert.equal(oversizedWorkflowExportPackage.summary.oversized_skill_count, 1);
 assert.equal(
-  (oversizedWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
-    ?.proposedInstructionsMd,
+  (
+    oversizedWorkflowExportPackage.ledger.skills as Array<
+      Record<string, unknown>
+    >
+  )[0]?.proposedInstructionsMd,
   undefined,
 );
 assert.equal(
-  (oversizedWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
-    ?.bodyTooLarge,
+  (
+    oversizedWorkflowExportPackage.ledger.skills as Array<
+      Record<string, unknown>
+    >
+  )[0]?.bodyTooLarge,
   true,
 );
 await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
       buildWorkflowExportZip({
-        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "manifest.json": JSON.stringify({
+          schemaVersion: "polynet_workflow_export_v1",
+        }),
         "skills/huge/SKILL.md": "A".repeat(121_000),
       }),
-      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+      {
+        communityId: "community_123",
+        builderUserId: "user_123",
+        sourceHarness: "Codex",
+      },
     ),
   /workflow_export_skill_file_too_large:huge/,
 );
@@ -529,12 +748,18 @@ const draftStatus = buildCommunityLaunchSetupStatus({
 assert.equal(draftStatus.current_step, "profile");
 assert.equal(draftStatus.completed, false);
 assert.equal(draftStatus.total_items, 11);
-assert.equal(draftStatus.steps.find((step) => step.step === "access")?.completed, true);
-assert.equal(draftStatus.steps.find((step) => step.step === "publish")?.completed, false);
-assert.deepEqual(draftStatus.steps.find((step) => step.step === "knowledge")?.missing, [
-  "community_knowledge_material",
-  "community_knowledge_published",
-]);
+assert.equal(
+  draftStatus.steps.find((step) => step.step === "access")?.completed,
+  true,
+);
+assert.equal(
+  draftStatus.steps.find((step) => step.step === "publish")?.completed,
+  false,
+);
+assert.deepEqual(
+  draftStatus.steps.find((step) => step.step === "knowledge")?.missing,
+  ["community_knowledge_material", "community_knowledge_published"],
+);
 
 const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   name: "Operators",
@@ -594,12 +819,16 @@ const stagedKnowledgeStatus = buildCommunityLaunchSetupStatus({
   entryPolicy: "approval",
   visibility: "published",
 });
-const stagedKnowledgeStep = stagedKnowledgeStatus.steps.find((step) => step.step === "knowledge");
+const stagedKnowledgeStep = stagedKnowledgeStatus.steps.find(
+  (step) => step.step === "knowledge",
+);
 assert.equal(stagedKnowledgeStatus.current_step, "knowledge");
 assert.equal(stagedKnowledgeStep?.completed, false);
 assert.equal(stagedKnowledgeStep?.completed_items, 1);
 assert.equal(stagedKnowledgeStep?.total_items, 2);
-assert.deepEqual(stagedKnowledgeStep?.missing, ["community_knowledge_published"]);
+assert.deepEqual(stagedKnowledgeStep?.missing, [
+  "community_knowledge_published",
+]);
 
 const paidWithoutPriceStatus = buildCommunityLaunchSetupStatus({
   name: "Operators",
@@ -617,7 +846,11 @@ const paidWithoutPriceStatus = buildCommunityLaunchSetupStatus({
 });
 assert.equal(paidWithoutPriceStatus.current_step, "access");
 assert.equal(paidWithoutPriceStatus.completed, false);
-assert.equal(paidWithoutPriceStatus.steps.find((step) => step.step === "access")?.completed, false);
+assert.equal(
+  paidWithoutPriceStatus.steps.find((step) => step.step === "access")
+    ?.completed,
+  false,
+);
 
 const completeStatus = buildCommunityLaunchSetupStatus({
   name: "Operators",
@@ -1263,7 +1496,10 @@ assert.match(
   "workflow import analysis agent must expose exactly the simple read, search, write, and finish tool surface",
 );
 for (const tool of buildCommunityWorkflowImportFunctionTools()) {
-  assertToolSchemaRequiresEveryProperty(tool.parameters, `workflow import tool ${tool.name}`);
+  assertToolSchemaRequiresEveryProperty(
+    tool.parameters,
+    `workflow import tool ${tool.name}`,
+  );
 }
 assert.match(
   workflowImports,
@@ -1292,12 +1528,27 @@ assert.match(
 );
 assert.match(
   workflowImports,
-  /resolveCommunityWorkflowImportMcpCatalogMatch[\s\S]*buildWorkflowImportMcpApplyPlanItems[\s\S]*catalogMatch\.connectable[\s\S]*api\.community\.connectCommunityApp[\s\S]*needs_manual_setup/,
+  /resolveCommunityWorkflowImportMcpCatalogMatch[\s\S]*buildWorkflowImportMcpApplyPlanItems[\s\S]*catalogMatch\.connectable[\s\S]*api\.community\.connectCommunityApp[\s\S]*buildWorkflowImportMcpMountedOutcome/,
   "workflow import apply must auto-connect vetted catalog-matched MCPs and leave unknown or non-ready MCPs for manual setup",
 );
 assert.match(
+  workflowImports,
+  /buildWorkflowImportMcpMountedOutcome[\s\S]*personal_seed_result[\s\S]*communityMountLiveStatus[\s\S]*personalHarnessLiveStatus[\s\S]*existingMemberSeedScheduled/,
+  "workflow import MCP apply outcomes must preserve community mount, personal harness seed, and member seed diagnostics",
+);
+assert.match(
+  workflowImports,
+  /const hadExistingEnabledGrant[\s\S]*api\.community\.connectCommunityApp[\s\S]*buildWorkflowImportMcpMountedOutcome/,
+  "workflow import MCP apply must rerun the canonical connect path for existing mounts so personal harness seeding is verified",
+);
+assert.match(
+  workflowImports,
+  /mcp_mounted[\s\S]*mcp_seeded_into_personal_harness[\s\S]*mcp_live_in_personal_harness/,
+  "workflow import apply summary must distinguish mounted MCPs from personal-harness-live MCPs",
+);
+assert.match(
   workflowImportCatalogResolver,
-  /DISCOVER_APP_ALIASES[\s\S]*github[\s\S]*supabase[\s\S]*resolveCommunityWorkflowImportMcpCatalogMatch[\s\S]*connectable[\s\S]*No vetted PolyNet catalog app matched/,
+  /COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY[\s\S]*findRegistryMatch[\s\S]*resolveCommunityWorkflowImportMcpCatalogMatch[\s\S]*connectable[\s\S]*No vetted PolyNet catalog app matched/,
   "workflow import catalog resolver must centralize vetted MCP identity matching for review and apply paths",
 );
 assert.match(
@@ -1387,20 +1638,32 @@ assert.match(
 );
 assert.match(
   workflowImportReviewProjection,
-  /catalogAppId[\s\S]*endpointUrl[\s\S]*authType[\s\S]*instructionsMd/,
+  /catalogAppId[\s\S]*endpointUrl[\s\S]*authType[\s\S]*mcpRegistryId[\s\S]*mcpStatus[\s\S]*instructionsMd/,
   "launch workflow review projection must expose server-usable MCP and skill apply metadata from the sanitized ledger",
 );
 assert.match(
+  workflowImportMcpRegistry,
+  /COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY[\s\S]*github[\s\S]*supabase[\s\S]*context7[\s\S]*fly-light[\s\S]*needs_runtime/,
+  "launch workflow MCP registry must classify vetted and review-only MCP candidates without relying on Discover alone",
+);
+assert.doesNotMatch(
+  workflowImportMcpRegistry,
+  /endpointUrl|authType|logoUrlDark|id: "workos"|id: "posthog"|id: "sentry"|id: "convex"/,
+  "launch workflow MCP registry must not duplicate Discover connection authority or carry no-value unknown rows",
+);
+assert.match(
   workflowImportCatalogResolver,
-  /DISCOVER_APP_ALIASES[\s\S]*REVIEW_ONLY_LOGO_ALIASES[\s\S]*context7[\s\S]*fly-light[\s\S]*logoUrlDark \?\? app\.logoUrl/,
-  "launch workflow catalog resolver must prefer light-on-dark catalog logos and support review-only known MCP aliases",
+  /getReviewCatalogLogoUrl[\s\S]*logoUrlDark \?\? app\.logoUrl[\s\S]*getReviewRegistryLogoUrl[\s\S]*reviewLogoUrl/,
+  "launch workflow catalog resolver must prefer catalog light-on-dark logos and explicit review-only registry logos",
 );
 const reviewCatalogMatcher =
-  workflowImportCatalogResolver.match(/function catalogCandidatesFromRecord[\s\S]*?function reviewLogoCandidatesFromRecord/)?.[0] ?? "";
+  workflowImportCatalogResolver.match(
+    /function catalogCandidatesFromRecord[\s\S]*?function readSourceTransport/,
+  )?.[0] ?? "";
 assert.doesNotMatch(
   reviewCatalogMatcher,
-  /docsUrl|websiteUrl|packageUrl|sourceUrl/,
-  "launch workflow catalog matching must not bind unknown MCPs to catalog apps just because evidence links live on GitHub or another app host",
+  /readRecordString\(record, \["docsUrl|readRecordString\(record, \["sourceUrl|websiteUrl/,
+  "launch workflow catalog matching must not bind unknown MCPs to catalog apps from flat evidence links",
 );
 assert.doesNotMatch(
   workflowImportCatalogResolver,
@@ -1409,8 +1672,8 @@ assert.doesNotMatch(
 );
 assert.match(
   workflowImportCatalogResolver,
-  /looksLikeEndpointHostInput[\s\S]*readEndpointHost[\s\S]*DISCOVER_APP_ID_BY_ENDPOINT_HOST[\s\S]*findCatalogAppForCandidate/,
-  "launch workflow catalog resolver must treat parsed endpoint hosts as a separate exact-match authority path",
+  /looksLikeEndpointHostInput[\s\S]*readEndpointHost[\s\S]*REGISTRY_BY_ENDPOINT_HOST[\s\S]*findRegistryEntryForCandidate/,
+  "launch workflow catalog resolver must treat parsed endpoint hosts as a separate exact-match registry authority path",
 );
 assert.match(
   workflowImportReviewProjection,
@@ -1551,7 +1814,11 @@ for (const logoPath of [
   "apps/web/public/harness-logos/gemini-cli.svg",
   "apps/web/public/harness-logos/antigravity.svg",
 ]) {
-  assert.equal(existsSync(logoPath), true, `missing harness logo asset: ${logoPath}`);
+  assert.equal(
+    existsSync(logoPath),
+    true,
+    `missing harness logo asset: ${logoPath}`,
+  );
 }
 for (const logoPath of [
   "apps/web/public/app-logos/github-light.svg",
@@ -1559,7 +1826,11 @@ for (const logoPath of [
   "apps/web/public/app-logos/context7.svg",
   "apps/web/public/app-logos/fly-light.svg",
 ]) {
-  assert.equal(existsSync(logoPath), true, `missing workflow import review logo asset: ${logoPath}`);
+  assert.equal(
+    existsSync(logoPath),
+    true,
+    `missing workflow import review logo asset: ${logoPath}`,
+  );
 }
 assert.match(
   discoverCatalog,

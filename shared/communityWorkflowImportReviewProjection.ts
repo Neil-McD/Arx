@@ -5,6 +5,7 @@ import {
   buildCommunityWorkflowImportSkillReviewItemId,
 } from "./communityWorkflowImportCandidateIds";
 import { resolveCommunityWorkflowImportMcpCatalogMatch } from "./communityWorkflowImportCatalogResolver";
+import type { CommunityWorkflowImportMcpRegistryStatus } from "./communityWorkflowImportMcpRegistry";
 import { buildCommunityWorkflowImportRepositoryIdentity } from "./communityWorkflowImportRepositoryIdentity";
 
 export type CommunityWorkflowImportReviewItem = {
@@ -19,6 +20,15 @@ export type CommunityWorkflowImportReviewItem = {
   catalogAppId?: string | null;
   endpointUrl?: string | null;
   authType?: DeveloperAppAuthType | null;
+  mcpRegistryId?: string | null;
+  mcpStatus?: CommunityWorkflowImportMcpRegistryStatus | null;
+  mcpMatchedBy?: string | null;
+  mcpReason?: string | null;
+  mcpSourceTransport?: string | null;
+  mcpRemoteTransport?: string | null;
+  mcpRequiredSecretNames?: string[];
+  mcpRequiredConfigParams?: string[];
+  mcpPortabilityClassification?: string | null;
   instructionsMd?: string | null;
   bodySha256?: string | null;
   repositoryUrl?: string | null;
@@ -43,30 +53,66 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function readRecordString(record: Record<string, unknown>, keys: string[]): string {
+function readRecordString(
+  record: Record<string, unknown>,
+  keys: string[],
+): string {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (typeof value === "number" || typeof value === "boolean")
+      return String(value);
   }
   return "";
 }
 
-function readRecordBooleanish(record: Record<string, unknown>, keys: string[]): boolean | null {
+function readNestedRecord(
+  record: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (isPlainObject(value)) return value;
+  }
+  return null;
+}
+
+function readNestedRecordString(
+  record: Record<string, unknown>,
+  parentKeys: string[],
+  keys: string[],
+): string {
+  const parent = readNestedRecord(record, parentKeys);
+  return parent ? readRecordString(parent, keys) : "";
+}
+
+function readRecordBooleanish(
+  record: Record<string, unknown>,
+  keys: string[],
+): boolean | null {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "boolean") return value;
     if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
     if (typeof value === "string" && value.trim()) {
       const normalized = value.trim().toLowerCase();
-      if (["true", "yes", "y", "1", "default", "selected"].includes(normalized)) return true;
-      if (["false", "no", "n", "0", "manual", "off", "review"].includes(normalized)) return false;
+      if (["true", "yes", "y", "1", "default", "selected"].includes(normalized))
+        return true;
+      if (
+        ["false", "no", "n", "0", "manual", "off", "review"].includes(
+          normalized,
+        )
+      )
+        return false;
     }
   }
   return null;
 }
 
-function readRecordArray(record: Record<string, unknown>, keys: string[]): unknown[] {
+function readRecordArray(
+  record: Record<string, unknown>,
+  keys: string[],
+): unknown[] {
   for (const key of keys) {
     const value = record[key];
     if (Array.isArray(value)) return value;
@@ -74,7 +120,10 @@ function readRecordArray(record: Record<string, unknown>, keys: string[]): unkno
   return [];
 }
 
-function readRecordNumber(record: Record<string, unknown>, keys: string[]): number | null {
+function readRecordNumber(
+  record: Record<string, unknown>,
+  keys: string[],
+): number | null {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -86,7 +135,10 @@ function readRecordNumber(record: Record<string, unknown>, keys: string[]): numb
   return null;
 }
 
-function readRecordListText(record: Record<string, unknown>, keys: string[]): string {
+function readRecordListText(
+  record: Record<string, unknown>,
+  keys: string[],
+): string {
   const parts: string[] = [];
   for (const key of keys) {
     const value = record[key];
@@ -97,7 +149,13 @@ function readRecordListText(record: Record<string, unknown>, keys: string[]): st
         if (typeof item === "string" && item.trim()) {
           parts.push(item.trim());
         } else if (isPlainObject(item)) {
-          const itemText = readRecordString(item, ["title", "name", "path", "location", "summary"]);
+          const itemText = readRecordString(item, [
+            "title",
+            "name",
+            "path",
+            "location",
+            "summary",
+          ]);
           if (itemText) parts.push(itemText);
         }
       }
@@ -131,17 +189,57 @@ function isLikelyActualSkillSource(source: string): boolean {
   return normalized.endsWith("/skill.md") || normalized === "skill.md";
 }
 
-function isDerivedOrSynthesizedSkillRecord(record: Record<string, unknown>, source: string): boolean {
-  const originKind = readRecordString(record, ["originKind", "origin_kind"]).toLowerCase();
-  const bodyExtraction = readRecordString(record, ["bodyExtraction", "body_extraction"]).toLowerCase();
-  const sourcePath = readRecordString(record, ["sourcePath", "source_path", "location", "path", "source_file", "sourceFile"]);
+function isDerivedOrSynthesizedSkillRecord(
+  record: Record<string, unknown>,
+  source: string,
+): boolean {
+  const originKind = readRecordString(record, [
+    "originKind",
+    "origin_kind",
+  ]).toLowerCase();
+  const bodyExtraction = readRecordString(record, [
+    "bodyExtraction",
+    "body_extraction",
+  ]).toLowerCase();
+  const sourcePath = readRecordString(record, [
+    "sourcePath",
+    "source_path",
+    "location",
+    "path",
+    "source_file",
+    "sourceFile",
+  ]);
   const evidenceText = readRecordListText(record, ["evidence"]).toLowerCase();
-  if (bodyExtraction === "synthesized" || bodyExtraction === "summary_only" || bodyExtraction === "unavailable") return true;
-  if (originKind === "derived_from_markdown" || originKind === "command" || originKind === "rule") return true;
-  if (originKind === "existing_skill_file" || originKind === "plugin_skill") return false;
-  if (sourcePath && sourcePath.toLowerCase().endsWith(".md") && !isLikelyActualSkillSource(sourcePath)) return true;
-  if (source && source.toLowerCase().endsWith(".md") && !isLikelyActualSkillSource(source)) return true;
-  return evidenceText.includes("derived from") || evidenceText.includes("converted into");
+  if (
+    bodyExtraction === "synthesized" ||
+    bodyExtraction === "summary_only" ||
+    bodyExtraction === "unavailable"
+  )
+    return true;
+  if (
+    originKind === "derived_from_markdown" ||
+    originKind === "command" ||
+    originKind === "rule"
+  )
+    return true;
+  if (originKind === "existing_skill_file" || originKind === "plugin_skill")
+    return false;
+  if (
+    sourcePath &&
+    sourcePath.toLowerCase().endsWith(".md") &&
+    !isLikelyActualSkillSource(sourcePath)
+  )
+    return true;
+  if (
+    source &&
+    source.toLowerCase().endsWith(".md") &&
+    !isLikelyActualSkillSource(source)
+  )
+    return true;
+  return (
+    evidenceText.includes("derived from") ||
+    evidenceText.includes("converted into")
+  );
 }
 
 function normalizeReviewAuthType(value: string): DeveloperAppAuthType | null {
@@ -154,7 +252,11 @@ function normalizeReviewAuthType(value: string): DeveloperAppAuthType | null {
   ) {
     return normalized;
   }
-  if (normalized === "api key" || normalized === "apikey" || normalized === "token") {
+  if (
+    normalized === "api key" ||
+    normalized === "apikey" ||
+    normalized === "token"
+  ) {
     return "api_key";
   }
   if (normalized === "bearer_token" || normalized === "bearer token") {
@@ -163,7 +265,9 @@ function normalizeReviewAuthType(value: string): DeveloperAppAuthType | null {
   return null;
 }
 
-function readReviewInstructionsMd(record: Record<string, unknown>): string | null {
+function readReviewInstructionsMd(
+  record: Record<string, unknown>,
+): string | null {
   const value = readRecordString(record, [
     "instructionsMd",
     "instructions_md",
@@ -190,11 +294,23 @@ function readReviewBodySha256(record: Record<string, unknown>): string | null {
 }
 
 function itemHasLowConfidence(record: Record<string, unknown>): boolean {
-  return readRecordString(record, ["confidence", "confidence_level"]).toLowerCase() === "low";
+  return (
+    readRecordString(record, [
+      "confidence",
+      "confidence_level",
+    ]).toLowerCase() === "low"
+  );
 }
 
-function recordTextIncludes(record: Record<string, unknown>, keys: string[], needles: string[]): boolean {
-  const haystack = keys.map((key) => readRecordString(record, [key])).join(" ").toLowerCase();
+function recordTextIncludes(
+  record: Record<string, unknown>,
+  keys: string[],
+  needles: string[],
+): boolean {
+  const haystack = keys
+    .map((key) => readRecordString(record, [key]))
+    .join(" ")
+    .toLowerCase();
   return needles.some((needle) => haystack.includes(needle));
 }
 
@@ -231,15 +347,28 @@ function collectRequiredSecretNames(
     "secretPlaceholders",
   ]);
   for (const value of topLevel) {
-    if (typeof value === "string" && value.trim()) secretNames.add(value.trim());
+    if (typeof value === "string" && value.trim())
+      secretNames.add(value.trim());
     if (isPlainObject(value)) {
-      const name = readRecordString(value, ["name", "key", "envVar", "env_var", "label"]);
+      const name = readRecordString(value, [
+        "name",
+        "key",
+        "envVar",
+        "env_var",
+        "label",
+      ]);
       if (name) secretNames.add(name);
     }
   }
   for (const record of records) {
-    for (const value of readRecordArray(record, ["requiredEnvVars", "required_env_vars", "envVars", "env_vars"])) {
-      if (typeof value === "string" && value.trim()) secretNames.add(value.trim());
+    for (const value of readRecordArray(record, [
+      "requiredEnvVars",
+      "required_env_vars",
+      "envVars",
+      "env_vars",
+    ])) {
+      if (typeof value === "string" && value.trim())
+        secretNames.add(value.trim());
     }
   }
   return secretNames;
@@ -272,61 +401,180 @@ export function buildCommunityWorkflowImportReviewProjection(
     "mdFiles",
   ]).filter(isPlainObject);
 
-  const mcpServers = mcpRecords.map((record, index): CommunityWorkflowImportReviewItem => {
-    const name = displayNameFromRaw(
-      readRecordString(record, ["name", "serverName", "server_name", "catalog_app_id", "catalogAppId", "id"]),
-      `MCP server ${index + 1}`,
-    );
-    const source = readRecordString(record, ["configLocation", "config_location", "location", "path", "endpoint", "command"]);
-    const catalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
-      record,
-      name,
-    });
-    const endpointUrl =
-      catalogMatch.endpointUrl ||
-      readRecordString(record, ["endpoint_url", "endpointUrl", "endpoint", "url"]);
-    const authType =
-      catalogMatch.authType ??
-      normalizeReviewAuthType(readRecordString(record, ["auth_type", "authType", "authMode", "auth_mode"]));
-    return {
-      id: buildCommunityWorkflowImportMcpReviewItemId({ name, source, index }),
-      kind: "mcp",
-      name,
-      summary: truncateReviewText(readRecordString(record, ["purpose", "summary", "description", "capabilities"]) || "MCP server"),
-      source: source || null,
-      preview: truncateReviewText(readRecordListText(record, ["evidence", "capabilities", "requiredEnvVars", "required_env_vars"]), 260) || null,
-      logoUrl: catalogMatch.reviewLogoUrl,
-      defaultSelected: !itemHasLowConfidence(record) && !isRejectedWorkflowCandidate(record),
-      catalogAppId: catalogMatch.catalogAppId,
-      endpointUrl: endpointUrl || null,
-      authType,
-    };
-  });
+  const mcpServers = mcpRecords.map(
+    (record, index): CommunityWorkflowImportReviewItem => {
+      const name = displayNameFromRaw(
+        readRecordString(record, [
+          "name",
+          "serverName",
+          "server_name",
+          "catalog_app_id",
+          "catalogAppId",
+          "id",
+        ]),
+        `MCP server ${index + 1}`,
+      );
+      const source = readRecordString(record, [
+        "configLocation",
+        "config_location",
+        "location",
+        "path",
+        "endpoint",
+        "command",
+      ]);
+      const catalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+        record,
+        name,
+      });
+      const endpointUrl =
+        catalogMatch.endpointUrl ||
+        readNestedRecordString(
+          record,
+          ["officialConnection", "official_connection"],
+          ["remoteEndpoint", "remote_endpoint"],
+        ) ||
+        readRecordString(record, [
+          "endpoint_url",
+          "endpointUrl",
+          "endpoint",
+          "url",
+        ]);
+      const authType =
+        catalogMatch.authType ??
+        normalizeReviewAuthType(
+          readNestedRecordString(
+            record,
+            ["officialConnection", "official_connection"],
+            ["authMode", "auth_mode"],
+          ),
+        ) ??
+        normalizeReviewAuthType(
+          readRecordString(record, [
+            "auth_type",
+            "authType",
+            "authMode",
+            "auth_mode",
+          ]),
+        );
+      return {
+        id: buildCommunityWorkflowImportMcpReviewItemId({
+          name,
+          source,
+          index,
+        }),
+        kind: "mcp",
+        name,
+        summary: truncateReviewText(
+          readRecordString(record, [
+            "purpose",
+            "summary",
+            "description",
+            "capabilities",
+          ]) || "MCP server",
+        ),
+        source: source || null,
+        preview:
+          truncateReviewText(
+            readRecordListText(record, [
+              "evidence",
+              "capabilities",
+              "requiredEnvVars",
+              "required_env_vars",
+            ]),
+            260,
+          ) || null,
+        logoUrl: catalogMatch.reviewLogoUrl,
+        defaultSelected:
+          !itemHasLowConfidence(record) && !isRejectedWorkflowCandidate(record),
+        catalogAppId: catalogMatch.catalogAppId,
+        endpointUrl: endpointUrl || null,
+        authType,
+        mcpRegistryId: catalogMatch.registryId,
+        mcpStatus: catalogMatch.status,
+        mcpMatchedBy: catalogMatch.matchedBy,
+        mcpReason: catalogMatch.reason,
+        mcpSourceTransport: catalogMatch.sourceTransport,
+        mcpRemoteTransport: catalogMatch.remoteTransport,
+        mcpRequiredSecretNames: catalogMatch.requiredSecretNames,
+        mcpRequiredConfigParams: catalogMatch.requiredConfigParams,
+        mcpPortabilityClassification: catalogMatch.portabilityClassification,
+      };
+    },
+  );
 
   const skills: CommunityWorkflowImportReviewItem[] = [];
   for (const [index, record] of skillRecords.entries()) {
     const name = displayNameFromRaw(
-      readRecordString(record, ["name", "title", "skillName", "skill_name", "invocation"]),
+      readRecordString(record, [
+        "name",
+        "title",
+        "skillName",
+        "skill_name",
+        "invocation",
+      ]),
       `Skill ${index + 1}`,
     );
-    const source = readRecordString(record, ["sourcePath", "source_path", "location", "path", "source_file", "sourceFile", "invocation"]);
+    const source = readRecordString(record, [
+      "sourcePath",
+      "source_path",
+      "location",
+      "path",
+      "source_file",
+      "sourceFile",
+      "invocation",
+    ]);
     const dependsOnRepo =
-      readRecordBooleanish(record, ["dependsOnRepoCode", "depends_on_repo_code", "dependsOnRepo", "depends_on_repo"]) === true ||
-      readRecordString(record, ["dependsOnRepoCode", "depends_on_repo_code", "dependsOnRepo", "depends_on_repo"]).toLowerCase() === "yes";
+      readRecordBooleanish(record, [
+        "dependsOnRepoCode",
+        "depends_on_repo_code",
+        "dependsOnRepo",
+        "depends_on_repo",
+      ]) === true ||
+      readRecordString(record, [
+        "dependsOnRepoCode",
+        "depends_on_repo_code",
+        "dependsOnRepo",
+        "depends_on_repo",
+      ]).toLowerCase() === "yes";
     const instructionsMd = readReviewInstructionsMd(record);
     const bodySha256 = readReviewBodySha256(record);
-    const shouldDefaultImport = readRecordBooleanish(record, ["shouldDefaultImport", "should_default_import"]);
-    const isActualHarnessSkill = readRecordBooleanish(record, ["isActualHarnessSkill", "is_actual_harness_skill"]);
-    const derivedOrSynthesized = isDerivedOrSynthesizedSkillRecord(record, source);
+    const shouldDefaultImport = readRecordBooleanish(record, [
+      "shouldDefaultImport",
+      "should_default_import",
+    ]);
+    const isActualHarnessSkill = readRecordBooleanish(record, [
+      "isActualHarnessSkill",
+      "is_actual_harness_skill",
+    ]);
+    const derivedOrSynthesized = isDerivedOrSynthesizedSkillRecord(
+      record,
+      source,
+    );
     const hasActualSkillProvenance =
-      isActualHarnessSkill === true || (!derivedOrSynthesized && isLikelyActualSkillSource(source));
+      isActualHarnessSkill === true ||
+      (!derivedOrSynthesized && isLikelyActualSkillSource(source));
     skills.push({
-      id: buildCommunityWorkflowImportSkillReviewItemId({ name, source, index }),
+      id: buildCommunityWorkflowImportSkillReviewItemId({
+        name,
+        source,
+        index,
+      }),
       kind: "skill",
       name,
-      summary: truncateReviewText(readRecordString(record, ["purpose", "summary", "description"]) || "Reusable agent behavior."),
+      summary: truncateReviewText(
+        readRecordString(record, ["purpose", "summary", "description"]) ||
+          "Reusable agent behavior.",
+      ),
       source: source || null,
-      preview: truncateReviewText(readRecordListText(record, ["evidence", "requiredEnvVars", "required_env_vars"]), 320) || null,
+      preview:
+        truncateReviewText(
+          readRecordListText(record, [
+            "evidence",
+            "requiredEnvVars",
+            "required_env_vars",
+          ]),
+          320,
+        ) || null,
       logoUrl: null,
       defaultSelected:
         Boolean(instructionsMd) &&
@@ -341,10 +589,22 @@ export function buildCommunityWorkflowImportReviewProjection(
   }
 
   for (const [index, record] of markdownRecords.entries()) {
-    const handling = readRecordString(record, ["recommendedHandling", "recommended_handling"]).toLowerCase();
-    const standalone = readRecordString(record, ["standaloneSkillCandidate", "standalone_skill_candidate"]).toLowerCase();
-    const behaviorRules = readRecordString(record, ["containsAgentBehaviorRules", "contains_agent_behavior_rules"]).toLowerCase();
-    const dependsOnRepo = readRecordString(record, ["dependsOnRepoContext", "depends_on_repo_context"]).toLowerCase();
+    const handling = readRecordString(record, [
+      "recommendedHandling",
+      "recommended_handling",
+    ]).toLowerCase();
+    const standalone = readRecordString(record, [
+      "standaloneSkillCandidate",
+      "standalone_skill_candidate",
+    ]).toLowerCase();
+    const behaviorRules = readRecordString(record, [
+      "containsAgentBehaviorRules",
+      "contains_agent_behavior_rules",
+    ]).toLowerCase();
+    const dependsOnRepo = readRecordString(record, [
+      "dependsOnRepoContext",
+      "depends_on_repo_context",
+    ]).toLowerCase();
     const shouldShow =
       handling === "import_as_skill" ||
       handling === "merge_into_agent_instructions" ||
@@ -352,23 +612,46 @@ export function buildCommunityWorkflowImportReviewProjection(
       standalone === "yes" ||
       behaviorRules === "yes";
     if (!shouldShow) continue;
-    const source = readRecordString(record, ["path", "location", "source_file", "sourceFile"]);
+    const source = readRecordString(record, [
+      "path",
+      "location",
+      "source_file",
+      "sourceFile",
+    ]);
     const name = displayNameFromRaw(
-      readRecordString(record, ["title", "name"]) || (source ? basenameWithoutExtension(source) : ""),
+      readRecordString(record, ["title", "name"]) ||
+        (source ? basenameWithoutExtension(source) : ""),
       `Markdown skill ${index + 1}`,
     );
     const instructionsMd = readReviewInstructionsMd(record);
     const bodySha256 = readReviewBodySha256(record);
     skills.push({
-      id: buildCommunityWorkflowImportMarkdownSkillReviewItemId({ name, source, index }),
+      id: buildCommunityWorkflowImportMarkdownSkillReviewItemId({
+        name,
+        source,
+        index,
+      }),
       kind: "skill",
       name,
       summary: truncateReviewText(
-        readRecordString(record, ["summary", "whyItMatters", "why_it_matters", "reasoning"]) ||
-          "Markdown-based workflow instructions.",
+        readRecordString(record, [
+          "summary",
+          "whyItMatters",
+          "why_it_matters",
+          "reasoning",
+        ]) || "Markdown-based workflow instructions.",
       ),
       source: source || null,
-      preview: truncateReviewText(readRecordListText(record, ["shortExcerpt", "short_excerpt", "importantHeadings", "evidence"]), 360) || null,
+      preview:
+        truncateReviewText(
+          readRecordListText(record, [
+            "shortExcerpt",
+            "short_excerpt",
+            "importantHeadings",
+            "evidence",
+          ]),
+          360,
+        ) || null,
       logoUrl: null,
       defaultSelected: false,
       instructionsMd,
@@ -376,7 +659,9 @@ export function buildCommunityWorkflowImportReviewProjection(
     });
   }
 
-  const repositoryRecord = isPlainObject(ledger.repository) ? ledger.repository : null;
+  const repositoryRecord = isPlainObject(ledger.repository)
+    ? ledger.repository
+    : null;
   const repositoryPresent = repositoryRecord
     ? readRecordString(repositoryRecord, ["present"]).toLowerCase()
     : "no";
@@ -391,13 +676,16 @@ export function buildCommunityWorkflowImportReviewProjection(
   const repository =
     repositoryRecord && (repositoryPresent !== "no" || remoteUrl)
       ? (() => {
-          const host = readRecordString(repositoryRecord, ["host"]).toLowerCase();
+          const host = readRecordString(repositoryRecord, [
+            "host",
+          ]).toLowerCase();
           const identity = buildCommunityWorkflowImportRepositoryIdentity({
             record: repositoryRecord,
             remoteUrl,
             host,
           });
-          const visibility = readRecordString(repositoryRecord, ["visibility"]) || "unknown";
+          const visibility =
+            readRecordString(repositoryRecord, ["visibility"]) || "unknown";
           const recommendation = readRecordString(repositoryRecord, [
             "publicSharingRecommendation",
             "public_sharing_recommendation",
@@ -409,17 +697,28 @@ export function buildCommunityWorkflowImportReviewProjection(
             id: "repo:primary",
             kind: "repo" as const,
             name,
-            summary: truncateReviewText(`${visibility}${recommendation ? ` | ${recommendation.replace(/_/g, " ")}` : ""}`),
+            summary: truncateReviewText(
+              `${visibility}${recommendation ? ` | ${recommendation.replace(/_/g, " ")}` : ""}`,
+            ),
             source: identity.remoteUrl || remoteUrl || null,
-            preview: truncateReviewText(readRecordListText(repositoryRecord, ["reasoning", "evidence"]), 320) || null,
+            preview:
+              truncateReviewText(
+                readRecordListText(repositoryRecord, ["reasoning", "evidence"]),
+                320,
+              ) || null,
             logoUrl: resolveCommunityWorkflowImportMcpCatalogMatch({
               record: repositoryRecord,
-              name: identity.host === "github" || identity.remoteUrl.includes("github.com") ? "GitHub" : name,
+              name:
+                identity.host === "github" ||
+                identity.remoteUrl.includes("github.com")
+                  ? "GitHub"
+                  : name,
             }).reviewLogoUrl,
             repositoryUrl: identity.remoteUrl || remoteUrl || null,
             repositoryRecommendation: recommendation || null,
             defaultSelected:
-              (identity.host === "github" || identity.remoteUrl.includes("github.com")) &&
+              (identity.host === "github" ||
+                identity.remoteUrl.includes("github.com")) &&
               (visibility.toLowerCase() === "public" ||
                 recommendation === "recommended" ||
                 recommendation === "connect_public_github" ||
@@ -428,18 +727,37 @@ export function buildCommunityWorkflowImportReviewProjection(
         })()
       : null;
 
-  const questionCount = readRecordArray(ledger, ["clarifying_questions", "clarifyingQuestions", "questions"]).length;
-  const secretCount = collectRequiredSecretNames(ledger, [...mcpRecords, ...skillRecords]).size;
+  const questionCount = readRecordArray(ledger, [
+    "clarifying_questions",
+    "clarifyingQuestions",
+    "questions",
+  ]).length;
+  const secretCount = collectRequiredSecretNames(ledger, [
+    ...mcpRecords,
+    ...skillRecords,
+  ]).size;
   return {
     mcpServers,
     skills,
     repository,
     skillScan: {
-      itemCount: readRecordNumber(scanSummary, ["skillLikeItemsSeen", "skill_like_items_seen"]),
-      selectedCount: readRecordNumber(scanSummary, ["selectedSkillCandidates", "selected_skill_candidates"]),
+      itemCount: readRecordNumber(scanSummary, [
+        "skillLikeItemsSeen",
+        "skill_like_items_seen",
+      ]),
+      selectedCount: readRecordNumber(scanSummary, [
+        "selectedSkillCandidates",
+        "selected_skill_candidates",
+      ]),
       completenessConfidence:
-        readRecordString(scanSummary, ["completenessConfidence", "completeness_confidence"]) || null,
-      omissionCount: readRecordArray(scanSummary, ["importantOmissions", "important_omissions"]).length,
+        readRecordString(scanSummary, [
+          "completenessConfidence",
+          "completeness_confidence",
+        ]) || null,
+      omissionCount: readRecordArray(scanSummary, [
+        "importantOmissions",
+        "important_omissions",
+      ]).length,
     },
     questionCount,
     secretCount,

@@ -1,5 +1,12 @@
 import { api, internal } from "./_generated/api";
-import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { v } from "convex/values";
 import { runChatgptNativeToolCompletion } from "./httpChatgpt";
 import {
@@ -22,6 +29,7 @@ import {
 import { resolveCommunityWorkflowImportMcpCatalogMatch } from "../shared/communityWorkflowImportCatalogResolver";
 import { buildCommunityWorkflowImportRepositoryIdentity } from "../shared/communityWorkflowImportRepositoryIdentity";
 import type { CommunityWorkflowImportReviewItem } from "../shared/communityWorkflowImportReviewProjection";
+import type { CommunityWorkflowImportMcpRegistryStatus } from "../shared/communityWorkflowImportMcpRegistry";
 import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
 import {
   DISCOVER_APP_CATALOG,
@@ -29,10 +37,7 @@ import {
   resolveDiscoverAppExecutionSurface,
   type DiscoverAppCatalogEntry,
 } from "../shared/discoverCatalog";
-import {
-  normalizeSkillMentionToken,
-  type SkillPackageRow,
-} from "./skillCore";
+import { normalizeSkillMentionToken, type SkillPackageRow } from "./skillCore";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import type {
   NativeToolAwareCompletionSuccess,
@@ -143,7 +148,12 @@ type WorkflowImportCandidateKind =
 
 type WorkflowImportSearchCandidate = {
   kind: WorkflowImportCandidateKind;
-  candidate_type: "mcp_server" | "skill" | "markdown" | "repository" | "unknown";
+  candidate_type:
+    | "mcp_server"
+    | "skill"
+    | "markdown"
+    | "repository"
+    | "unknown";
   id: string;
   name: string;
   summary: string;
@@ -176,6 +186,30 @@ type WorkflowImportApplyOutcome = {
   status: WorkflowImportApplyOutcomeStatus;
   reason: string;
   referenceId?: string | null;
+  catalogAppId?: string | null;
+  endpointUrl?: string | null;
+  authType?: DeveloperAppAuthType | null;
+  mcpRegistryId?: string | null;
+  mcpStatus?: CommunityWorkflowImportMcpRegistryStatus | null;
+  mcpMatchedBy?: string | null;
+  mcpReason?: string | null;
+  mcpSourceTransport?: string | null;
+  mcpRemoteTransport?: string | null;
+  mcpRequiredSecretNames?: string[];
+  mcpRequiredConfigParams?: string[];
+  mcpPortabilityClassification?: string | null;
+  mounted?: boolean;
+  communityMountLiveStatus?: string | null;
+  communityMountNotLiveReason?: string | null;
+  communityMountEnabledToolCount?: number | null;
+  personalSeedOk?: boolean | null;
+  personalSeeded?: boolean | null;
+  personalSeedReason?: string | null;
+  personalHarnessMountId?: string | null;
+  personalHarnessLiveStatus?: string | null;
+  personalHarnessNotLiveReason?: string | null;
+  personalHarnessEnabledToolCount?: number | null;
+  existingMemberSeedScheduled?: boolean | null;
 };
 
 type WorkflowImportApplyPlanAction =
@@ -195,6 +229,15 @@ type WorkflowImportApplyPlanItem = {
   catalogAppId?: string | null;
   endpointUrl?: string | null;
   authType?: DeveloperAppAuthType | null;
+  mcpRegistryId?: string | null;
+  mcpStatus?: CommunityWorkflowImportMcpRegistryStatus | null;
+  mcpMatchedBy?: string | null;
+  mcpReason?: string | null;
+  mcpSourceTransport?: string | null;
+  mcpRemoteTransport?: string | null;
+  mcpRequiredSecretNames?: string[];
+  mcpRequiredConfigParams?: string[];
+  mcpPortabilityClassification?: string | null;
   instructionsMd?: string | null;
   bodySha256?: string | null;
   repositoryUrl?: string | null;
@@ -202,7 +245,9 @@ type WorkflowImportApplyPlanItem = {
 };
 
 function normalizeBoundedText(input: unknown, maxLength: number): string {
-  return String(input ?? "").trim().slice(0, maxLength);
+  return String(input ?? "")
+    .trim()
+    .slice(0, maxLength);
 }
 
 function normalizeSourceHarness(input: unknown): string {
@@ -214,7 +259,10 @@ function redactLikelySecretValues(input: string): string {
   return input
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, "$1[REDACTED]")
     .replace(/\b(sk-[A-Za-z0-9_-]{16,})\b/g, "[REDACTED_OPENAI_KEY]")
-    .replace(/\b(ghp_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{16,})\b/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(
+      /\b(ghp_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{16,})\b/g,
+      "[REDACTED_GITHUB_TOKEN]",
+    )
     .replace(
       /\b(api[_ -]?key|token|secret|password|private[_ -]?key|authorization)\b\s*[:=]\s*([^\n,}]+)/gi,
       "$1: [REDACTED]",
@@ -230,7 +278,10 @@ function normalizeHarnessOutput(input: unknown): string {
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", copy.buffer as ArrayBuffer);
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    copy.buffer as ArrayBuffer,
+  );
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
@@ -263,7 +314,9 @@ function sanitizeWorkflowImportJsonLike(input: unknown, depth = 0): unknown {
       .slice(0, WORKFLOW_IMPORT_JSON_MAX_ARRAY_ITEMS)
       .map((value) => sanitizeWorkflowImportJsonLike(value, depth + 1));
     if (input.length > WORKFLOW_IMPORT_JSON_MAX_ARRAY_ITEMS) {
-      values.push(`[TRUNCATED_${input.length - WORKFLOW_IMPORT_JSON_MAX_ARRAY_ITEMS}_ITEMS]`);
+      values.push(
+        `[TRUNCATED_${input.length - WORKFLOW_IMPORT_JSON_MAX_ARRAY_ITEMS}_ITEMS]`,
+      );
     }
     return values;
   }
@@ -286,14 +339,20 @@ function sanitizeWorkflowImportJsonLike(input: unknown, depth = 0): unknown {
   return null;
 }
 
-function sanitizeWorkflowImportJsonArtifact(input: unknown, maxChars: number): unknown {
+function sanitizeWorkflowImportJsonArtifact(
+  input: unknown,
+  maxChars: number,
+): unknown {
   const sanitized = sanitizeWorkflowImportJsonLike(input);
   const serialized = JSON.stringify(sanitized);
   if (serialized.length <= maxChars) return sanitized;
   return {
     _truncated: true,
     original_json_chars: serialized.length,
-    preview: redactLikelySecretValues(serialized).slice(0, Math.max(0, maxChars - 120)),
+    preview: redactLikelySecretValues(serialized).slice(
+      0,
+      Math.max(0, maxChars - 120),
+    ),
   };
 }
 
@@ -313,7 +372,10 @@ function truncateOutput(raw: unknown): string {
   return `${value.slice(0, WORKFLOW_IMPORT_MAX_OUTPUT_CHARS - 120)}\n...[truncated workflow import tool output]`;
 }
 
-function toolOk(output: unknown, details?: Record<string, unknown>): RuntimeKernelToolExecutionResult {
+function toolOk(
+  output: unknown,
+  details?: Record<string, unknown>,
+): RuntimeKernelToolExecutionResult {
   return {
     status: "ok",
     exitCode: 0,
@@ -349,7 +411,8 @@ function readWorkflowImportRecordString(
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (typeof value === "number" || typeof value === "boolean")
+      return String(value);
   }
   return "";
 }
@@ -363,6 +426,48 @@ function readWorkflowImportRecordArray(
     if (Array.isArray(value)) return value;
   }
   return [];
+}
+
+function readWorkflowImportRecordBoolean(
+  record: Record<string, unknown>,
+  keys: string[],
+): boolean | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+    if (typeof value === "string" && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "yes", "y", "1", "ok", "live"].includes(normalized))
+        return true;
+      if (["false", "no", "n", "0", "failed", "not_live"].includes(normalized))
+        return false;
+    }
+  }
+  return null;
+}
+
+function readWorkflowImportNestedRecord(
+  record: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (isPlainRecord(value)) return value;
+  }
+  return null;
+}
+
+function readWorkflowImportStringArrayCount(
+  record: Record<string, unknown> | null,
+  keys: string[],
+): number | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value.length;
+  }
+  return null;
 }
 
 function displayWorkflowImportName(raw: string, fallback: string): string {
@@ -379,13 +484,18 @@ function basenameWithoutExtension(path: string): string {
   return basename.replace(/\.[a-z0-9]+$/i, "");
 }
 
-function truncateWorkflowImportReviewText(value: string, maxLength = 150): string {
+function truncateWorkflowImportReviewText(
+  value: string,
+  maxLength = 150,
+): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength - 3).trim()}...`;
 }
 
-function readWorkflowImportInstructionsMd(record: Record<string, unknown>): string | null {
+function readWorkflowImportInstructionsMd(
+  record: Record<string, unknown>,
+): string | null {
   const value = readWorkflowImportRecordString(record, [
     "instructionsMd",
     "instructions_md",
@@ -399,7 +509,9 @@ function readWorkflowImportInstructionsMd(record: Record<string, unknown>): stri
   return value.length >= 40 ? value : null;
 }
 
-function readWorkflowImportBodySha256(record: Record<string, unknown>): string | null {
+function readWorkflowImportBodySha256(
+  record: Record<string, unknown>,
+): string | null {
   const value = readWorkflowImportRecordString(record, [
     "bodySha256",
     "body_sha256",
@@ -411,8 +523,12 @@ function readWorkflowImportBodySha256(record: Record<string, unknown>): string |
   return /^[a-f0-9]{64}$/.test(value) ? value : null;
 }
 
-function isCommunityWorkflowImportToolName(value: unknown): value is CommunityWorkflowImportToolName {
-  return COMMUNITY_WORKFLOW_IMPORT_TOOL_NAMES.some((toolName) => toolName === value);
+function isCommunityWorkflowImportToolName(
+  value: unknown,
+): value is CommunityWorkflowImportToolName {
+  return COMMUNITY_WORKFLOW_IMPORT_TOOL_NAMES.some(
+    (toolName) => toolName === value,
+  );
 }
 
 function unsupportedToolFailure(toolName: unknown): RuntimeKernelFailureInput {
@@ -428,8 +544,12 @@ function unsupportedToolFailure(toolName: unknown): RuntimeKernelFailureInput {
 }
 
 function coerceWorkflowImportCompletion(
-  completion: NativeToolAwareCompletionSuccess<string> | RuntimeKernelFailureInput,
-): NativeToolAwareCompletionSuccess<CommunityWorkflowImportToolName> | RuntimeKernelFailureInput {
+  completion:
+    | NativeToolAwareCompletionSuccess<string>
+    | RuntimeKernelFailureInput,
+):
+  | NativeToolAwareCompletionSuccess<CommunityWorkflowImportToolName>
+  | RuntimeKernelFailureInput {
   if (completion.ok === false) return completion;
   if (completion.type === "assistant") return completion;
   if (completion.type === "tool_call") {
@@ -552,7 +672,9 @@ async function writeWorkflowImportLedgerPatch(
     nowMs: number;
   },
 ): Promise<CommunityWorkflowImportDraftRow> {
-  const draft = (await ctx.db.get(args.draftId as any)) as CommunityWorkflowImportDraftRow | null;
+  const draft = (await ctx.db.get(
+    args.draftId as any,
+  )) as CommunityWorkflowImportDraftRow | null;
   if (!draft || String(draft.communityId) !== String(args.communityId)) {
     throw new Error("workflow_import_draft_not_found");
   }
@@ -571,7 +693,10 @@ async function writeWorkflowImportLedgerPatch(
   }
   const patch: Record<string, unknown> = {
     status,
-    errorMessage: status === "failed" ? normalizeErrorMessage(args.errorMessage) : undefined,
+    errorMessage:
+      status === "failed"
+        ? normalizeErrorMessage(args.errorMessage)
+        : undefined,
     updatedAt: args.nowMs,
   };
   if (shouldPurgeRawHarnessOutput) {
@@ -590,7 +715,9 @@ async function writeWorkflowImportLedgerPatch(
     builderUserId: draft.builderUserId,
     eventType:
       args.eventType ??
-      (status === "ready_for_review" || status === "failed" ? "analysis_finished" : "ledger_written"),
+      (status === "ready_for_review" || status === "failed"
+        ? "analysis_finished"
+        : "ledger_written"),
     payload: args.eventPayload ?? { status },
     nowMs: args.nowMs,
   });
@@ -607,7 +734,9 @@ async function writeWorkflowImportLedgerPatch(
       nowMs: args.nowMs,
     });
   }
-  const updated = (await ctx.db.get(args.draftId as any)) as CommunityWorkflowImportDraftRow | null;
+  const updated = (await ctx.db.get(
+    args.draftId as any,
+  )) as CommunityWorkflowImportDraftRow | null;
   if (!updated) throw new Error("workflow_import_draft_not_found");
   return updated;
 }
@@ -625,7 +754,9 @@ async function requireWorkflowImportDraftForManager(
     communityId: args.communityId,
     userId: args.userId,
   });
-  const draft = (await ctx.db.get(args.draftId as any)) as CommunityWorkflowImportDraftRow | null;
+  const draft = (await ctx.db.get(
+    args.draftId as any,
+  )) as CommunityWorkflowImportDraftRow | null;
   if (!draft || String(draft.communityId) !== String(args.communityId)) {
     throw new Error("workflow_import_draft_not_found");
   }
@@ -689,7 +820,11 @@ function buildWorkflowImportMcpApplyPlanItems(
       "endpoint",
       "command",
     ]);
-    const id = buildCommunityWorkflowImportMcpReviewItemId({ name, source, index });
+    const id = buildCommunityWorkflowImportMcpReviewItemId({
+      name,
+      source,
+      index,
+    });
     const catalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
       record,
       name,
@@ -705,7 +840,16 @@ function buildWorkflowImportMcpApplyPlanItems(
         "capabilities",
       ]) || "MCP server",
     );
-    if (!catalogMatch.connectable || !catalogAppId || !endpointUrl || !authType) {
+    if (
+      !catalogMatch.connectable ||
+      !catalogAppId ||
+      !endpointUrl ||
+      !authType
+    ) {
+      const missing: string[] = [];
+      if (!catalogAppId) missing.push("vetted catalog app");
+      if (!endpointUrl) missing.push("endpoint");
+      if (!authType) missing.push("auth mode");
       return {
         id,
         kind: "mcp",
@@ -713,8 +857,20 @@ function buildWorkflowImportMcpApplyPlanItems(
         action: "manual_setup",
         reason:
           catalogMatch.reason ||
-          "No vetted catalog app with a ready endpoint and auth type matched the saved import ledger.",
+          `MCP import needs manual setup because it is missing ${missing.join(", ")}.`,
         summary,
+        catalogAppId,
+        endpointUrl,
+        authType,
+        mcpRegistryId: catalogMatch.registryId,
+        mcpStatus: catalogMatch.status,
+        mcpMatchedBy: catalogMatch.matchedBy,
+        mcpReason: catalogMatch.reason,
+        mcpSourceTransport: catalogMatch.sourceTransport,
+        mcpRemoteTransport: catalogMatch.remoteTransport,
+        mcpRequiredSecretNames: catalogMatch.requiredSecretNames,
+        mcpRequiredConfigParams: catalogMatch.requiredConfigParams,
+        mcpPortabilityClassification: catalogMatch.portabilityClassification,
       };
     }
     return {
@@ -722,11 +878,21 @@ function buildWorkflowImportMcpApplyPlanItems(
       kind: "mcp",
       name,
       action: "connect_mcp",
-      reason: "Vetted catalog-backed MCP candidate is eligible for canonical connection.",
+      reason:
+        "Vetted catalog-backed MCP candidate is eligible for canonical connection.",
       summary,
       catalogAppId,
       endpointUrl,
       authType,
+      mcpRegistryId: catalogMatch.registryId,
+      mcpStatus: catalogMatch.status,
+      mcpMatchedBy: catalogMatch.matchedBy,
+      mcpReason: catalogMatch.reason,
+      mcpSourceTransport: catalogMatch.sourceTransport,
+      mcpRemoteTransport: catalogMatch.remoteTransport,
+      mcpRequiredSecretNames: catalogMatch.requiredSecretNames,
+      mcpRequiredConfigParams: catalogMatch.requiredConfigParams,
+      mcpPortabilityClassification: catalogMatch.portabilityClassification,
     };
   });
 }
@@ -770,7 +936,11 @@ function buildWorkflowImportSkillApplyPlanItems(
       ]) || "Reusable agent behavior.",
     );
     return {
-      id: buildCommunityWorkflowImportSkillReviewItemId({ name, source, index }),
+      id: buildCommunityWorkflowImportSkillReviewItemId({
+        name,
+        source,
+        index,
+      }),
       kind: "skill",
       name,
       action: instructionsMd ? "attach_skill" : "skill_body_review",
@@ -838,7 +1008,11 @@ function buildWorkflowImportMarkdownSkillApplyPlanItems(
       (handling === "import_as_skill" ||
         (standalone === "yes" && dependsOnRepo !== "yes"));
     items.push({
-      id: buildCommunityWorkflowImportMarkdownSkillReviewItemId({ name, source, index }),
+      id: buildCommunityWorkflowImportMarkdownSkillReviewItemId({
+        name,
+        source,
+        index,
+      }),
       kind: "skill",
       name,
       action: importable ? "attach_skill" : "skill_body_review",
@@ -865,7 +1039,9 @@ function buildWorkflowImportRepositoryApplyPlanItem(
 ): WorkflowImportApplyPlanItem | null {
   const record = isPlainRecord(ledger.repository) ? ledger.repository : null;
   if (!record) return null;
-  const present = readWorkflowImportRecordString(record, ["present"]).toLowerCase();
+  const present = readWorkflowImportRecordString(record, [
+    "present",
+  ]).toLowerCase();
   const remoteUrl = readWorkflowImportRecordString(record, [
     "remoteUrl",
     "remote_url",
@@ -878,7 +1054,8 @@ function buildWorkflowImportRepositoryApplyPlanItem(
     remoteUrl,
     host,
   });
-  const visibility = readWorkflowImportRecordString(record, ["visibility"]) || "unknown";
+  const visibility =
+    readWorkflowImportRecordString(record, ["visibility"]) || "unknown";
   const recommendation = readWorkflowImportRecordString(record, [
     "publicSharingRecommendation",
     "public_sharing_recommendation",
@@ -918,7 +1095,8 @@ function requireSelectedWorkflowImportApplyPlanItems(args: {
   selectedItemIds: unknown;
 }): WorkflowImportApplyPlanItem[] {
   const selectedIds = normalizeWorkflowReviewSelectionIds(args.selectedItemIds);
-  if (selectedIds.size === 0) throw new Error("workflow_import_selection_required");
+  if (selectedIds.size === 0)
+    throw new Error("workflow_import_selection_required");
   const planItems = buildWorkflowImportApplyPlan(args.ledgerJson);
   const itemById = new Map(planItems.map((item) => [item.id, item]));
   for (const selectedId of selectedIds) {
@@ -929,13 +1107,24 @@ function requireSelectedWorkflowImportApplyPlanItems(args: {
   return [...selectedIds].map((selectedId) => itemById.get(selectedId)!);
 }
 
-function summarizeWorkflowImportApplyOutcomes(outcomes: WorkflowImportApplyOutcome[]) {
+function summarizeWorkflowImportApplyOutcomes(
+  outcomes: WorkflowImportApplyOutcome[],
+) {
   return {
     selected_count: outcomes.length,
     mcp_connected: outcomes.filter(
       (item) =>
         item.kind === "mcp" &&
         (item.status === "connected" || item.status === "already_connected"),
+    ).length,
+    mcp_mounted: outcomes.filter(
+      (item) => item.kind === "mcp" && item.mounted === true,
+    ).length,
+    mcp_seeded_into_personal_harness: outcomes.filter(
+      (item) => item.kind === "mcp" && item.personalSeedOk === true,
+    ).length,
+    mcp_live_in_personal_harness: outcomes.filter(
+      (item) => item.kind === "mcp" && item.personalHarnessLiveStatus === "live",
     ).length,
     mcp_needs_setup: outcomes.filter(
       (item) =>
@@ -953,6 +1142,165 @@ function summarizeWorkflowImportApplyOutcomes(outcomes: WorkflowImportApplyOutco
         (item.status === "needs_skill_body_review" || item.status === "failed"),
     ).length,
     repo_next_actions: outcomes.filter((item) => item.kind === "repo").length,
+  };
+}
+
+function buildWorkflowImportMcpOutcomeBase(
+  item: WorkflowImportApplyPlanItem,
+): Partial<WorkflowImportApplyOutcome> {
+  return {
+    catalogAppId: item.catalogAppId ?? null,
+    endpointUrl: item.endpointUrl ?? null,
+    authType: item.authType ?? null,
+    mcpRegistryId: item.mcpRegistryId ?? null,
+    mcpStatus: item.mcpStatus ?? null,
+    mcpMatchedBy: item.mcpMatchedBy ?? null,
+    mcpReason: item.mcpReason ?? null,
+    mcpSourceTransport: item.mcpSourceTransport ?? null,
+    mcpRemoteTransport: item.mcpRemoteTransport ?? null,
+    mcpRequiredSecretNames: item.mcpRequiredSecretNames ?? [],
+    mcpRequiredConfigParams: item.mcpRequiredConfigParams ?? [],
+    mcpPortabilityClassification: item.mcpPortabilityClassification ?? null,
+  };
+}
+
+function describeWorkflowImportMcpSetupReason(reason: string | null): string {
+  switch (reason) {
+    case "needs_auth":
+      return "needs user authentication";
+    case "missing_snapshot":
+      return "has no validated tool snapshot";
+    case "validation_failed":
+      return "failed app validation";
+    case "no_tools_discovered":
+      return "validated with no usable tools";
+    case "disabled":
+      return "is disabled";
+    default:
+      return reason || "needs setup";
+  }
+}
+
+function buildWorkflowImportMcpMountedOutcome(args: {
+  item: WorkflowImportApplyPlanItem;
+  mounted: Record<string, unknown>;
+  hadExistingEnabledGrant: boolean;
+}): WorkflowImportApplyOutcome {
+  const base = buildWorkflowImportMcpOutcomeBase(args.item);
+  const personalSeedResult = readWorkflowImportNestedRecord(args.mounted, [
+    "personal_seed_result",
+    "personalSeedResult",
+  ]);
+  const personalMount = personalSeedResult
+    ? readWorkflowImportNestedRecord(personalSeedResult, ["mount"])
+    : null;
+  const existingMemberSeedResult = readWorkflowImportNestedRecord(args.mounted, [
+    "existing_member_seed_result",
+    "existingMemberSeedResult",
+  ]);
+  const communityMountLiveStatus =
+    readWorkflowImportRecordString(args.mounted, ["live_status", "liveStatus"]) ||
+    null;
+  const communityMountNotLiveReason =
+    readWorkflowImportRecordString(args.mounted, [
+      "not_live_reason",
+      "notLiveReason",
+    ]) || null;
+  const personalSeedOk = personalSeedResult
+    ? readWorkflowImportRecordBoolean(personalSeedResult, ["ok"])
+    : null;
+  const personalSeeded = personalSeedResult
+    ? readWorkflowImportRecordBoolean(personalSeedResult, ["seeded"])
+    : null;
+  const personalSeedReason = personalSeedResult
+    ? readWorkflowImportRecordString(personalSeedResult, ["reason"]) || null
+    : null;
+  const personalHarnessLiveStatus = personalMount
+    ? readWorkflowImportRecordString(personalMount, ["live_status", "liveStatus"]) ||
+      null
+    : null;
+  const personalHarnessNotLiveReason = personalMount
+    ? readWorkflowImportRecordString(personalMount, [
+        "not_live_reason",
+        "notLiveReason",
+      ]) || null
+    : null;
+  const diagnostics = {
+    ...base,
+    mounted: true,
+    communityMountLiveStatus,
+    communityMountNotLiveReason,
+    communityMountEnabledToolCount: readWorkflowImportStringArrayCount(
+      args.mounted,
+      ["enabled_tools", "enabledTools"],
+    ),
+    personalSeedOk,
+    personalSeeded,
+    personalSeedReason,
+    personalHarnessMountId: personalMount
+      ? readWorkflowImportRecordString(personalMount, ["id", "_id"]) || null
+      : null,
+    personalHarnessLiveStatus,
+    personalHarnessNotLiveReason,
+    personalHarnessEnabledToolCount: readWorkflowImportStringArrayCount(
+      personalMount,
+      ["enabled_tools", "enabledTools"],
+    ),
+    existingMemberSeedScheduled: existingMemberSeedResult
+      ? readWorkflowImportRecordBoolean(existingMemberSeedResult, ["scheduled"])
+      : null,
+  };
+  if (communityMountLiveStatus !== "live") {
+    const reason = describeWorkflowImportMcpSetupReason(
+      communityMountNotLiveReason,
+    );
+    return {
+      id: args.item.id,
+      kind: args.item.kind,
+      name: args.item.name,
+      status: "needs_manual_setup",
+      reason: `Mounted through the catalog, but the community attachment is not live: ${reason}.`,
+      referenceId: readWorkflowImportRecordString(args.mounted, ["id"]) || null,
+      ...diagnostics,
+    };
+  }
+  if (personalSeedOk !== true) {
+    return {
+      id: args.item.id,
+      kind: args.item.kind,
+      name: args.item.name,
+      status: "needs_manual_setup",
+      reason: personalSeedReason
+        ? `Mounted through the catalog, but the personal harness seed needs attention: ${personalSeedReason}.`
+        : "Mounted through the catalog, but PolyNet could not confirm the personal harness seed.",
+      referenceId: readWorkflowImportRecordString(args.mounted, ["id"]) || null,
+      ...diagnostics,
+    };
+  }
+  if (personalHarnessLiveStatus !== "live") {
+    const reason = describeWorkflowImportMcpSetupReason(
+      personalHarnessNotLiveReason,
+    );
+    return {
+      id: args.item.id,
+      kind: args.item.kind,
+      name: args.item.name,
+      status: "needs_manual_setup",
+      reason: `Mounted and seeded into the personal harness, but it is not live yet: ${reason}.`,
+      referenceId: readWorkflowImportRecordString(args.mounted, ["id"]) || null,
+      ...diagnostics,
+    };
+  }
+  return {
+    id: args.item.id,
+    kind: args.item.kind,
+    name: args.item.name,
+    status: args.hadExistingEnabledGrant ? "already_connected" : "connected",
+    reason: args.hadExistingEnabledGrant
+      ? "This MCP app was already mounted and is live through the canonical harness path."
+      : "Connected through the canonical community app mount path and confirmed in the personal harness.",
+    referenceId: readWorkflowImportRecordString(args.mounted, ["id"]) || null,
+    ...diagnostics,
   };
 }
 
@@ -975,6 +1323,16 @@ function buildAppliedWorkflowImportLedger(args: {
         action: item.action,
         reason: item.reason,
         catalog_app_id: item.catalogAppId ?? null,
+        mcp_registry_id: item.mcpRegistryId ?? null,
+        mcp_status: item.mcpStatus ?? null,
+        mcp_matched_by: item.mcpMatchedBy ?? null,
+        mcp_reason: item.mcpReason ?? null,
+        mcp_source_transport: item.mcpSourceTransport ?? null,
+        mcp_remote_transport: item.mcpRemoteTransport ?? null,
+        mcp_required_secret_names: item.mcpRequiredSecretNames ?? [],
+        mcp_required_config_params: item.mcpRequiredConfigParams ?? [],
+        mcp_portability_classification:
+          item.mcpPortabilityClassification ?? null,
         repository_url: item.repositoryUrl ?? null,
       })),
       outcomes: args.outcomes,
@@ -999,27 +1357,37 @@ export const createCommunityWorkflowImportDraft = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
     const nowMs = args.nowMs ?? Date.now();
     const sourceHarness = normalizeSourceHarness(args.sourceHarness);
-    const boundedHarnessOutput = normalizeBoundedText(args.rawHarnessOutput, MAX_HARNESS_OUTPUT_LENGTH);
+    const boundedHarnessOutput = normalizeBoundedText(
+      args.rawHarnessOutput,
+      MAX_HARNESS_OUTPUT_LENGTH,
+    );
     const rawHarnessOutput = normalizeHarnessOutput(args.rawHarnessOutput);
     const currentLedgerJson = buildInitialWorkflowImportLedger({
       communityId: args.communityId,
       builderUserId: userId,
       sourceHarness,
     });
-    const draftId = await ctx.db.insert("communityWorkflowImportDrafts" as any, {
-      communityId: args.communityId,
-      builderUserId: userId,
-      sourceHarness,
-      sourceKind: "pasted_output",
-      status: "working",
-      rawHarnessOutput,
-      currentLedgerJson,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
+    const draftId = await ctx.db.insert(
+      "communityWorkflowImportDrafts" as any,
+      {
+        communityId: args.communityId,
+        builderUserId: userId,
+        sourceHarness,
+        sourceKind: "pasted_output",
+        status: "working",
+        rawHarnessOutput,
+        currentLedgerJson,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      },
+    );
     await appendWorkflowImportEvent(ctx, {
       draftId,
       communityId: args.communityId,
@@ -1060,7 +1428,8 @@ export const createCommunityWorkflowImportDraft = mutation({
     try {
       await ctx.scheduler.runAfter(
         0,
-        internalRefs.communityWorkflowImports.runCommunityWorkflowImportAnalysisInternal as any,
+        internalRefs.communityWorkflowImports
+          .runCommunityWorkflowImportAnalysisInternal as any,
         {
           communityId: args.communityId,
           draftId,
@@ -1089,7 +1458,9 @@ export const createCommunityWorkflowImportDraft = mutation({
         nowMs,
       });
     }
-    const draft = (await ctx.db.get(draftId as any)) as CommunityWorkflowImportDraftRow | null;
+    const draft = (await ctx.db.get(
+      draftId as any,
+    )) as CommunityWorkflowImportDraftRow | null;
     if (!draft) throw new Error("workflow_import_draft_create_failed");
     return mapWorkflowImportDraftSummary(draft);
   },
@@ -1107,87 +1478,99 @@ export const generateCommunityWorkflowImportPackageUploadUrl = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
     return {
       uploadUrl: await ctx.storage.generateUploadUrl(),
     };
   },
 });
 
-export const createCommunityWorkflowImportDraftFromPackageInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    builderUserId: v.id("users"),
-    sourceHarness: v.string(),
-    sourceFilename: v.optional(v.string()),
-    packageSha256: v.string(),
-    packageByteCount: v.number(),
-    packageSummary: v.any(),
-    ledgerJson: v.any(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const sourceHarness = normalizeSourceHarness(args.sourceHarness);
-    const ledgerJson = sanitizeWorkflowImportJsonArtifact(
-      args.ledgerJson,
-      WORKFLOW_IMPORT_LEDGER_MAX_JSON_CHARS,
-    );
-    const packageSummary = sanitizeWorkflowImportJsonArtifact(
-      args.packageSummary,
-      WORKFLOW_IMPORT_EVENT_PAYLOAD_MAX_JSON_CHARS,
-    );
-    const draftId = await ctx.db.insert("communityWorkflowImportDrafts" as any, {
-      communityId: args.communityId,
-      builderUserId: args.builderUserId,
-      sourceHarness,
-      sourceKind: "workflow_export_zip",
-      status: "ready_for_review",
-      rawHarnessOutput: COMMUNITY_WORKFLOW_EXPORT_PACKAGE_SENTINEL,
-      currentLedgerJson: ledgerJson,
-      packageFilename: normalizeBoundedText(args.sourceFilename, 240) || undefined,
-      packageSha256: args.packageSha256,
-      packageByteCount: Math.max(0, Math.floor(args.packageByteCount)),
-      packageSummary,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await appendWorkflowImportEvent(ctx, {
-      draftId,
-      communityId: args.communityId,
-      builderUserId: args.builderUserId,
-      eventType: "draft_created",
-      payload: {
-        source_harness: sourceHarness,
-        source_kind: "workflow_export_zip",
-      },
-      nowMs,
-    });
-    await appendWorkflowImportEvent(ctx, {
-      draftId,
-      communityId: args.communityId,
-      builderUserId: args.builderUserId,
-      eventType: "workflow_export_package_received",
-      payload: {
-        source_filename: normalizeBoundedText(args.sourceFilename, 240) || null,
-        package_sha256: args.packageSha256,
-        package_byte_count: args.packageByteCount,
-      },
-      nowMs,
-    });
-    await appendWorkflowImportEvent(ctx, {
-      draftId,
-      communityId: args.communityId,
-      builderUserId: args.builderUserId,
-      eventType: "workflow_export_package_parsed",
-      payload: packageSummary,
-      nowMs,
-    });
-    const updated = (await ctx.db.get(draftId)) as CommunityWorkflowImportDraftRow | null;
-    if (!updated) throw new Error("workflow_import_draft_not_found");
-    return mapWorkflowImportDraftSummary(updated);
-  },
-});
+export const createCommunityWorkflowImportDraftFromPackageInternal =
+  internalMutation({
+    args: {
+      communityId: v.id("communities"),
+      builderUserId: v.id("users"),
+      sourceHarness: v.string(),
+      sourceFilename: v.optional(v.string()),
+      packageSha256: v.string(),
+      packageByteCount: v.number(),
+      packageSummary: v.any(),
+      ledgerJson: v.any(),
+      nowMs: v.optional(v.number()),
+    },
+    handler: async (ctx, args) => {
+      const nowMs = args.nowMs ?? Date.now();
+      const sourceHarness = normalizeSourceHarness(args.sourceHarness);
+      const ledgerJson = sanitizeWorkflowImportJsonArtifact(
+        args.ledgerJson,
+        WORKFLOW_IMPORT_LEDGER_MAX_JSON_CHARS,
+      );
+      const packageSummary = sanitizeWorkflowImportJsonArtifact(
+        args.packageSummary,
+        WORKFLOW_IMPORT_EVENT_PAYLOAD_MAX_JSON_CHARS,
+      );
+      const draftId = await ctx.db.insert(
+        "communityWorkflowImportDrafts" as any,
+        {
+          communityId: args.communityId,
+          builderUserId: args.builderUserId,
+          sourceHarness,
+          sourceKind: "workflow_export_zip",
+          status: "ready_for_review",
+          rawHarnessOutput: COMMUNITY_WORKFLOW_EXPORT_PACKAGE_SENTINEL,
+          currentLedgerJson: ledgerJson,
+          packageFilename:
+            normalizeBoundedText(args.sourceFilename, 240) || undefined,
+          packageSha256: args.packageSha256,
+          packageByteCount: Math.max(0, Math.floor(args.packageByteCount)),
+          packageSummary,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        },
+      );
+      await appendWorkflowImportEvent(ctx, {
+        draftId,
+        communityId: args.communityId,
+        builderUserId: args.builderUserId,
+        eventType: "draft_created",
+        payload: {
+          source_harness: sourceHarness,
+          source_kind: "workflow_export_zip",
+        },
+        nowMs,
+      });
+      await appendWorkflowImportEvent(ctx, {
+        draftId,
+        communityId: args.communityId,
+        builderUserId: args.builderUserId,
+        eventType: "workflow_export_package_received",
+        payload: {
+          source_filename:
+            normalizeBoundedText(args.sourceFilename, 240) || null,
+          package_sha256: args.packageSha256,
+          package_byte_count: args.packageByteCount,
+        },
+        nowMs,
+      });
+      await appendWorkflowImportEvent(ctx, {
+        draftId,
+        communityId: args.communityId,
+        builderUserId: args.builderUserId,
+        eventType: "workflow_export_package_parsed",
+        payload: packageSummary,
+        nowMs,
+      });
+      const updated = (await ctx.db.get(
+        draftId,
+      )) as CommunityWorkflowImportDraftRow | null;
+      if (!updated) throw new Error("workflow_import_draft_not_found");
+      return mapWorkflowImportDraftSummary(updated);
+    },
+  });
 
 export const createCommunityWorkflowImportDraftFromPackage = action({
   args: {
@@ -1203,13 +1586,16 @@ export const createCommunityWorkflowImportDraftFromPackage = action({
       authSubject: args.authSubject ?? null,
     });
     await ctx.runQuery(
-      internalRefs.communitySkillAttachments.assertCommunityManagerAccessInternal as any,
+      internalRefs.communitySkillAttachments
+        .assertCommunityManagerAccessInternal as any,
       {
         userId,
         communityId: args.communityId,
       },
     );
-    const sourceFilename = normalizeBoundedText(args.sourceFilename, 240) || "polynet-workflow-export.zip";
+    const sourceFilename =
+      normalizeBoundedText(args.sourceFilename, 240) ||
+      "polynet-workflow-export.zip";
     if (!sourceFilename.toLowerCase().endsWith(".zip")) {
       throw new Error("workflow_export_package_zip_required");
     }
@@ -1226,7 +1612,8 @@ export const createCommunityWorkflowImportDraftFromPackage = action({
         sourceFilename,
       });
       return await ctx.runMutation(
-        internalRefs.communityWorkflowImports.createCommunityWorkflowImportDraftFromPackageInternal as any,
+        internalRefs.communityWorkflowImports
+          .createCommunityWorkflowImportDraftFromPackageInternal as any,
         {
           communityId: args.communityId,
           builderUserId: userId,
@@ -1276,18 +1663,27 @@ export const readCommunityWorkflowImportContextInternal = internalQuery({
     draftId: v.id("communityWorkflowImportDrafts"),
   },
   handler: async (ctx, args) => {
-    const draft = (await ctx.db.get(args.draftId as any)) as CommunityWorkflowImportDraftRow | null;
+    const draft = (await ctx.db.get(
+      args.draftId as any,
+    )) as CommunityWorkflowImportDraftRow | null;
     if (!draft || String(draft.communityId) !== String(args.communityId)) {
       throw new Error("workflow_import_draft_not_found");
     }
-    const community = (await ctx.db.get(args.communityId as any)) as Record<string, any> | null;
+    const community = (await ctx.db.get(args.communityId as any)) as Record<
+      string,
+      any
+    > | null;
     const appMounts = (await ctx.db
       .query("communityAppMounts" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .withIndex("by_community", (q: any) =>
+        q.eq("communityId", args.communityId),
+      )
       .take(50)) as Array<Record<string, any>>;
     const skillAttachments = (await ctx.db
       .query("communitySkillAttachments" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .withIndex("by_community", (q: any) =>
+        q.eq("communityId", args.communityId),
+      )
       .take(50)) as Array<Record<string, any>>;
     return {
       id: String(draft._id),
@@ -1309,7 +1705,9 @@ export const readCommunityWorkflowImportContextInternal = internalQuery({
           id: String(row._id),
           developer_app_id: String(row.developerAppId),
           enabled: row.enabled === true,
-          enabled_tools: Array.isArray(row.enabledTools) ? row.enabledTools.map(String).slice(0, 100) : null,
+          enabled_tools: Array.isArray(row.enabledTools)
+            ? row.enabledTools.map(String).slice(0, 100)
+            : null,
         })),
         community_skill_attachments: skillAttachments.map((row) => ({
           id: String(row._id),
@@ -1355,37 +1753,42 @@ export const listCommunityWorkflowImportEvents = query({
   },
 });
 
-export const findWorkflowImportSkillPackageByMentionTokenInternal = internalQuery({
-  args: {
-    ownerUserId: v.id("users"),
-    communityId: v.id("communities"),
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const mentionToken = normalizeSkillMentionToken(args.name);
-    if (!mentionToken) return null;
-    const rows = (await ctx.db
-      .query("skillPackages")
-      .withIndex("by_owner", (q: any) => q.eq("ownerUserId", args.ownerUserId))
-      .collect()) as SkillPackageRow[];
-    const skill = rows.find(
-      (row) => normalizeSkillMentionToken(row.mentionToken || row.name) === mentionToken,
-    );
-    if (!skill) return null;
-    const attachment = await ctx.db
-      .query("communitySkillAttachments" as any)
-      .withIndex("by_community_skill", (q: any) =>
-        q.eq("communityId", args.communityId).eq("skillPackageId", skill._id),
-      )
-      .first();
-    return {
-      skillPackageId: skill._id,
-      instructionsMd: skill.instructionsMd,
-      attachmentId: attachment?._id ?? null,
-      attachmentEnabled: attachment?.enabled === true,
-    };
-  },
-});
+export const findWorkflowImportSkillPackageByMentionTokenInternal =
+  internalQuery({
+    args: {
+      ownerUserId: v.id("users"),
+      communityId: v.id("communities"),
+      name: v.string(),
+    },
+    handler: async (ctx, args) => {
+      const mentionToken = normalizeSkillMentionToken(args.name);
+      if (!mentionToken) return null;
+      const rows = (await ctx.db
+        .query("skillPackages")
+        .withIndex("by_owner", (q: any) =>
+          q.eq("ownerUserId", args.ownerUserId),
+        )
+        .collect()) as SkillPackageRow[];
+      const skill = rows.find(
+        (row) =>
+          normalizeSkillMentionToken(row.mentionToken || row.name) ===
+          mentionToken,
+      );
+      if (!skill) return null;
+      const attachment = await ctx.db
+        .query("communitySkillAttachments" as any)
+        .withIndex("by_community_skill", (q: any) =>
+          q.eq("communityId", args.communityId).eq("skillPackageId", skill._id),
+        )
+        .first();
+      return {
+        skillPackageId: skill._id,
+        instructionsMd: skill.instructionsMd,
+        attachmentId: attachment?._id ?? null,
+        attachmentEnabled: attachment?.enabled === true,
+      };
+    },
+  });
 
 async function applyWorkflowImportMcpPlanItem(args: {
   ctx: any;
@@ -1405,11 +1808,14 @@ async function applyWorkflowImportMcpPlanItem(args: {
       name: args.item.name,
       status: "needs_manual_setup",
       reason: args.item.reason,
+      mounted: false,
+      ...buildWorkflowImportMcpOutcomeBase(args.item),
     };
   }
   try {
     const existingGrant = (await args.ctx.runQuery(
-      internalRefs.communityAppMounts.findExistingCommunityAppMountByIdentityInternal as any,
+      internalRefs.communityAppMounts
+        .findExistingCommunityAppMountByIdentityInternal as any,
       {
         communityId: args.communityId,
         catalogAppId: args.item.catalogAppId,
@@ -1417,46 +1823,49 @@ async function applyWorkflowImportMcpPlanItem(args: {
         authType: args.item.authType,
       },
     )) as { mount?: { _id?: unknown; enabled?: unknown } } | null;
-    if (existingGrant?.mount?.enabled === true) {
+    const hadExistingEnabledGrant = existingGrant?.mount?.enabled === true;
+    const mounted = (await args.ctx.runAction(
+      api.community.connectCommunityApp as any,
+      {
+        authSubject: args.authSubject,
+        communityId: args.communityId,
+        catalogAppId: args.item.catalogAppId,
+        name: args.item.name,
+        endpointUrl: args.item.endpointUrl,
+        authType: args.item.authType,
+        description: args.item.summary,
+      },
+    )) as Record<string, any> | null;
+    if (!isPlainRecord(mounted)) {
       return {
         id: args.item.id,
         kind: args.item.kind,
         name: args.item.name,
-        status: "already_connected",
-        reason: "This MCP app was already mounted for the community.",
-        referenceId: normalizeBoundedText(existingGrant.mount._id, 160) || null,
+        status: "failed",
+        reason:
+          "The canonical community app mount path did not return a mount read model.",
+        mounted: false,
+        ...buildWorkflowImportMcpOutcomeBase(args.item),
       };
     }
-    const mounted = (await args.ctx.runAction(api.community.connectCommunityApp as any, {
-      authSubject: args.authSubject,
-      communityId: args.communityId,
-      catalogAppId: args.item.catalogAppId,
-      name: args.item.name,
-      endpointUrl: args.item.endpointUrl,
-      authType: args.item.authType,
-      description: args.item.summary,
-    })) as Record<string, any> | null;
-    const notLiveReason = normalizeBoundedText(mounted?.not_live_reason, 120);
-    return {
-      id: args.item.id,
-      kind: args.item.kind,
-      name: args.item.name,
-      status: notLiveReason ? "needs_manual_setup" : "connected",
-      reason: notLiveReason
-        ? `Mounted through the catalog, but still needs setup: ${notLiveReason}.`
-        : "Connected through the canonical community app mount path.",
-      referenceId: normalizeBoundedText(mounted?.id, 160) || null,
-    };
+    return buildWorkflowImportMcpMountedOutcome({
+      item: args.item,
+      mounted,
+      hadExistingEnabledGrant,
+    });
   } catch (error) {
     return {
       id: args.item.id,
       kind: args.item.kind,
       name: args.item.name,
       status: "failed",
-      reason: normalizeBoundedText(
-        error instanceof Error ? error.message : String(error),
-        500,
-      ) || "Failed to connect catalog app.",
+      reason:
+        normalizeBoundedText(
+          error instanceof Error ? error.message : String(error),
+          500,
+        ) || "Failed to connect catalog app.",
+      mounted: false,
+      ...buildWorkflowImportMcpOutcomeBase(args.item),
     };
   }
 }
@@ -1479,7 +1888,8 @@ async function applyWorkflowImportSkillPlanItem(args: {
   }
   try {
     const existing = (await args.ctx.runQuery(
-      internalRefs.communityWorkflowImports.findWorkflowImportSkillPackageByMentionTokenInternal as any,
+      internalRefs.communityWorkflowImports
+        .findWorkflowImportSkillPackageByMentionTokenInternal as any,
       {
         ownerUserId: args.userId,
         communityId: args.communityId,
@@ -1495,7 +1905,10 @@ async function applyWorkflowImportSkillPlanItem(args: {
     const reusedExistingSkillPackage = Boolean(skillPackageId);
     if (skillPackageId) {
       const existingSkill = existing!;
-      const existingInstructions = normalizeBoundedText(existingSkill.instructionsMd, 40_000);
+      const existingInstructions = normalizeBoundedText(
+        existingSkill.instructionsMd,
+        40_000,
+      );
       if (existingInstructions && existingInstructions !== instructionsMd) {
         return {
           id: args.item.id,
@@ -1514,7 +1927,8 @@ async function applyWorkflowImportSkillPlanItem(args: {
           name: args.item.name,
           status: "already_attached",
           reason: "This skill was already attached to the community.",
-          referenceId: normalizeBoundedText(existingSkill.attachmentId, 160) || null,
+          referenceId:
+            normalizeBoundedText(existingSkill.attachmentId, 160) || null,
         };
       }
     } else {
@@ -1529,7 +1943,8 @@ async function applyWorkflowImportSkillPlanItem(args: {
       );
     }
     const attachmentId = await args.ctx.runMutation(
-      internalRefs.communitySkillAttachments.upsertCommunitySkillAttachmentInternal as any,
+      internalRefs.communitySkillAttachments
+        .upsertCommunitySkillAttachmentInternal as any,
       {
         communityId: args.communityId,
         skillPackageId,
@@ -1553,10 +1968,11 @@ async function applyWorkflowImportSkillPlanItem(args: {
       kind: args.item.kind,
       name: args.item.name,
       status: "failed",
-      reason: normalizeBoundedText(
-        error instanceof Error ? error.message : String(error),
-        500,
-      ) || "Failed to attach skill.",
+      reason:
+        normalizeBoundedText(
+          error instanceof Error ? error.message : String(error),
+          500,
+        ) || "Failed to attach skill.",
     };
   }
 }
@@ -1584,12 +2000,14 @@ export const applyCommunityWorkflowImportReview = action({
     selectedItemIds: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const { userId, authSubject } = await resolveAuthenticatedWorkflowImportActionUser({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
+    const { userId, authSubject } =
+      await resolveAuthenticatedWorkflowImportActionUser({
+        ctx,
+        authSubject: args.authSubject ?? null,
+      });
     await ctx.runQuery(
-      internalRefs.communitySkillAttachments.assertCommunityManagerAccessInternal as any,
+      internalRefs.communitySkillAttachments
+        .assertCommunityManagerAccessInternal as any,
       {
         userId,
         communityId: args.communityId,
@@ -1642,7 +2060,8 @@ export const applyCommunityWorkflowImportReview = action({
       appliedAt,
     });
     const updated = await ctx.runMutation(
-      internalRefs.communityWorkflowImports.markCommunityWorkflowImportAppliedInternal as any,
+      internalRefs.communityWorkflowImports
+        .markCommunityWorkflowImportAppliedInternal as any,
       {
         communityId: args.communityId,
         draftId: args.draftId,
@@ -1718,10 +2137,16 @@ function buildWorkflowImportMessages(params: {
         `Builder user id: ${params.context.builder_user_id}`,
         `Source harness: ${params.context.source_harness}`,
         `Model id: ${params.modelId}`,
-        params.context.community.one_liner ? `Community one-liner: ${params.context.community.one_liner}` : "",
-        params.context.community.about ? `Community about: ${params.context.community.about}` : "",
+        params.context.community.one_liner
+          ? `Community one-liner: ${params.context.community.one_liner}`
+          : "",
+        params.context.community.about
+          ? `Community about: ${params.context.community.about}`
+          : "",
         "Begin the bounded import analysis now.",
-      ].filter(Boolean).join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n"),
     },
   ];
 }
@@ -1764,24 +2189,34 @@ function inferCandidateType(
   text: string,
   requestedKind: string,
 ): WorkflowImportSearchCandidate["candidate_type"] {
-  if (requestedKind !== "all") return requestedKind as WorkflowImportSearchCandidate["candidate_type"];
+  if (requestedKind !== "all")
+    return requestedKind as WorkflowImportSearchCandidate["candidate_type"];
   const lower = text.toLowerCase();
-  if (lower.includes("github.com") || /\brepo(sitory)?\b/.test(lower)) return "repository";
-  if (lower.includes(".md") || lower.includes("claude.md") || lower.includes("agents.md")) return "markdown";
+  if (lower.includes("github.com") || /\brepo(sitory)?\b/.test(lower))
+    return "repository";
+  if (
+    lower.includes(".md") ||
+    lower.includes("claude.md") ||
+    lower.includes("agents.md")
+  )
+    return "markdown";
   if (lower.includes("skill")) return "skill";
   if (lower.includes("mcp") || lower.includes("server")) return "mcp_server";
   return "unknown";
 }
 
-function mapCatalogCandidate(app: DiscoverAppCatalogEntry, score: number): WorkflowImportSearchCandidate {
+function mapCatalogCandidate(
+  app: DiscoverAppCatalogEntry,
+  score: number,
+): WorkflowImportSearchCandidate {
   const profile = resolveDiscoverAppIntegrationProfile(app);
   const endpointUrl =
     app.personalConnect.connectionKind === "known"
-      ? app.personalConnect.endpointUrl ?? null
+      ? (app.personalConnect.endpointUrl ?? null)
       : null;
   const authType =
     app.personalConnect.connectionKind === "known"
-      ? app.personalConnect.authType ?? null
+      ? (app.personalConnect.authType ?? null)
       : null;
   return {
     kind: "catalog_app",
@@ -1820,7 +2255,10 @@ function searchWorkflowImportCandidates(params: {
 } {
   const limit = Math.max(
     1,
-    Math.min(WORKFLOW_IMPORT_SEARCH_MAX_RESULTS, Math.floor(params.limit ?? WORKFLOW_IMPORT_SEARCH_MAX_RESULTS)),
+    Math.min(
+      WORKFLOW_IMPORT_SEARCH_MAX_RESULTS,
+      Math.floor(params.limit ?? WORKFLOW_IMPORT_SEARCH_MAX_RESULTS),
+    ),
   );
   const tokens = tokenizeSearchQuery(params.query);
   const results: Array<WorkflowImportSearchCandidate & { score: number }> = [];
@@ -1868,9 +2306,13 @@ function searchWorkflowImportCandidates(params: {
       candidate_type: inferCandidateType(ledgerText, params.kind),
       id: "current_ledger",
       name: "Current import ledger",
-      summary: ledgerText.length <= 360 ? ledgerText : `${ledgerText.slice(0, 340)}...`,
+      summary:
+        ledgerText.length <= 360
+          ? ledgerText
+          : `${ledgerText.slice(0, 340)}...`,
       source: "workflow_import_ledger",
-      confidence: ledgerScore >= 4 ? "high" : ledgerScore >= 2 ? "medium" : "low",
+      confidence:
+        ledgerScore >= 4 ? "high" : ledgerScore >= 2 ? "medium" : "low",
       score: ledgerScore,
     });
   }
@@ -1878,7 +2320,10 @@ function searchWorkflowImportCandidates(params: {
     query: params.query,
     kind: params.kind,
     results: results
-      .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+      .sort(
+        (left, right) =>
+          right.score - left.score || left.name.localeCompare(right.name),
+      )
       .slice(0, limit)
       .map(({ score: _score, ...candidate }) => candidate),
   };
@@ -1892,7 +2337,8 @@ async function readWorkflowImportContextForAction(
   },
 ): Promise<CommunityWorkflowImportContext> {
   return (await ctx.runQuery(
-    internalRefs.communityWorkflowImports.readCommunityWorkflowImportContextInternal as any,
+    internalRefs.communityWorkflowImports
+      .readCommunityWorkflowImportContextInternal as any,
     {
       communityId: args.communityId,
       draftId: args.draftId,
@@ -1914,7 +2360,12 @@ async function executeWorkflowImportTool(args: {
         communityId: args.communityId,
         draftId: args.draftId,
       });
-      return toolOk(buildContextSection(context, String(args.normalizedArgs.section ?? "all")));
+      return toolOk(
+        buildContextSection(
+          context,
+          String(args.normalizedArgs.section ?? "all"),
+        ),
+      );
     }
     if (args.toolName === "search_import_candidates") {
       const context = await readWorkflowImportContextForAction(args.ctx, {
@@ -1926,7 +2377,10 @@ async function executeWorkflowImportTool(args: {
           context,
           query: String(args.normalizedArgs.query ?? ""),
           kind: String(args.normalizedArgs.kind ?? "all"),
-          limit: typeof args.normalizedArgs.limit === "number" ? args.normalizedArgs.limit : undefined,
+          limit:
+            typeof args.normalizedArgs.limit === "number"
+              ? args.normalizedArgs.limit
+              : undefined,
         }),
       );
     }
@@ -1936,7 +2390,8 @@ async function executeWorkflowImportTool(args: {
         : {};
       const note = normalizeBoundedText(args.normalizedArgs.note, 500);
       const result = await args.ctx.runMutation(
-        internalRefs.communityWorkflowImports.writeCommunityWorkflowImportLedgerInternal as any,
+        internalRefs.communityWorkflowImports
+          .writeCommunityWorkflowImportLedgerInternal as any,
         {
           communityId: args.communityId,
           draftId: args.draftId,
@@ -1952,17 +2407,22 @@ async function executeWorkflowImportTool(args: {
       return toolOk(result, { made_progress: true });
     }
     if (args.toolName === "finish_import_analysis") {
-      const status = args.normalizedArgs.status === "failed" ? "failed" : "ready_for_review";
-      const currentContext = await readWorkflowImportContextForAction(args.ctx, {
-        communityId: args.communityId,
-        draftId: args.draftId,
-      });
+      const status =
+        args.normalizedArgs.status === "failed" ? "failed" : "ready_for_review";
+      const currentContext = await readWorkflowImportContextForAction(
+        args.ctx,
+        {
+          communityId: args.communityId,
+          draftId: args.draftId,
+        },
+      );
       const ledger = isPlainRecord(args.normalizedArgs.ledger)
         ? args.normalizedArgs.ledger
         : currentContext.current_ledger_json;
       const summary = normalizeBoundedText(args.normalizedArgs.summary, 1200);
       const result = await args.ctx.runMutation(
-        internalRefs.communityWorkflowImports.writeCommunityWorkflowImportLedgerInternal as any,
+        internalRefs.communityWorkflowImports
+          .writeCommunityWorkflowImportLedgerInternal as any,
         {
           communityId: args.communityId,
           draftId: args.draftId,
@@ -2075,7 +2535,8 @@ export const runCommunityWorkflowImportAnalysisInternal = internalAction({
       };
     }
     await ctx.runMutation(
-      internalRefs.communityWorkflowImports.writeCommunityWorkflowImportLedgerInternal as any,
+      internalRefs.communityWorkflowImports
+        .writeCommunityWorkflowImportLedgerInternal as any,
       {
         communityId: args.communityId,
         draftId: args.draftId,
@@ -2088,40 +2549,41 @@ export const runCommunityWorkflowImportAnalysisInternal = internalAction({
       },
     );
     try {
-      const result = await runNativeRuntimeKernel<CommunityWorkflowImportToolName>({
-        messages: buildWorkflowImportMessages({ context, modelId }),
-        budget: {
-          ...DEFAULT_RUNTIME_KERNEL_BUDGET,
-          maxToolSteps: clampToolSteps(args.maxToolSteps),
-          maxConsecutiveFailures: 3,
-          maxNoProgressSteps: 3,
-          maxRepeatedIdenticalCalls: 2,
-        },
-        runCompletion: async (messages) => {
-          const completion = await runChatgptNativeToolCompletion({
-            ctx,
-            userId: normalizeIdValue(context.builder_user_id),
-            modelId,
-            messages,
-            maxTokens: 1800,
-            tools: buildCommunityWorkflowImportFunctionTools(),
-            parallelToolCalls: false,
-          });
-          return coerceWorkflowImportCompletion(completion);
-        },
-        normalizeToolArguments: normalizeCommunityWorkflowImportToolArguments,
-        executeTool: async ({ toolName, normalizedArgs }) =>
-          await executeWorkflowImportTool({
-            ctx,
-            communityId: args.communityId,
-            draftId: args.draftId,
-            toolName,
-            normalizedArgs,
-            onFinish: (status) => {
-              finishedStatus = status;
-            },
-          }),
-      });
+      const result =
+        await runNativeRuntimeKernel<CommunityWorkflowImportToolName>({
+          messages: buildWorkflowImportMessages({ context, modelId }),
+          budget: {
+            ...DEFAULT_RUNTIME_KERNEL_BUDGET,
+            maxToolSteps: clampToolSteps(args.maxToolSteps),
+            maxConsecutiveFailures: 3,
+            maxNoProgressSteps: 3,
+            maxRepeatedIdenticalCalls: 2,
+          },
+          runCompletion: async (messages) => {
+            const completion = await runChatgptNativeToolCompletion({
+              ctx,
+              userId: normalizeIdValue(context.builder_user_id),
+              modelId,
+              messages,
+              maxTokens: 1800,
+              tools: buildCommunityWorkflowImportFunctionTools(),
+              parallelToolCalls: false,
+            });
+            return coerceWorkflowImportCompletion(completion);
+          },
+          normalizeToolArguments: normalizeCommunityWorkflowImportToolArguments,
+          executeTool: async ({ toolName, normalizedArgs }) =>
+            await executeWorkflowImportTool({
+              ctx,
+              communityId: args.communityId,
+              draftId: args.draftId,
+              toolName,
+              normalizedArgs,
+              onFinish: (status) => {
+                finishedStatus = status;
+              },
+            }),
+        });
 
       context = await readWorkflowImportContextForAction(ctx, {
         communityId: args.communityId,
@@ -2147,7 +2609,8 @@ export const runCommunityWorkflowImportAnalysisInternal = internalAction({
       }
       if (!result.ok) {
         const updated = await ctx.runMutation(
-          internalRefs.communityWorkflowImports.writeCommunityWorkflowImportLedgerInternal as any,
+          internalRefs.communityWorkflowImports
+            .writeCommunityWorkflowImportLedgerInternal as any,
           {
             communityId: args.communityId,
             draftId: args.draftId,
@@ -2170,13 +2633,15 @@ export const runCommunityWorkflowImportAnalysisInternal = internalAction({
         };
       }
       const updated = await ctx.runMutation(
-        internalRefs.communityWorkflowImports.writeCommunityWorkflowImportLedgerInternal as any,
+        internalRefs.communityWorkflowImports
+          .writeCommunityWorkflowImportLedgerInternal as any,
         {
           communityId: args.communityId,
           draftId: args.draftId,
           ledgerJson: context.current_ledger_json,
           status: "failed",
-          errorMessage: "Workflow import agent stopped without finish_import_analysis.",
+          errorMessage:
+            "Workflow import agent stopped without finish_import_analysis.",
           eventType: "analysis_failed",
           eventPayload: {
             code: "workflow_import_finish_missing",
@@ -2198,7 +2663,8 @@ export const runCommunityWorkflowImportAnalysisInternal = internalAction({
         draftId: args.draftId,
       });
       const updated = await ctx.runMutation(
-        internalRefs.communityWorkflowImports.writeCommunityWorkflowImportLedgerInternal as any,
+        internalRefs.communityWorkflowImports
+          .writeCommunityWorkflowImportLedgerInternal as any,
         {
           communityId: args.communityId,
           draftId: args.draftId,
