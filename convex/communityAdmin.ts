@@ -45,6 +45,7 @@ import {
 } from "./platformHomeCommunity";
 import { getStripeClient } from "./stripeCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { normalizeCommunityMemberOnboardingConfig } from "../shared/communityMemberOnboarding";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -60,6 +61,28 @@ const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
   "past_due",
   "cancel_at_period_end",
 ]);
+
+function mapCommunityMemberOnboardingForOutput(community: CommunityLike) {
+  const config = community.memberOnboarding;
+  return normalizeCommunityMemberOnboardingConfig(
+    config
+      ? {
+          enabled: config.enabled,
+          title: config.title,
+          description: config.description,
+          video_url: config.videoUrl ?? null,
+          thumbnail_url: config.thumbnailUrl ?? null,
+          primary_action: config.primaryAction,
+          ai_guide_prompt: config.aiGuidePrompt,
+        }
+      : null,
+    community.name,
+  );
+}
+
+function canViewCommunityMemberOnboardingAdminConfig(role: string): boolean {
+  return role === "owner" || role === "admin";
+}
 const COMMUNITY_ADMIN_MEMBERS_DEFAULT_PAGE_SIZE = 25;
 const COMMUNITY_ADMIN_MEMBERS_MAX_PAGE_SIZE = 100;
 
@@ -433,7 +456,7 @@ export const listCommunityMemberships = query({
       .collect()) as CommunityLike[];
     const userIdCache = new Map<string, string | null>();
 
-    const buildCommunityProjection = async (community: CommunityLike) => {
+    const buildCommunityProjection = async (community: CommunityLike, role: string) => {
       const branding = await resolveCommunityBrandingFields(ctx, community);
       const base = {
         id: String(community._id),
@@ -462,6 +485,9 @@ export const listCommunityMemberships = query({
             banner_zoom: branding.banner_zoom,
             visibility: community.visibility,
             entry_policy: resolveCommunityEntryPolicy(community),
+            ...(canViewCommunityMemberOnboardingAdminConfig(role)
+              ? { member_onboarding: mapCommunityMemberOnboardingForOutput(community) }
+              : {}),
             updated_at: toIsoString(community.updatedAt),
           };
     };
@@ -479,7 +505,7 @@ export const listCommunityMemberships = query({
         sort_ms: community.createdAt,
         community_id: String(community._id),
         role: "owner",
-        communities: await buildCommunityProjection(community),
+        communities: await buildCommunityProjection(community, "owner"),
       });
     }
     for (const row of effectiveRows) {
@@ -497,11 +523,12 @@ export const listCommunityMemberships = query({
       if (!entitlement.isEntitled) continue;
       if (out.some((entry) => entry.community_id === String(row.communityId)))
         continue;
+      const role = normalizeCommunityRoleForOutput(row.role) || "member";
       out.push({
         sort_ms: row.createdAt,
         community_id: String(row.communityId),
-        role: normalizeCommunityRoleForOutput(row.role) || "member",
-        communities: await buildCommunityProjection(community),
+        role,
+        communities: await buildCommunityProjection(community, role),
       });
     }
     return out

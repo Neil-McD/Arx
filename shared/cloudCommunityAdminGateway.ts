@@ -1,6 +1,7 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow, parseGatewayNumberLike } from "./cloudGateway";
 import type { CommunityAnalyticsSnapshot } from "./communityTypes";
+import type { CommunityMemberOnboardingConfig } from "./communityMemberOnboarding";
 
 type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
@@ -44,6 +45,13 @@ export type CloudCommunitySettingsSaveResult = {
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
   visibility: string;
+  member_onboarding?: CommunityMemberOnboardingConfig | null;
+  updated_at: string;
+};
+
+export type CloudCommunityMemberOnboardingSaveResult = {
+  community_id: string;
+  member_onboarding: CommunityMemberOnboardingConfig;
   updated_at: string;
 };
 
@@ -614,6 +622,21 @@ export async function setCloudCommunityFreeAccessMode<SessionT>(
     mode: params.mode,
   });
   return firstGatewayRow<CloudCommunityFreeAccessModeResult>(payload);
+}
+
+export async function saveCloudCommunityMemberOnboardingConfig<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    config: CommunityMemberOnboardingConfig;
+  },
+): Promise<CloudCommunityMemberOnboardingSaveResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:saveCommunityMemberOnboardingConfig" as any, {
+    authSubject,
+    communityId: params.communityId,
+    config: params.config,
+  });
+  return firstGatewayRow<CloudCommunityMemberOnboardingSaveResult>(payload);
 }
 
 export async function leaveCloudCommunity<SessionT>(

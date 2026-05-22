@@ -6,10 +6,13 @@ import { getCommunityPublishReadinessMissingFields } from "./communityPublishRea
 import {
   leaveCloudCommunity,
   prepareCloudCommunityBrandingField,
+  saveCloudCommunityMemberOnboardingConfig,
   saveCloudCommunityMemberSettings,
   saveCloudCommunitySettings,
+  type CloudCommunityMemberOnboardingSaveResult,
   type CloudCommunitySettingsSaveResult,
 } from "./cloudCommunityAdminGateway";
+import type { CommunityMemberOnboardingConfig } from "./communityMemberOnboarding";
 
 type SessionLike = {
   user: {
@@ -50,10 +53,17 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsPricingMode: string;
   communitySettingsPriceUsdMonthly: string;
   communitySettingsPriceUsdAnnual: string;
+  communityMemberOnboardingConfig: CommunityMemberOnboardingConfig;
+  communityMemberOnboardingDirtyRef: { current: boolean };
   isValidCommunitySlug: (slug: string) => boolean;
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
+  setCommunityMemberOnboardingError: Dispatch<SetStateAction<string | null>>;
   setIsSavingCommunitySettings: Dispatch<SetStateAction<boolean>>;
+  setIsSavingCommunityMemberOnboarding: Dispatch<SetStateAction<boolean>>;
   onSaveCommunitySettingsSuccess: (result: CloudCommunitySettingsSaveResult) => void;
+  onSaveCommunityMemberOnboardingSuccess: (
+    result: CloudCommunityMemberOnboardingSaveResult,
+  ) => void;
 };
 
 function parsePriceBaseUnits(raw: string): number | null {
@@ -90,6 +100,9 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   }
   if (message.includes("community_publish_ready_required")) {
     return "Published communities need a name, one-liner, avatar, and banner.";
+  }
+  if (message === "community_member_onboarding_url_invalid") {
+    return "Use a valid https URL for onboarding video and thumbnail links.";
   }
   return message;
 }
@@ -260,9 +273,35 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     }
   }, []);
 
+  const handleSaveCommunityMemberOnboarding = useCallback(async () => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    const communityId = current.activeCommunityId;
+    if (!session || !communityId) return;
+
+    current.setCommunityMemberOnboardingError(null);
+    current.setIsSavingCommunityMemberOnboarding(true);
+    try {
+      const result = await saveCloudCommunityMemberOnboardingConfig({
+        session,
+        communityId,
+        config: current.communityMemberOnboardingConfig,
+      });
+      if (result?.community_id) {
+        current.onSaveCommunityMemberOnboardingSuccess(result);
+        current.communityMemberOnboardingDirtyRef.current = false;
+      }
+    } catch (error) {
+      current.setCommunityMemberOnboardingError(formatCommunitySettingsErrorMessage(error));
+    } finally {
+      current.setIsSavingCommunityMemberOnboarding(false);
+    }
+  }, []);
+
   return {
     handleToggleCommunityMute,
     handleLeaveCommunity,
     handleSaveCommunitySettings,
+    handleSaveCommunityMemberOnboarding,
   };
 }

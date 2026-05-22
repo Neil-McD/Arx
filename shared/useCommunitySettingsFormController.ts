@@ -1,5 +1,10 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
+import {
+  buildDefaultCommunityMemberOnboardingConfig,
+  normalizeCommunityMemberOnboardingConfig,
+  type CommunityMemberOnboardingConfig,
+} from "./communityMemberOnboarding";
 
 type CommunityLike = {
   id: string;
@@ -16,12 +21,14 @@ type CommunityLike = {
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
+  member_onboarding?: CommunityMemberOnboardingConfig | null;
 };
 
 type UseCommunitySettingsFormControllerArgs = {
   slugifyCommunityName: (value: string) => string;
   communitySettingsLoadedCommunityIdRef: MutableRefObject<string | null>;
   communitySettingsDirtyRef: MutableRefObject<boolean>;
+  communityMemberOnboardingDirtyRef?: MutableRefObject<boolean>;
   communityPricingDirtyRef: MutableRefObject<boolean>;
 
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
@@ -42,6 +49,8 @@ type UseCommunitySettingsFormControllerArgs = {
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<"free" | "monthly" | "annual">>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
   setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
+  setCommunityMemberOnboardingConfig?: Dispatch<SetStateAction<CommunityMemberOnboardingConfig>>;
+  setCommunityMemberOnboardingError?: Dispatch<SetStateAction<string | null>>;
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
 
   setCommunitySettingsBannerUploadError?: Dispatch<SetStateAction<string | null>>;
@@ -71,6 +80,9 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     if (switchingCommunity) {
       current.communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
       current.communitySettingsDirtyRef.current = false;
+      if (current.communityMemberOnboardingDirtyRef) {
+        current.communityMemberOnboardingDirtyRef.current = false;
+      }
       current.communityPricingDirtyRef.current = false;
       current.setCommunitySettingsPricingMode("free");
       current.setCommunitySettingsPriceUsdMonthly("");
@@ -82,6 +94,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     if (!selectedCommunity) {
       current.setCommunitySettingsError(null);
       current.setCommunityMemberSettingsError(null);
+      current.setCommunityMemberOnboardingError?.(null);
       clearBannerState(true);
       current.setCommunitySettingsName("");
       current.setCommunitySettingsSlug("");
@@ -98,15 +111,25 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.setCommunitySettingsBannerZoom(1);
       current.setCommunitySettingsPriceUsdMonthly("");
       current.setCommunitySettingsPriceUsdAnnual("");
+      current.setCommunityMemberOnboardingConfig?.(
+        buildDefaultCommunityMemberOnboardingConfig(),
+      );
       current.setCommunityMemberMuted(false);
       current.onNoCommunitySelected?.();
       return;
     }
 
-    if (!switchingCommunity && current.communitySettingsDirtyRef.current) return;
+    if (
+      !switchingCommunity &&
+      (current.communitySettingsDirtyRef.current ||
+        Boolean(current.communityMemberOnboardingDirtyRef?.current))
+    ) {
+      return;
+    }
 
     current.setCommunitySettingsError(null);
     current.setCommunityMemberSettingsError(null);
+    current.setCommunityMemberOnboardingError?.(null);
     clearBannerState(false);
     current.setCommunitySettingsName(selectedCommunity.name ?? "");
     current.setCommunitySettingsSlug(current.slugifyCommunityName(selectedCommunity.slug ?? ""));
@@ -144,6 +167,12 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       typeof selectedCommunity.banner_zoom === "number" && Number.isFinite(selectedCommunity.banner_zoom)
         ? Math.max(1, Math.min(2.5, selectedCommunity.banner_zoom))
         : 1,
+    );
+    current.setCommunityMemberOnboardingConfig?.(
+      normalizeCommunityMemberOnboardingConfig(
+        selectedCommunity.member_onboarding ?? null,
+        selectedCommunity.name,
+      ),
     );
   }, [clearBannerState]);
 

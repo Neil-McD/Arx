@@ -864,6 +864,24 @@ export default defineSchema({
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
+    memberOnboarding: v.optional(
+      v.object({
+        enabled: v.boolean(),
+        title: v.string(),
+        description: v.string(),
+        videoUrl: v.optional(v.union(v.string(), v.null())),
+        thumbnailUrl: v.optional(v.union(v.string(), v.null())),
+        primaryAction: v.union(
+          v.literal("introduce"),
+          v.literal("ask_agent"),
+          v.literal("view_resources"),
+          v.literal("start_workflow"),
+        ),
+        aiGuidePrompt: v.string(),
+        updatedAt: v.optional(v.number()),
+        updatedByUserId: v.optional(v.id("users")),
+      }),
+    ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
     entryPolicy: v.union(
       v.literal("open"),

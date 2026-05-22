@@ -4,6 +4,10 @@ import type { CommunitySettingsLayer } from "../../../../shared/communityAccessV
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
+import type {
+  CommunityMemberOnboardingConfig,
+  CommunityMemberOnboardingPrimaryAction,
+} from "../../../../shared/communityMemberOnboarding";
 import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
@@ -113,6 +117,10 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsPricingMode: CommunityPricingMode;
     communitySettingsPriceUsdMonthly: string;
     communitySettingsPriceUsdAnnual: string;
+    communityMemberOnboardingConfig: CommunityMemberOnboardingConfig;
+    isCommunityMemberOnboardingDirty: boolean;
+    communityMemberOnboardingError: string | null;
+    isSavingCommunityMemberOnboarding: boolean;
     isCommunitySettingsDirty: boolean;
     communitySettingsError: string | null;
     isSavingCommunitySettings: boolean;
@@ -152,8 +160,15 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsPricingMode: (value: CommunityPricingMode) => void;
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
+    setCommunityMemberOnboardingConfig: (
+      value:
+        | CommunityMemberOnboardingConfig
+        | ((prev: CommunityMemberOnboardingConfig) => CommunityMemberOnboardingConfig),
+    ) => void;
+    markCommunityMemberOnboardingDirty: () => void;
     setCommunityPricingDirty: () => void;
     handleSaveCommunitySettings: () => Promise<void> | void;
+    handleSaveCommunityMemberOnboarding: () => Promise<void> | void;
     openDeleteCommunityModal: () => void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
@@ -229,19 +244,158 @@ function CommunitySettingsPaneSwitcher({
   );
 }
 
-function CommunityMemberOnboardingSettingsSection() {
+const COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS: Record<
+  CommunityMemberOnboardingPrimaryAction,
+  string
+> = {
+  introduce: "Introduce yourself in chat",
+  ask_agent: "Ask the community agent",
+  view_resources: "View starter resources",
+  start_workflow: "Start a recommended workflow",
+};
+
+function CommunityMemberOnboardingSettingsSection({
+  activeCommunity,
+  state,
+  actions,
+}: SharedSettingsProps & {
+  activeCommunity: ActiveCommunity;
+}) {
+  const config = state.communityMemberOnboardingConfig;
+  const updateConfig = (patch: Partial<CommunityMemberOnboardingConfig>) => {
+    actions.setCommunityMemberOnboardingConfig((prev) => ({ ...prev, ...patch }));
+    actions.markCommunityMemberOnboardingDirty();
+  };
+  const videoUrl = config.video_url ?? "";
+  const thumbnailUrl = config.thumbnail_url ?? "";
+
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">Member onboarding</div>
-      <div className="settings-section-desc">
-        Configure the welcome experience members see after joining this community.
+    <>
+      <div className="settings-section">
+        <div className="settings-section-title">Member onboarding</div>
+        <div className="settings-section-desc">
+          Configure the welcome experience new members see after joining {activeCommunity.name}.
+        </div>
+        <div className="model-list">
+          <label className="model-toggle">
+            <span>Show onboarding to new members</span>
+            <input
+              type="checkbox"
+              checked={config.enabled}
+              disabled={state.isSavingCommunityMemberOnboarding}
+              onChange={(event) => updateConfig({ enabled: event.target.checked })}
+            />
+          </label>
+        </div>
+        <label className="create-community-field">
+          <span>Welcome title</span>
+          <input
+            type="text"
+            value={config.title}
+            maxLength={120}
+            disabled={state.isSavingCommunityMemberOnboarding}
+            onChange={(event) => updateConfig({ title: event.target.value })}
+          />
+        </label>
+        <label className="create-community-field">
+          <span>Short description</span>
+          <textarea
+            rows={3}
+            value={config.description}
+            maxLength={400}
+            disabled={state.isSavingCommunityMemberOnboarding}
+            onChange={(event) => updateConfig({ description: event.target.value })}
+          />
+        </label>
+        <label className="create-community-field">
+          <span>Welcome video URL</span>
+          <input
+            type="url"
+            placeholder="https://youtube.com/..."
+            value={videoUrl}
+            disabled={state.isSavingCommunityMemberOnboarding}
+            onChange={(event) => updateConfig({ video_url: event.target.value.trim() || null })}
+          />
+          <span className="create-community-hint">
+            Optional. The member display will open this in the welcome modal.
+          </span>
+        </label>
+        <label className="create-community-field">
+          <span>Thumbnail URL</span>
+          <input
+            type="url"
+            placeholder="https://..."
+            value={thumbnailUrl}
+            disabled={state.isSavingCommunityMemberOnboarding}
+            onChange={(event) => updateConfig({ thumbnail_url: event.target.value.trim() || null })}
+          />
+        </label>
+        <label className="create-community-field">
+          <span>Primary first action</span>
+          <select
+            className="select-styled"
+            value={config.primary_action}
+            disabled={state.isSavingCommunityMemberOnboarding}
+            onChange={(event) =>
+              updateConfig({
+                primary_action: event.target.value as CommunityMemberOnboardingPrimaryAction,
+              })
+            }
+          >
+            {Object.entries(COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="create-community-field">
+          <span>AI guide prompt</span>
+          <textarea
+            rows={5}
+            value={config.ai_guide_prompt}
+            maxLength={1000}
+            disabled={state.isSavingCommunityMemberOnboarding}
+            onChange={(event) => updateConfig({ ai_guide_prompt: event.target.value })}
+          />
+          <span className="create-community-hint">
+            Used later by the community agent to orient new members.
+          </span>
+        </label>
+        {state.communityMemberOnboardingError ? (
+          <div className="auth-error">{state.communityMemberOnboardingError}</div>
+        ) : null}
+        <div className="create-community-actions">
+          <button
+            className={`platform-save-button${
+              state.isCommunityMemberOnboardingDirty ? " is-dirty" : " is-saved"
+            }`}
+            type="button"
+            disabled={
+              state.isSavingCommunityMemberOnboarding ||
+              !state.isCommunityMemberOnboardingDirty
+            }
+            onClick={() => void actions.handleSaveCommunityMemberOnboarding()}
+          >
+            {state.isSavingCommunityMemberOnboarding
+              ? "Saving..."
+              : state.isCommunityMemberOnboardingDirty
+                ? "Save onboarding"
+                : "Saved"}
+          </button>
+        </div>
       </div>
-      <div className="model-note">
-        The member onboarding display will use a clickable welcome bar, an intro video modal,
-        and first-action prompts. This settings pane is ready for that configuration, but the
-        persisted onboarding fields are not wired yet.
+      <div className="settings-section">
+        <div className="settings-section-title">Preview</div>
+        <div className="model-note">
+          <strong>{config.title || `Welcome to ${activeCommunity.name}`}</strong>
+          <br />
+          {config.description}
+          <br />
+          First action: {COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS[config.primary_action]}.
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1025,7 +1179,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 </div>
               </>
             ) : null}
-            {selectedSettingsPane === "onboarding" ? <CommunityMemberOnboardingSettingsSection /> : null}
+            {selectedSettingsPane === "onboarding" ? (
+              <CommunityMemberOnboardingSettingsSection
+                activeCommunity={activeCommunity}
+                state={state}
+                actions={actions}
+              />
+            ) : null}
             {selectedSettingsPane === "integrations" ? (
               <CommunityIntegrationsSettingsSection
                 canManage={canManageCommunitySettings}

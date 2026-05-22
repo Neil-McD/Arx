@@ -50,6 +50,7 @@
     "smoke:builder-partner-runtime": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_partner_program_runtime_smoke.ts",
     "check:community-launch-setup-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_launch_setup_contract_proof.ts",
     "check:community-settings-panes-route-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_settings_panes_route_contract_proof.ts",
+    "check:community-member-onboarding-config-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_member_onboarding_config_contract_proof.ts",
     "check:purchase-token-hygiene-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/purchase_token_hygiene_proof.ts",
     "check:frontend-privacy-hygiene-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/frontend_privacy_hygiene_proof.ts",
     "check:community-admin-contract-guard": "bash scripts/community_admin_contract_guard.sh",

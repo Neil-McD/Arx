@@ -48,6 +48,7 @@ import {
 } from "../../../shared/createCommunityIntent";
 import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
+import type { CommunityMemberOnboardingConfig } from "../../../shared/communityMemberOnboarding";
 import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
 import {
   buildCsv, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
@@ -483,6 +484,7 @@ type CommunityRecord = {
   banner_zoom?: number | null;
   visibility: string;
   entry_policy?: "open" | "approval" | "paid_subscription" | null;
+  member_onboarding?: CommunityMemberOnboardingConfig | null;
   owner_id: string;
   created_at: string;
   updated_at: string;
@@ -2405,8 +2407,12 @@ export default function App() {
     setCommunitySettingsPriceUsdMonthly,
     communitySettingsPriceUsdAnnual,
     setCommunitySettingsPriceUsdAnnual,
+    communityMemberOnboardingConfig,
+    setCommunityMemberOnboardingConfig,
     communitySettingsError,
     setCommunitySettingsError,
+    communityMemberOnboardingError,
+    setCommunityMemberOnboardingError,
     communitySettingsBannerUploadError,
     setCommunitySettingsBannerUploadError,
     isProcessingCommunitySettingsBanner,
@@ -2417,14 +2423,18 @@ export default function App() {
     setIsCommunityBannerFocusModalOpen,
     isSavingCommunitySettings,
     setIsSavingCommunitySettings,
+    isSavingCommunityMemberOnboarding,
+    setIsSavingCommunityMemberOnboarding,
     isSettingsBannerDragOver,
     setIsSettingsBannerDragOver,
     isSettingsAvatarDragOver,
     setIsSettingsAvatarDragOver,
     communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
+    communityMemberOnboardingDirtyRef,
     communityPricingDirtyRef,
     markCommunitySettingsDirty,
+    markCommunityMemberOnboardingDirty,
   } = communitySettingsUi;
   const communityAgentConfigUi = useWebCommunityAgentConfigUiController();
   const {
@@ -3818,6 +3828,7 @@ export default function App() {
     slugifyCommunityName,
     communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
+    communityMemberOnboardingDirtyRef,
     communityPricingDirtyRef,
     setCommunitySettingsError,
     setCommunityMemberSettingsError,
@@ -3837,6 +3848,8 @@ export default function App() {
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
     setCommunitySettingsPriceUsdAnnual,
+    setCommunityMemberOnboardingConfig,
+    setCommunityMemberOnboardingError,
     setCommunityMemberMuted,
     setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner,
@@ -3863,6 +3876,7 @@ export default function App() {
     handleToggleCommunityMute,
     handleLeaveCommunity,
     handleSaveCommunitySettings,
+    handleSaveCommunityMemberOnboarding,
   } = useCommunitySettingsGovernanceController<AuthSession>({
     activeCommunityAvatarStorageId: activeCommunitySettingsSource?.avatar_storage_id ?? null,
     activeCommunityBannerStorageId: activeCommunitySettingsSource?.banner_storage_id ?? null,
@@ -3902,9 +3916,13 @@ export default function App() {
     communitySettingsPricingMode,
     communitySettingsPriceUsdMonthly,
     communitySettingsPriceUsdAnnual,
+    communityMemberOnboardingConfig,
+    communityMemberOnboardingDirtyRef,
     isValidCommunitySlug,
     setCommunitySettingsError,
+    setCommunityMemberOnboardingError,
     setIsSavingCommunitySettings,
+    setIsSavingCommunityMemberOnboarding,
     onSaveCommunitySettingsSuccess: (result) => {
       setCommunities((prev) =>
         prev.map((community) =>
@@ -3939,6 +3957,21 @@ export default function App() {
       }
       communitySettingsDirtyRef.current = false;
       communityPricingDirtyRef.current = false;
+    },
+    onSaveCommunityMemberOnboardingSuccess: (result) => {
+      setCommunities((prev) =>
+        prev.map((community) =>
+          community.id === result.community_id
+            ? {
+                ...community,
+                member_onboarding: result.member_onboarding,
+                updated_at: result.updated_at,
+              }
+            : community,
+        ),
+      );
+      setCommunityMemberOnboardingConfig(result.member_onboarding);
+      communityMemberOnboardingDirtyRef.current = false;
     },
   });
   const {
@@ -7883,7 +7916,8 @@ export default function App() {
   const handleSelectActiveCommunity = useCallback((community: CommunityRecord): boolean => {
     if (
       !confirmDiscardUnsavedCommunitySettingsWeb({
-        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+        isCommunitySettingsDirty:
+          communitySettingsDirtyRef.current || communityMemberOnboardingDirtyRef.current,
         isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
         activeCommunityId: selectedActiveCommunityId,
         nextCommunityId: community.id,
@@ -8000,6 +8034,10 @@ export default function App() {
         communitySettingsPricingMode,
         communitySettingsPriceUsdMonthly,
         communitySettingsPriceUsdAnnual,
+        communityMemberOnboardingConfig,
+        isCommunityMemberOnboardingDirty: communityMemberOnboardingDirtyRef.current,
+        communityMemberOnboardingError,
+        isSavingCommunityMemberOnboarding,
         isCommunitySettingsDirty: communitySettingsDirtyRef.current,
         communitySettingsError,
         isSavingCommunitySettings,
@@ -8033,8 +8071,11 @@ export default function App() {
         setCommunitySettingsPricingMode,
         setCommunitySettingsPriceUsdMonthly,
         setCommunitySettingsPriceUsdAnnual,
+        setCommunityMemberOnboardingConfig,
+        markCommunityMemberOnboardingDirty,
         communityPricingDirtyRef,
         handleSaveCommunitySettings,
+        handleSaveCommunityMemberOnboarding,
         openDeleteCommunityModal,
         handleToggleCommunityMute,
         handleLeaveCommunity,
