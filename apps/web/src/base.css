@@ -18920,6 +18920,10 @@ button.message-citation-chip:hover {
   padding: 4px;
 }
 
+.settings-panel .community-settings-pane-switcher {
+  margin-bottom: 8px;
+}
+
 .model-note {
   margin-top: 4px;
   font-size: 11px;
@@ -18927,7 +18931,7 @@ button.message-citation-chip:hover {
 }
 
 .member-onboarding-settings-section {
-  gap: 16px;
+  gap: 18px;
 }
 
 .member-onboarding-heading {
@@ -18935,6 +18939,21 @@ button.message-citation-chip:hover {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.member-onboarding-heading > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.member-onboarding-heading .settings-section-title {
+  line-height: 1.25;
+}
+
+.member-onboarding-heading .settings-section-desc {
+  margin: 0;
+  line-height: 1.4;
 }
 
 .member-onboarding-state {
