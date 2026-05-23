@@ -125,8 +125,12 @@ import {
   saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
 } from "../../../shared/cloudCommunityAgentGateway";
 import {
+  applyCloudCommunityWikiArchitectProposal,
   createCloudCommunity,
+  ensureCloudCommunityResourceWikiScaffold,
+  getCloudCommunityResourceBuilderHealth,
   prepareCloudCommunityBrandingField,
+  runCloudCommunityWikiArchitectProposal,
   saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
@@ -7633,14 +7637,52 @@ export default function App() {
             body_md: null,
             url: parsedUrl.toString(),
             type: "link",
-            resource_role: "page",
-            resource_status: "published",
+            resource_role: "source",
+            resource_status: "review",
             pinned: false,
           },
         });
       }
       await loadCommunityResources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleLoadCommunityLaunchKnowledgeHealth = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const health = await getCloudCommunityResourceBuilderHealth({
+        session,
+        communityId: community.id,
+      });
+      return health as any;
+    };
+    const handleEnsureCommunityLaunchKnowledgeScaffold = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await ensureCloudCommunityResourceWikiScaffold({
+        session,
+        communityId: community.id,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return result as any;
+    };
+    const handleGenerateCommunityLaunchKnowledgePlan = async (draft: { builderIntent: string }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await runCloudCommunityWikiArchitectProposal({
+        session,
+        communityId: community.id,
+        builderIntent: draft.builderIntent,
+      });
+      return result as any;
+    };
+    const handleApplyCommunityLaunchKnowledgePlan = async (draft: { proposal: unknown }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await applyCloudCommunityWikiArchitectProposal({
+        session,
+        communityId: community.id,
+        proposal: draft.proposal,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return result as any;
     };
     const handleSaveCommunityLaunchAgent = async (draft: {
       systemPrompt: string;
@@ -9341,6 +9383,10 @@ export default function App() {
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
+        onLoadKnowledgeHealth={handleLoadCommunityLaunchKnowledgeHealth}
+        onEnsureKnowledgeScaffold={handleEnsureCommunityLaunchKnowledgeScaffold}
+        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
+        onApplyKnowledgePlan={handleApplyCommunityLaunchKnowledgePlan}
         onSaveAgent={handleSaveCommunityLaunchAgent}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}

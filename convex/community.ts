@@ -75,7 +75,10 @@ import {
   cancelMyJoinRequestBySlug as cancelMyJoinRequestBySlugImpl,
   getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
   countCommunityResources as countCommunityResourcesImpl,
+  editCommunityResourceBuilderResource as editCommunityResourceBuilderResourceImpl,
+  ensureCommunityResourceWikiScaffold as ensureCommunityResourceWikiScaffoldImpl,
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
+  getCommunityResourceBuilderHealth as getCommunityResourceBuilderHealthImpl,
   recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
   createCommunityResourcePageDraftFromSource as createCommunityResourcePageDraftFromSourceImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
@@ -85,14 +88,17 @@ import {
   getMyJoinRequestBySlug as getMyJoinRequestBySlugImpl,
   joinPublicCommunity as joinPublicCommunityImpl,
   joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
+  listCommunityResourceBuilderDirectory as listCommunityResourceBuilderDirectoryImpl,
   listCommunityResources as listCommunityResourcesImpl,
   listCommunityResourceModules as listCommunityResourceModulesImpl,
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   reorderCommunityResourceModules as reorderCommunityResourceModulesImpl,
   reorderCommunityResources as reorderCommunityResourcesImpl,
+  readCommunityResourceBuilderResource as readCommunityResourceBuilderResourceImpl,
   saveCommunityResource as saveCommunityResourceImpl,
   saveCommunityResourceModule as saveCommunityResourceModuleImpl,
+  writeCommunityResourceBuilderResource as writeCommunityResourceBuilderResourceImpl,
 } from "./communityExperience";
 import {
   cancelCommunityEvent as cancelCommunityEventImpl,
@@ -112,6 +118,10 @@ import {
 import {
   getCommunityLaunchSetupStatus as getCommunityLaunchSetupStatusImpl,
 } from "./communityLaunchSetup";
+import {
+  applyCommunityWikiArchitectProposal as applyCommunityWikiArchitectProposalImpl,
+  runCommunityWikiArchitectProposal as runCommunityWikiArchitectProposalImpl,
+} from "./communityWikiArchitect";
 import {
   getCommunityArchiveHealth as getCommunityArchiveHealthImpl,
   processCommunityArchivePending as processCommunityArchivePendingImpl,
@@ -173,6 +183,13 @@ export const listCommunityRevenueSeries = listCommunityRevenueSeriesImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
 export const listCommunityResourceModules = listCommunityResourceModulesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
+export const listCommunityResourceBuilderDirectory = listCommunityResourceBuilderDirectoryImpl;
+export const readCommunityResourceBuilderResource = readCommunityResourceBuilderResourceImpl;
+export const writeCommunityResourceBuilderResource = writeCommunityResourceBuilderResourceImpl;
+export const editCommunityResourceBuilderResource = editCommunityResourceBuilderResourceImpl;
+export const getCommunityResourceBuilderHealth = getCommunityResourceBuilderHealthImpl;
+export const ensureCommunityResourceWikiScaffold = ensureCommunityResourceWikiScaffoldImpl;
+export const applyCommunityWikiArchitectProposal: any = applyCommunityWikiArchitectProposalImpl;
 export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
 export const createCommunityResourcePageDraftFromSource = createCommunityResourcePageDraftFromSourceImpl;
@@ -215,6 +232,7 @@ export const saveCommunityMemberOnboardingConfig = saveCommunityMemberOnboarding
 export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
+export const runCommunityWikiArchitectProposal: any = runCommunityWikiArchitectProposalImpl;
 export const deleteCommunity = deleteCommunityImpl;
 export const getCommunityArchiveHealth = getCommunityArchiveHealthImpl;
 export const requestCommunityArchiveBackfill = requestCommunityArchiveBackfillImpl;

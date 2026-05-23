@@ -500,6 +500,65 @@ export async function createCloudCommunityResourcePageDraftFromSource<SessionT, 
   return payload as TResource;
 }
 
+export async function getCloudCommunityResourceBuilderHealth<SessionT, THealth = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<THealth> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunityResourceBuilderHealth" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  return payload as THealth;
+}
+
+export async function ensureCloudCommunityResourceWikiScaffold<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:ensureCommunityResourceWikiScaffold" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  return payload as TResult;
+}
+
+export async function runCloudCommunityWikiArchitectProposal<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    builderIntent?: string | null;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.action("community:runCommunityWikiArchitectProposal" as any, {
+    authSubject,
+    communityId: params.communityId,
+    builderIntent:
+      typeof params.builderIntent === "string" && params.builderIntent.trim()
+        ? params.builderIntent.trim()
+        : null,
+  });
+  return payload as TResult;
+}
+
+export async function applyCloudCommunityWikiArchitectProposal<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    proposal: unknown;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:applyCommunityWikiArchitectProposal" as any, {
+    authSubject,
+    communityId: params.communityId,
+    proposal: params.proposal,
+  });
+  return payload as TResult;
+}
+
 export async function saveCloudCommunityResourceModule<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     moduleId: string | null;

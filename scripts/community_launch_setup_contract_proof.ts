@@ -432,8 +432,8 @@ assert.match(
 );
 assert.match(
   appShell,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_status: "published"/,
-  "launch knowledge links must create canonical published link resources",
+  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"/,
+  "launch knowledge links must create canonical reviewed source resources",
 );
 assert.doesNotMatch(
   setupModal,
