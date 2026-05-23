@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../../shared/markdownUi";
@@ -27,19 +27,10 @@ function getHostLabel(rawUrl: string | null): string {
   return url.hostname.replace(/^www\./i, "");
 }
 
-function getMediaLabel(resource: CommunityResource): string {
-  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
-  if (embed?.provider === "youtube") return "YouTube";
-  if (embed?.provider === "wistia") return "Wistia";
-  if (normalizeExternalUrl(resource.url)) return getHostLabel(resource.url);
-  return "Note";
-}
-
-function getKindLabel(resource: CommunityResource): string {
-  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
-  if (embed) return "Video";
-  if (normalizeExternalUrl(resource.url)) return "Link";
-  return "Note";
+function getEmbedProviderLabel(provider: string | null | undefined): string {
+  if (provider === "youtube") return "YouTube";
+  if (provider === "wistia") return "Wistia";
+  return "Video";
 }
 
 function getRoleLabel(resource: CommunityResource): string {
@@ -59,9 +50,28 @@ function isUnpublishedStatus(resource: CommunityResource): boolean {
 }
 
 function buildEyebrow(resource: CommunityResource): string {
-  return [getRoleLabel(resource), getKindLabel(resource), getMediaLabel(resource)]
-    .filter((part, index, list) => part && list.indexOf(part) === index)
-    .join(" · ");
+  const role = getRoleLabel(resource);
+  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
+  if (embed) return `${role} · ${getEmbedProviderLabel(embed.provider)}`;
+  if (normalizeExternalUrl(resource.url)) return `${role} · ${getHostLabel(resource.url)}`;
+  return role;
+}
+
+function formatCreatedAt(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  try {
+    return parsed.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return parsed.toISOString();
+  }
 }
 
 function PinIcon() {
@@ -76,10 +86,159 @@ function PinIcon() {
 
 function ExternalArrowIcon() {
   return (
-    <svg className="resource-viewer-citation-arrow" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className="resource-viewer-external-arrow" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M7 17L17 7" />
       <path d="M9 7h8v8" />
     </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="19" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </svg>
+  );
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // best-effort only
+    }
+  };
+  return (
+    <button
+      className="resource-viewer-details-copy"
+      type="button"
+      onClick={handleCopy}
+      title="Copy to clipboard"
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+function ResourceDetailsSheet(props: {
+  resource: CommunityResource;
+  sourceLineage: WebCommunityResourceSourceLineage | null;
+  actions: ReactNode;
+  onClose: () => void;
+}) {
+  const { resource, sourceLineage, actions, onClose } = props;
+  const createdAt = formatCreatedAt(resource.created_at);
+  const status = getStatusLabel(resource);
+  const hasLineage = Boolean(resource.source_resource_id && sourceLineage);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <aside className="resource-viewer-details" aria-label="Resource details">
+      <div className="resource-viewer-details-header">
+        <div className="resource-viewer-details-title">Details</div>
+        <button
+          className="resource-viewer-details-close"
+          type="button"
+          onClick={onClose}
+          title="Close"
+          aria-label="Close details"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+
+      <div className="resource-viewer-details-body">
+        <div className="resource-viewer-details-row">
+          <div className="resource-viewer-details-label">Status</div>
+          <div className="resource-viewer-details-value">
+            <span
+              className={`resource-viewer-status-pill resource-viewer-status-${resource.resource_status ?? "draft"}`}
+            >
+              {status}
+            </span>
+          </div>
+        </div>
+
+        {hasLineage ? (
+          <div className="resource-viewer-details-row">
+            <div className="resource-viewer-details-label">Drafted from</div>
+            <div className="resource-viewer-details-value">
+              {sourceLineage?.onOpen ? (
+                <button
+                  className="resource-viewer-details-link"
+                  type="button"
+                  onClick={sourceLineage.onOpen}
+                  title="Open source"
+                >
+                  <span>{sourceLineage.title}</span>
+                  <ExternalArrowIcon />
+                </button>
+              ) : (
+                <div className="resource-viewer-details-static">
+                  {sourceLineage?.title ?? "Original source unavailable"}
+                </div>
+              )}
+              {sourceLineage?.detail ? (
+                <div className="resource-viewer-details-detail">{sourceLineage.detail}</div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="resource-viewer-details-row">
+          <div className="resource-viewer-details-label">Path</div>
+          <div className="resource-viewer-details-value">
+            <div className="resource-viewer-details-static">{resource.directory_path}</div>
+          </div>
+        </div>
+
+        <div className="resource-viewer-details-row">
+          <div className="resource-viewer-details-label">URI</div>
+          <div className="resource-viewer-details-value">
+            <code className="resource-viewer-details-code">{resource.directory_uri}</code>
+            <CopyButton value={resource.directory_uri} />
+          </div>
+        </div>
+
+        {createdAt ? (
+          <div className="resource-viewer-details-row">
+            <div className="resource-viewer-details-label">Created</div>
+            <div className="resource-viewer-details-value">
+              <div className="resource-viewer-details-static">{createdAt}</div>
+            </div>
+          </div>
+        ) : null}
+
+        {actions ? (
+          <div className="resource-viewer-details-actions">
+            <div className="resource-viewer-details-label">Actions</div>
+            <div className="resource-viewer-details-actions-row">{actions}</div>
+          </div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
@@ -93,10 +252,17 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const statusLabel = getStatusLabel(resource);
   const trimmedBody = resource.body_md?.trim() ?? "";
   const hasBody = trimmedBody.length > 0;
-  const hasExternalLink = Boolean(sourceUrl) && !embed;
-  const hasLineage = Boolean(resource.source_resource_id && sourceLineage);
-  const showCitation = hasExternalLink || hasLineage;
-  const isEmpty = !embed && !hasBody && !showCitation;
+  const verificationLink: { label: string; href: string } | null = sourceUrl
+    ? {
+        label: embed
+          ? `Watch on ${getEmbedProviderLabel(embed.provider)}`
+          : `Read on ${hostLabel}`,
+        href: sourceUrl.toString(),
+      }
+    : null;
+  const showDetailsTrigger = Boolean(actions);
+  const isEmpty = !embed && !hasBody && !verificationLink;
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   return (
     <div className="resource-viewer-content">
@@ -115,12 +281,19 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
                 {statusLabel}
               </span>
             ) : null}
-            {actions ? <div className="resource-viewer-actions">{actions}</div> : null}
+            {showDetailsTrigger ? (
+              <button
+                className="resource-viewer-details-trigger"
+                type="button"
+                onClick={() => setIsDetailsOpen((open) => !open)}
+                aria-expanded={isDetailsOpen}
+                aria-label="Show details"
+                title="Show details"
+              >
+                <MoreIcon />
+              </button>
+            ) : null}
           </div>
-        </div>
-        <div className="resource-viewer-directory" aria-label="Resource directory">
-          <span>{resource.directory_path}</span>
-          <code>{resource.directory_uri}</code>
         </div>
       </div>
 
@@ -141,63 +314,32 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
             <div className="resource-viewer-prose">{renderMarkdown(trimmedBody)}</div>
           ) : null}
 
+          {verificationLink ? (
+            <a
+              className="resource-viewer-verification-link"
+              href={verificationLink.href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>{verificationLink.label}</span>
+              <ExternalArrowIcon />
+            </a>
+          ) : null}
+
           {isEmpty ? (
             <div className="resource-viewer-empty">This page hasn’t been written yet.</div>
           ) : null}
-
-          {showCitation ? (
-            <div className="resource-viewer-citation">
-              {hasExternalLink ? (
-                <a
-                  className="resource-viewer-citation-cell"
-                  href={sourceUrl!.toString()}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <div className="resource-viewer-citation-copy">
-                    <div className="resource-viewer-citation-label">Source</div>
-                    <div className="resource-viewer-citation-value">{hostLabel}</div>
-                  </div>
-                  <ExternalArrowIcon />
-                </a>
-              ) : null}
-
-              {hasLineage ? (
-                sourceLineage?.onOpen ? (
-                  <button
-                    className="resource-viewer-citation-cell resource-viewer-citation-cell-button"
-                    type="button"
-                    onClick={sourceLineage.onOpen}
-                    title="Open source"
-                    aria-label={`Open source ${sourceLineage.title}`}
-                  >
-                    <div className="resource-viewer-citation-copy">
-                      <div className="resource-viewer-citation-label">Drafted from</div>
-                      <div className="resource-viewer-citation-value">{sourceLineage.title}</div>
-                      {sourceLineage.detail ? (
-                        <div className="resource-viewer-citation-detail">{sourceLineage.detail}</div>
-                      ) : null}
-                    </div>
-                    <ExternalArrowIcon />
-                  </button>
-                ) : (
-                  <div className="resource-viewer-citation-cell resource-viewer-citation-cell-static">
-                    <div className="resource-viewer-citation-copy">
-                      <div className="resource-viewer-citation-label">Drafted from</div>
-                      <div className="resource-viewer-citation-value">
-                        {sourceLineage?.title ?? "Original source unavailable"}
-                      </div>
-                      {sourceLineage?.detail ? (
-                        <div className="resource-viewer-citation-detail">{sourceLineage.detail}</div>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
+
+      {isDetailsOpen ? (
+        <ResourceDetailsSheet
+          resource={resource}
+          sourceLineage={sourceLineage}
+          actions={actions}
+          onClose={() => setIsDetailsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

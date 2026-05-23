@@ -338,8 +338,9 @@ function ResourceRailItem(props: {
     isDragging,
     isDropTarget,
   } = props;
-  const meta = getResourceMeta(resource);
   const summary = (resource.body_md ?? "").trim();
+  const isUnpublished =
+    resource.resource_status !== undefined && resource.resource_status !== "published";
 
   const handleItemKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -379,12 +380,9 @@ function ResourceRailItem(props: {
           <div className="knowledge-resource-item-title">{resource.title}</div>
           {resource.pinned ? <PinIcon /> : null}
         </div>
-        <div className="knowledge-resource-item-meta">
-          <span>{getResourceRoleLabel(resource)}</span>
-          <span>{meta.primary}</span>
-          {meta.secondary ? <span>{meta.secondary}</span> : null}
-          {resource.resource_status !== "published" ? <span>{getResourceStatusLabel(resource)}</span> : null}
-        </div>
+        {isUnpublished ? (
+          <div className="knowledge-resource-item-status">{getResourceStatusLabel(resource)}</div>
+        ) : null}
         {summary ? <div className="knowledge-resource-item-summary">{summary}</div> : null}
       </div>
       {canManage ? (
