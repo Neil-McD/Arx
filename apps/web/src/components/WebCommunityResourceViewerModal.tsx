@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { renderMarkdown } from "../../../../shared/markdownUi";
 import type { CommunityResource } from "./communityResourcesContracts";
 
 type WebCommunityResourceViewerModalProps = {
@@ -16,7 +17,6 @@ export type WebCommunityResourceSourceLineage = {
 
 type WebCommunityResourceViewerContentProps = {
   resource: CommunityResource;
-  eyebrow?: string;
   actions?: ReactNode;
   sourceLineage?: WebCommunityResourceSourceLineage | null;
 };
@@ -27,12 +27,23 @@ function getHostLabel(rawUrl: string | null): string {
   return url.hostname.replace(/^www\./i, "");
 }
 
-function getMeta(resource: CommunityResource): { primary: string; secondary: string | null } {
+function getMediaLabel(resource: CommunityResource): string {
   const embed = resource.url ? parseEmbedUrl(resource.url) : null;
-  if (embed?.provider === "youtube") return { primary: "Video", secondary: "YouTube" };
-  if (embed?.provider === "wistia") return { primary: "Video", secondary: "Wistia" };
-  if (normalizeExternalUrl(resource.url)) return { primary: "Link", secondary: getHostLabel(resource.url) };
-  return { primary: "Note", secondary: null };
+  if (embed?.provider === "youtube") return "YouTube";
+  if (embed?.provider === "wistia") return "Wistia";
+  if (normalizeExternalUrl(resource.url)) return getHostLabel(resource.url);
+  return "Note";
+}
+
+function getKindLabel(resource: CommunityResource): string {
+  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
+  if (embed) return "Video";
+  if (normalizeExternalUrl(resource.url)) return "Link";
+  return "Note";
+}
+
+function getRoleLabel(resource: CommunityResource): string {
+  return resource.resource_role === "source" ? "Source" : "Page";
 }
 
 function getStatusLabel(resource: CommunityResource): string {
@@ -43,27 +54,76 @@ function getStatusLabel(resource: CommunityResource): string {
   return "Published";
 }
 
+function isUnpublishedStatus(resource: CommunityResource): boolean {
+  return resource.resource_status !== undefined && resource.resource_status !== "published";
+}
+
+function buildEyebrow(resource: CommunityResource): string {
+  return [getRoleLabel(resource), getKindLabel(resource), getMediaLabel(resource)]
+    .filter((part, index, list) => part && list.indexOf(part) === index)
+    .join(" · ");
+}
+
+function PinIcon() {
+  return (
+    <svg className="resource-viewer-pin-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 3h6" />
+      <path d="M10 3v6l-3 3v1h10v-1l-3-3V3" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
+function ExternalArrowIcon() {
+  return (
+    <svg className="resource-viewer-citation-arrow" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 17L17 7" />
+      <path d="M9 7h8v8" />
+    </svg>
+  );
+}
+
 export function WebCommunityResourceViewerContent(props: WebCommunityResourceViewerContentProps) {
-  const { resource, eyebrow = "Resource", actions = null, sourceLineage = null } = props;
+  const { resource, actions = null, sourceLineage = null } = props;
   const embed = resource.url ? parseEmbedUrl(resource.url) : null;
-  const meta = getMeta(resource);
   const sourceUrl = normalizeExternalUrl(resource.url);
   const hostLabel = getHostLabel(resource.url);
-  const hasSourceLineage = Boolean(resource.source_resource_id);
+  const eyebrow = buildEyebrow(resource);
+  const showStatusPill = isUnpublishedStatus(resource);
+  const statusLabel = getStatusLabel(resource);
+  const trimmedBody = resource.body_md?.trim() ?? "";
+  const hasBody = trimmedBody.length > 0;
+  const hasExternalLink = Boolean(sourceUrl) && !embed;
+  const hasLineage = Boolean(resource.source_resource_id && sourceLineage);
+  const showCitation = hasExternalLink || hasLineage;
+  const isEmpty = !embed && !hasBody && !showCitation;
 
   return (
     <div className="resource-viewer-content">
       <div className="resource-viewer-header">
-        <div className="resource-viewer-title-block">
-          <div className="resource-viewer-eyebrow">{eyebrow}</div>
-          <h2 className="resource-viewer-title">{resource.title}</h2>
+        <div className="resource-viewer-eyebrow">{eyebrow}</div>
+        <div className="resource-viewer-title-row">
+          <h1 className="resource-viewer-title">
+            <span>{resource.title}</span>
+            {resource.pinned ? <PinIcon /> : null}
+          </h1>
+          <div className="resource-viewer-header-aside">
+            {showStatusPill ? (
+              <span
+                className={`resource-viewer-status-pill resource-viewer-status-${resource.resource_status ?? "draft"}`}
+              >
+                {statusLabel}
+              </span>
+            ) : null}
+            {actions ? <div className="resource-viewer-actions">{actions}</div> : null}
+          </div>
         </div>
-        {actions ? <div className="resource-viewer-actions">{actions}</div> : null}
       </div>
+
       <div className="resource-viewer-body">
-        <div className={embed ? "resource-viewer-layout has-media" : "resource-viewer-layout"}>
+        <div className="resource-viewer-column">
           {embed ? (
-            <div className="resource-viewer-media">
+            <div className="resource-viewer-embed">
               <iframe
                 src={embed.src}
                 title={`${resource.title} embed`}
@@ -72,93 +132,66 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
               />
             </div>
           ) : null}
-          <div className="resource-viewer-sidebar">
-            <div className="resource-viewer-meta">
-              <span>{meta.primary}</span>
-              {meta.secondary ? <span>{meta.secondary}</span> : null}
-              <span>{resource.resource_role === "source" ? "Source" : "Page"}</span>
-              <span>{getStatusLabel(resource)}</span>
-              {resource.pinned ? <span>Pinned</span> : null}
-            </div>
-            {sourceUrl ? (
-              <a
-                className="resource-viewer-link-surface"
-                href={sourceUrl.toString()}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <div className="resource-viewer-link-copy">
-                  <div className="resource-viewer-link-label">Source</div>
-                  <div className="resource-viewer-link-host">{hostLabel}</div>
-                </div>
-                <div className="resource-viewer-link-arrow" aria-hidden="true">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M7 17L17 7" />
-                    <path d="M9 7h8v8" />
-                  </svg>
-                </div>
-              </a>
-            ) : (
-              <div className="resource-viewer-note-surface">
-                <div className="resource-viewer-link-copy">
-                  <div className="resource-viewer-note-label">Type</div>
-                  <div className="resource-viewer-link-host">{meta.primary}</div>
-                </div>
-              </div>
-            )}
-            <div className="resource-viewer-note-surface">
-              <div className="resource-viewer-link-copy">
-                <div className="resource-viewer-note-label">Path</div>
-                <div className="resource-viewer-link-host">{resource.directory_path}</div>
-                <div className="resource-viewer-link-detail">{resource.directory_uri}</div>
-              </div>
-            </div>
-            {hasSourceLineage && sourceLineage?.onOpen ? (
-              <button
-                className="resource-viewer-link-surface resource-viewer-lineage-button"
-                type="button"
-                onClick={sourceLineage.onOpen}
-                title="Open source"
-                aria-label={`Open source ${sourceLineage.title}`}
-              >
-                <div className="resource-viewer-link-copy">
-                  <div className="resource-viewer-link-label">Drafted from</div>
-                  <div className="resource-viewer-link-host">{sourceLineage.title}</div>
-                  {sourceLineage.detail ? (
-                    <div className="resource-viewer-link-detail">{sourceLineage.detail}</div>
-                  ) : null}
-                </div>
-                <div className="resource-viewer-link-arrow" aria-hidden="true">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M7 17L17 7" />
-                    <path d="M9 7h8v8" />
-                  </svg>
-                </div>
-              </button>
-            ) : hasSourceLineage ? (
-              <div className="resource-viewer-note-surface">
-                <div className="resource-viewer-link-copy">
-                  <div className="resource-viewer-note-label">
-                    {sourceLineage ? "Drafted from" : "Lineage"}
+
+          {hasBody ? (
+            <div className="resource-viewer-prose">{renderMarkdown(trimmedBody)}</div>
+          ) : null}
+
+          {isEmpty ? (
+            <div className="resource-viewer-empty">This page hasn’t been written yet.</div>
+          ) : null}
+
+          {showCitation ? (
+            <div className="resource-viewer-citation">
+              {hasExternalLink ? (
+                <a
+                  className="resource-viewer-citation-cell"
+                  href={sourceUrl!.toString()}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <div className="resource-viewer-citation-copy">
+                    <div className="resource-viewer-citation-label">Source</div>
+                    <div className="resource-viewer-citation-value">{hostLabel}</div>
                   </div>
-                  <div className="resource-viewer-link-host">
-                    {sourceLineage?.title ?? "Original source unavailable"}
+                  <ExternalArrowIcon />
+                </a>
+              ) : null}
+
+              {hasLineage ? (
+                sourceLineage?.onOpen ? (
+                  <button
+                    className="resource-viewer-citation-cell resource-viewer-citation-cell-button"
+                    type="button"
+                    onClick={sourceLineage.onOpen}
+                    title="Open source"
+                    aria-label={`Open source ${sourceLineage.title}`}
+                  >
+                    <div className="resource-viewer-citation-copy">
+                      <div className="resource-viewer-citation-label">Drafted from</div>
+                      <div className="resource-viewer-citation-value">{sourceLineage.title}</div>
+                      {sourceLineage.detail ? (
+                        <div className="resource-viewer-citation-detail">{sourceLineage.detail}</div>
+                      ) : null}
+                    </div>
+                    <ExternalArrowIcon />
+                  </button>
+                ) : (
+                  <div className="resource-viewer-citation-cell resource-viewer-citation-cell-static">
+                    <div className="resource-viewer-citation-copy">
+                      <div className="resource-viewer-citation-label">Drafted from</div>
+                      <div className="resource-viewer-citation-value">
+                        {sourceLineage?.title ?? "Original source unavailable"}
+                      </div>
+                      {sourceLineage?.detail ? (
+                        <div className="resource-viewer-citation-detail">{sourceLineage.detail}</div>
+                      ) : null}
+                    </div>
                   </div>
-                  {sourceLineage?.detail ? (
-                    <div className="resource-viewer-link-detail">{sourceLineage.detail}</div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-            {resource.body_md ? (
-              <div className="resource-viewer-description-block">
-                <div className="resource-viewer-description-label">Content</div>
-                <div className="resource-viewer-description-shell">
-                  <div className="resource-viewer-description">{resource.body_md}</div>
-                </div>
-              </div>
-            ) : null}
-          </div>
+                )
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

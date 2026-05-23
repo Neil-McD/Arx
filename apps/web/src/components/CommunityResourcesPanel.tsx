@@ -861,7 +861,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               {selectedResource ? (
                 <WebCommunityResourceViewerContent
                   resource={selectedResource}
-                  eyebrow={getResourceRoleLabel(selectedResource)}
                   sourceLineage={selectedSourceLineage}
                   actions={
                     capabilities.canOperateResources ? (
