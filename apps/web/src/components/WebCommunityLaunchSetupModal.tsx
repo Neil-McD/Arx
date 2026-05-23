@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
+  useEffect,
+  useMemo,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
+  ArrowLeft,
   BookOpen,
   Bot,
   Check,
@@ -29,6 +37,8 @@ import { StripeWordmark } from "./StripeWordmark";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
+
+type CommunityLaunchKnowledgeStage = "collect" | "assemble" | "review";
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 
@@ -155,11 +165,17 @@ type WebCommunityLaunchSetupModalProps = {
   onCreateCommunity?: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
-  onAddKnowledgeLink: (draft: CommunityLaunchKnowledgeLinkSaveDraft) => Promise<void>;
+  onAddKnowledgeLink: (
+    draft: CommunityLaunchKnowledgeLinkSaveDraft,
+  ) => Promise<void>;
   onLoadKnowledgeHealth?: () => Promise<CommunityLaunchKnowledgeHealth | null>;
   onEnsureKnowledgeScaffold?: () => Promise<CommunityLaunchKnowledgeScaffoldResult | null>;
-  onGenerateKnowledgePlan?: (draft: { builderIntent: string }) => Promise<CommunityLaunchKnowledgePlanResult | null>;
-  onApplyKnowledgePlan?: (draft: { proposal: CommunityWikiArchitectProposal }) => Promise<CommunityLaunchKnowledgePlanApplyResult | null>;
+  onGenerateKnowledgePlan?: (draft: {
+    builderIntent: string;
+  }) => Promise<CommunityLaunchKnowledgePlanResult | null>;
+  onApplyKnowledgePlan?: (draft: {
+    proposal: CommunityWikiArchitectProposal;
+  }) => Promise<CommunityLaunchKnowledgePlanApplyResult | null>;
   onSaveAgent: (draft: CommunityLaunchAgentSaveDraft) => Promise<void>;
   onSaveAccess: (draft: CommunityLaunchAccessSaveDraft) => Promise<void>;
   onSavePublish: (draft: CommunityLaunchPublishSaveDraft) => Promise<void>;
@@ -254,20 +270,26 @@ function normalizeActiveStep(
   return "profile";
 }
 
-function getNextLaunchStep(step: CommunityLaunchSetupStep): CommunityLaunchSetupStep | null {
+function getNextLaunchStep(
+  step: CommunityLaunchSetupStep,
+): CommunityLaunchSetupStep | null {
   const index = STEP_ORDER.indexOf(step);
   if (index < 0 || index >= STEP_ORDER.length - 1) return null;
   return STEP_ORDER[index + 1];
 }
 
-function getStarterPrompts(community: CommunityLaunchSetupCommunity | null): string[] {
+function getStarterPrompts(
+  community: CommunityLaunchSetupCommunity | null,
+): string[] {
   const prompts = Array.isArray(community?.agent_starter_prompts)
     ? community.agent_starter_prompts
     : [];
   return [0, 1, 2].map((index) => String(prompts[index] ?? "").trim());
 }
 
-function isPublishProfileMissing(missing: CommunityLaunchSetupMissing): boolean {
+function isPublishProfileMissing(
+  missing: CommunityLaunchSetupMissing,
+): boolean {
   return (
     missing === "community_name" ||
     missing === "community_one_liner" ||
@@ -302,31 +324,44 @@ export function WebCommunityLaunchSetupModal(
   const [activeStep, setActiveStep] = useState<CommunityLaunchSetupStep>(() =>
     normalizeActiveStep(status),
   );
-  const [stepOverride, setStepOverride] = useState<CommunityLaunchSetupStep | null>(null);
-  const [savingStep, setSavingStep] = useState<CommunityLaunchSetupStep | null>(null);
+  const [stepOverride, setStepOverride] =
+    useState<CommunityLaunchSetupStep | null>(null);
+  const [savingStep, setSavingStep] = useState<CommunityLaunchSetupStep | null>(
+    null,
+  );
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepSuccess, setStepSuccess] = useState<string | null>(null);
-  const [profileMediaError, setProfileMediaError] = useState<string | null>(null);
+  const [profileMediaError, setProfileMediaError] = useState<string | null>(
+    null,
+  );
   const [profileAvatarFileName, setProfileAvatarFileName] = useState("");
   const [profileBannerFileName, setProfileBannerFileName] = useState("");
-  const [processingProfileMedia, setProcessingProfileMedia] = useState<"avatar" | "banner" | null>(null);
+  const [processingProfileMedia, setProcessingProfileMedia] = useState<
+    "avatar" | "banner" | null
+  >(null);
   const [profileAvatarDragOver, setProfileAvatarDragOver] = useState(false);
   const [profileBannerDragOver, setProfileBannerDragOver] = useState(false);
   const [profileSlugEdited, setProfileSlugEdited] = useState(false);
-  const [profileDraft, setProfileDraft] = useState<CommunityLaunchProfileSaveDraft>({
-    name: "",
-    slug: "",
-    oneLiner: "",
-    avatarUrl: "",
-    bannerUrl: "",
-  });
+  const [profileDraft, setProfileDraft] =
+    useState<CommunityLaunchProfileSaveDraft>({
+      name: "",
+      slug: "",
+      oneLiner: "",
+      avatarUrl: "",
+      bannerUrl: "",
+    });
   const [aboutDraft, setAboutDraft] = useState("");
-  const [knowledgeLinkDrafts, setKnowledgeLinkDrafts] = useState<string[]>([""]);
-  const [knowledgeHealth, setKnowledgeHealth] = useState<CommunityLaunchKnowledgeHealth | null>(null);
+  const [knowledgeLinkDrafts, setKnowledgeLinkDrafts] = useState<string[]>([
+    "",
+  ]);
+  const [knowledgeStage, setKnowledgeStage] =
+    useState<CommunityLaunchKnowledgeStage>("collect");
+  const [knowledgeHealth, setKnowledgeHealth] =
+    useState<CommunityLaunchKnowledgeHealth | null>(null);
   const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
-  const [knowledgeScaffoldSaving, setKnowledgeScaffoldSaving] = useState(false);
   const [knowledgePlanIntent, setKnowledgePlanIntent] = useState("");
-  const [knowledgePlan, setKnowledgePlan] = useState<CommunityLaunchKnowledgePlanResult | null>(null);
+  const [knowledgePlan, setKnowledgePlan] =
+    useState<CommunityLaunchKnowledgePlanResult | null>(null);
   const [knowledgePlanLoading, setKnowledgePlanLoading] = useState(false);
   const [knowledgePlanApplyResult, setKnowledgePlanApplyResult] =
     useState<CommunityLaunchKnowledgePlanApplyResult | null>(null);
@@ -360,9 +395,9 @@ export function WebCommunityLaunchSetupModal(
       });
       setAboutDraft("");
       setKnowledgeLinkDrafts([""]);
+      setKnowledgeStage("collect");
       setKnowledgeHealth(null);
       setKnowledgeHealthLoading(false);
-      setKnowledgeScaffoldSaving(false);
       setKnowledgePlanIntent("");
       setKnowledgePlan(null);
       setKnowledgePlanLoading(false);
@@ -394,9 +429,9 @@ export function WebCommunityLaunchSetupModal(
     });
     setAboutDraft(community.about ?? "");
     setKnowledgeLinkDrafts([""]);
+    setKnowledgeStage("collect");
     setKnowledgeHealth(null);
     setKnowledgeHealthLoading(false);
-    setKnowledgeScaffoldSaving(false);
     setKnowledgePlanIntent("");
     setKnowledgePlan(null);
     setKnowledgePlanLoading(false);
@@ -432,7 +467,14 @@ export function WebCommunityLaunchSetupModal(
   ]);
 
   useEffect(() => {
-    if (!isOpen || activeStep !== "knowledge" || isCreateMode || !onLoadKnowledgeHealth) return;
+    if (
+      !isOpen ||
+      activeStep !== "knowledge" ||
+      knowledgeStage === "collect" ||
+      isCreateMode ||
+      !onLoadKnowledgeHealth
+    )
+      return;
     let cancelled = false;
     setKnowledgeHealthLoading(true);
     void onLoadKnowledgeHealth()
@@ -441,7 +483,11 @@ export function WebCommunityLaunchSetupModal(
       })
       .catch((error) => {
         if (!cancelled) {
-          setStepError(error instanceof Error ? error.message : "Could not load knowledge setup.");
+          setStepError(
+            error instanceof Error
+              ? error.message
+              : "Could not load knowledge setup.",
+          );
         }
       })
       .finally(() => {
@@ -450,7 +496,7 @@ export function WebCommunityLaunchSetupModal(
     return () => {
       cancelled = true;
     };
-  }, [activeStep, isCreateMode, isOpen, onLoadKnowledgeHealth]);
+  }, [activeStep, isCreateMode, isOpen, knowledgeStage, onLoadKnowledgeHealth]);
 
   const createModeStatus = useMemo(
     () =>
@@ -499,11 +545,20 @@ export function WebCommunityLaunchSetupModal(
   const progressDashOffset =
     progressCircumference - (progress / 100) * progressCircumference;
   const activeMeta = STEP_META[activeStep];
-  const activeTitle = activeMeta.title;
-  const activeStatus = effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
+  const activeTitle =
+    activeStep === "knowledge"
+      ? knowledgeStage === "assemble"
+        ? "Assemble the resources"
+        : knowledgeStage === "review"
+          ? "Review the wiki plan"
+          : activeMeta.title
+      : activeMeta.title;
+  const activeStatus =
+    effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
   const missingCount = activeStatus?.missing.length ?? 0;
-  const publishMissing = effectiveStatus?.missing.filter(isPublishProfileMissing) ?? [];
+  const publishMissing =
+    effectiveStatus?.missing.filter(isPublishProfileMissing) ?? [];
   const isSavingActiveStep = savingStep === activeStep;
   const stepSummary = useMemo(() => {
     if (!activeStatus) return "Not loaded yet.";
@@ -528,6 +583,7 @@ export function WebCommunityLaunchSetupModal(
       if (nextStep) {
         setStepOverride(nextStep);
         setActiveStep(nextStep);
+        if (nextStep === "knowledge") setKnowledgeStage("collect");
         setStepSuccess(null);
       } else {
         setStepSuccess(successMessage);
@@ -595,55 +651,67 @@ export function WebCommunityLaunchSetupModal(
     );
   };
 
-  const handleAddKnowledgeLink = (event: FormEvent) => {
-    event.preventDefault();
-    if (savingStep) return;
+  const saveKnowledgeLinkDrafts = async (
+    successMessage?: string,
+  ): Promise<boolean> => {
+    const urls = knowledgeLinkDrafts.map((url) => url.trim()).filter(Boolean);
+    if (urls.length === 0) return true;
+    if (savingStep) return false;
     setSavingStep("knowledge");
     setStepError(null);
     setStepSuccess(null);
-    void (async () => {
-      try {
-        await onAddKnowledgeLink({ urls: knowledgeLinkDrafts });
-        if (onLoadKnowledgeHealth) {
-          const nextHealth = await onLoadKnowledgeHealth();
-          setKnowledgeHealth(nextHealth);
-        }
-        setKnowledgeLinkDrafts([""]);
-        setStepSuccess("Links added.");
-      } catch (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to add links.";
-        setStepError(message);
-      } finally {
-        setSavingStep(null);
+    try {
+      await onAddKnowledgeLink({ urls });
+      if (onLoadKnowledgeHealth) {
+        const nextHealth = await onLoadKnowledgeHealth();
+        setKnowledgeHealth(nextHealth);
       }
-    })();
+      setKnowledgeLinkDrafts([""]);
+      if (successMessage) setStepSuccess(successMessage);
+      return true;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to add links.";
+      setStepError(message);
+      return false;
+    } finally {
+      setSavingStep(null);
+    }
   };
 
-  const handleEnsureKnowledgeScaffold = () => {
-    if (savingStep || knowledgeScaffoldSaving || !onEnsureKnowledgeScaffold) return;
-    setKnowledgeScaffoldSaving(true);
+  const handleAddKnowledgeLink = (event: FormEvent) => {
+    event.preventDefault();
+    void saveKnowledgeLinkDrafts("Links added.");
+  };
+
+  const handleEnterKnowledgeAssemble = () => {
+    if (savingStep || knowledgeHealthLoading) return;
     setStepError(null);
     setStepSuccess(null);
     void (async () => {
+      const saved = await saveKnowledgeLinkDrafts();
+      if (!saved) return;
+      if (!onLoadKnowledgeHealth) {
+        setKnowledgeStage("assemble");
+        return;
+      }
+      setKnowledgeHealthLoading(true);
       try {
-        const result = await onEnsureKnowledgeScaffold();
-        if (result?.health) setKnowledgeHealth(result.health);
-        const modulesCreated = result?.summary?.modules_created?.length ?? 0;
-        const pagesCreated = result?.summary?.pages_created?.length ?? 0;
-        setStepSuccess(
-          modulesCreated || pagesCreated
-            ? `Created ${modulesCreated} modules and ${pagesCreated} draft pages.`
-            : "Knowledge scaffold already exists.",
-        );
+        const nextHealth = await onLoadKnowledgeHealth();
+        setKnowledgeHealth(nextHealth);
+        setKnowledgeStage("assemble");
       } catch (error) {
-        setStepError(error instanceof Error ? error.message : "Could not create knowledge scaffold.");
+        setStepError(
+          error instanceof Error
+            ? error.message
+            : "Could not load knowledge setup.",
+        );
       } finally {
-        setKnowledgeScaffoldSaving(false);
+        setKnowledgeHealthLoading(false);
       }
     })();
   };
@@ -656,17 +724,33 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgePlanApplyResult(null);
     void (async () => {
       try {
+        const missingDefaultModules =
+          knowledgeHealth?.summary?.missing_default_modules ?? [];
+        const missingScaffoldPages =
+          knowledgeHealth?.summary?.missing_scaffold_pages ?? [];
+        if (
+          onEnsureKnowledgeScaffold &&
+          (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0)
+        ) {
+          const scaffoldResult = await onEnsureKnowledgeScaffold();
+          if (scaffoldResult?.health) setKnowledgeHealth(scaffoldResult.health);
+        }
         const result = await onGenerateKnowledgePlan({
           builderIntent: knowledgePlanIntent,
         });
         setKnowledgePlan(result ?? null);
         if (result?.ok) {
+          setKnowledgeStage("review");
           setStepSuccess("Wiki plan ready for review.");
         } else {
           setStepError(result?.message || "Could not generate wiki plan.");
         }
       } catch (error) {
-        setStepError(error instanceof Error ? error.message : "Could not generate wiki plan.");
+        setStepError(
+          error instanceof Error
+            ? error.message
+            : "Could not generate wiki plan.",
+        );
       } finally {
         setKnowledgePlanLoading(false);
       }
@@ -675,7 +759,13 @@ export function WebCommunityLaunchSetupModal(
 
   const handleApplyKnowledgePlan = () => {
     const proposal = knowledgePlan?.proposal ?? null;
-    if (savingStep || knowledgePlanApplying || !proposal || !onApplyKnowledgePlan) return;
+    if (
+      savingStep ||
+      knowledgePlanApplying ||
+      !proposal ||
+      !onApplyKnowledgePlan
+    )
+      return;
     setKnowledgePlanApplying(true);
     setStepError(null);
     setStepSuccess(null);
@@ -695,7 +785,9 @@ export function WebCommunityLaunchSetupModal(
           setStepError(result?.message || "Could not apply wiki plan.");
         }
       } catch (error) {
-        setStepError(error instanceof Error ? error.message : "Could not apply wiki plan.");
+        setStepError(
+          error instanceof Error ? error.message : "Could not apply wiki plan.",
+        );
       } finally {
         setKnowledgePlanApplying(false);
       }
@@ -704,11 +796,7 @@ export function WebCommunityLaunchSetupModal(
 
   const handleSaveAgent = (event: FormEvent) => {
     event.preventDefault();
-    void runStepSave(
-      "agent",
-      () => onSaveAgent(agentDraft),
-      "Agent saved.",
-    );
+    void runStepSave("agent", () => onSaveAgent(agentDraft), "Agent saved.");
   };
 
   const handleSaveAccess = (event: FormEvent) => {
@@ -728,11 +816,16 @@ export function WebCommunityLaunchSetupModal(
     void runStepSave(
       "publish",
       () => onSavePublish({ visibility }),
-      visibility === "published" ? "Community published." : "Community kept unlisted.",
+      visibility === "published"
+        ? "Community published."
+        : "Community kept unlisted.",
     );
   };
 
-  const readProfileImage = async (kind: "avatar" | "banner", file: File | null) => {
+  const readProfileImage = async (
+    kind: "avatar" | "banner",
+    file: File | null,
+  ) => {
     if (!file) return;
     setProfileMediaError(null);
     setProcessingProfileMedia(kind);
@@ -771,9 +864,14 @@ export function WebCommunityLaunchSetupModal(
 
   const renderStepEditor = () => {
     if (activeStep === "profile") {
-      const canSaveProfile = Boolean(profileDraft.name.trim() && profileDraft.slug.trim());
+      const canSaveProfile = Boolean(
+        profileDraft.name.trim() && profileDraft.slug.trim(),
+      );
       return (
-        <form className="community-launch-inline-form" onSubmit={handleSaveProfile}>
+        <form
+          className="community-launch-inline-form"
+          onSubmit={handleSaveProfile}
+        >
           <div className="community-launch-field-grid">
             <label className="community-launch-field">
               <span>Name</span>
@@ -799,7 +897,10 @@ export function WebCommunityLaunchSetupModal(
                 value={profileDraft.slug}
                 onChange={(event) => {
                   setProfileSlugEdited(true);
-                  setProfileDraft((draft) => ({ ...draft, slug: event.target.value }));
+                  setProfileDraft((draft) => ({
+                    ...draft,
+                    slug: event.target.value,
+                  }));
                 }}
                 placeholder="community-slug"
               />
@@ -809,7 +910,12 @@ export function WebCommunityLaunchSetupModal(
             <span>One-liner</span>
             <textarea
               value={profileDraft.oneLiner}
-              onChange={(event) => setProfileDraft((draft) => ({ ...draft, oneLiner: event.target.value }))}
+              onChange={(event) =>
+                setProfileDraft((draft) => ({
+                  ...draft,
+                  oneLiner: event.target.value,
+                }))
+              }
               rows={2}
               placeholder="A short line about who this community is for."
             />
@@ -837,12 +943,18 @@ export function WebCommunityLaunchSetupModal(
                     })}
                   />
                 ) : (
-                  <div className="create-community-banner-placeholder">Banner preview</div>
+                  <div className="create-community-banner-placeholder">
+                    Banner preview
+                  </div>
                 )}
               </div>
               <div className="create-community-branding-actions">
-                <label className={`create-banner-btn${processingProfileMedia ? " disabled" : ""}`}>
-                  {processingProfileMedia === "banner" ? "Reading..." : "Upload banner"}
+                <label
+                  className={`create-banner-btn${processingProfileMedia ? " disabled" : ""}`}
+                >
+                  {processingProfileMedia === "banner"
+                    ? "Reading..."
+                    : "Upload banner"}
                   <input
                     type="file"
                     accept="image/*"
@@ -867,7 +979,11 @@ export function WebCommunityLaunchSetupModal(
                     Remove
                   </button>
                 ) : null}
-                {profileBannerFileName ? <span className="create-upload-status">{profileBannerFileName}</span> : null}
+                {profileBannerFileName ? (
+                  <span className="create-upload-status">
+                    {profileBannerFileName}
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="create-community-avatar-row">
@@ -887,8 +1003,12 @@ export function WebCommunityLaunchSetupModal(
                 onDrop={(event) => handleProfileImageDrop("avatar", event)}
               />
               <div className="create-community-avatar-actions">
-                <label className={`create-avatar-btn${processingProfileMedia ? " disabled" : ""}`}>
-                  {processingProfileMedia === "avatar" ? "Reading..." : "Upload avatar"}
+                <label
+                  className={`create-avatar-btn${processingProfileMedia ? " disabled" : ""}`}
+                >
+                  {processingProfileMedia === "avatar"
+                    ? "Reading..."
+                    : "Upload avatar"}
                   <input
                     type="file"
                     accept="image/*"
@@ -913,14 +1033,26 @@ export function WebCommunityLaunchSetupModal(
                     Remove
                   </button>
                 ) : null}
-                {profileAvatarFileName ? <span className="create-upload-status">{profileAvatarFileName}</span> : null}
+                {profileAvatarFileName ? (
+                  <span className="create-upload-status">
+                    {profileAvatarFileName}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
-          {profileMediaError ? <p className="community-launch-step-message error">{profileMediaError}</p> : null}
+          {profileMediaError ? (
+            <p className="community-launch-step-message error">
+              {profileMediaError}
+            </p>
+          ) : null}
           <div className="community-launch-step-actions">
             {renderFinishLaterButton()}
-            <button type="submit" className="polynet-onboarding-next" disabled={!canSaveProfile || isSavingActiveStep}>
+            <button
+              type="submit"
+              className="polynet-onboarding-next"
+              disabled={!canSaveProfile || isSavingActiveStep}
+            >
               {isSavingActiveStep
                 ? isCreateMode
                   ? "Creating..."
@@ -936,7 +1068,10 @@ export function WebCommunityLaunchSetupModal(
 
     if (activeStep === "about") {
       return (
-        <form className="community-launch-inline-form" onSubmit={handleSaveAbout}>
+        <form
+          className="community-launch-inline-form"
+          onSubmit={handleSaveAbout}
+        >
           <label className="community-launch-field">
             <span>About</span>
             <textarea
@@ -948,7 +1083,11 @@ export function WebCommunityLaunchSetupModal(
           </label>
           <div className="community-launch-step-actions">
             {renderFinishLaterButton()}
-            <button type="submit" className="polynet-onboarding-next" disabled={isSavingActiveStep}>
+            <button
+              type="submit"
+              className="polynet-onboarding-next"
+              disabled={isSavingActiveStep}
+            >
               {isSavingActiveStep ? "Saving..." : "Save about"}
             </button>
           </div>
@@ -958,305 +1097,617 @@ export function WebCommunityLaunchSetupModal(
 
     if (activeStep === "knowledge") {
       const canAddKnowledgeLink = knowledgeLinkDrafts.some((url) => url.trim());
-      const canAddKnowledgeLinkRow = knowledgeLinkDrafts.length < COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS;
-      const missingDefaultModules = knowledgeHealth?.summary?.missing_default_modules ?? [];
-      const missingScaffoldPages = knowledgeHealth?.summary?.missing_scaffold_pages ?? [];
-      const sourceInboxCount = knowledgeHealth?.summary?.source_inbox_items ?? 0;
+      const canAddKnowledgeLinkRow =
+        knowledgeLinkDrafts.length < COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS;
+      const missingDefaultModules =
+        knowledgeHealth?.summary?.missing_default_modules ?? [];
+      const missingScaffoldPages =
+        knowledgeHealth?.summary?.missing_scaffold_pages ?? [];
+      const sourceInboxCount =
+        knowledgeHealth?.summary?.source_inbox_items ?? 0;
       const draftPageCount = knowledgeHealth?.summary?.draft_pages ?? 0;
-      const unreferencedSourceCount = knowledgeHealth?.issues?.unreferencedSources?.length ?? 0;
+      const unreferencedSourceCount =
+        knowledgeHealth?.issues?.unreferencedSources?.length ?? 0;
       const staleDraftCount = knowledgeHealth?.issues?.staleDrafts?.length ?? 0;
       const sparsePageCount = knowledgeHealth?.issues?.sparsePages?.length ?? 0;
-      const canCreateScaffold =
-        (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0) && Boolean(onEnsureKnowledgeScaffold);
       const planProposal = knowledgePlan?.proposal ?? null;
       const planDrafts = planProposal?.drafts_created ?? [];
       const planUpdates = planProposal?.drafts_updated ?? [];
       const planGaps = planProposal?.gaps ?? [];
       const planBuilderNeeds = planProposal?.needs_from_builder ?? [];
       const canApplyKnowledgePlan =
-        Boolean(planProposal) && Boolean(onApplyKnowledgePlan) && !knowledgePlanApplying && !isSavingActiveStep;
+        Boolean(planProposal) &&
+        Boolean(onApplyKnowledgePlan) &&
+        !knowledgePlanApplyResult?.ok &&
+        !knowledgePlanApplying &&
+        !isSavingActiveStep;
       return (
         <div className="community-launch-inline-form community-launch-knowledge-gateway">
           <div className="community-launch-knowledge-stack">
-            <section className="community-launch-knowledge-row">
-              <span className="community-launch-knowledge-icon" aria-hidden="true">
-                <BookOpen size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="community-launch-knowledge-kicker">Setup</span>
-                <strong>Set up the wiki structure</strong>
-                <p>
-                  {knowledgeHealthLoading
-                    ? "Checking the current resource tree."
-                    : !knowledgeHealth
-                      ? "Resource tree has not been checked yet."
-                      : missingDefaultModules.length > 0
-                      ? `Missing ${missingDefaultModules.join(", ")}.`
-                      : missingScaffoldPages.length > 0
-                        ? "Missing starter wiki pages."
-                        : "The base wiki modules are ready."}
-                </p>
-                <div className="community-launch-knowledge-setup-metrics" aria-label="Knowledge setup status">
-                  <span>{draftPageCount} drafts</span>
-                  <span>{sourceInboxCount} sources</span>
-                  <span>{unreferencedSourceCount} unlinked</span>
-                  <span>{staleDraftCount} stale</span>
-                  <span>{sparsePageCount} sparse</span>
-                </div>
-              </div>
-              {canCreateScaffold ? (
-                <button
-                  type="button"
-                  className="community-launch-knowledge-action"
-                  disabled={knowledgeScaffoldSaving || isSavingActiveStep}
-                  onClick={handleEnsureKnowledgeScaffold}
-                >
-                  {knowledgeScaffoldSaving ? "Creating..." : "Create drafts"}
-                </button>
-              ) : (
-                <span className="community-launch-knowledge-pill">
-                  {knowledgeHealthLoading ? "Checking" : knowledgeHealth ? "Ready" : "Not checked"}
-                </span>
-              )}
-            </section>
-            <section className="community-launch-knowledge-row community-launch-knowledge-architect-row">
-              <span className="community-launch-knowledge-icon" aria-hidden="true">
-                <Sparkles size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="community-launch-knowledge-kicker">Architect</span>
-                <strong>Generate wiki plan</strong>
-                <p>
-                  The agent reads community context and resource metadata, then returns a review-only structure plan.
-                </p>
-                <textarea
-                  className="community-launch-knowledge-intent"
-                  value={knowledgePlanIntent}
-                  onChange={(event) => setKnowledgePlanIntent(event.target.value)}
-                  rows={3}
-                  placeholder="Optional notes: what should this wiki help members understand or do?"
-                />
-                <div className="community-launch-knowledge-plan-actions">
-                  <button
-                    type="button"
-                    className="community-launch-knowledge-action"
-                    disabled={!onGenerateKnowledgePlan || knowledgePlanLoading || isSavingActiveStep}
-                    onClick={handleGenerateKnowledgePlan}
+            {knowledgeStage === "assemble" ? (
+              <>
+                <section className="community-launch-knowledge-row">
+                  <span
+                    className="community-launch-knowledge-icon"
+                    aria-hidden="true"
                   >
-                    {knowledgePlanLoading ? "Designing..." : "Generate plan"}
-                  </button>
-                  {planProposal ? (
-                    <button
-                      type="button"
-                      className="community-launch-knowledge-action"
-                      disabled={!canApplyKnowledgePlan}
-                      onClick={handleApplyKnowledgePlan}
+                    <BookOpen size={15} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <span className="community-launch-knowledge-kicker">
+                      Setup
+                    </span>
+                    <strong>Set up the wiki structure</strong>
+                    <p>
+                      {knowledgeHealthLoading
+                        ? "Checking the current resource tree."
+                        : !knowledgeHealth
+                          ? "Resource tree has not been checked yet."
+                          : missingDefaultModules.length > 0
+                            ? `Missing ${missingDefaultModules.join(", ")}.`
+                            : missingScaffoldPages.length > 0
+                              ? "Missing starter wiki pages."
+                              : "The base wiki modules are ready."}
+                    </p>
+                    <div
+                      className="community-launch-knowledge-setup-metrics"
+                      aria-label="Knowledge setup status"
                     >
-                      {knowledgePlanApplying ? "Applying..." : "Apply draft plan"}
-                    </button>
-                  ) : null}
-                  {knowledgePlan?.model_id ? <span>{knowledgePlan.model_id}</span> : null}
-                </div>
-                {planProposal ? (
-                  <div className="community-launch-knowledge-plan" aria-live="polite">
-                    <div className="community-launch-knowledge-plan-grid">
-                      <span>
-                        <strong>{planProposal.modules_created.length}</strong>
-                        modules
+                      <span>{draftPageCount} drafts</span>
+                      <span>{sourceInboxCount} sources</span>
+                      <span>{unreferencedSourceCount} unlinked</span>
+                      <span>{staleDraftCount} stale</span>
+                      <span>{sparsePageCount} sparse</span>
+                    </div>
+                  </div>
+                  <span className="community-launch-knowledge-pill">
+                    {knowledgeHealthLoading
+                      ? "Checking"
+                      : knowledgeHealth
+                        ? "Ready"
+                        : "Not checked"}
+                  </span>
+                </section>
+                <section className="community-launch-knowledge-row community-launch-knowledge-architect-row">
+                  <span
+                    className="community-launch-knowledge-icon"
+                    aria-hidden="true"
+                  >
+                    <Sparkles size={15} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <span className="community-launch-knowledge-kicker">
+                      Architect
+                    </span>
+                    <strong>Build the wiki plan</strong>
+                    <p>
+                      The agent reads community context and resource metadata,
+                      then returns a review-only structure plan.
+                    </p>
+                    <textarea
+                      className="community-launch-knowledge-intent"
+                      value={knowledgePlanIntent}
+                      onChange={(event) =>
+                        setKnowledgePlanIntent(event.target.value)
+                      }
+                      rows={3}
+                      placeholder="Optional notes: what should this wiki help members understand or do?"
+                    />
+                    {planProposal ? (
+                      <div
+                        className="community-launch-knowledge-plan"
+                        aria-live="polite"
+                      >
+                        <div className="community-launch-knowledge-plan-grid">
+                          <span>
+                            <strong>
+                              {planProposal.modules_created.length}
+                            </strong>
+                            modules
+                          </span>
+                          <span>
+                            <strong>{planDrafts.length}</strong>
+                            drafts
+                          </span>
+                          <span>
+                            <strong>{planUpdates.length}</strong>
+                            updates
+                          </span>
+                          <span>
+                            <strong>{planGaps.length}</strong>
+                            gaps
+                          </span>
+                        </div>
+                        {planDrafts.length > 0 ? (
+                          <div className="community-launch-knowledge-plan-section">
+                            <span>Drafts</span>
+                            <ul>
+                              {planDrafts.slice(0, 4).map((draft) => (
+                                <li key={`${draft.module}:${draft.title}`}>
+                                  {draft.title} <em>{draft.module}</em>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {planGaps.length > 0 || planBuilderNeeds.length > 0 ? (
+                          <div className="community-launch-knowledge-plan-section">
+                            <span>Needs</span>
+                            <ul>
+                              {planGaps.slice(0, 3).map((gap) => (
+                                <li key={`${gap.module}:${gap.title}`}>
+                                  {gap.needed_source}
+                                </li>
+                              ))}
+                              {planBuilderNeeds.slice(0, 3).map((need) => (
+                                <li key={need}>{need}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {knowledgePlanApplyResult?.ok ? (
+                          <div className="community-launch-knowledge-plan-section">
+                            <span>Applied</span>
+                            <ul>
+                              <li>
+                                {knowledgePlanApplyResult.summary
+                                  ?.modules_created?.length ?? 0}{" "}
+                                modules created
+                              </li>
+                              <li>
+                                {knowledgePlanApplyResult.summary?.pages_created
+                                  ?.length ?? 0}{" "}
+                                drafts created
+                              </li>
+                              <li>
+                                {knowledgePlanApplyResult.summary?.pages_updated
+                                  ?.length ?? 0}{" "}
+                                drafts updated
+                              </li>
+                            </ul>
+                          </div>
+                        ) : null}
+                        {knowledgePlanApplyResult &&
+                        !knowledgePlanApplyResult.ok ? (
+                          <div className="community-launch-knowledge-plan-section">
+                            <span>Apply failed</span>
+                            <ul>
+                              {(knowledgePlanApplyResult.errors ?? [])
+                                .slice(0, 4)
+                                .map((error, index) => (
+                                  <li
+                                    key={`${error.path ?? "apply-error"}:${index}`}
+                                  >
+                                    {error.path ? `${error.path}: ` : ""}
+                                    {error.message ??
+                                      knowledgePlanApplyResult.message ??
+                                      "Invalid field."}
+                                  </li>
+                                ))}
+                              {knowledgePlanApplyResult.errors
+                                ?.length ? null : (
+                                <li>
+                                  {knowledgePlanApplyResult.message ||
+                                    "Wiki plan could not be applied."}
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : knowledgePlan && !knowledgePlan.ok ? (
+                      <div
+                        className="community-launch-knowledge-plan error"
+                        aria-live="polite"
+                      >
+                        <strong>
+                          {knowledgePlan.message ||
+                            "Wiki plan failed validation."}
+                        </strong>
+                        {knowledgePlan.errors?.length ? (
+                          <ul>
+                            {knowledgePlan.errors
+                              .slice(0, 4)
+                              .map((error, index) => (
+                                <li key={`${error.path ?? "error"}:${index}`}>
+                                  {error.path ? `${error.path}: ` : ""}
+                                  {error.message ?? "Invalid field."}
+                                </li>
+                              ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="community-launch-knowledge-pill">
+                    {knowledgePlanLoading
+                      ? "Running"
+                      : knowledgePlan?.ok
+                        ? "Ready"
+                        : "Review"}
+                  </span>
+                </section>
+              </>
+            ) : null}
+            {knowledgeStage === "collect" ? (
+              <>
+                <section className="community-launch-knowledge-row">
+                  <span
+                    className="community-launch-knowledge-icon"
+                    aria-hidden="true"
+                  >
+                    <FileText size={15} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <span className="community-launch-knowledge-kicker">
+                      Sources
+                    </span>
+                    <strong>Drop source material</strong>
+                    <p>
+                      Files, PDFs, presentations, videos, and notes should enter
+                      the canonical resources system here.
+                    </p>
+                    <div
+                      className="community-launch-knowledge-dropzone"
+                      aria-label="Knowledge upload placeholder"
+                    >
+                      Drop files here once ingestion is enabled
+                    </div>
+                  </div>
+                  <span className="community-launch-knowledge-pill">Next</span>
+                </section>
+                <section className="community-launch-knowledge-row">
+                  <span
+                    className="community-launch-knowledge-icon"
+                    aria-hidden="true"
+                  >
+                    <Link2 size={15} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <span className="community-launch-knowledge-kicker">
+                      Links
+                    </span>
+                    <strong>Add source links</strong>
+                    <p>
+                      Paste docs, videos, articles, or public resource URLs into
+                      the community resource directory.
+                    </p>
+                    <form
+                      className="community-launch-knowledge-link-composer"
+                      onSubmit={handleAddKnowledgeLink}
+                    >
+                      <div className="community-launch-knowledge-link-list">
+                        {knowledgeLinkDrafts.map((url, index) => (
+                          <input
+                            key={index}
+                            aria-label={`Source link URL ${index + 1}`}
+                            value={url}
+                            onChange={(event) => {
+                              const nextUrls = [...knowledgeLinkDrafts];
+                              nextUrls[index] = event.target.value;
+                              setKnowledgeLinkDrafts(nextUrls);
+                            }}
+                            placeholder="https://..."
+                          />
+                        ))}
+                      </div>
+                      <div className="community-launch-knowledge-link-actions">
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={
+                            !canAddKnowledgeLinkRow || isSavingActiveStep
+                          }
+                          onClick={() => {
+                            if (!canAddKnowledgeLinkRow) return;
+                            setKnowledgeLinkDrafts((urls) =>
+                              [...urls, ""].slice(
+                                0,
+                                COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS,
+                              ),
+                            );
+                          }}
+                        >
+                          Add new link
+                        </button>
+                        <span>
+                          {knowledgeLinkDrafts.length}/
+                          {COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}
+                        </span>
+                        <button
+                          type="submit"
+                          disabled={!canAddKnowledgeLink || isSavingActiveStep}
+                        >
+                          {isSavingActiveStep ? "Adding..." : "Add links"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                  <span className="community-launch-knowledge-pill">Next</span>
+                </section>
+                <section className="community-launch-knowledge-row">
+                  <span
+                    className="community-launch-knowledge-icon"
+                    aria-hidden="true"
+                  >
+                    <Link2 size={15} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <span className="community-launch-knowledge-kicker">
+                      Integrations
+                    </span>
+                    <strong>Connect source systems</strong>
+                    <p>
+                      Connect cloud sources that can become community context
+                      once scoped and approved.
+                    </p>
+                    <div
+                      className="community-launch-knowledge-integrations"
+                      aria-label="Knowledge integrations"
+                    >
+                      <span className="community-launch-knowledge-integration-chip">
+                        <img
+                          className="community-launch-knowledge-provider-logo drive"
+                          src="/app-logos/google-drive.svg"
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        <span>Google Drive</span>
                       </span>
-                      <span>
-                        <strong>{planDrafts.length}</strong>
-                        drafts
-                      </span>
-                      <span>
-                        <strong>{planUpdates.length}</strong>
-                        updates
-                      </span>
-                      <span>
-                        <strong>{planGaps.length}</strong>
-                        gaps
+                      <span className="community-launch-knowledge-integration-chip">
+                        <img
+                          className="community-launch-knowledge-provider-logo github"
+                          src="/app-logos/github.svg"
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        <span>GitHub</span>
                       </span>
                     </div>
-                    {planDrafts.length > 0 ? (
-                      <div className="community-launch-knowledge-plan-section">
-                        <span>Drafts</span>
-                        <ul>
-                          {planDrafts.slice(0, 4).map((draft) => (
-                            <li key={`${draft.module}:${draft.title}`}>
-                              {draft.title} <em>{draft.module}</em>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {planGaps.length > 0 || planBuilderNeeds.length > 0 ? (
-                      <div className="community-launch-knowledge-plan-section">
-                        <span>Needs</span>
-                        <ul>
-                          {planGaps.slice(0, 3).map((gap) => (
-                            <li key={`${gap.module}:${gap.title}`}>{gap.needed_source}</li>
-                          ))}
-                          {planBuilderNeeds.slice(0, 3).map((need) => (
-                            <li key={need}>{need}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {knowledgePlanApplyResult?.ok ? (
-                      <div className="community-launch-knowledge-plan-section">
-                        <span>Applied</span>
-                        <ul>
-                          <li>{knowledgePlanApplyResult.summary?.modules_created?.length ?? 0} modules created</li>
-                          <li>{knowledgePlanApplyResult.summary?.pages_created?.length ?? 0} drafts created</li>
-                          <li>{knowledgePlanApplyResult.summary?.pages_updated?.length ?? 0} drafts updated</li>
-                        </ul>
-                      </div>
-                    ) : null}
-                    {knowledgePlanApplyResult && !knowledgePlanApplyResult.ok ? (
-                      <div className="community-launch-knowledge-plan-section">
-                        <span>Apply failed</span>
-                        <ul>
-                          {(knowledgePlanApplyResult.errors ?? []).slice(0, 4).map((error, index) => (
-                            <li key={`${error.path ?? "apply-error"}:${index}`}>
-                              {error.path ? `${error.path}: ` : ""}
-                              {error.message ?? knowledgePlanApplyResult.message ?? "Invalid field."}
-                            </li>
-                          ))}
-                          {knowledgePlanApplyResult.errors?.length ? null : (
-                            <li>{knowledgePlanApplyResult.message || "Wiki plan could not be applied."}</li>
-                          )}
-                        </ul>
-                      </div>
-                    ) : null}
                   </div>
-                ) : knowledgePlan && !knowledgePlan.ok ? (
-                  <div className="community-launch-knowledge-plan error" aria-live="polite">
-                    <strong>{knowledgePlan.message || "Wiki plan failed validation."}</strong>
-                    {knowledgePlan.errors?.length ? (
-                      <ul>
-                        {knowledgePlan.errors.slice(0, 4).map((error, index) => (
-                          <li key={`${error.path ?? "error"}:${index}`}>
-                            {error.path ? `${error.path}: ` : ""}
-                            {error.message ?? "Invalid field."}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <span className="community-launch-knowledge-pill">
-                {knowledgePlanLoading ? "Running" : knowledgePlan?.ok ? "Ready" : "Review"}
-              </span>
-            </section>
-            <section className="community-launch-knowledge-row">
-              <span className="community-launch-knowledge-icon" aria-hidden="true">
-                <FileText size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="community-launch-knowledge-kicker">Sources</span>
-                <strong>Drop source material</strong>
-                <p>Files, PDFs, presentations, videos, and notes should enter the canonical resources system here.</p>
-                <div className="community-launch-knowledge-dropzone" aria-label="Knowledge upload placeholder">
-                  Drop files here once ingestion is enabled
-                </div>
-              </div>
-              <span className="community-launch-knowledge-pill">Next</span>
-            </section>
-            <section className="community-launch-knowledge-row">
-              <span className="community-launch-knowledge-icon" aria-hidden="true">
-                <Link2 size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="community-launch-knowledge-kicker">Links</span>
-                <strong>Add source links</strong>
-                <p>Paste docs, videos, articles, or public resource URLs into the community resource directory.</p>
-                <form className="community-launch-knowledge-link-composer" onSubmit={handleAddKnowledgeLink}>
-                  <div className="community-launch-knowledge-link-list">
-                    {knowledgeLinkDrafts.map((url, index) => (
-                      <input
-                        key={index}
-                        aria-label={`Source link URL ${index + 1}`}
-                        value={url}
-                        onChange={(event) => {
-                          const nextUrls = [...knowledgeLinkDrafts];
-                          nextUrls[index] = event.target.value;
-                          setKnowledgeLinkDrafts(nextUrls);
-                        }}
-                        placeholder="https://..."
-                      />
-                    ))}
-                  </div>
-                  <div className="community-launch-knowledge-link-actions">
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={!canAddKnowledgeLinkRow || isSavingActiveStep}
-                      onClick={() => {
-                        if (!canAddKnowledgeLinkRow) return;
-                        setKnowledgeLinkDrafts((urls) => [
-                          ...urls,
-                          "",
-                        ].slice(0, COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS));
-                      }}
+                  <span className="community-launch-knowledge-pill">
+                    Planned
+                  </span>
+                </section>
+              </>
+            ) : null}
+            {knowledgeStage === "review" ? (
+              <section className="community-launch-knowledge-row community-launch-knowledge-architect-row">
+                <span
+                  className="community-launch-knowledge-icon"
+                  aria-hidden="true"
+                >
+                  <Sparkles size={15} strokeWidth={2} />
+                </span>
+                <div>
+                  <span className="community-launch-knowledge-kicker">
+                    Plan
+                  </span>
+                  <strong>Review the generated wiki plan</strong>
+                  <p>
+                    Nothing is published here. Applying the plan creates draft
+                    modules and pages for review.
+                  </p>
+                  {planProposal ? (
+                    <div
+                      className="community-launch-knowledge-plan"
+                      aria-live="polite"
                     >
-                      Add new link
-                    </button>
-                    <span>{knowledgeLinkDrafts.length}/{COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}</span>
-                    <button type="submit" disabled={!canAddKnowledgeLink || isSavingActiveStep}>
-                      {isSavingActiveStep ? "Adding..." : "Add links"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-              <span className="community-launch-knowledge-pill">Next</span>
-            </section>
-            <section className="community-launch-knowledge-row">
-              <span className="community-launch-knowledge-icon" aria-hidden="true">
-                <Link2 size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="community-launch-knowledge-kicker">Integrations</span>
-                <strong>Connect source systems</strong>
-                <p>Connect cloud sources that can become community context once scoped and approved.</p>
-                <div className="community-launch-knowledge-integrations" aria-label="Knowledge integrations">
-                  <span className="community-launch-knowledge-integration-chip">
-                    <img
-                      className="community-launch-knowledge-provider-logo drive"
-                      src="/app-logos/google-drive.svg"
-                      alt=""
-                      aria-hidden="true"
-                    />
-                    <span>Google Drive</span>
-                  </span>
-                  <span className="community-launch-knowledge-integration-chip">
-                    <img
-                      className="community-launch-knowledge-provider-logo github"
-                      src="/app-logos/github.svg"
-                      alt=""
-                      aria-hidden="true"
-                    />
-                    <span>GitHub</span>
-                  </span>
+                      <div className="community-launch-knowledge-plan-grid">
+                        <span>
+                          <strong>{planProposal.modules_created.length}</strong>
+                          modules
+                        </span>
+                        <span>
+                          <strong>{planDrafts.length}</strong>
+                          drafts
+                        </span>
+                        <span>
+                          <strong>{planUpdates.length}</strong>
+                          updates
+                        </span>
+                        <span>
+                          <strong>{planGaps.length}</strong>
+                          gaps
+                        </span>
+                      </div>
+                      {planDrafts.length > 0 ? (
+                        <div className="community-launch-knowledge-plan-section">
+                          <span>Drafts</span>
+                          <ul>
+                            {planDrafts.slice(0, 4).map((draft) => (
+                              <li key={`${draft.module}:${draft.title}`}>
+                                {draft.title} <em>{draft.module}</em>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {planGaps.length > 0 || planBuilderNeeds.length > 0 ? (
+                        <div className="community-launch-knowledge-plan-section">
+                          <span>Needs</span>
+                          <ul>
+                            {planGaps.slice(0, 3).map((gap) => (
+                              <li key={`${gap.module}:${gap.title}`}>
+                                {gap.needed_source}
+                              </li>
+                            ))}
+                            {planBuilderNeeds.slice(0, 3).map((need) => (
+                              <li key={need}>{need}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {knowledgePlanApplyResult?.ok ? (
+                        <div className="community-launch-knowledge-plan-section">
+                          <span>Applied</span>
+                          <ul>
+                            <li>
+                              {knowledgePlanApplyResult.summary?.modules_created
+                                ?.length ?? 0}{" "}
+                              modules created
+                            </li>
+                            <li>
+                              {knowledgePlanApplyResult.summary?.pages_created
+                                ?.length ?? 0}{" "}
+                              drafts created
+                            </li>
+                            <li>
+                              {knowledgePlanApplyResult.summary?.pages_updated
+                                ?.length ?? 0}{" "}
+                              drafts updated
+                            </li>
+                          </ul>
+                        </div>
+                      ) : null}
+                      {knowledgePlanApplyResult &&
+                      !knowledgePlanApplyResult.ok ? (
+                        <div className="community-launch-knowledge-plan-section">
+                          <span>Apply failed</span>
+                          <ul>
+                            {(knowledgePlanApplyResult.errors ?? [])
+                              .slice(0, 4)
+                              .map((error, index) => (
+                                <li
+                                  key={`${error.path ?? "apply-error"}:${index}`}
+                                >
+                                  {error.path ? `${error.path}: ` : ""}
+                                  {error.message ??
+                                    knowledgePlanApplyResult.message ??
+                                    "Invalid field."}
+                                </li>
+                              ))}
+                            {knowledgePlanApplyResult.errors?.length ? null : (
+                              <li>
+                                {knowledgePlanApplyResult.message ||
+                                  "Wiki plan could not be applied."}
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : knowledgePlan && !knowledgePlan.ok ? (
+                    <div
+                      className="community-launch-knowledge-plan error"
+                      aria-live="polite"
+                    >
+                      <strong>
+                        {knowledgePlan.message ||
+                          "Wiki plan failed validation."}
+                      </strong>
+                      {knowledgePlan.errors?.length ? (
+                        <ul>
+                          {knowledgePlan.errors
+                            .slice(0, 4)
+                            .map((error, index) => (
+                              <li key={`${error.path ?? "error"}:${index}`}>
+                                {error.path ? `${error.path}: ` : ""}
+                                {error.message ?? "Invalid field."}
+                              </li>
+                            ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-              <span className="community-launch-knowledge-pill">Planned</span>
-            </section>
+                <span className="community-launch-knowledge-pill">
+                  {knowledgePlanApplyResult?.ok
+                    ? "Applied"
+                    : knowledgePlan?.ok
+                      ? "Ready"
+                      : "Review"}
+                </span>
+              </section>
+            ) : null}
           </div>
           <div className="community-launch-step-actions">
-            {renderFinishLaterButton()}
-            <button
-              type="button"
-              className="polynet-onboarding-next"
-              onClick={() => {
-                setStepOverride("publish");
-                setActiveStep("publish");
-                setStepError(null);
-                setStepSuccess(null);
-              }}
-            >
-              Review publish
-            </button>
+            {knowledgeStage === "collect" ? (
+              <>
+                {renderFinishLaterButton()}
+                <button
+                  type="button"
+                  className="polynet-onboarding-next"
+                  disabled={isSavingActiveStep || knowledgeHealthLoading}
+                  onClick={handleEnterKnowledgeAssemble}
+                >
+                  {isSavingActiveStep
+                    ? "Saving..."
+                    : knowledgeHealthLoading
+                      ? "Checking..."
+                      : "Next"}
+                </button>
+              </>
+            ) : null}
+            {knowledgeStage === "assemble" ? (
+              <>
+                <button
+                  type="button"
+                  className="polynet-onboarding-back"
+                  onClick={() => {
+                    setKnowledgeStage("collect");
+                    setStepError(null);
+                    setStepSuccess(null);
+                  }}
+                >
+                  <ArrowLeft size={13} strokeWidth={2.2} />
+                  Back
+                </button>
+                {renderFinishLaterButton()}
+                <button
+                  type="button"
+                  className="polynet-onboarding-next"
+                  disabled={
+                    !onGenerateKnowledgePlan ||
+                    knowledgePlanLoading ||
+                    isSavingActiveStep
+                  }
+                  onClick={handleGenerateKnowledgePlan}
+                >
+                  {knowledgePlanLoading ? "Assembling..." : "Build wiki plan"}
+                </button>
+              </>
+            ) : null}
+            {knowledgeStage === "review" ? (
+              <>
+                <button
+                  type="button"
+                  className="polynet-onboarding-back"
+                  onClick={() => {
+                    setKnowledgeStage("assemble");
+                    setStepError(null);
+                    setStepSuccess(null);
+                  }}
+                >
+                  <ArrowLeft size={13} strokeWidth={2.2} />
+                  Back
+                </button>
+                {renderFinishLaterButton()}
+                {knowledgePlanApplyResult?.ok ? (
+                  <button
+                    type="button"
+                    className="polynet-onboarding-next"
+                    onClick={() => {
+                      setStepOverride("publish");
+                      setActiveStep("publish");
+                      setStepError(null);
+                      setStepSuccess(null);
+                    }}
+                  >
+                    Review publish
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="polynet-onboarding-next"
+                    disabled={!canApplyKnowledgePlan}
+                    onClick={handleApplyKnowledgePlan}
+                  >
+                    {knowledgePlanApplying ? "Applying..." : "Apply draft plan"}
+                  </button>
+                )}
+              </>
+            ) : null}
           </div>
         </div>
       );
@@ -1264,12 +1715,20 @@ export function WebCommunityLaunchSetupModal(
 
     if (activeStep === "agent") {
       return (
-        <form className="community-launch-inline-form" onSubmit={handleSaveAgent}>
+        <form
+          className="community-launch-inline-form"
+          onSubmit={handleSaveAgent}
+        >
           <label className="community-launch-field">
             <span>Agent instructions</span>
             <textarea
               value={agentDraft.systemPrompt}
-              onChange={(event) => setAgentDraft((draft) => ({ ...draft, systemPrompt: event.target.value }))}
+              onChange={(event) =>
+                setAgentDraft((draft) => ({
+                  ...draft,
+                  systemPrompt: event.target.value,
+                }))
+              }
               rows={6}
               placeholder="How should the agent help this community?"
             />
@@ -1288,7 +1747,10 @@ export function WebCommunityLaunchSetupModal(
                     onChange={(event) => {
                       const nextPrompts = [...agentDraft.starterPrompts];
                       nextPrompts[index] = event.target.value;
-                      setAgentDraft((draft) => ({ ...draft, starterPrompts: nextPrompts }));
+                      setAgentDraft((draft) => ({
+                        ...draft,
+                        starterPrompts: nextPrompts,
+                      }));
                     }}
                     rows={2}
                     placeholder="Suggested first question"
@@ -1299,7 +1761,11 @@ export function WebCommunityLaunchSetupModal(
           </details>
           <div className="community-launch-step-actions">
             {renderFinishLaterButton()}
-            <button type="submit" className="polynet-onboarding-next" disabled={isSavingActiveStep}>
+            <button
+              type="submit"
+              className="polynet-onboarding-next"
+              disabled={isSavingActiveStep}
+            >
               {isSavingActiveStep ? "Saving..." : "Save agent"}
             </button>
           </div>
@@ -1309,12 +1775,23 @@ export function WebCommunityLaunchSetupModal(
 
     if (activeStep === "access") {
       return (
-        <form className="community-launch-inline-form" onSubmit={handleSaveAccess}>
-          <div className="community-launch-choice-row" role="radiogroup" aria-label="Community access">
+        <form
+          className="community-launch-inline-form"
+          onSubmit={handleSaveAccess}
+        >
+          <div
+            className="community-launch-choice-row"
+            role="radiogroup"
+            aria-label="Community access"
+          >
             {[
               ["open", "Open", "Members can join directly."],
               ["approval", "Approval", "Members request access first."],
-              ["paid_subscription", "Stripe Connect", "Connect Stripe before paid access."],
+              [
+                "paid_subscription",
+                "Stripe Connect",
+                "Connect Stripe before paid access.",
+              ],
             ].map(([value, label, description]) => (
               <button
                 key={value}
@@ -1346,7 +1823,9 @@ export function WebCommunityLaunchSetupModal(
             <button
               type="submit"
               className="polynet-onboarding-next"
-              disabled={accessDraft === "paid_subscription" || isSavingActiveStep}
+              disabled={
+                accessDraft === "paid_subscription" || isSavingActiveStep
+              }
             >
               {isSavingActiveStep ? "Saving..." : "Save access"}
             </button>
@@ -1356,16 +1835,21 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "publish") {
-      const isPublished = String(effectiveCommunity.visibility ?? "").trim().toLowerCase() === "published";
+      const isPublished =
+        String(effectiveCommunity.visibility ?? "")
+          .trim()
+          .toLowerCase() === "published";
       return (
         <div className="community-launch-inline-form">
           {publishMissing.length > 0 ? (
             <p className="community-launch-inline-note">
-              Publish needs the profile requirements above before the community can appear in Discover.
+              Publish needs the profile requirements above before the community
+              can appear in Discover.
             </p>
           ) : (
             <p className="community-launch-inline-note">
-              The public profile is ready to publish. The rest of launch setup can continue after publishing.
+              The public profile is ready to publish. The rest of launch setup
+              can continue after publishing.
             </p>
           )}
           <div className="community-launch-step-actions">
@@ -1374,9 +1858,15 @@ export function WebCommunityLaunchSetupModal(
               type="button"
               className="polynet-onboarding-next"
               onClick={() => savePublishState("published")}
-              disabled={publishMissing.length > 0 || isSavingActiveStep || isPublished}
+              disabled={
+                publishMissing.length > 0 || isSavingActiveStep || isPublished
+              }
             >
-              {isSavingActiveStep ? "Publishing..." : isPublished ? "Published" : "Publish"}
+              {isSavingActiveStep
+                ? "Publishing..."
+                : isPublished
+                  ? "Published"
+                  : "Publish"}
             </button>
           </div>
         </div>
@@ -1421,7 +1911,10 @@ export function WebCommunityLaunchSetupModal(
           </button>
 
           <div className="polynet-onboarding-header">
-            <div className="polynet-onboarding-progress-ring" aria-hidden="true">
+            <div
+              className="polynet-onboarding-progress-ring"
+              aria-hidden="true"
+            >
               <svg viewBox="0 0 40 40">
                 <circle className="track" cx="20" cy="20" r="17" />
                 <circle
@@ -1438,14 +1931,19 @@ export function WebCommunityLaunchSetupModal(
             <div>
               <p className="polynet-landing-kicker">Community launch</p>
               <h1 id="community-launch-title">
-                {isCreateMode ? "Create community" : `Set up ${effectiveCommunity.name}`}
+                {isCreateMode
+                  ? "Create community"
+                  : `Set up ${effectiveCommunity.name}`}
               </h1>
               <p>{progress}% complete</p>
             </div>
           </div>
 
           <div className="polynet-onboarding-shell">
-            <nav className="polynet-onboarding-steps" aria-label="Community launch steps">
+            <nav
+              className="polynet-onboarding-steps"
+              aria-label="Community launch steps"
+            >
               {STEP_ORDER.map((step) => {
                 const active = step === activeStep;
                 const complete = isStepComplete(effectiveStatus, step);
@@ -1482,8 +1980,16 @@ export function WebCommunityLaunchSetupModal(
                 <div className="community-launch-step-heading">
                   <h2>{activeTitle}</h2>
                 </div>
-                {stepError ? <p className="community-launch-step-message error">{stepError}</p> : null}
-                {stepSuccess ? <p className="community-launch-step-message success">{stepSuccess}</p> : null}
+                {stepError ? (
+                  <p className="community-launch-step-message error">
+                    {stepError}
+                  </p>
+                ) : null}
+                {stepSuccess ? (
+                  <p className="community-launch-step-message success">
+                    {stepSuccess}
+                  </p>
+                ) : null}
                 {renderStepEditor()}
                 <div
                   className={`community-launch-step-summary${activeComplete ? " complete" : ""}`}
@@ -1496,7 +2002,8 @@ export function WebCommunityLaunchSetupModal(
                   )}
                   <span>{stepSummary}</span>
                   <span className="community-launch-status-count">
-                    {activeStatus?.completed_items ?? 0}/{activeStatus?.total_items ?? 0}
+                    {activeStatus?.completed_items ?? 0}/
+                    {activeStatus?.total_items ?? 0}
                   </span>
                 </div>
               </div>

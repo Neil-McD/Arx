@@ -181,10 +181,15 @@ assert.match(
   /resource_role: "source"[\s\S]*resource_status: "review"/,
   "launch knowledge links should enter as reviewed sources rather than published pages",
 );
-assert.match(
+assert.doesNotMatch(
   launchModal,
   /Create drafts/,
-  "knowledge modal should surface the scaffold action",
+  "knowledge modal should not expose a raw scaffold action on the collection screen",
+);
+assert.match(
+  launchModal,
+  /onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan/,
+  "knowledge modal should run scaffold creation internally before generating a wiki plan",
 );
 assert.match(
   launchModal,

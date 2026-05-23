@@ -200,7 +200,7 @@ assert.match(
 );
 assert.match(
   modal,
-  /Generate wiki plan/,
+  /Build wiki plan/,
   "modal should render the architect review action",
 );
 assert.match(

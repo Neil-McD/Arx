@@ -422,13 +422,33 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /type CommunityLaunchKnowledgeStage = "collect" \| "assemble" \| "review"/,
+  "launch knowledge step must use staged source collection, assembly, and review screens",
+);
+assert.match(
+  setupModal,
+  /knowledgeStage === "collect"[\s\S]*Drop source material[\s\S]*Add source links[\s\S]*Connect source systems[\s\S]*handleEnterKnowledgeAssemble/,
+  "launch knowledge step must collect source material before showing the wiki architect controls",
+);
+assert.match(
+  setupModal,
+  /knowledgeStage === "assemble"[\s\S]*Build the wiki plan[\s\S]*handleGenerateKnowledgePlan/,
+  "launch knowledge step must put wiki plan generation behind the assembly screen",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Create drafts/,
+  "launch knowledge step must not expose raw scaffold creation as the first user action",
+);
+assert.match(
+  setupModal,
   /COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5[\s\S]*knowledgeLinkDrafts[\s\S]*Add new link[\s\S]*Add links/,
   "launch knowledge link entry must support adding up to five links",
 );
 assert.match(
   setupModal,
-  /onAddKnowledgeLink[\s\S]*handleAddKnowledgeLink[\s\S]*urls: knowledgeLinkDrafts[\s\S]*community-launch-knowledge-link-composer/,
-  "launch knowledge link entries must write through the onboarding save path",
+  /onAddKnowledgeLink[\s\S]*saveKnowledgeLinkDrafts[\s\S]*const urls = knowledgeLinkDrafts[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*community-launch-knowledge-link-composer/,
+  "launch knowledge link entries must trim source URLs and write through the onboarding save path",
 );
 assert.match(
   appShell,
@@ -487,7 +507,7 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /\.community-launch-choice \{[\s\S]*background: linear-gradient\(180deg, rgba\(255, 255, 255, 0\.072\), rgba\(255, 255, 255, 0\.044\)\)/,
+  /\.community-launch-choice \{[\s\S]*background: linear-gradient\([\s\S]*180deg,[\s\S]*rgba\(255, 255, 255, 0\.072\),[\s\S]*rgba\(255, 255, 255, 0\.044\)[\s\S]*\)/,
   "launch access selector cards must use a visibly raised neutral button surface",
 );
 assert.match(
