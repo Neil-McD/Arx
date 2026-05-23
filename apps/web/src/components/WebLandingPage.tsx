@@ -1,5 +1,19 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { Brain, Play } from "lucide-react";
+import {
+  Boxes,
+  Brain,
+  CalendarDays,
+  Check,
+  FileText,
+  MessagesSquare,
+  Play,
+  Plug,
+  Sparkles,
+  Users,
+  Workflow,
+  X,
+} from "lucide-react";
+import type { ComponentType } from "react";
 import { recordCloudBusinessPageVisit } from "../../../../shared/cloudBusinessAnalyticsGateway";
 
 type WebLandingPageProps = {
@@ -35,50 +49,81 @@ const stackItems = [
 
 const stackTotal = "$516+";
 
-const buildAgentStream = [
+const memoryShift: {
+  source: string;
+  Icon: ComponentType<{ className?: string }>;
+  evaporates: string;
+  compounds: string;
+}[] = [
   {
-    call: "project.search",
-    detail: "connected project tables",
-    result: "Project data is available to the agent.",
+    source: "People",
+    Icon: Users,
+    evaporates: "Knowledge trapped in people",
+    compounds: "Expertise packaged into an agent",
   },
   {
-    call: "linear.read",
-    detail: "synced issues and roadmap",
-    result: "Open work and priorities are now in context.",
+    source: "Chats",
+    Icon: MessagesSquare,
+    evaporates: "Decisions buried in chats",
+    compounds: "Decisions captured in shared memory",
   },
   {
-    call: "slack.search",
-    detail: "indexed team context",
-    result: "Recent decisions and conversations are searchable.",
+    source: "Docs",
+    Icon: FileText,
+    evaporates: "Context lost in files",
+    compounds: "Docs become retrievable context",
   },
   {
-    call: "docs.attach",
-    detail: "attached source material",
-    result: "Canonical docs are ready for retrieval.",
+    source: "Meetings",
+    Icon: CalendarDays,
+    evaporates: "Insights forgotten after the call",
+    compounds: "Insights synthesized and reused",
+  },
+  {
+    source: "Workflows",
+    Icon: Workflow,
+    evaporates: "Work reinvented every time",
+    compounds: "Workflows run on demand",
   },
 ];
 
-const buildAgentResearchStream = [
-  {
-    call: "polynet.search",
-    detail: "searched platform docs",
-    result: "Found community intelligence primitives.",
-  },
-  {
-    call: "web.search",
-    detail: "checked external context",
-    result: "Compared language against the market.",
-  },
-  {
-    call: "community.reference",
-    detail: "loaded community intelligence",
-    result: "Positioning and examples are ready.",
-  },
+type CommunityThreadEvent =
+  | { kind: "member"; name: string; initials: string; text: string }
+  | { kind: "agent"; tool: string; text: string };
+
+const communityThread: CommunityThreadEvent[] = [
+  { kind: "member", name: "Myah", initials: "MY", text: "Review my offer page before I publish?" },
+  { kind: "agent", tool: "offer playbook", text: "Tighten the CTA promise above the fold." },
+  { kind: "member", name: "Jordan", initials: "JO", text: "Shared launch-teardown.mp4" },
+  { kind: "agent", tool: "video.summarize", text: "4 positioning notes pulled." },
+  { kind: "member", name: "Nate", initials: "NA", text: "What pricing tier should I launch at?" },
+  { kind: "agent", tool: "pricing playbook", text: "Start at $97 — demand signal matches." },
+  { kind: "member", name: "Kara", initials: "KA", text: "Need a follow-up email template." },
+  { kind: "agent", tool: "templates.search", text: "Pulled 3 templates from the playbook." },
+];
+
+type AgentStreamEvent =
+  | { kind: "user"; text: string }
+  | { kind: "assistant"; text: string }
+  | { kind: "tool"; name: string; args: string }
+  | { kind: "result"; text: string };
+
+const agentTimeline: AgentStreamEvent[] = [
+  { kind: "user", text: "Wire up my expertise as an agent." },
+  { kind: "assistant", text: "On it. Pulling in your frameworks first." },
+  { kind: "tool", name: "knowledge.attach", args: 'source: "frameworks/*"' },
+  { kind: "result", text: "24 documents indexed" },
+  { kind: "assistant", text: "Indexing your posts and videos." },
+  { kind: "tool", name: "content.index", args: 'scope: "posts, videos"' },
+  { kind: "result", text: "142 items embedded" },
+  { kind: "assistant", text: "Importing past sessions for tone and lessons." },
+  { kind: "tool", name: "calls.import", args: 'period: "6m"' },
+  { kind: "result", text: "38 transcripts loaded" },
+  { kind: "assistant", text: "Done. The agent has your method and voice." },
 ];
 const flowCards = [
   {
     title: "Build the agent",
-    image: "/landing/build-agent.png",
     summary: "Create the agent surface for your expertise, workflow, or point of view.",
     bullets: [
       "Add apps and MCP servers",
@@ -96,11 +141,10 @@ const flowCards = [
   },
   {
     title: "Wrap it in a community",
-    image: "/landing/wrap-community.png",
-    summary: "Give the agent a home where members can use it together.",
+    summary: "Give every member an agent that does the work — not just a place to chat.",
     bullets: [
       "Create a community around an outcome",
-      "Give members access to the agent",
+      "Give every member their own agent",
       "Add resources, modules, and context",
       "Let members ask, learn, and build",
     ],
@@ -113,16 +157,15 @@ const flowCards = [
     ],
   },
   {
-    title: "Improve with usage",
-    image: "/landing/improve-usage.png",
-    summary: "Use repeated member activity to make the system more useful over time.",
+    title: "Compound the intelligence",
+    summary: "Turn repeated member activity into reusable leverage the whole system shares.",
     bullets: [
       "See repeated questions and requests",
       "Add resources where members get stuck",
       "Turn repeat work into skills",
       "Refine instructions as patterns emerge",
     ],
-    exampleTitle: "Usage signal",
+    exampleTitle: "Intelligence directory",
     examples: [
       { name: "Questions", detail: "high-frequency asks appear", status: "signal" },
       { name: "Resources", detail: "new docs fill gaps", status: "signal" },
@@ -132,7 +175,6 @@ const flowCards = [
   },
   {
     title: "Monetize",
-    image: "/landing/monetize.png",
     summary: "Turn useful access into a paid community product.",
     bullets: [
       "Gate access with memberships",
@@ -150,36 +192,71 @@ const flowCards = [
   },
 ];
 
-const communityConversationEvents = [
+type DirectoryNode = {
+  title: string;
+  type: "playbook" | "insight" | "example" | "warning" | "decision" | "open";
+  status: "canonical" | "validating" | "promising" | "contested";
+  evidence: string;
+  trail: string;
+  glyph: string;
+};
+
+const intelligenceDirectory: DirectoryNode[] = [
   {
-    kind: "message",
-    name: "Myah",
-    detail: "Can someone review this offer page before I publish?",
+    glyph: "▣",
+    title: "Pricing playbook",
+    type: "playbook",
+    status: "canonical",
+    evidence: "24 retrievals · 18 useful",
+    trail: "live in every agent's context",
   },
   {
-    kind: "bot",
-    name: "Signal",
-    detail: "The CTA is clear. Tighten the outcome promise above the fold.",
+    glyph: "◐",
+    title: "Auto offer review",
+    type: "playbook",
+    status: "validating",
+    evidence: "12 outcomes · evidence observed",
+    trail: "promoting to canonical",
   },
   {
-    kind: "file",
-    name: "Jordan",
-    detail: "Shared video · launch-teardown.mp4",
+    glyph: "◷",
+    title: "Launch sequencing patterns",
+    type: "insight",
+    status: "promising",
+    evidence: "4 source traces · 1 outcome",
+    trail: "awaiting more evidence",
   },
   {
-    kind: "bot",
-    name: "Musebot",
-    detail: "Pulled 4 positioning notes from the shared video.",
+    glyph: "▣",
+    title: "Tier-1 onboarding sequence",
+    type: "playbook",
+    status: "canonical",
+    evidence: "38 retrievals · 32 useful",
+    trail: "live in every agent's context",
   },
   {
-    kind: "file",
-    name: "Nate",
-    detail: "Shared PDF · offer-draft.pdf",
+    glyph: "◐",
+    title: "Pricing tier guidance",
+    type: "insight",
+    status: "validating",
+    evidence: "8 outcomes · evidence observed",
+    trail: "promoting to canonical",
   },
   {
-    kind: "memory",
-    name: "Orbit",
-    detail: "Added to memory system · offer teardown, CTA notes, member demand.",
+    glyph: "⚠",
+    title: "Cold outreach · low-trust template",
+    type: "warning",
+    status: "contested",
+    evidence: "3 outcomes · 2 negative",
+    trail: "flagged for builder review",
+  },
+  {
+    glyph: "◷",
+    title: "Webinar follow-up windows",
+    type: "example",
+    status: "promising",
+    evidence: "5 source traces",
+    trail: "awaiting more evidence",
   },
 ];
 
@@ -259,55 +336,174 @@ const monetizeEvents = [
   },
 ];
 
+const agentMotifChips = [
+  { Icon: Boxes, key: "apps" },
+  { Icon: Plug, key: "mcp" },
+  { Icon: Sparkles, key: "skills" },
+  { Icon: FileText, key: "docs" },
+];
+
+function renderFlowMotif(index: number) {
+  if (index === 0) {
+    return (
+      <div className="polynet-landing-motif motif-agent" aria-hidden="true">
+        <span className="polynet-landing-motif-core">
+          <Brain />
+        </span>
+        {agentMotifChips.map((chip, i) => (
+          <span
+            className="polynet-landing-motif-spoke"
+            key={chip.key}
+            style={{ "--a": `${45 + i * 90}deg`, "--i": i } as CSSProperties}
+          >
+            <span className="polynet-landing-motif-chip">
+              <chip.Icon />
+            </span>
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  if (index === 1) {
+    return (
+      <div className="polynet-landing-motif motif-community" aria-hidden="true">
+        <span className="polynet-landing-motif-core">
+          <Brain />
+        </span>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span
+            className="polynet-landing-motif-spoke"
+            key={`member-${i}`}
+            style={{ "--a": `${i * 60}deg`, "--i": i } as CSSProperties}
+          >
+            <span className="polynet-landing-motif-member">
+              <Users />
+            </span>
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  if (index === 2) {
+    return (
+      <div className="polynet-landing-motif motif-compound" aria-hidden="true">
+        <span className="polynet-landing-motif-ring" />
+        <span className="polynet-landing-motif-orbit" />
+        <span className="polynet-landing-motif-core">
+          <Brain />
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="polynet-landing-motif motif-revenue" aria-hidden="true">
+      <svg
+        className="polynet-landing-motif-curve"
+        viewBox="0 0 100 60"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="polynet-motif-curve-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path
+          className="polynet-landing-motif-curve-area"
+          d="M2,58 C30,58 50,52 68,38 C82,26 92,12 98,4 L98,58 Z"
+          fill="url(#polynet-motif-curve-fill)"
+        />
+        <path
+          className="polynet-landing-motif-curve-line"
+          d="M2,58 C30,58 50,52 68,38 C82,26 92,12 98,4"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="polynet-landing-motif-curve-dot" aria-hidden="true" />
+      <span className="polynet-landing-motif-dollar" aria-hidden="true">$</span>
+    </div>
+  );
+}
+
 function renderFlowExample(flow: (typeof flowCards)[number], index: number) {
   if (index === 0) {
+    const lastAssistantSeq = agentTimeline.reduce(
+      (acc, event, i) => (event.kind === "assistant" ? i : acc),
+      -1,
+    );
     return (
       <div className="polynet-landing-tool-stream" aria-label={flow.exampleTitle}>
         <span>{flow.exampleTitle}</span>
         <div className="polynet-landing-agent-stream-window">
-          <div className="polynet-landing-agent-stream-track">
-            <div className="polynet-landing-agent-stream" aria-label="Simulated agent harness stream">
-              <div className="polynet-landing-agent-status">
-                <span>Working for 8s</span>
-                <span aria-hidden="true">›</span>
-              </div>
-              <p className="polynet-landing-agent-output">
-                I’ll connect this agent to the tools and context it can use.
-              </p>
-              <div className="polynet-landing-agent-tools" aria-label="Simulated tool calls">
-                {buildAgentStream.map((tool, toolIndex) => (
+          <div
+            className="polynet-landing-agent-stream"
+            aria-label="Simulated agent harness stream"
+          >
+            {agentTimeline.map((event, seq) => {
+              const baseStyle = { "--seq": seq } as CSSProperties;
+              if (event.kind === "user") {
+                return (
                   <div
-                    key={tool.call}
-                    className="polynet-landing-agent-tool"
-                    style={{ "--tool-index": toolIndex } as CSSProperties}
+                    key={`event-${seq}`}
+                    className="polynet-landing-agent-event user"
+                    style={baseStyle}
                   >
-                    <div>
-                      <code>{tool.call}</code>
-                      <span>{tool.detail}</span>
-                    </div>
-                    <p>{tool.result}</p>
+                    <span className="polynet-landing-agent-role">You</span>
+                    <span className="polynet-landing-agent-text">{event.text}</span>
                   </div>
-                ))}
-              </div>
-              <div className="polynet-landing-agent-tools secondary" aria-label="Simulated research calls">
-                {buildAgentResearchStream.map((tool, toolIndex) => (
+                );
+              }
+              if (event.kind === "assistant") {
+                const charStyle = {
+                  ...baseStyle,
+                  "--chars": event.text.length,
+                  "--type-ms": `${Math.max(260, event.text.length * 13)}ms`,
+                } as CSSProperties;
+                const isLast = seq === lastAssistantSeq;
+                return (
                   <div
-                    key={tool.call}
-                    className="polynet-landing-agent-tool research"
-                    style={{ "--tool-index": toolIndex } as CSSProperties}
+                    key={`event-${seq}`}
+                    className={`polynet-landing-agent-event assistant${isLast ? " final" : ""}`}
+                    style={charStyle}
                   >
-                    <div>
-                      <code>{tool.call}</code>
-                      <span>{tool.detail}</span>
-                    </div>
-                    <p>{tool.result}</p>
+                    <span className="polynet-landing-agent-text">{event.text}</span>
+                    <span className="polynet-landing-agent-caret" aria-hidden="true" />
                   </div>
-                ))}
-              </div>
-              <div className="polynet-landing-agent-thinking">
-                <span>Referencing community intelligence</span>
-              </div>
-            </div>
+                );
+              }
+              if (event.kind === "tool") {
+                return (
+                  <div
+                    key={`event-${seq}`}
+                    className="polynet-landing-agent-event tool"
+                    style={baseStyle}
+                  >
+                    <code className="polynet-landing-agent-tool-name">
+                      <span aria-hidden="true">⚙</span> {event.name}
+                    </code>
+                    <span className="polynet-landing-agent-tool-args">({event.args})</span>
+                  </div>
+                );
+              }
+              return (
+                <div
+                  key={`event-${seq}`}
+                  className="polynet-landing-agent-event result"
+                  style={baseStyle}
+                >
+                  <span className="polynet-landing-agent-result-arrow" aria-hidden="true">
+                    ↳
+                  </span>
+                  <span className="polynet-landing-agent-result-text">{event.text}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -317,25 +513,66 @@ function renderFlowExample(flow: (typeof flowCards)[number], index: number) {
   if (index === 1) {
     return (
       <div
-        className="polynet-landing-tool-stream polynet-landing-community-feed"
+        className="polynet-landing-tool-stream polynet-landing-community-thread"
         aria-label={flow.exampleTitle}
       >
         <span>{flow.exampleTitle}</span>
-        <div className="polynet-landing-community-feed-window">
-          <div className="polynet-landing-community-feed-list">
-            {communityConversationEvents.map((event, eventIndex) => (
-              <div
-                key={`${event.name}-${event.detail}`}
-                className={`polynet-landing-community-event ${event.kind}`}
-                style={{ "--community-index": eventIndex } as CSSProperties}
-              >
-                <span>{event.name.slice(0, 2)}</span>
-                <div>
-                  <strong>{event.name}</strong>
-                  <p>{event.detail}</p>
+        <div className="polynet-landing-community-thread-window">
+          <div className="polynet-landing-community-thread-track">
+            {communityThread.map((event, seq) => {
+              const baseStyle = { "--seq": seq } as CSSProperties;
+              if (event.kind === "member") {
+                return (
+                  <div
+                    key={`thread-${seq}`}
+                    className="polynet-landing-community-line member"
+                    style={baseStyle}
+                  >
+                    <span className="polynet-landing-community-line-avatar">
+                      {event.initials}
+                    </span>
+                    <div>
+                      <strong>{event.name}</strong>
+                      <p>{event.text}</p>
+                    </div>
+                  </div>
+                );
+              }
+              const isLast = seq === communityThread.length - 1;
+              const typeMs = Math.max(260, event.text.length * 13);
+              const charStyle = {
+                ...baseStyle,
+                "--type-ms": `${typeMs}ms`,
+              } as CSSProperties;
+              return (
+                <div
+                  key={`thread-${seq}`}
+                  className={`polynet-landing-community-line agent${isLast ? " final" : ""}`}
+                  style={charStyle}
+                >
+                  <span
+                    className="polynet-landing-community-line-avatar agent"
+                    aria-hidden="true"
+                  >
+                    ⚙
+                  </span>
+                  <div>
+                    <strong className="polynet-landing-community-agent-label">
+                      agent · <em>{event.tool}</em>
+                    </strong>
+                    <p>
+                      <span className="polynet-landing-community-agent-text">
+                        {event.text}
+                      </span>
+                      <span
+                        className="polynet-landing-community-agent-caret"
+                        aria-hidden="true"
+                      />
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -345,26 +582,65 @@ function renderFlowExample(flow: (typeof flowCards)[number], index: number) {
   if (index === 2) {
     return (
       <div
-        className="polynet-landing-tool-stream polynet-landing-usage-stream"
+        className="polynet-landing-tool-stream polynet-landing-directory"
         aria-label={flow.exampleTitle}
       >
-        <span>{flow.exampleTitle}</span>
-        <div className="polynet-landing-usage-stream-window">
-          <div className="polynet-landing-usage-stream-track">
-            {usageSignalEvents.map((event, eventIndex) => (
+        <span>Intelligence directory · 30-day digest</span>
+        <div className="polynet-landing-directory-window">
+          <div className="polynet-landing-directory-track">
+            {intelligenceDirectory.map((node, seq) => (
               <div
-                key={`${event.label}-${event.value}`}
-                className="polynet-landing-usage-event"
-                style={{ "--usage-index": eventIndex } as CSSProperties}
+                key={node.title}
+                className={`polynet-landing-directory-node ${node.status}`}
+                style={{ "--seq": seq } as CSSProperties}
               >
-                <div>
-                  <strong>{event.label}</strong>
-                  <p>{event.detail}</p>
+                <span className="polynet-landing-directory-glyph" aria-hidden="true">
+                  {node.glyph}
+                </span>
+                <div className="polynet-landing-directory-body">
+                  <div className="polynet-landing-directory-head">
+                    <strong>{node.title}</strong>
+                    <span
+                      className={`polynet-landing-directory-status ${node.status}`}
+                    >
+                      {node.status}
+                    </span>
+                  </div>
+                  <span className="polynet-landing-directory-evidence">
+                    <em>{node.type}</em>
+                    <span className="polynet-landing-directory-dot" aria-hidden="true">
+                      ·
+                    </span>
+                    {node.evidence}
+                  </span>
+                  <span className="polynet-landing-directory-trail">
+                    ↳ {node.trail}
+                    {node.status === "validating" ? (
+                      <span
+                        className="polynet-landing-directory-caret"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </span>
                 </div>
-                <em>{event.value}</em>
               </div>
             ))}
           </div>
+        </div>
+        <div className="polynet-landing-directory-digest">
+          <span className="polynet-landing-directory-digest-glyph" aria-hidden="true">
+            ⏵
+          </span>
+          <span>
+            digesting{" "}
+            <em className="polynet-landing-directory-counter">142</em> new source
+            traces
+            <span className="polynet-landing-directory-digest-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </span>
         </div>
       </div>
     );
@@ -418,15 +694,8 @@ function renderFlowExample(flow: (typeof flowCards)[number], index: number) {
 export function WebLandingPage(props: WebLandingPageProps) {
   const [activeFlowIndex, setActiveFlowIndex] = useState(0);
   const [isFlowPinned, setIsFlowPinned] = useState(false);
-  const [members, setMembers] = useState(100);
-  const [price, setPrice] = useState(29);
   const mobileFlowRef = useRef<HTMLDivElement | null>(null);
   const activeFlow = flowCards[activeFlowIndex] ?? flowCards[0];
-
-  const monthlyRevenue = members * price;
-  const annualRevenue = monthlyRevenue * 12;
-  const monthlyFormatted = "$" + monthlyRevenue.toLocaleString();
-  const annualFormatted = "$" + annualRevenue.toLocaleString();
 
   useEffect(() => {
     void recordCloudBusinessPageVisit({
@@ -447,7 +716,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
 
     const interval = window.setInterval(() => {
       setActiveFlowIndex((current) => (current + 1) % flowCards.length);
-    }, 4200);
+    }, 7500);
 
     return () => window.clearInterval(interval);
   }, [isFlowPinned]);
@@ -501,11 +770,12 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <div className="polynet-landing-copy">
             <p className="polynet-landing-kicker">Services as software</p>
             <h1 id="polynet-landing-title">
-              Turn your expertise into a <span>paid AI community</span>.
+              Turn your expertise into a community that{" "}
+              <span>executes for every member</span>.
             </h1>
             <p className="polynet-landing-subcopy">
-              Build an agent. Monetize access. Bring in members. Improve with
-              usage.
+              Package your expertise once. Every member gets an agent that does
+              the work — and every interaction makes the system smarter.
             </p>
             <div className="polynet-landing-cta-row">
               <button type="button" className="primary" onClick={props.onTryFree}>
@@ -544,6 +814,106 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
       </section>
 
+      <section
+        className="polynet-landing-section polynet-landing-memory"
+        aria-labelledby="polynet-landing-memory-title"
+      >
+        <div className="polynet-landing-memory-head">
+          <p className="polynet-landing-kicker">Why it compounds</p>
+          <h2 id="polynet-landing-memory-title">
+            Expertise either evaporates or compounds.
+          </h2>
+          <p>
+            In most communities, what people know leaks away — trapped in heads,
+            buried in chats, forgotten after every call. On Polynet, the same
+            signal feeds one shared memory your agent executes on, so the system
+            gets smarter with every interaction.
+          </p>
+        </div>
+        <div className="polynet-landing-memory-visual" aria-hidden="true">
+          <div className="polynet-landing-memory-fan evaporates">
+            <span className="polynet-landing-memory-fan-tag">Evaporates</span>
+            <div className="polynet-landing-memory-fan-stage">
+              <span className="polynet-landing-memory-fan-core" />
+              {memoryShift.map((row, index) => (
+                <span
+                  className="polynet-landing-memory-spoke"
+                  key={`scatter-${row.source}`}
+                  style={
+                    { "--a": `${-150 + index * 30}deg`, "--i": index } as CSSProperties
+                  }
+                >
+                  <span className="polynet-landing-memory-spoke-chip">
+                    <row.Icon className="polynet-landing-memory-spoke-icon" />
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="polynet-landing-memory-fan compounds">
+            <span className="polynet-landing-memory-fan-tag">Compounds</span>
+            <div className="polynet-landing-memory-fan-stage">
+              <span className="polynet-landing-memory-feedback" aria-hidden="true" />
+              <span className="polynet-landing-memory-fan-core">
+                <Brain className="polynet-landing-memory-core-icon" />
+              </span>
+              {memoryShift.map((row, index) => (
+                <span
+                  className="polynet-landing-memory-spoke"
+                  key={`hub-${row.source}`}
+                  style={
+                    { "--a": `${-150 + index * 30}deg`, "--i": index } as CSSProperties
+                  }
+                >
+                  <span className="polynet-landing-memory-spoke-chip">
+                    <row.Icon className="polynet-landing-memory-spoke-icon" />
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="polynet-landing-memory-table">
+          <div className="polynet-landing-memory-row head">
+            <span className="polynet-landing-memory-source" aria-hidden="true" />
+            <span className="polynet-landing-memory-col evaporates">
+              Without shared memory
+            </span>
+            <span className="polynet-landing-memory-col compounds">
+              With Polynet
+            </span>
+          </div>
+          {memoryShift
+            .filter((row) => row.source === "People" || row.source === "Chats" || row.source === "Workflows")
+            .map((row) => (
+              <div className="polynet-landing-memory-row" key={row.source}>
+                <span className="polynet-landing-memory-source">
+                  <row.Icon className="polynet-landing-memory-source-icon" />
+                  {row.source}
+                </span>
+                <span className="polynet-landing-memory-cell evaporates">
+                  <X className="polynet-landing-memory-mark" aria-hidden="true" />
+                  {row.evaporates}
+                </span>
+                <span className="polynet-landing-memory-cell compounds">
+                  <Check className="polynet-landing-memory-mark" aria-hidden="true" />
+                  {row.compounds}
+                </span>
+              </div>
+            ))}
+          <div className="polynet-landing-memory-row foot">
+            <span className="polynet-landing-memory-source" aria-hidden="true" />
+            <span className="polynet-landing-memory-foot evaporates">
+              The people learn. The community forgets.
+            </span>
+            <span className="polynet-landing-memory-foot compounds">
+              The group learns. The system gets smarter.
+            </span>
+          </div>
+        </div>
+      </section>
+
       <section className="polynet-landing-section compact" aria-labelledby="polynet-landing-flow">
         <div>
           <p className="polynet-landing-kicker">How it works</p>
@@ -571,7 +941,9 @@ export function WebLandingPage(props: WebLandingPageProps) {
               }}
               onMouseLeave={() => setIsFlowPinned(false)}
             >
-              <img src={card.image} alt={card.title} loading="lazy" />
+              <span className="polynet-landing-flow-card-step">Step {index + 1}</span>
+              {renderFlowMotif(index)}
+              <span className="polynet-landing-flow-card-label">{card.title}</span>
             </button>
           ))}
         </div>
@@ -580,7 +952,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
             className={`polynet-landing-flow-active-visual step-${activeFlowIndex}`}
             aria-hidden="true"
           >
-            <img src={activeFlow.image} alt="" loading="lazy" />
+            {renderFlowMotif(activeFlowIndex)}
           </div>
           <div className="polynet-landing-flow-copy">
             <span>Step {activeFlowIndex + 1} of {flowCards.length}</span>
@@ -609,7 +981,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
             >
               <div className="polynet-landing-flow-mobile-top">
                 <div className={`polynet-landing-flow-active-visual step-${index}`} aria-hidden="true">
-                  <img src={card.image} alt="" loading="lazy" />
+                  {renderFlowMotif(index)}
                 </div>
                 {renderFlowExample(card, index)}
               </div>
@@ -647,61 +1019,12 @@ export function WebLandingPage(props: WebLandingPageProps) {
         <div className="polynet-landing-comparison-copy">
           <p className="polynet-landing-kicker">Stack comparison</p>
           <h2 id="polynet-landing-stack">
-            The Collective Intelligence Platform
+            One system instead of five subscriptions.
           </h2>
           <p>
             Polynet compresses agents, community, resources, funnels, and paid
-            access into one clean product.
+            access into one collective intelligence system.
           </p>
-          <div className="polynet-landing-calculator">
-            <h3 className="polynet-landing-calculator-title">Estimate your earnings</h3>
-            <div className="polynet-landing-calculator-field">
-              <div className="polynet-landing-calculator-label">
-                <span>Members</span>
-                <strong>{members}</strong>
-              </div>
-              <input
-                type="range"
-                min="10"
-                max="1000"
-                step="10"
-                value={members}
-                onChange={(e) => setMembers(Number(e.target.value))}
-                className="polynet-landing-calculator-slider"
-                style={{
-                  background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${((members - 10) / 990) * 100}%, rgba(255, 255, 255, 0.15) ${((members - 10) / 990) * 100}%, rgba(255, 255, 255, 0.15) 100%)`
-                }}
-              />
-            </div>
-            <div className="polynet-landing-calculator-field">
-              <div className="polynet-landing-calculator-label">
-                <span>Price per month</span>
-                <strong>${price}</strong>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="150"
-                step="5"
-                value={price}
-                onChange={(e) => setPrice(Number(e.target.value))}
-                className="polynet-landing-calculator-slider"
-                style={{
-                  background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${((price - 5) / 145) * 100}%, rgba(255, 255, 255, 0.15) ${((price - 5) / 145) * 100}%, rgba(255, 255, 255, 0.15) 100%)`
-                }}
-              />
-            </div>
-            <div className="polynet-landing-calculator-results">
-              <div>
-                <span>Monthly earnings</span>
-                <strong>{monthlyFormatted}</strong>
-              </div>
-              <div>
-                <span>Yearly earnings</span>
-                <strong>{annualFormatted}</strong>
-              </div>
-            </div>
-          </div>
         </div>
         <div className="polynet-landing-comparison">
           <div className="polynet-landing-stack-list">
