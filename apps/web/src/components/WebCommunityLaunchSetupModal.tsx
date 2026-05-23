@@ -8,10 +8,12 @@ import {
   Image,
   Link2,
   LockKeyhole,
+  Sparkles,
   X,
 } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
+import type { CommunityWikiArchitectProposal } from "../../../../shared/communityWikiArchitectPrompt";
 import type {
   CommunityLaunchSetupMissing,
   CommunityLaunchSetupStatus,
@@ -68,6 +70,68 @@ export type CommunityLaunchKnowledgeLinkSaveDraft = {
   urls: string[];
 };
 
+export type CommunityLaunchKnowledgeHealth = {
+  summary?: {
+    modules?: number;
+    draft_pages?: number;
+    source_inbox_items?: number;
+    missing_default_modules?: string[];
+    missing_scaffold_pages?: string[];
+    issue_count?: number;
+  };
+  issues?: {
+    unreferencedSources?: unknown[];
+    staleDrafts?: unknown[];
+    sparsePages?: unknown[];
+  };
+};
+
+export type CommunityLaunchKnowledgeScaffoldResult = {
+  summary?: {
+    modules_created?: string[];
+    pages_created?: string[];
+  };
+  health?: CommunityLaunchKnowledgeHealth;
+};
+
+export type CommunityLaunchKnowledgePlanResult = {
+  ok?: boolean;
+  proposal?: CommunityWikiArchitectProposal | null;
+  errors?: Array<{
+    path?: string;
+    message?: string;
+  }>;
+  message?: string | null;
+  code?: string | null;
+  output_preview?: string | null;
+  model_id?: string | null;
+  usage?: {
+    prompt_tokens?: number | null;
+    completion_tokens?: number | null;
+  } | null;
+  context_summary?: {
+    modules?: number;
+    pages?: number;
+    sources?: number;
+  } | null;
+};
+
+export type CommunityLaunchKnowledgePlanApplyResult = {
+  ok?: boolean;
+  summary?: {
+    modules_created?: string[];
+    pages_created?: string[];
+    pages_updated?: string[];
+  };
+  health?: CommunityLaunchKnowledgeHealth;
+  errors?: Array<{
+    path?: string;
+    message?: string;
+  }>;
+  message?: string | null;
+  code?: string | null;
+};
+
 export type CommunityLaunchAgentSaveDraft = {
   systemPrompt: string;
   starterPrompts: string[];
@@ -92,6 +156,10 @@ type WebCommunityLaunchSetupModalProps = {
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
   onAddKnowledgeLink: (draft: CommunityLaunchKnowledgeLinkSaveDraft) => Promise<void>;
+  onLoadKnowledgeHealth?: () => Promise<CommunityLaunchKnowledgeHealth | null>;
+  onEnsureKnowledgeScaffold?: () => Promise<CommunityLaunchKnowledgeScaffoldResult | null>;
+  onGenerateKnowledgePlan?: (draft: { builderIntent: string }) => Promise<CommunityLaunchKnowledgePlanResult | null>;
+  onApplyKnowledgePlan?: (draft: { proposal: CommunityWikiArchitectProposal }) => Promise<CommunityLaunchKnowledgePlanApplyResult | null>;
   onSaveAgent: (draft: CommunityLaunchAgentSaveDraft) => Promise<void>;
   onSaveAccess: (draft: CommunityLaunchAccessSaveDraft) => Promise<void>;
   onSavePublish: (draft: CommunityLaunchPublishSaveDraft) => Promise<void>;
@@ -222,6 +290,10 @@ export function WebCommunityLaunchSetupModal(
     onSaveProfile,
     onSaveAbout,
     onAddKnowledgeLink,
+    onLoadKnowledgeHealth,
+    onEnsureKnowledgeScaffold,
+    onGenerateKnowledgePlan,
+    onApplyKnowledgePlan,
     onSaveAgent,
     onSaveAccess,
     onSavePublish,
@@ -250,6 +322,15 @@ export function WebCommunityLaunchSetupModal(
   });
   const [aboutDraft, setAboutDraft] = useState("");
   const [knowledgeLinkDrafts, setKnowledgeLinkDrafts] = useState<string[]>([""]);
+  const [knowledgeHealth, setKnowledgeHealth] = useState<CommunityLaunchKnowledgeHealth | null>(null);
+  const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
+  const [knowledgeScaffoldSaving, setKnowledgeScaffoldSaving] = useState(false);
+  const [knowledgePlanIntent, setKnowledgePlanIntent] = useState("");
+  const [knowledgePlan, setKnowledgePlan] = useState<CommunityLaunchKnowledgePlanResult | null>(null);
+  const [knowledgePlanLoading, setKnowledgePlanLoading] = useState(false);
+  const [knowledgePlanApplyResult, setKnowledgePlanApplyResult] =
+    useState<CommunityLaunchKnowledgePlanApplyResult | null>(null);
+  const [knowledgePlanApplying, setKnowledgePlanApplying] = useState(false);
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -279,6 +360,14 @@ export function WebCommunityLaunchSetupModal(
       });
       setAboutDraft("");
       setKnowledgeLinkDrafts([""]);
+      setKnowledgeHealth(null);
+      setKnowledgeHealthLoading(false);
+      setKnowledgeScaffoldSaving(false);
+      setKnowledgePlanIntent("");
+      setKnowledgePlan(null);
+      setKnowledgePlanLoading(false);
+      setKnowledgePlanApplyResult(null);
+      setKnowledgePlanApplying(false);
       setAgentDraft({
         systemPrompt: "",
         starterPrompts: ["", "", ""],
@@ -305,6 +394,14 @@ export function WebCommunityLaunchSetupModal(
     });
     setAboutDraft(community.about ?? "");
     setKnowledgeLinkDrafts([""]);
+    setKnowledgeHealth(null);
+    setKnowledgeHealthLoading(false);
+    setKnowledgeScaffoldSaving(false);
+    setKnowledgePlanIntent("");
+    setKnowledgePlan(null);
+    setKnowledgePlanLoading(false);
+    setKnowledgePlanApplyResult(null);
+    setKnowledgePlanApplying(false);
     setAgentDraft({
       systemPrompt: community.agent_system_prompt ?? "",
       starterPrompts: getStarterPrompts(community),
@@ -333,6 +430,27 @@ export function WebCommunityLaunchSetupModal(
     community?.agent_system_prompt,
     community?.agent_starter_prompts,
   ]);
+
+  useEffect(() => {
+    if (!isOpen || activeStep !== "knowledge" || isCreateMode || !onLoadKnowledgeHealth) return;
+    let cancelled = false;
+    setKnowledgeHealthLoading(true);
+    void onLoadKnowledgeHealth()
+      .then((nextHealth) => {
+        if (!cancelled) setKnowledgeHealth(nextHealth);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setStepError(error instanceof Error ? error.message : "Could not load knowledge setup.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setKnowledgeHealthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStep, isCreateMode, isOpen, onLoadKnowledgeHealth]);
 
   const createModeStatus = useMemo(
     () =>
@@ -486,6 +604,10 @@ export function WebCommunityLaunchSetupModal(
     void (async () => {
       try {
         await onAddKnowledgeLink({ urls: knowledgeLinkDrafts });
+        if (onLoadKnowledgeHealth) {
+          const nextHealth = await onLoadKnowledgeHealth();
+          setKnowledgeHealth(nextHealth);
+        }
         setKnowledgeLinkDrafts([""]);
         setStepSuccess("Links added.");
       } catch (error) {
@@ -498,6 +620,84 @@ export function WebCommunityLaunchSetupModal(
         setStepError(message);
       } finally {
         setSavingStep(null);
+      }
+    })();
+  };
+
+  const handleEnsureKnowledgeScaffold = () => {
+    if (savingStep || knowledgeScaffoldSaving || !onEnsureKnowledgeScaffold) return;
+    setKnowledgeScaffoldSaving(true);
+    setStepError(null);
+    setStepSuccess(null);
+    void (async () => {
+      try {
+        const result = await onEnsureKnowledgeScaffold();
+        if (result?.health) setKnowledgeHealth(result.health);
+        const modulesCreated = result?.summary?.modules_created?.length ?? 0;
+        const pagesCreated = result?.summary?.pages_created?.length ?? 0;
+        setStepSuccess(
+          modulesCreated || pagesCreated
+            ? `Created ${modulesCreated} modules and ${pagesCreated} draft pages.`
+            : "Knowledge scaffold already exists.",
+        );
+      } catch (error) {
+        setStepError(error instanceof Error ? error.message : "Could not create knowledge scaffold.");
+      } finally {
+        setKnowledgeScaffoldSaving(false);
+      }
+    })();
+  };
+
+  const handleGenerateKnowledgePlan = () => {
+    if (savingStep || knowledgePlanLoading || !onGenerateKnowledgePlan) return;
+    setKnowledgePlanLoading(true);
+    setStepError(null);
+    setStepSuccess(null);
+    setKnowledgePlanApplyResult(null);
+    void (async () => {
+      try {
+        const result = await onGenerateKnowledgePlan({
+          builderIntent: knowledgePlanIntent,
+        });
+        setKnowledgePlan(result ?? null);
+        if (result?.ok) {
+          setStepSuccess("Wiki plan ready for review.");
+        } else {
+          setStepError(result?.message || "Could not generate wiki plan.");
+        }
+      } catch (error) {
+        setStepError(error instanceof Error ? error.message : "Could not generate wiki plan.");
+      } finally {
+        setKnowledgePlanLoading(false);
+      }
+    })();
+  };
+
+  const handleApplyKnowledgePlan = () => {
+    const proposal = knowledgePlan?.proposal ?? null;
+    if (savingStep || knowledgePlanApplying || !proposal || !onApplyKnowledgePlan) return;
+    setKnowledgePlanApplying(true);
+    setStepError(null);
+    setStepSuccess(null);
+    void (async () => {
+      try {
+        const result = await onApplyKnowledgePlan({ proposal });
+        setKnowledgePlanApplyResult(result ?? null);
+        if (result?.health) setKnowledgeHealth(result.health);
+        if (result?.ok) {
+          const modulesCreated = result.summary?.modules_created?.length ?? 0;
+          const pagesCreated = result.summary?.pages_created?.length ?? 0;
+          const pagesUpdated = result.summary?.pages_updated?.length ?? 0;
+          setStepSuccess(
+            `Applied wiki plan: ${modulesCreated} modules, ${pagesCreated} drafts, ${pagesUpdated} updates.`,
+          );
+        } else {
+          setStepError(result?.message || "Could not apply wiki plan.");
+        }
+      } catch (error) {
+        setStepError(error instanceof Error ? error.message : "Could not apply wiki plan.");
+      } finally {
+        setKnowledgePlanApplying(false);
       }
     })();
   };
@@ -759,9 +959,196 @@ export function WebCommunityLaunchSetupModal(
     if (activeStep === "knowledge") {
       const canAddKnowledgeLink = knowledgeLinkDrafts.some((url) => url.trim());
       const canAddKnowledgeLinkRow = knowledgeLinkDrafts.length < COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS;
+      const missingDefaultModules = knowledgeHealth?.summary?.missing_default_modules ?? [];
+      const missingScaffoldPages = knowledgeHealth?.summary?.missing_scaffold_pages ?? [];
+      const sourceInboxCount = knowledgeHealth?.summary?.source_inbox_items ?? 0;
+      const draftPageCount = knowledgeHealth?.summary?.draft_pages ?? 0;
+      const unreferencedSourceCount = knowledgeHealth?.issues?.unreferencedSources?.length ?? 0;
+      const staleDraftCount = knowledgeHealth?.issues?.staleDrafts?.length ?? 0;
+      const sparsePageCount = knowledgeHealth?.issues?.sparsePages?.length ?? 0;
+      const canCreateScaffold =
+        (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0) && Boolean(onEnsureKnowledgeScaffold);
+      const planProposal = knowledgePlan?.proposal ?? null;
+      const planDrafts = planProposal?.drafts_created ?? [];
+      const planUpdates = planProposal?.drafts_updated ?? [];
+      const planGaps = planProposal?.gaps ?? [];
+      const planBuilderNeeds = planProposal?.needs_from_builder ?? [];
+      const canApplyKnowledgePlan =
+        Boolean(planProposal) && Boolean(onApplyKnowledgePlan) && !knowledgePlanApplying && !isSavingActiveStep;
       return (
         <div className="community-launch-inline-form community-launch-knowledge-gateway">
           <div className="community-launch-knowledge-stack">
+            <section className="community-launch-knowledge-row">
+              <span className="community-launch-knowledge-icon" aria-hidden="true">
+                <BookOpen size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">Setup</span>
+                <strong>Set up the wiki structure</strong>
+                <p>
+                  {knowledgeHealthLoading
+                    ? "Checking the current resource tree."
+                    : !knowledgeHealth
+                      ? "Resource tree has not been checked yet."
+                      : missingDefaultModules.length > 0
+                      ? `Missing ${missingDefaultModules.join(", ")}.`
+                      : missingScaffoldPages.length > 0
+                        ? "Missing starter wiki pages."
+                        : "The base wiki modules are ready."}
+                </p>
+                <div className="community-launch-knowledge-setup-metrics" aria-label="Knowledge setup status">
+                  <span>{draftPageCount} drafts</span>
+                  <span>{sourceInboxCount} sources</span>
+                  <span>{unreferencedSourceCount} unlinked</span>
+                  <span>{staleDraftCount} stale</span>
+                  <span>{sparsePageCount} sparse</span>
+                </div>
+              </div>
+              {canCreateScaffold ? (
+                <button
+                  type="button"
+                  className="community-launch-knowledge-action"
+                  disabled={knowledgeScaffoldSaving || isSavingActiveStep}
+                  onClick={handleEnsureKnowledgeScaffold}
+                >
+                  {knowledgeScaffoldSaving ? "Creating..." : "Create drafts"}
+                </button>
+              ) : (
+                <span className="community-launch-knowledge-pill">
+                  {knowledgeHealthLoading ? "Checking" : knowledgeHealth ? "Ready" : "Not checked"}
+                </span>
+              )}
+            </section>
+            <section className="community-launch-knowledge-row community-launch-knowledge-architect-row">
+              <span className="community-launch-knowledge-icon" aria-hidden="true">
+                <Sparkles size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">Architect</span>
+                <strong>Generate wiki plan</strong>
+                <p>
+                  The agent reads community context and resource metadata, then returns a review-only structure plan.
+                </p>
+                <textarea
+                  className="community-launch-knowledge-intent"
+                  value={knowledgePlanIntent}
+                  onChange={(event) => setKnowledgePlanIntent(event.target.value)}
+                  rows={3}
+                  placeholder="Optional notes: what should this wiki help members understand or do?"
+                />
+                <div className="community-launch-knowledge-plan-actions">
+                  <button
+                    type="button"
+                    className="community-launch-knowledge-action"
+                    disabled={!onGenerateKnowledgePlan || knowledgePlanLoading || isSavingActiveStep}
+                    onClick={handleGenerateKnowledgePlan}
+                  >
+                    {knowledgePlanLoading ? "Designing..." : "Generate plan"}
+                  </button>
+                  {planProposal ? (
+                    <button
+                      type="button"
+                      className="community-launch-knowledge-action"
+                      disabled={!canApplyKnowledgePlan}
+                      onClick={handleApplyKnowledgePlan}
+                    >
+                      {knowledgePlanApplying ? "Applying..." : "Apply draft plan"}
+                    </button>
+                  ) : null}
+                  {knowledgePlan?.model_id ? <span>{knowledgePlan.model_id}</span> : null}
+                </div>
+                {planProposal ? (
+                  <div className="community-launch-knowledge-plan" aria-live="polite">
+                    <div className="community-launch-knowledge-plan-grid">
+                      <span>
+                        <strong>{planProposal.modules_created.length}</strong>
+                        modules
+                      </span>
+                      <span>
+                        <strong>{planDrafts.length}</strong>
+                        drafts
+                      </span>
+                      <span>
+                        <strong>{planUpdates.length}</strong>
+                        updates
+                      </span>
+                      <span>
+                        <strong>{planGaps.length}</strong>
+                        gaps
+                      </span>
+                    </div>
+                    {planDrafts.length > 0 ? (
+                      <div className="community-launch-knowledge-plan-section">
+                        <span>Drafts</span>
+                        <ul>
+                          {planDrafts.slice(0, 4).map((draft) => (
+                            <li key={`${draft.module}:${draft.title}`}>
+                              {draft.title} <em>{draft.module}</em>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {planGaps.length > 0 || planBuilderNeeds.length > 0 ? (
+                      <div className="community-launch-knowledge-plan-section">
+                        <span>Needs</span>
+                        <ul>
+                          {planGaps.slice(0, 3).map((gap) => (
+                            <li key={`${gap.module}:${gap.title}`}>{gap.needed_source}</li>
+                          ))}
+                          {planBuilderNeeds.slice(0, 3).map((need) => (
+                            <li key={need}>{need}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {knowledgePlanApplyResult?.ok ? (
+                      <div className="community-launch-knowledge-plan-section">
+                        <span>Applied</span>
+                        <ul>
+                          <li>{knowledgePlanApplyResult.summary?.modules_created?.length ?? 0} modules created</li>
+                          <li>{knowledgePlanApplyResult.summary?.pages_created?.length ?? 0} drafts created</li>
+                          <li>{knowledgePlanApplyResult.summary?.pages_updated?.length ?? 0} drafts updated</li>
+                        </ul>
+                      </div>
+                    ) : null}
+                    {knowledgePlanApplyResult && !knowledgePlanApplyResult.ok ? (
+                      <div className="community-launch-knowledge-plan-section">
+                        <span>Apply failed</span>
+                        <ul>
+                          {(knowledgePlanApplyResult.errors ?? []).slice(0, 4).map((error, index) => (
+                            <li key={`${error.path ?? "apply-error"}:${index}`}>
+                              {error.path ? `${error.path}: ` : ""}
+                              {error.message ?? knowledgePlanApplyResult.message ?? "Invalid field."}
+                            </li>
+                          ))}
+                          {knowledgePlanApplyResult.errors?.length ? null : (
+                            <li>{knowledgePlanApplyResult.message || "Wiki plan could not be applied."}</li>
+                          )}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : knowledgePlan && !knowledgePlan.ok ? (
+                  <div className="community-launch-knowledge-plan error" aria-live="polite">
+                    <strong>{knowledgePlan.message || "Wiki plan failed validation."}</strong>
+                    {knowledgePlan.errors?.length ? (
+                      <ul>
+                        {knowledgePlan.errors.slice(0, 4).map((error, index) => (
+                          <li key={`${error.path ?? "error"}:${index}`}>
+                            {error.path ? `${error.path}: ` : ""}
+                            {error.message ?? "Invalid field."}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <span className="community-launch-knowledge-pill">
+                {knowledgePlanLoading ? "Running" : knowledgePlan?.ok ? "Ready" : "Review"}
+              </span>
+            </section>
             <section className="community-launch-knowledge-row">
               <span className="community-launch-knowledge-icon" aria-hidden="true">
                 <FileText size={15} strokeWidth={2} />

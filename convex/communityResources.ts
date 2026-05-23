@@ -37,6 +37,12 @@ import {
   buildCommunityResourceModuleDirectoryFields,
   parseCommunityResourceDirectoryUri,
 } from "../shared/communityResourceDirectory";
+import {
+  COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES,
+  COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES,
+  COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES,
+  getCommunityResourceBuilderScaffoldPageKey,
+} from "../shared/communityResourceBuilder";
 
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_DEFAULT_LIMIT = 50;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MAX_LIMIT = 100;
@@ -45,6 +51,8 @@ const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MODULE_SCAN_LIMIT = 500;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS = 12_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS = 20_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_SNIPPET_CHARS = 420;
+const COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS = 240;
+const COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS = 14 * 24 * 60 * 60 * 1000;
 
 function normalizeOptionalModuleId(raw: unknown): string | null {
   const value = String(raw ?? "").trim();
@@ -252,6 +260,64 @@ function normalizeDirectoryToolPath(raw: unknown): string {
 
 function normalizeDirectoryPathForMatch(raw: unknown): string {
   return normalizeDirectoryToolPath(raw).toLowerCase();
+}
+
+function normalizeBuilderWriteKind(raw: unknown): "module" | "page" | "source" {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "module" || value === "page" || value === "source") return value;
+  throw new Error("community_resource_builder_kind_invalid");
+}
+
+function normalizeBuilderHealthTitle(raw: unknown): string {
+  return String(raw ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isBuilderScaffoldPageTitle(raw: unknown): boolean {
+  return COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES.some(
+    (title) => normalizeBuilderHealthTitle(title) === normalizeBuilderHealthTitle(raw),
+  );
+}
+
+function isBuilderDefaultModuleName(raw: unknown): boolean {
+  return COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES.some(
+    (moduleName) => normalizeBuilderHealthTitle(moduleName) === normalizeBuilderHealthTitle(raw),
+  );
+}
+
+function requireExpectedUpdatedAt(args: {
+  expectedUpdatedAt: unknown;
+  actualUpdatedAt: unknown;
+}): void {
+  const expected = Number(args.expectedUpdatedAt);
+  const actual = Number(args.actualUpdatedAt);
+  if (!Number.isFinite(expected)) {
+    throw new Error("community_resource_expected_updated_at_required");
+  }
+  if (expected !== actual) {
+    throw new Error("community_resource_edit_conflict");
+  }
+}
+
+function normalizeBuilderResourceStatus(args: {
+  raw: unknown;
+  existingStatus?: unknown;
+  publishing?: boolean;
+  confirmPublish?: boolean;
+  defaultStatus: "draft" | "review";
+}): "draft" | "review" | "published" | "processing" | "failed" {
+  const hasRaw = args.raw !== undefined;
+  const next = hasRaw
+    ? requireResourceStatusForWrite(args.raw)
+    : args.existingStatus !== undefined
+      ? normalizeResourceStatus(args.existingStatus)
+      : args.defaultStatus;
+  if (next === "published" && !args.confirmPublish) {
+    throw new Error("community_resource_publish_confirmation_required");
+  }
+  if (args.publishing && next !== "published") {
+    throw new Error("community_resource_publish_status_required");
+  }
+  return next;
 }
 
 function isCommunityResourceRow(row: unknown): row is CommunityResourceLike {
@@ -946,6 +1012,602 @@ export const searchCommunityResourceDirectoryInternal = internalQuery({
       kind: "community_resources_search",
       query: args.query,
       matches,
+    };
+  },
+});
+
+export const listCommunityResourceBuilderDirectory = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 1000)));
+    const [modules, resources] = await Promise.all([
+      ctx.db
+        .query("communityResourceModules" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect() as Promise<CommunityResourceModuleLike[]>,
+      ctx.db
+        .query("communityResources" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect() as Promise<CommunityResourceLike[]>,
+    ]);
+    const userIdCache = new Map<string, string | null>();
+    const moduleNameCache = new Map<string, string | null>();
+    return {
+      ok: true,
+      kind: "community_resource_builder_directory",
+      modules: await Promise.all(
+        modules
+          .slice()
+          .sort((a, b) => a.sortOrder - b.sortOrder || b.createdAt - a.createdAt)
+          .map((row) => mapCommunityResourceModuleRow(ctx, row)),
+      ),
+      resources: await Promise.all(
+        resources
+          .slice()
+          .sort(compareCommunityResources)
+          .slice(0, limit)
+          .map((row) => mapCommunityResourceRow(ctx, row, userIdCache, moduleNameCache)),
+      ),
+    };
+  },
+});
+
+export const readCommunityResourceBuilderResource = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    resourceId: v.optional(v.union(v.id("communityResources"), v.null())),
+    moduleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    if (args.resourceId) {
+      const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+      if (!resource || String(resource.communityId) !== String(args.communityId)) {
+        throw new Error("community_resource_not_found");
+      }
+      return {
+        ok: true,
+        kind: "community_resource_builder_read",
+        resource: await mapCommunityResourceRow(ctx, resource),
+      };
+    }
+    if (args.moduleId) {
+      const module = (await ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+      if (!module || String(module.communityId) !== String(args.communityId)) {
+        throw new Error("community_resource_module_not_found");
+      }
+      return {
+        ok: true,
+        kind: "community_resource_builder_read",
+        module: await mapCommunityResourceModuleRow(ctx, module),
+      };
+    }
+    throw new Error("community_resource_builder_read_ref_required");
+  },
+});
+
+export const writeCommunityResourceBuilderResource = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    kind: v.string(),
+    payload: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const kind = normalizeBuilderWriteKind(args.kind);
+    const payload =
+      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
+        ? (args.payload as Record<string, unknown>)
+        : {};
+    const nowMs = Date.now();
+
+    if (kind === "module") {
+      const rows = (await ctx.db
+        .query("communityResourceModules" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect()) as CommunityResourceModuleLike[];
+      const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
+      const id = await ctx.db.insert("communityResourceModules" as any, {
+        communityId: args.communityId,
+        createdByUserId: userId,
+        name: normalizeName(payload.name),
+        descriptionMd: normalizeOptionalText(payload.description_md, 1200),
+        sortOrder: nextSortOrder,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const created = (await ctx.db.get(id as any)) as CommunityResourceModuleLike | null;
+      if (!created) throw new Error("community_resource_module_create_failed");
+      return {
+        ok: true,
+        kind: "community_resource_builder_write",
+        module: await mapCommunityResourceModuleRow(ctx, created),
+      };
+    }
+
+    const role = kind === "source" ? "source" : "page";
+    const status = normalizeBuilderResourceStatus({
+      raw: payload.resource_status,
+      confirmPublish: Boolean(payload.confirm_publish),
+      defaultStatus: role === "source" ? "review" : "draft",
+    });
+    const moduleId = await requireValidResourceModule({
+      ctx,
+      communityId: args.communityId,
+      moduleId: normalizeOptionalModuleId(payload.module_id),
+    });
+    const sourceResourceIdRaw = normalizeOptionalModuleId(payload.source_resource_id);
+    const sourceResource = sourceResourceIdRaw
+      ? ((await ctx.db.get(sourceResourceIdRaw as any)) as CommunityResourceLike | null)
+      : null;
+    if (sourceResourceIdRaw) {
+      if (!sourceResource || String(sourceResource.communityId) !== String(args.communityId)) {
+        throw new Error("community_source_resource_not_found");
+      }
+      if (normalizeResourceRole(sourceResource.role) !== "source") {
+        throw new Error("community_source_resource_required");
+      }
+    }
+    const sortOrder = await getNextResourceSortOrder({
+      ctx,
+      communityId: args.communityId,
+      moduleId,
+    });
+    const id = await ctx.db.insert("communityResources" as any, {
+      communityId: args.communityId,
+      ...(moduleId ? { moduleId } : {}),
+      createdByUserId: userId,
+      type: normalizeResourceType(payload.type),
+      role,
+      status,
+      ...(sourceResource ? { sourceResourceId: sourceResource._id } : {}),
+      title: normalizeName(payload.title),
+      bodyMd: normalizeOptionalText(payload.body_md, 20_000),
+      url: normalizeOptionalUrl(payload.url),
+      fileKey: normalizeOptionalFileKey(payload.file_key),
+      pinned: Boolean(payload.pinned),
+      sortOrder,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
+    if (!created) throw new Error("community_resource_create_failed");
+    await upsertArchiveDocumentForResource(ctx, created);
+    return {
+      ok: true,
+      kind: "community_resource_builder_write",
+      resource: await mapCommunityResourceRow(ctx, created),
+    };
+  },
+});
+
+export const editCommunityResourceBuilderResource = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    resourceId: v.optional(v.union(v.id("communityResources"), v.null())),
+    moduleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
+    expectedUpdatedAt: v.number(),
+    confirmPublish: v.optional(v.boolean()),
+    payload: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const payload =
+      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
+        ? (args.payload as Record<string, unknown>)
+        : {};
+    const nowMs = Date.now();
+
+    if (args.moduleId) {
+      const existing = (await ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+      if (!existing || String(existing.communityId) !== String(args.communityId)) {
+        throw new Error("community_resource_module_not_found");
+      }
+      requireExpectedUpdatedAt({
+        expectedUpdatedAt: args.expectedUpdatedAt,
+        actualUpdatedAt: existing.updatedAt,
+      });
+      await ctx.db.patch(existing._id as any, {
+        ...(Object.prototype.hasOwnProperty.call(payload, "name")
+          ? { name: normalizeName(payload.name) }
+          : {}),
+        ...(Object.prototype.hasOwnProperty.call(payload, "description_md")
+          ? { descriptionMd: normalizeOptionalText(payload.description_md, 1200) }
+          : {}),
+        updatedAt: nowMs,
+      });
+      const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
+      if (!updated) throw new Error("community_resource_module_not_found");
+      return {
+        ok: true,
+        kind: "community_resource_builder_edit",
+        module: await mapCommunityResourceModuleRow(ctx, updated),
+      };
+    }
+
+    if (!args.resourceId) throw new Error("community_resource_builder_edit_ref_required");
+    const existing = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+    if (!existing || String(existing.communityId) !== String(args.communityId)) {
+      throw new Error("community_resource_not_found");
+    }
+    requireExpectedUpdatedAt({
+      expectedUpdatedAt: args.expectedUpdatedAt,
+      actualUpdatedAt: existing.updatedAt,
+    });
+    const nextStatus = Object.prototype.hasOwnProperty.call(payload, "resource_status")
+      ? normalizeBuilderResourceStatus({
+          raw: payload.resource_status,
+          existingStatus: existing.status,
+          confirmPublish: Boolean(args.confirmPublish),
+          defaultStatus: normalizeResourceRole(existing.role) === "source" ? "review" : "draft",
+        })
+      : normalizeResourceStatus(existing.status);
+    const nextModuleIdRaw = Object.prototype.hasOwnProperty.call(payload, "module_id")
+      ? payload.module_id
+      : existing.moduleId;
+    const nextModuleId = await requireValidResourceModule({
+      ctx,
+      communityId: args.communityId,
+      moduleId: normalizeOptionalModuleId(nextModuleIdRaw),
+    });
+    const sourceResourceIdRaw = Object.prototype.hasOwnProperty.call(payload, "source_resource_id")
+      ? normalizeOptionalModuleId(payload.source_resource_id)
+      : normalizeIdValue(existing.sourceResourceId ?? "");
+    const sourceResource = sourceResourceIdRaw
+      ? ((await ctx.db.get(sourceResourceIdRaw as any)) as CommunityResourceLike | null)
+      : null;
+    if (sourceResourceIdRaw) {
+      if (!sourceResource || String(sourceResource.communityId) !== String(args.communityId)) {
+        throw new Error("community_source_resource_not_found");
+      }
+      if (normalizeResourceRole(sourceResource.role) !== "source") {
+        throw new Error("community_source_resource_required");
+      }
+    }
+    const moduleChanged = resourceModuleIdentity(existing.moduleId) !== resourceModuleIdentity(nextModuleId);
+    const nextSortOrder = moduleChanged
+      ? await getNextResourceSortOrder({
+          ctx,
+          communityId: args.communityId,
+          moduleId: nextModuleId,
+          excludeResourceId: existing._id,
+        })
+      : existing.sortOrder;
+
+    await ctx.db.patch(existing._id as any, {
+      ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
+      ...(Object.prototype.hasOwnProperty.call(payload, "type") ? { type: normalizeResourceType(payload.type) } : {}),
+      status: nextStatus,
+      ...(sourceResource ? { sourceResourceId: sourceResource._id } : { sourceResourceId: undefined }),
+      ...(Object.prototype.hasOwnProperty.call(payload, "title") ? { title: normalizeName(payload.title) } : {}),
+      ...(Object.prototype.hasOwnProperty.call(payload, "body_md")
+        ? { bodyMd: normalizeOptionalText(payload.body_md, 20_000) }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(payload, "url") ? { url: normalizeOptionalUrl(payload.url) } : {}),
+      ...(Object.prototype.hasOwnProperty.call(payload, "file_key")
+        ? { fileKey: normalizeOptionalFileKey(payload.file_key) }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(payload, "pinned") ? { pinned: Boolean(payload.pinned) } : {}),
+      ...(typeof nextSortOrder === "number" ? { sortOrder: nextSortOrder } : {}),
+      updatedAt: nowMs,
+    });
+    const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
+    if (!updated) throw new Error("community_resource_not_found");
+    await upsertArchiveDocumentForResource(ctx, updated);
+    return {
+      ok: true,
+      kind: "community_resource_builder_edit",
+      resource: await mapCommunityResourceRow(ctx, updated),
+    };
+  },
+});
+
+export const getCommunityResourceBuilderHealth = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    return await buildCommunityResourceBuilderHealthReport({
+      ctx,
+      communityId: args.communityId,
+      nowMs: Number.isFinite(args.nowMs) ? Number(args.nowMs) : Date.now(),
+    });
+  },
+});
+export async function buildCommunityResourceBuilderHealthReport(args: {
+  ctx: any;
+  communityId: any;
+  nowMs: number;
+}): Promise<any> {
+  const [modules, resources] = await Promise.all([
+    args.ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect() as Promise<CommunityResourceModuleLike[]>,
+    args.ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect() as Promise<CommunityResourceLike[]>,
+  ]);
+  const pages = resources.filter((row) => normalizeResourceRole(row.role) === "page");
+  const sources = resources.filter((row) => normalizeResourceRole(row.role) === "source");
+  const existingModuleNames = new Set(modules.map((module) => normalizeBuilderHealthTitle(module.name)));
+  const missingDefaultModules = COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES.filter(
+    (moduleName) => !existingModuleNames.has(normalizeBuilderHealthTitle(moduleName)),
+  );
+  const moduleNameById = new Map(
+    modules.map((module) => [normalizeIdValue(module._id), String(module.name ?? "")]),
+  );
+  const existingScaffoldPageKeys = new Set(
+    pages.map((page) =>
+      getCommunityResourceBuilderScaffoldPageKey({
+        moduleName: moduleNameById.get(normalizeIdValue(page.moduleId ?? "")) ?? "",
+        title: page.title,
+      }),
+    ),
+  );
+  const missingScaffoldPages = COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES.filter(
+    (page) =>
+      !existingScaffoldPageKeys.has(
+        getCommunityResourceBuilderScaffoldPageKey({
+          moduleName: page.moduleName,
+          title: page.title,
+        }),
+      ),
+  ).map((page) => `${page.moduleName}/${page.title}`);
+  const referencedSourceIds = new Set(
+    pages
+      .map((row) => normalizeIdValue(row.sourceResourceId ?? ""))
+      .filter(Boolean),
+  );
+  const modulePageCounts = new Map<string, number>();
+  for (const page of pages) {
+    const moduleId = normalizeIdValue(page.moduleId ?? "");
+    if (!moduleId) continue;
+    modulePageCounts.set(moduleId, (modulePageCounts.get(moduleId) ?? 0) + 1);
+  }
+  const staleDraftCutoff = args.nowMs - COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS;
+  const issues = {
+    emptyModules: modules
+      .filter(
+        (module) =>
+          (modulePageCounts.get(normalizeIdValue(module._id)) ?? 0) === 0 &&
+          !isBuilderDefaultModuleName(module.name),
+      )
+      .map((module) => ({
+        module_id: normalizeIdValue(module._id),
+        name: module.name,
+      })),
+    sparsePages: pages
+      .filter(
+        (page) =>
+          !isBuilderScaffoldPageTitle(page.title) &&
+          String(page.bodyMd ?? "").trim().length < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS,
+      )
+      .map((page) => ({
+        resource_id: normalizeIdValue(page._id),
+        title: page.title,
+        status: normalizeResourceStatus(page.status),
+        body_chars: String(page.bodyMd ?? "").trim().length,
+      })),
+    pagesWithoutSourceLineage: pages
+      .filter((page) => !normalizeIdValue(page.sourceResourceId ?? "") && !isBuilderScaffoldPageTitle(page.title))
+      .map((page) => ({
+        resource_id: normalizeIdValue(page._id),
+        title: page.title,
+        status: normalizeResourceStatus(page.status),
+      })),
+    unreferencedSources: sources
+      .filter((source) => !referencedSourceIds.has(normalizeIdValue(source._id)))
+      .map((source) => ({
+        resource_id: normalizeIdValue(source._id),
+        title: source.title,
+        status: normalizeResourceStatus(source.status),
+      })),
+    staleDrafts: pages
+      .filter((page) => normalizeResourceStatus(page.status) === "draft" && page.updatedAt < staleDraftCutoff)
+      .map((page) => ({
+        resource_id: normalizeIdValue(page._id),
+        title: page.title,
+        updated_at: toIsoString(page.updatedAt),
+      })),
+  };
+  return {
+    ok: true,
+    kind: "community_resource_builder_health",
+    checked_at: toIsoString(args.nowMs),
+    summary: {
+      modules: modules.length,
+      resources: resources.length,
+      pages: pages.length,
+      sources: sources.length,
+      published_pages: pages.filter((page) => normalizeResourceStatus(page.status) === "published").length,
+      draft_pages: pages.filter((page) => normalizeResourceStatus(page.status) === "draft").length,
+      source_inbox_items: sources.length,
+      missing_default_modules: missingDefaultModules,
+      missing_scaffold_pages: missingScaffoldPages,
+      issue_count:
+        issues.emptyModules.length +
+        issues.sparsePages.length +
+        issues.pagesWithoutSourceLineage.length +
+        issues.unreferencedSources.length +
+        issues.staleDrafts.length,
+    },
+    issues,
+  };
+}
+
+export const ensureCommunityResourceWikiScaffold = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+
+    const nowMs = Date.now();
+    const modules = (await ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceModuleLike[];
+    const moduleByName = new Map(modules.map((module) => [normalizeBuilderHealthTitle(module.name), module]));
+    const modulesCreated: string[] = [];
+    const existingModules: string[] = [];
+    let nextModuleSortOrder = modules.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
+
+    for (const moduleName of COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES) {
+      const key = normalizeBuilderHealthTitle(moduleName);
+      if (moduleByName.has(key)) {
+        existingModules.push(moduleName);
+        continue;
+      }
+      const id = await ctx.db.insert("communityResourceModules" as any, {
+        communityId: args.communityId,
+        createdByUserId: userId,
+        name: moduleName,
+        descriptionMd: null,
+        sortOrder: nextModuleSortOrder,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      nextModuleSortOrder += 1000;
+      const created = (await ctx.db.get(id as any)) as CommunityResourceModuleLike | null;
+      if (!created) throw new Error("community_resource_module_create_failed");
+      moduleByName.set(key, created);
+      modulesCreated.push(moduleName);
+    }
+
+    const resources = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceLike[];
+    const pagesByModuleAndTitle = new Set(
+      resources
+        .filter((row) => normalizeResourceRole(row.role) === "page")
+        .map((row) => `${normalizeIdValue(row.moduleId ?? "")}:${normalizeBuilderHealthTitle(row.title)}`),
+    );
+    const pagesCreated: string[] = [];
+    const existingPages: string[] = [];
+
+    for (const page of COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES) {
+      const module = moduleByName.get(normalizeBuilderHealthTitle(page.moduleName));
+      if (!module) throw new Error("community_resource_scaffold_module_missing");
+      const pageKey = `${normalizeIdValue(module._id)}:${normalizeBuilderHealthTitle(page.title)}`;
+      if (pagesByModuleAndTitle.has(pageKey)) {
+        existingPages.push(`${page.moduleName}/${page.title}`);
+        continue;
+      }
+      const sortOrder = await getNextResourceSortOrder({
+        ctx,
+        communityId: args.communityId,
+        moduleId: module._id,
+      });
+      const id = await ctx.db.insert("communityResources" as any, {
+        communityId: args.communityId,
+        moduleId: module._id,
+        createdByUserId: userId,
+        type: "post",
+        role: "page",
+        status: "draft",
+        title: page.title,
+        bodyMd: normalizeOptionalText(page.bodyMd, 20_000),
+        pinned: false,
+        sortOrder,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
+      if (!created) throw new Error("community_resource_create_failed");
+      await upsertArchiveDocumentForResource(ctx, created);
+      pagesByModuleAndTitle.add(pageKey);
+      pagesCreated.push(`${page.moduleName}/${page.title}`);
+    }
+
+    return {
+      ok: true,
+      kind: "community_resource_wiki_scaffold",
+      summary: {
+        modules_created: modulesCreated,
+        modules_existing: existingModules,
+        pages_created: pagesCreated,
+        pages_existing: existingPages,
+      },
+      health: await buildCommunityResourceBuilderHealthReport({
+        ctx,
+        communityId: args.communityId,
+        nowMs: Date.now(),
+      }),
     };
   },
 });
