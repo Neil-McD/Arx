@@ -11299,6 +11299,32 @@ button.chat-reply-quote:hover {
   flex-shrink: 0;
 }
 
+.resource-viewer-directory {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.resource-viewer-directory span,
+.resource-viewer-directory code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resource-viewer-directory code {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-card-alt) 80%, transparent);
+  color: var(--text-muted);
+  font: 11px/1.4 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+}
+
 .resource-viewer-status-pill {
   display: inline-flex;
   align-items: center;

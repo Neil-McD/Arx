@@ -200,23 +200,13 @@ assert.match(
 );
 assert.match(
   modal,
-  /Build wiki plan/,
-  "modal should render the architect review action",
+  /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan/,
+  "modal should run the architect proposal/apply path internally from Knowledge Next",
 );
-assert.match(
+assert.doesNotMatch(
   modal,
-  /review-only structure plan/,
-  "modal copy should make the run review-only",
-);
-assert.match(
-  modal,
-  /drafts_created/,
-  "modal should render proposed draft counts",
-);
-assert.match(
-  modal,
-  /onApplyKnowledgePlan[\s\S]*Apply draft plan/,
-  "modal should expose a reviewed apply action after proposal generation",
+  /Build wiki plan|review-only structure plan|drafts_created|Apply draft plan/,
+  "modal should not expose architect review controls in the Knowledge UI",
 );
 
 console.log("community_wiki_architect_run_contract_proof: ok");

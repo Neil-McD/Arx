@@ -118,6 +118,10 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
             {actions ? <div className="resource-viewer-actions">{actions}</div> : null}
           </div>
         </div>
+        <div className="resource-viewer-directory" aria-label="Resource directory">
+          <span>{resource.directory_path}</span>
+          <code>{resource.directory_uri}</code>
+        </div>
       </div>
 
       <div className="resource-viewer-body">

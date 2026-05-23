@@ -7,7 +7,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ArrowLeft,
   BookOpen,
   Bot,
   Check,
@@ -16,7 +15,6 @@ import {
   Image,
   Link2,
   LockKeyhole,
-  Sparkles,
   X,
 } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
@@ -37,8 +35,6 @@ import { StripeWordmark } from "./StripeWordmark";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
-
-type CommunityLaunchKnowledgeStage = "collect" | "assemble" | "review";
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 
@@ -243,7 +239,7 @@ const STEP_META: Record<
   },
   knowledge: {
     label: "Knowledge",
-    title: "Build the knowledge base",
+    title: "Collect source material",
     action: "Open resources",
     icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
   },
@@ -354,18 +350,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeLinkDrafts, setKnowledgeLinkDrafts] = useState<string[]>([
     "",
   ]);
-  const [knowledgeStage, setKnowledgeStage] =
-    useState<CommunityLaunchKnowledgeStage>("collect");
-  const [knowledgeHealth, setKnowledgeHealth] =
-    useState<CommunityLaunchKnowledgeHealth | null>(null);
   const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
-  const [knowledgePlanIntent, setKnowledgePlanIntent] = useState("");
-  const [knowledgePlan, setKnowledgePlan] =
-    useState<CommunityLaunchKnowledgePlanResult | null>(null);
-  const [knowledgePlanLoading, setKnowledgePlanLoading] = useState(false);
-  const [knowledgePlanApplyResult, setKnowledgePlanApplyResult] =
-    useState<CommunityLaunchKnowledgePlanApplyResult | null>(null);
-  const [knowledgePlanApplying, setKnowledgePlanApplying] = useState(false);
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -395,14 +380,7 @@ export function WebCommunityLaunchSetupModal(
       });
       setAboutDraft("");
       setKnowledgeLinkDrafts([""]);
-      setKnowledgeStage("collect");
-      setKnowledgeHealth(null);
       setKnowledgeHealthLoading(false);
-      setKnowledgePlanIntent("");
-      setKnowledgePlan(null);
-      setKnowledgePlanLoading(false);
-      setKnowledgePlanApplyResult(null);
-      setKnowledgePlanApplying(false);
       setAgentDraft({
         systemPrompt: "",
         starterPrompts: ["", "", ""],
@@ -429,14 +407,7 @@ export function WebCommunityLaunchSetupModal(
     });
     setAboutDraft(community.about ?? "");
     setKnowledgeLinkDrafts([""]);
-    setKnowledgeStage("collect");
-    setKnowledgeHealth(null);
     setKnowledgeHealthLoading(false);
-    setKnowledgePlanIntent("");
-    setKnowledgePlan(null);
-    setKnowledgePlanLoading(false);
-    setKnowledgePlanApplyResult(null);
-    setKnowledgePlanApplying(false);
     setAgentDraft({
       systemPrompt: community.agent_system_prompt ?? "",
       starterPrompts: getStarterPrompts(community),
@@ -465,38 +436,6 @@ export function WebCommunityLaunchSetupModal(
     community?.agent_system_prompt,
     community?.agent_starter_prompts,
   ]);
-
-  useEffect(() => {
-    if (
-      !isOpen ||
-      activeStep !== "knowledge" ||
-      knowledgeStage === "collect" ||
-      isCreateMode ||
-      !onLoadKnowledgeHealth
-    )
-      return;
-    let cancelled = false;
-    setKnowledgeHealthLoading(true);
-    void onLoadKnowledgeHealth()
-      .then((nextHealth) => {
-        if (!cancelled) setKnowledgeHealth(nextHealth);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setStepError(
-            error instanceof Error
-              ? error.message
-              : "Could not load knowledge setup.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setKnowledgeHealthLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeStep, isCreateMode, isOpen, knowledgeStage, onLoadKnowledgeHealth]);
 
   const createModeStatus = useMemo(
     () =>
@@ -545,14 +484,7 @@ export function WebCommunityLaunchSetupModal(
   const progressDashOffset =
     progressCircumference - (progress / 100) * progressCircumference;
   const activeMeta = STEP_META[activeStep];
-  const activeTitle =
-    activeStep === "knowledge"
-      ? knowledgeStage === "assemble"
-        ? "Assemble the resources"
-        : knowledgeStage === "review"
-          ? "Review the wiki plan"
-          : activeMeta.title
-      : activeMeta.title;
+  const activeTitle = activeMeta.title;
   const activeStatus =
     effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
@@ -583,7 +515,6 @@ export function WebCommunityLaunchSetupModal(
       if (nextStep) {
         setStepOverride(nextStep);
         setActiveStep(nextStep);
-        if (nextStep === "knowledge") setKnowledgeStage("collect");
         setStepSuccess(null);
       } else {
         setStepSuccess(successMessage);
@@ -662,10 +593,6 @@ export function WebCommunityLaunchSetupModal(
     setStepSuccess(null);
     try {
       await onAddKnowledgeLink({ urls });
-      if (onLoadKnowledgeHealth) {
-        const nextHealth = await onLoadKnowledgeHealth();
-        setKnowledgeHealth(nextHealth);
-      }
       setKnowledgeLinkDrafts([""]);
       if (successMessage) setStepSuccess(successMessage);
       return true;
@@ -688,108 +615,72 @@ export function WebCommunityLaunchSetupModal(
     void saveKnowledgeLinkDrafts("Links added.");
   };
 
-  const handleEnterKnowledgeAssemble = () => {
+  const handlePrepareKnowledgeResources = () => {
     if (savingStep || knowledgeHealthLoading) return;
     setStepError(null);
     setStepSuccess(null);
     void (async () => {
       const saved = await saveKnowledgeLinkDrafts();
       if (!saved) return;
-      if (!onLoadKnowledgeHealth) {
-        setKnowledgeStage("assemble");
+      if (
+        !onLoadKnowledgeHealth ||
+        !onGenerateKnowledgePlan ||
+        !onApplyKnowledgePlan
+      ) {
+        setStepOverride("publish");
+        setActiveStep("publish");
+        setStepSuccess(
+          "Sources saved. Continue once draft resources are ready in Resources.",
+        );
         return;
       }
+      setSavingStep("knowledge");
       setKnowledgeHealthLoading(true);
       try {
-        const nextHealth = await onLoadKnowledgeHealth();
-        setKnowledgeHealth(nextHealth);
-        setKnowledgeStage("assemble");
-      } catch (error) {
-        setStepError(
-          error instanceof Error
-            ? error.message
-            : "Could not load knowledge setup.",
-        );
-      } finally {
-        setKnowledgeHealthLoading(false);
-      }
-    })();
-  };
-
-  const handleGenerateKnowledgePlan = () => {
-    if (savingStep || knowledgePlanLoading || !onGenerateKnowledgePlan) return;
-    setKnowledgePlanLoading(true);
-    setStepError(null);
-    setStepSuccess(null);
-    setKnowledgePlanApplyResult(null);
-    void (async () => {
-      try {
+        const currentHealth = await onLoadKnowledgeHealth();
         const missingDefaultModules =
-          knowledgeHealth?.summary?.missing_default_modules ?? [];
+          currentHealth?.summary?.missing_default_modules ?? [];
         const missingScaffoldPages =
-          knowledgeHealth?.summary?.missing_scaffold_pages ?? [];
+          currentHealth?.summary?.missing_scaffold_pages ?? [];
         if (
           onEnsureKnowledgeScaffold &&
           (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0)
         ) {
-          const scaffoldResult = await onEnsureKnowledgeScaffold();
-          if (scaffoldResult?.health) setKnowledgeHealth(scaffoldResult.health);
+          await onEnsureKnowledgeScaffold();
         }
-        const result = await onGenerateKnowledgePlan({
-          builderIntent: knowledgePlanIntent,
+        const planResult = await onGenerateKnowledgePlan({
+          builderIntent: "",
         });
-        setKnowledgePlan(result ?? null);
-        if (result?.ok) {
-          setKnowledgeStage("review");
-          setStepSuccess("Wiki plan ready for review.");
-        } else {
-          setStepError(result?.message || "Could not generate wiki plan.");
+        if (!planResult?.ok || !planResult.proposal) {
+          throw new Error(
+            planResult?.message || "Could not prepare draft resources.",
+          );
         }
+        const applyResult = await onApplyKnowledgePlan({
+          proposal: planResult.proposal,
+        });
+        if (!applyResult?.ok) {
+          const firstError = applyResult?.errors?.[0];
+          throw new Error(
+            firstError?.message ||
+              applyResult?.message ||
+              "Could not prepare draft resources.",
+          );
+        }
+        setStepOverride("publish");
+        setActiveStep("publish");
+        setStepSuccess(
+          "Draft resources prepared. Review, edit, and publish them from Resources.",
+        );
       } catch (error) {
         setStepError(
           error instanceof Error
             ? error.message
-            : "Could not generate wiki plan.",
+            : "Could not prepare draft resources.",
         );
       } finally {
-        setKnowledgePlanLoading(false);
-      }
-    })();
-  };
-
-  const handleApplyKnowledgePlan = () => {
-    const proposal = knowledgePlan?.proposal ?? null;
-    if (
-      savingStep ||
-      knowledgePlanApplying ||
-      !proposal ||
-      !onApplyKnowledgePlan
-    )
-      return;
-    setKnowledgePlanApplying(true);
-    setStepError(null);
-    setStepSuccess(null);
-    void (async () => {
-      try {
-        const result = await onApplyKnowledgePlan({ proposal });
-        setKnowledgePlanApplyResult(result ?? null);
-        if (result?.health) setKnowledgeHealth(result.health);
-        if (result?.ok) {
-          const modulesCreated = result.summary?.modules_created?.length ?? 0;
-          const pagesCreated = result.summary?.pages_created?.length ?? 0;
-          const pagesUpdated = result.summary?.pages_updated?.length ?? 0;
-          setStepSuccess(
-            `Applied wiki plan: ${modulesCreated} modules, ${pagesCreated} drafts, ${pagesUpdated} updates.`,
-          );
-        } else {
-          setStepError(result?.message || "Could not apply wiki plan.");
-        }
-      } catch (error) {
-        setStepError(
-          error instanceof Error ? error.message : "Could not apply wiki plan.",
-        );
-      } finally {
-        setKnowledgePlanApplying(false);
+        setKnowledgeHealthLoading(false);
+        setSavingStep(null);
       }
     })();
   };
@@ -1099,615 +990,158 @@ export function WebCommunityLaunchSetupModal(
       const canAddKnowledgeLink = knowledgeLinkDrafts.some((url) => url.trim());
       const canAddKnowledgeLinkRow =
         knowledgeLinkDrafts.length < COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS;
-      const missingDefaultModules =
-        knowledgeHealth?.summary?.missing_default_modules ?? [];
-      const missingScaffoldPages =
-        knowledgeHealth?.summary?.missing_scaffold_pages ?? [];
-      const sourceInboxCount =
-        knowledgeHealth?.summary?.source_inbox_items ?? 0;
-      const draftPageCount = knowledgeHealth?.summary?.draft_pages ?? 0;
-      const unreferencedSourceCount =
-        knowledgeHealth?.issues?.unreferencedSources?.length ?? 0;
-      const staleDraftCount = knowledgeHealth?.issues?.staleDrafts?.length ?? 0;
-      const sparsePageCount = knowledgeHealth?.issues?.sparsePages?.length ?? 0;
-      const planProposal = knowledgePlan?.proposal ?? null;
-      const planDrafts = planProposal?.drafts_created ?? [];
-      const planUpdates = planProposal?.drafts_updated ?? [];
-      const planGaps = planProposal?.gaps ?? [];
-      const planBuilderNeeds = planProposal?.needs_from_builder ?? [];
-      const canApplyKnowledgePlan =
-        Boolean(planProposal) &&
-        Boolean(onApplyKnowledgePlan) &&
-        !knowledgePlanApplyResult?.ok &&
-        !knowledgePlanApplying &&
-        !isSavingActiveStep;
       return (
         <div className="community-launch-inline-form community-launch-knowledge-gateway">
           <div className="community-launch-knowledge-stack">
-            {knowledgeStage === "assemble" ? (
-              <>
-                <section className="community-launch-knowledge-row">
-                  <span
-                    className="community-launch-knowledge-icon"
-                    aria-hidden="true"
-                  >
-                    <BookOpen size={15} strokeWidth={2} />
-                  </span>
-                  <div>
-                    <span className="community-launch-knowledge-kicker">
-                      Setup
-                    </span>
-                    <strong>Set up the wiki structure</strong>
-                    <p>
-                      {knowledgeHealthLoading
-                        ? "Checking the current resource tree."
-                        : !knowledgeHealth
-                          ? "Resource tree has not been checked yet."
-                          : missingDefaultModules.length > 0
-                            ? `Missing ${missingDefaultModules.join(", ")}.`
-                            : missingScaffoldPages.length > 0
-                              ? "Missing starter wiki pages."
-                              : "The base wiki modules are ready."}
-                    </p>
-                    <div
-                      className="community-launch-knowledge-setup-metrics"
-                      aria-label="Knowledge setup status"
-                    >
-                      <span>{draftPageCount} drafts</span>
-                      <span>{sourceInboxCount} sources</span>
-                      <span>{unreferencedSourceCount} unlinked</span>
-                      <span>{staleDraftCount} stale</span>
-                      <span>{sparsePageCount} sparse</span>
-                    </div>
-                  </div>
-                  <span className="community-launch-knowledge-pill">
-                    {knowledgeHealthLoading
-                      ? "Checking"
-                      : knowledgeHealth
-                        ? "Ready"
-                        : "Not checked"}
-                  </span>
-                </section>
-                <section className="community-launch-knowledge-row community-launch-knowledge-architect-row">
-                  <span
-                    className="community-launch-knowledge-icon"
-                    aria-hidden="true"
-                  >
-                    <Sparkles size={15} strokeWidth={2} />
-                  </span>
-                  <div>
-                    <span className="community-launch-knowledge-kicker">
-                      Architect
-                    </span>
-                    <strong>Build the wiki plan</strong>
-                    <p>
-                      The agent reads community context and resource metadata,
-                      then returns a review-only structure plan.
-                    </p>
-                    <textarea
-                      className="community-launch-knowledge-intent"
-                      value={knowledgePlanIntent}
-                      onChange={(event) =>
-                        setKnowledgePlanIntent(event.target.value)
-                      }
-                      rows={3}
-                      placeholder="Optional notes: what should this wiki help members understand or do?"
-                    />
-                    {planProposal ? (
-                      <div
-                        className="community-launch-knowledge-plan"
-                        aria-live="polite"
-                      >
-                        <div className="community-launch-knowledge-plan-grid">
-                          <span>
-                            <strong>
-                              {planProposal.modules_created.length}
-                            </strong>
-                            modules
-                          </span>
-                          <span>
-                            <strong>{planDrafts.length}</strong>
-                            drafts
-                          </span>
-                          <span>
-                            <strong>{planUpdates.length}</strong>
-                            updates
-                          </span>
-                          <span>
-                            <strong>{planGaps.length}</strong>
-                            gaps
-                          </span>
-                        </div>
-                        {planDrafts.length > 0 ? (
-                          <div className="community-launch-knowledge-plan-section">
-                            <span>Drafts</span>
-                            <ul>
-                              {planDrafts.slice(0, 4).map((draft) => (
-                                <li key={`${draft.module}:${draft.title}`}>
-                                  {draft.title} <em>{draft.module}</em>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        {planGaps.length > 0 || planBuilderNeeds.length > 0 ? (
-                          <div className="community-launch-knowledge-plan-section">
-                            <span>Needs</span>
-                            <ul>
-                              {planGaps.slice(0, 3).map((gap) => (
-                                <li key={`${gap.module}:${gap.title}`}>
-                                  {gap.needed_source}
-                                </li>
-                              ))}
-                              {planBuilderNeeds.slice(0, 3).map((need) => (
-                                <li key={need}>{need}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        {knowledgePlanApplyResult?.ok ? (
-                          <div className="community-launch-knowledge-plan-section">
-                            <span>Applied</span>
-                            <ul>
-                              <li>
-                                {knowledgePlanApplyResult.summary
-                                  ?.modules_created?.length ?? 0}{" "}
-                                modules created
-                              </li>
-                              <li>
-                                {knowledgePlanApplyResult.summary?.pages_created
-                                  ?.length ?? 0}{" "}
-                                drafts created
-                              </li>
-                              <li>
-                                {knowledgePlanApplyResult.summary?.pages_updated
-                                  ?.length ?? 0}{" "}
-                                drafts updated
-                              </li>
-                            </ul>
-                          </div>
-                        ) : null}
-                        {knowledgePlanApplyResult &&
-                        !knowledgePlanApplyResult.ok ? (
-                          <div className="community-launch-knowledge-plan-section">
-                            <span>Apply failed</span>
-                            <ul>
-                              {(knowledgePlanApplyResult.errors ?? [])
-                                .slice(0, 4)
-                                .map((error, index) => (
-                                  <li
-                                    key={`${error.path ?? "apply-error"}:${index}`}
-                                  >
-                                    {error.path ? `${error.path}: ` : ""}
-                                    {error.message ??
-                                      knowledgePlanApplyResult.message ??
-                                      "Invalid field."}
-                                  </li>
-                                ))}
-                              {knowledgePlanApplyResult.errors
-                                ?.length ? null : (
-                                <li>
-                                  {knowledgePlanApplyResult.message ||
-                                    "Wiki plan could not be applied."}
-                                </li>
-                              )}
-                            </ul>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : knowledgePlan && !knowledgePlan.ok ? (
-                      <div
-                        className="community-launch-knowledge-plan error"
-                        aria-live="polite"
-                      >
-                        <strong>
-                          {knowledgePlan.message ||
-                            "Wiki plan failed validation."}
-                        </strong>
-                        {knowledgePlan.errors?.length ? (
-                          <ul>
-                            {knowledgePlan.errors
-                              .slice(0, 4)
-                              .map((error, index) => (
-                                <li key={`${error.path ?? "error"}:${index}`}>
-                                  {error.path ? `${error.path}: ` : ""}
-                                  {error.message ?? "Invalid field."}
-                                </li>
-                              ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <span className="community-launch-knowledge-pill">
-                    {knowledgePlanLoading
-                      ? "Running"
-                      : knowledgePlan?.ok
-                        ? "Ready"
-                        : "Review"}
-                  </span>
-                </section>
-              </>
-            ) : null}
-            {knowledgeStage === "collect" ? (
-              <>
-                <section className="community-launch-knowledge-row">
-                  <span
-                    className="community-launch-knowledge-icon"
-                    aria-hidden="true"
-                  >
-                    <FileText size={15} strokeWidth={2} />
-                  </span>
-                  <div>
-                    <span className="community-launch-knowledge-kicker">
-                      Sources
-                    </span>
-                    <strong>Drop source material</strong>
-                    <p>
-                      Files, PDFs, presentations, videos, and notes should enter
-                      the canonical resources system here.
-                    </p>
-                    <div
-                      className="community-launch-knowledge-dropzone"
-                      aria-label="Knowledge upload placeholder"
-                    >
-                      Drop files here once ingestion is enabled
-                    </div>
-                  </div>
-                  <span className="community-launch-knowledge-pill">Next</span>
-                </section>
-                <section className="community-launch-knowledge-row">
-                  <span
-                    className="community-launch-knowledge-icon"
-                    aria-hidden="true"
-                  >
-                    <Link2 size={15} strokeWidth={2} />
-                  </span>
-                  <div>
-                    <span className="community-launch-knowledge-kicker">
-                      Links
-                    </span>
-                    <strong>Add source links</strong>
-                    <p>
-                      Paste docs, videos, articles, or public resource URLs into
-                      the community resource directory.
-                    </p>
-                    <form
-                      className="community-launch-knowledge-link-composer"
-                      onSubmit={handleAddKnowledgeLink}
-                    >
-                      <div className="community-launch-knowledge-link-list">
-                        {knowledgeLinkDrafts.map((url, index) => (
-                          <input
-                            key={index}
-                            aria-label={`Source link URL ${index + 1}`}
-                            value={url}
-                            onChange={(event) => {
-                              const nextUrls = [...knowledgeLinkDrafts];
-                              nextUrls[index] = event.target.value;
-                              setKnowledgeLinkDrafts(nextUrls);
-                            }}
-                            placeholder="https://..."
-                          />
-                        ))}
-                      </div>
-                      <div className="community-launch-knowledge-link-actions">
-                        <button
-                          type="button"
-                          className="secondary"
-                          disabled={
-                            !canAddKnowledgeLinkRow || isSavingActiveStep
-                          }
-                          onClick={() => {
-                            if (!canAddKnowledgeLinkRow) return;
-                            setKnowledgeLinkDrafts((urls) =>
-                              [...urls, ""].slice(
-                                0,
-                                COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS,
-                              ),
-                            );
-                          }}
-                        >
-                          Add new link
-                        </button>
-                        <span>
-                          {knowledgeLinkDrafts.length}/
-                          {COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}
-                        </span>
-                        <button
-                          type="submit"
-                          disabled={!canAddKnowledgeLink || isSavingActiveStep}
-                        >
-                          {isSavingActiveStep ? "Adding..." : "Add links"}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                  <span className="community-launch-knowledge-pill">Next</span>
-                </section>
-                <section className="community-launch-knowledge-row">
-                  <span
-                    className="community-launch-knowledge-icon"
-                    aria-hidden="true"
-                  >
-                    <Link2 size={15} strokeWidth={2} />
-                  </span>
-                  <div>
-                    <span className="community-launch-knowledge-kicker">
-                      Integrations
-                    </span>
-                    <strong>Connect source systems</strong>
-                    <p>
-                      Connect cloud sources that can become community context
-                      once scoped and approved.
-                    </p>
-                    <div
-                      className="community-launch-knowledge-integrations"
-                      aria-label="Knowledge integrations"
-                    >
-                      <span className="community-launch-knowledge-integration-chip">
-                        <img
-                          className="community-launch-knowledge-provider-logo drive"
-                          src="/app-logos/google-drive.svg"
-                          alt=""
-                          aria-hidden="true"
-                        />
-                        <span>Google Drive</span>
-                      </span>
-                      <span className="community-launch-knowledge-integration-chip">
-                        <img
-                          className="community-launch-knowledge-provider-logo github"
-                          src="/app-logos/github.svg"
-                          alt=""
-                          aria-hidden="true"
-                        />
-                        <span>GitHub</span>
-                      </span>
-                    </div>
-                  </div>
-                  <span className="community-launch-knowledge-pill">
-                    Planned
-                  </span>
-                </section>
-              </>
-            ) : null}
-            {knowledgeStage === "review" ? (
-              <section className="community-launch-knowledge-row community-launch-knowledge-architect-row">
-                <span
-                  className="community-launch-knowledge-icon"
-                  aria-hidden="true"
+            <section className="community-launch-knowledge-row">
+              <span
+                className="community-launch-knowledge-icon"
+                aria-hidden="true"
+              >
+                <FileText size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">
+                  Sources
+                </span>
+                <strong>Drop source material</strong>
+                <p>
+                  Files, PDFs, presentations, videos, and notes should enter
+                  the canonical resources system here.
+                </p>
+                <div
+                  className="community-launch-knowledge-dropzone"
+                  aria-label="Knowledge upload placeholder"
                 >
-                  <Sparkles size={15} strokeWidth={2} />
-                </span>
-                <div>
-                  <span className="community-launch-knowledge-kicker">
-                    Plan
-                  </span>
-                  <strong>Review the generated wiki plan</strong>
-                  <p>
-                    Nothing is published here. Applying the plan creates draft
-                    modules and pages for review.
-                  </p>
-                  {planProposal ? (
-                    <div
-                      className="community-launch-knowledge-plan"
-                      aria-live="polite"
-                    >
-                      <div className="community-launch-knowledge-plan-grid">
-                        <span>
-                          <strong>{planProposal.modules_created.length}</strong>
-                          modules
-                        </span>
-                        <span>
-                          <strong>{planDrafts.length}</strong>
-                          drafts
-                        </span>
-                        <span>
-                          <strong>{planUpdates.length}</strong>
-                          updates
-                        </span>
-                        <span>
-                          <strong>{planGaps.length}</strong>
-                          gaps
-                        </span>
-                      </div>
-                      {planDrafts.length > 0 ? (
-                        <div className="community-launch-knowledge-plan-section">
-                          <span>Drafts</span>
-                          <ul>
-                            {planDrafts.slice(0, 4).map((draft) => (
-                              <li key={`${draft.module}:${draft.title}`}>
-                                {draft.title} <em>{draft.module}</em>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {planGaps.length > 0 || planBuilderNeeds.length > 0 ? (
-                        <div className="community-launch-knowledge-plan-section">
-                          <span>Needs</span>
-                          <ul>
-                            {planGaps.slice(0, 3).map((gap) => (
-                              <li key={`${gap.module}:${gap.title}`}>
-                                {gap.needed_source}
-                              </li>
-                            ))}
-                            {planBuilderNeeds.slice(0, 3).map((need) => (
-                              <li key={need}>{need}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {knowledgePlanApplyResult?.ok ? (
-                        <div className="community-launch-knowledge-plan-section">
-                          <span>Applied</span>
-                          <ul>
-                            <li>
-                              {knowledgePlanApplyResult.summary?.modules_created
-                                ?.length ?? 0}{" "}
-                              modules created
-                            </li>
-                            <li>
-                              {knowledgePlanApplyResult.summary?.pages_created
-                                ?.length ?? 0}{" "}
-                              drafts created
-                            </li>
-                            <li>
-                              {knowledgePlanApplyResult.summary?.pages_updated
-                                ?.length ?? 0}{" "}
-                              drafts updated
-                            </li>
-                          </ul>
-                        </div>
-                      ) : null}
-                      {knowledgePlanApplyResult &&
-                      !knowledgePlanApplyResult.ok ? (
-                        <div className="community-launch-knowledge-plan-section">
-                          <span>Apply failed</span>
-                          <ul>
-                            {(knowledgePlanApplyResult.errors ?? [])
-                              .slice(0, 4)
-                              .map((error, index) => (
-                                <li
-                                  key={`${error.path ?? "apply-error"}:${index}`}
-                                >
-                                  {error.path ? `${error.path}: ` : ""}
-                                  {error.message ??
-                                    knowledgePlanApplyResult.message ??
-                                    "Invalid field."}
-                                </li>
-                              ))}
-                            {knowledgePlanApplyResult.errors?.length ? null : (
-                              <li>
-                                {knowledgePlanApplyResult.message ||
-                                  "Wiki plan could not be applied."}
-                              </li>
-                            )}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : knowledgePlan && !knowledgePlan.ok ? (
-                    <div
-                      className="community-launch-knowledge-plan error"
-                      aria-live="polite"
-                    >
-                      <strong>
-                        {knowledgePlan.message ||
-                          "Wiki plan failed validation."}
-                      </strong>
-                      {knowledgePlan.errors?.length ? (
-                        <ul>
-                          {knowledgePlan.errors
-                            .slice(0, 4)
-                            .map((error, index) => (
-                              <li key={`${error.path ?? "error"}:${index}`}>
-                                {error.path ? `${error.path}: ` : ""}
-                                {error.message ?? "Invalid field."}
-                              </li>
-                            ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  ) : null}
+                  Drop files here once ingestion is enabled
                 </div>
-                <span className="community-launch-knowledge-pill">
-                  {knowledgePlanApplyResult?.ok
-                    ? "Applied"
-                    : knowledgePlan?.ok
-                      ? "Ready"
-                      : "Review"}
+              </div>
+              <span className="community-launch-knowledge-pill">Soon</span>
+            </section>
+            <section className="community-launch-knowledge-row">
+              <span
+                className="community-launch-knowledge-icon"
+                aria-hidden="true"
+              >
+                <Link2 size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">
+                  Links
                 </span>
-              </section>
-            ) : null}
+                <strong>Add source links</strong>
+                <p>
+                  Paste docs, videos, articles, or public resource URLs into
+                  the community resource directory.
+                </p>
+                <form
+                  className="community-launch-knowledge-link-composer"
+                  onSubmit={handleAddKnowledgeLink}
+                >
+                  <div className="community-launch-knowledge-link-list">
+                    {knowledgeLinkDrafts.map((url, index) => (
+                      <input
+                        key={index}
+                        aria-label={`Source link URL ${index + 1}`}
+                        value={url}
+                        onChange={(event) => {
+                          const nextUrls = [...knowledgeLinkDrafts];
+                          nextUrls[index] = event.target.value;
+                          setKnowledgeLinkDrafts(nextUrls);
+                        }}
+                        placeholder="https://..."
+                      />
+                    ))}
+                  </div>
+                  <div className="community-launch-knowledge-link-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!canAddKnowledgeLinkRow || isSavingActiveStep}
+                      onClick={() => {
+                        if (!canAddKnowledgeLinkRow) return;
+                        setKnowledgeLinkDrafts((urls) =>
+                          [...urls, ""].slice(
+                            0,
+                            COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS,
+                          ),
+                        );
+                      }}
+                    >
+                      Add new link
+                    </button>
+                    <span>
+                      {knowledgeLinkDrafts.length}/
+                      {COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={!canAddKnowledgeLink || isSavingActiveStep}
+                    >
+                      {isSavingActiveStep ? "Adding..." : "Add links"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+              <span className="community-launch-knowledge-pill">Available</span>
+            </section>
+            <section className="community-launch-knowledge-row">
+              <span
+                className="community-launch-knowledge-icon"
+                aria-hidden="true"
+              >
+                <Link2 size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">
+                  Integrations
+                </span>
+                <strong>Connect source systems</strong>
+                <p>
+                  Connect cloud sources that can become community context once
+                  scoped and approved.
+                </p>
+                <div
+                  className="community-launch-knowledge-integrations"
+                  aria-label="Knowledge integrations"
+                >
+                  <span className="community-launch-knowledge-integration-chip">
+                    <img
+                      className="community-launch-knowledge-provider-logo drive"
+                      src="/app-logos/google-drive.svg"
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    <span>Google Drive</span>
+                  </span>
+                  <span className="community-launch-knowledge-integration-chip">
+                    <img
+                      className="community-launch-knowledge-provider-logo github"
+                      src="/app-logos/github.svg"
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    <span>GitHub</span>
+                  </span>
+                </div>
+              </div>
+              <span className="community-launch-knowledge-pill">Planned</span>
+            </section>
           </div>
           <div className="community-launch-step-actions">
-            {knowledgeStage === "collect" ? (
-              <>
-                {renderFinishLaterButton()}
-                <button
-                  type="button"
-                  className="polynet-onboarding-next"
-                  disabled={isSavingActiveStep || knowledgeHealthLoading}
-                  onClick={handleEnterKnowledgeAssemble}
-                >
-                  {isSavingActiveStep
-                    ? "Saving..."
-                    : knowledgeHealthLoading
-                      ? "Checking..."
-                      : "Next"}
-                </button>
-              </>
-            ) : null}
-            {knowledgeStage === "assemble" ? (
-              <>
-                <button
-                  type="button"
-                  className="polynet-onboarding-back"
-                  onClick={() => {
-                    setKnowledgeStage("collect");
-                    setStepError(null);
-                    setStepSuccess(null);
-                  }}
-                >
-                  <ArrowLeft size={13} strokeWidth={2.2} />
-                  Back
-                </button>
-                {renderFinishLaterButton()}
-                <button
-                  type="button"
-                  className="polynet-onboarding-next"
-                  disabled={
-                    !onGenerateKnowledgePlan ||
-                    knowledgePlanLoading ||
-                    isSavingActiveStep
-                  }
-                  onClick={handleGenerateKnowledgePlan}
-                >
-                  {knowledgePlanLoading ? "Assembling..." : "Build wiki plan"}
-                </button>
-              </>
-            ) : null}
-            {knowledgeStage === "review" ? (
-              <>
-                <button
-                  type="button"
-                  className="polynet-onboarding-back"
-                  onClick={() => {
-                    setKnowledgeStage("assemble");
-                    setStepError(null);
-                    setStepSuccess(null);
-                  }}
-                >
-                  <ArrowLeft size={13} strokeWidth={2.2} />
-                  Back
-                </button>
-                {renderFinishLaterButton()}
-                {knowledgePlanApplyResult?.ok ? (
-                  <button
-                    type="button"
-                    className="polynet-onboarding-next"
-                    onClick={() => {
-                      setStepOverride("publish");
-                      setActiveStep("publish");
-                      setStepError(null);
-                      setStepSuccess(null);
-                    }}
-                  >
-                    Review publish
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="polynet-onboarding-next"
-                    disabled={!canApplyKnowledgePlan}
-                    onClick={handleApplyKnowledgePlan}
-                  >
-                    {knowledgePlanApplying ? "Applying..." : "Apply draft plan"}
-                  </button>
-                )}
-              </>
-            ) : null}
+            {renderFinishLaterButton()}
+            <button
+              type="button"
+              className="polynet-onboarding-next"
+              disabled={isSavingActiveStep || knowledgeHealthLoading}
+              onClick={handlePrepareKnowledgeResources}
+            >
+              {knowledgeHealthLoading
+                ? "Curating resources..."
+                : isSavingActiveStep
+                  ? "Saving..."
+                  : "Next"}
+            </button>
           </div>
         </div>
       );

@@ -417,28 +417,28 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /Sources[\s\S]*Drop source material[\s\S]*Links[\s\S]*Add source links[\s\S]*Integrations[\s\S]*Google Drive[\s\S]*GitHub[\s\S]*Review publish/,
+  /Collect source material[\s\S]*Sources[\s\S]*Drop source material[\s\S]*Links[\s\S]*Add source links[\s\S]*Integrations[\s\S]*Google Drive[\s\S]*GitHub/,
   "launch knowledge step must separate file sources, link sources, and connected source integrations",
-);
-assert.match(
-  setupModal,
-  /type CommunityLaunchKnowledgeStage = "collect" \| "assemble" \| "review"/,
-  "launch knowledge step must use staged source collection, assembly, and review screens",
-);
-assert.match(
-  setupModal,
-  /knowledgeStage === "collect"[\s\S]*Drop source material[\s\S]*Add source links[\s\S]*Connect source systems[\s\S]*handleEnterKnowledgeAssemble/,
-  "launch knowledge step must collect source material before showing the wiki architect controls",
-);
-assert.match(
-  setupModal,
-  /knowledgeStage === "assemble"[\s\S]*Build the wiki plan[\s\S]*handleGenerateKnowledgePlan/,
-  "launch knowledge step must put wiki plan generation behind the assembly screen",
 );
 assert.doesNotMatch(
   setupModal,
-  /Create drafts/,
-  "launch knowledge step must not expose raw scaffold creation as the first user action",
+  /type CommunityLaunchKnowledgeStage|knowledgeStage|Set up the wiki structure|Build the wiki plan|Review the generated wiki plan|community-launch-knowledge-architect-row|community-launch-knowledge-intent/,
+  "launch knowledge step must not expose setup or architect screens",
+);
+assert.match(
+  setupModal,
+  /handlePrepareKnowledgeResources[\s\S]*saveKnowledgeLinkDrafts\(\)[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*setActiveStep\("publish"\)/,
+  "launch knowledge Next must run the internal resource preparation loop before advancing",
+);
+assert.match(
+  setupModal,
+  /(?=[\s\S]*Curating resources\.\.\.)(?=[\s\S]*Draft resources prepared\. Review, edit, and publish them from Resources\.)/,
+  "launch knowledge step must present agent preparation as an internal progress state",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Create drafts|Review publish|Apply draft plan/,
+  "launch knowledge step must not expose raw scaffold or architect actions",
 );
 assert.match(
   setupModal,
