@@ -242,6 +242,7 @@ type GoogleDriveFileCandidate = {
 type GoogleDriveOAuthFinalizeResult = {
   ok: boolean;
   provider: typeof GOOGLE_DRIVE_SOURCE_PROVIDER;
+  community_id?: string | null;
   email?: string | null;
   error_message?: string | null;
 };
@@ -282,6 +283,7 @@ type GitHubFileCandidate = {
 type GitHubOAuthFinalizeResult = {
   ok: boolean;
   provider: typeof GITHUB_SOURCE_PROVIDER;
+  community_id?: string | null;
   login?: string | null;
   email?: string | null;
   error_message?: string | null;
@@ -561,6 +563,7 @@ function stringifyGoogleDriveOAuthFinalizeResult(result: GoogleDriveOAuthFinaliz
   return JSON.stringify({
     ok: result.ok === true,
     provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+    community_id: result.community_id ?? null,
     email: result.email ?? null,
     error_message: result.error_message ?? null,
   });
@@ -573,6 +576,7 @@ function parseGoogleDriveOAuthFinalizeResult(raw: unknown): GoogleDriveOAuthFina
     return {
       ok: parsed.ok === true,
       provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+      community_id: normalizeSourceIntegrationString(parsed.community_id, 200) || null,
       email: normalizeSourceIntegrationString(parsed.email, 320) || null,
       error_message: normalizeSourceIntegrationString(parsed.error_message, 500) || null,
     };
@@ -585,6 +589,7 @@ function stringifyGitHubOAuthFinalizeResult(result: GitHubOAuthFinalizeResult): 
   return JSON.stringify({
     ok: result.ok === true,
     provider: GITHUB_SOURCE_PROVIDER,
+    community_id: result.community_id ?? null,
     login: result.login ?? null,
     email: result.email ?? null,
     error_message: result.error_message ?? null,
@@ -598,6 +603,7 @@ function parseGitHubOAuthFinalizeResult(raw: unknown): GitHubOAuthFinalizeResult
     return {
       ok: parsed.ok === true,
       provider: GITHUB_SOURCE_PROVIDER,
+      community_id: normalizeSourceIntegrationString(parsed.community_id, 200) || null,
       login: normalizeSourceIntegrationString(parsed.login, 320) || null,
       email: normalizeSourceIntegrationString(parsed.email, 320) || null,
       error_message: normalizeSourceIntegrationString(parsed.error_message, 500) || null,
@@ -4257,10 +4263,12 @@ export const finalizeGoogleDriveSourceOAuth = action({
         error_message: "Google Drive connection expired. Start again.",
       };
     }
+    const sourceCommunityId = normalizeSourceIntegrationString(row.communityId, 200) || null;
     if (String(row.userId) !== String(userId)) {
       return {
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+        community_id: sourceCommunityId,
         error_message: "Google Drive must be finalized by the Polynet account that started it.",
       };
     }
@@ -4279,16 +4287,21 @@ export const finalizeGoogleDriveSourceOAuth = action({
       },
     )) as { status?: string; stateId?: unknown; result?: GoogleDriveOAuthFinalizeResult } | null;
     if (claim?.status !== "claimed") {
-      return claim?.result ?? {
+      const result = claim?.result ?? {
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
         error_message: "Google Drive connection could not be finalized.",
+      };
+      return {
+        ...result,
+        community_id: result.community_id ?? sourceCommunityId,
       };
     }
     if (!row.callbackCodeEncryptedHex || !row.callbackCodeIvHex) {
       return {
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+        community_id: sourceCommunityId,
         error_message: "Google Drive callback has not completed yet.",
       };
     }
@@ -4316,6 +4329,7 @@ export const finalizeGoogleDriveSourceOAuth = action({
       const result = {
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+        community_id: sourceCommunityId,
         error_message: "Google Drive authorization could not be finalized. Start again.",
       } satisfies GoogleDriveOAuthFinalizeResult;
       await ctx.runMutation((internal as any).communityResources.failGoogleDriveSourceOAuthFinalizeInternal, {
@@ -4343,6 +4357,7 @@ export const finalizeGoogleDriveSourceOAuth = action({
     const result = {
       ok: true,
       provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+      community_id: sourceCommunityId,
       email,
     } satisfies GoogleDriveOAuthFinalizeResult;
     await ctx.runMutation((internal as any).communityResources.completeGoogleDriveSourceOAuthFinalizeInternal, {
@@ -4649,10 +4664,12 @@ export const finalizeGitHubSourceOAuth = action({
         error_message: "GitHub connection expired. Start again.",
       };
     }
+    const sourceCommunityId = normalizeSourceIntegrationString(row.communityId, 200) || null;
     if (String(row.userId) !== String(userId)) {
       return {
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
+        community_id: sourceCommunityId,
         error_message: "GitHub must be finalized by the Polynet account that started it.",
       };
     }
@@ -4671,16 +4688,21 @@ export const finalizeGitHubSourceOAuth = action({
       },
     )) as { status?: string; stateId?: unknown; result?: GitHubOAuthFinalizeResult } | null;
     if (claim?.status !== "claimed") {
-      return claim?.result ?? {
+      const result = claim?.result ?? {
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
         error_message: "GitHub connection could not be finalized.",
+      };
+      return {
+        ...result,
+        community_id: result.community_id ?? sourceCommunityId,
       };
     }
     if (!row.callbackCodeEncryptedHex || !row.callbackCodeIvHex) {
       return {
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
+        community_id: sourceCommunityId,
         error_message: "GitHub callback has not completed yet.",
       };
     }
@@ -4707,6 +4729,7 @@ export const finalizeGitHubSourceOAuth = action({
       const result = {
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
+        community_id: sourceCommunityId,
         error_message: "GitHub authorization could not be finalized. Start again.",
       } satisfies GitHubOAuthFinalizeResult;
       await ctx.runMutation((internal as any).communityResources.failGitHubSourceOAuthFinalizeInternal, {
@@ -4742,6 +4765,7 @@ export const finalizeGitHubSourceOAuth = action({
     const result = {
       ok: true,
       provider: GITHUB_SOURCE_PROVIDER,
+      community_id: sourceCommunityId,
       login: viewer.login,
       email: viewer.email,
     } satisfies GitHubOAuthFinalizeResult;

@@ -572,6 +572,7 @@ export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
 ): Promise<{
   ok: boolean;
   provider: "google_drive";
+  community_id: string | null;
   email: string | null;
   error_message: string | null;
 }> {
@@ -584,6 +585,10 @@ export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   return {
     ok: payload?.ok === true,
     provider: "google_drive",
+    community_id:
+      typeof payload?.community_id === "string" && payload.community_id.trim()
+        ? payload.community_id.trim()
+        : null,
     email: typeof payload?.email === "string" && payload.email.trim() ? payload.email.trim() : null,
     error_message:
       typeof payload?.error_message === "string" && payload.error_message.trim()
@@ -710,6 +715,7 @@ export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
 ): Promise<{
   ok: boolean;
   provider: "github";
+  community_id: string | null;
   login: string | null;
   email: string | null;
   error_message: string | null;
@@ -723,6 +729,10 @@ export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
   return {
     ok: payload?.ok === true,
     provider: "github",
+    community_id:
+      typeof payload?.community_id === "string" && payload.community_id.trim()
+        ? payload.community_id.trim()
+        : null,
     login: typeof payload?.login === "string" && payload.login.trim() ? payload.login.trim() : null,
     email: typeof payload?.email === "string" && payload.email.trim() ? payload.email.trim() : null,
     error_message:

@@ -310,8 +310,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /finalizeGoogleDriveSourceOAuth = action\([\s\S]*decryptStoredSecret[\s\S]*exchangeGoogleDriveCodeForTokens[\s\S]*encryptSecret\(encodeStoredGoogleDriveAuth\(tokenBundle\)\)[\s\S]*upsertGoogleDriveSourceConnectionInternal/,
-  "Google Drive OAuth finalize should exchange, encrypt, and store tokens server-side only",
+  /finalizeGoogleDriveSourceOAuth = action\([\s\S]*sourceCommunityId[\s\S]*decryptStoredSecret[\s\S]*exchangeGoogleDriveCodeForTokens[\s\S]*encryptSecret\(encodeStoredGoogleDriveAuth\(tokenBundle\)\)[\s\S]*upsertGoogleDriveSourceConnectionInternal[\s\S]*community_id: sourceCommunityId/,
+  "Google Drive OAuth finalize should exchange, encrypt, store tokens server-side only, and return source community identity",
 );
 assert.match(
   resources,
@@ -365,8 +365,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /finalizeGitHubSourceOAuth = action\([\s\S]*decryptStoredSecret[\s\S]*exchangeGitHubCodeForToken[\s\S]*codeVerifier: row\.codeVerifier[\s\S]*fetchGitHubViewer[\s\S]*encryptSecret\(encodeStoredGitHubAuth\(tokenBundle\)\)[\s\S]*upsertGitHubSourceConnectionInternal/,
-  "GitHub OAuth finalize should exchange, validate, encrypt, and store tokens server-side only",
+  /finalizeGitHubSourceOAuth = action\([\s\S]*sourceCommunityId[\s\S]*decryptStoredSecret[\s\S]*exchangeGitHubCodeForToken[\s\S]*codeVerifier: row\.codeVerifier[\s\S]*fetchGitHubViewer[\s\S]*encryptSecret\(encodeStoredGitHubAuth\(tokenBundle\)\)[\s\S]*upsertGitHubSourceConnectionInternal[\s\S]*community_id: sourceCommunityId/,
+  "GitHub OAuth finalize should exchange, validate, encrypt, store tokens server-side only, and return source community identity",
 );
 assert.match(
   resources,
@@ -455,6 +455,11 @@ assert.match(
 );
 assert.match(
   gateway,
+  /finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*community_id:[\s\S]*payload\?\.community_id[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*community_id:[\s\S]*payload\?\.community_id/,
+  "web gateway should preserve source integration OAuth source community identity",
+);
+assert.match(
+  gateway,
   /importCloudCommunityGoogleDriveSourceFiles[\s\S]*failed:[\s\S]*failures: Array\.isArray\(payload\?\.failures\)[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*failed:[\s\S]*failures: Array\.isArray\(payload\?\.failures\)/,
   "web gateway should preserve Drive/GitHub per-file import failures",
 );
@@ -512,23 +517,28 @@ assert.match(
 );
 assert.match(
   app,
-  /(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_id)(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_slug)(?=[\s\S]*readCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*restoreCommunityLaunchKnowledgeOAuthContext\(launchKnowledgeContext\))(?=[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\))(?=[\s\S]*initialStep=\{communityLaunchSetupInitialStep\})/,
-  "source integration OAuth returns from launch should preserve community context and reopen the launch modal on Knowledge",
+  /(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_id)(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_slug)(?=[\s\S]*COMMUNITY_LAUNCH_KNOWLEDGE_SOURCE_OAUTH_INTENT_STORAGE_PREFIX)(?=[\s\S]*readCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*mergeCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*queueCommunityLaunchKnowledgeOAuthRestore\(context\))(?=[\s\S]*pendingCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\))(?=[\s\S]*initialStep=\{communityLaunchSetupInitialStep\})/,
+  "source integration OAuth returns from launch should preserve URL/storage/server community context and reopen the launch modal on Knowledge",
 );
 assert.match(
   app,
-  /handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
+  /handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
   "launch Knowledge integration handlers should connect, list, and import Google Drive files",
 );
 assert.match(
   app,
-  /handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
+  /handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "github"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
   "launch Knowledge integration handlers should connect, list, and import GitHub files",
 );
 assert.match(
   app,
-  /sourceIntegrationOAuthFinalizeInFlightRef[\s\S]*restoreLaunchKnowledgeContext\(\);[\s\S]*if \(!session\) return[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*setCommunityLaunchKnowledgeIntegrationReloadKey\(\(key\) => key \+ 1\)/,
-  "source integration OAuth finalize should restore launch context before session readiness and reload provider connection after success",
+  /sourceIntegrationOAuthFinalizeInFlightRef[\s\S]*readCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*restoreLaunchKnowledgeContext\(\);[\s\S]*if \(!session\) return[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*restoreLaunchKnowledgeContext\(result\)[\s\S]*clearCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*setCommunityLaunchKnowledgeIntegrationReloadKey\(\(key\) => key \+ 1\)/,
+  "source integration OAuth finalize should restore launch context before session readiness, merge server identity, clear stored intent, and reload provider connection after success",
+);
+assert.match(
+  app,
+  /pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*!pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*setIsCommunityLaunchSetupModalOpen\(false\)[\s\S]*const context = pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*!activeCommunity[\s\S]*!communityLaunchSetupStatus[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
+  "launch Knowledge OAuth restore should not be erased by status hydration and should open only after community/status readiness",
 );
 assert.match(
   modal,
