@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -288,6 +289,7 @@ type WebCommunityLaunchSetupModalProps = {
   mode?: "setup" | "create";
   initialStep?: CommunityLaunchSetupStep | null;
   knowledgeIntegrationReloadKey?: string | number | null;
+  knowledgeAutoOpenProvider?: "google_drive" | null;
   community: CommunityLaunchSetupCommunity | null;
   status: CommunityLaunchSetupStatus | null;
   onClose: () => void;
@@ -307,6 +309,7 @@ type WebCommunityLaunchSetupModalProps = {
   onConnectKnowledgeGoogleDrive?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
   onListKnowledgeGoogleDriveFiles?: (query?: string | null) => Promise<CommunityLaunchGoogleDriveFileListResult | null>;
   onImportKnowledgeGoogleDriveFiles?: (fileIds: string[]) => Promise<CommunityLaunchGoogleDriveImportResult | null>;
+  onKnowledgeAutoOpenHandled?: (provider: "google_drive") => void;
   onLoadKnowledgeGitHubConnection?: () => Promise<CommunityLaunchGitHubConnection | null>;
   onConnectKnowledgeGitHub?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
   onListKnowledgeGitHubRepositories?: (query?: string | null) => Promise<CommunityLaunchGitHubRepositoryListResult | null>;
@@ -455,6 +458,7 @@ export function WebCommunityLaunchSetupModal(
     mode = "setup",
     initialStep = null,
     knowledgeIntegrationReloadKey = null,
+    knowledgeAutoOpenProvider = null,
     community,
     status,
     onClose,
@@ -470,6 +474,7 @@ export function WebCommunityLaunchSetupModal(
     onConnectKnowledgeGoogleDrive,
     onListKnowledgeGoogleDriveFiles,
     onImportKnowledgeGoogleDriveFiles,
+    onKnowledgeAutoOpenHandled,
     onLoadKnowledgeGitHubConnection,
     onConnectKnowledgeGitHub,
     onListKnowledgeGitHubRepositories,
@@ -900,6 +905,50 @@ export function WebCommunityLaunchSetupModal(
     void saveKnowledgeFiles(Array.from(event.dataTransfer.files ?? []));
   };
 
+  const loadGoogleDriveFiles = useCallback(async (): Promise<boolean> => {
+    if (!onListKnowledgeGoogleDriveFiles) {
+      setStepError("Google Drive file selection is unavailable.");
+      return false;
+    }
+    setKnowledgeDriveLoading(true);
+    try {
+      const result = await onListKnowledgeGoogleDriveFiles();
+      if (!result?.ok) throw new Error("Could not load Google Drive files.");
+      setKnowledgeDriveConnection(result.connection ?? knowledgeDriveConnection);
+      setKnowledgeDriveFiles(result.files ?? []);
+      setKnowledgeDriveSelectedIds([]);
+      setStepSuccess((result.files ?? []).length > 0 ? "Choose Drive files to import." : "No readable Drive files found.");
+      return true;
+    } catch (error) {
+      setStepError(error instanceof Error ? error.message : "Could not load Google Drive files.");
+      return false;
+    } finally {
+      setKnowledgeDriveLoading(false);
+    }
+  }, [knowledgeDriveConnection, onListKnowledgeGoogleDriveFiles]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      activeStep !== "knowledge" ||
+      knowledgeAutoOpenProvider !== "google_drive" ||
+      !knowledgeDriveConnection?.connected ||
+      knowledgeDriveLoading
+    ) {
+      return;
+    }
+    onKnowledgeAutoOpenHandled?.("google_drive");
+    void loadGoogleDriveFiles();
+  }, [
+    activeStep,
+    isOpen,
+    knowledgeAutoOpenProvider,
+    knowledgeDriveConnection?.connected,
+    knowledgeDriveLoading,
+    loadGoogleDriveFiles,
+    onKnowledgeAutoOpenHandled,
+  ]);
+
   const handleGoogleDrivePrimaryAction = () => {
     if (savingStep || knowledgeDriveLoading) return;
     setStepError(null);
@@ -923,23 +972,7 @@ export function WebCommunityLaunchSetupModal(
         }
         return;
       }
-      if (!onListKnowledgeGoogleDriveFiles) {
-        setStepError("Google Drive file selection is unavailable.");
-        return;
-      }
-      setKnowledgeDriveLoading(true);
-      try {
-        const result = await onListKnowledgeGoogleDriveFiles();
-        if (!result?.ok) throw new Error("Could not load Google Drive files.");
-        setKnowledgeDriveConnection(result.connection ?? knowledgeDriveConnection);
-        setKnowledgeDriveFiles(result.files ?? []);
-        setKnowledgeDriveSelectedIds([]);
-        setStepSuccess((result.files ?? []).length > 0 ? "Choose Drive files to import." : "No readable Drive files found.");
-      } catch (error) {
-        setStepError(error instanceof Error ? error.message : "Could not load Google Drive files.");
-      } finally {
-        setKnowledgeDriveLoading(false);
-      }
+      await loadGoogleDriveFiles();
     })();
   };
 

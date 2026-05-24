@@ -3,8 +3,10 @@ import {
   type CommunityLaunchSetupStep,
 } from "../../../shared/communityLaunchSetup";
 import {
-  buildAppRoutePath,
+  buildWorkspaceCommunityDraftPath,
   buildWorkspaceDraftPath,
+  isReservedWorkspaceRouteSegment,
+  stripShellVariantFromPathname,
 } from "../../../shared/webAppRouteState";
 
 export const COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES = [
@@ -38,9 +40,77 @@ export function parseCommunityLaunchSetupRouteStep(
     : null;
 }
 
+function decodeRouteSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment).trim();
+  } catch {
+    return segment.trim();
+  }
+}
+
+function splitLaunchSetupPathSegments(pathname: string | null | undefined): string[] {
+  const parsed = new URL(String(pathname || "/"), "https://www.polynet.ai");
+  const stripped = stripShellVariantFromPathname(parsed.pathname || "/");
+  const strippedParsed = new URL(stripped, "https://www.polynet.ai");
+  return strippedParsed.pathname
+    .split("/")
+    .map(decodeRouteSegment)
+    .filter(Boolean);
+}
+
+export function readCommunityLaunchSetupPathRouteContext(
+  pathname: string | null | undefined,
+): CommunityLaunchSetupRouteContext {
+  const segments = splitLaunchSetupPathSegments(pathname);
+  let communitySlug: string | null = null;
+  let step: CommunityLaunchSetupStep | null = null;
+
+  if (
+    segments[0] === "workspace" &&
+    segments[1] === "community" &&
+    segments.length === 5 &&
+    segments[3] === "setup"
+  ) {
+    communitySlug = normalizeLaunchSetupRouteParam(segments[2]);
+    step = parseCommunityLaunchSetupRouteStep(segments[4]);
+  } else if (
+    segments[0] === "workspace" &&
+    segments.length === 4 &&
+    segments[2] === "setup" &&
+    !isReservedWorkspaceRouteSegment(segments[1])
+  ) {
+    communitySlug = normalizeLaunchSetupRouteParam(segments[1]);
+    step = parseCommunityLaunchSetupRouteStep(segments[3]);
+  }
+
+  return {
+    shouldRestore: Boolean(communitySlug && step),
+    step,
+    communityId: null,
+    communitySlug,
+  };
+}
+
+export function isCommunityLaunchSetupRoutePath(
+  pathname: string | null | undefined,
+): boolean {
+  return readCommunityLaunchSetupPathRouteContext(pathname).shouldRestore;
+}
+
 export function readCommunityLaunchSetupRouteContext(
   params: URLSearchParams,
+  pathname?: string | null,
 ): CommunityLaunchSetupRouteContext {
+  const pathContext = readCommunityLaunchSetupPathRouteContext(pathname);
+  if (pathContext.shouldRestore) {
+    return {
+      ...pathContext,
+      communityId: normalizeLaunchSetupRouteParam(
+        params.get("community_launch_community_id"),
+      ),
+    };
+  }
+
   const setup = String(params.get("community_launch_setup") ?? "")
     .trim()
     .toLowerCase();
@@ -68,7 +138,10 @@ export function readCurrentCommunityLaunchSetupRouteContext(): CommunityLaunchSe
       communitySlug: null,
     };
   }
-  return readCommunityLaunchSetupRouteContext(new URLSearchParams(window.location.search));
+  return readCommunityLaunchSetupRouteContext(
+    new URLSearchParams(window.location.search),
+    window.location.pathname,
+  );
 }
 
 export function buildCommunityLaunchSetupRoutePath(args: {
@@ -78,15 +151,12 @@ export function buildCommunityLaunchSetupRoutePath(args: {
 }): string {
   const communityId = normalizeLaunchSetupRouteParam(args.communityId);
   const communitySlug = normalizeLaunchSetupRouteParam(args.communitySlug);
-  const routePath =
-    buildAppRoutePath({
-      page: "workspace",
-      view: "home",
-      settingsPage: "agent",
-      communitySlug,
-      communityTab: "chat",
-      threadId: null,
-    }) ?? buildWorkspaceDraftPath();
+  const communityRoutePath = buildWorkspaceCommunityDraftPath(communitySlug);
+  if (communityRoutePath) {
+    return `${communityRoutePath}/setup/${encodeURIComponent(args.step)}`;
+  }
+
+  const routePath = buildWorkspaceDraftPath();
   const url = new URL(routePath, "https://www.polynet.ai");
   url.searchParams.set("community_launch_setup", "1");
   url.searchParams.set("community_launch_step", args.step);

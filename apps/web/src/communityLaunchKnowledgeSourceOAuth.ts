@@ -158,8 +158,9 @@ export function buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(args: {
 
 export function readCommunityLaunchKnowledgeOAuthContext(
   params: URLSearchParams,
+  pathname?: string | null,
 ): CommunityLaunchKnowledgeOAuthContext {
-  const context = readCommunityLaunchSetupRouteContext(params);
+  const context = readCommunityLaunchSetupRouteContext(params, pathname);
   return {
     shouldRestore: context.shouldRestore && context.step === "knowledge",
     communityId: context.communityId,

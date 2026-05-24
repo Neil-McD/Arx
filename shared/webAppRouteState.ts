@@ -64,10 +64,11 @@ const RESERVED_WORKSPACE_ROUTE_SEGMENTS = new Set([
   "projects",
   "settings",
   "skills",
+  "setup",
   "thread",
 ]);
 
-function isReservedWorkspaceRouteSegment(value: string | null | undefined): boolean {
+export function isReservedWorkspaceRouteSegment(value: string | null | undefined): boolean {
   const segment = String(value ?? "").trim().toLowerCase();
   return Boolean(segment && RESERVED_WORKSPACE_ROUTE_SEGMENTS.has(segment));
 }
@@ -443,6 +444,34 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         communitySlug: null,
         communityTab: "chat",
         threadId: isUuid(rawThreadId) ? rawThreadId : null,
+      };
+    }
+    if (segments[1] === "community" && segments.length === 5 && segments[3] === "setup") {
+      const slug = String(segments[2] ?? "").trim();
+      if (!slug) return null;
+      return {
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: slug,
+        communityTab: "chat",
+        threadId: null,
+      };
+    }
+    if (
+      segments.length === 4 &&
+      segments[2] === "setup" &&
+      !isReservedWorkspaceRouteSegment(segments[1])
+    ) {
+      const slug = String(segments[1] ?? "").trim();
+      if (!slug) return null;
+      return {
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: slug,
+        communityTab: "chat",
+        threadId: null,
       };
     }
     if (segments[1] === "community" && segments.length === 3) {

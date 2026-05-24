@@ -465,18 +465,23 @@ assert.match(
 );
 assert.match(
   launchSetupRoute,
-  /COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES[\s\S]*community_launch_setup[\s\S]*community_launch_step[\s\S]*parseCommunityLaunchSetupRouteStep[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*buildCommunityLaunchSetupRoutePath/,
-  "launch setup route helper must own parse/build behavior for durable setup-step URLs",
+  /COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES[\s\S]*community_launch_setup[\s\S]*community_launch_step[\s\S]*readCommunityLaunchSetupPathRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*\/setup\/\$\{encodeURIComponent\(args\.step\)\}/,
+  "launch setup route helper must own path-first parse/build behavior for durable setup-step URLs",
 );
 assert.match(
   routeLifecycle,
-  /source_integration_oauth[\s\S]*hasCommunityLaunchSetupRouteParams[\s\S]*community_launch_setup[\s\S]*hasCommunityLaunchSetupRouteParams\(\)\) return/,
-  "route lifecycle must preserve source OAuth and launch setup query params instead of canonicalizing them away",
+  /source_integration_oauth[\s\S]*hasCommunityLaunchSetupRouteState[\s\S]*community_launch_setup[\s\S]*isCommunityLaunchSetupRoutePath[\s\S]*hasCommunityLaunchSetupRouteState\(\)\) return/,
+  "route lifecycle must preserve source OAuth and launch setup route state instead of canonicalizing it away",
 );
 assert.match(
   appShell,
-  /pendingCommunityLaunchSetupRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*replaceCommunityLaunchSetupRouteState[\s\S]*buildCommunityLaunchSetupRoutePath[\s\S]*clearCommunityLaunchSetupRouteState[\s\S]*COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES/,
-  "app shell must persist launch setup modal state to the URL and scrub only launch setup params on close",
+  /pendingCommunityLaunchSetupRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*replaceCommunityLaunchSetupRouteState[\s\S]*buildCommunityLaunchSetupRoutePath[\s\S]*clearCommunityLaunchSetupRouteState[\s\S]*readCommunityLaunchSetupRouteContext/,
+  "app shell must persist launch setup modal state to the URL and clear setup path/query state on close",
+);
+assert.match(
+  appShell,
+  /communityLaunchKnowledgeAutoOpenProvider[\s\S]*provider === "google_drive"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)[\s\S]*knowledgeAutoOpenProvider=\{communityLaunchKnowledgeAutoOpenProvider\}[\s\S]*onKnowledgeAutoOpenHandled/,
+  "Google Drive OAuth restore should pass an auto-open intent into the launch Knowledge modal",
 );
 assert.match(
   appShell,

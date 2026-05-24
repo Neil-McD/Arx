@@ -176,6 +176,7 @@ import {
   COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES,
   buildCommunityLaunchSetupRoutePath,
   parseCommunityLaunchSetupRouteStep,
+  readCommunityLaunchSetupRouteContext,
   readCurrentCommunityLaunchSetupRouteContext,
   type CommunityLaunchSetupRouteContext,
 } from "./communityLaunchSetupRoute";
@@ -1678,6 +1679,10 @@ export default function App() {
     setCommunityLaunchKnowledgeIntegrationReloadKey,
   ] = useState(0);
   const [
+    communityLaunchKnowledgeAutoOpenProvider,
+    setCommunityLaunchKnowledgeAutoOpenProvider,
+  ] = useState<"google_drive" | null>(null);
+  const [
     pendingCommunityLaunchKnowledgeOAuthContext,
     setPendingCommunityLaunchKnowledgeOAuthContext,
   ] = useState<CommunityLaunchKnowledgeOAuthContext | null>(null);
@@ -3028,21 +3033,16 @@ export default function App() {
     };
     if (!restoreContext.shouldRestore) return;
     if (restoredCommunitySlug) {
-      const routePath = buildAppRoutePath({
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
+      const routePath = buildCommunityLaunchSetupRoutePath({
+        step: "knowledge",
+        communityId: restoredCommunityId,
         communitySlug: restoredCommunitySlug,
-        communityTab: "chat",
-        threadId: null,
       });
-      if (routePath) {
-        const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
-        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        if (nextPath !== currentPath && !window.location.search.includes("source_integration_oauth=")) {
-          window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-          applyLocationToState();
-        }
+      const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (nextPath !== currentPath && !window.location.search.includes("source_integration_oauth=")) {
+        window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+        applyLocationToState();
       }
       applyCommunityShellState({
         communityId: restoredCommunityId,
@@ -3106,9 +3106,45 @@ export default function App() {
   ]);
 
   const clearCommunityLaunchSetupRouteState = useCallback(() => {
-    scrubCurrentRouteSearchParams(COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const currentUrl = new URL(window.location.href);
+    const setupContext = readCommunityLaunchSetupRouteContext(
+      currentUrl.searchParams,
+      currentUrl.pathname,
+    );
+    const pathWithoutLaunchParams = buildPathWithSearchParamsRemoved({
+      pathname: currentUrl.pathname,
+      search: currentUrl.search,
+      hash: currentUrl.hash,
+      paramNames: COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES,
+      dropHash: true,
+    });
+    if (setupContext.shouldRestore) {
+      const communitySlug = normalizeLaunchOAuthContextParam(
+        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? setupContext.communitySlug,
+      );
+      const routePath = buildAppRoutePath({
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug,
+        communityTab: "chat",
+        threadId: null,
+      }) ?? buildWorkspaceDraftPath();
+      const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
+      if (nextPath !== currentPath) {
+        window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+      }
+    } else if (pathWithoutLaunchParams !== currentPath) {
+      window.history.replaceState(window.history.state ?? {}, document.title, pathWithoutLaunchParams);
+    }
     applyLocationToState();
-  }, [applyLocationToState]);
+  }, [
+    activeCommunity?.slug,
+    applyLocationToState,
+    selectedActiveCommunitySlug,
+    shellVariant,
+  ]);
 
   const applyStandaloneWorkspaceLaunch = useCallback((nextPath: string) => {
     window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
@@ -4797,7 +4833,10 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("source_integration_oauth");
     if (!status) return;
-    const urlLaunchKnowledgeContext = readCommunityLaunchKnowledgeOAuthContext(params);
+    const urlLaunchKnowledgeContext = readCommunityLaunchKnowledgeOAuthContext(
+      params,
+      window.location.pathname,
+    );
     const provider = normalizeSourceIntegrationOAuthProvider(params.get("source_integration_provider"));
     const state = normalizeLaunchOAuthContextParam(params.get("source_integration_state"), 500);
     const storedLaunchKnowledgeContext = readCommunityLaunchKnowledgeSourceOAuthIntent({
@@ -4906,6 +4945,9 @@ export default function App() {
         clearCommunityLaunchKnowledgeSourceOAuthIntent({ provider, state });
         if (result.ok && didRestoreLaunchKnowledge) {
           setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
+          if (provider === "google_drive") {
+            setCommunityLaunchKnowledgeAutoOpenProvider(provider);
+          }
         }
       } finally {
         clearAppOAuthFinalizeSessionGuard(sessionGuardKey);
@@ -9979,13 +10021,20 @@ export default function App() {
         status={communityLaunchSetupStatus}
         initialStep={communityLaunchSetupInitialStep}
         knowledgeIntegrationReloadKey={communityLaunchKnowledgeIntegrationReloadKey}
+        knowledgeAutoOpenProvider={communityLaunchKnowledgeAutoOpenProvider}
         onClose={() => {
           setIsCommunityLaunchSetupModalOpen(false);
           setIsCommunityLaunchCreateMode(false);
           setCommunityLaunchSetupInitialStep(null);
+          setCommunityLaunchKnowledgeAutoOpenProvider(null);
           setPendingCommunityLaunchKnowledgeOAuthContext(null);
           setPendingCommunityLaunchSetupRouteContext(null);
           clearCommunityLaunchSetupRouteState();
+        }}
+        onKnowledgeAutoOpenHandled={(provider) => {
+          setCommunityLaunchKnowledgeAutoOpenProvider((current) =>
+            current === provider ? null : current,
+          );
         }}
         onStepChange={(step) => {
           replaceCommunityLaunchSetupRouteState(step);

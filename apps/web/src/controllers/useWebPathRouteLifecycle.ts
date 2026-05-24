@@ -13,6 +13,7 @@ import type {
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
+import { isCommunityLaunchSetupRoutePath } from "../communityLaunchSetupRoute";
 
 function hasPendingOAuthCallbackParams(): boolean {
   try {
@@ -28,13 +29,13 @@ function hasPendingOAuthCallbackParams(): boolean {
   }
 }
 
-function hasCommunityLaunchSetupRouteParams(): boolean {
+function hasCommunityLaunchSetupRouteState(): boolean {
   try {
     const url = new URL(window.location.href);
     const setup = String(url.searchParams.get("community_launch_setup") ?? "")
       .trim()
       .toLowerCase();
-    return setup === "1" || setup === "true";
+    return setup === "1" || setup === "true" || isCommunityLaunchSetupRoutePath(url.pathname);
   } catch {
     return false;
   }
@@ -95,7 +96,7 @@ export function useWebPathRouteLifecycle(params: {
   useEffect(() => {
     if (params.publicRouteKind !== "app") return;
     if (hasPendingOAuthCallbackParams()) return;
-    if (hasCommunityLaunchSetupRouteParams()) return;
+    if (hasCommunityLaunchSetupRouteState()) return;
 
     const nextPath = params.buildAppRoutePath({
       page: params.activePage,

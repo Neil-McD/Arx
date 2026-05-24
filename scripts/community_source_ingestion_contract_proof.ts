@@ -585,8 +585,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /handleGoogleDrivePrimaryAction[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*setKnowledgeDriveFiles[\s\S]*handleImportGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles/,
-  "launch Knowledge modal should connect Drive, load selectable files, and import selected files",
+  /loadGoogleDriveFiles[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*setKnowledgeDriveFiles[\s\S]*knowledgeAutoOpenProvider[\s\S]*handleGoogleDrivePrimaryAction[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*loadGoogleDriveFiles[\s\S]*handleImportGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles/,
+  "launch Knowledge modal should connect Drive, auto/load selectable files, and import selected files",
 );
 assert.match(
   modal,
