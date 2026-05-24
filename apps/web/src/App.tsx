@@ -8182,7 +8182,6 @@ export default function App() {
     };
     const handleLoadCommunityLaunchGoogleDriveConnection = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
-      void loadCommunityResources(community.id, session);
       return await loadCloudCommunityGoogleDriveSourceConnection({
         session,
         communityId: community.id,

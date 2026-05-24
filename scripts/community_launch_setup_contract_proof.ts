@@ -500,8 +500,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*community-launch-knowledge-drive-import[\s\S]*Import selected[\s\S]*Close/,
+  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*community-launch-knowledge-source-import[\s\S]*Import selected[\s\S]*Close/,
   "launch knowledge Google Drive chip must connect first, then allow file selection, import, and closing the picker",
+);
+assert.doesNotMatch(
+  setupModal,
+  /community-launch-knowledge-drive-picker|community-launch-knowledge-drive-browser|community-launch-knowledge-drive-actions|community-launch-knowledge-drive-empty|community-launch-knowledge-drive-import/,
+  "launch knowledge shared source picker chrome must not keep Drive-only class names",
 );
 assert.match(
   setupModal,
@@ -560,8 +565,15 @@ assert.match(
 );
 assert.match(
   appShell,
-  /communityLaunchGoogleDriveSources[\s\S]*source_external_provider === "google_drive"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCommunityResources\(community\.id, session\)[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchGoogleDriveSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
+  /communityLaunchGoogleDriveSources[\s\S]*source_external_provider === "google_drive"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchGoogleDriveSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
   "app shell must wire launch Knowledge Google Drive connection, listing, import, remove, and disconnect handlers",
+);
+const googleDriveConnectionLoadSection =
+  appShell.match(/const handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*?const handleConnectCommunityLaunchGoogleDrive/)?.[0] ?? "";
+assert.doesNotMatch(
+  googleDriveConnectionLoadSection,
+  /loadCommunityResources/,
+  "passive Google Drive connection status loading should not refresh community resources",
 );
 assert.match(
   appShell,

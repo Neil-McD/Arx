@@ -350,6 +350,13 @@ assert.match(
   /importGoogleDriveSourceFiles = action\([\s\S]*requireCommunityManagerForAction[\s\S]*for \(const fileId of fileIds\)[\s\S]*try \{[\s\S]*getCommunitySourceByExternalIdInternal[\s\S]*insertGoogleDriveSourceResourceInternal[\s\S]*catch \(error\)[\s\S]*failures\.push[\s\S]*ok: failed === 0/,
   "Google Drive file import should be manager-gated, dedupe by external file identity, and report per-file failures",
 );
+const googleDriveImportSection =
+  resources.match(/export const importGoogleDriveSourceFiles[\s\S]*?\n}\);\n\nexport const getGitHubSourceConnectionStatus/)?.[0] ?? "";
+assert.doesNotMatch(
+  googleDriveImportSection,
+  /const resources: unknown\[\]|resources\.push|resources,\s*\n/,
+  "Google Drive import should not return dead resource payloads that the web gateway ignores",
+);
 assert.match(
   resources,
   /insertGoogleDriveSourceResourceInternal[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "queued"[\s\S]*sourceIngestionKind: "google_drive"[\s\S]*sourceExternalProvider: GOOGLE_DRIVE_SOURCE_PROVIDER[\s\S]*sourceExternalConnectionUserId: args\.userId[\s\S]*sourceExternalId:/,

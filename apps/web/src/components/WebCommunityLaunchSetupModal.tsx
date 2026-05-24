@@ -2095,7 +2095,7 @@ export function WebCommunityLaunchSetupModal(
                   </p>
                 ) : null}
                 {knowledgeDriveBrowserOpen ? (
-                  <div className="community-launch-knowledge-drive-picker community-launch-knowledge-drive-browser">
+                  <div className="community-launch-knowledge-source-picker community-launch-knowledge-source-browser">
                     <form className="community-launch-knowledge-drive-search" onSubmit={handleSearchGoogleDriveFiles}>
                       <Search size={14} strokeWidth={2} aria-hidden="true" />
                       <input
@@ -2154,7 +2154,7 @@ export function WebCommunityLaunchSetupModal(
                         );
                       })
                     ) : (
-                      <p className="community-launch-knowledge-drive-empty">
+                      <p className="community-launch-knowledge-source-empty">
                         {knowledgeDriveFilesLoading
                           ? "Loading Drive items..."
                           : knowledgeDriveQuery
@@ -2162,7 +2162,7 @@ export function WebCommunityLaunchSetupModal(
                             : "No readable files or folders here."}
                       </p>
                     )}
-                    <div className="community-launch-knowledge-drive-actions">
+                    <div className="community-launch-knowledge-source-actions">
                       {knowledgeDriveNextPageToken ? (
                         <button
                           type="button"
@@ -2178,7 +2178,7 @@ export function WebCommunityLaunchSetupModal(
                       </span>
                       <button
                         type="button"
-                        className="community-launch-knowledge-drive-import"
+                        className="community-launch-knowledge-source-import"
                         disabled={!knowledgeDriveCanImport || isSavingActiveStep || knowledgeDriveFilesLoading}
                         onClick={handleImportGoogleDriveFiles}
                       >
@@ -2194,14 +2194,14 @@ export function WebCommunityLaunchSetupModal(
                       </button>
                     </div>
                     {knowledgeDriveVisibleImportableCount === 0 && knowledgeDriveFiles.length > 0 ? (
-                      <p className="community-launch-knowledge-drive-empty">
+                      <p className="community-launch-knowledge-source-empty">
                         Open a folder or search to find readable files.
                       </p>
                     ) : null}
                   </div>
                 ) : null}
                 {knowledgeGitHubRepositories.length > 0 ? (
-                  <div className="community-launch-knowledge-drive-picker">
+                  <div className="community-launch-knowledge-source-picker">
                     {knowledgeGitHubRepositories.map((repository) => (
                       <button
                         key={repository.id}
@@ -2216,7 +2216,7 @@ export function WebCommunityLaunchSetupModal(
                   </div>
                 ) : null}
                 {knowledgeGitHubFiles.length > 0 ? (
-                  <div className="community-launch-knowledge-drive-picker">
+                  <div className="community-launch-knowledge-source-picker">
                     {knowledgeGitHubSelectedRepository ? (
                       <p className="community-launch-knowledge-integration-note">
                         {knowledgeGitHubSelectedRepository.full_name}

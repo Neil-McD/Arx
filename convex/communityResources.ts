@@ -4533,7 +4533,6 @@ export const importGoogleDriveSourceFiles = action({
     let skipped = 0;
     let failed = 0;
     const failures: Array<{ id: string; name: string | null; message: string }> = [];
-    const resources: unknown[] = [];
     for (const fileId of fileIds) {
       try {
         const metadataUrl = new URL(`${GOOGLE_DRIVE_API_BASE_URL}/files/${encodeURIComponent(fileId)}`);
@@ -4558,7 +4557,7 @@ export const importGoogleDriveSourceFiles = action({
           skipped += 1;
           continue;
         }
-        const resource = (await ctx.runMutation(
+        await ctx.runMutation(
           (internal as any).communityResources.insertGoogleDriveSourceResourceInternal,
           {
             communityId: args.communityId,
@@ -4569,8 +4568,7 @@ export const importGoogleDriveSourceFiles = action({
             webUrl: metadata.webViewLink ?? null,
             modifiedAt: parseGoogleDriveModifiedAt(metadata.modifiedTime),
           },
-        )) as unknown;
-        resources.push(resource);
+        );
         imported += 1;
       } catch (error) {
         failed += 1;
@@ -4588,7 +4586,6 @@ export const importGoogleDriveSourceFiles = action({
       skipped,
       failed,
       failures,
-      resources,
     };
   },
 });
