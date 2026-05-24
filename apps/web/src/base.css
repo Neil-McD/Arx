@@ -5116,6 +5116,64 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: min(100%, 560px);
 }
 
+.community-launch-knowledge-github-repo-list {
+  width: min(100%, 420px);
+  gap: 6px;
+}
+
+.community-launch-knowledge-github-repo-list .community-launch-knowledge-github-repo {
+  width: 100%;
+  justify-self: stretch;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border-radius: 9px;
+  padding: 6px 9px;
+  text-align: left;
+}
+
+.community-launch-knowledge-github-repo svg {
+  color: var(--text-muted);
+}
+
+.community-launch-knowledge-github-repo span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.community-launch-knowledge-github-repo strong,
+.community-launch-knowledge-github-repo small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-launch-knowledge-github-repo strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.community-launch-knowledge-github-repo small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.community-launch-knowledge-github-repo.is-selected {
+  border-color: color-mix(in srgb, var(--accent, var(--accent-gold)) 56%, transparent);
+  background: color-mix(in srgb, var(--accent, var(--accent-gold)) 10%, transparent);
+}
+
+.community-launch-knowledge-github-repo.is-selected svg {
+  color: var(--accent, var(--accent-gold));
+}
+
 .community-launch-knowledge-drive-search {
   min-width: 0;
   display: grid;

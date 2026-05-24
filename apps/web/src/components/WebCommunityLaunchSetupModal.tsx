@@ -318,7 +318,7 @@ type WebCommunityLaunchSetupModalProps = {
   mode?: "setup" | "create";
   initialStep?: CommunityLaunchSetupStep | null;
   knowledgeIntegrationReloadKey?: string | number | null;
-  knowledgeAutoOpenProvider?: "google_drive" | null;
+  knowledgeAutoOpenProvider?: "google_drive" | "github" | null;
   knowledgeGoogleDriveSources?: CommunityLaunchKnowledgeImportedSource[];
   community: CommunityLaunchSetupCommunity | null;
   status: CommunityLaunchSetupStatus | null;
@@ -343,7 +343,7 @@ type WebCommunityLaunchSetupModalProps = {
   onImportKnowledgeGoogleDriveFiles?: (fileIds: string[]) => Promise<CommunityLaunchGoogleDriveImportResult | null>;
   onRemoveKnowledgeGoogleDriveSource?: (resourceId: string) => Promise<boolean | void>;
   onDisconnectKnowledgeGoogleDrive?: () => Promise<CommunityLaunchGoogleDriveConnection | null>;
-  onKnowledgeAutoOpenHandled?: (provider: "google_drive") => void;
+  onKnowledgeAutoOpenHandled?: (provider: "google_drive" | "github") => void;
   onLoadKnowledgeGitHubConnection?: () => Promise<CommunityLaunchGitHubConnection | null>;
   onConnectKnowledgeGitHub?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
   onListKnowledgeGitHubRepositories?: (query?: string | null) => Promise<CommunityLaunchGitHubRepositoryListResult | null>;
@@ -909,6 +909,37 @@ export function WebCommunityLaunchSetupModal(
     onListKnowledgeGoogleDriveFiles,
   ]);
 
+  const loadGitHubRepositories = useCallback(async (): Promise<boolean> => {
+    if (!onListKnowledgeGitHubRepositories) {
+      setStepError("GitHub repository selection is unavailable.");
+      return false;
+    }
+    setKnowledgeGitHubRepositoriesLoading(true);
+    try {
+      const result = await onListKnowledgeGitHubRepositories();
+      if (!result?.ok) throw new Error("Could not load GitHub repositories.");
+      setKnowledgeGitHubConnection(result.connection ?? knowledgeGitHubConnection);
+      setKnowledgeGitHubRepositories(result.repositories ?? []);
+      setKnowledgeGitHubSelectedRepository(null);
+      setKnowledgeGitHubFiles([]);
+      setKnowledgeGitHubSelectedIds([]);
+      setStepSuccess(
+        (result.repositories ?? []).length > 0
+          ? "Select a GitHub repository."
+          : "No GitHub repositories found.",
+      );
+      return true;
+    } catch (error) {
+      setStepError(error instanceof Error ? error.message : "Could not load GitHub repositories.");
+      return false;
+    } finally {
+      setKnowledgeGitHubRepositoriesLoading(false);
+    }
+  }, [
+    knowledgeGitHubConnection,
+    onListKnowledgeGitHubRepositories,
+  ]);
+
   useEffect(() => {
     if (
       !isOpen ||
@@ -928,6 +959,30 @@ export function WebCommunityLaunchSetupModal(
     knowledgeDriveConnection?.connected,
     knowledgeDriveFilesLoading,
     loadGoogleDriveFiles,
+    onKnowledgeAutoOpenHandled,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      activeStep !== "knowledge" ||
+      knowledgeAutoOpenProvider !== "github" ||
+      !knowledgeGitHubConnection?.connected ||
+      knowledgeGitHubRepositoriesLoading ||
+      knowledgeGitHubFilesLoading
+    ) {
+      return;
+    }
+    onKnowledgeAutoOpenHandled?.("github");
+    void loadGitHubRepositories();
+  }, [
+    activeStep,
+    isOpen,
+    knowledgeAutoOpenProvider,
+    knowledgeGitHubConnection?.connected,
+    knowledgeGitHubFilesLoading,
+    knowledgeGitHubRepositoriesLoading,
+    loadGitHubRepositories,
     onKnowledgeAutoOpenHandled,
   ]);
 
@@ -1333,29 +1388,7 @@ export function WebCommunityLaunchSetupModal(
         }
         return;
       }
-      if (!onListKnowledgeGitHubRepositories) {
-        setStepError("GitHub repository selection is unavailable.");
-        return;
-      }
-      setKnowledgeGitHubRepositoriesLoading(true);
-      try {
-        const result = await onListKnowledgeGitHubRepositories();
-        if (!result?.ok) throw new Error("Could not load GitHub repositories.");
-        setKnowledgeGitHubConnection(result.connection ?? knowledgeGitHubConnection);
-        setKnowledgeGitHubRepositories(result.repositories ?? []);
-        setKnowledgeGitHubSelectedRepository(null);
-        setKnowledgeGitHubFiles([]);
-        setKnowledgeGitHubSelectedIds([]);
-        setStepSuccess(
-          (result.repositories ?? []).length > 0
-            ? "Choose a GitHub repository."
-            : "No GitHub repositories found.",
-        );
-      } catch (error) {
-        setStepError(error instanceof Error ? error.message : "Could not load GitHub repositories.");
-      } finally {
-        setKnowledgeGitHubRepositoriesLoading(false);
-      }
+      void loadGitHubRepositories();
     })();
   };
 
@@ -1390,6 +1423,14 @@ export function WebCommunityLaunchSetupModal(
         ? current.filter((id) => id !== fileId)
         : [...current, fileId].slice(0, COMMUNITY_LAUNCH_MAX_GITHUB_FILES),
     );
+  };
+
+  const handleCloseGitHubPicker = () => {
+    setKnowledgeGitHubRepositories([]);
+    setKnowledgeGitHubSelectedRepository(null);
+    setKnowledgeGitHubFiles([]);
+    setKnowledgeGitHubSelectedIds([]);
+    setStepSuccess(null);
   };
 
   const handleImportGitHubFiles = () => {
@@ -2201,18 +2242,42 @@ export function WebCommunityLaunchSetupModal(
                   </div>
                 ) : null}
                 {knowledgeGitHubRepositories.length > 0 ? (
-                  <div className="community-launch-knowledge-source-picker">
+                  <div className="community-launch-knowledge-source-picker community-launch-knowledge-github-repo-list">
                     {knowledgeGitHubRepositories.map((repository) => (
                       <button
                         key={repository.id}
                         type="button"
-                        className="secondary"
+                        className={`community-launch-knowledge-github-repo${
+                          knowledgeGitHubSelectedRepository?.id === repository.id ? " is-selected" : ""
+                        }`}
                         disabled={isSavingActiveStep || knowledgeGitHubFilesLoading || !onListKnowledgeGitHubFiles}
                         onClick={() => handleSelectGitHubRepository(repository)}
+                        aria-pressed={knowledgeGitHubSelectedRepository?.id === repository.id}
                       >
-                        {repository.full_name}
+                        {repository.private ? (
+                          <LockKeyhole size={13} strokeWidth={2.2} aria-hidden="true" />
+                        ) : (
+                          <BookOpen size={13} strokeWidth={2.2} aria-hidden="true" />
+                        )}
+                        <span>
+                          <strong>{repository.full_name}</strong>
+                          <small>
+                            {repository.private ? "Private" : "Public"} / {repository.default_branch}
+                          </small>
+                        </span>
                       </button>
                     ))}
+                    <div className="community-launch-knowledge-source-actions">
+                      <span>{knowledgeGitHubRepositories.length} repositories</span>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={isSavingActiveStep || knowledgeGitHubFilesLoading}
+                        onClick={handleCloseGitHubPicker}
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 ) : null}
                 {knowledgeGitHubFiles.length > 0 ? (
@@ -2233,14 +2298,27 @@ export function WebCommunityLaunchSetupModal(
                         <small>{file.size ? `${Math.ceil(file.size / 1024)} KB` : file.ref}</small>
                       </label>
                     ))}
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={knowledgeGitHubSelectedIds.length === 0 || isSavingActiveStep || knowledgeGitHubFilesLoading}
-                      onClick={handleImportGitHubFiles}
-                    >
-                      Import selected
-                    </button>
+                    <div className="community-launch-knowledge-source-actions">
+                      <span>
+                        {knowledgeGitHubSelectedIds.length}/{COMMUNITY_LAUNCH_MAX_GITHUB_FILES} selected
+                      </span>
+                      <button
+                        type="button"
+                        className="community-launch-knowledge-source-import"
+                        disabled={knowledgeGitHubSelectedIds.length === 0 || isSavingActiveStep || knowledgeGitHubFilesLoading}
+                        onClick={handleImportGitHubFiles}
+                      >
+                        Import selected
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={isSavingActiveStep || knowledgeGitHubFilesLoading}
+                        onClick={handleCloseGitHubPicker}
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </div>

@@ -587,6 +587,11 @@ assert.match(
 );
 assert.match(
   app,
+  /provider === "google_drive" \|\| provider === "github"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)/,
+  "source integration OAuth finalize should auto-open the just-connected launch Knowledge provider",
+);
+assert.match(
+  app,
   /pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*!pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*setIsCommunityLaunchSetupModalOpen\(false\)[\s\S]*const context = pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*!activeCommunity[\s\S]*!communityLaunchSetupStatus[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
   "launch Knowledge OAuth restore should not be erased by status hydration and should open only after community/status readiness",
 );
@@ -627,8 +632,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /handleGitHubPrimaryAction[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*handleSelectGitHubRepository[\s\S]*onListKnowledgeGitHubFiles[\s\S]*handleImportGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles/,
-  "launch Knowledge modal should connect GitHub, load repositories/files, and import selected files",
+  /loadGitHubRepositories[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*onConnectKnowledgeGitHub[\s\S]*handleSelectGitHubRepository[\s\S]*onListKnowledgeGitHubFiles[\s\S]*handleCloseGitHubPicker[\s\S]*handleImportGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles/,
+  "launch Knowledge modal should connect GitHub, auto-open/load repositories, load files, close the picker, and import selected files",
 );
 assert.match(
   modal,

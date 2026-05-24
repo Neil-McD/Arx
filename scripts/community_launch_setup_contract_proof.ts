@@ -495,8 +495,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleImportGitHubFiles/,
-  "launch knowledge GitHub UI must track connection, repository/file selection, and import state",
+  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*loadGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleCloseGitHubPicker[\s\S]*handleImportGitHubFiles/,
+  "launch knowledge GitHub UI must track connection, auto-open repository selection, close state, file selection, and import state",
 );
 assert.match(
   setupModal,
@@ -540,17 +540,23 @@ assert.match(
 );
 assert.match(
   appShell,
-  /communityLaunchKnowledgeAutoOpenProvider[\s\S]*provider === "google_drive"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)[\s\S]*knowledgeAutoOpenProvider=\{communityLaunchKnowledgeAutoOpenProvider\}[\s\S]*onKnowledgeAutoOpenHandled/,
-  "Google Drive OAuth restore should pass an auto-open intent into the launch Knowledge modal",
+  /communityLaunchKnowledgeAutoOpenProvider[\s\S]*"google_drive" \| "github" \| null[\s\S]*provider === "google_drive" \|\| provider === "github"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)[\s\S]*knowledgeAutoOpenProvider=\{communityLaunchKnowledgeAutoOpenProvider\}[\s\S]*onKnowledgeAutoOpenHandled/,
+  "Drive and GitHub OAuth restore should pass an auto-open intent into the launch Knowledge modal",
 );
 {
   const earlyNullReturnIndex = setupModal.indexOf("if (!isOpen || !effectiveCommunity || !effectiveStatus) return null;");
   const driveAutoOpenHookIndex = setupModal.indexOf("knowledgeAutoOpenProvider !== \"google_drive\"");
+  const githubAutoOpenHookIndex = setupModal.indexOf("knowledgeAutoOpenProvider !== \"github\"");
   assert.ok(earlyNullReturnIndex >= 0, "launch setup modal must retain the explicit unloaded early return");
   assert.ok(driveAutoOpenHookIndex >= 0, "launch setup modal must retain the Google Drive auto-open hook");
+  assert.ok(githubAutoOpenHookIndex >= 0, "launch setup modal must retain the GitHub auto-open hook");
   assert.ok(
     driveAutoOpenHookIndex < earlyNullReturnIndex,
     "launch setup modal hooks must stay before the unloaded early return to preserve React hook order",
+  );
+  assert.ok(
+    githubAutoOpenHookIndex < earlyNullReturnIndex,
+    "launch setup modal GitHub auto-open hook must stay before the unloaded early return to preserve React hook order",
   );
 }
 assert.match(
@@ -644,6 +650,16 @@ assert.match(
   baseCss,
   /\.community-launch-knowledge-provider-logo\.github[\s\S]*filter: brightness\(0\) invert\(1\)/,
   "launch knowledge GitHub logo must be light on the dark background",
+);
+assert.match(
+  setupModal,
+  /community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*Close[\s\S]*community-launch-knowledge-source-import[\s\S]*Import selected/,
+  "launch knowledge GitHub repo picker must render scannable repo rows, close control, and text-only import action",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-github-repo-list[\s\S]*\.community-launch-knowledge-github-repo\.is-selected/,
+  "launch knowledge GitHub repo picker must have dedicated row styling instead of tiny generic pills",
 );
 assert.match(
   setupModal,

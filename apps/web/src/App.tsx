@@ -1684,7 +1684,7 @@ export default function App() {
   const [
     communityLaunchKnowledgeAutoOpenProvider,
     setCommunityLaunchKnowledgeAutoOpenProvider,
-  ] = useState<"google_drive" | null>(null);
+  ] = useState<"google_drive" | "github" | null>(null);
   const [
     pendingCommunityLaunchKnowledgeOAuthContext,
     setPendingCommunityLaunchKnowledgeOAuthContext,
@@ -4964,7 +4964,7 @@ export default function App() {
         clearCommunityLaunchKnowledgeSourceOAuthIntent({ provider, state });
         if (result.ok && didRestoreLaunchKnowledge) {
           setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
-          if (provider === "google_drive") {
+          if (provider === "google_drive" || provider === "github") {
             setCommunityLaunchKnowledgeAutoOpenProvider(provider);
           }
         }
