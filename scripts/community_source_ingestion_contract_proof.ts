@@ -590,8 +590,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /knowledgeIntegrationReloadKey\?: string \| number \| null[\s\S]*onLoadKnowledgeGoogleDriveConnection[\s\S]*knowledgeIntegrationReloadKey[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*knowledgeIntegrationReloadKey/,
-  "launch setup modal should reload source integration connection state after OAuth finalize",
+  /knowledgeIntegrationReloadKey\?: string \| number \| null[\s\S]*onLoadKnowledgeGoogleDriveConnectionRef[\s\S]*onLoadKnowledgeGitHubConnectionRef[\s\S]*const loadConnection = onLoadKnowledgeGitHubConnectionRef\.current[\s\S]*knowledgeIntegrationReloadKey/,
+  "launch setup modal should reload source integration connection state after OAuth finalize without restarting on recreated callback props",
 );
 assert.match(
   modal,
@@ -615,8 +615,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*onDisconnectKnowledgeGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*onRemoveKnowledgeGoogleDriveSource[\s\S]*Imported from Drive[\s\S]*alreadyAdded/,
-  "launch Knowledge modal should show saved Drive sources, mark selected Drive files as Added, remove individual sources, and disconnect credentials",
+  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*onDisconnectKnowledgeGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*onRemoveKnowledgeGoogleDriveSource[\s\S]*community-launch-knowledge-imported-source[\s\S]*community-launch-knowledge-source-action[\s\S]*alreadyAdded/,
+  "launch Knowledge modal should show saved Drive sources inline, mark selected Drive files as Added, delete individual sources, and disconnect credentials",
 );
 assert.match(
   modal,

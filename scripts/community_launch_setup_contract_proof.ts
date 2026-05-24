@@ -460,8 +460,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*Imported from Drive[\s\S]*community-launch-knowledge-imported-source/,
-  "launch knowledge Google Drive UI must show imported Drive sources, support un-adding one source, and support disconnecting the provider",
+  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*community-launch-knowledge-source-action[\s\S]*Delete/,
+  "launch knowledge Google Drive UI must show imported Drive sources inline, support deleting one source, and support disconnecting the provider",
 );
 assert.match(
   setupModal,
@@ -472,6 +472,11 @@ assert.match(
   setupModal,
   /knowledgeDriveConnectionLoading[\s\S]*knowledgeDriveFilesLoading[\s\S]*knowledgeGitHubConnectionLoading[\s\S]*knowledgeGitHubRepositoriesLoading[\s\S]*knowledgeGitHubFilesLoading/,
   "launch knowledge integration loading must be split by connection, list, and file phases to avoid picker flicker",
+);
+assert.match(
+  setupModal,
+  /onLoadKnowledgeGoogleDriveConnectionRef[\s\S]*onLoadKnowledgeGitHubConnectionRef[\s\S]*const loadConnection = onLoadKnowledgeGitHubConnectionRef\.current[\s\S]*\}, \[activeStep, community\?\.id, isOpen, knowledgeIntegrationReloadKey\]\);/,
+  "launch knowledge passive integration status reloads should not restart when App recreates callback props",
 );
 assert.doesNotMatch(
   setupModal,

@@ -499,12 +499,6 @@ function getGoogleDriveSourceFileTypeLabel(file: CommunityLaunchGoogleDriveFile)
   return file.mime_type.replace("application/vnd.google-apps.", "Google ");
 }
 
-function getKnowledgeSourceStatusLabel(source: CommunityLaunchKnowledgeImportedSource): string {
-  const status = source.source_ingestion_status ?? "queued";
-  if (status === "not_required") return "Added";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 export function WebCommunityLaunchSetupModal(
   props: WebCommunityLaunchSetupModalProps,
 ) {
@@ -619,6 +613,16 @@ export function WebCommunityLaunchSetupModal(
   const effectiveKnowledgeGoogleDriveSources = isCreateMode
     ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
     : knowledgeGoogleDriveSources;
+  const onLoadKnowledgeGoogleDriveConnectionRef = useRef(onLoadKnowledgeGoogleDriveConnection);
+  const onLoadKnowledgeGitHubConnectionRef = useRef(onLoadKnowledgeGitHubConnection);
+
+  useEffect(() => {
+    onLoadKnowledgeGoogleDriveConnectionRef.current = onLoadKnowledgeGoogleDriveConnection;
+  }, [onLoadKnowledgeGoogleDriveConnection]);
+
+  useEffect(() => {
+    onLoadKnowledgeGitHubConnectionRef.current = onLoadKnowledgeGitHubConnection;
+  }, [onLoadKnowledgeGitHubConnection]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -750,38 +754,32 @@ export function WebCommunityLaunchSetupModal(
   ]);
 
   useEffect(() => {
-    if (!isOpen || activeStep !== "knowledge" || !onLoadKnowledgeGoogleDriveConnection) return;
+    const loadConnection = onLoadKnowledgeGoogleDriveConnectionRef.current;
+    if (!isOpen || activeStep !== "knowledge" || !loadConnection) return;
     let cancelled = false;
-    setKnowledgeDriveConnectionLoading(true);
-    void onLoadKnowledgeGoogleDriveConnection()
+    void loadConnection()
       .then((connection) => {
         if (!cancelled) setKnowledgeDriveConnection(connection ?? null);
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setKnowledgeDriveConnectionLoading(false);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [activeStep, isOpen, knowledgeIntegrationReloadKey, onLoadKnowledgeGoogleDriveConnection]);
+  }, [activeStep, community?.id, isOpen, knowledgeIntegrationReloadKey]);
 
   useEffect(() => {
-    if (!isOpen || activeStep !== "knowledge" || !onLoadKnowledgeGitHubConnection) return;
+    const loadConnection = onLoadKnowledgeGitHubConnectionRef.current;
+    if (!isOpen || activeStep !== "knowledge" || !loadConnection) return;
     let cancelled = false;
-    setKnowledgeGitHubConnectionLoading(true);
-    void onLoadKnowledgeGitHubConnection()
+    void loadConnection()
       .then((connection) => {
         if (!cancelled) setKnowledgeGitHubConnection(connection ?? null);
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setKnowledgeGitHubConnectionLoading(false);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [activeStep, isOpen, knowledgeIntegrationReloadKey, onLoadKnowledgeGitHubConnection]);
+  }, [activeStep, community?.id, isOpen, knowledgeIntegrationReloadKey]);
 
   const createModeStatus = useMemo(
     () =>
@@ -2026,7 +2024,7 @@ export function WebCommunityLaunchSetupModal(
                     </p>
                     <button
                       type="button"
-                      className="secondary community-launch-knowledge-disconnect"
+                      className="community-launch-knowledge-disconnect"
                       disabled={isSavingActiveStep || knowledgeDriveDisconnecting || !onDisconnectKnowledgeGoogleDrive}
                       onClick={handleDisconnectGoogleDrive}
                     >
@@ -2036,21 +2034,23 @@ export function WebCommunityLaunchSetupModal(
                 ) : null}
                 {effectiveKnowledgeGoogleDriveSources.length > 0 ? (
                   <div className="community-launch-knowledge-imported-sources">
-                    <strong>Imported from Drive</strong>
                     {effectiveKnowledgeGoogleDriveSources.map((source) => (
                       <div key={source.id} className="community-launch-knowledge-imported-source">
+                        <Check size={13} strokeWidth={3} aria-hidden="true" />
                         <span>{source.title || "Drive source"}</span>
-                        <small className={`community-launch-knowledge-source-status ${source.source_ingestion_status ?? "queued"}`}>
-                          {getKnowledgeSourceStatusLabel(source)}
-                        </small>
                         {source.source_external_url ? (
-                          <a href={source.source_external_url} target="_blank" rel="noreferrer">
+                          <a
+                            className="community-launch-knowledge-source-action"
+                            href={source.source_external_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Open
                           </a>
                         ) : null}
                         <button
                           type="button"
-                          className="secondary"
+                          className="community-launch-knowledge-source-action is-delete"
                           disabled={
                             isSavingActiveStep ||
                             knowledgeDriveRemovingSourceId === source.id ||
@@ -2058,7 +2058,7 @@ export function WebCommunityLaunchSetupModal(
                           }
                           onClick={() => handleRemoveGoogleDriveSource(source)}
                         >
-                          {knowledgeDriveRemovingSourceId === source.id ? "Removing..." : "Remove"}
+                          {knowledgeDriveRemovingSourceId === source.id ? "Deleting..." : "Delete"}
                         </button>
                       </div>
                     ))}
