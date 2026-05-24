@@ -746,6 +746,19 @@ export async function beginCloudCommunityGitHubSourceOAuth<SessionT>(
   };
 }
 
+export async function disconnectCloudCommunityGitHubSourceConnection<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudGitHubSourceConnectionStatus> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.mutation("community:disconnectGitHubSourceConnection" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as Record<string, unknown> | null;
+  return normalizeGitHubSourceConnection(payload?.connection);
+}
+
 export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     state: string;

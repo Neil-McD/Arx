@@ -23,6 +23,7 @@ export {
   ensureCommunityResourceWikiScaffold,
   beginGoogleDriveSourceOAuth,
   beginGitHubSourceOAuth,
+  disconnectGitHubSourceConnection,
   disconnectGoogleDriveSourceConnection,
   finalizeGoogleDriveSourceOAuth,
   finalizeGitHubSourceOAuth,

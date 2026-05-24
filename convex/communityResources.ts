@@ -4051,6 +4051,29 @@ export const upsertGitHubSourceConnectionInternal = internalMutation({
   },
 });
 
+export const disconnectGitHubSourceConnection = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManagerForAction(ctx, userId, args.communityId);
+    const row = await getGitHubConnectionRow(ctx, userId);
+    if (row?._id) {
+      await ctx.db.delete(row._id as any);
+    }
+    return {
+      ok: true,
+      provider: GITHUB_SOURCE_PROVIDER,
+      connection: toPublicGitHubConnection(null),
+    };
+  },
+});
+
 async function resolveGitHubAccessToken(ctx: any, userId: any): Promise<{
   accessToken: string;
   bundle: StoredGitHubAuthV1;

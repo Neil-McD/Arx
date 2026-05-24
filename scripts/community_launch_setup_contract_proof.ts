@@ -435,7 +435,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /CommunityLaunchGitHubConnection[\s\S]*CommunityLaunchGitHubRepository[\s\S]*CommunityLaunchGitHubFile[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles/,
+  /CommunityLaunchGitHubConnection[\s\S]*CommunityLaunchGitHubRepository[\s\S]*CommunityLaunchGitHubFile[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onDisconnectKnowledgeGitHub/,
   "launch knowledge integrations must expose a concrete GitHub lifecycle contract",
 );
 assert.match(
@@ -495,8 +495,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*loadGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleCloseGitHubPicker[\s\S]*handleImportGitHubFiles/,
-  "launch knowledge GitHub UI must track connection, auto-open repository selection, close state, file selection, and import state",
+  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*knowledgeGitHubDisconnecting[\s\S]*loadGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleCloseGitHubPicker[\s\S]*handleDisconnectGitHub[\s\S]*handleImportGitHubFiles/,
+  "launch knowledge GitHub UI must track connection, auto-open repository selection, close state, disconnect state, file selection, and import state",
 );
 assert.match(
   setupModal,
@@ -510,8 +510,13 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /GitHub[\s\S]*Select repo[\s\S]*Connect[\s\S]*GitHub connected[\s\S]*Import selected/,
-  "launch knowledge GitHub chip must connect first, then allow repository/file selection and import",
+  /GitHub[\s\S]*Select repo[\s\S]*Connect[\s\S]*handleDisconnectGitHub[\s\S]*Disconnect[\s\S]*Import selected/,
+  "launch knowledge GitHub chip must connect first, support disconnecting credentials, then allow repository/file selection and import",
+);
+assert.doesNotMatch(
+  setupModal,
+  /GitHub connected/,
+  "launch knowledge GitHub UI should not show the old connected-as account text",
 );
 assert.match(
   sourceOAuth,
@@ -583,8 +588,8 @@ assert.doesNotMatch(
 );
 assert.match(
   appShell,
-  /handleLoadCommunityLaunchGitHubConnection[\s\S]*loadCloudCommunityGitHubSourceConnection[\s\S]*handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "github"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
-  "app shell must wire launch Knowledge GitHub connection, listing, and import handlers",
+  /handleLoadCommunityLaunchGitHubConnection[\s\S]*loadCloudCommunityGitHubSourceConnection[\s\S]*handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "github"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*handleDisconnectCommunityLaunchGitHub[\s\S]*disconnectCloudCommunityGitHubSourceConnection/,
+  "app shell must wire launch Knowledge GitHub connection, listing, import, and disconnect handlers",
 );
 assert.doesNotMatch(
   setupModal,

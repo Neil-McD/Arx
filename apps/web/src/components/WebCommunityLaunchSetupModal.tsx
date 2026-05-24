@@ -353,6 +353,7 @@ type WebCommunityLaunchSetupModalProps = {
     query?: string | null,
   ) => Promise<CommunityLaunchGitHubFileListResult | null>;
   onImportKnowledgeGitHubFiles?: (fileIds: string[]) => Promise<CommunityLaunchGitHubImportResult | null>;
+  onDisconnectKnowledgeGitHub?: () => Promise<CommunityLaunchGitHubConnection | null>;
   onLoadKnowledgeHealth?: () => Promise<CommunityLaunchKnowledgeHealth | null>;
   onEnsureKnowledgeScaffold?: () => Promise<CommunityLaunchKnowledgeScaffoldResult | null>;
   onGenerateKnowledgePlan?: (draft: {
@@ -535,6 +536,7 @@ export function WebCommunityLaunchSetupModal(
     onListKnowledgeGitHubRepositories,
     onListKnowledgeGitHubFiles,
     onImportKnowledgeGitHubFiles,
+    onDisconnectKnowledgeGitHub,
     onLoadKnowledgeHealth,
     onEnsureKnowledgeScaffold,
     onGenerateKnowledgePlan,
@@ -606,6 +608,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeGitHubConnectionLoading, setKnowledgeGitHubConnectionLoading] = useState(false);
   const [knowledgeGitHubRepositoriesLoading, setKnowledgeGitHubRepositoriesLoading] = useState(false);
   const [knowledgeGitHubFilesLoading, setKnowledgeGitHubFilesLoading] = useState(false);
+  const [knowledgeGitHubDisconnecting, setKnowledgeGitHubDisconnecting] = useState(false);
   const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
   const knowledgeProviderStateCommunityKeyRef = useRef<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
@@ -672,6 +675,7 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeGitHubConnectionLoading(false);
       setKnowledgeGitHubRepositoriesLoading(false);
       setKnowledgeGitHubFilesLoading(false);
+      setKnowledgeGitHubDisconnecting(false);
       setKnowledgeHealthLoading(false);
       knowledgeProviderStateCommunityKeyRef.current = "__create__";
       setAgentDraft({
@@ -725,6 +729,7 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeGitHubConnectionLoading(false);
       setKnowledgeGitHubRepositoriesLoading(false);
       setKnowledgeGitHubFilesLoading(false);
+      setKnowledgeGitHubDisconnecting(false);
     }
     setKnowledgeHealthLoading(false);
     setAgentDraft({
@@ -1433,6 +1438,31 @@ export function WebCommunityLaunchSetupModal(
     setStepSuccess(null);
   };
 
+  const handleDisconnectGitHub = () => {
+    if (savingStep || knowledgeGitHubDisconnecting || !knowledgeGitHubConnection?.connected) return;
+    if (!onDisconnectKnowledgeGitHub) {
+      setStepError("GitHub disconnect is unavailable.");
+      return;
+    }
+    const shouldDisconnect = window.confirm(
+      "Disconnect GitHub? Imported sources stay saved, but pending GitHub sources may need you to reconnect before processing.",
+    );
+    if (!shouldDisconnect) return;
+    setKnowledgeGitHubDisconnecting(true);
+    setStepError(null);
+    setStepSuccess(null);
+    void onDisconnectKnowledgeGitHub()
+      .then((connection) => {
+        setKnowledgeGitHubConnection(connection ?? { connected: false });
+        handleCloseGitHubPicker();
+        setStepSuccess("GitHub disconnected. Imported sources remain saved.");
+      })
+      .catch((error) => {
+        setStepError(error instanceof Error ? error.message : "Could not disconnect GitHub.");
+      })
+      .finally(() => setKnowledgeGitHubDisconnecting(false));
+  };
+
   const handleImportGitHubFiles = () => {
     if (savingStep || knowledgeGitHubFilesLoading || knowledgeGitHubSelectedIds.length === 0) return;
     if (!onImportKnowledgeGitHubFiles) {
@@ -2125,15 +2155,16 @@ export function WebCommunityLaunchSetupModal(
                   </div>
                 ) : null}
                 {knowledgeGitHubConnection?.connected ? (
-                  <p className="community-launch-knowledge-integration-note">
-                    GitHub connected
-                    {knowledgeGitHubConnection.login
-                      ? ` as ${knowledgeGitHubConnection.login}`
-                      : knowledgeGitHubConnection.email
-                        ? ` as ${knowledgeGitHubConnection.email}`
-                        : ""}
-                    .
-                  </p>
+                  <div className="community-launch-knowledge-integration-status">
+                    <button
+                      type="button"
+                      className="community-launch-knowledge-disconnect"
+                      disabled={isSavingActiveStep || knowledgeGitHubDisconnecting || !onDisconnectKnowledgeGitHub}
+                      onClick={handleDisconnectGitHub}
+                    >
+                      {knowledgeGitHubDisconnecting ? "Disconnecting..." : "Disconnect"}
+                    </button>
+                  </div>
                 ) : null}
                 {knowledgeDriveBrowserOpen ? (
                   <div className="community-launch-knowledge-source-picker community-launch-knowledge-source-browser">

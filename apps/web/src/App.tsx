@@ -130,6 +130,7 @@ import {
   beginCloudCommunityGitHubSourceOAuth,
   createCloudCommunity,
   deleteCloudCommunityResource,
+  disconnectCloudCommunityGitHubSourceConnection,
   disconnectCloudCommunityGoogleDriveSourceConnection,
   draftCloudCommunityResourceContentFromSources,
   ensureCloudCommunityResourceWikiScaffold,
@@ -8315,6 +8316,17 @@ export default function App() {
       await refreshActiveCommunityLaunchSetupStatus();
       return result;
     };
+    const handleDisconnectCommunityLaunchGitHub = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const connection = await disconnectCloudCommunityGitHubSourceConnection({
+        session,
+        communityId: community.id,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
+      return connection;
+    };
     const handleLoadCommunityLaunchKnowledgeHealth = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
       const health = await getCloudCommunityResourceBuilderHealth({
@@ -10104,6 +10116,7 @@ export default function App() {
         onListKnowledgeGitHubRepositories={handleListCommunityLaunchGitHubRepositories}
         onListKnowledgeGitHubFiles={handleListCommunityLaunchGitHubFiles}
         onImportKnowledgeGitHubFiles={handleImportCommunityLaunchGitHubFiles}
+        onDisconnectKnowledgeGitHub={handleDisconnectCommunityLaunchGitHub}
         onLoadKnowledgeHealth={handleLoadCommunityLaunchKnowledgeHealth}
 	        onEnsureKnowledgeScaffold={handleEnsureCommunityLaunchKnowledgeScaffold}
 	        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
