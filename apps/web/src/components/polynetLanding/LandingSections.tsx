@@ -25,7 +25,7 @@ function TopNav({ onJoin }) {
           <a href="#pillars" onClick={() => setMenuOpen(false)}>Product</a>
           <a href="#communities" onClick={() => setMenuOpen(false)}>Communities</a>
           <button className="btn btn-primary" style={{ padding: '10px 18px', fontSize: 14 }} onClick={() => { setMenuOpen(false); onJoin(); }}>
-            Join the waitlist <span className="arrow">→</span>
+            Try Polynet free <span className="arrow">→</span>
           </button>
         </div>
       </div>
@@ -41,13 +41,6 @@ function Hero({ onJoin }) {
         <div className="globe" />
       </div>
       <div className="wrap content">
-        <div className="topline">
-          <span className="chip"><span className="dot" /> EARLY ACCESS · WAVE 03</span>
-          <span className="topline-right">
-            <span className="mono" style={{color:'var(--ink-3)', fontSize:11, letterSpacing:'0.16em'}}>v0.4.2 · SHIPPING WEEKLY</span>
-          </span>
-        </div>
-
         <h1 className="h-display headline">
           Build an <em>Intelligence Network</em> that Compounds.
         </h1>
@@ -57,7 +50,7 @@ function Hero({ onJoin }) {
 
         <div className="cta-row">
           <button className="btn btn-primary" onClick={onJoin}>
-            Join the network
+            Try Polynet free
             <span className="arrow">→</span>
           </button>
           <a className="btn btn-ghost" href="#argument">
@@ -440,16 +433,11 @@ function FinalCTA({ onJoin }) {
           <h2>Join the network<br />before it joins <em>you</em>.</h2>
         </div>
         <div className="right">
-          <div className="label">EARLY ACCESS · WAVE 03</div>
-          <p>We're onboarding the next 200 networks. Tell us where you operate and we'll route an access link when your slot opens.</p>
+          <p>Build your agent. Wrap it in a community. Monetize access. Free to start.</p>
           <button className="btn btn-primary open-btn" onClick={onJoin}>
-            <span>Get an access link</span>
+            <span>Try Polynet free</span>
             <span className="arrow">→</span>
           </button>
-          <div style={{display:'flex', justifyContent:'space-between', marginTop:16, fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--ink-3)', letterSpacing:'0.14em', textTransform:'uppercase'}}>
-            <span>5 questions · 90 seconds</span>
-            <span>No marketing list</span>
-          </div>
         </div>
       </div>
     </section>
