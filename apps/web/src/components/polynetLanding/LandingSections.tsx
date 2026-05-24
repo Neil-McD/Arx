@@ -580,7 +580,7 @@ function StackCollapse({ onJoin }) {
 
 function Manifesto() {
   return (
-    <section className="manifesto">
+    <section className="manifesto" id="manifesto">
       <div className="wrap inner">
         <div className="grid">
           <div className="left">
@@ -663,10 +663,7 @@ function SiteFooter() {
           </div>
           <div className="col">
             <h4>Company</h4>
-            <a href="#">Manifesto</a>
-            <a href="#">Careers · 04</a>
-            <a href="#">Press kit</a>
-            <a href="#">hello@polynet.dev</a>
+            <a href="#manifesto">Manifesto</a>
           </div>
         </div>
         <div className="legal">
