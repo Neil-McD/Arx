@@ -1,7 +1,50 @@
 /* Page sections — composed by app.jsx */
 // @ts-nocheck
 import { useState as useStateS } from "react";
+import {
+  Brain,
+  CalendarDays,
+  Check,
+  FileText,
+  MessagesSquare,
+  Users,
+  Workflow,
+  X,
+} from "lucide-react";
 import { NetworkVisualization } from "./NetworkVisualization";
+
+const memoryShift = [
+  {
+    source: "People",
+    Icon: Users,
+    evaporates: "Knowledge trapped in people",
+    compounds: "Expertise packaged into an agent",
+  },
+  {
+    source: "Chats",
+    Icon: MessagesSquare,
+    evaporates: "Decisions buried in chats",
+    compounds: "Decisions captured in shared memory",
+  },
+  {
+    source: "Docs",
+    Icon: FileText,
+    evaporates: "Context lost in files",
+    compounds: "Docs become retrievable context",
+  },
+  {
+    source: "Meetings",
+    Icon: CalendarDays,
+    evaporates: "Insights forgotten after the call",
+    compounds: "Insights synthesized and reused",
+  },
+  {
+    source: "Workflows",
+    Icon: Workflow,
+    evaporates: "Work reinvented every time",
+    compounds: "Workflows run on demand",
+  },
+];
 
 function useReveal() {
   // No-op: see index.html for note on why scroll reveal is disabled.
@@ -179,7 +222,99 @@ function NetworkSection() {
 }
 
 function MemorySection() {
-  return null;
+  const tableRows = memoryShift.filter(
+    (row) => row.source === "People" || row.source === "Chats" || row.source === "Workflows",
+  );
+  return (
+    <section className="memory-section" id="memory" aria-labelledby="memory-title">
+      <div className="wrap">
+        <div className="head reveal">
+          <div>
+            <div className="micro" style={{ marginBottom: 14 }}>/03 · THE MECHANISM</div>
+            <h2 id="memory-title" className="h-1">
+              Expertise either evaporates or compounds.
+            </h2>
+          </div>
+          <p className="body-lg" style={{ maxWidth: 520 }}>
+            In a hierarchy, information leaks away — trapped in heads, buried in chats, forgotten after every call. In a network with shared memory, the same signal compounds into something the whole system can execute on.
+          </p>
+        </div>
+
+        <div className="memory-visual" aria-hidden="true">
+          <div className="memory-fan evaporates">
+            <span className="memory-fan-tag">Evaporates</span>
+            <div className="memory-fan-stage">
+              <span className="memory-fan-core" />
+              {memoryShift.map((row, index) => (
+                <span
+                  className="memory-spoke"
+                  key={`scatter-${row.source}`}
+                  style={{ "--a": `${-150 + index * 30}deg`, "--i": index }}
+                >
+                  <span className="memory-spoke-chip">
+                    <row.Icon className="memory-spoke-icon" />
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="memory-fan compounds">
+            <span className="memory-fan-tag">Compounds</span>
+            <div className="memory-fan-stage">
+              <span className="memory-feedback" aria-hidden="true" />
+              <span className="memory-fan-core">
+                <Brain className="memory-core-icon" />
+              </span>
+              {memoryShift.map((row, index) => (
+                <span
+                  className="memory-spoke"
+                  key={`hub-${row.source}`}
+                  style={{ "--a": `${-150 + index * 30}deg`, "--i": index }}
+                >
+                  <span className="memory-spoke-chip">
+                    <row.Icon className="memory-spoke-icon" />
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="memory-table">
+          <div className="memory-row head">
+            <span className="memory-source" aria-hidden="true" />
+            <span className="memory-col evaporates">Without shared memory</span>
+            <span className="memory-col compounds">With Polynet</span>
+          </div>
+          {tableRows.map((row) => (
+            <div className="memory-row" key={row.source}>
+              <span className="memory-source">
+                <row.Icon className="memory-source-icon" />
+                {row.source}
+              </span>
+              <span className="memory-cell evaporates">
+                <X className="memory-mark" aria-hidden="true" />
+                {row.evaporates}
+              </span>
+              <span className="memory-cell compounds">
+                <Check className="memory-mark" aria-hidden="true" />
+                {row.compounds}
+              </span>
+            </div>
+          ))}
+          <div className="memory-row foot">
+            <span className="memory-source" aria-hidden="true" />
+            <span className="memory-foot evaporates">
+              The people learn. The community forgets.
+            </span>
+            <span className="memory-foot compounds">
+              The group learns. The system gets smarter.
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /* Brand-native pillar glyphs — each is a fragment of the network motif
@@ -493,6 +628,7 @@ export {
   Marquee,
   Argument,
   NetworkSection,
+  MemorySection,
   Pillars,
   Communities,
   Manifesto,

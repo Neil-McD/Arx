@@ -7,6 +7,7 @@ import {
   Hero,
   Manifesto,
   Marquee,
+  MemorySection,
   NetworkSection,
   Pillars,
   SiteFooter,
@@ -35,6 +36,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
         <Marquee />
         <Argument />
         <NetworkSection />
+        <MemorySection />
         <Pillars />
         <Communities />
         <Manifesto />
