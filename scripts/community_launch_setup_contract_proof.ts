@@ -450,8 +450,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeDriveBrowserOpen[\s\S]*knowledgeDriveSearchDraft[\s\S]*knowledgeDriveFolderTrail[\s\S]*knowledgeDriveNextPageToken[\s\S]*handleSearchGoogleDriveFiles[\s\S]*handleOpenGoogleDriveFolder[\s\S]*handleLoadMoreGoogleDriveFiles/,
+  /knowledgeDriveBrowserOpen[\s\S]*knowledgeDriveSearchDraft[\s\S]*knowledgeDriveFolderTrail[\s\S]*knowledgeDriveNextPageToken[\s\S]*knowledgeDriveLocationPath[\s\S]*handleSearchGoogleDriveFiles[\s\S]*handleOpenGoogleDriveFolder[\s\S]*handleBackGoogleDriveLocation[\s\S]*handleLoadMoreGoogleDriveFiles/,
   "launch knowledge Google Drive picker must expose search, folder navigation, and load-more state",
+);
+assert.match(
+  setupModal,
+  /community-launch-knowledge-drive-location[\s\S]*Current location[\s\S]*knowledgeDriveLocationPath[\s\S]*community-launch-knowledge-drive-back/,
+  "launch knowledge Google Drive picker should show a clear current location with one back action instead of breadcrumb pills",
 );
 assert.match(
   setupModal,
@@ -495,7 +500,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*Import selected/,
+  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*community-launch-knowledge-drive-import[\s\S]*Import selected/,
   "launch knowledge Google Drive chip must connect first, then allow file selection and import",
 );
 assert.match(

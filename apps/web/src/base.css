@@ -5146,7 +5146,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-muted);
 }
 
-.community-launch-knowledge-drive-breadcrumbs,
 .community-launch-knowledge-drive-actions {
   min-width: 0;
   display: flex;
@@ -5155,7 +5154,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 6px;
 }
 
-.community-launch-knowledge-drive-breadcrumbs span,
 .community-launch-knowledge-drive-actions span {
   min-width: 0;
   max-width: 100%;
@@ -5165,6 +5163,40 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 800;
+}
+
+.community-launch-knowledge-drive-location {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.community-launch-knowledge-drive-location div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.community-launch-knowledge-drive-location span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.community-launch-knowledge-drive-location strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .community-launch-knowledge-drive-picker label {
@@ -5257,6 +5289,28 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-launch-knowledge-drive-picker button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
+}
+
+.community-launch-knowledge-drive-picker .community-launch-knowledge-drive-back {
+  display: inline-grid;
+  grid-template-columns: 13px auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  border-radius: 9px;
+  padding: 0 9px;
+  color: var(--text-primary);
+}
+
+.community-launch-knowledge-drive-picker .community-launch-knowledge-drive-import {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  color: #ffffff;
+  background: color-mix(in srgb, var(--accent) 52%, rgba(0, 0, 0, 0.18));
+}
+
+.community-launch-knowledge-drive-picker .community-launch-knowledge-drive-import:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 88%, transparent);
+  background: color-mix(in srgb, var(--accent) 64%, rgba(0, 0, 0, 0.14));
 }
 
 .community-launch-choice-row {

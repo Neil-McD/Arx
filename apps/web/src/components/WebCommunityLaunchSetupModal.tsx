@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ArrowLeft,
   BookOpen,
   Bot,
   Check,
@@ -942,6 +943,13 @@ export function WebCommunityLaunchSetupModal(
   const knowledgeDriveCanImport = knowledgeDriveSelectedIds.some(
     (id) => !knowledgeDriveImportedExternalIds.has(id),
   );
+  const knowledgeDriveCurrentFolder =
+    knowledgeDriveFolderTrail[knowledgeDriveFolderTrail.length - 1] ?? null;
+  const knowledgeDriveLocationPath = knowledgeDriveQuery
+    ? `Search: ${knowledgeDriveQuery}`
+    : knowledgeDriveFolderTrail.length > 0
+      ? ["Google Drive", ...knowledgeDriveFolderTrail.map((folder) => folder.name)].join(" / ")
+      : "Google Drive";
 
   useEffect(() => {
     if (knowledgeDriveImportedExternalIds.size === 0) return;
@@ -1172,16 +1180,6 @@ export function WebCommunityLaunchSetupModal(
     });
   };
 
-  const handleOpenGoogleDriveRoot = () => {
-    if (savingStep || knowledgeDriveFilesLoading) return;
-    setKnowledgeDriveSearchDraft("");
-    void loadGoogleDriveFiles({
-      folderId: null,
-      folderTrail: [],
-      query: "",
-    });
-  };
-
   const handleOpenGoogleDriveFolder = (folder: CommunityLaunchGoogleDriveFile) => {
     if (savingStep || knowledgeDriveFilesLoading || folder.kind !== "folder") return;
     const nextTrail = [...knowledgeDriveFolderTrail, { id: folder.id, name: folder.name }];
@@ -1193,9 +1191,11 @@ export function WebCommunityLaunchSetupModal(
     });
   };
 
-  const handleOpenGoogleDriveBreadcrumb = (index: number) => {
+  const handleBackGoogleDriveLocation = () => {
     if (savingStep || knowledgeDriveFilesLoading) return;
-    const nextTrail = knowledgeDriveFolderTrail.slice(0, index + 1);
+    const nextTrail = knowledgeDriveQuery
+      ? []
+      : knowledgeDriveFolderTrail.slice(0, Math.max(0, knowledgeDriveFolderTrail.length - 1));
     const nextFolder = nextTrail[nextTrail.length - 1] ?? null;
     setKnowledgeDriveSearchDraft("");
     void loadGoogleDriveFiles({
@@ -2097,25 +2097,22 @@ export function WebCommunityLaunchSetupModal(
                         Search
                       </button>
                     </form>
-                    <div className="community-launch-knowledge-drive-breadcrumbs" aria-label="Google Drive location">
-                      <button
-                        type="button"
-                        disabled={isSavingActiveStep || knowledgeDriveFilesLoading}
-                        onClick={handleOpenGoogleDriveRoot}
-                      >
-                        Drive
-                      </button>
-                      {knowledgeDriveFolderTrail.map((folder, index) => (
+                    <div className="community-launch-knowledge-drive-location" aria-label="Google Drive location">
+                      <div>
+                        <span>Current location</span>
+                        <strong title={knowledgeDriveLocationPath}>{knowledgeDriveLocationPath}</strong>
+                      </div>
+                      {knowledgeDriveQuery || knowledgeDriveCurrentFolder ? (
                         <button
-                          key={folder.id}
                           type="button"
+                          className="community-launch-knowledge-drive-back"
                           disabled={isSavingActiveStep || knowledgeDriveFilesLoading}
-                          onClick={() => handleOpenGoogleDriveBreadcrumb(index)}
+                          onClick={handleBackGoogleDriveLocation}
                         >
-                          {folder.name}
+                          <ArrowLeft size={13} strokeWidth={2.25} aria-hidden="true" />
+                          {knowledgeDriveQuery ? "Back to Drive" : "Back"}
                         </button>
-                      ))}
-                      {knowledgeDriveQuery ? <span>Search: {knowledgeDriveQuery}</span> : null}
+                      ) : null}
                     </div>
                     {knowledgeDriveFiles.length > 0 ? (
                       knowledgeDriveFiles.map((file) => {
@@ -2170,7 +2167,7 @@ export function WebCommunityLaunchSetupModal(
                       </span>
                       <button
                         type="button"
-                        className="secondary"
+                        className="community-launch-knowledge-drive-import"
                         disabled={!knowledgeDriveCanImport || isSavingActiveStep || knowledgeDriveFilesLoading}
                         onClick={handleImportGoogleDriveFiles}
                       >
