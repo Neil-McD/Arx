@@ -20,8 +20,21 @@ function hasPendingOAuthCallbackParams(): boolean {
     return (
       url.searchParams.has("code") ||
       url.searchParams.has("error") ||
-      url.searchParams.has("app_oauth")
+      url.searchParams.has("app_oauth") ||
+      url.searchParams.has("source_integration_oauth")
     );
+  } catch {
+    return false;
+  }
+}
+
+function hasCommunityLaunchSetupRouteParams(): boolean {
+  try {
+    const url = new URL(window.location.href);
+    const setup = String(url.searchParams.get("community_launch_setup") ?? "")
+      .trim()
+      .toLowerCase();
+    return setup === "1" || setup === "true";
   } catch {
     return false;
   }
@@ -82,6 +95,7 @@ export function useWebPathRouteLifecycle(params: {
   useEffect(() => {
     if (params.publicRouteKind !== "app") return;
     if (hasPendingOAuthCallbackParams()) return;
+    if (hasCommunityLaunchSetupRouteParams()) return;
 
     const nextPath = params.buildAppRoutePath({
       page: params.activePage,

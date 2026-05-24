@@ -573,6 +573,7 @@ export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   ok: boolean;
   provider: "google_drive";
   community_id: string | null;
+  return_context_kind: "community_launch_knowledge" | null;
   email: string | null;
   error_message: string | null;
 }> {
@@ -588,6 +589,10 @@ export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
     community_id:
       typeof payload?.community_id === "string" && payload.community_id.trim()
         ? payload.community_id.trim()
+        : null,
+    return_context_kind:
+      payload?.return_context_kind === "community_launch_knowledge"
+        ? "community_launch_knowledge"
         : null,
     email: typeof payload?.email === "string" && payload.email.trim() ? payload.email.trim() : null,
     error_message:
@@ -716,6 +721,7 @@ export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
   ok: boolean;
   provider: "github";
   community_id: string | null;
+  return_context_kind: "community_launch_knowledge" | null;
   login: string | null;
   email: string | null;
   error_message: string | null;
@@ -732,6 +738,10 @@ export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
     community_id:
       typeof payload?.community_id === "string" && payload.community_id.trim()
         ? payload.community_id.trim()
+        : null,
+    return_context_kind:
+      payload?.return_context_kind === "community_launch_knowledge"
+        ? "community_launch_knowledge"
         : null,
     login: typeof payload?.login === "string" && payload.login.trim() ? payload.login.trim() : null,
     email: typeof payload?.email === "string" && payload.email.trim() ? payload.email.trim() : null,

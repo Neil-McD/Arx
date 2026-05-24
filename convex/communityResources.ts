@@ -178,6 +178,7 @@ const GITHUB_SOURCE_READABLE_EXTENSIONS = new Set([
 ]);
 
 type SourceIntegrationProvider = typeof GOOGLE_DRIVE_SOURCE_PROVIDER | typeof GITHUB_SOURCE_PROVIDER;
+type SourceIntegrationReturnContextKind = "community_launch_knowledge" | null;
 
 type UserSourceIntegrationConnectionRow = {
   _id?: unknown;
@@ -206,6 +207,7 @@ type UserSourceIntegrationAuthStateRow = {
   codeVerifier: string;
   redirectUri: string;
   returnToPath: string;
+  returnContextKind?: SourceIntegrationReturnContextKind;
   callbackCodeEncryptedHex?: string;
   callbackCodeIvHex?: string;
   callbackCodeVersion?: number;
@@ -243,6 +245,7 @@ type GoogleDriveOAuthFinalizeResult = {
   ok: boolean;
   provider: typeof GOOGLE_DRIVE_SOURCE_PROVIDER;
   community_id?: string | null;
+  return_context_kind?: SourceIntegrationReturnContextKind;
   email?: string | null;
   error_message?: string | null;
 };
@@ -284,6 +287,7 @@ type GitHubOAuthFinalizeResult = {
   ok: boolean;
   provider: typeof GITHUB_SOURCE_PROVIDER;
   community_id?: string | null;
+  return_context_kind?: SourceIntegrationReturnContextKind;
   login?: string | null;
   email?: string | null;
   error_message?: string | null;
@@ -369,6 +373,28 @@ function normalizeReturnToPath(value: unknown): string {
   return trimmed;
 }
 
+function normalizeSourceIntegrationReturnContextKind(value: unknown): SourceIntegrationReturnContextKind {
+  const normalized = normalizeSourceIntegrationString(value, 80);
+  return normalized === "community_launch_knowledge" ? normalized : null;
+}
+
+function resolveSourceIntegrationReturnContextKind(returnToPath: unknown): SourceIntegrationReturnContextKind {
+  try {
+    const url = new URL(normalizeReturnToPath(returnToPath), "https://polynet.ai");
+    const setup = String(url.searchParams.get("community_launch_setup") ?? "")
+      .trim()
+      .toLowerCase();
+    const step = String(url.searchParams.get("community_launch_step") ?? "")
+      .trim()
+      .toLowerCase();
+    return (setup === "1" || setup === "true") && step === "knowledge"
+      ? "community_launch_knowledge"
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeHttpsOrLocalOrigin(value: unknown): string | null {
   const raw = normalizeSourceIntegrationString(value, 2_000).replace(/\/+$/, "");
   if (!raw) return null;
@@ -428,6 +454,7 @@ function buildSourceIntegrationRedirectUrl(params: {
   message?: string | null;
   state?: string | null;
   finalizeToken?: string | null;
+  returnContextKind?: SourceIntegrationReturnContextKind;
 }): string {
   let origin = "https://polynet.ai";
   try {
@@ -438,6 +465,9 @@ function buildSourceIntegrationRedirectUrl(params: {
   const url = new URL(params.returnToPath || "/discover", origin);
   url.searchParams.set("source_integration_oauth", params.status);
   url.searchParams.set("source_integration_provider", params.provider);
+  if (params.returnContextKind) {
+    url.searchParams.set("source_integration_context", params.returnContextKind);
+  }
   if (params.message) url.searchParams.set("source_integration_message", params.message.slice(0, 300));
   if (params.state) url.searchParams.set("source_integration_state", params.state);
   if (params.finalizeToken) {
@@ -564,6 +594,7 @@ function stringifyGoogleDriveOAuthFinalizeResult(result: GoogleDriveOAuthFinaliz
     ok: result.ok === true,
     provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
     community_id: result.community_id ?? null,
+    return_context_kind: normalizeSourceIntegrationReturnContextKind(result.return_context_kind),
     email: result.email ?? null,
     error_message: result.error_message ?? null,
   });
@@ -577,6 +608,7 @@ function parseGoogleDriveOAuthFinalizeResult(raw: unknown): GoogleDriveOAuthFina
       ok: parsed.ok === true,
       provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
       community_id: normalizeSourceIntegrationString(parsed.community_id, 200) || null,
+      return_context_kind: normalizeSourceIntegrationReturnContextKind(parsed.return_context_kind),
       email: normalizeSourceIntegrationString(parsed.email, 320) || null,
       error_message: normalizeSourceIntegrationString(parsed.error_message, 500) || null,
     };
@@ -590,6 +622,7 @@ function stringifyGitHubOAuthFinalizeResult(result: GitHubOAuthFinalizeResult): 
     ok: result.ok === true,
     provider: GITHUB_SOURCE_PROVIDER,
     community_id: result.community_id ?? null,
+    return_context_kind: normalizeSourceIntegrationReturnContextKind(result.return_context_kind),
     login: result.login ?? null,
     email: result.email ?? null,
     error_message: result.error_message ?? null,
@@ -604,6 +637,7 @@ function parseGitHubOAuthFinalizeResult(raw: unknown): GitHubOAuthFinalizeResult
       ok: parsed.ok === true,
       provider: GITHUB_SOURCE_PROVIDER,
       community_id: normalizeSourceIntegrationString(parsed.community_id, 200) || null,
+      return_context_kind: normalizeSourceIntegrationReturnContextKind(parsed.return_context_kind),
       login: normalizeSourceIntegrationString(parsed.login, 320) || null,
       email: normalizeSourceIntegrationString(parsed.email, 320) || null,
       error_message: normalizeSourceIntegrationString(parsed.error_message, 500) || null,
@@ -3559,6 +3593,7 @@ export const insertGoogleDriveSourceAuthStateInternal = internalMutation({
     codeVerifier: v.string(),
     redirectUri: v.string(),
     returnToPath: v.string(),
+    returnContextKind: v.optional(v.literal("community_launch_knowledge")),
     createdAt: v.number(),
     expiresAt: v.number(),
   },
@@ -3571,6 +3606,7 @@ export const insertGoogleDriveSourceAuthStateInternal = internalMutation({
       codeVerifier: normalizeSourceIntegrationString(args.codeVerifier, 500),
       redirectUri: normalizeSourceIntegrationString(args.redirectUri, 2_000),
       returnToPath: normalizeReturnToPath(args.returnToPath),
+      returnContextKind: normalizeSourceIntegrationReturnContextKind(args.returnContextKind) ?? undefined,
       createdAt: args.createdAt,
       expiresAt: args.expiresAt,
     });
@@ -3787,6 +3823,7 @@ export const insertGitHubSourceAuthStateInternal = internalMutation({
     codeVerifier: v.string(),
     redirectUri: v.string(),
     returnToPath: v.string(),
+    returnContextKind: v.optional(v.literal("community_launch_knowledge")),
     createdAt: v.number(),
     expiresAt: v.number(),
   },
@@ -3799,6 +3836,7 @@ export const insertGitHubSourceAuthStateInternal = internalMutation({
       codeVerifier: normalizeSourceIntegrationString(args.codeVerifier, 500),
       redirectUri: normalizeSourceIntegrationString(args.redirectUri, 2_000),
       returnToPath: normalizeReturnToPath(args.returnToPath),
+      returnContextKind: normalizeSourceIntegrationReturnContextKind(args.returnContextKind) ?? undefined,
       createdAt: args.createdAt,
       expiresAt: args.expiresAt,
     });
@@ -4132,13 +4170,15 @@ export const beginGoogleDriveSourceOAuth = action({
     const codeChallenge = await sha256Base64Url(codeVerifier);
     const state = randomBase64Url(32);
     const nowMs = Date.now();
+    const returnToPath = normalizeReturnToPath(args.returnToPath);
     await ctx.runMutation((internal as any).communityResources.insertGoogleDriveSourceAuthStateInternal, {
       userId,
       communityId: args.communityId,
       state,
       codeVerifier,
       redirectUri,
-      returnToPath: normalizeReturnToPath(args.returnToPath),
+      returnToPath,
+      returnContextKind: resolveSourceIntegrationReturnContextKind(returnToPath) ?? undefined,
       createdAt: nowMs,
       expiresAt: nowMs + GOOGLE_DRIVE_SOURCE_OAUTH_STATE_TTL_MS,
     });
@@ -4191,6 +4231,7 @@ export const completeGoogleDriveSourceOAuthCallbackInternal = internalAction({
           returnToPath: row.returnToPath,
           status: "error",
           provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+          returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
           message: "Google Drive connection expired. Start again.",
         }),
       };
@@ -4202,6 +4243,7 @@ export const completeGoogleDriveSourceOAuthCallbackInternal = internalAction({
           returnToPath: row.returnToPath,
           status: "error",
           provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+          returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
           message:
             normalizeSourceIntegrationString(args.oauthErrorDescription, 300) ||
             oauthError ||
@@ -4216,6 +4258,7 @@ export const completeGoogleDriveSourceOAuthCallbackInternal = internalAction({
           returnToPath: row.returnToPath,
           status: "error",
           provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+          returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
           message: "Google Drive callback did not include an authorization code.",
         }),
       };
@@ -4235,6 +4278,7 @@ export const completeGoogleDriveSourceOAuthCallbackInternal = internalAction({
         returnToPath: row.returnToPath,
         status: "pending",
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+        returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
         state,
         finalizeToken,
       }),
@@ -4264,11 +4308,13 @@ export const finalizeGoogleDriveSourceOAuth = action({
       };
     }
     const sourceCommunityId = normalizeSourceIntegrationString(row.communityId, 200) || null;
+    const sourceReturnContextKind = normalizeSourceIntegrationReturnContextKind(row.returnContextKind);
     if (String(row.userId) !== String(userId)) {
       return {
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
         community_id: sourceCommunityId,
+        return_context_kind: sourceReturnContextKind,
         error_message: "Google Drive must be finalized by the Polynet account that started it.",
       };
     }
@@ -4295,6 +4341,7 @@ export const finalizeGoogleDriveSourceOAuth = action({
       return {
         ...result,
         community_id: result.community_id ?? sourceCommunityId,
+        return_context_kind: result.return_context_kind ?? sourceReturnContextKind,
       };
     }
     if (!row.callbackCodeEncryptedHex || !row.callbackCodeIvHex) {
@@ -4302,6 +4349,7 @@ export const finalizeGoogleDriveSourceOAuth = action({
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
         community_id: sourceCommunityId,
+        return_context_kind: sourceReturnContextKind,
         error_message: "Google Drive callback has not completed yet.",
       };
     }
@@ -4330,6 +4378,7 @@ export const finalizeGoogleDriveSourceOAuth = action({
         ok: false,
         provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
         community_id: sourceCommunityId,
+        return_context_kind: sourceReturnContextKind,
         error_message: "Google Drive authorization could not be finalized. Start again.",
       } satisfies GoogleDriveOAuthFinalizeResult;
       await ctx.runMutation((internal as any).communityResources.failGoogleDriveSourceOAuthFinalizeInternal, {
@@ -4358,6 +4407,7 @@ export const finalizeGoogleDriveSourceOAuth = action({
       ok: true,
       provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
       community_id: sourceCommunityId,
+      return_context_kind: sourceReturnContextKind,
       email,
     } satisfies GoogleDriveOAuthFinalizeResult;
     await ctx.runMutation((internal as any).communityResources.completeGoogleDriveSourceOAuthFinalizeInternal, {
@@ -4536,13 +4586,15 @@ export const beginGitHubSourceOAuth = action({
     const codeChallenge = await sha256Base64Url(codeVerifier);
     const state = randomBase64Url(32);
     const nowMs = Date.now();
+    const returnToPath = normalizeReturnToPath(args.returnToPath);
     await ctx.runMutation((internal as any).communityResources.insertGitHubSourceAuthStateInternal, {
       userId,
       communityId: args.communityId,
       state,
       codeVerifier,
       redirectUri,
-      returnToPath: normalizeReturnToPath(args.returnToPath),
+      returnToPath,
+      returnContextKind: resolveSourceIntegrationReturnContextKind(returnToPath) ?? undefined,
       createdAt: nowMs,
       expiresAt: nowMs + GITHUB_SOURCE_OAUTH_STATE_TTL_MS,
     });
@@ -4592,6 +4644,7 @@ export const completeGitHubSourceOAuthCallbackInternal = internalAction({
           returnToPath: row.returnToPath,
           status: "error",
           provider: GITHUB_SOURCE_PROVIDER,
+          returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
           message: "GitHub connection expired. Start again.",
         }),
       };
@@ -4603,6 +4656,7 @@ export const completeGitHubSourceOAuthCallbackInternal = internalAction({
           returnToPath: row.returnToPath,
           status: "error",
           provider: GITHUB_SOURCE_PROVIDER,
+          returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
           message:
             normalizeSourceIntegrationString(args.oauthErrorDescription, 300) ||
             oauthError ||
@@ -4617,6 +4671,7 @@ export const completeGitHubSourceOAuthCallbackInternal = internalAction({
           returnToPath: row.returnToPath,
           status: "error",
           provider: GITHUB_SOURCE_PROVIDER,
+          returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
           message: "GitHub callback did not include an authorization code.",
         }),
       };
@@ -4636,6 +4691,7 @@ export const completeGitHubSourceOAuthCallbackInternal = internalAction({
         returnToPath: row.returnToPath,
         status: "pending",
         provider: GITHUB_SOURCE_PROVIDER,
+        returnContextKind: normalizeSourceIntegrationReturnContextKind(row.returnContextKind),
         state,
         finalizeToken,
       }),
@@ -4665,11 +4721,13 @@ export const finalizeGitHubSourceOAuth = action({
       };
     }
     const sourceCommunityId = normalizeSourceIntegrationString(row.communityId, 200) || null;
+    const sourceReturnContextKind = normalizeSourceIntegrationReturnContextKind(row.returnContextKind);
     if (String(row.userId) !== String(userId)) {
       return {
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
         community_id: sourceCommunityId,
+        return_context_kind: sourceReturnContextKind,
         error_message: "GitHub must be finalized by the Polynet account that started it.",
       };
     }
@@ -4696,6 +4754,7 @@ export const finalizeGitHubSourceOAuth = action({
       return {
         ...result,
         community_id: result.community_id ?? sourceCommunityId,
+        return_context_kind: result.return_context_kind ?? sourceReturnContextKind,
       };
     }
     if (!row.callbackCodeEncryptedHex || !row.callbackCodeIvHex) {
@@ -4703,6 +4762,7 @@ export const finalizeGitHubSourceOAuth = action({
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
         community_id: sourceCommunityId,
+        return_context_kind: sourceReturnContextKind,
         error_message: "GitHub callback has not completed yet.",
       };
     }
@@ -4730,6 +4790,7 @@ export const finalizeGitHubSourceOAuth = action({
         ok: false,
         provider: GITHUB_SOURCE_PROVIDER,
         community_id: sourceCommunityId,
+        return_context_kind: sourceReturnContextKind,
         error_message: "GitHub authorization could not be finalized. Start again.",
       } satisfies GitHubOAuthFinalizeResult;
       await ctx.runMutation((internal as any).communityResources.failGitHubSourceOAuthFinalizeInternal, {
@@ -4766,6 +4827,7 @@ export const finalizeGitHubSourceOAuth = action({
       ok: true,
       provider: GITHUB_SOURCE_PROVIDER,
       community_id: sourceCommunityId,
+      return_context_kind: sourceReturnContextKind,
       login: viewer.login,
       email: viewer.email,
     } satisfies GitHubOAuthFinalizeResult;

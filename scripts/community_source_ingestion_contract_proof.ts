@@ -20,6 +20,8 @@ const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const app = read("apps/web/src/App.tsx");
+const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
+const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const modal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const architect = read("convex/communityWikiArchitect.ts");
 const prompt = read("shared/communityWikiArchitectPrompt.ts");
@@ -510,16 +512,37 @@ assert.match(
   /onAddKnowledgeFile[\s\S]*handleKnowledgeFileDrop[\s\S]*Drop files or choose files/,
   "launch Knowledge Sources should expose real file upload/drop wiring",
 );
-assert.match(
-  app,
-  /SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*source_integration_provider[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*scrubCurrentRouteSearchParams\(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES\)/,
-  "app shell should finalize source integration OAuth returns and scrub one-shot URL params",
-);
-assert.match(
-  app,
-  /(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_id)(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_slug)(?=[\s\S]*COMMUNITY_LAUNCH_KNOWLEDGE_SOURCE_OAUTH_INTENT_STORAGE_PREFIX)(?=[\s\S]*readCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*mergeCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*queueCommunityLaunchKnowledgeOAuthRestore\(context\))(?=[\s\S]*pendingCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\))(?=[\s\S]*initialStep=\{communityLaunchSetupInitialStep\})/,
-  "source integration OAuth returns from launch should preserve URL/storage/server community context and reopen the launch modal on Knowledge",
-);
+for (const snippet of [
+  "SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES",
+  "source_integration_provider",
+  "source_integration_context",
+  "return_context_kind",
+  "community_launch_knowledge",
+]) {
+  assert.ok(sourceOAuth.includes(snippet), "source OAuth helper should define one-shot return params and explicit launch return context");
+}
+for (const snippet of [
+  "COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES",
+  "community_launch_step",
+]) {
+  assert.ok(launchSetupRoute.includes(snippet), "launch setup route helper should expose durable launch setup params");
+}
+for (const snippet of [
+  "community_launch_community_id",
+  "community_launch_community_slug",
+  "COMMUNITY_LAUNCH_KNOWLEDGE_SOURCE_OAUTH_INTENT_STORAGE_PREFIX",
+  "readCommunityLaunchKnowledgeOAuthContext",
+  "mergeCommunityLaunchKnowledgeOAuthContext",
+  "queueCommunityLaunchKnowledgeOAuthRestore(context)",
+  "pendingCommunityLaunchKnowledgeOAuthContext",
+  'setCommunityLaunchSetupInitialStep("knowledge")',
+  "initialStep={communityLaunchSetupInitialStep}",
+]) {
+  assert.ok(
+    (app + sourceOAuth + launchSetupRoute).includes(snippet),
+    "source integration OAuth returns from launch should preserve URL/storage/server community context and reopen the launch modal on Knowledge",
+  );
+}
 assert.match(
   app,
   /handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,

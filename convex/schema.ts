@@ -658,6 +658,7 @@ export default defineSchema({
     codeVerifier: v.string(),
     redirectUri: v.string(),
     returnToPath: v.string(),
+    returnContextKind: v.optional(v.literal("community_launch_knowledge")),
     callbackCodeEncryptedHex: v.optional(v.string()),
     callbackCodeIvHex: v.optional(v.string()),
     callbackCodeVersion: v.optional(v.number()),

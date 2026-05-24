@@ -291,6 +291,7 @@ type WebCommunityLaunchSetupModalProps = {
   community: CommunityLaunchSetupCommunity | null;
   status: CommunityLaunchSetupStatus | null;
   onClose: () => void;
+  onStepChange?: (step: CommunityLaunchSetupStep) => void;
   onOpenStep: (step: CommunityLaunchSetupStep) => void;
   onCreateCommunity?: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
@@ -457,6 +458,7 @@ export function WebCommunityLaunchSetupModal(
     community,
     status,
     onClose,
+    onStepChange,
     onOpenStep,
     onCreateCommunity,
     onSaveProfile,
@@ -761,6 +763,7 @@ export function WebCommunityLaunchSetupModal(
       if (nextStep) {
         setStepOverride(nextStep);
         setActiveStep(nextStep);
+        onStepChange?.(nextStep);
         setStepSuccess(null);
       } else {
         setStepSuccess(successMessage);
@@ -1642,8 +1645,8 @@ export function WebCommunityLaunchSetupModal(
                 </span>
                 <strong>Connect source systems</strong>
                 <p>
-                  Connect cloud sources that can become community context once
-                  scoped and approved.
+                  Connect manager-authorized source access, then choose the
+                  exact material to queue for community resources.
                 </p>
                 <div
                   className="community-launch-knowledge-integrations"
@@ -2056,6 +2059,7 @@ export function WebCommunityLaunchSetupModal(
                       if (disabled) return;
                       setStepOverride(step);
                       setActiveStep(step);
+                      onStepChange?.(step);
                       setStepError(null);
                       setStepSuccess(null);
                     }}

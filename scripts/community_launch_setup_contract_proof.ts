@@ -20,6 +20,9 @@ const setupCard = read(
 const setupModal = read(
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
 );
+const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
+const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
+const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const baseCss = read("apps/web/src/base.css");
 const appShell = read("apps/web/src/App.tsx");
 const shellChromeHostProps = read(
@@ -451,9 +454,39 @@ assert.match(
   "launch knowledge GitHub chip must connect first, then allow repository/file selection and import",
 );
 assert.match(
+  sourceOAuth,
+  /SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*source_integration_oauth[\s\S]*source_integration_finalize_token[\s\S]*source_integration_context[\s\S]*normalizeSourceIntegrationOAuthProvider[\s\S]*readCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*return_context_kind[\s\S]*community_launch_knowledge/,
+  "source integration OAuth launch restore helpers must own return params, stored intent, and explicit return context",
+);
+assert.match(
   appShell,
-  /SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*source_integration_oauth[\s\S]*source_integration_finalize_token[\s\S]*normalizeSourceIntegrationOAuthProvider[\s\S]*readCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*`\$\{providerLabel\} connected\.`/,
-  "app shell must finalize source integration OAuth returns for the launch integration flow",
+  /readCommunityLaunchKnowledgeOAuthContext[\s\S]*readCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*mergeCommunityLaunchKnowledgeOAuthContext[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*`\$\{providerLabel\} connected\.`/,
+  "app shell must use the source OAuth helpers to finalize launch integration returns",
+);
+assert.match(
+  launchSetupRoute,
+  /COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES[\s\S]*community_launch_setup[\s\S]*community_launch_step[\s\S]*parseCommunityLaunchSetupRouteStep[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*buildCommunityLaunchSetupRoutePath/,
+  "launch setup route helper must own parse/build behavior for durable setup-step URLs",
+);
+assert.match(
+  routeLifecycle,
+  /source_integration_oauth[\s\S]*hasCommunityLaunchSetupRouteParams[\s\S]*community_launch_setup[\s\S]*hasCommunityLaunchSetupRouteParams\(\)\) return/,
+  "route lifecycle must preserve source OAuth and launch setup query params instead of canonicalizing them away",
+);
+assert.match(
+  appShell,
+  /pendingCommunityLaunchSetupRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*replaceCommunityLaunchSetupRouteState[\s\S]*buildCommunityLaunchSetupRoutePath[\s\S]*clearCommunityLaunchSetupRouteState[\s\S]*COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES/,
+  "app shell must persist launch setup modal state to the URL and scrub only launch setup params on close",
+);
+assert.match(
+  appShell,
+  /const context = pendingCommunityLaunchSetupRouteContext[\s\S]*context\.step[\s\S]*applyCommunityShellState[\s\S]*setCommunityLaunchSetupInitialStep\(context\.step\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
+  "app shell must restore launch setup modal and exact step from durable route state after refresh",
+);
+assert.match(
+  setupModal,
+  /onStepChange\?:[\s\S]*onStepChange,[\s\S]*onStepChange\?\.\(nextStep\)[\s\S]*onStepChange\?\.\(step\)/,
+  "launch setup modal step changes must notify the shell so the durable route stays current",
 );
 assert.match(
   appShell,
