@@ -512,23 +512,33 @@ assert.match(
 );
 assert.match(
   app,
-  /SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_setup[\s\S]*community_launch_step[\s\S]*shouldRestoreCommunityLaunchKnowledgeStep[\s\S]*restoreCommunityLaunchKnowledgeOAuthContext[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\)[\s\S]*initialStep=\{communityLaunchSetupInitialStep\}/,
-  "source integration OAuth returns from launch should reopen the launch modal on Knowledge",
+  /(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_id)(?=[\s\S]*SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*community_launch_community_slug)(?=[\s\S]*readCommunityLaunchKnowledgeOAuthContext)(?=[\s\S]*restoreCommunityLaunchKnowledgeOAuthContext\(launchKnowledgeContext\))(?=[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\))(?=[\s\S]*initialStep=\{communityLaunchSetupInitialStep\})/,
+  "source integration OAuth returns from launch should preserve community context and reopen the launch modal on Knowledge",
 );
 assert.match(
   app,
-  /handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\)[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
+  /handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
   "launch Knowledge integration handlers should connect, list, and import Google Drive files",
 );
 assert.match(
   app,
-  /handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\)[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
+  /handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
   "launch Knowledge integration handlers should connect, list, and import GitHub files",
+);
+assert.match(
+  app,
+  /sourceIntegrationOAuthFinalizeInFlightRef[\s\S]*restoreLaunchKnowledgeContext\(\);[\s\S]*if \(!session\) return[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*setCommunityLaunchKnowledgeIntegrationReloadKey\(\(key\) => key \+ 1\)/,
+  "source integration OAuth finalize should restore launch context before session readiness and reload provider connection after success",
 );
 assert.match(
   modal,
   /initialStep\?: CommunityLaunchSetupStep \| null[\s\S]*requestedInitialStep[\s\S]*setStepOverride\(requestedInitialStep\)[\s\S]*setActiveStep\(requestedInitialStep \?\?/,
   "launch setup modal should accept a one-shot initial step for OAuth return continuity",
+);
+assert.match(
+  modal,
+  /knowledgeIntegrationReloadKey\?: string \| number \| null[\s\S]*onLoadKnowledgeGoogleDriveConnection[\s\S]*knowledgeIntegrationReloadKey[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*knowledgeIntegrationReloadKey/,
+  "launch setup modal should reload source integration connection state after OAuth finalize",
 );
 assert.match(
   modal,

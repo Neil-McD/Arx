@@ -1014,9 +1014,17 @@ const SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES = [
   "source_integration_message",
   "community_launch_setup",
   "community_launch_step",
+  "community_launch_community_id",
+  "community_launch_community_slug",
 ] as const;
 const APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX = "app_oauth_finalize:";
 const APP_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
+
+type CommunityLaunchKnowledgeOAuthContext = {
+  shouldRestore: boolean;
+  communityId: string | null;
+  communitySlug: string | null;
+};
 
 function buildAppOAuthFinalizeSessionGuardKey(
   state: string,
@@ -1042,29 +1050,56 @@ function claimAppOAuthFinalizeSessionGuard(key: string): boolean {
   }
 }
 
-function buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(): string {
+function normalizeLaunchOAuthContextParam(value: unknown, maxLength = 300): string | null {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(args: {
+  communityId?: string | null;
+  communitySlug?: string | null;
+} = {}): string {
+  const communityId = normalizeLaunchOAuthContextParam(args.communityId);
+  const communitySlug = normalizeLaunchOAuthContextParam(args.communitySlug);
   if (typeof window === "undefined") {
-    return "/discover?community_launch_setup=1&community_launch_step=knowledge";
+    const fallback = new URL("/workspace", "https://www.polynet.ai");
+    fallback.searchParams.set("community_launch_setup", "1");
+    fallback.searchParams.set("community_launch_step", "knowledge");
+    if (communityId) fallback.searchParams.set("community_launch_community_id", communityId);
+    if (communitySlug) fallback.searchParams.set("community_launch_community_slug", communitySlug);
+    return `${fallback.pathname}${fallback.search}`;
   }
-  const url = new URL(
-    `${window.location.pathname}${window.location.search}`,
-    window.location.origin,
-  );
+  const routePath =
+    buildAppRoutePath({
+      page: "workspace",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug,
+      communityTab: "chat",
+      threadId: null,
+    }) ?? buildWorkspaceDraftPath();
+  const url = new URL(routePath, window.location.origin);
   url.searchParams.set("community_launch_setup", "1");
   url.searchParams.set("community_launch_step", "knowledge");
+  if (communityId) url.searchParams.set("community_launch_community_id", communityId);
+  if (communitySlug) url.searchParams.set("community_launch_community_slug", communitySlug);
   return `${url.pathname}${url.search}`;
 }
 
-function shouldRestoreCommunityLaunchKnowledgeStep(
+function readCommunityLaunchKnowledgeOAuthContext(
   params: URLSearchParams,
-): boolean {
+): CommunityLaunchKnowledgeOAuthContext {
   const setup = String(params.get("community_launch_setup") ?? "")
     .trim()
     .toLowerCase();
   const step = String(params.get("community_launch_step") ?? "")
     .trim()
     .toLowerCase();
-  return (setup === "1" || setup === "true") && step === "knowledge";
+  return {
+    shouldRestore: (setup === "1" || setup === "true") && step === "knowledge",
+    communityId: normalizeLaunchOAuthContextParam(params.get("community_launch_community_id")),
+    communitySlug: normalizeLaunchOAuthContextParam(params.get("community_launch_community_slug")),
+  };
 }
 
 function clearAppOAuthFinalizeSessionGuard(key: string): void {
@@ -1685,6 +1720,10 @@ export default function App() {
     useState(false);
   const [communityLaunchSetupInitialStep, setCommunityLaunchSetupInitialStep] =
     useState<CommunityLaunchSetupStep | null>(null);
+  const [
+    communityLaunchKnowledgeIntegrationReloadKey,
+    setCommunityLaunchKnowledgeIntegrationReloadKey,
+  ] = useState(0);
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const profileUi = useWebProfileSettingsUiController({
@@ -3001,11 +3040,55 @@ export default function App() {
     return nextPublicRoute;
   }, [applyAppRouteState]);
 
-  const restoreCommunityLaunchKnowledgeOAuthContext = useCallback(() => {
+  const restoreCommunityLaunchKnowledgeOAuthContext = useCallback((context?: {
+    communityId?: string | null;
+    communitySlug?: string | null;
+  }) => {
+    const restoredCommunityId =
+      normalizeLaunchOAuthContextParam(context?.communityId) ??
+      normalizeLaunchOAuthContextParam(activeCommunityId);
+    const restoredCommunitySlug =
+      normalizeLaunchOAuthContextParam(context?.communitySlug) ??
+      normalizeLaunchOAuthContextParam(selectedActiveCommunitySlug ?? activeCommunity?.slug);
+    if (restoredCommunitySlug) {
+      const routePath = buildAppRoutePath({
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: restoredCommunitySlug,
+        communityTab: "chat",
+        threadId: null,
+      });
+      if (routePath) {
+        const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (nextPath !== currentPath && !window.location.search.includes("source_integration_oauth=")) {
+          window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+          applyLocationToState();
+        }
+      }
+      applyCommunityShellState({
+        communityId: restoredCommunityId,
+        communitySlug: restoredCommunitySlug,
+        communityTab: "chat",
+      });
+    } else if (restoredCommunityId) {
+      applyCommunityShellState({
+        communityId: restoredCommunityId,
+        communityTab: "chat",
+      });
+    }
     setIsCommunityLaunchCreateMode(false);
     setCommunityLaunchSetupInitialStep("knowledge");
     setIsCommunityLaunchSetupModalOpen(true);
-  }, []);
+  }, [
+    activeCommunity?.slug,
+    activeCommunityId,
+    applyCommunityShellState,
+    applyLocationToState,
+    selectedActiveCommunitySlug,
+    shellVariant,
+  ]);
 
   const applyStandaloneWorkspaceLaunch = useCallback((nextPath: string) => {
     window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
@@ -4694,12 +4777,18 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("source_integration_oauth");
     if (!status) return;
-    const restoreLaunchKnowledgeStep = shouldRestoreCommunityLaunchKnowledgeStep(params);
+    const launchKnowledgeContext = readCommunityLaunchKnowledgeOAuthContext(params);
+    const restoreLaunchKnowledgeStep = launchKnowledgeContext.shouldRestore;
+    const restoreLaunchKnowledgeContext = () => {
+      if (restoreLaunchKnowledgeStep) {
+        restoreCommunityLaunchKnowledgeOAuthContext(launchKnowledgeContext);
+      }
+    };
     const provider = params.get("source_integration_provider")?.trim() ?? "";
     if (provider !== "google_drive" && provider !== "github") {
       scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
       applyLocationToState();
-      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      restoreLaunchKnowledgeContext();
       return;
     }
     const providerLabel = provider === "github" ? "GitHub" : "Google Drive";
@@ -4711,14 +4800,14 @@ export default function App() {
       );
       scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
       applyLocationToState();
-      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      restoreLaunchKnowledgeContext();
       return;
     }
 
     if (status !== "pending") {
       scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
       applyLocationToState();
-      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      restoreLaunchKnowledgeContext();
       return;
     }
     const state = params.get("source_integration_state")?.trim() ?? "";
@@ -4727,9 +4816,10 @@ export default function App() {
       showAppToastMessage(`${providerLabel} connection could not be finalized.`);
       scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
       applyLocationToState();
-      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      restoreLaunchKnowledgeContext();
       return;
     }
+    restoreLaunchKnowledgeContext();
     if (!session) return;
     const inFlightKey = `${state}:${finalizeToken}`;
     if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) return;
@@ -4742,17 +4832,29 @@ export default function App() {
 
     void (async () => {
       try {
-        const result = provider === "github"
-          ? await finalizeCloudCommunityGitHubSourceOAuth({
-              session,
-              state,
-              finalizeToken,
-            })
-          : await finalizeCloudCommunityGoogleDriveSourceOAuth({
-              session,
-              state,
-              finalizeToken,
-            });
+        let result:
+          | Awaited<ReturnType<typeof finalizeCloudCommunityGitHubSourceOAuth>>
+          | Awaited<ReturnType<typeof finalizeCloudCommunityGoogleDriveSourceOAuth>>;
+        try {
+          result = provider === "github"
+            ? await finalizeCloudCommunityGitHubSourceOAuth({
+                session,
+                state,
+                finalizeToken,
+              })
+            : await finalizeCloudCommunityGoogleDriveSourceOAuth({
+                session,
+                state,
+                finalizeToken,
+              });
+        } catch {
+          result = {
+            ok: false,
+            provider,
+            email: null,
+            error_message: `${providerLabel} connection could not be finalized. Try again.`,
+          } as Awaited<ReturnType<typeof finalizeCloudCommunityGoogleDriveSourceOAuth>>;
+        }
         showAppToastMessage(
           result.ok
             ? `${providerLabel} connected.`
@@ -4760,7 +4862,10 @@ export default function App() {
         );
         scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
         applyLocationToState();
-        if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+        restoreLaunchKnowledgeContext();
+        if (result.ok && restoreLaunchKnowledgeStep) {
+          setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
+        }
       } finally {
         clearAppOAuthFinalizeSessionGuard(sessionGuardKey);
         if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) {
@@ -7875,7 +7980,10 @@ export default function App() {
       const result = await beginCloudCommunityGoogleDriveSourceOAuth({
         session,
         communityId: community.id,
-        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(),
+        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath({
+          communityId: community.id,
+          communitySlug: community.slug,
+        }),
       });
       if (result.ok && result.authorize_url) {
         window.location.assign(result.authorize_url);
@@ -7913,7 +8021,10 @@ export default function App() {
       const result = await beginCloudCommunityGitHubSourceOAuth({
         session,
         communityId: community.id,
-        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(),
+        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath({
+          communityId: community.id,
+          communitySlug: community.slug,
+        }),
       });
       if (result.ok && result.authorize_url) {
         window.location.assign(result.authorize_url);
@@ -9697,6 +9808,7 @@ export default function App() {
         }
         status={communityLaunchSetupStatus}
         initialStep={communityLaunchSetupInitialStep}
+        knowledgeIntegrationReloadKey={communityLaunchKnowledgeIntegrationReloadKey}
         onClose={() => {
           setIsCommunityLaunchSetupModalOpen(false);
           setIsCommunityLaunchCreateMode(false);

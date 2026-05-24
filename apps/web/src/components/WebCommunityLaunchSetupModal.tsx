@@ -287,6 +287,7 @@ type WebCommunityLaunchSetupModalProps = {
   isOpen: boolean;
   mode?: "setup" | "create";
   initialStep?: CommunityLaunchSetupStep | null;
+  knowledgeIntegrationReloadKey?: string | number | null;
   community: CommunityLaunchSetupCommunity | null;
   status: CommunityLaunchSetupStatus | null;
   onClose: () => void;
@@ -452,6 +453,7 @@ export function WebCommunityLaunchSetupModal(
     isOpen,
     mode = "setup",
     initialStep = null,
+    knowledgeIntegrationReloadKey = null,
     community,
     status,
     onClose,
@@ -660,7 +662,7 @@ export function WebCommunityLaunchSetupModal(
     return () => {
       cancelled = true;
     };
-  }, [activeStep, isOpen, onLoadKnowledgeGoogleDriveConnection]);
+  }, [activeStep, isOpen, knowledgeIntegrationReloadKey, onLoadKnowledgeGoogleDriveConnection]);
 
   useEffect(() => {
     if (!isOpen || activeStep !== "knowledge" || !onLoadKnowledgeGitHubConnection) return;
@@ -679,7 +681,7 @@ export function WebCommunityLaunchSetupModal(
     return () => {
       cancelled = true;
     };
-  }, [activeStep, isOpen, onLoadKnowledgeGitHubConnection]);
+  }, [activeStep, isOpen, knowledgeIntegrationReloadKey, onLoadKnowledgeGitHubConnection]);
 
   const createModeStatus = useMemo(
     () =>
