@@ -627,8 +627,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onDisconnectKnowledgeGitHub/,
-  "launch Knowledge modal props should expose the GitHub integration lifecycle",
+  /knowledgeGitHubSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onRemoveKnowledgeGitHubSource[\s\S]*onDisconnectKnowledgeGitHub/,
+  "launch Knowledge modal props should expose saved GitHub sources and the GitHub integration lifecycle",
 );
 assert.match(
   modal,
@@ -654,6 +654,16 @@ assert.match(
   modal,
   /knowledgeGitHubSelectableFileIds[\s\S]*handleSelectAllGitHubFiles[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-list[\s\S]*Select first \$\{COMMUNITY_LAUNCH_MAX_GITHUB_FILES\}[\s\S]*Select all/,
   "launch Knowledge modal should show GitHub files inline under the selected repo and support one-action capped file selection",
+);
+assert.match(
+  modal,
+  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveGitHubSource)(?=[\s\S]*onRemoveKnowledgeGitHubSource)(?=[\s\S]*effectiveKnowledgeGitHubSources)(?=[\s\S]*GitHub source)(?=[\s\S]*community-launch-knowledge-imported-source)/,
+  "launch Knowledge modal should show saved GitHub sources inline, mark selected GitHub files as Added, and delete individual sources",
+);
+assert.match(
+  modal,
+  /alreadyAdded = knowledgeGitHubImportedExternalIds\.has\(file\.id\)[\s\S]*alreadyAdded \? "Added"/,
+  "launch Knowledge modal should mark already imported GitHub files as Added in the repo picker",
 );
 assert.match(
   modal,

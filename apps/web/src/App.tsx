@@ -898,6 +898,26 @@ type CommunityResource = {
   created_at: string;
 };
 
+function mapCommunityLaunchExternalSources(
+  resources: CommunityResource[],
+  provider: "google_drive" | "github",
+): CommunityLaunchKnowledgeImportedSource[] {
+  return resources
+    .filter((resource) =>
+      resource.resource_role === "source" &&
+      resource.source_external_provider === provider,
+    )
+    .map((resource) => ({
+      id: resource.id,
+      title: resource.title,
+      source_ingestion_status: resource.source_ingestion_status,
+      source_ingestion_error: resource.source_ingestion_error ?? null,
+      source_external_id: resource.source_external_id ?? null,
+      source_external_url: resource.source_external_url ?? null,
+      source_external_mime_type: resource.source_external_mime_type ?? null,
+    }));
+}
+
 type CommunityResourceModule = {
   id: string;
   community_id?: string | null;
@@ -2402,20 +2422,10 @@ export default function App() {
     setIsLoadingResourceModules,
   });
   const communityLaunchGoogleDriveSources = useMemo<CommunityLaunchKnowledgeImportedSource[]>(() => {
-    return communityResources
-      .filter((resource) =>
-        resource.resource_role === "source" &&
-        resource.source_external_provider === "google_drive",
-      )
-      .map((resource) => ({
-        id: resource.id,
-        title: resource.title,
-        source_ingestion_status: resource.source_ingestion_status,
-        source_ingestion_error: resource.source_ingestion_error ?? null,
-        source_external_id: resource.source_external_id ?? null,
-        source_external_url: resource.source_external_url ?? null,
-        source_external_mime_type: resource.source_external_mime_type ?? null,
-      }));
+    return mapCommunityLaunchExternalSources(communityResources, "google_drive");
+  }, [communityResources]);
+  const communityLaunchGitHubSources = useMemo<CommunityLaunchKnowledgeImportedSource[]>(() => {
+    return mapCommunityLaunchExternalSources(communityResources, "github");
   }, [communityResources]);
   const {
     loadCommunityEvents,
@@ -8238,7 +8248,7 @@ export default function App() {
       await refreshActiveCommunityLaunchSetupStatus();
       return result;
     };
-    const handleRemoveCommunityLaunchGoogleDriveSource = async (resourceId: string) => {
+    const handleRemoveCommunityLaunchKnowledgeSource = async (resourceId: string) => {
       const { session, community } = requireCommunityLaunchSaveContext();
       await deleteCloudCommunityResource({
         session,
@@ -10085,6 +10095,7 @@ export default function App() {
         knowledgeIntegrationReloadKey={communityLaunchKnowledgeIntegrationReloadKey}
         knowledgeAutoOpenProvider={communityLaunchKnowledgeAutoOpenProvider}
         knowledgeGoogleDriveSources={communityLaunchGoogleDriveSources}
+        knowledgeGitHubSources={communityLaunchGitHubSources}
         onClose={() => {
           setIsCommunityLaunchSetupModalOpen(false);
           setIsCommunityLaunchCreateMode(false);
@@ -10114,13 +10125,14 @@ export default function App() {
         onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}
         onListKnowledgeGoogleDriveFiles={handleListCommunityLaunchGoogleDriveFiles}
         onImportKnowledgeGoogleDriveFiles={handleImportCommunityLaunchGoogleDriveFiles}
-        onRemoveKnowledgeGoogleDriveSource={handleRemoveCommunityLaunchGoogleDriveSource}
+        onRemoveKnowledgeGoogleDriveSource={handleRemoveCommunityLaunchKnowledgeSource}
         onDisconnectKnowledgeGoogleDrive={handleDisconnectCommunityLaunchGoogleDrive}
         onLoadKnowledgeGitHubConnection={handleLoadCommunityLaunchGitHubConnection}
         onConnectKnowledgeGitHub={handleConnectCommunityLaunchGitHub}
         onListKnowledgeGitHubRepositories={handleListCommunityLaunchGitHubRepositories}
         onListKnowledgeGitHubFiles={handleListCommunityLaunchGitHubFiles}
         onImportKnowledgeGitHubFiles={handleImportCommunityLaunchGitHubFiles}
+        onRemoveKnowledgeGitHubSource={handleRemoveCommunityLaunchKnowledgeSource}
         onDisconnectKnowledgeGitHub={handleDisconnectCommunityLaunchGitHub}
         onLoadKnowledgeHealth={handleLoadCommunityLaunchKnowledgeHealth}
 	        onEnsureKnowledgeScaffold={handleEnsureCommunityLaunchKnowledgeScaffold}

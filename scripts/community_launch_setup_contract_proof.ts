@@ -435,8 +435,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /CommunityLaunchGitHubConnection[\s\S]*CommunityLaunchGitHubRepository[\s\S]*CommunityLaunchGitHubFile[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onDisconnectKnowledgeGitHub/,
-  "launch knowledge integrations must expose a concrete GitHub lifecycle contract",
+  /knowledgeGitHubSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onRemoveKnowledgeGitHubSource\?:[\s\S]*onDisconnectKnowledgeGitHub/,
+  "launch knowledge integrations must expose a concrete GitHub lifecycle contract with imported rows and per-source removal",
 );
 assert.match(
   setupModal,
@@ -470,8 +470,18 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveGitHubSource)(?=[\s\S]*effectiveKnowledgeGitHubSources\.length > 0)(?=[\s\S]*GitHub source)(?=[\s\S]*community-launch-knowledge-imported-source)(?=[\s\S]*<Check)(?=[\s\S]*<ExternalLink)(?=[\s\S]*<Trash2)/,
+  "launch knowledge GitHub UI must show imported GitHub sources inline with icon actions and support deleting one source",
+);
+assert.match(
+  setupModal,
   /knowledgeDriveSourcesExpanded[\s\S]*community-launch-knowledge-imported-sources[\s\S]*is-expanded[\s\S]*Show fewer[\s\S]*View all/,
   "launch knowledge Google Drive imported source list must stay compact and expandable",
+);
+assert.match(
+  setupModal,
+  /knowledgeGitHubSourcesExpanded[\s\S]*community-launch-knowledge-imported-sources[\s\S]*is-expanded[\s\S]*Show fewer[\s\S]*View all/,
+  "launch knowledge GitHub imported source list must stay compact and expandable",
 );
 assert.match(
   baseCss,
@@ -596,8 +606,8 @@ assert.match(
 );
 assert.match(
   appShell,
-  /communityLaunchGoogleDriveSources[\s\S]*source_external_provider === "google_drive"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchGoogleDriveSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
-  "app shell must wire launch Knowledge Google Drive connection, listing, import, remove, and disconnect handlers",
+  /mapCommunityLaunchExternalSources[\s\S]*source_external_provider === provider[\s\S]*communityLaunchGoogleDriveSources[\s\S]*mapCommunityLaunchExternalSources\(communityResources, "google_drive"\)[\s\S]*communityLaunchGitHubSources[\s\S]*mapCommunityLaunchExternalSources\(communityResources, "github"\)[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchKnowledgeSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
+  "app shell must wire launch Knowledge external source rows plus Google Drive connection, listing, import, remove, and disconnect handlers",
 );
 assert.match(
   appShell,
@@ -615,6 +625,11 @@ assert.match(
   appShell,
   /handleLoadCommunityLaunchGitHubConnection[\s\S]*loadCloudCommunityGitHubSourceConnection[\s\S]*handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "github"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*handleDisconnectCommunityLaunchGitHub[\s\S]*disconnectCloudCommunityGitHubSourceConnection/,
   "app shell must wire launch Knowledge GitHub connection, listing, import, and disconnect handlers",
+);
+assert.match(
+  appShell,
+  /knowledgeGitHubSources=\{communityLaunchGitHubSources\}[\s\S]*onRemoveKnowledgeGitHubSource=\{handleRemoveCommunityLaunchKnowledgeSource\}/,
+  "app shell must pass saved GitHub source rows and provider-agnostic source removal into launch Knowledge",
 );
 assert.doesNotMatch(
   setupModal,
