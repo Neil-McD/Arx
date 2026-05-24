@@ -65,8 +65,10 @@ function TopNav({ onJoin }) {
         <div className={`links${menuOpen ? ' open' : ''}`}>
           <a href="#argument" onClick={() => setMenuOpen(false)}>Thesis</a>
           <a href="#network" onClick={() => setMenuOpen(false)}>Network</a>
+          <a href="#memory" onClick={() => setMenuOpen(false)}>Memory</a>
           <a href="#pillars" onClick={() => setMenuOpen(false)}>Product</a>
-          <a href="#communities" onClick={() => setMenuOpen(false)}>Communities</a>
+          <a href="#communities" onClick={() => setMenuOpen(false)}>Snapshot</a>
+          <a href="#stack" onClick={() => setMenuOpen(false)}>Stack</a>
           <button className="btn btn-primary" style={{ padding: '10px 18px', fontSize: 14 }} onClick={() => { setMenuOpen(false); onJoin(); }}>
             Try Polynet free <span className="arrow">→</span>
           </button>
@@ -103,19 +105,19 @@ function Hero({ onJoin }) {
 
         <div className="meta">
           <div>
-            <div className="k">/01 PREMISE</div>
+            <div className="k">PREMISE</div>
             <div className="v">"Software is eating the world." — Andreessen, 2011. Now it's coming for services.</div>
           </div>
           <div>
-            <div className="k">/02 IMPLICATION</div>
+            <div className="k">IMPLICATION</div>
             <div className="v">Today's org chart was built for a world without AI. Now that agents deliver services, the org chart becomes software.</div>
           </div>
           <div>
-            <div className="k">/03 SHAPE</div>
+            <div className="k">SHAPE</div>
             <div className="v">Companies stop looking like hierarchies. They start looking like networks with shared memory.</div>
           </div>
           <div>
-            <div className="k">/04 STAKES</div>
+            <div className="k">STAKES</div>
             <div className="v">Those who are building this way today are compounding and out-accelerating their competitors. The race has already started.</div>
           </div>
         </div>
@@ -151,7 +153,7 @@ function Argument() {
       <div className="wrap">
         <div className="reveal arg-head" style={{ marginBottom: 48 }}>
           <div>
-            <div className="micro" style={{ marginBottom: 14 }}>/THE THESIS</div>
+            <div className="micro" style={{ marginBottom: 14 }}>/01 · THE THESIS</div>
             <h2 className="h-1">A logical argument,<br />in three moves.</h2>
           </div>
           <p className="body-lg" style={{ maxWidth: 460 }}>
@@ -190,7 +192,7 @@ function NetworkSection() {
       <div className="wrap">
         <div className="head">
           <div>
-            <div className="label">/04 · THE SHAPE</div>
+            <div className="label">/02 · THE SHAPE</div>
             <h2 className="h-1">The org chart<br />is a network now.</h2>
           </div>
           <div>
@@ -442,7 +444,7 @@ function Pillars() {
       <div className="wrap">
         <div className="head reveal">
           <div>
-            <div className="micro" style={{ marginBottom: 14 }}>/05 · THE PRODUCT</div>
+            <div className="micro" style={{ marginBottom: 14 }}>/04 · THE PRODUCT</div>
             <h2 className="h-1">Four primitives.<br />One operating layer.</h2>
           </div>
           <p className="body-lg">Polynet is a substrate for running an organization as a network of people and agents. The product is four primitives that compose into anything you'd otherwise hire a company to do.</p>
@@ -654,8 +656,9 @@ function SiteFooter() {
             <h4>Argument</h4>
             <a href="#argument">Thesis</a>
             <a href="#network">Network shape</a>
-            <a href="#memory">Multi-party memory</a>
-            <a href="#communities">Case studies</a>
+            <a href="#memory">Memory mechanism</a>
+            <a href="#communities">Snapshot</a>
+            <a href="#stack">Stack collapse</a>
           </div>
           <div className="col">
             <h4>Company</h4>
