@@ -555,9 +555,9 @@ export function WebCommunityLaunchSetupModal(
   }, [community?.id, isCreateMode, isOpen, requestedInitialStep]);
 
   useEffect(() => {
-    if (!isOpen || stepOverride) return;
+    if (!isOpen || stepOverride || requestedInitialStep) return;
     setActiveStep(isCreateMode ? "profile" : normalizeActiveStep(status));
-  }, [isCreateMode, isOpen, status?.current_step, stepOverride]);
+  }, [isCreateMode, isOpen, requestedInitialStep, status?.current_step, stepOverride]);
 
   useEffect(() => {
     if (!isOpen) return;

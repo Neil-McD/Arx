@@ -370,8 +370,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /if \(!isOpen \|\| stepOverride\) return;/,
-  "launch modal status refreshes must not pull the user back after a successful step advance",
+  /if \(!isOpen \|\| stepOverride \|\| requestedInitialStep\) return;/,
+  "launch modal status refreshes must not pull the user back after a successful step advance or route-restored initial step",
 );
 assert.match(
   baseCss,
