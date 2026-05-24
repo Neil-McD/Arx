@@ -178,7 +178,7 @@ function Argument() {
             <div className="n">/03 — THEN</div>
             <div className="claim">The <em>hierarchy</em> collapses.</div>
             <p className="body">Hierarchies exist to coordinate humans doing services. When agents do the services, the layers built to manage them stop earning their keep. What's left is a flat mesh of people and agents — a network with shared memory.</p>
-            <div className="arrow-down">→ POLYNET</div>
+            <div className="arrow-down">→ A NETWORK WITH MEMORY</div>
           </div>
         </div>
       </div>
