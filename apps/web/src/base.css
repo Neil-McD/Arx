@@ -5037,27 +5037,31 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-launch-knowledge-imported-sources {
   display: grid;
-  gap: 3px;
-  max-width: min(100%, 410px);
-  margin-top: 5px;
+  width: fit-content;
+  max-width: 100%;
+  gap: 2px;
+  margin-top: 3px;
 }
 
 .community-launch-knowledge-imported-source {
   min-width: 0;
   display: grid;
-  grid-template-columns: 13px minmax(0, 1fr) 18px 18px;
+  grid-template-columns: 11px minmax(0, auto) 15px 15px;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .community-launch-knowledge-imported-check {
+  width: 10px;
+  height: 10px;
   color: var(--accent-success, #66b786);
 }
 
 .community-launch-knowledge-imported-source span {
   min-width: 0;
+  max-width: 170px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5065,8 +5069,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-launch-knowledge-source-action {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   min-height: 0;
   display: inline-grid;
   place-items: center;
@@ -5077,6 +5081,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
+}
+
+.community-launch-knowledge-source-action svg {
+  width: 11px;
+  height: 11px;
 }
 
 .community-launch-knowledge-source-action:hover {
