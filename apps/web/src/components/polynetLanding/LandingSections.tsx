@@ -516,7 +516,7 @@ function Communities() {
 
 function StackCollapse({ onJoin }) {
   const stackItems = [
-    { category: 'AI assistance', vendor: 'Perplexity Pro', domain: 'perplexity.ai', cost: '$200' },
+    { category: 'AI assistance', vendor: 'Perplexity Max', domain: 'perplexity.ai', cost: '$200' },
     { category: 'Community', vendor: 'Skool', domain: 'skool.com', cost: '$99' },
     { category: 'Knowledge resources', vendor: 'Notion Business', domain: 'notion.com', cost: '$20' },
     { category: 'Funnel + paid access', vendor: 'ClickFunnels Scale', domain: 'clickfunnels.com', cost: '$197' },
