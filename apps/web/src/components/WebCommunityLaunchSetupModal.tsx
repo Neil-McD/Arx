@@ -334,6 +334,7 @@ type WebCommunityLaunchSetupModalProps = {
   onAddKnowledgeFile?: (
     draft: CommunityLaunchKnowledgeFileSaveDraft,
   ) => Promise<void>;
+  onLoadKnowledgeSources?: () => Promise<void>;
   onIngestKnowledgeSources?: () => Promise<CommunityLaunchKnowledgeSourceIngestionResult | null>;
   onLoadKnowledgeGoogleDriveConnection?: () => Promise<CommunityLaunchGoogleDriveConnection | null>;
   onConnectKnowledgeGoogleDrive?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
@@ -523,6 +524,7 @@ export function WebCommunityLaunchSetupModal(
     onSaveAbout,
     onAddKnowledgeLink,
     onAddKnowledgeFile,
+    onLoadKnowledgeSources,
     onIngestKnowledgeSources,
     onLoadKnowledgeGoogleDriveConnection,
     onConnectKnowledgeGoogleDrive,
@@ -585,6 +587,7 @@ export function WebCommunityLaunchSetupModal(
   ]);
   const [knowledgeSourceFileNames, setKnowledgeSourceFileNames] = useState<string[]>([]);
   const [knowledgeSourceDragOver, setKnowledgeSourceDragOver] = useState(false);
+  const [knowledgeDriveSourcesExpanded, setKnowledgeDriveSourcesExpanded] = useState(false);
   const [knowledgeDriveConnection, setKnowledgeDriveConnection] =
     useState<CommunityLaunchGoogleDriveConnection | null>(null);
   const [knowledgeDriveBrowserOpen, setKnowledgeDriveBrowserOpen] = useState(false);
@@ -621,6 +624,7 @@ export function WebCommunityLaunchSetupModal(
     : knowledgeGoogleDriveSources;
   const onLoadKnowledgeGoogleDriveConnectionRef = useRef(onLoadKnowledgeGoogleDriveConnection);
   const onLoadKnowledgeGitHubConnectionRef = useRef(onLoadKnowledgeGitHubConnection);
+  const onLoadKnowledgeSourcesRef = useRef(onLoadKnowledgeSources);
 
   useEffect(() => {
     onLoadKnowledgeGoogleDriveConnectionRef.current = onLoadKnowledgeGoogleDriveConnection;
@@ -629,6 +633,10 @@ export function WebCommunityLaunchSetupModal(
   useEffect(() => {
     onLoadKnowledgeGitHubConnectionRef.current = onLoadKnowledgeGitHubConnection;
   }, [onLoadKnowledgeGitHubConnection]);
+
+  useEffect(() => {
+    onLoadKnowledgeSourcesRef.current = onLoadKnowledgeSources;
+  }, [onLoadKnowledgeSources]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -655,6 +663,7 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeLinkDrafts([""]);
       setKnowledgeSourceFileNames([]);
       setKnowledgeSourceDragOver(false);
+      setKnowledgeDriveSourcesExpanded(false);
       setKnowledgeDriveConnection(null);
       setKnowledgeDriveBrowserOpen(false);
       setKnowledgeDriveFiles([]);
@@ -706,6 +715,7 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeLinkDrafts([""]);
     setKnowledgeSourceFileNames([]);
     setKnowledgeSourceDragOver(false);
+    setKnowledgeDriveSourcesExpanded(false);
     const nextKnowledgeProviderStateCommunityKey = String(community.id ?? "").trim() || null;
     if (knowledgeProviderStateCommunityKeyRef.current !== nextKnowledgeProviderStateCommunityKey) {
       knowledgeProviderStateCommunityKeyRef.current = nextKnowledgeProviderStateCommunityKey;
@@ -774,6 +784,12 @@ export function WebCommunityLaunchSetupModal(
       cancelled = true;
     };
   }, [activeStep, community?.id, isOpen, knowledgeIntegrationReloadKey]);
+
+  useEffect(() => {
+    const loadSources = onLoadKnowledgeSourcesRef.current;
+    if (!isOpen || isCreateMode || activeStep !== "knowledge" || !community?.id || !loadSources) return;
+    void loadSources().catch(() => {});
+  }, [activeStep, community?.id, isCreateMode, isOpen, knowledgeIntegrationReloadKey]);
 
   useEffect(() => {
     const loadConnection = onLoadKnowledgeGitHubConnectionRef.current;
@@ -2084,45 +2100,62 @@ export function WebCommunityLaunchSetupModal(
                       </div>
                     ) : null}
                     {effectiveKnowledgeGoogleDriveSources.length > 0 ? (
-                      <div className="community-launch-knowledge-imported-sources">
-                        {effectiveKnowledgeGoogleDriveSources.map((source) => (
-                          <div key={source.id} className="community-launch-knowledge-imported-source">
-                            <Check
-                              className="community-launch-knowledge-imported-check"
-                              size={11}
-                              strokeWidth={3}
-                              aria-hidden="true"
-                            />
-                            <span>{source.title || "Drive source"}</span>
-                            {source.source_external_url ? (
-                              <a
-                                className="community-launch-knowledge-source-action"
-                                href={source.source_external_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label={`Open ${source.title || "Drive source"}`}
-                                title="Open"
+                      <>
+                        <div
+                          className={`community-launch-knowledge-imported-sources${
+                            knowledgeDriveSourcesExpanded ? " is-expanded" : ""
+                          }`}
+                        >
+                          {effectiveKnowledgeGoogleDriveSources.map((source) => (
+                            <div key={source.id} className="community-launch-knowledge-imported-source">
+                              <Check
+                                className="community-launch-knowledge-imported-check"
+                                size={11}
+                                strokeWidth={3}
+                                aria-hidden="true"
+                              />
+                              <span>{source.title || "Drive source"}</span>
+                              {source.source_external_url ? (
+                                <a
+                                  className="community-launch-knowledge-source-action"
+                                  href={source.source_external_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  aria-label={`Open ${source.title || "Drive source"}`}
+                                  title="Open"
+                                >
+                                  <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
+                                </a>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="community-launch-knowledge-source-action is-delete"
+                                disabled={
+                                  isSavingActiveStep ||
+                                  knowledgeDriveRemovingSourceId === source.id ||
+                                  !onRemoveKnowledgeGoogleDriveSource
+                                }
+                                onClick={() => handleRemoveGoogleDriveSource(source)}
+                                aria-label={`${knowledgeDriveRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "Drive source"}`}
+                                title="Delete"
                               >
-                                <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
-                              </a>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="community-launch-knowledge-source-action is-delete"
-                              disabled={
-                                isSavingActiveStep ||
-                                knowledgeDriveRemovingSourceId === source.id ||
-                                !onRemoveKnowledgeGoogleDriveSource
-                              }
-                              onClick={() => handleRemoveGoogleDriveSource(source)}
-                              aria-label={`${knowledgeDriveRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "Drive source"}`}
-                              title="Delete"
-                            >
-                              <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                                <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {effectiveKnowledgeGoogleDriveSources.length > 3 ? (
+                          <button
+                            type="button"
+                            className="community-launch-knowledge-source-list-toggle"
+                            onClick={() => setKnowledgeDriveSourcesExpanded((expanded) => !expanded)}
+                          >
+                            {knowledgeDriveSourcesExpanded
+                              ? "Show fewer"
+                              : `View all ${effectiveKnowledgeGoogleDriveSources.length}`}
+                          </button>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                   <div className="community-launch-knowledge-integration-provider">

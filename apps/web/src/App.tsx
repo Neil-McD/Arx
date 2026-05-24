@@ -8181,6 +8181,10 @@ export default function App() {
       await refreshActiveCommunityLaunchSetupStatus();
       return result as any;
     };
+    const handleLoadCommunityLaunchKnowledgeSources = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      await loadCommunityResources(community.id, session);
+    };
     const handleLoadCommunityLaunchGoogleDriveConnection = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
       return await loadCloudCommunityGoogleDriveSourceConnection({
@@ -10104,6 +10108,7 @@ export default function App() {
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
         onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
+        onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
         onIngestKnowledgeSources={handleIngestCommunityLaunchKnowledgeSources}
         onLoadKnowledgeGoogleDriveConnection={handleLoadCommunityLaunchGoogleDriveConnection}
         onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}

@@ -5047,8 +5047,17 @@ button.community-launch-knowledge-integration-chip:disabled {
   display: grid;
   width: fit-content;
   max-width: 100%;
+  max-height: 47px;
   gap: 2px;
   margin-top: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  scrollbar-width: thin;
+}
+
+.community-launch-knowledge-imported-sources.is-expanded {
+  max-height: 136px;
 }
 
 .community-launch-knowledge-imported-source {
@@ -5059,6 +5068,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 3px;
   color: var(--text-secondary);
   font-size: 9px;
+  line-height: 1.35;
 }
 
 .community-launch-knowledge-imported-check {
@@ -5112,6 +5122,25 @@ button.community-launch-knowledge-integration-chip:disabled {
   cursor: default;
   opacity: 0.55;
   text-decoration: none;
+}
+
+.community-launch-knowledge-source-list-toggle {
+  justify-self: start;
+  min-height: 0;
+  margin-top: 1px;
+  border: 0;
+  padding: 0;
+  color: var(--accent, var(--accent-gold));
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.community-launch-knowledge-source-list-toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .community-launch-knowledge-source-picker {

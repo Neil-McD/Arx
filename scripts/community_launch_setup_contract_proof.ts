@@ -430,8 +430,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /CommunityLaunchKnowledgeImportedSource[\s\S]*knowledgeGoogleDriveSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onRemoveKnowledgeGoogleDriveSource\?:[\s\S]*onDisconnectKnowledgeGoogleDrive\?:/,
-  "launch knowledge Google Drive contract must expose imported source rows, per-source removal, and disconnect",
+  /CommunityLaunchKnowledgeImportedSource[\s\S]*knowledgeGoogleDriveSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeSources\?:[\s\S]*onRemoveKnowledgeGoogleDriveSource\?:[\s\S]*onDisconnectKnowledgeGoogleDrive\?:/,
+  "launch knowledge Google Drive contract must expose imported source rows, explicit source loading, per-source removal, and disconnect",
 );
 assert.match(
   setupModal,
@@ -467,6 +467,16 @@ assert.match(
   setupModal,
   /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2/,
   "launch knowledge Google Drive UI must show imported Drive sources inline with icon actions, support deleting one source, and support disconnecting the provider",
+);
+assert.match(
+  setupModal,
+  /knowledgeDriveSourcesExpanded[\s\S]*community-launch-knowledge-imported-sources[\s\S]*is-expanded[\s\S]*Show fewer[\s\S]*View all/,
+  "launch knowledge Google Drive imported source list must stay compact and expandable",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-imported-sources[\s\S]*max-height: 47px[\s\S]*overflow-y: auto[\s\S]*\.community-launch-knowledge-imported-sources\.is-expanded[\s\S]*max-height: 136px[\s\S]*\.community-launch-knowledge-source-list-toggle/,
+  "launch knowledge imported source list must show about three rows before scrolling with an expand control",
 );
 assert.match(
   setupModal,
@@ -588,6 +598,11 @@ assert.match(
   appShell,
   /communityLaunchGoogleDriveSources[\s\S]*source_external_provider === "google_drive"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchGoogleDriveSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
   "app shell must wire launch Knowledge Google Drive connection, listing, import, remove, and disconnect handlers",
+);
+assert.match(
+  appShell,
+  /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityResources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
+  "app shell must explicitly hydrate saved launch Knowledge sources when the Knowledge step opens",
 );
 const googleDriveConnectionLoadSection =
   appShell.match(/const handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*?const handleConnectCommunityLaunchGoogleDrive/)?.[0] ?? "";

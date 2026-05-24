@@ -535,6 +535,11 @@ assert.match(
   "launch Knowledge Next should refresh resources after source ingestion",
 );
 assert.match(
+  app,
+  /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityResources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
+  "launch Knowledge step should explicitly load saved source selections for onboarding display",
+);
+assert.match(
   modal,
   /onIngestKnowledgeSources[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onLoadKnowledgeHealth[\s\S]*onGenerateKnowledgePlan/,
   "launch Knowledge Next must run ingestion before health/scaffold/architect",
@@ -612,8 +617,13 @@ assert.match(
 );
 assert.match(
   modal,
-  /onLoadKnowledgeGoogleDriveConnection[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles[\s\S]*onRemoveKnowledgeGoogleDriveSource[\s\S]*onDisconnectKnowledgeGoogleDrive/,
-  "launch Knowledge modal props should expose the Google Drive integration lifecycle",
+  /onLoadKnowledgeSources[\s\S]*onLoadKnowledgeGoogleDriveConnection[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles[\s\S]*onRemoveKnowledgeGoogleDriveSource[\s\S]*onDisconnectKnowledgeGoogleDrive/,
+  "launch Knowledge modal props should expose saved source loading and the Google Drive integration lifecycle",
+);
+assert.match(
+  modal,
+  /onLoadKnowledgeSourcesRef[\s\S]*activeStep !== "knowledge"[\s\S]*loadSources\(\)\.catch/,
+  "launch Knowledge modal should hydrate saved source selections when the Knowledge step opens",
 );
 assert.match(
   modal,
