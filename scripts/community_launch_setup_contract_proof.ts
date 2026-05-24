@@ -440,6 +440,36 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /CommunityLaunchGoogleDriveFileListRequest[\s\S]*folderId\?: string \| null[\s\S]*pageToken\?: string \| null[\s\S]*next_page_token\?: string \| null/,
+  "launch knowledge Google Drive list contract must support folder navigation and cursor pagination",
+);
+assert.match(
+  setupModal,
+  /knowledgeDriveBrowserOpen[\s\S]*knowledgeDriveSearchDraft[\s\S]*knowledgeDriveFolderTrail[\s\S]*knowledgeDriveNextPageToken[\s\S]*handleSearchGoogleDriveFiles[\s\S]*handleOpenGoogleDriveFolder[\s\S]*handleLoadMoreGoogleDriveFiles/,
+  "launch knowledge Google Drive picker must expose search, folder navigation, and load-more state",
+);
+assert.match(
+  setupModal,
+  /file\.kind === "folder"[\s\S]*community-launch-knowledge-drive-folder[\s\S]*handleOpenGoogleDriveFolder\(file\)[\s\S]*isImportableGoogleDriveSourceFile\(file\)[\s\S]*handleToggleGoogleDriveFile/,
+  "launch knowledge Google Drive folders should navigate while only importable files can be selected",
+);
+assert.match(
+  setupModal,
+  /knowledgeDriveConnectionLoading[\s\S]*knowledgeDriveFilesLoading[\s\S]*knowledgeGitHubConnectionLoading[\s\S]*knowledgeGitHubRepositoriesLoading[\s\S]*knowledgeGitHubFilesLoading/,
+  "launch knowledge integration loading must be split by connection, list, and file phases to avoid picker flicker",
+);
+assert.doesNotMatch(
+  setupModal,
+  /knowledgeDriveLoading|knowledgeGitHubLoading/,
+  "launch knowledge integrations must not collapse provider refresh/list/import into one flickery loading flag",
+);
+assert.match(
+  setupModal,
+  /knowledgeProviderStateCommunityKeyRef[\s\S]*nextKnowledgeProviderStateCommunityKey[\s\S]*!== nextKnowledgeProviderStateCommunityKey[\s\S]*setKnowledgeDriveConnection\(null\)[\s\S]*setKnowledgeGitHubConnection\(null\)/,
+  "launch knowledge integration state should reset only when the target community changes",
+);
+assert.match(
+  setupModal,
   /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleImportGitHubFiles/,
   "launch knowledge GitHub UI must track connection, repository/file selection, and import state",
 );

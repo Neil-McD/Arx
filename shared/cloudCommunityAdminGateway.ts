@@ -185,6 +185,8 @@ export type CloudGoogleDriveSourceFile = {
   id: string;
   name: string;
   mime_type: string;
+  kind: "file" | "folder";
+  importable: boolean;
   web_url: string | null;
   modified_time: string | null;
   size: string | null;
@@ -194,6 +196,9 @@ export type CloudGoogleDriveSourceFileListResult = {
   ok: boolean;
   provider: "google_drive";
   connection: CloudGoogleDriveSourceConnectionStatus;
+  folder_id: string | null;
+  query: string | null;
+  next_page_token: string | null;
   files: CloudGoogleDriveSourceFile[];
 };
 
@@ -420,10 +425,13 @@ function normalizeGoogleDriveSourceFiles(payload: unknown): CloudGoogleDriveSour
       const name = typeof record?.name === "string" ? record.name.trim() : "";
       const mimeType = typeof record?.mime_type === "string" ? record.mime_type.trim() : "";
       if (!id || !name || !mimeType) return null;
+      const kind = record?.kind === "folder" ? "folder" : "file";
       return {
         id,
         name,
         mime_type: mimeType,
+        kind,
+        importable: kind === "file" && record?.importable !== false,
         web_url: typeof record?.web_url === "string" && record.web_url.trim() ? record.web_url.trim() : null,
         modified_time:
           typeof record?.modified_time === "string" && record.modified_time.trim()
@@ -605,6 +613,8 @@ export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
 export async function listCloudCommunityGoogleDriveSourceFiles<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
+    folderId?: string | null;
+    pageToken?: string | null;
     query?: string | null;
   },
 ): Promise<CloudGoogleDriveSourceFileListResult> {
@@ -612,12 +622,23 @@ export async function listCloudCommunityGoogleDriveSourceFiles<SessionT>(
   const payload = (await client.action("community:listGoogleDriveSourceFiles" as any, {
     authSubject,
     communityId: params.communityId,
+    folderId: String(params.folderId ?? "").trim() || undefined,
+    pageToken: String(params.pageToken ?? "").trim() || undefined,
     query: String(params.query ?? "").trim() || undefined,
   })) as Record<string, unknown> | null;
   return {
     ok: payload?.ok === true,
     provider: "google_drive",
     connection: normalizeGoogleDriveSourceConnection(payload?.connection),
+    folder_id:
+      typeof payload?.folder_id === "string" && payload.folder_id.trim()
+        ? payload.folder_id.trim()
+        : null,
+    query: typeof payload?.query === "string" && payload.query.trim() ? payload.query.trim() : null,
+    next_page_token:
+      typeof payload?.next_page_token === "string" && payload.next_page_token.trim()
+        ? payload.next_page_token.trim()
+        : null,
     files: normalizeGoogleDriveSourceFiles(payload?.files),
   };
 }

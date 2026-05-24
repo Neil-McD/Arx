@@ -8189,12 +8189,18 @@ export default function App() {
       }
       return result;
     };
-    const handleListCommunityLaunchGoogleDriveFiles = async (query?: string | null) => {
+    const handleListCommunityLaunchGoogleDriveFiles = async (request?: {
+      folderId?: string | null;
+      pageToken?: string | null;
+      query?: string | null;
+    } | null) => {
       const { session, community } = requireCommunityLaunchSaveContext();
       return await listCloudCommunityGoogleDriveSourceFiles({
         session,
         communityId: community.id,
-        query,
+        folderId: request?.folderId,
+        pageToken: request?.pageToken,
+        query: request?.query,
       });
     };
     const handleImportCommunityLaunchGoogleDriveFiles = async (fileIds: string[]) => {

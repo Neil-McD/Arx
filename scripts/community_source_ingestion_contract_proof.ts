@@ -327,6 +327,16 @@ assert.match(
 );
 assert.match(
   resources,
+  /listGoogleDriveSourceFiles = action\([\s\S]*folderId: v\.optional\(v\.string\(\)\)[\s\S]*pageToken: v\.optional\(v\.string\(\)\)[\s\S]*nextPageToken,files\(id,name,mimeType,webViewLink,modifiedTime,size\)[\s\S]*if \(pageToken\) url\.searchParams\.set\("pageToken", pageToken\)[\s\S]*kind: isGoogleDriveFolderMimeType\(file\.mimeType\) \? "folder" : "file"[\s\S]*importable:[\s\S]*next_page_token:/,
+  "Google Drive file listing should expose folder navigation, cursor pagination, and file-only importability",
+);
+assert.match(
+  gateway,
+  /CloudGoogleDriveSourceFile = \{[\s\S]*kind: "file" \| "folder"[\s\S]*importable: boolean[\s\S]*CloudGoogleDriveSourceFileListResult = \{[\s\S]*folder_id: string \| null[\s\S]*query: string \| null[\s\S]*next_page_token: string \| null[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*folderId\?: string \| null[\s\S]*pageToken\?: string \| null[\s\S]*folderId: String\(params\.folderId[\s\S]*pageToken: String\(params\.pageToken/,
+  "Google Drive gateway should preserve folder, query, pagination, and importability metadata",
+);
+assert.match(
+  resources,
   /importGoogleDriveSourceFiles = action\([\s\S]*requireCommunityManagerForAction[\s\S]*for \(const fileId of fileIds\)[\s\S]*try \{[\s\S]*getCommunitySourceByExternalIdInternal[\s\S]*insertGoogleDriveSourceResourceInternal[\s\S]*catch \(error\)[\s\S]*failures\.push[\s\S]*ok: failed === 0/,
   "Google Drive file import should be manager-gated, dedupe by external file identity, and report per-file failures",
 );

@@ -5010,6 +5010,61 @@ button.community-launch-knowledge-integration-chip:disabled {
   padding-top: 8px;
 }
 
+.community-launch-knowledge-drive-browser {
+  max-width: min(100%, 560px);
+}
+
+.community-launch-knowledge-drive-search {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 64%, transparent);
+  border-radius: 10px;
+  padding: 6px 7px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.community-launch-knowledge-drive-search svg {
+  color: var(--text-muted);
+}
+
+.community-launch-knowledge-drive-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+
+.community-launch-knowledge-drive-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.community-launch-knowledge-drive-breadcrumbs,
+.community-launch-knowledge-drive-actions {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.community-launch-knowledge-drive-breadcrumbs span,
+.community-launch-knowledge-drive-actions span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .community-launch-knowledge-drive-picker label {
   min-width: 0;
   display: grid;
@@ -5036,6 +5091,43 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 800;
+}
+
+.community-launch-knowledge-drive-folder {
+  width: 100%;
+  justify-self: stretch;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.community-launch-knowledge-drive-folder svg {
+  color: var(--accent);
+}
+
+.community-launch-knowledge-drive-folder span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-launch-knowledge-drive-folder small {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.community-launch-knowledge-drive-empty {
+  margin: 2px 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .community-launch-knowledge-drive-picker button {

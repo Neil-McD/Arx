@@ -93,6 +93,7 @@ const GOOGLE_DRIVE_SOURCE_OAUTH_FINALIZE_PROCESSING_TIMEOUT_MS = 2 * 60_000;
 const GOOGLE_DRIVE_SOURCE_REFRESH_WINDOW_MS = 60_000;
 const GOOGLE_DRIVE_SOURCE_MAX_FILES = 20;
 const GOOGLE_DRIVE_SOURCE_LIST_PAGE_SIZE = 20;
+const GOOGLE_DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const GOOGLE_DRIVE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_DRIVE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_DRIVE_API_BASE_URL = "https://www.googleapis.com/drive/v3";
@@ -651,10 +652,18 @@ function isGoogleDriveNativeDocumentMimeType(mimeType: string): boolean {
   return mimeType === "application/vnd.google-apps.document";
 }
 
+function isGoogleDriveFolderMimeType(mimeType: string): boolean {
+  return mimeType === GOOGLE_DRIVE_FOLDER_MIME_TYPE;
+}
+
 function isSupportedGoogleDriveSourceMimeType(mimeType: string, filename = ""): boolean {
   const normalized = mimeType.toLowerCase();
   return isGoogleDriveNativeDocumentMimeType(normalized) ||
     isReadableTextFileType(normalized, filename);
+}
+
+function escapeGoogleDriveQueryLiteral(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 function parseGoogleDriveModifiedAt(value: unknown): number | undefined {
@@ -4423,6 +4432,8 @@ export const listGoogleDriveSourceFiles = action({
   args: {
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    folderId: v.optional(v.string()),
+    pageToken: v.optional(v.string()),
     query: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -4431,18 +4442,21 @@ export const listGoogleDriveSourceFiles = action({
     const { accessToken, connection } = await resolveFreshGoogleDriveAccessToken(ctx, userId);
     const url = new URL(`${GOOGLE_DRIVE_API_BASE_URL}/files`);
     const search = normalizeSourceIntegrationString(args.query, 120);
+    const folderId = normalizeSourceIntegrationString(args.folderId, 300);
+    const pageToken = normalizeSourceIntegrationString(args.pageToken, 2_000);
     const queryParts = [
       "trashed = false",
-      "mimeType != 'application/vnd.google-apps.folder'",
     ];
     if (search) {
-      const escaped = search.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-      queryParts.push(`name contains '${escaped}'`);
+      queryParts.push(`name contains '${escapeGoogleDriveQueryLiteral(search)}'`);
+    } else {
+      queryParts.push(`'${escapeGoogleDriveQueryLiteral(folderId || "root")}' in parents`);
     }
     url.searchParams.set("q", queryParts.join(" and "));
     url.searchParams.set("pageSize", String(GOOGLE_DRIVE_SOURCE_LIST_PAGE_SIZE));
-    url.searchParams.set("orderBy", "modifiedTime desc");
-    url.searchParams.set("fields", "files(id,name,mimeType,webViewLink,modifiedTime,size)");
+    url.searchParams.set("orderBy", search ? "folder,name" : "folder,modifiedTime desc");
+    url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,size)");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
     url.searchParams.set("supportsAllDrives", "true");
     url.searchParams.set("includeItemsFromAllDrives", "true");
     const payload = await fetchGoogleDriveJson({ accessToken, url: url.toString() });
@@ -4450,7 +4464,10 @@ export const listGoogleDriveSourceFiles = action({
       ? payload.files
           .map(mapGoogleDriveFileCandidate)
           .filter((file): file is GoogleDriveFileCandidate => Boolean(file))
-          .filter((file) => isSupportedGoogleDriveSourceMimeType(file.mimeType, file.name))
+          .filter((file) => (
+            isGoogleDriveFolderMimeType(file.mimeType) ||
+            isSupportedGoogleDriveSourceMimeType(file.mimeType, file.name)
+          ))
           .slice(0, GOOGLE_DRIVE_SOURCE_LIST_PAGE_SIZE)
           .map((file) => ({
             id: file.id,
@@ -4459,12 +4476,18 @@ export const listGoogleDriveSourceFiles = action({
             web_url: file.webViewLink,
             modified_time: file.modifiedTime,
             size: file.size,
+            kind: isGoogleDriveFolderMimeType(file.mimeType) ? "folder" : "file",
+            importable: !isGoogleDriveFolderMimeType(file.mimeType) &&
+              isSupportedGoogleDriveSourceMimeType(file.mimeType, file.name),
           }))
       : [];
     return {
       ok: true,
       provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
       connection: toPublicGoogleDriveConnection(connection),
+      folder_id: folderId || null,
+      query: search || null,
+      next_page_token: normalizeSourceIntegrationString(payload.nextPageToken, 2_000) || null,
       files,
     };
   },
