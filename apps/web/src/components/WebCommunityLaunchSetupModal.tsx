@@ -1217,6 +1217,17 @@ export function WebCommunityLaunchSetupModal(
     });
   };
 
+  const handleCloseGoogleDrivePicker = () => {
+    if (savingStep || knowledgeDriveFilesLoading) return;
+    setKnowledgeDriveBrowserOpen(false);
+    setKnowledgeDriveFiles([]);
+    setKnowledgeDriveSelectedIds([]);
+    setKnowledgeDriveSearchDraft("");
+    setKnowledgeDriveQuery("");
+    setKnowledgeDriveFolderTrail([]);
+    setKnowledgeDriveNextPageToken(null);
+  };
+
   const handleToggleGoogleDriveFile = (fileId: string) => {
     const file = knowledgeDriveFiles.find((item) => item.id === fileId);
     if (
@@ -2172,6 +2183,14 @@ export function WebCommunityLaunchSetupModal(
                         onClick={handleImportGoogleDriveFiles}
                       >
                         Import selected
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={isSavingActiveStep || knowledgeDriveFilesLoading}
+                        onClick={handleCloseGoogleDrivePicker}
+                      >
+                        Close
                       </button>
                     </div>
                     {knowledgeDriveVisibleImportableCount === 0 && knowledgeDriveFiles.length > 0 ? (

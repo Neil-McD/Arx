@@ -450,8 +450,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeDriveBrowserOpen[\s\S]*knowledgeDriveSearchDraft[\s\S]*knowledgeDriveFolderTrail[\s\S]*knowledgeDriveNextPageToken[\s\S]*knowledgeDriveLocationPath[\s\S]*handleSearchGoogleDriveFiles[\s\S]*handleOpenGoogleDriveFolder[\s\S]*handleBackGoogleDriveLocation[\s\S]*handleLoadMoreGoogleDriveFiles/,
-  "launch knowledge Google Drive picker must expose search, folder navigation, and load-more state",
+  /knowledgeDriveBrowserOpen[\s\S]*knowledgeDriveSearchDraft[\s\S]*knowledgeDriveFolderTrail[\s\S]*knowledgeDriveNextPageToken[\s\S]*knowledgeDriveLocationPath[\s\S]*handleSearchGoogleDriveFiles[\s\S]*handleOpenGoogleDriveFolder[\s\S]*handleBackGoogleDriveLocation[\s\S]*handleLoadMoreGoogleDriveFiles[\s\S]*handleCloseGoogleDrivePicker/,
+  "launch knowledge Google Drive picker must expose search, folder navigation, load-more, and close state",
 );
 assert.match(
   setupModal,
@@ -500,8 +500,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*community-launch-knowledge-drive-import[\s\S]*Import selected/,
-  "launch knowledge Google Drive chip must connect first, then allow file selection and import",
+  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*community-launch-knowledge-drive-import[\s\S]*Import selected[\s\S]*Close/,
+  "launch knowledge Google Drive chip must connect first, then allow file selection, import, and closing the picker",
 );
 assert.match(
   setupModal,
