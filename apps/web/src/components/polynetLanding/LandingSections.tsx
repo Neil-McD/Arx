@@ -512,6 +512,69 @@ function Communities() {
   );
 }
 
+function StackCollapse({ onJoin }) {
+  const stackItems = [
+    { category: 'AI assistance', vendor: 'Perplexity Pro', domain: 'perplexity.ai', cost: '$200' },
+    { category: 'Community', vendor: 'Skool', domain: 'skool.com', cost: '$99' },
+    { category: 'Knowledge resources', vendor: 'Notion Business', domain: 'notion.com', cost: '$20' },
+    { category: 'Funnel + paid access', vendor: 'ClickFunnels Scale', domain: 'clickfunnels.com', cost: '$197' },
+  ];
+  return (
+    <section className="stack-collapse" id="stack">
+      <div className="wrap">
+        <div className="head reveal">
+          <div>
+            <div className="micro" style={{ marginBottom: 14 }}>/06 · THE STACK COLLAPSES</div>
+            <h2 className="h-1">
+              Four tools. Four silos.<br />No shared memory.
+            </h2>
+          </div>
+          <p className="body-lg" style={{ maxWidth: 460 }}>
+            The hierarchical stack: one tool per layer, none of them talking. Information evaporates between the cracks. The bill stacks up anyway.
+          </p>
+        </div>
+
+        <div className="stack-grid">
+          <div className="stack-old">
+            <div className="stack-old-header">
+              <span>Example monthly stack</span>
+              <strong>$516+/mo</strong>
+            </div>
+            {stackItems.map((item) => (
+              <div className="stack-old-row" key={`${item.category}-${item.vendor}`}>
+                <span className="stack-old-vendor">
+                  <img
+                    src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=64`}
+                    alt=""
+                  />
+                  <span>
+                    <strong>{item.vendor}</strong>
+                    <em>{item.category}</em>
+                  </span>
+                </span>
+                <strong>{item.cost}/mo</strong>
+              </div>
+            ))}
+          </div>
+
+          <button type="button" className="stack-new" onClick={onJoin}>
+            <div className="stack-new-arrow" aria-hidden="true">→</div>
+            <div className="stack-new-brand">
+              <img src="/landing-polynet/logo.png" alt="" />
+              <span>Polynet</span>
+            </div>
+            <strong>Free</strong>
+            <p>One operating layer. One memory. One bill.</p>
+            <span className="stack-new-cta">
+              Try Polynet free <span className="arrow">→</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Manifesto() {
   return (
     <section className="manifesto">
@@ -620,6 +683,7 @@ export {
   MemorySection,
   Pillars,
   Communities,
+  StackCollapse,
   Manifesto,
   FinalCTA,
   SiteFooter,

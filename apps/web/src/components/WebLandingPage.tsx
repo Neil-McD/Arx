@@ -11,6 +11,7 @@ import {
   NetworkSection,
   Pillars,
   SiteFooter,
+  StackCollapse,
   TopNav,
 } from "./polynetLanding/LandingSections";
 import "./WebLandingPage.css";
@@ -39,6 +40,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
         <MemorySection />
         <Pillars />
         <Communities />
+        <StackCollapse onJoin={props.onTryFree} />
         <Manifesto />
         <FinalCTA onJoin={props.onTryFree} />
       </main>

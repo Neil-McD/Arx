@@ -1659,3 +1659,182 @@
     }
     .polynet-network-landing .snapshot-legend-bar { display: none; }
   }
+
+  /* ============================================================
+     /06 · THE STACK COLLAPSES
+     ============================================================ */
+  .polynet-network-landing .stack-collapse {
+    padding: 120px 0;
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+  }
+  .polynet-network-landing .stack-collapse .wrap { display: grid; gap: 56px; }
+  .polynet-network-landing .stack-collapse .head {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: end;
+  }
+  @media (max-width: 860px) {
+    .polynet-network-landing .stack-collapse .head {
+      grid-template-columns: 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+  }
+
+  .polynet-network-landing .stack-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+  @media (max-width: 860px) {
+    .polynet-network-landing .stack-grid { grid-template-columns: 1fr; }
+  }
+
+  .polynet-network-landing .stack-old {
+    border: 1px solid var(--line-2);
+    border-radius: 18px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .polynet-network-landing .stack-old-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line-2);
+    background: rgba(255, 255, 255, 0.015);
+  }
+  .polynet-network-landing .stack-old-header > span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .polynet-network-landing .stack-old-header strong {
+    font-size: 18px;
+    color: var(--ink);
+  }
+  .polynet-network-landing .stack-old-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 22px;
+    border-top: 1px solid var(--line);
+  }
+  .polynet-network-landing .stack-old-vendor {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+  .polynet-network-landing .stack-old-vendor img {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+  }
+  .polynet-network-landing .stack-old-vendor > span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .polynet-network-landing .stack-old-vendor strong {
+    font-size: 14px;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .polynet-network-landing .stack-old-vendor em {
+    font-style: normal;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .polynet-network-landing .stack-old-row > strong {
+    font-size: 15px;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  .polynet-network-landing .stack-new {
+    position: relative;
+    appearance: none;
+    text-align: left;
+    border: 1px solid color-mix(in srgb, var(--pink) 45%, transparent);
+    border-radius: 18px;
+    padding: 28px 26px;
+    background:
+      radial-gradient(circle at 30% 20%, var(--pink-glow), transparent 60%),
+      color-mix(in srgb, var(--pink-deep) 60%, var(--bg-1));
+    color: var(--ink);
+    cursor: pointer;
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    transition: border-color 160ms ease, transform 160ms ease;
+  }
+  .polynet-network-landing .stack-new:hover {
+    border-color: var(--pink);
+    transform: translateY(-1px);
+  }
+  .polynet-network-landing .stack-new-arrow {
+    position: absolute;
+    top: 22px;
+    right: 24px;
+    font-size: 22px;
+    color: var(--pink);
+    opacity: 0.7;
+  }
+  .polynet-network-landing .stack-new-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .polynet-network-landing .stack-new-brand img { width: 28px; height: 28px; }
+  .polynet-network-landing .stack-new-brand span {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .polynet-network-landing .stack-new strong {
+    font-size: clamp(42px, 5vw, 60px);
+    line-height: 0.95;
+    color: var(--ink);
+    margin-top: 6px;
+  }
+  .polynet-network-landing .stack-new p {
+    margin: 0;
+    color: var(--ink-1);
+    font-size: 16px;
+    line-height: 1.5;
+    max-width: 320px;
+  }
+  .polynet-network-landing .stack-new-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 16px;
+    border-top: 1px solid color-mix(in srgb, var(--pink) 25%, transparent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--pink-1);
+  }
+
+  @media (max-width: 760px) {
+    .polynet-network-landing .stack-old-header,
+    .polynet-network-landing .stack-old-row { padding: 14px 16px; }
+    .polynet-network-landing .stack-new { padding: 22px 20px; }
+  }
