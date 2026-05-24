@@ -751,6 +751,51 @@ export function WebCommunityLaunchSetupModal(
     if (missingCount === 1) return "1 item left";
     return `${missingCount} items left`;
   }, [activeStatus, missingCount]);
+
+  const loadGoogleDriveFiles = useCallback(async (): Promise<boolean> => {
+    if (!onListKnowledgeGoogleDriveFiles) {
+      setStepError("Google Drive file selection is unavailable.");
+      return false;
+    }
+    setKnowledgeDriveLoading(true);
+    try {
+      const result = await onListKnowledgeGoogleDriveFiles();
+      if (!result?.ok) throw new Error("Could not load Google Drive files.");
+      setKnowledgeDriveConnection(result.connection ?? knowledgeDriveConnection);
+      setKnowledgeDriveFiles(result.files ?? []);
+      setKnowledgeDriveSelectedIds([]);
+      setStepSuccess((result.files ?? []).length > 0 ? "Choose Drive files to import." : "No readable Drive files found.");
+      return true;
+    } catch (error) {
+      setStepError(error instanceof Error ? error.message : "Could not load Google Drive files.");
+      return false;
+    } finally {
+      setKnowledgeDriveLoading(false);
+    }
+  }, [knowledgeDriveConnection, onListKnowledgeGoogleDriveFiles]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      activeStep !== "knowledge" ||
+      knowledgeAutoOpenProvider !== "google_drive" ||
+      !knowledgeDriveConnection?.connected ||
+      knowledgeDriveLoading
+    ) {
+      return;
+    }
+    onKnowledgeAutoOpenHandled?.("google_drive");
+    void loadGoogleDriveFiles();
+  }, [
+    activeStep,
+    isOpen,
+    knowledgeAutoOpenProvider,
+    knowledgeDriveConnection?.connected,
+    knowledgeDriveLoading,
+    loadGoogleDriveFiles,
+    onKnowledgeAutoOpenHandled,
+  ]);
+
   if (!isOpen || !effectiveCommunity || !effectiveStatus) return null;
 
   const runStepSave = async (
@@ -904,50 +949,6 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeSourceDragOver(false);
     void saveKnowledgeFiles(Array.from(event.dataTransfer.files ?? []));
   };
-
-  const loadGoogleDriveFiles = useCallback(async (): Promise<boolean> => {
-    if (!onListKnowledgeGoogleDriveFiles) {
-      setStepError("Google Drive file selection is unavailable.");
-      return false;
-    }
-    setKnowledgeDriveLoading(true);
-    try {
-      const result = await onListKnowledgeGoogleDriveFiles();
-      if (!result?.ok) throw new Error("Could not load Google Drive files.");
-      setKnowledgeDriveConnection(result.connection ?? knowledgeDriveConnection);
-      setKnowledgeDriveFiles(result.files ?? []);
-      setKnowledgeDriveSelectedIds([]);
-      setStepSuccess((result.files ?? []).length > 0 ? "Choose Drive files to import." : "No readable Drive files found.");
-      return true;
-    } catch (error) {
-      setStepError(error instanceof Error ? error.message : "Could not load Google Drive files.");
-      return false;
-    } finally {
-      setKnowledgeDriveLoading(false);
-    }
-  }, [knowledgeDriveConnection, onListKnowledgeGoogleDriveFiles]);
-
-  useEffect(() => {
-    if (
-      !isOpen ||
-      activeStep !== "knowledge" ||
-      knowledgeAutoOpenProvider !== "google_drive" ||
-      !knowledgeDriveConnection?.connected ||
-      knowledgeDriveLoading
-    ) {
-      return;
-    }
-    onKnowledgeAutoOpenHandled?.("google_drive");
-    void loadGoogleDriveFiles();
-  }, [
-    activeStep,
-    isOpen,
-    knowledgeAutoOpenProvider,
-    knowledgeDriveConnection?.connected,
-    knowledgeDriveLoading,
-    loadGoogleDriveFiles,
-    onKnowledgeAutoOpenHandled,
-  ]);
 
   const handleGoogleDrivePrimaryAction = () => {
     if (savingStep || knowledgeDriveLoading) return;

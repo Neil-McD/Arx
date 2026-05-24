@@ -483,6 +483,16 @@ assert.match(
   /communityLaunchKnowledgeAutoOpenProvider[\s\S]*provider === "google_drive"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)[\s\S]*knowledgeAutoOpenProvider=\{communityLaunchKnowledgeAutoOpenProvider\}[\s\S]*onKnowledgeAutoOpenHandled/,
   "Google Drive OAuth restore should pass an auto-open intent into the launch Knowledge modal",
 );
+{
+  const earlyNullReturnIndex = setupModal.indexOf("if (!isOpen || !effectiveCommunity || !effectiveStatus) return null;");
+  const driveAutoOpenHookIndex = setupModal.indexOf("knowledgeAutoOpenProvider !== \"google_drive\"");
+  assert.ok(earlyNullReturnIndex >= 0, "launch setup modal must retain the explicit unloaded early return");
+  assert.ok(driveAutoOpenHookIndex >= 0, "launch setup modal must retain the Google Drive auto-open hook");
+  assert.ok(
+    driveAutoOpenHookIndex < earlyNullReturnIndex,
+    "launch setup modal hooks must stay before the unloaded early return to preserve React hook order",
+  );
+}
 assert.match(
   appShell,
   /const context = pendingCommunityLaunchSetupRouteContext[\s\S]*context\.step[\s\S]*applyCommunityShellState[\s\S]*setCommunityLaunchSetupInitialStep\(context\.step\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
