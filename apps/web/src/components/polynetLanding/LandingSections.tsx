@@ -464,59 +464,48 @@ function Pillars() {
 }
 
 function Communities() {
-  const cards = [
-    {
-      tk: 'NODE 014 · LEGAL',
-      title: 'A 3-person law firm that runs like a 50-person one.',
-      desc: 'Two partners + one paralegal + a Polynet of contract, discovery and intake agents. Caseload up 7×, billable hours down.',
-      a: ['Headcount', '3'],
-      b: ['Throughput', '×7.4'],
-    },
-    {
-      tk: 'NODE 028 · BRAND STUDIO',
-      title: 'A creative collective with no studio.',
-      desc: 'Forty designers, no office, no PM layer. Briefs route to whichever node — human or agent — has matching memory. Clients get work in hours.',
-      a: ['Network', '40 peers'],
-      b: ['Cycle time', '< 6h'],
-    },
-    {
-      tk: 'NODE 041 · GROWTH ENGINE',
-      title: 'A community of operators selling to itself.',
-      desc: 'Two hundred ex-founders running shared playbooks. Each deal closed writes back to the memory. The next deal starts smarter than the last.',
-      a: ['Operators', '212'],
-      b: ['Pipeline', '$84M ARR'],
-    },
+  const eventTypes = [
+    { tk: 'COMMUNITY', label: 'Community launched' },
+    { tk: 'AGENT', label: 'Agent shipped' },
+    { tk: 'MEMBER', label: 'Member joined' },
+    { tk: 'MEMORY', label: 'Playbook promoted' },
+    { tk: 'REVENUE', label: 'Payout cleared' },
   ];
   return (
-    <section className="communities" id="communities">
+    <section className="communities snapshot" id="communities">
       <div className="wrap">
         <div className="head reveal">
-          <div className="micro" style={{ marginBottom: 14 }}>/06 · WHAT'S RUNNING</div>
+          <div className="micro" style={{ marginBottom: 14 }}>/05 · SNAPSHOT FROM POLYNET</div>
           <h2 className="h-1" style={{maxWidth: 1000}}>
-            Networks running on Polynet.
+            A live view into the network.
           </h2>
           <p className="body-lg" style={{marginTop:18, maxWidth:680}}>
-            Real networks — humans + agents on shared memory — running real workloads in production today. We onboard one new network a week.
+            Public activity from networks running on Polynet. Sanitized for privacy. Refreshed weekly.
           </p>
         </div>
-        <div className="cards">
-          {cards.map((c, i) => (
-            <div className="card reveal" style={{transitionDelay: `${0.08 * i}s`}} key={c.tk}>
-              <div className="ticker">{c.tk}</div>
-              <h3>{c.title}</h3>
-              <p className="desc">{c.desc}</p>
-              <div className="footer">
-                <div className="item">
-                  <div className="k">{c.a[0]}</div>
-                  <div className="v mono">{c.a[1]}</div>
-                </div>
-                <div className="item">
-                  <div className="k">{c.b[0]}</div>
-                  <div className="v mono">{c.b[1]}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="snapshot-panel reveal">
+          <div className="snapshot-header">
+            <span className="snapshot-status">
+              <span className="snapshot-status-dot" aria-hidden="true" />
+              Live feed coming online
+            </span>
+            <span className="snapshot-meta">Public-safe projection · v0</span>
+          </div>
+          <div className="snapshot-legend">
+            <div className="snapshot-legend-head">Events that populate here</div>
+            <ul className="snapshot-legend-list">
+              {eventTypes.map((event) => (
+                <li className="snapshot-legend-row" key={event.tk}>
+                  <span className="snapshot-legend-tk">{event.tk}</span>
+                  <span className="snapshot-legend-label">{event.label}</span>
+                  <span className="snapshot-legend-bar" aria-hidden="true" />
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="snapshot-foot">
+            Real network activity will appear here as the public-safe data contract ships. No fabricated metrics, no member names — only what networks consent to share.
+          </div>
         </div>
       </div>
     </section>

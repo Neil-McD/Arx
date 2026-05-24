@@ -1563,3 +1563,99 @@
     }
     .polynet-network-landing .memory-foot.evaporates { padding-bottom: 16px; }
   }
+
+  /* ============================================================
+     /05 · SNAPSHOT FROM POLYNET — replaces fake case studies
+     ============================================================ */
+  .polynet-network-landing .snapshot-panel {
+    border: 1px solid var(--line-2);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.02);
+    overflow: hidden;
+  }
+  .polynet-network-landing .snapshot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line-2);
+    background: rgba(255, 255, 255, 0.015);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .polynet-network-landing .snapshot-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+  }
+  .polynet-network-landing .snapshot-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-2);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--ink-2) 50%, transparent);
+  }
+  .polynet-network-landing .snapshot-meta { color: var(--ink-3); }
+
+  .polynet-network-landing .snapshot-legend { padding: 28px 22px 14px; }
+  .polynet-network-landing .snapshot-legend-head {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 18px;
+  }
+  .polynet-network-landing .snapshot-legend-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 8px;
+  }
+  .polynet-network-landing .snapshot-legend-row {
+    display: grid;
+    grid-template-columns: 110px minmax(160px, 1fr) minmax(80px, 1.4fr);
+    align-items: center;
+    gap: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.012);
+  }
+  .polynet-network-landing .snapshot-legend-tk {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pink);
+  }
+  .polynet-network-landing .snapshot-legend-label {
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .polynet-network-landing .snapshot-legend-bar {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--line-2) 0%, var(--line) 60%, transparent 100%);
+    opacity: 0.55;
+  }
+  .polynet-network-landing .snapshot-foot {
+    padding: 18px 22px 22px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-2);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  @media (max-width: 760px) {
+    .polynet-network-landing .snapshot-legend-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .polynet-network-landing .snapshot-legend-bar { display: none; }
+  }
