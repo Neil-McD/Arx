@@ -133,6 +133,7 @@ function Marquee() {
     'AGENTS RUN THE WORK',
     'COMMUNITIES SHIP LIKE COMPANIES',
     'SHARED MEMORY IS THE MOAT',
+    'EXPERTISE COMPOUNDS',
     'NO ORG CHART, NO BOTTLENECK',
     'PEER-TO-PEER COORDINATION',
   ];
@@ -436,7 +437,7 @@ function Pillars() {
     {
       n: '/04', name: 'SCALE', icon: <GlyphScale />,
       title: 'Grow revenue, not headcount.',
-      body: 'More members, more compounding, more revenue — on the same lean team. Throughput scales on a network curve, not a headcount curve.',
+      body: 'More members, more compounding, more revenue — on the same lean team. Paid access, recurring billing, payouts handled.',
     },
   ];
   return (
