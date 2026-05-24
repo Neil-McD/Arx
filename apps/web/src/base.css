@@ -5008,17 +5008,18 @@ button.community-launch-knowledge-integration-chip:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin-top: 3px;
 }
 
 .community-launch-knowledge-disconnect {
   min-height: 0;
-  margin-top: 8px;
+  margin: 0;
   border: 0;
   padding: 0;
   color: #ff7a7a;
   background: transparent;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1.2;
   cursor: pointer;
@@ -5036,22 +5037,22 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-launch-knowledge-imported-sources {
   display: grid;
-  gap: 5px;
-  max-width: min(100%, 560px);
-  margin-top: 7px;
+  gap: 3px;
+  max-width: min(100%, 410px);
+  margin-top: 5px;
 }
 
 .community-launch-knowledge-imported-source {
   min-width: 0;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto auto;
+  grid-template-columns: 13px minmax(0, 1fr) 18px 18px;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 10px;
 }
 
-.community-launch-knowledge-imported-source svg {
+.community-launch-knowledge-imported-check {
   color: var(--accent-success, #66b786);
 }
 
@@ -5064,13 +5065,15 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-launch-knowledge-source-action {
+  width: 18px;
+  height: 18px;
   min-height: 0;
+  display: inline-grid;
+  place-items: center;
   border: 0;
   padding: 0;
   color: var(--text-secondary);
   background: transparent;
-  font-size: 11px;
-  font-weight: 800;
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
@@ -5078,7 +5081,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-launch-knowledge-source-action:hover {
   color: var(--text-primary);
-  text-decoration: underline;
 }
 
 .community-launch-knowledge-source-action.is-delete {

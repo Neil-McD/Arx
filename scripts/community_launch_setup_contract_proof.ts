@@ -460,8 +460,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*community-launch-knowledge-source-action[\s\S]*Delete/,
-  "launch knowledge Google Drive UI must show imported Drive sources inline, support deleting one source, and support disconnecting the provider",
+  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2/,
+  "launch knowledge Google Drive UI must show imported Drive sources inline with icon actions, support deleting one source, and support disconnecting the provider",
 );
 assert.match(
   setupModal,
@@ -495,7 +495,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Connected[\s\S]*Import selected/,
+  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Disconnect[\s\S]*Import selected/,
   "launch knowledge Google Drive chip must connect first, then allow file selection and import",
 );
 assert.match(

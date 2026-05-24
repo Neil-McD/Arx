@@ -13,12 +13,14 @@ import {
   Bot,
   Check,
   Circle,
+  ExternalLink,
   FileText,
   Folder,
   Image,
   Link2,
   LockKeyhole,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
@@ -2019,9 +2021,6 @@ export function WebCommunityLaunchSetupModal(
                 </div>
                 {knowledgeDriveConnection?.connected ? (
                   <div className="community-launch-knowledge-integration-status">
-                    <p className="community-launch-knowledge-integration-note">
-                      Connected{knowledgeDriveConnection.email ? ` as ${knowledgeDriveConnection.email}` : ""}.
-                    </p>
                     <button
                       type="button"
                       className="community-launch-knowledge-disconnect"
@@ -2036,7 +2035,12 @@ export function WebCommunityLaunchSetupModal(
                   <div className="community-launch-knowledge-imported-sources">
                     {effectiveKnowledgeGoogleDriveSources.map((source) => (
                       <div key={source.id} className="community-launch-knowledge-imported-source">
-                        <Check size={13} strokeWidth={3} aria-hidden="true" />
+                        <Check
+                          className="community-launch-knowledge-imported-check"
+                          size={11}
+                          strokeWidth={3}
+                          aria-hidden="true"
+                        />
                         <span>{source.title || "Drive source"}</span>
                         {source.source_external_url ? (
                           <a
@@ -2044,8 +2048,10 @@ export function WebCommunityLaunchSetupModal(
                             href={source.source_external_url}
                             target="_blank"
                             rel="noreferrer"
+                            aria-label={`Open ${source.title || "Drive source"}`}
+                            title="Open"
                           >
-                            Open
+                            <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
                           </a>
                         ) : null}
                         <button
@@ -2057,8 +2063,10 @@ export function WebCommunityLaunchSetupModal(
                             !onRemoveKnowledgeGoogleDriveSource
                           }
                           onClick={() => handleRemoveGoogleDriveSource(source)}
+                          aria-label={`${knowledgeDriveRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "Drive source"}`}
+                          title="Delete"
                         >
-                          {knowledgeDriveRemovingSourceId === source.id ? "Deleting..." : "Delete"}
+                          <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
                         </button>
                       </div>
                     ))}
