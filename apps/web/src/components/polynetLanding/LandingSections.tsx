@@ -479,17 +479,17 @@ function Communities() {
         <div className="head reveal">
           <div className="micro" style={{ marginBottom: 14 }}>/05 · SNAPSHOT FROM POLYNET</div>
           <h2 className="h-1" style={{maxWidth: 1000}}>
-            A live view into the network.
+            Snapshot from Polynet.
           </h2>
           <p className="body-lg" style={{marginTop:18, maxWidth:680}}>
-            Public activity from networks running on Polynet. Sanitized for privacy. Refreshed weekly.
+            Public activity from networks running on Polynet. Sanitized for privacy.
           </p>
         </div>
         <div className="snapshot-panel reveal">
           <div className="snapshot-header">
             <span className="snapshot-status">
               <span className="snapshot-status-dot" aria-hidden="true" />
-              Live feed coming online
+              Public-safe feed coming soon
             </span>
             <span className="snapshot-meta">Public-safe projection · v0</span>
           </div>
