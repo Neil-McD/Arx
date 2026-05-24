@@ -1,0 +1,513 @@
+/* Page sections — composed by app.jsx */
+// @ts-nocheck
+import { useState as useStateS } from "react";
+import { NetworkVisualization } from "./NetworkVisualization";
+
+function useReveal() {
+  // No-op: see index.html for note on why scroll reveal is disabled.
+}
+
+function TopNav({ onJoin }) {
+  const [menuOpen, setMenuOpen] = useStateS(false);
+  return (
+    <nav className="topnav">
+      <div className="wrap inner">
+        <a href="#" className="lockup">
+          <img src="/landing-polynet/logo.png" alt="Polynet" />
+          <div className="name">Polynet<span className="dot">.</span></div>
+        </a>
+        <button className="nav-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
+          {menuOpen ? '✕' : '☰'}
+        </button>
+        <div className={`links${menuOpen ? ' open' : ''}`}>
+          <a href="#argument" onClick={() => setMenuOpen(false)}>Thesis</a>
+          <a href="#network" onClick={() => setMenuOpen(false)}>Network</a>
+          <a href="#pillars" onClick={() => setMenuOpen(false)}>Product</a>
+          <a href="#communities" onClick={() => setMenuOpen(false)}>Communities</a>
+          <button className="btn btn-primary" style={{ padding: '10px 18px', fontSize: 14 }} onClick={() => { setMenuOpen(false); onJoin(); }}>
+            Join the waitlist <span className="arrow">→</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function Hero({ onJoin }) {
+  return (
+    <section className="hero">
+      <div className="bg">
+        <div className="grid-bg" />
+        <div className="globe" />
+      </div>
+      <div className="wrap content">
+        <div className="topline">
+          <span className="chip"><span className="dot" /> EARLY ACCESS · WAVE 03</span>
+          <span className="topline-right">
+            <span className="mono" style={{color:'var(--ink-3)', fontSize:11, letterSpacing:'0.16em'}}>v0.4.2 · SHIPPING WEEKLY</span>
+          </span>
+        </div>
+
+        <h1 className="h-display headline">
+          Build an <em>Intelligence Network</em> that Compounds.
+        </h1>
+        <p className="sub">
+          Build your agents. Deploy to everyone. Compound with every interaction. Scale without hiring.
+        </p>
+
+        <div className="cta-row">
+          <button className="btn btn-primary" onClick={onJoin}>
+            Join the network
+            <span className="arrow">→</span>
+          </button>
+          <a className="btn btn-ghost" href="#argument">
+            Read the thesis
+          </a>
+        </div>
+
+        <div className="meta">
+          <div>
+            <div className="k">/01 PREMISE</div>
+            <div className="v">"Software is eating the world." — Andreessen, 2011. Now it's coming for services.</div>
+          </div>
+          <div>
+            <div className="k">/02 IMPLICATION</div>
+            <div className="v">Today's org chart was built for a world without AI. Now that agents deliver services, the org chart becomes software.</div>
+          </div>
+          <div>
+            <div className="k">/03 SHAPE</div>
+            <div className="v">Companies stop looking like hierarchies. They start looking like networks with shared memory.</div>
+          </div>
+          <div>
+            <div className="k">/04 STAKES</div>
+            <div className="v">Those who are building this way today are compounding and out-accelerating their competitors. The race has already started.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Marquee() {
+  const phrases = [
+    'SERVICES AS SOFTWARE',
+    'HIERARCHY → INTELLIGENCE',
+    'AGENTS RUN THE WORK',
+    'COMMUNITIES SHIP LIKE COMPANIES',
+    'SHARED MEMORY IS THE MOAT',
+    'NO ORG CHART, NO BOTTLENECK',
+    'PEER-TO-PEER COORDINATION',
+  ];
+  const line = phrases.join('    \u25c6    ');
+  return (
+    <div className="marquee">
+      <div className="track">
+        <span>{line}</span>
+        <span>{line}</span>
+      </div>
+    </div>
+  );
+}
+
+function Argument() {
+  return (
+    <section className="argument" id="argument">
+      <div className="wrap">
+        <div className="reveal arg-head" style={{ marginBottom: 48 }}>
+          <div>
+            <div className="micro" style={{ marginBottom: 14 }}>/THE THESIS</div>
+            <h2 className="h-1">A logical argument,<br />in three moves.</h2>
+          </div>
+          <p className="body-lg" style={{ maxWidth: 460 }}>
+            Each step is uncontroversial on its own. Strung together, they describe an inevitability: the company is becoming a network.
+          </p>
+        </div>
+
+        <div className="grid">
+          <div className="step reveal d1">
+            <div className="n">/01 — IF</div>
+            <div className="claim">Software ate the <em>world</em>.</div>
+            <p className="body">Every category that could be digitized was — distribution, finance, communication, transportation, work itself. The remaining frontier was always going to be the thing software couldn't yet touch: judgment.</p>
+            <div className="arrow-down">↓ AND THEN</div>
+          </div>
+          <div className="step reveal d2">
+            <div className="n">/02 — AND</div>
+            <div className="claim"><em>AI</em> is eating services.</div>
+            <p className="body">Legal review. Accounting. Recruiting. Design. Strategy. Sales. The work that humans were paid to do — interpret context, generate output, decide — is now something models do continuously, in parallel, for cents.</p>
+            <div className="arrow-down">↓ THEREFORE</div>
+          </div>
+          <div className="step reveal d3">
+            <div className="n">/03 — THEN</div>
+            <div className="claim">The <em>hierarchy</em> collapses.</div>
+            <p className="body">Hierarchies exist to coordinate humans doing services. When agents do the services, the layers built to manage them stop earning their keep. What's left is a flat mesh of people and agents — a network with shared memory.</p>
+            <div className="arrow-down">→ POLYNET</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NetworkSection() {
+  return (
+    <section className="network-vis" id="network">
+      <div className="wrap">
+        <div className="head">
+          <div>
+            <div className="label">/04 · THE SHAPE</div>
+            <h2 className="h-1">The org chart<br />is a network now.</h2>
+          </div>
+          <div>
+            <p className="body-lg">Hierarchies were a workaround for the fact that information was lossy and humans were the only nodes. Both constraints just disappeared. The chart flips as you scroll into it — toggle to compare.</p>
+          </div>
+        </div>
+        <NetworkVisualization />
+        <div className="ooda-grid">
+          {[
+            ['Observe', 'quarterly reports', 'continuous sensors'],
+            ['Orient', 'committee review', 'continuous learning'],
+            ['Decide', 'meeting cadence', 'real-time'],
+            ['Act', 'assign → wait', 'agents execute'],
+          ].map(([k, before, after], i) => (
+            <div className="ooda-cell" key={k}>
+              <div style={{ color: 'var(--ink-3)' }}>/{(i+1).toString().padStart(2,'0')}</div>
+              <div style={{ color: 'var(--ink)', marginTop: 4, marginBottom: 12, letterSpacing: '0.16em' }}>{k}</div>
+              <div style={{ color: 'var(--ink-2)', textDecoration: 'line-through', opacity: 0.75 }}>{before}</div>
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: 'oklch(0.72 0.14 155)', fontSize: 13 }}>→</span>
+                <span style={{ color: 'var(--ink)' }}>{after}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MemorySection() {
+  return null;
+}
+
+/* Brand-native pillar glyphs — each is a fragment of the network motif
+   tuned to telegraph that pillar's specific idea. All share the node + edge
+   vocabulary so they read as one family. */
+
+const GlyphCompose = () => (
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+    {/* Loose nodes being wired into a graph */}
+    <g stroke="#d63a47" strokeWidth="1.4">
+      <line x1="12" y1="14" x2="32" y2="32" />
+      <line x1="52" y1="14" x2="32" y2="32" />
+      <line x1="12" y1="50" x2="32" y2="32" />
+      <line x1="52" y1="50" x2="32" y2="32" />
+      <line x1="12" y1="14" x2="12" y2="50" strokeDasharray="2 3" opacity="0.4" />
+      <line x1="52" y1="14" x2="52" y2="50" strokeDasharray="2 3" opacity="0.4" />
+    </g>
+    <g fill="#17171a" stroke="#d63a47" strokeWidth="1.4">
+      <circle cx="12" cy="14" r="4" />
+      <circle cx="52" cy="14" r="4" />
+      <circle cx="12" cy="50" r="4" />
+      <circle cx="52" cy="50" r="4" />
+    </g>
+    <circle cx="32" cy="32" r="6" fill="#d63a47" />
+  </svg>
+);
+
+const GlyphDeploy = () => (
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+    {/* A packaged node, trailing copies — services being deployed */}
+    <g stroke="#d63a47" strokeWidth="1.4" fill="none">
+      <rect x="20" y="20" width="24" height="24" rx="4" />
+      <rect x="14" y="26" width="24" height="24" rx="4" opacity="0.5" />
+      <rect x="8" y="32" width="24" height="24" rx="4" opacity="0.25" />
+    </g>
+    <circle cx="32" cy="32" r="5" fill="#d63a47" />
+    <g stroke="#d63a47" strokeWidth="1.4">
+      <line x1="32" y1="20" x2="32" y2="8" />
+      <line x1="44" y1="32" x2="56" y2="32" />
+    </g>
+    <g fill="#d63a47">
+      <circle cx="32" cy="8" r="3" />
+      <circle cx="56" cy="32" r="3" />
+    </g>
+  </svg>
+);
+
+const GlyphRemember = () => (
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+    {/* A memory core with edges streaming in from all sides */}
+    <g stroke="#d63a47" strokeWidth="1.4" opacity="0.8">
+      <line x1="8" y1="14" x2="28" y2="30" />
+      <line x1="56" y1="14" x2="36" y2="30" />
+      <line x1="8" y1="50" x2="28" y2="34" />
+      <line x1="56" y1="50" x2="36" y2="34" />
+      <line x1="32" y1="6" x2="32" y2="24" />
+      <line x1="32" y1="58" x2="32" y2="40" />
+    </g>
+    <g fill="#17171a" stroke="#d63a47" strokeWidth="1.2">
+      <circle cx="8" cy="14" r="3" />
+      <circle cx="56" cy="14" r="3" />
+      <circle cx="8" cy="50" r="3" />
+      <circle cx="56" cy="50" r="3" />
+      <circle cx="32" cy="6" r="3" />
+      <circle cx="32" cy="58" r="3" />
+    </g>
+    {/* Central memory ring */}
+    <circle cx="32" cy="32" r="10" fill="none" stroke="#d63a47" strokeWidth="1.4" />
+    <circle cx="32" cy="32" r="4" fill="#d63a47" />
+  </svg>
+);
+
+const GlyphScale = () => (
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+    {/* A single node branching into many — network growth */}
+    <g stroke="#d63a47" strokeWidth="1.4">
+      <line x1="14" y1="32" x2="32" y2="20" />
+      <line x1="14" y1="32" x2="32" y2="44" />
+      <line x1="32" y1="20" x2="50" y2="10" />
+      <line x1="32" y1="20" x2="50" y2="26" />
+      <line x1="32" y1="44" x2="50" y2="38" />
+      <line x1="32" y1="44" x2="50" y2="54" />
+    </g>
+    <g fill="#d63a47">
+      <circle cx="14" cy="32" r="5" />
+    </g>
+    <g fill="#17171a" stroke="#d63a47" strokeWidth="1.4">
+      <circle cx="32" cy="20" r="3.5" />
+      <circle cx="32" cy="44" r="3.5" />
+    </g>
+    <g fill="#d63a47" opacity="0.85">
+      <circle cx="50" cy="10" r="2.5" />
+      <circle cx="50" cy="26" r="2.5" />
+      <circle cx="50" cy="38" r="2.5" />
+      <circle cx="50" cy="54" r="2.5" />
+    </g>
+  </svg>
+);
+
+function Pillars() {
+  const cells = [
+    {
+      n: '/01', name: 'BUILD', icon: <GlyphCompose />,
+      title: 'Build the agent.',
+      body: 'Wire apps, MCP servers, skills, workflows, docs and files into an agent that knows your method and your voice.',
+    },
+    {
+      n: '/02', name: 'DEPLOY', icon: <GlyphDeploy />,
+      title: 'Deploy to everyone.',
+      body: 'Ship it as a paid service to your community, or roll it out across your team. Every member gets their own agent doing the work — not just a place to chat.',
+    },
+    {
+      n: '/03', name: 'COMPOUND', icon: <GlyphRemember />,
+      title: 'Compound with usage.',
+      body: 'Every conversation, every outcome writes back. Patterns crystallize into playbooks. The system gets smarter the more it runs.',
+    },
+    {
+      n: '/04', name: 'SCALE', icon: <GlyphScale />,
+      title: 'Grow revenue, not headcount.',
+      body: 'More members, more compounding, more revenue — on the same lean team. Throughput scales on a network curve, not a headcount curve.',
+    },
+  ];
+  return (
+    <section className="pillars" id="pillars">
+      <div className="wrap">
+        <div className="head reveal">
+          <div>
+            <div className="micro" style={{ marginBottom: 14 }}>/05 · THE PRODUCT</div>
+            <h2 className="h-1">Four primitives.<br />One operating layer.</h2>
+          </div>
+          <p className="body-lg">Polynet is a substrate for running an organization as a network of people and agents. The product is four primitives that compose into anything you'd otherwise hire a company to do.</p>
+        </div>
+        <div className="grid">
+          {cells.map(c => (
+            <div className="cell reveal" key={c.name}>
+              <div className="num">{c.n}</div>
+              <div className="icon">{c.icon}</div>
+              <div className="name">{c.name}</div>
+              <h3>{c.title}</h3>
+              <p>{c.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Communities() {
+  const cards = [
+    {
+      tk: 'NODE 014 · LEGAL',
+      title: 'A 3-person law firm that runs like a 50-person one.',
+      desc: 'Two partners + one paralegal + a Polynet of contract, discovery and intake agents. Caseload up 7×, billable hours down.',
+      a: ['Headcount', '3'],
+      b: ['Throughput', '×7.4'],
+    },
+    {
+      tk: 'NODE 028 · BRAND STUDIO',
+      title: 'A creative collective with no studio.',
+      desc: 'Forty designers, no office, no PM layer. Briefs route to whichever node — human or agent — has matching memory. Clients get work in hours.',
+      a: ['Network', '40 peers'],
+      b: ['Cycle time', '< 6h'],
+    },
+    {
+      tk: 'NODE 041 · GROWTH ENGINE',
+      title: 'A community of operators selling to itself.',
+      desc: 'Two hundred ex-founders running shared playbooks. Each deal closed writes back to the memory. The next deal starts smarter than the last.',
+      a: ['Operators', '212'],
+      b: ['Pipeline', '$84M ARR'],
+    },
+  ];
+  return (
+    <section className="communities" id="communities">
+      <div className="wrap">
+        <div className="head reveal">
+          <div className="micro" style={{ marginBottom: 14 }}>/06 · WHAT'S RUNNING</div>
+          <h2 className="h-1" style={{maxWidth: 1000}}>
+            Networks running on Polynet.
+          </h2>
+          <p className="body-lg" style={{marginTop:18, maxWidth:680}}>
+            Real networks — humans + agents on shared memory — running real workloads in production today. We onboard one new network a week.
+          </p>
+        </div>
+        <div className="cards">
+          {cards.map((c, i) => (
+            <div className="card reveal" style={{transitionDelay: `${0.08 * i}s`}} key={c.tk}>
+              <div className="ticker">{c.tk}</div>
+              <h3>{c.title}</h3>
+              <p className="desc">{c.desc}</p>
+              <div className="footer">
+                <div className="item">
+                  <div className="k">{c.a[0]}</div>
+                  <div className="v mono">{c.a[1]}</div>
+                </div>
+                <div className="item">
+                  <div className="k">{c.b[0]}</div>
+                  <div className="v mono">{c.b[1]}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Manifesto() {
+  return (
+    <section className="manifesto">
+      <div className="wrap inner">
+        <div className="grid">
+          <div className="left">
+            <div className="label">/07 · THE CLAIM</div>
+            <div className="lead">
+              <span className="num">01 / 01</span>
+              An argument made in eight sections. It ends here.
+            </div>
+          </div>
+          <div className="right">
+            <h2>
+              <span className="quiet">The next decade's defining companies won't </span>
+              <span className="strike">look like companies</span>
+              <span className="quiet">. They'll look like </span>
+              <span className="pink">networks that ship</span>
+              <span className="quiet">.</span>
+            </h2>
+            <div className="coda">
+              <span className="sig">
+                <img src="/landing-polynet/logo.png" alt="" />
+                Polynet — from hierarchy to intelligence.
+              </span>
+              <span style={{flex:1, minWidth:200}}>
+                The operating layer for them. Built for the people and agents wiring up what comes after the hierarchy — not in five years, now.
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FinalCTA({ onJoin }) {
+  return (
+    <section className="cta" id="join">
+      <div className="wrap inner">
+        <div>
+          <div className="micro" style={{ marginBottom: 14, color: 'var(--pink)' }}>/08 · NOW</div>
+          <h2>Join the network<br />before it joins <em>you</em>.</h2>
+        </div>
+        <div className="right">
+          <div className="label">EARLY ACCESS · WAVE 03</div>
+          <p>We're onboarding the next 200 networks. Tell us where you operate and we'll route an access link when your slot opens.</p>
+          <button className="btn btn-primary open-btn" onClick={onJoin}>
+            <span>Get an access link</span>
+            <span className="arrow">→</span>
+          </button>
+          <div style={{display:'flex', justifyContent:'space-between', marginTop:16, fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--ink-3)', letterSpacing:'0.14em', textTransform:'uppercase'}}>
+            <span>5 questions · 90 seconds</span>
+            <span>No marketing list</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="site">
+      <div className="wrap">
+        <div className="row">
+          <div className="col">
+            <a href="#" className="lockup">
+              <img src="/landing-polynet/logo.png" alt="" />
+              <div className="name">Polynet<span className="dot">.</span></div>
+            </a>
+            <div className="blurb">The operating layer for the network organization. Built for the world after the hierarchy.</div>
+          </div>
+          <div className="col">
+            <h4>Product</h4>
+            <a href="#pillars">Build</a>
+            <a href="#pillars">Deploy</a>
+            <a href="#pillars">Compound</a>
+            <a href="#pillars">Scale</a>
+          </div>
+          <div className="col">
+            <h4>Argument</h4>
+            <a href="#argument">Thesis</a>
+            <a href="#network">Network shape</a>
+            <a href="#memory">Multi-party memory</a>
+            <a href="#communities">Case studies</a>
+          </div>
+          <div className="col">
+            <h4>Company</h4>
+            <a href="#">Manifesto</a>
+            <a href="#">Careers · 04</a>
+            <a href="#">Press kit</a>
+            <a href="#">hello@polynet.dev</a>
+          </div>
+        </div>
+        <div className="legal">
+          <span>© POLYNET 2026 · BUILT ON A NETWORK</span>
+          <span>SAN FRANCISCO · LISBON · NEW YORK</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+export {
+  TopNav,
+  Hero,
+  Marquee,
+  Argument,
+  NetworkSection,
+  Pillars,
+  Communities,
+  Manifesto,
+  FinalCTA,
+  SiteFooter,
+};
