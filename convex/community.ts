@@ -3,6 +3,7 @@ import {
   communityOwnerHasArchitectAccess as communityOwnerHasArchitectAccessImpl,
   countCommunityMemberships as countCommunityMembershipsImpl,
   denyCommunityJoinRequest as denyCommunityJoinRequestImpl,
+  getCommunityMemberBillingHistory as getCommunityMemberBillingHistoryImpl,
   getCommunityMemberSettings as getCommunityMemberSettingsImpl,
   getCommunityAnalyticsSnapshot as getCommunityAnalyticsSnapshotImpl,
   getCommunityAnalyticsSummary as getCommunityAnalyticsSummaryImpl,
@@ -20,6 +21,7 @@ import {
   saveCommunityMemberSettings as saveCommunityMemberSettingsImpl,
   setCommunityFreeAccessMode as setCommunityFreeAccessModeImpl,
   setCommunityMemberRole as setCommunityMemberRoleImpl,
+  syncCommunityMembershipCount as syncCommunityMembershipCountImpl,
   unbanCommunityUser as unbanCommunityUserImpl,
 } from "./communityAdmin";
 import {
@@ -77,8 +79,25 @@ import {
   countCommunityResources as countCommunityResourcesImpl,
   editCommunityResourceBuilderResource as editCommunityResourceBuilderResourceImpl,
   ensureCommunityResourceWikiScaffold as ensureCommunityResourceWikiScaffoldImpl,
+  beginGoogleDriveSourceOAuth as beginGoogleDriveSourceOAuthImpl,
+  beginGitHubSourceOAuth as beginGitHubSourceOAuthImpl,
+  finalizeGoogleDriveSourceOAuth as finalizeGoogleDriveSourceOAuthImpl,
+  finalizeGitHubSourceOAuth as finalizeGitHubSourceOAuthImpl,
+  generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl,
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
+  getGitHubSourceConnectionStatus as getGitHubSourceConnectionStatusImpl,
+  getGoogleDriveSourceConnectionStatus as getGoogleDriveSourceConnectionStatusImpl,
   getCommunityResourceBuilderHealth as getCommunityResourceBuilderHealthImpl,
+  importGitHubSourceFiles as importGitHubSourceFilesImpl,
+  importGoogleDriveSourceFiles as importGoogleDriveSourceFilesImpl,
+  ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl,
+  ingestCommunitySourceGitHub as ingestCommunitySourceGitHubImpl,
+  ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl,
+  ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl,
+  ingestCommunitySources as ingestCommunitySourcesImpl,
+  listGitHubSourceFiles as listGitHubSourceFilesImpl,
+  listGitHubSourceRepositories as listGitHubSourceRepositoriesImpl,
+  listGoogleDriveSourceFiles as listGoogleDriveSourceFilesImpl,
   recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
   createCommunityResourcePageDraftFromSource as createCommunityResourcePageDraftFromSourceImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
@@ -120,6 +139,7 @@ import {
 } from "./communityLaunchSetup";
 import {
   applyCommunityWikiArchitectProposal as applyCommunityWikiArchitectProposalImpl,
+  draftCommunityResourceContentFromSources as draftCommunityResourceContentFromSourcesImpl,
   runCommunityWikiArchitectProposal as runCommunityWikiArchitectProposalImpl,
 } from "./communityWikiArchitect";
 import {
@@ -161,12 +181,14 @@ export const listCommunityMemberships = listCommunityMembershipsImpl;
 export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
 export const listCommunityMembershipsAdminPage = listCommunityMembershipsAdminPageImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;
+export const syncCommunityMembershipCount = syncCommunityMembershipCountImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
 export const readCommunityRecentContext = readCommunityRecentContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;
 export const approveCommunityJoinRequest = approveCommunityJoinRequestImpl;
 export const denyCommunityJoinRequest = denyCommunityJoinRequestImpl;
+export const getCommunityMemberBillingHistory = getCommunityMemberBillingHistoryImpl;
 export const setCommunityMemberRole = setCommunityMemberRoleImpl;
 export const removeCommunityMember = removeCommunityMemberImpl;
 export const banCommunityMember = banCommunityMemberImpl;
@@ -232,7 +254,25 @@ export const saveCommunityMemberOnboardingConfig = saveCommunityMemberOnboarding
 export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
+export const beginGoogleDriveSourceOAuth: any = beginGoogleDriveSourceOAuthImpl;
+export const beginGitHubSourceOAuth: any = beginGitHubSourceOAuthImpl;
+export const finalizeGoogleDriveSourceOAuth: any = finalizeGoogleDriveSourceOAuthImpl;
+export const finalizeGitHubSourceOAuth: any = finalizeGitHubSourceOAuthImpl;
+export const generateCommunityResourceSourceUploadUrl = generateCommunityResourceSourceUploadUrlImpl;
+export const getGitHubSourceConnectionStatus = getGitHubSourceConnectionStatusImpl;
+export const getGoogleDriveSourceConnectionStatus = getGoogleDriveSourceConnectionStatusImpl;
+export const importGitHubSourceFiles: any = importGitHubSourceFilesImpl;
+export const importGoogleDriveSourceFiles: any = importGoogleDriveSourceFilesImpl;
+export const ingestCommunitySources: any = ingestCommunitySourcesImpl;
+export const ingestCommunitySourceLinks: any = ingestCommunitySourceLinksImpl;
+export const ingestCommunitySourceFiles: any = ingestCommunitySourceFilesImpl;
+export const ingestCommunitySourceGitHub: any = ingestCommunitySourceGitHubImpl;
+export const ingestCommunitySourceGoogleDrive: any = ingestCommunitySourceGoogleDriveImpl;
+export const listGitHubSourceFiles: any = listGitHubSourceFilesImpl;
+export const listGitHubSourceRepositories: any = listGitHubSourceRepositoriesImpl;
+export const listGoogleDriveSourceFiles: any = listGoogleDriveSourceFilesImpl;
 export const runCommunityWikiArchitectProposal: any = runCommunityWikiArchitectProposalImpl;
+export const draftCommunityResourceContentFromSources: any = draftCommunityResourceContentFromSourcesImpl;
 export const deleteCommunity = deleteCommunityImpl;
 export const getCommunityArchiveHealth = getCommunityArchiveHealthImpl;
 export const requestCommunityArchiveBackfill = requestCommunityArchiveBackfillImpl;

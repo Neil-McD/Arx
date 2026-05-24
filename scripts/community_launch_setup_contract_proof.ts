@@ -417,8 +417,58 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /Collect source material[\s\S]*Sources[\s\S]*Drop source material[\s\S]*Links[\s\S]*Add source links[\s\S]*Integrations[\s\S]*Google Drive[\s\S]*GitHub/,
+  /Collect source material[\s\S]*Sources[\s\S]*Drop source material[\s\S]*Drop files or choose files[\s\S]*Links[\s\S]*Add source links[\s\S]*Integrations[\s\S]*Google Drive[\s\S]*GitHub/,
   "launch knowledge step must separate file sources, link sources, and connected source integrations",
+);
+assert.match(
+  setupModal,
+  /CommunityLaunchGoogleDriveConnection[\s\S]*CommunityLaunchGoogleDriveFile[\s\S]*onLoadKnowledgeGoogleDriveConnection[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles/,
+  "launch knowledge integrations must expose a concrete Google Drive lifecycle contract",
+);
+assert.match(
+  setupModal,
+  /CommunityLaunchGitHubConnection[\s\S]*CommunityLaunchGitHubRepository[\s\S]*CommunityLaunchGitHubFile[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles/,
+  "launch knowledge integrations must expose a concrete GitHub lifecycle contract",
+);
+assert.match(
+  setupModal,
+  /knowledgeDriveConnection[\s\S]*knowledgeDriveFiles[\s\S]*knowledgeDriveSelectedIds[\s\S]*handleGoogleDrivePrimaryAction[\s\S]*handleImportGoogleDriveFiles/,
+  "launch knowledge Google Drive UI must track connection, file selection, and import state",
+);
+assert.match(
+  setupModal,
+  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleImportGitHubFiles/,
+  "launch knowledge GitHub UI must track connection, repository/file selection, and import state",
+);
+assert.match(
+  setupModal,
+  /Google Drive[\s\S]*Select files[\s\S]*Connect[\s\S]*Connected[\s\S]*Import selected/,
+  "launch knowledge Google Drive chip must connect first, then allow file selection and import",
+);
+assert.match(
+  setupModal,
+  /GitHub[\s\S]*Select repo[\s\S]*Connect[\s\S]*GitHub connected[\s\S]*Import selected/,
+  "launch knowledge GitHub chip must connect first, then allow repository/file selection and import",
+);
+assert.match(
+  appShell,
+  /SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES[\s\S]*source_integration_oauth[\s\S]*source_integration_finalize_token[\s\S]*provider !== "google_drive" && provider !== "github"[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*`\$\{providerLabel\} connected\.`/,
+  "app shell must finalize source integration OAuth returns for the launch integration flow",
+);
+assert.match(
+  appShell,
+  /handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
+  "app shell must wire launch Knowledge Google Drive connection, listing, and import handlers",
+);
+assert.match(
+  appShell,
+  /handleLoadCommunityLaunchGitHubConnection[\s\S]*loadCloudCommunityGitHubSourceConnection[\s\S]*handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
+  "app shell must wire launch Knowledge GitHub connection, listing, and import handlers",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Drop files here once ingestion is enabled/,
+  "launch knowledge source uploads must not be a disabled placeholder",
 );
 assert.doesNotMatch(
   setupModal,
@@ -427,12 +477,12 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /handlePrepareKnowledgeResources[\s\S]*saveKnowledgeLinkDrafts\(\)[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*setActiveStep\("publish"\)/,
-  "launch knowledge Next must run the internal resource preparation loop before advancing",
+  /handlePrepareKnowledgeResources[\s\S]*saveKnowledgeLinkDrafts\(\)[\s\S]*onIngestKnowledgeSources[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  "launch knowledge Next must run the internal resource preparation loop before opening Resources review",
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*Curating resources\.\.\.)(?=[\s\S]*Draft resources prepared\. Review, edit, and publish them from Resources\.)/,
+  /(?=[\s\S]*Curating resources\.\.\.)(?=[\s\S]*Resources drafted for review\.)(?=[\s\S]*Draft resources prepared for review\.)/,
   "launch knowledge step must present agent preparation as an internal progress state",
 );
 assert.doesNotMatch(
@@ -451,9 +501,19 @@ assert.match(
   "launch knowledge link entries must trim source URLs and write through the onboarding save path",
 );
 assert.match(
+  setupModal,
+  /onAddKnowledgeFile[\s\S]*saveKnowledgeFiles[\s\S]*handleKnowledgeFileDrop[\s\S]*community-launch-knowledge-dropzone/,
+  "launch knowledge file uploads must write through the onboarding save path",
+);
+assert.match(
   appShell,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"/,
-  "launch knowledge links must create canonical reviewed source resources",
+  /handleAddCommunityLaunchKnowledgeFile[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*type: "file"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "file"/,
+  "launch knowledge files must create canonical reviewed source resources queued for file ingestion",
+);
+assert.match(
+  appShell,
+  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"/,
+  "launch knowledge links must create canonical reviewed source resources queued for ingestion",
 );
 assert.doesNotMatch(
   setupModal,

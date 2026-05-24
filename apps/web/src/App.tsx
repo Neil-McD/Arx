@@ -51,7 +51,7 @@ import {
 import type { CommunityMemberOnboardingConfig } from "../../../shared/communityMemberOnboarding";
 import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
 import {
-  buildCsv, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
+  buildCsv, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
 import {
   formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, type StripeConnectReturn, } from "../../../shared/accountCommerce";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
@@ -126,13 +126,28 @@ import {
 } from "../../../shared/cloudCommunityAgentGateway";
 import {
   applyCloudCommunityWikiArchitectProposal,
+  beginCloudCommunityGoogleDriveSourceOAuth,
+  beginCloudCommunityGitHubSourceOAuth,
   createCloudCommunity,
+  draftCloudCommunityResourceContentFromSources,
   ensureCloudCommunityResourceWikiScaffold,
+  fetchCloudCommunityMemberBillingHistory,
+  finalizeCloudCommunityGoogleDriveSourceOAuth,
+  finalizeCloudCommunityGitHubSourceOAuth,
   getCloudCommunityResourceBuilderHealth,
+  importCloudCommunityGitHubSourceFiles,
+  importCloudCommunityGoogleDriveSourceFiles,
+  ingestCloudCommunitySources,
+  listCloudCommunityGitHubSourceFiles,
+  listCloudCommunityGitHubSourceRepositories,
+  listCloudCommunityGoogleDriveSourceFiles,
+  loadCloudCommunityGitHubSourceConnection,
+  loadCloudCommunityGoogleDriveSourceConnection,
   prepareCloudCommunityBrandingField,
   runCloudCommunityWikiArchitectProposal,
   saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
+  uploadCloudCommunityResourceSourceFile,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
   loadCloudCommunityLaunchSetupStatus,
@@ -839,6 +854,20 @@ type CommunityResource = {
   body_md: string | null;
   url: string | null;
   file_key?: string | null;
+  source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
+  source_ingestion_kind?: "manual" | "url" | "file" | "google_drive" | "github";
+  source_ingestion_error?: string | null;
+  source_ingestion_attempted_at?: string | null;
+  source_ingested_at?: string | null;
+  source_original_filename?: string | null;
+  source_original_mime_type?: string | null;
+  source_original_bytes?: number | null;
+  source_external_provider?: "google_drive" | "github" | null;
+  source_external_id?: string | null;
+  source_external_name?: string | null;
+  source_external_url?: string | null;
+  source_external_mime_type?: string | null;
+  source_external_modified_at?: string | null;
   pinned: boolean;
   sort_order: number | null;
   created_at: string;
@@ -977,6 +1006,15 @@ const APP_OAUTH_RETURN_PARAM_NAMES = [
   "app_oauth_message",
   "catalog_app_id",
 ] as const;
+const SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES = [
+  "source_integration_oauth",
+  "source_integration_provider",
+  "source_integration_state",
+  "source_integration_finalize_token",
+  "source_integration_message",
+  "community_launch_setup",
+  "community_launch_step",
+] as const;
 const APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX = "app_oauth_finalize:";
 const APP_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
 
@@ -1002,6 +1040,31 @@ function claimAppOAuthFinalizeSessionGuard(key: string): boolean {
   } catch {
     return true;
   }
+}
+
+function buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(): string {
+  if (typeof window === "undefined") {
+    return "/discover?community_launch_setup=1&community_launch_step=knowledge";
+  }
+  const url = new URL(
+    `${window.location.pathname}${window.location.search}`,
+    window.location.origin,
+  );
+  url.searchParams.set("community_launch_setup", "1");
+  url.searchParams.set("community_launch_step", "knowledge");
+  return `${url.pathname}${url.search}`;
+}
+
+function shouldRestoreCommunityLaunchKnowledgeStep(
+  params: URLSearchParams,
+): boolean {
+  const setup = String(params.get("community_launch_setup") ?? "")
+    .trim()
+    .toLowerCase();
+  const step = String(params.get("community_launch_step") ?? "")
+    .trim()
+    .toLowerCase();
+  return (setup === "1" || setup === "true") && step === "knowledge";
 }
 
 function clearAppOAuthFinalizeSessionGuard(key: string): void {
@@ -1620,6 +1683,8 @@ export default function App() {
     useState(false);
   const [isCommunityLaunchCreateMode, setIsCommunityLaunchCreateMode] =
     useState(false);
+  const [communityLaunchSetupInitialStep, setCommunityLaunchSetupInitialStep] =
+    useState<CommunityLaunchSetupStep | null>(null);
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const profileUi = useWebProfileSettingsUiController({
@@ -2936,6 +3001,12 @@ export default function App() {
     return nextPublicRoute;
   }, [applyAppRouteState]);
 
+  const restoreCommunityLaunchKnowledgeOAuthContext = useCallback(() => {
+    setIsCommunityLaunchCreateMode(false);
+    setCommunityLaunchSetupInitialStep("knowledge");
+    setIsCommunityLaunchSetupModalOpen(true);
+  }, []);
+
   const applyStandaloneWorkspaceLaunch = useCallback((nextPath: string) => {
     window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
     applyCommunityShellState({
@@ -3216,6 +3287,7 @@ export default function App() {
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const appOAuthFinalizeInFlightRef = useRef<string | null>(null);
+  const sourceIntegrationOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
   const [previewAccessGateModal, setPreviewAccessGateModal] = useState<
     NonNullable<WebGlobalOverlayHostProps["previewAccessGateModalProps"]>["previewAccessGateModal"]
@@ -3426,7 +3498,6 @@ export default function App() {
   >({
     activeCommunityId,
     ...authenticatedSessionArg,
-    parseContentRangeTotal,
     ensureCommunityChatThread,
     confirmAction: (message) => confirm(message),
     reloadCommunities: loadCommunities,
@@ -3481,6 +3552,17 @@ export default function App() {
     setCommunityAnalyticsSummary,
     setCommunityAnalyticsSeries,
   });
+  const loadCommunityMemberBillingHistory = useCallback(async (membershipId: string) => {
+    const usableSession = await ensureUsableAuthSession();
+    const communityId = activeCommunityIdRef.current ?? activeCommunityId;
+    if (!usableSession || !communityId) return null;
+    return await fetchCloudCommunityMemberBillingHistory({
+      session: usableSession,
+      communityId,
+      membershipId,
+      limit: 20,
+    });
+  }, [activeCommunityId, ensureUsableAuthSession]);
 
   const {
     loadCommunityAgentConfig,
@@ -4609,6 +4691,91 @@ export default function App() {
   ]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("source_integration_oauth");
+    if (!status) return;
+    const restoreLaunchKnowledgeStep = shouldRestoreCommunityLaunchKnowledgeStep(params);
+    const provider = params.get("source_integration_provider")?.trim() ?? "";
+    if (provider !== "google_drive" && provider !== "github") {
+      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      return;
+    }
+    const providerLabel = provider === "github" ? "GitHub" : "Google Drive";
+
+    if (status === "error") {
+      showAppToastMessage(
+        params.get("source_integration_message")?.trim() ||
+          `${providerLabel} connection was not completed.`,
+      );
+      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      return;
+    }
+
+    if (status !== "pending") {
+      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      return;
+    }
+    const state = params.get("source_integration_state")?.trim() ?? "";
+    const finalizeToken = params.get("source_integration_finalize_token")?.trim() ?? "";
+    if (!state || !finalizeToken) {
+      showAppToastMessage(`${providerLabel} connection could not be finalized.`);
+      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      return;
+    }
+    if (!session) return;
+    const inFlightKey = `${state}:${finalizeToken}`;
+    if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) return;
+    const sessionGuardKey = buildAppOAuthFinalizeSessionGuardKey(
+      `source:${state}`,
+      finalizeToken,
+    );
+    if (!claimAppOAuthFinalizeSessionGuard(sessionGuardKey)) return;
+    sourceIntegrationOAuthFinalizeInFlightRef.current = inFlightKey;
+
+    void (async () => {
+      try {
+        const result = provider === "github"
+          ? await finalizeCloudCommunityGitHubSourceOAuth({
+              session,
+              state,
+              finalizeToken,
+            })
+          : await finalizeCloudCommunityGoogleDriveSourceOAuth({
+              session,
+              state,
+              finalizeToken,
+            });
+        showAppToastMessage(
+          result.ok
+            ? `${providerLabel} connected.`
+            : result.error_message || `${providerLabel} connection could not be finalized.`,
+        );
+        scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
+        applyLocationToState();
+        if (restoreLaunchKnowledgeStep) restoreCommunityLaunchKnowledgeOAuthContext();
+      } finally {
+        clearAppOAuthFinalizeSessionGuard(sessionGuardKey);
+        if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) {
+          sourceIntegrationOAuthFinalizeInFlightRef.current = null;
+        }
+      }
+    })();
+  }, [
+    applyLocationToState,
+    restoreCommunityLaunchKnowledgeOAuthContext,
+    session,
+    showAppToastMessage,
+  ]);
+
+  useEffect(() => {
     if (shellVariant !== "standard" || !isLikelyMobileDevice) return;
     if (hasOAuthCallbackParamsInLocation()) return;
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -5707,6 +5874,7 @@ export default function App() {
       setCommunityLaunchSetupError(null);
       setIsLoadingCommunityLaunchSetupStatus(false);
       setIsCommunityLaunchSetupModalOpen(false);
+      setCommunityLaunchSetupInitialStep(null);
       return;
     }
     let cancelled = false;
@@ -7460,6 +7628,7 @@ export default function App() {
       ).trim();
       if (!nextCommunitySlug) return;
       setIsCommunityLaunchSetupModalOpen(false);
+      setCommunityLaunchSetupInitialStep(null);
       pushNavSnapshot();
       if (step === "knowledge") {
         openCommunityTab(nextCommunitySlug, "resources", { pushSnapshot: false });
@@ -7622,8 +7791,8 @@ export default function App() {
         } catch {
           throw new Error("Add valid source links.");
         }
-        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-          throw new Error("Add http or https source links.");
+        if (parsedUrl.protocol !== "https:") {
+          throw new Error("Add https source links.");
         }
         const titlePath = parsedUrl.pathname && parsedUrl.pathname !== "/" ? parsedUrl.pathname : "";
         const title = `${parsedUrl.hostname.replace(/^www\./, "")}${titlePath}`.slice(0, 120);
@@ -7639,12 +7808,150 @@ export default function App() {
             type: "link",
             resource_role: "source",
             resource_status: "review",
+            source_ingestion_status: "queued",
+            source_ingestion_kind: "url",
             pinned: false,
           },
         });
       }
       await loadCommunityResources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleAddCommunityLaunchKnowledgeFile = async (draft: { files: File[] }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const files = draft.files.filter((file) => file.size > 0).slice(0, 5);
+      if (files.length === 0) throw new Error("Add a source file.");
+      for (const file of files) {
+        const storageId = await uploadCloudCommunityResourceSourceFile({
+          session,
+          communityId: community.id,
+          file,
+        });
+        await saveCloudCommunityResource({
+          session,
+          resourceId: null,
+          isPatch: false,
+          payload: {
+            community_id: community.id,
+            title: file.name || "Source file",
+            body_md: null,
+            url: null,
+            file_key: storageId,
+            type: "file",
+            resource_role: "source",
+            resource_status: "review",
+            source_ingestion_status: "queued",
+            source_ingestion_kind: "file",
+            source_original_filename: file.name || null,
+            source_original_mime_type: file.type || null,
+            source_original_bytes: file.size,
+            pinned: false,
+          },
+        });
+      }
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleIngestCommunityLaunchKnowledgeSources = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await ingestCloudCommunitySources({
+        session,
+        communityId: community.id,
+        limit: 20,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return result as any;
+    };
+    const handleLoadCommunityLaunchGoogleDriveConnection = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      return await loadCloudCommunityGoogleDriveSourceConnection({
+        session,
+        communityId: community.id,
+      });
+    };
+    const handleConnectCommunityLaunchGoogleDrive = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await beginCloudCommunityGoogleDriveSourceOAuth({
+        session,
+        communityId: community.id,
+        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(),
+      });
+      if (result.ok && result.authorize_url) {
+        window.location.assign(result.authorize_url);
+      }
+      return result;
+    };
+    const handleListCommunityLaunchGoogleDriveFiles = async (query?: string | null) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      return await listCloudCommunityGoogleDriveSourceFiles({
+        session,
+        communityId: community.id,
+        query,
+      });
+    };
+    const handleImportCommunityLaunchGoogleDriveFiles = async (fileIds: string[]) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await importCloudCommunityGoogleDriveSourceFiles({
+        session,
+        communityId: community.id,
+        fileIds,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return result;
+    };
+    const handleLoadCommunityLaunchGitHubConnection = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      return await loadCloudCommunityGitHubSourceConnection({
+        session,
+        communityId: community.id,
+      });
+    };
+    const handleConnectCommunityLaunchGitHub = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await beginCloudCommunityGitHubSourceOAuth({
+        session,
+        communityId: community.id,
+        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath(),
+      });
+      if (result.ok && result.authorize_url) {
+        window.location.assign(result.authorize_url);
+      }
+      return result;
+    };
+    const handleListCommunityLaunchGitHubRepositories = async (query?: string | null) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      return await listCloudCommunityGitHubSourceRepositories({
+        session,
+        communityId: community.id,
+        query,
+      });
+    };
+    const handleListCommunityLaunchGitHubFiles = async (
+      repoFullName: string,
+      ref?: string | null,
+      query?: string | null,
+    ) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      return await listCloudCommunityGitHubSourceFiles({
+        session,
+        communityId: community.id,
+        repoFullName,
+        ref,
+        query,
+      });
+    };
+    const handleImportCommunityLaunchGitHubFiles = async (fileIds: string[]) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await importCloudCommunityGitHubSourceFiles({
+        session,
+        communityId: community.id,
+        fileIds,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return result;
     };
     const handleLoadCommunityLaunchKnowledgeHealth = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
@@ -7679,6 +7986,17 @@ export default function App() {
         session,
         communityId: community.id,
         proposal: draft.proposal,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return result as any;
+    };
+    const handleDraftCommunityLaunchKnowledgeResources = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await draftCloudCommunityResourceContentFromSources({
+        session,
+        communityId: community.id,
+        limit: 8,
       });
       await loadCommunityResources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
@@ -7791,12 +8109,13 @@ export default function App() {
         if (getOwnedCommunityCount() >= maxCommunities) {
           showAppToastMessage("You've built the maximum number of communities");
           return;
-        }
-        setCommunityLaunchSetupStatus(null);
-        setCommunityLaunchSetupError(null);
-        setIsLoadingCommunityLaunchSetupStatus(false);
-        setIsCommunityLaunchCreateMode(true);
-        setIsCommunityLaunchSetupModalOpen(true);
+	        }
+	        setCommunityLaunchSetupStatus(null);
+	        setCommunityLaunchSetupError(null);
+	        setIsLoadingCommunityLaunchSetupStatus(false);
+	        setCommunityLaunchSetupInitialStep(null);
+	        setIsCommunityLaunchCreateMode(true);
+	        setIsCommunityLaunchSetupModalOpen(true);
         navigateTo("/workspace");
       })();
     };
@@ -7879,9 +8198,10 @@ export default function App() {
           session: activeSession,
           communityId: community.id,
         });
-        setCommunityLaunchSetupStatus(launchStatus);
-        setCommunityLaunchSetupError(null);
-        setIsCommunityLaunchSetupModalOpen(true);
+	        setCommunityLaunchSetupStatus(launchStatus);
+	        setCommunityLaunchSetupError(null);
+	        setCommunityLaunchSetupInitialStep(null);
+	        setIsCommunityLaunchSetupModalOpen(true);
       } catch (error) {
         throw new Error(mapLaunchCommunityCreateError(error));
       } finally {
@@ -8300,6 +8620,7 @@ export default function App() {
         handleSetCommunityMemberRole,
         handleRemoveCommunityMember,
         handleBanCommunityMember,
+        loadMemberBillingHistory: loadCommunityMemberBillingHistory,
         handleApproveCommunityJoinRequest,
         handleDenyCommunityJoinRequest,
         copyTextToClipboard,
@@ -8844,6 +9165,7 @@ export default function App() {
     communityLaunchSetupStatus,
     onContinueCommunityLaunchSetup: () => {
       setIsCommunityLaunchCreateMode(false);
+      setCommunityLaunchSetupInitialStep(null);
       setIsCommunityLaunchSetupModalOpen(true);
     },
   });
@@ -9374,20 +9696,34 @@ export default function App() {
             : null
         }
         status={communityLaunchSetupStatus}
+        initialStep={communityLaunchSetupInitialStep}
         onClose={() => {
           setIsCommunityLaunchSetupModalOpen(false);
           setIsCommunityLaunchCreateMode(false);
+          setCommunityLaunchSetupInitialStep(null);
         }}
         onOpenStep={handleOpenCommunityLaunchSetupStep}
         onCreateCommunity={handleCreateCommunityFromLaunch}
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
+        onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
+        onIngestKnowledgeSources={handleIngestCommunityLaunchKnowledgeSources}
+        onLoadKnowledgeGoogleDriveConnection={handleLoadCommunityLaunchGoogleDriveConnection}
+        onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}
+        onListKnowledgeGoogleDriveFiles={handleListCommunityLaunchGoogleDriveFiles}
+        onImportKnowledgeGoogleDriveFiles={handleImportCommunityLaunchGoogleDriveFiles}
+        onLoadKnowledgeGitHubConnection={handleLoadCommunityLaunchGitHubConnection}
+        onConnectKnowledgeGitHub={handleConnectCommunityLaunchGitHub}
+        onListKnowledgeGitHubRepositories={handleListCommunityLaunchGitHubRepositories}
+        onListKnowledgeGitHubFiles={handleListCommunityLaunchGitHubFiles}
+        onImportKnowledgeGitHubFiles={handleImportCommunityLaunchGitHubFiles}
         onLoadKnowledgeHealth={handleLoadCommunityLaunchKnowledgeHealth}
-        onEnsureKnowledgeScaffold={handleEnsureCommunityLaunchKnowledgeScaffold}
-        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
-        onApplyKnowledgePlan={handleApplyCommunityLaunchKnowledgePlan}
-        onSaveAgent={handleSaveCommunityLaunchAgent}
+	        onEnsureKnowledgeScaffold={handleEnsureCommunityLaunchKnowledgeScaffold}
+	        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
+	        onApplyKnowledgePlan={handleApplyCommunityLaunchKnowledgePlan}
+	        onDraftKnowledgeResources={handleDraftCommunityLaunchKnowledgeResources}
+	        onSaveAgent={handleSaveCommunityLaunchAgent}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}
       />

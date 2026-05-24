@@ -2,6 +2,7 @@ import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient"
 import { coerceGatewayRows, firstGatewayRow, parseGatewayNumberLike } from "./cloudGateway";
 import type { CommunityAnalyticsSnapshot } from "./communityTypes";
 import type { CommunityMemberOnboardingConfig } from "./communityMemberOnboarding";
+import { readConvexRuntimeUrl } from "./convexRuntime";
 
 type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
@@ -26,6 +27,43 @@ export type CloudCommunityAnalyticsSummaryRow = {
   mrr_base_units: number | null;
   currency: string | null;
   currency_decimals: number | null;
+};
+
+export type CloudCommunityMemberBillingHistoryEvent = {
+  id: string;
+  kind: "checkout" | "subscription" | "subscription_event";
+  status: string;
+  source: string | null;
+  billing_period: "monthly" | "annual" | null;
+  amount_base_units: number | null;
+  currency: string | null;
+  currency_decimals: number | null;
+  occurred_at: string;
+  created_at: string | null;
+  updated_at: string | null;
+  current_period_start_at: string | null;
+  current_period_end_at: string | null;
+  ended_at: string | null;
+  cancel_at_period_end: boolean | null;
+};
+
+export type CloudCommunityMemberBillingCurrentPlan = {
+  status: string;
+  source: string | null;
+  billing_period: "monthly" | "annual" | null;
+  amount_base_units: number | null;
+  currency: string | null;
+  currency_decimals: number | null;
+  current_period_start_at: string | null;
+  current_period_end_at: string | null;
+  cancel_at_period_end: boolean | null;
+};
+
+export type CloudCommunityMemberBillingHistory = {
+  community_id: string;
+  member_id: string;
+  current_plan: CloudCommunityMemberBillingCurrentPlan | null;
+  events: CloudCommunityMemberBillingHistoryEvent[];
 };
 
 export type CloudCommunitySettingsSaveResult = {
@@ -99,6 +137,117 @@ export type CloudCommunityArchiveProcessResult = {
 
 export type CloudCommunityArchiveRetryResult = CloudCommunityArchiveProcessResult & {
   retried: number;
+};
+
+export type CloudCommunitySourceLinkIngestionResult = {
+  ok: boolean;
+  kind:
+    | "community_source_ingestion"
+    | "community_source_link_ingestion"
+    | "community_source_file_ingestion"
+    | "community_source_google_drive_ingestion"
+    | "community_source_github_ingestion";
+  processed: number;
+  succeeded: number;
+  failed: number;
+  ready_sources: number;
+  total_sources: number;
+  pending_url_sources: number;
+  pending_file_sources?: number;
+  pending_google_drive_sources?: number;
+  pending_github_sources?: number;
+  failures: Array<{
+    resource_id: string;
+    title: string;
+    url: string | null;
+    message: string;
+  }>;
+  duration_ms: number;
+  code: string | null;
+  message: string;
+};
+
+export type CloudCommunitySourceIngestionResult = CloudCommunitySourceLinkIngestionResult;
+
+export type CloudGoogleDriveSourceConnectionStatus = {
+  provider: "google_drive";
+  auth_kind: "oauth_tokens";
+  connected: boolean;
+  email: string | null;
+  account_id: string | null;
+  scope: string | null;
+  access_token_expires_at: string | null;
+  validated_at: string | null;
+  updated_at: string | null;
+};
+
+export type CloudGoogleDriveSourceFile = {
+  id: string;
+  name: string;
+  mime_type: string;
+  web_url: string | null;
+  modified_time: string | null;
+  size: string | null;
+};
+
+export type CloudGoogleDriveSourceFileListResult = {
+  ok: boolean;
+  provider: "google_drive";
+  connection: CloudGoogleDriveSourceConnectionStatus;
+  files: CloudGoogleDriveSourceFile[];
+};
+
+export type CloudGitHubSourceConnectionStatus = {
+  provider: "github";
+  auth_kind: "oauth_tokens";
+  connected: boolean;
+  email: string | null;
+  login: string | null;
+  account_id: string | null;
+  scope: string | null;
+  access_token_expires_at: string | null;
+  validated_at: string | null;
+  updated_at: string | null;
+};
+
+export type CloudGitHubSourceRepository = {
+  id: string;
+  name: string;
+  full_name: string;
+  owner: string;
+  private: boolean;
+  web_url: string | null;
+  default_branch: string;
+  updated_at: string | null;
+  pushed_at: string | null;
+};
+
+export type CloudGitHubSourceRepositoryListResult = {
+  ok: boolean;
+  provider: "github";
+  connection: CloudGitHubSourceConnectionStatus;
+  repositories: CloudGitHubSourceRepository[];
+};
+
+export type CloudGitHubSourceFile = {
+  id: string;
+  repo_full_name: string;
+  path: string;
+  name: string;
+  ref: string;
+  sha: string | null;
+  size: number | null;
+  web_url: string | null;
+};
+
+export type CloudGitHubSourceFileListResult = {
+  ok: boolean;
+  provider: "github";
+  connection: CloudGitHubSourceConnectionStatus;
+  repo_full_name: string | null;
+  ref: string | null;
+  truncated: boolean;
+  files: CloudGitHubSourceFile[];
 };
 
 type CloudCommunityFreeAccessModeResult = {
@@ -184,6 +333,499 @@ async function uploadCloudCommunityBrandingDataUrl<SessionT>(
     throw new Error(`Failed to upload ${params.kind}.`);
   }
   return storageId;
+}
+
+async function requestCloudCommunityResourceSourceUploadUrl<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:generateCommunityResourceSourceUploadUrl" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  const uploadUrl =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? String((payload as Record<string, unknown>).uploadUrl ?? "").trim()
+      : "";
+  if (!uploadUrl) {
+    throw new Error("Failed to start source upload.");
+  }
+  return uploadUrl;
+}
+
+export async function uploadCloudCommunityResourceSourceFile<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    file: File | Blob;
+  },
+): Promise<string> {
+  const uploadUrl = await requestCloudCommunityResourceSourceUploadUrl({
+    session: params.session,
+    communityId: params.communityId,
+  });
+  const contentType =
+    params.file && typeof params.file === "object" && "type" in params.file
+      ? String((params.file as File | Blob).type ?? "").trim() || "application/octet-stream"
+      : "application/octet-stream";
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": contentType,
+    },
+    body: params.file as BodyInit,
+  });
+  if (!response.ok) {
+    throw new Error("Failed to upload source file.");
+  }
+  const payload = (await response.json()) as { storageId?: string | null };
+  const storageId = String(payload?.storageId ?? "").trim();
+  if (!storageId) {
+    throw new Error("Failed to upload source file.");
+  }
+  return storageId;
+}
+
+function normalizeGoogleDriveSourceConnection(payload: unknown): CloudGoogleDriveSourceConnectionStatus {
+  const row = (payload ?? null) as Partial<CloudGoogleDriveSourceConnectionStatus> | null;
+  return {
+    provider: "google_drive",
+    auth_kind: "oauth_tokens",
+    connected: row?.connected === true,
+    email: typeof row?.email === "string" && row.email.trim() ? row.email.trim() : null,
+    account_id: typeof row?.account_id === "string" && row.account_id.trim() ? row.account_id.trim() : null,
+    scope: typeof row?.scope === "string" && row.scope.trim() ? row.scope.trim() : null,
+    access_token_expires_at:
+      typeof row?.access_token_expires_at === "string" && row.access_token_expires_at.trim()
+        ? row.access_token_expires_at.trim()
+        : null,
+    validated_at:
+      typeof row?.validated_at === "string" && row.validated_at.trim()
+        ? row.validated_at.trim()
+        : null,
+    updated_at:
+      typeof row?.updated_at === "string" && row.updated_at.trim()
+        ? row.updated_at.trim()
+        : null,
+  };
+}
+
+function normalizeGoogleDriveSourceFiles(payload: unknown): CloudGoogleDriveSourceFile[] {
+  if (!Array.isArray(payload)) return [];
+  return payload
+    .map((row) => {
+      const record = (row ?? null) as Record<string, unknown> | null;
+      const id = typeof record?.id === "string" ? record.id.trim() : "";
+      const name = typeof record?.name === "string" ? record.name.trim() : "";
+      const mimeType = typeof record?.mime_type === "string" ? record.mime_type.trim() : "";
+      if (!id || !name || !mimeType) return null;
+      return {
+        id,
+        name,
+        mime_type: mimeType,
+        web_url: typeof record?.web_url === "string" && record.web_url.trim() ? record.web_url.trim() : null,
+        modified_time:
+          typeof record?.modified_time === "string" && record.modified_time.trim()
+            ? record.modified_time.trim()
+            : null,
+        size: typeof record?.size === "string" && record.size.trim() ? record.size.trim() : null,
+      } satisfies CloudGoogleDriveSourceFile;
+    })
+    .filter((row): row is CloudGoogleDriveSourceFile => Boolean(row));
+}
+
+function normalizeGitHubSourceConnection(payload: unknown): CloudGitHubSourceConnectionStatus {
+  const row = (payload ?? null) as Partial<CloudGitHubSourceConnectionStatus> | null;
+  return {
+    provider: "github",
+    auth_kind: "oauth_tokens",
+    connected: row?.connected === true,
+    email: typeof row?.email === "string" && row.email.trim() ? row.email.trim() : null,
+    login: typeof row?.login === "string" && row.login.trim() ? row.login.trim() : null,
+    account_id: typeof row?.account_id === "string" && row.account_id.trim() ? row.account_id.trim() : null,
+    scope: typeof row?.scope === "string" && row.scope.trim() ? row.scope.trim() : null,
+    access_token_expires_at:
+      typeof row?.access_token_expires_at === "string" && row.access_token_expires_at.trim()
+        ? row.access_token_expires_at.trim()
+        : null,
+    validated_at:
+      typeof row?.validated_at === "string" && row.validated_at.trim()
+        ? row.validated_at.trim()
+        : null,
+    updated_at:
+      typeof row?.updated_at === "string" && row.updated_at.trim()
+        ? row.updated_at.trim()
+        : null,
+  };
+}
+
+function normalizeGitHubSourceRepositories(payload: unknown): CloudGitHubSourceRepository[] {
+  if (!Array.isArray(payload)) return [];
+  return payload
+    .map((row) => {
+      const record = (row ?? null) as Record<string, unknown> | null;
+      const id = typeof record?.id === "string" ? record.id.trim() : "";
+      const name = typeof record?.name === "string" ? record.name.trim() : "";
+      const fullName = typeof record?.full_name === "string" ? record.full_name.trim() : "";
+      const owner = typeof record?.owner === "string" ? record.owner.trim() : "";
+      const defaultBranch =
+        typeof record?.default_branch === "string" && record.default_branch.trim()
+          ? record.default_branch.trim()
+          : "main";
+      if (!id || !name || !fullName || !owner) return null;
+      return {
+        id,
+        name,
+        full_name: fullName,
+        owner,
+        private: record?.private === true,
+        web_url: typeof record?.web_url === "string" && record.web_url.trim() ? record.web_url.trim() : null,
+        default_branch: defaultBranch,
+        updated_at: typeof record?.updated_at === "string" && record.updated_at.trim()
+          ? record.updated_at.trim()
+          : null,
+        pushed_at: typeof record?.pushed_at === "string" && record.pushed_at.trim()
+          ? record.pushed_at.trim()
+          : null,
+      } satisfies CloudGitHubSourceRepository;
+    })
+    .filter((row): row is CloudGitHubSourceRepository => Boolean(row));
+}
+
+function normalizeGitHubSourceFiles(payload: unknown): CloudGitHubSourceFile[] {
+  if (!Array.isArray(payload)) return [];
+  return payload
+    .map((row) => {
+      const record = (row ?? null) as Record<string, unknown> | null;
+      const id = typeof record?.id === "string" ? record.id.trim() : "";
+      const repoFullName = typeof record?.repo_full_name === "string" ? record.repo_full_name.trim() : "";
+      const path = typeof record?.path === "string" ? record.path.trim() : "";
+      const name = typeof record?.name === "string" ? record.name.trim() : "";
+      const ref = typeof record?.ref === "string" ? record.ref.trim() : "";
+      if (!id || !repoFullName || !path || !name || !ref) return null;
+      return {
+        id,
+        repo_full_name: repoFullName,
+        path,
+        name,
+        ref,
+        sha: typeof record?.sha === "string" && record.sha.trim() ? record.sha.trim() : null,
+        size: typeof record?.size === "number" && Number.isFinite(record.size)
+          ? Math.max(0, Math.floor(record.size))
+          : null,
+        web_url: typeof record?.web_url === "string" && record.web_url.trim() ? record.web_url.trim() : null,
+      } satisfies CloudGitHubSourceFile;
+    })
+    .filter((row): row is CloudGitHubSourceFile => Boolean(row));
+}
+
+export async function loadCloudCommunityGoogleDriveSourceConnection<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudGoogleDriveSourceConnectionStatus> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getGoogleDriveSourceConnectionStatus" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  return normalizeGoogleDriveSourceConnection(payload);
+}
+
+export async function beginCloudCommunityGoogleDriveSourceOAuth<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    returnToPath?: string | null;
+  },
+): Promise<{
+  ok: boolean;
+  provider: "google_drive";
+  authorize_url: string | null;
+  redirect_uri: string | null;
+  error_message: string | null;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:beginGoogleDriveSourceOAuth" as any, {
+    authSubject,
+    communityId: params.communityId,
+    returnToPath: String(params.returnToPath ?? "").trim() || "/discover",
+    callbackBaseUrl: readConvexRuntimeUrl() ?? undefined,
+  })) as Record<string, unknown> | null;
+  const authorizeUrl = typeof payload?.authorize_url === "string" ? payload.authorize_url.trim() : "";
+  return {
+    ok: payload?.ok === true && Boolean(authorizeUrl),
+    provider: "google_drive",
+    authorize_url: authorizeUrl || null,
+    redirect_uri: typeof payload?.redirect_uri === "string" && payload.redirect_uri.trim()
+      ? payload.redirect_uri.trim()
+      : null,
+    error_message: authorizeUrl ? null : "Google Drive authorization URL was not returned.",
+  };
+}
+
+export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    state: string;
+    finalizeToken: string;
+  },
+): Promise<{
+  ok: boolean;
+  provider: "google_drive";
+  email: string | null;
+  error_message: string | null;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:finalizeGoogleDriveSourceOAuth" as any, {
+    authSubject,
+    state: params.state,
+    finalizeToken: params.finalizeToken,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "google_drive",
+    email: typeof payload?.email === "string" && payload.email.trim() ? payload.email.trim() : null,
+    error_message:
+      typeof payload?.error_message === "string" && payload.error_message.trim()
+        ? payload.error_message.trim()
+        : null,
+  };
+}
+
+export async function listCloudCommunityGoogleDriveSourceFiles<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    query?: string | null;
+  },
+): Promise<CloudGoogleDriveSourceFileListResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:listGoogleDriveSourceFiles" as any, {
+    authSubject,
+    communityId: params.communityId,
+    query: String(params.query ?? "").trim() || undefined,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "google_drive",
+    connection: normalizeGoogleDriveSourceConnection(payload?.connection),
+    files: normalizeGoogleDriveSourceFiles(payload?.files),
+  };
+}
+
+export async function importCloudCommunityGoogleDriveSourceFiles<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    fileIds: string[];
+  },
+): Promise<{
+  ok: boolean;
+  provider: "google_drive";
+  imported: number;
+  skipped: number;
+  failed: number;
+  failures: Array<{ id: string; name: string | null; message: string }>;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:importGoogleDriveSourceFiles" as any, {
+    authSubject,
+    communityId: params.communityId,
+    fileIds: params.fileIds,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "google_drive",
+    imported: typeof payload?.imported === "number" && Number.isFinite(payload.imported)
+      ? Math.max(0, Math.floor(payload.imported))
+      : 0,
+    skipped: typeof payload?.skipped === "number" && Number.isFinite(payload.skipped)
+      ? Math.max(0, Math.floor(payload.skipped))
+      : 0,
+    failed: typeof payload?.failed === "number" && Number.isFinite(payload.failed)
+      ? Math.max(0, Math.floor(payload.failed))
+      : 0,
+    failures: Array.isArray(payload?.failures)
+      ? payload.failures
+          .map((failure) => {
+            const row = failure as Record<string, unknown>;
+            return {
+              id: String(row.id ?? "").trim(),
+              name: row.name == null ? null : String(row.name).trim() || null,
+              message: String(row.message ?? "").trim() || "Google Drive file import failed.",
+            };
+          })
+          .filter((failure) => failure.id)
+      : [],
+  };
+}
+
+export async function loadCloudCommunityGitHubSourceConnection<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudGitHubSourceConnectionStatus> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getGitHubSourceConnectionStatus" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  return normalizeGitHubSourceConnection(payload);
+}
+
+export async function beginCloudCommunityGitHubSourceOAuth<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    returnToPath?: string | null;
+  },
+): Promise<{
+  ok: boolean;
+  provider: "github";
+  authorize_url: string | null;
+  redirect_uri: string | null;
+  error_message: string | null;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:beginGitHubSourceOAuth" as any, {
+    authSubject,
+    communityId: params.communityId,
+    returnToPath: String(params.returnToPath ?? "").trim() || "/discover",
+    callbackBaseUrl: readConvexRuntimeUrl() ?? undefined,
+  })) as Record<string, unknown> | null;
+  const authorizeUrl = typeof payload?.authorize_url === "string" ? payload.authorize_url.trim() : "";
+  return {
+    ok: payload?.ok === true && Boolean(authorizeUrl),
+    provider: "github",
+    authorize_url: authorizeUrl || null,
+    redirect_uri: typeof payload?.redirect_uri === "string" && payload.redirect_uri.trim()
+      ? payload.redirect_uri.trim()
+      : null,
+    error_message: authorizeUrl ? null : "GitHub authorization URL was not returned.",
+  };
+}
+
+export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    state: string;
+    finalizeToken: string;
+  },
+): Promise<{
+  ok: boolean;
+  provider: "github";
+  login: string | null;
+  email: string | null;
+  error_message: string | null;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:finalizeGitHubSourceOAuth" as any, {
+    authSubject,
+    state: params.state,
+    finalizeToken: params.finalizeToken,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "github",
+    login: typeof payload?.login === "string" && payload.login.trim() ? payload.login.trim() : null,
+    email: typeof payload?.email === "string" && payload.email.trim() ? payload.email.trim() : null,
+    error_message:
+      typeof payload?.error_message === "string" && payload.error_message.trim()
+        ? payload.error_message.trim()
+        : null,
+  };
+}
+
+export async function listCloudCommunityGitHubSourceRepositories<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    query?: string | null;
+  },
+): Promise<CloudGitHubSourceRepositoryListResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:listGitHubSourceRepositories" as any, {
+    authSubject,
+    communityId: params.communityId,
+    query: String(params.query ?? "").trim() || undefined,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "github",
+    connection: normalizeGitHubSourceConnection(payload?.connection),
+    repositories: normalizeGitHubSourceRepositories(payload?.repositories),
+  };
+}
+
+export async function listCloudCommunityGitHubSourceFiles<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    repoFullName: string;
+    ref?: string | null;
+    query?: string | null;
+  },
+): Promise<CloudGitHubSourceFileListResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:listGitHubSourceFiles" as any, {
+    authSubject,
+    communityId: params.communityId,
+    repoFullName: params.repoFullName,
+    ref: String(params.ref ?? "").trim() || undefined,
+    query: String(params.query ?? "").trim() || undefined,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "github",
+    connection: normalizeGitHubSourceConnection(payload?.connection),
+    repo_full_name:
+      typeof payload?.repo_full_name === "string" && payload.repo_full_name.trim()
+        ? payload.repo_full_name.trim()
+        : null,
+    ref: typeof payload?.ref === "string" && payload.ref.trim() ? payload.ref.trim() : null,
+    truncated: payload?.truncated === true,
+    files: normalizeGitHubSourceFiles(payload?.files),
+  };
+}
+
+export async function importCloudCommunityGitHubSourceFiles<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    fileIds: string[];
+  },
+): Promise<{
+  ok: boolean;
+  provider: "github";
+  imported: number;
+  skipped: number;
+  failed: number;
+  failures: Array<{ id: string; name: string | null; message: string }>;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action("community:importGitHubSourceFiles" as any, {
+    authSubject,
+    communityId: params.communityId,
+    fileIds: params.fileIds,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    provider: "github",
+    imported: typeof payload?.imported === "number" && Number.isFinite(payload.imported)
+      ? Math.max(0, Math.floor(payload.imported))
+      : 0,
+    skipped: typeof payload?.skipped === "number" && Number.isFinite(payload.skipped)
+      ? Math.max(0, Math.floor(payload.skipped))
+      : 0,
+    failed: typeof payload?.failed === "number" && Number.isFinite(payload.failed)
+      ? Math.max(0, Math.floor(payload.failed))
+      : 0,
+    failures: Array.isArray(payload?.failures)
+      ? payload.failures
+          .map((failure) => {
+            const row = failure as Record<string, unknown>;
+            return {
+              id: String(row.id ?? "").trim(),
+              name: row.name == null ? null : String(row.name).trim() || null,
+              message: String(row.message ?? "").trim() || "GitHub file import failed.",
+            };
+          })
+          .filter((failure) => failure.id)
+      : [],
+  };
 }
 
 export async function prepareCloudCommunityBrandingField<SessionT>(
@@ -288,22 +930,21 @@ export async function fetchCloudCommunityAnalyticsSnapshot<SessionT>(
   return firstGatewayRow<CommunityAnalyticsSnapshot>(payload);
 }
 
-export async function fetchCloudCommunityEntitledMemberCount<SessionT>(
+export async function fetchCloudCommunityMemberBillingHistory<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
+    membershipId: string;
+    limit?: number;
   },
-): Promise<number | null> {
+): Promise<CloudCommunityMemberBillingHistory | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  try {
-    const payload = await client.query("community:countCommunityMemberships" as any, {
-      authSubject,
-      communityId: params.communityId,
-      sinceIso: null,
-    });
-    return parseGatewayNumberLike(payload);
-  } catch {
-    return null;
-  }
+  const payload = await client.query("community:getCommunityMemberBillingHistory" as any, {
+    authSubject,
+    communityId: params.communityId,
+    targetMembershipId: params.membershipId,
+    limit: params.limit ?? 20,
+  });
+  return firstGatewayRow<CloudCommunityMemberBillingHistory>(payload);
 }
 
 export async function setCloudCommunityMemberRole<SessionT>(
@@ -526,6 +1167,50 @@ export async function ensureCloudCommunityResourceWikiScaffold<SessionT, TResult
   return payload as TResult;
 }
 
+export async function ingestCloudCommunitySourceLinks<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+  },
+): Promise<CloudCommunitySourceLinkIngestionResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.action("community:ingestCommunitySourceLinks" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit:
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : undefined,
+    retryFailed: true,
+  });
+  return firstGatewayRow<CloudCommunitySourceLinkIngestionResult>(payload)
+    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
+      ? (payload as CloudCommunitySourceLinkIngestionResult)
+      : null);
+}
+
+export async function ingestCloudCommunitySources<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+  },
+): Promise<CloudCommunitySourceIngestionResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.action("community:ingestCommunitySources" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit:
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : undefined,
+    retryFailed: true,
+  });
+  return firstGatewayRow<CloudCommunitySourceIngestionResult>(payload)
+    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
+      ? (payload as CloudCommunitySourceIngestionResult)
+      : null);
+}
+
 export async function runCloudCommunityWikiArchitectProposal<SessionT, TResult = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -555,6 +1240,24 @@ export async function applyCloudCommunityWikiArchitectProposal<SessionT, TResult
     authSubject,
     communityId: params.communityId,
     proposal: params.proposal,
+  });
+  return payload as TResult;
+}
+
+export async function draftCloudCommunityResourceContentFromSources<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.action("community:draftCommunityResourceContentFromSources" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit:
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : undefined,
   });
   return payload as TResult;
 }

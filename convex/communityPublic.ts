@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
+  adjustCommunityActiveMemberCountForMembershipTransition,
   communityJoinRequestCanReapply,
   type CommunityJoinRequestLike,
   type CommunityLike,
@@ -488,13 +489,28 @@ async function joinPublicCommunityInternal(args: {
 
   const grantFreeMembership = async () => {
     if (existingMembership && !communityMembershipRowIsActive(existingMembership)) {
-      await args.ctx.db.patch(existingMembership._id as any, {
+      const restoredMembership = {
+        ...existingMembership,
         role: normalizeCommunityRoleForOutput(existingMembership.role) || "member",
         accessSource: "free_grant",
         active: true,
         revokedAt: undefined,
         revokedReason: undefined,
         updatedAt: args.nowMs,
+      } as CommunityMembershipLike;
+      await args.ctx.db.patch(existingMembership._id as any, {
+        role: restoredMembership.role,
+        accessSource: "free_grant",
+        active: true,
+        revokedAt: undefined,
+        revokedReason: undefined,
+        updatedAt: args.nowMs,
+      });
+      await adjustCommunityActiveMemberCountForMembershipTransition({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        before: existingMembership,
+        after: restoredMembership,
       });
       grantedMembershipMarker = `${String(existingMembership._id)}:${args.nowMs}`;
     } else if (!existingMembership) {
@@ -506,6 +522,21 @@ async function joinPublicCommunityInternal(args: {
         active: true,
         createdAt: args.nowMs,
         updatedAt: args.nowMs,
+      });
+      await adjustCommunityActiveMemberCountForMembershipTransition({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        before: null,
+        after: {
+          _id: membershipId,
+          communityId: args.community._id,
+          userId: args.userId,
+          role: "member",
+          accessSource: "free_grant",
+          active: true,
+          createdAt: args.nowMs,
+          updatedAt: args.nowMs,
+        },
       });
       grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
     }

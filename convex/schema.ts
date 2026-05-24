@@ -631,6 +631,55 @@ export default defineSchema({
     .index("by_user_provider", ["userId", "provider"])
     .index("by_device_auth_id", ["deviceAuthId"]),
 
+  userSourceIntegrationConnections: defineTable({
+    userId: v.id("users"),
+    provider: v.union(v.literal("google_drive"), v.literal("github")),
+    authKind: v.literal("oauth_tokens"),
+    encryptedSecretHex: v.string(),
+    secretIvHex: v.string(),
+    secretVersion: v.number(),
+    accountId: v.optional(v.string()),
+    accountLogin: v.optional(v.string()),
+    email: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    accessTokenExpiresAt: v.optional(v.number()),
+    validatedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_provider", ["userId", "provider"]),
+
+  userSourceIntegrationAuthStates: defineTable({
+    userId: v.id("users"),
+    provider: v.union(v.literal("google_drive"), v.literal("github")),
+    communityId: v.optional(v.id("communities")),
+    state: v.string(),
+    codeVerifier: v.string(),
+    redirectUri: v.string(),
+    returnToPath: v.string(),
+    callbackCodeEncryptedHex: v.optional(v.string()),
+    callbackCodeIvHex: v.optional(v.string()),
+    callbackCodeVersion: v.optional(v.number()),
+    finalizeTokenHash: v.optional(v.string()),
+    callbackReceivedAt: v.optional(v.number()),
+    finalizeStatus: v.optional(
+      v.union(
+        v.literal("processing"),
+        v.literal("completed"),
+        v.literal("failed"),
+      ),
+    ),
+    finalizeStartedAt: v.optional(v.number()),
+    finalizeCompletedAt: v.optional(v.number()),
+    finalizeResultJson: v.optional(v.string()),
+    finalizeErrorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_state", ["state"])
+    .index("by_user_provider", ["userId", "provider"]),
+
   userProfileDetails: defineTable({
     userId: v.id("users"),
     displayName: v.optional(v.string()),
@@ -887,6 +936,7 @@ export default defineSchema({
       v.literal("approval"),
       v.literal("paid_subscription"),
     ),
+    activeMemberCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -940,7 +990,8 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_community", ["communityId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"]),
 
   communityBlocks: defineTable({
     communityId: v.id("communities"),
@@ -1446,6 +1497,37 @@ export default defineSchema({
     bodyMd: v.optional(v.string()),
     url: v.optional(v.string()),
     fileKey: v.optional(v.string()),
+    sourceIngestionStatus: v.optional(
+      v.union(
+        v.literal("not_required"),
+        v.literal("queued"),
+        v.literal("processing"),
+        v.literal("ready"),
+        v.literal("failed"),
+      ),
+    ),
+    sourceIngestionKind: v.optional(
+      v.union(
+        v.literal("manual"),
+        v.literal("url"),
+        v.literal("file"),
+        v.literal("google_drive"),
+        v.literal("github"),
+      ),
+    ),
+    sourceIngestionError: v.optional(v.string()),
+    sourceIngestionAttemptedAt: v.optional(v.number()),
+    sourceIngestedAt: v.optional(v.number()),
+    sourceOriginalFilename: v.optional(v.string()),
+    sourceOriginalMimeType: v.optional(v.string()),
+    sourceOriginalBytes: v.optional(v.number()),
+    sourceExternalProvider: v.optional(v.union(v.literal("google_drive"), v.literal("github"))),
+    sourceExternalConnectionUserId: v.optional(v.id("users")),
+    sourceExternalId: v.optional(v.string()),
+    sourceExternalName: v.optional(v.string()),
+    sourceExternalUrl: v.optional(v.string()),
+    sourceExternalMimeType: v.optional(v.string()),
+    sourceExternalModifiedAt: v.optional(v.number()),
     pinned: v.boolean(),
     sortOrder: v.optional(v.number()),
     createdAt: v.number(),
@@ -1456,6 +1538,7 @@ export default defineSchema({
     .index("by_community_role_status", ["communityId", "role", "status"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_source_external", ["communityId", "sourceExternalProvider", "sourceExternalId"])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityResourceModules: defineTable({

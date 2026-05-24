@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import {
+  adjustCommunityActiveMemberCountForMembershipTransition,
   type CommunityLike,
   type CommunityJoinRequestLike,
   type CommunityMembershipLike,
@@ -223,7 +224,7 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     return { status: "already_member", communityId };
   }
 
-  await args.ctx.db.insert("communityMemberships", {
+  const membershipId = await args.ctx.db.insert("communityMemberships", {
     communityId: community._id,
     userId: args.userId,
     role: existingMembership ? normalizeCommunityRoleForOutput(existingMembership.role) || "member" : "member",
@@ -231,6 +232,21 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     active: true,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
+  });
+  await adjustCommunityActiveMemberCountForMembershipTransition({
+    ctx: args.ctx,
+    communityId: community._id,
+    before: null,
+    after: {
+      _id: membershipId,
+      communityId: community._id,
+      userId: args.userId,
+      role: existingMembership ? normalizeCommunityRoleForOutput(existingMembership.role) || "member" : "member",
+      accessSource: "free_grant",
+      active: true,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    },
   });
   await scheduleCommunityAppGrantSeedingBestEffort({
     ctx: args.ctx,

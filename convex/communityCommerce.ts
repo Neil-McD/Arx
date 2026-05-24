@@ -23,6 +23,7 @@ import {
   toIsoString,
 } from "./billingCore";
 import {
+  adjustCommunityActiveMemberCountForMembershipTransition,
   communitySubscriptionStatusGrantsAccess,
   communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
@@ -231,7 +232,8 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         existingRevokedReason === "subscription_dispute_opened" ||
         existingRevokedReason === "subscription_dispute_lost"
       );
-    await ctx.db.patch(membership._id, {
+    const updatedMembership = {
+      ...membership,
       pricePointId,
       active: shouldPreserveRiskRevocation ? false : grantsAccess,
       revokedAt: shouldPreserveRiskRevocation
@@ -241,6 +243,19 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         ? existingRevokedReason
         : grantsAccess ? undefined : revokedReason || `subscription_${status}`,
       updatedAt: nowMs,
+    } as CommunityMembershipLike;
+    await ctx.db.patch(membership._id, {
+      pricePointId,
+      active: updatedMembership.active,
+      revokedAt: updatedMembership.revokedAt,
+      revokedReason: updatedMembership.revokedReason,
+      updatedAt: nowMs,
+    });
+    await adjustCommunityActiveMemberCountForMembershipTransition({
+      ctx,
+      communityId: args.communityId,
+      before: membership,
+      after: updatedMembership,
     });
 
     if (status === "past_due" && previousStatus !== "past_due") {

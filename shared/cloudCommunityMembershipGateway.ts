@@ -1,5 +1,4 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import type { CommunityBillingPeriod } from "./communityTypes";
 import { coerceGatewayRows, parseGatewayNumberLike } from "./cloudGateway";
 
 type CloudCommunityMembershipGatewayParams<SessionT> = {
@@ -39,11 +38,6 @@ export type CloudCommunityMembershipAdminRow = {
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
   role: string;
-  price_point_id?: string | null;
-  billing_period?: CommunityBillingPeriod | null;
-  amount_base_units?: number | null;
-  currency?: string | null;
-  currency_decimals?: number | null;
   created_at: string;
 };
 
@@ -92,6 +86,13 @@ export async function countCloudCommunityMembershipRows<SessionT>(
   },
 ): Promise<number | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  if (!params.sinceIso) {
+    const payload = await client.mutation("community:syncCommunityMembershipCount" as any, {
+      authSubject,
+      communityId: params.communityId,
+    });
+    return parseGatewayNumberLike(payload);
+  }
   const payload = await client.query("community:countCommunityMemberships" as any, {
     authSubject,
     communityId: params.communityId,

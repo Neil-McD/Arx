@@ -178,8 +178,8 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /resource_role: "source"[\s\S]*resource_status: "review"/,
-  "launch knowledge links should enter as reviewed sources rather than published pages",
+  /resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"/,
+  "launch knowledge links should enter as reviewed URL sources queued for ingestion rather than published pages",
 );
 assert.doesNotMatch(
   launchModal,
@@ -198,8 +198,8 @@ assert.match(
 );
 assert.match(
   launchModal,
-  /await onAddKnowledgeLink[\s\S]*await onLoadKnowledgeHealth/,
-  "knowledge modal should refresh health after adding source links",
+  /await onAddKnowledgeLink[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onLoadKnowledgeHealth/,
+  "knowledge modal should ingest source links before refreshing health",
 );
 
 const builderListBody = resources.slice(

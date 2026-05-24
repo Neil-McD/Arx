@@ -16,6 +16,9 @@ const app = read("apps/web/src/App.tsx");
 const modal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const applyStart = architect.indexOf("export const applyCommunityWikiArchitectProposal");
 assert.notEqual(applyStart, -1, "architect apply mutation should exist");
+const runStart = architect.indexOf("export const runCommunityWikiArchitectProposal");
+assert.notEqual(runStart, -1, "architect proposal action should exist");
+const runBody = architect.slice(runStart, applyStart);
 const applyBody = architect.slice(applyStart);
 
 assert.match(
@@ -66,8 +69,8 @@ assert.match(
 );
 assert.match(
   architect,
-  /source_inbox:[\s\S]*length_chars:[\s\S]*assigned_pages:/,
-  "architect context should expose source metadata and assignment state",
+  /const readySources = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*source_inbox:[\s\S]*source_ingestion_status:[\s\S]*length_chars:[\s\S]*excerpt: buildSourceExcerpt[\s\S]*assigned_pages:/,
+  "architect context should expose ready source text excerpts and assignment state",
 );
 assert.match(
   architect,
@@ -86,23 +89,33 @@ assert.match(
 );
 assert.match(
   architect,
+  /ready_sources_total:[\s\S]*sources_pending_ingestion:[\s\S]*sources_failed_ingestion:/,
+  "architect context should expose source ingestion readiness metadata",
+);
+assert.match(
+  architect,
+  /code: "no_ready_sources"[\s\S]*Source material must be ingested/,
+  "architect run should not draft from source URL metadata before ingestion",
+);
+assert.match(
+  architect,
   /Wiki Architect cannot propose draft writes from a truncated resource window/,
   "architect action should reject write proposals produced from truncated context",
 );
 assert.doesNotMatch(
-  architect,
+  runBody,
   /ctx\.runMutation/,
   "architect run must be read-only and must not mutate resources",
 );
 assert.doesNotMatch(
-  architect,
+  runBody,
   /writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource|ensureCommunityResourceWikiScaffold/,
   "architect run must not call builder write/edit/scaffold mutations",
 );
 assert.doesNotMatch(
-  architect,
+  runBody,
   /body_md:|bodyMd:\s*String\(/,
-  "architect context must not send full page or source bodies to the model",
+  "architect context must not send unbounded full page or source bodies to the model",
 );
 
 assert.match(
@@ -135,11 +148,36 @@ assert.match(
   /buildCommunityResourceBuilderHealthReport/,
   "architect apply should return fresh builder health after writes",
 );
+assert.match(
+  architect,
+  /COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT[\s\S]*Use only the provided source text[\s\S]*Return ONLY valid JSON[\s\S]*"body_md"/,
+  "resource content writer should have a source-grounded JSON-only prompt",
+);
+assert.match(
+  architect,
+  /export const buildCommunityResourceContentWriterRunContextInternal = internalQuery\([\s\S]*communityResourceSourceHasReadyText[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*source_body_md: truncateContentWriterSource\(source\.bodyMd\)/,
+  "content writer context should target only scaffold draft pages with ready source text",
+);
+assert.match(
+  architect,
+  /export const patchCommunityResourceContentDraftInternal = internalMutation\([\s\S]*normalizeResourceStatus\(page\.status\) !== "draft"[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*status: "review"[\s\S]*upsertArchiveDocumentForResource/,
+  "content writer patch should refuse unsafe targets and leave generated pages in review",
+);
+assert.match(
+  architect,
+  /export const draftCommunityResourceContentFromSources(?:: any)? = action\([\s\S]*runResourceContentWriterModel[\s\S]*parseResourceContentWriterBody[\s\S]*patchCommunityResourceContentDraftInternal[\s\S]*const ok = failed === 0/,
+  "content writer action should call the model, patch through the guarded mutation, and surface partial failures",
+);
 
 assert.match(
   community,
   /runCommunityWikiArchitectProposal as runCommunityWikiArchitectProposalImpl/,
   "community API should import the architect action implementation",
+);
+assert.match(
+  community,
+  /draftCommunityResourceContentFromSources as draftCommunityResourceContentFromSourcesImpl/,
+  "community API should import the content writer action implementation",
 );
 assert.match(
   community,
@@ -157,6 +195,11 @@ assert.match(
   "community API should export the architect apply mutation",
 );
 assert.match(
+  community,
+  /export const draftCommunityResourceContentFromSources(?:: any)? = draftCommunityResourceContentFromSourcesImpl/,
+  "community API should export the content writer action",
+);
+assert.match(
   gateway,
   /runCloudCommunityWikiArchitectProposal[\s\S]*client\.action\("community:runCommunityWikiArchitectProposal" as any/,
   "web gateway should call the architect action",
@@ -165,6 +208,11 @@ assert.match(
   gateway,
   /applyCloudCommunityWikiArchitectProposal[\s\S]*client\.mutation\("community:applyCommunityWikiArchitectProposal" as any/,
   "web gateway should expose the reviewed architect apply mutation",
+);
+assert.match(
+  gateway,
+  /draftCloudCommunityResourceContentFromSources[\s\S]*client\.action\("community:draftCommunityResourceContentFromSources" as any/,
+  "web gateway should expose the resource content writer action",
 );
 assert.doesNotMatch(
   gateway,
@@ -192,6 +240,11 @@ assert.match(
   /onApplyKnowledgePlan=\{handleApplyCommunityLaunchKnowledgePlan\}/,
   "launch modal should receive the reviewed architect apply handler",
 );
+assert.match(
+  app,
+  /draftCloudCommunityResourceContentFromSources[\s\S]*handleDraftCommunityLaunchKnowledgeResources[\s\S]*onDraftKnowledgeResources=\{handleDraftCommunityLaunchKnowledgeResources\}/,
+  "App should draft resource content after applying the architect plan",
+);
 
 assert.match(
   modal,
@@ -200,8 +253,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan/,
-  "modal should run the architect proposal/apply path internally from Knowledge Next",
+  /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  "modal should run ingest, architect, content writer, then open Resources review from Knowledge Next",
 );
 assert.doesNotMatch(
   modal,

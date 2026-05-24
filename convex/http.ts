@@ -6,6 +6,7 @@ import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerAppOAuthRoutes } from "./httpAppOAuth";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
+import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
 import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
@@ -289,6 +290,11 @@ registerRuntimeAuthBridgeRoutes({
 });
 
 registerAppOAuthRoutes({
+  http,
+  httpAction,
+});
+
+registerCommunitySourceIntegrationRoutes({
   http,
   httpAction,
 });

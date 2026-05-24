@@ -2,6 +2,8 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { internal } from "./_generated/api";
 import {
+  adjustCommunityActiveMemberCountForMembershipTransition,
+  communityMembershipRowIsActive,
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
   requireCommunityUserNotBlocked,
@@ -216,6 +218,7 @@ export async function ensureCommunityMembership(args: {
   const defaultAccessSource = "paid_subscription";
   const accessSource = args.accessSourceOverride ?? defaultAccessSource;
   if (existing) {
+    const wasActive = communityMembershipRowIsActive(existing);
     const patch: Record<string, unknown> = {
       accessSource,
       active: true,
@@ -227,6 +230,12 @@ export async function ensureCommunityMembership(args: {
     await args.ctx.db.patch(existing._id, patch);
     const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
     if (!refreshed) throw new Error("community_membership_not_found");
+    await adjustCommunityActiveMemberCountForMembershipTransition({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      before: existing,
+      after: refreshed,
+    });
     await scheduleCommunityAppGrantSeedingBestEffort({
       ctx: args.ctx,
       communityId: args.communityId,
@@ -236,7 +245,7 @@ export async function ensureCommunityMembership(args: {
     });
     return {
       membership: refreshed,
-      accessGranted: !Boolean(existing.active),
+      accessGranted: !wasActive,
     };
   }
   const membershipId = await args.ctx.db.insert("communityMemberships", {
@@ -251,6 +260,12 @@ export async function ensureCommunityMembership(args: {
   });
   const created = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
   if (!created) throw new Error("community_membership_create_failed");
+  await adjustCommunityActiveMemberCountForMembershipTransition({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    before: null,
+    after: created,
+  });
   await scheduleCommunityAppGrantSeedingBestEffort({
     ctx: args.ctx,
     communityId: args.communityId,

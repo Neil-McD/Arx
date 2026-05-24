@@ -35,6 +35,7 @@ export type CommunityLike = {
   };
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
+  activeMemberCount?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -211,11 +212,40 @@ export type CommunityResourceLike = {
   bodyMd?: string;
   url?: string;
   fileKey?: string;
+  sourceIngestionStatus?: string;
+  sourceIngestionKind?: string;
+  sourceIngestionError?: string;
+  sourceIngestionAttemptedAt?: number;
+  sourceIngestedAt?: number;
+  sourceOriginalFilename?: string;
+  sourceOriginalMimeType?: string;
+  sourceOriginalBytes?: number;
+  sourceExternalProvider?: string;
+  sourceExternalConnectionUserId?: any;
+  sourceExternalId?: string;
+  sourceExternalName?: string;
+  sourceExternalUrl?: string;
+  sourceExternalMimeType?: string;
+  sourceExternalModifiedAt?: number;
   pinned: boolean;
   sortOrder?: number;
   createdAt: number;
   updatedAt: number;
 };
+
+export type CommunityResourceSourceIngestionStatus =
+  | "not_required"
+  | "queued"
+  | "processing"
+  | "ready"
+  | "failed";
+
+export type CommunityResourceSourceIngestionKind =
+  | "manual"
+  | "url"
+  | "file"
+  | "google_drive"
+  | "github";
 
 export type CommunityResourceModuleLike = {
   _id: any;
@@ -486,6 +516,79 @@ export function normalizeResourceStatus(raw: unknown): CommunityResourceStatus {
   return parseResourceStatusForWrite(status) ?? "draft";
 }
 
+export function parseResourceSourceIngestionStatusForWrite(
+  raw: unknown,
+): CommunityResourceSourceIngestionStatus | null {
+  const status = String(raw ?? "").trim().toLowerCase();
+  if (status === "not_required" || status === "not-required" || status === "none") return "not_required";
+  if (status === "queued" || status === "pending") return "queued";
+  if (status === "processing" || status === "running") return "processing";
+  if (status === "ready" || status === "complete" || status === "completed") return "ready";
+  if (status === "failed" || status === "error") return "failed";
+  return null;
+}
+
+export function requireResourceSourceIngestionStatusForWrite(
+  raw: unknown,
+): CommunityResourceSourceIngestionStatus {
+  const status = parseResourceSourceIngestionStatusForWrite(raw);
+  if (!status) throw new Error("community_resource_source_ingestion_status_invalid");
+  return status;
+}
+
+export function parseResourceSourceIngestionKindForWrite(
+  raw: unknown,
+): CommunityResourceSourceIngestionKind | null {
+  const kind = String(raw ?? "").trim().toLowerCase();
+  if (kind === "manual") return "manual";
+  if (kind === "url" || kind === "link" || kind === "web") return "url";
+  if (kind === "file" || kind === "upload") return "file";
+  if (kind === "google_drive" || kind === "google-drive" || kind === "drive") return "google_drive";
+  if (kind === "github" || kind === "git_hub") return "github";
+  return null;
+}
+
+export function requireResourceSourceIngestionKindForWrite(
+  raw: unknown,
+): CommunityResourceSourceIngestionKind {
+  const kind = parseResourceSourceIngestionKindForWrite(raw);
+  if (!kind) throw new Error("community_resource_source_ingestion_kind_invalid");
+  return kind;
+}
+
+export function normalizeResourceSourceIngestionStatus(
+  row: CommunityResourceLike,
+): CommunityResourceSourceIngestionStatus {
+  const explicit = parseResourceSourceIngestionStatusForWrite(row.sourceIngestionStatus);
+  if (explicit) return explicit;
+  if (normalizeResourceRole(row.role) !== "source") return "not_required";
+  if (String(row.bodyMd ?? "").trim()) return "ready";
+  if (
+    String(row.url ?? "").trim() ||
+    String(row.fileKey ?? "").trim() ||
+    String(row.sourceExternalId ?? "").trim()
+  ) return "queued";
+  return "not_required";
+}
+
+export function normalizeResourceSourceIngestionKind(
+  row: CommunityResourceLike,
+): CommunityResourceSourceIngestionKind {
+  const explicit = parseResourceSourceIngestionKindForWrite(row.sourceIngestionKind);
+  if (explicit) return explicit;
+  if (String(row.sourceExternalProvider ?? "").trim() === "google_drive") return "google_drive";
+  if (String(row.sourceExternalProvider ?? "").trim() === "github") return "github";
+  if (String(row.fileKey ?? "").trim()) return "file";
+  if (String(row.url ?? "").trim()) return "url";
+  return "manual";
+}
+
+export function communityResourceSourceHasReadyText(row: CommunityResourceLike): boolean {
+  return normalizeResourceRole(row.role) === "source" &&
+    normalizeResourceSourceIngestionStatus(row) === "ready" &&
+    Boolean(String(row.bodyMd ?? "").trim());
+}
+
 export function communityResourceHasUsableKnowledgeContent(row: CommunityResourceLike): boolean {
   return Boolean(
     String(row.title ?? "").trim() &&
@@ -541,6 +644,109 @@ export function communityMembershipRowIsActive(membership: CommunityMembershipLi
   if (membership.active === false) return false;
   if (typeof membership.revokedAt === "number" && membership.revokedAt > 0) return false;
   return true;
+}
+
+export function normalizeCommunityActiveMemberCount(rawCount: unknown): number | null {
+  const count = Number(rawCount);
+  if (!Number.isFinite(count) || count < 0) return null;
+  return Math.floor(count);
+}
+
+export function readCommunityActiveMemberCount(
+  community: CommunityLike | null | undefined,
+): number | null {
+  return normalizeCommunityActiveMemberCount(community?.activeMemberCount);
+}
+
+export function communityMembershipCountsTowardActiveMemberCount(args: {
+  community: CommunityLike;
+  membership: CommunityMembershipLike | null | undefined;
+}): boolean {
+  if (!communityMembershipRowIsActive(args.membership)) return false;
+  return String(args.membership?.userId ?? "") !== String(args.community.ownerId);
+}
+
+export async function computeCommunityActiveMemberCount(args: {
+  ctx: any;
+  communityId: any;
+  community?: CommunityLike | null;
+}): Promise<number> {
+  const community =
+    args.community ??
+    ((await args.ctx.db.get(args.communityId as any)) as CommunityLike | null);
+  if (!community) throw new Error("community_not_found");
+  const rows = (await args.ctx.db
+    .query("communityMemberships")
+    .withIndex("by_community_createdAt", (q: any) =>
+      q.eq("communityId", args.communityId),
+    )
+    .collect()) as CommunityMembershipLike[];
+  return rows.reduce((count, row) => {
+    return communityMembershipCountsTowardActiveMemberCount({ community, membership: row })
+      ? count + 1
+      : count;
+  }, 1);
+}
+
+export async function syncCommunityActiveMemberCount(args: {
+  ctx: any;
+  communityId: any;
+  community?: CommunityLike | null;
+}): Promise<number> {
+  const community =
+    args.community ??
+    ((await args.ctx.db.get(args.communityId as any)) as CommunityLike | null);
+  if (!community) throw new Error("community_not_found");
+  const nextCount = await computeCommunityActiveMemberCount({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    community,
+  });
+  if (readCommunityActiveMemberCount(community) !== nextCount) {
+    await args.ctx.db.patch(community._id as any, {
+      activeMemberCount: nextCount,
+    });
+  }
+  return nextCount;
+}
+
+export async function adjustCommunityActiveMemberCountForMembershipTransition(args: {
+  ctx: any;
+  communityId: any;
+  before: CommunityMembershipLike | null | undefined;
+  after: CommunityMembershipLike | null | undefined;
+}): Promise<void> {
+  const community = (await args.ctx.db.get(args.communityId as any)) as CommunityLike | null;
+  if (!community) return;
+  const beforeCount = communityMembershipCountsTowardActiveMemberCount({
+    community,
+    membership: args.before,
+  })
+    ? 1
+    : 0;
+  const afterCount = communityMembershipCountsTowardActiveMemberCount({
+    community,
+    membership: args.after,
+  })
+    ? 1
+    : 0;
+  const delta = afterCount - beforeCount;
+  if (delta === 0) return;
+  const currentCount = readCommunityActiveMemberCount(community);
+  if (currentCount === null) {
+    await syncCommunityActiveMemberCount({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      community,
+    });
+    return;
+  }
+  const nextCount = Math.max(1, currentCount + delta);
+  if (nextCount !== currentCount) {
+    await args.ctx.db.patch(community._id as any, {
+      activeMemberCount: nextCount,
+    });
+  }
 }
 
 export function pickMostRelevantCommunityMembership(
@@ -768,6 +974,26 @@ export async function mapCommunityResourceRow(
     body_md: row.bodyMd ?? null,
     url: row.url ?? null,
     file_key: row.fileKey ?? null,
+    source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
+    source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
+    source_ingestion_error: row.sourceIngestionError ?? null,
+    source_ingestion_attempted_at:
+      typeof row.sourceIngestionAttemptedAt === "number" ? toIsoString(row.sourceIngestionAttemptedAt) : null,
+    source_ingested_at:
+      typeof row.sourceIngestedAt === "number" ? toIsoString(row.sourceIngestedAt) : null,
+    source_original_filename: row.sourceOriginalFilename ?? null,
+    source_original_mime_type: row.sourceOriginalMimeType ?? null,
+    source_original_bytes:
+      typeof row.sourceOriginalBytes === "number" && Number.isFinite(row.sourceOriginalBytes)
+        ? row.sourceOriginalBytes
+        : null,
+    source_external_provider: row.sourceExternalProvider ?? null,
+    source_external_id: row.sourceExternalId ?? null,
+    source_external_name: row.sourceExternalName ?? null,
+    source_external_url: row.sourceExternalUrl ?? null,
+    source_external_mime_type: row.sourceExternalMimeType ?? null,
+    source_external_modified_at:
+      typeof row.sourceExternalModifiedAt === "number" ? toIsoString(row.sourceExternalModifiedAt) : null,
     pinned: Boolean(row.pinned),
     sort_order: Number.isFinite(row.sortOrder) ? row.sortOrder : null,
     created_by: (await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)) ?? String(row.createdByUserId),

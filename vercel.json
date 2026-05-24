@@ -2,6 +2,11 @@
   "installCommand": "npm ci && npm --prefix apps/web ci",
   "buildCommand": "npm run build",
   "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/source-url-fetch.js": {
+      "maxDuration": 10
+    }
+  },
   "routes": [
     {
       "src": "/(.*)",

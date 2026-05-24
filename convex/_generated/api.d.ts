@@ -99,6 +99,7 @@ import type * as httpAuth from "../httpAuth.js";
 import type * as httpAuthBridge from "../httpAuthBridge.js";
 import type * as httpBilling from "../httpBilling.js";
 import type * as httpChatgpt from "../httpChatgpt.js";
+import type * as httpCommunitySourceIntegrations from "../httpCommunitySourceIntegrations.js";
 import type * as httpContext from "../httpContext.js";
 import type * as httpDaytona from "../httpDaytona.js";
 import type * as httpEmail from "../httpEmail.js";
@@ -261,6 +262,7 @@ declare const fullApi: ApiFromModules<{
   httpAuthBridge: typeof httpAuthBridge;
   httpBilling: typeof httpBilling;
   httpChatgpt: typeof httpChatgpt;
+  httpCommunitySourceIntegrations: typeof httpCommunitySourceIntegrations;
   httpContext: typeof httpContext;
   httpDaytona: typeof httpDaytona;
   httpEmail: typeof httpEmail;

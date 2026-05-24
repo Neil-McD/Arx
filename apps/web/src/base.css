@@ -9190,17 +9190,6 @@ button.chat-reply-quote:hover {
   flex-wrap: wrap;
 }
 
-.member-price-label {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 560;
-  letter-spacing: 0.03em;
-  color: #8fe3b1;
-  flex-shrink: 0;
-}
-
 .member-role {
   display: inline-flex;
   align-items: center;
@@ -12778,6 +12767,52 @@ button.chat-reply-quote:hover {
 .member-settings-payment-card {
   display: grid;
   gap: 8px;
+}
+
+.member-settings-billing-history {
+  display: grid;
+  gap: 12px;
+}
+
+.member-settings-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.member-settings-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 12px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+}
+
+.member-settings-history-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.member-settings-history-copy {
+  min-width: 0;
+}
+
+.member-settings-history-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.member-settings-history-detail,
+.member-settings-history-date {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.member-settings-history-date {
+  white-space: nowrap;
 }
 
 .member-settings-payment-title {

@@ -205,7 +205,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /role: normalizeResourceRole\(nextRoleRaw\)/,
+  /const nextRole = normalizeResourceRole\(nextRoleRaw\)[\s\S]*role: nextRole/,
   "resource updates must persist normalized role",
 );
 assert.match(

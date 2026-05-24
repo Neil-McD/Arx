@@ -587,6 +587,7 @@ export const createCommunity = mutation({
       bannerZoom: normalizeBannerZoom(args.bannerZoom),
       visibility,
       entryPolicy,
+      activeMemberCount: 1,
       createdAt: nowMs,
       updatedAt: nowMs,
     });

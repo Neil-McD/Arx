@@ -9,11 +9,18 @@ echo "== Community admin contract guard =="
 COMMUNITY_FILE="convex/community.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
+COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
+COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
+COMMUNITY_COMMERCE_FILE="convex/communityCommerce.ts"
+BILLING_CORE_FILE="convex/billingCore.ts"
+PLATFORM_HOME_COMMUNITY_FILE="convex/platformHomeCommunity.ts"
 SCHEMA_FILE="convex/schema.ts"
 ADMIN_GATEWAY_FILE="shared/cloudCommunityAdminGateway.ts"
 MEMBERSHIP_GATEWAY_FILE="shared/cloudCommunityMembershipGateway.ts"
+WEB_APP_FILE="apps/web/src/App.tsx"
 WEB_MEMBERS_FILE="apps/web/src/components/WebCommunityMembersSection.tsx"
 WEB_PEOPLE_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityPeopleController.ts"
+ADMIN_CONTROLLER_FILE="shared/useCommunityAdminController.ts"
 
 if [[ ! -f "$COMMUNITY_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_FILE"
@@ -27,6 +34,26 @@ if [[ ! -f "$COMMUNITY_CORE_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CORE_FILE"
   exit 1
 fi
+if [[ ! -f "$COMMUNITY_LIFECYCLE_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_LIFECYCLE_FILE"
+  exit 1
+fi
+if [[ ! -f "$COMMUNITY_PUBLIC_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_PUBLIC_FILE"
+  exit 1
+fi
+if [[ ! -f "$COMMUNITY_COMMERCE_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_COMMERCE_FILE"
+  exit 1
+fi
+if [[ ! -f "$BILLING_CORE_FILE" ]]; then
+  echo "FAIL: missing $BILLING_CORE_FILE"
+  exit 1
+fi
+if [[ ! -f "$PLATFORM_HOME_COMMUNITY_FILE" ]]; then
+  echo "FAIL: missing $PLATFORM_HOME_COMMUNITY_FILE"
+  exit 1
+fi
 if [[ ! -f "$SCHEMA_FILE" ]]; then
   echo "FAIL: missing $SCHEMA_FILE"
   exit 1
@@ -37,6 +64,14 @@ if [[ ! -f "$ADMIN_GATEWAY_FILE" ]]; then
 fi
 if [[ ! -f "$MEMBERSHIP_GATEWAY_FILE" ]]; then
   echo "FAIL: missing $MEMBERSHIP_GATEWAY_FILE"
+  exit 1
+fi
+if [[ ! -f "$WEB_APP_FILE" ]]; then
+  echo "FAIL: missing $WEB_APP_FILE"
+  exit 1
+fi
+if [[ ! -f "$ADMIN_CONTROLLER_FILE" ]]; then
+  echo "FAIL: missing $ADMIN_CONTROLLER_FILE"
   exit 1
 fi
 
@@ -62,18 +97,35 @@ require_no_match() {
   echo "OK: $description"
 }
 
-echo "[1/9] Ensuring admin gateway forwards authSubject for member/admin queries..."
+require_block_no_match() {
+  local file="$1"
+  local start_pattern="$2"
+  local end_pattern="$3"
+  local forbidden_pattern="$4"
+  local description="$5"
+  if awk -v start="$start_pattern" -v end="$end_pattern" '
+    $0 ~ start { in_block = 1 }
+    in_block { print }
+    $0 ~ end && in_block { in_block = 0 }
+  ' "$file" | rg -n -U --pcre2 "$forbidden_pattern" >/dev/null; then
+    echo "FAIL: forbidden contract marker present: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
+echo "[1/12] Ensuring admin gateway forwards authSubject for member/admin queries..."
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
   'export async function listCloudCommunityMembershipAdminPage<[\s\S]*?client\.query\("community:listCommunityMembershipsAdminPage" as any, \{\s*authSubject,\s*communityId:' \
   "paginated members admin gateway forwards authSubject"
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
-  'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.query\("community:countCommunityMemberships" as any, \{\s*authSubject,\s*communityId:' \
-  "member count gateway forwards authSubject"
+  'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.mutation\("community:syncCommunityMembershipCount" as any, \{\s*authSubject,\s*communityId:' \
+  "member count gateway forwards authSubject through durable count sync"
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function listCloudCommunityRevenueSeriesRows<[\s\S]*?client\.query\("community:listCommunityRevenueSeries" as any, \{\s*authSubject,\s*communityId:' \
   "revenue series gateway forwards authSubject"
 
-echo "[2/9] Ensuring admin/member analytics queries accept authSubject..."
+echo "[2/12] Ensuring admin/member analytics queries accept authSubject..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipsAdmin = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityMembershipsAdmin accepts authSubject"
@@ -84,6 +136,9 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "countCommunityMemberships accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const syncCommunityMembershipCount = mutation\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),' \
+  "syncCommunityMembershipCount accepts authSubject"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityMembershipCreatedAtRows accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
@@ -93,15 +148,33 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityRevenueSeries accepts authSubject"
 
-echo "[3/9] Ensuring manager access centralizes membership-row reads..."
+echo "[3/12] Ensuring manager access centralizes membership-row reads..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function listCommunityMembershipRowsForManager\(args: \{' \
   "shared manager-scoped membership helper exists"
 
-echo "[4/9] Ensuring member/admin roster reads are paginated, release-safe, and count context is explicit..."
+echo "[4/12] Ensuring member/admin roster reads are paginated, release-safe, and count context is explicit..."
 require_multiline_match "$SCHEMA_FILE" \
   'communityMemberships: defineTable\([\s\S]*?\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)' \
   "communityMemberships has community creation-order index"
+require_multiline_match "$SCHEMA_FILE" \
+  'communityJoinRequests: defineTable\([\s\S]*?\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)' \
+  "communityJoinRequests has community status creation-order index"
+require_multiline_match "$SCHEMA_FILE" \
+  'communities: defineTable\([\s\S]*?activeMemberCount: v\.optional\(v\.number\(\)\)' \
+  "communities carry a durable active member count"
+require_multiline_match "$COMMUNITY_LIFECYCLE_FILE" \
+  'ctx\.db\.insert\("communities", \{[\s\S]*?activeMemberCount: 1,' \
+  "new communities initialize active member count with owner"
+require_multiline_match "$COMMUNITY_CORE_FILE" \
+  'export async function adjustCommunityActiveMemberCountForMembershipTransition\([\s\S]*?syncCommunityActiveMemberCount' \
+  "membership transitions go through the durable member-count helper"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const countCommunityMemberships = query\([\s\S]*?readCommunityActiveMemberCount\(community\)[\s\S]*?if \(activeMemberCount !== null\) return activeMemberCount' \
+  "countCommunityMemberships reads durable count before scan fallback"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const syncCommunityMembershipCount = mutation\([\s\S]*?readCommunityActiveMemberCount\(community\)[\s\S]*?if \(activeMemberCount !== null\) return activeMemberCount[\s\S]*?syncCommunityActiveMemberCount\(\{' \
+  "syncCommunityMembershipCount reads cached count before legacy reconciliation"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipsAdminPage = query\([\s\S]*?withIndex\("by_community_createdAt", \(q\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)[\s\S]*?\.paginate\(\{' \
   "listCommunityMembershipsAdminPage paginates membership rows by community creation order"
@@ -123,19 +196,123 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\([\s\S]*?listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "listCommunityMembershipCreatedAtRows delegates through manager helper"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const listCommunityJoinRequests = query\([\s\S]*?withIndex\("by_community_status_createdAt", \(q: any\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)\.eq\("status", status\)[\s\S]*?\.order\("desc"\)[\s\S]*?\.take\(limit\)' \
+  "listCommunityJoinRequests reads join requests by community status creation order"
+require_block_no_match "$COMMUNITY_ADMIN_FILE" \
+  'export const listCommunityJoinRequests = query' \
+  '^\}\);' \
+  'withIndex\("by_community",[\s\S]*?\.collect\(\)' \
+  "listCommunityJoinRequests does not collect every community join request"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'function requireOwnerForAdminAuthorityChange\([\s\S]*?currentRole === "admin" \|\| nextRole === "admin"[\s\S]*?community_owner_required_for_admin_role' \
+  "admin authority changes require an explicit owner-only helper"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const setCommunityMemberRole = mutation\([\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: args\.userId,\s*targetMembership: membership,\s*nextRole: role,' \
+  "setCommunityMemberRole requires owner for admin promotion or demotion"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'prepareCommunityMemberRemovalInternal[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership: membership,' \
+  "member removal preparation requires owner for admin targets"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'revokeCommunityMemberInternal[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership: membership,' \
+  "member revocation requires owner for admin targets"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'blockCommunityUserInternal[\s\S]*?targetMembershipRows[\s\S]*?pickMostRelevantCommunityMembership\(targetMembershipRows\)[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership,' \
+  "member ban requires owner for admin targets"
 require_no_match "$WEB_PEOPLE_CONTROLLER_FILE" \
   'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter' \
   "members controller does not keep loaded-subset filter state"
 require_no_match "$WEB_MEMBERS_FILE" \
   'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|members-filter-row|members-filter-field' \
   "members UI does not expose loaded-subset filters"
+require_multiline_match "$WEB_MEMBERS_FILE" \
+  'const isActiveCommunityOwner = capabilities\.isActiveCommunityOwner[\s\S]*?selectedMemberRoleOptions[\s\S]*?isActiveCommunityOwner[\s\S]*?\["member", "moderator", "admin"\][\s\S]*?selectedMemberIsAdmin[\s\S]*?\["admin"\][\s\S]*?\["member", "moderator"\]' \
+  "members UI role options reserve admin role controls for owners"
+require_multiline_match "$WEB_MEMBERS_FILE" \
+  'disabled=\{!canChangeSelectedMemberRole\}[\s\S]*?selectedMemberRoleOptions\.map' \
+  "members UI disables admin role changes for non-owner admins"
+require_multiline_match "$WEB_MEMBERS_FILE" \
+  'disabled=\{!canRemoveSelectedMember\}[\s\S]*?Only owners can remove admins[\s\S]*?disabled=\{!canRemoveSelectedMember\}[\s\S]*?Only owners can ban admins' \
+  "members UI disables admin removal and ban actions for non-owner admins"
+require_no_match "$WEB_MEMBERS_FILE" \
+  '\(\["member", "moderator", "admin"\] as const\)\.map' \
+  "members UI does not render admin role options unconditionally"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'const patchCommunityMemberRoleLocally = useCallback\([\s\S]*?current\.setCommunityMembers\(\(previous\) =>[\s\S]*?\.\.\.\(row as any\), role' \
+  "member role mutations patch the local roster after backend success"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'const removeCommunityMemberLocally = useCallback\([\s\S]*?current\.setCommunityMembers\(\(previous\) =>[\s\S]*?previous\.filter[\s\S]*?decrementCommunityMemberCountIfKnown\(current\)' \
+  "member remove and ban mutations remove the local row and decrement known counts"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'const reconcileCommunityMembershipViews = useCallback\([\s\S]*?void \(async \(\) =>[\s\S]*?Promise\.allSettled\(\[[\s\S]*?countCloudCommunityMembershipRows[\s\S]*?reloadCommunities[\s\S]*?reloadCommunityAccess' \
+  "member mutations use non-blocking narrow background reconciliation"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'handleSetCommunityMemberRole[\s\S]*?await setCloudCommunityMemberRole[\s\S]*?patchCommunityMemberRoleLocally\(current, membershipId, role\)[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
+  "role mutation patches local row only after backend success"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'handleRemoveCommunityMember[\s\S]*?await removeCloudCommunityMember[\s\S]*?removeCommunityMemberLocally\(current, membershipId\)[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
+  "remove mutation removes local row only after backend success"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'handleBanCommunityMember[\s\S]*?await banCloudCommunityMember[\s\S]*?removeCommunityMemberLocally\(current, membershipId\)[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
+  "ban mutation removes local row only after backend success"
+require_no_match "$ADMIN_CONTROLLER_FILE" \
+  'refreshCommunityMembershipViews' \
+  "member mutations do not keep the old full refresh helper"
+require_block_no_match "$ADMIN_CONTROLLER_FILE" \
+  'const handleSetCommunityMemberRole = useCallback' \
+  '^\s*\}, \[patchCommunityMemberRoleLocally, reconcileCommunityMembershipViews\]\);' \
+  'finally|await reconcileCommunityMembershipViews|await reloadCommunities|await reloadCommunityAccess' \
+  "role mutation does not block on refresh or reconciliation"
+require_block_no_match "$ADMIN_CONTROLLER_FILE" \
+  'const handleRemoveCommunityMember = useCallback' \
+  '^\s*\}, \[reconcileCommunityMembershipViews, removeCommunityMemberLocally\]\);' \
+  'finally|await reconcileCommunityMembershipViews|await reloadCommunities|await reloadCommunityAccess' \
+  "remove mutation does not block on refresh or reconciliation"
+require_block_no_match "$ADMIN_CONTROLLER_FILE" \
+  'const handleBanCommunityMember = useCallback' \
+  '^\s*\}, \[reconcileCommunityMembershipViews, removeCommunityMemberLocally\]\);' \
+  'finally|await reconcileCommunityMembershipViews|await reloadCommunities|await reloadCommunityAccess' \
+  "ban mutation does not block on refresh or reconciliation"
+require_multiline_match "$ADMIN_CONTROLLER_FILE" \
+  'current\.setCommunityMembers\(rows\);[\s\S]*?loadCommunityMemberCount\(current, communityId, usableSession, seq\);' \
+  "members roster publishes before exact count enrichment"
+require_no_match "$ADMIN_CONTROLLER_FILE" \
+  'await countCloudCommunityMembershipRows' \
+  "members initial load does not await exact member count"
+require_no_match "$ADMIN_CONTROLLER_FILE" \
+  'Promise\.all\([\s\S]*?(listCloudCommunityMembershipAdminPage[\s\S]*?countCloudCommunityMembershipRows|countCloudCommunityMembershipRows[\s\S]*?listCloudCommunityMembershipAdminPage)' \
+  "members initial load does not join roster and count promises"
+require_multiline_match "$WEB_MEMBERS_FILE" \
+  'loadedCommunityMemberCountLabel[\s\S]*communityMemberCountLabel' \
+  "members header keeps a loaded-count fallback while exact count loads"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'approveCommunityJoinRequest[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "join approvals maintain active member count"
+require_multiline_match "$COMMUNITY_PUBLIC_FILE" \
+  'grantFreeMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "public joins maintain active member count"
+require_multiline_match "$BILLING_CORE_FILE" \
+  'ensureCommunityMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "paid membership creation maintains active member count"
+require_multiline_match "$COMMUNITY_COMMERCE_FILE" \
+  'syncCommunitySubscriptionLifecycleInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "subscription status changes maintain active member count"
+require_multiline_match "$PLATFORM_HOME_COMMUNITY_FILE" \
+  'ensurePlatformHomeCommunityMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "platform autojoin maintains active member count"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'revokeCommunityMemberInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "member removal and ban maintain active member count"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'leaveCommunity[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "member leave maintains active member count"
 
-echo "[5/9] Ensuring public user identity is returned for admin membership rows..."
+echo "[5/12] Ensuring public user identity is returned for admin membership rows..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
   "admin membership rows resolve public user IDs"
 
-echo "[6/9] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."
+echo "[6/12] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const communityOwnerHasArchitectAccess = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "communityOwnerHasArchitectAccess resolves authenticated subject"
@@ -143,7 +320,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "listCommunityRevenueSeries resolves authenticated subject"
 
-echo "[7/9] Ensuring analytics queries still require manager access..."
+echo "[7/12] Ensuring analytics queries still require manager access..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const communityOwnerHasArchitectAccess = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
   "communityOwnerHasArchitectAccess requires manager access"
@@ -151,14 +328,62 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
   "listCommunityRevenueSeries requires manager access"
 
-echo "[8/9] Ensuring the canonical auth + funding contract doc exists..."
+echo "[8/12] Ensuring the canonical auth + funding contract doc exists..."
 if [[ ! -f "docs/auth-money-access-matrix.md" ]]; then
   echo "FAIL: missing docs/auth-money-access-matrix.md"
   exit 1
 fi
 echo "OK: canonical auth + funding contract doc present."
 
-echo "[9/11] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
+echo "[9/12] Ensuring member billing history is real, authenticated, and manager-gated..."
+require_multiline_match "$COMMUNITY_FILE" \
+  'getCommunityMemberBillingHistory as getCommunityMemberBillingHistoryImpl[\s\S]*?export const getCommunityMemberBillingHistory = getCommunityMemberBillingHistoryImpl;' \
+  "community public API exports member billing history"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const getCommunityMemberBillingHistory = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*targetMembershipId: v\.id\("communityMemberships"\),' \
+  "member billing history query accepts authenticated subject and target membership"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const getCommunityMemberBillingHistory = query\([\s\S]*?resolveCommunityAdminMembersContext\(\{[\s\S]*?if \(!viewerCanManageMembers\) throw new Error\("community_forbidden"\)' \
+  "member billing history fails closed to managers only"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const getCommunityMemberBillingHistory = query\([\s\S]*?listCommunitySubscriptionRowsForMembership\(\{[\s\S]*?membershipId: membership\._id,' \
+  "member billing history is backed by persisted subscription rows"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const getCommunityMemberBillingHistory = query\([\s\S]*?current_plan: currentPlan,[\s\S]*?events,' \
+  "member billing history returns current plan from billing detail path"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'listCheckoutBillingHistoryEventsForSubscriptions\([\s\S]*?query\("checkoutSessions" as any\)[\s\S]*?withIndex\("by_providerSubscriptionId"' \
+  "member billing history includes persisted checkout sessions by provider subscription"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'listSubscriptionAuditBillingHistoryEvents\([\s\S]*?query\("criticalAuditEvents" as any\)[\s\S]*?withIndex\("by_providerObject"' \
+  "member billing history includes persisted subscription audit events"
+require_multiline_match "$ADMIN_GATEWAY_FILE" \
+  'export async function fetchCloudCommunityMemberBillingHistory<[\s\S]*?client\.query\("community:getCommunityMemberBillingHistory" as any, \{\s*authSubject,\s*communityId: params\.communityId,\s*targetMembershipId: params\.membershipId,' \
+  "member billing history gateway forwards authSubject and target membership"
+require_multiline_match "$WEB_APP_FILE" \
+  'fetchCloudCommunityMemberBillingHistory\(\{[\s\S]*?session: usableSession,\s*communityId,\s*membershipId,' \
+  "members surface loads billing history on demand"
+require_no_match "$WEB_MEMBERS_FILE" \
+  'Payment history|Historical payments unavailable|No payment history' \
+  "members UI does not expose unbacked payment-history placeholder text"
+require_block_no_match "$COMMUNITY_ADMIN_FILE" \
+  '^async function mapCommunityOwnerAdminMemberRow' \
+  '^async function mapCommunityAdminMembershipRow' \
+  'price_point_id|billing_period|amount_base_units|currency_decimals|communitySubscriptions|pricePoint' \
+  "owner roster row has no billing/detail fields"
+require_block_no_match "$COMMUNITY_ADMIN_FILE" \
+  '^async function mapCommunityAdminMembershipRow' \
+  '^async function endCommunitySubscriptionsForMembership' \
+  'price_point_id|billing_period|amount_base_units|currency_decimals|communitySubscriptions|pricePoint' \
+  "member roster rows do not hydrate billing detail"
+require_no_match "$MEMBERSHIP_GATEWAY_FILE" \
+  'price_point_id|billing_period|amount_base_units|currency_decimals|CommunityBillingPeriod' \
+  "membership admin gateway row type excludes billing detail"
+require_no_match "$WEB_MEMBERS_FILE" \
+  'member-price-label|formatMemberAccess|member\.(price_point_id|billing_period|amount_base_units|currency_decimals)' \
+  "members roster UI excludes plan badges and billing detail fields"
+
+echo "[10/12] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function removeCloudCommunityMember<[\s\S]*?client\.action\("community:removeCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
   "remove member gateway calls action for provider cancellation"
@@ -181,7 +406,7 @@ if awk '
 fi
 echo "OK: revokeCommunityMemberInternal does not delete membership rows"
 
-echo "[10/11] Ensuring ban and unban are distinct from remove..."
+echo "[11/12] Ensuring ban and unban are distinct from remove..."
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function banCloudCommunityMember<[\s\S]*?client\.action\("community:banCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
   "ban member gateway calls action"
@@ -198,5 +423,5 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 \* 24 \* 60 \* 60 \* 1000;' \
   "removed member reapply cooldown is 14 days"
 
-echo "[11/11] Guard passed."
+echo "[12/12] Guard passed."
 echo "PASS: community admin contract markers are present and hardened."
