@@ -5303,14 +5303,21 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-launch-knowledge-drive-picker .community-launch-knowledge-drive-import {
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  color: #ffffff;
-  background: color-mix(in srgb, var(--accent) 52%, rgba(0, 0, 0, 0.18));
+  min-height: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: var(--accent, var(--accent-gold));
+  background: transparent;
+  box-shadow: none;
+  line-height: 1.2;
 }
 
 .community-launch-knowledge-drive-picker .community-launch-knowledge-drive-import:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--accent) 88%, transparent);
-  background: color-mix(in srgb, var(--accent) 64%, rgba(0, 0, 0, 0.14));
+  color: color-mix(in srgb, var(--accent, var(--accent-gold)) 82%, white 18%);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .community-launch-choice-row {
