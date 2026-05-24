@@ -430,6 +430,11 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /CommunityLaunchKnowledgeImportedSource[\s\S]*knowledgeGoogleDriveSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onRemoveKnowledgeGoogleDriveSource\?:[\s\S]*onDisconnectKnowledgeGoogleDrive\?:/,
+  "launch knowledge Google Drive contract must expose imported source rows, per-source removal, and disconnect",
+);
+assert.match(
+  setupModal,
   /CommunityLaunchGitHubConnection[\s\S]*CommunityLaunchGitHubRepository[\s\S]*CommunityLaunchGitHubFile[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles/,
   "launch knowledge integrations must expose a concrete GitHub lifecycle contract",
 );
@@ -452,6 +457,16 @@ assert.match(
   setupModal,
   /file\.kind === "folder"[\s\S]*community-launch-knowledge-drive-folder[\s\S]*handleOpenGoogleDriveFolder\(file\)[\s\S]*isImportableGoogleDriveSourceFile\(file\)[\s\S]*handleToggleGoogleDriveFile/,
   "launch knowledge Google Drive folders should navigate while only importable files can be selected",
+);
+assert.match(
+  setupModal,
+  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*Imported from Drive[\s\S]*community-launch-knowledge-imported-source/,
+  "launch knowledge Google Drive UI must show imported Drive sources, support un-adding one source, and support disconnecting the provider",
+);
+assert.match(
+  setupModal,
+  /alreadyAdded = knowledgeDriveImportedExternalIds\.has\(file\.id\)[\s\S]*disabled=\{!isImportableGoogleDriveSourceFile\(file\) \|\| alreadyAdded\}[\s\S]*alreadyAdded \? "Added"/,
+  "launch knowledge Google Drive picker should mark already imported files as Added instead of selectable",
 );
 assert.match(
   setupModal,
@@ -535,8 +550,8 @@ assert.match(
 );
 assert.match(
   appShell,
-  /handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
-  "app shell must wire launch Knowledge Google Drive connection, listing, and import handlers",
+  /communityLaunchGoogleDriveSources[\s\S]*source_external_provider === "google_drive"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCommunityResources\(community\.id, session\)[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchGoogleDriveSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
+  "app shell must wire launch Knowledge Google Drive connection, listing, import, remove, and disconnect handlers",
 );
 assert.match(
   appShell,

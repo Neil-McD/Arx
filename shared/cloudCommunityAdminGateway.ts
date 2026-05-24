@@ -572,6 +572,19 @@ export async function beginCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   };
 }
 
+export async function disconnectCloudCommunityGoogleDriveSourceConnection<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudGoogleDriveSourceConnectionStatus> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.mutation("community:disconnectGoogleDriveSourceConnection" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as Record<string, unknown> | null;
+  return normalizeGoogleDriveSourceConnection(payload?.connection);
+}
+
 export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     state: string;

@@ -228,6 +228,18 @@ export type CommunityLaunchGoogleDriveImportResult = {
   }>;
 };
 
+export type CommunityLaunchKnowledgeImportedSource = {
+  id: string;
+  title: string;
+  source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
+  source_ingestion_error?: string | null;
+  source_external_id?: string | null;
+  source_external_url?: string | null;
+  source_external_mime_type?: string | null;
+};
+
+const EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES: CommunityLaunchKnowledgeImportedSource[] = [];
+
 export type CommunityLaunchGitHubConnection = {
   connected: boolean;
   login?: string | null;
@@ -304,6 +316,7 @@ type WebCommunityLaunchSetupModalProps = {
   initialStep?: CommunityLaunchSetupStep | null;
   knowledgeIntegrationReloadKey?: string | number | null;
   knowledgeAutoOpenProvider?: "google_drive" | null;
+  knowledgeGoogleDriveSources?: CommunityLaunchKnowledgeImportedSource[];
   community: CommunityLaunchSetupCommunity | null;
   status: CommunityLaunchSetupStatus | null;
   onClose: () => void;
@@ -325,6 +338,8 @@ type WebCommunityLaunchSetupModalProps = {
     request?: CommunityLaunchGoogleDriveFileListRequest | null,
   ) => Promise<CommunityLaunchGoogleDriveFileListResult | null>;
   onImportKnowledgeGoogleDriveFiles?: (fileIds: string[]) => Promise<CommunityLaunchGoogleDriveImportResult | null>;
+  onRemoveKnowledgeGoogleDriveSource?: (resourceId: string) => Promise<boolean | void>;
+  onDisconnectKnowledgeGoogleDrive?: () => Promise<CommunityLaunchGoogleDriveConnection | null>;
   onKnowledgeAutoOpenHandled?: (provider: "google_drive") => void;
   onLoadKnowledgeGitHubConnection?: () => Promise<CommunityLaunchGitHubConnection | null>;
   onConnectKnowledgeGitHub?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
@@ -484,6 +499,12 @@ function getGoogleDriveSourceFileTypeLabel(file: CommunityLaunchGoogleDriveFile)
   return file.mime_type.replace("application/vnd.google-apps.", "Google ");
 }
 
+function getKnowledgeSourceStatusLabel(source: CommunityLaunchKnowledgeImportedSource): string {
+  const status = source.source_ingestion_status ?? "queued";
+  if (status === "not_required") return "Added";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 export function WebCommunityLaunchSetupModal(
   props: WebCommunityLaunchSetupModalProps,
 ) {
@@ -493,6 +514,7 @@ export function WebCommunityLaunchSetupModal(
     initialStep = null,
     knowledgeIntegrationReloadKey = null,
     knowledgeAutoOpenProvider = null,
+    knowledgeGoogleDriveSources = [],
     community,
     status,
     onClose,
@@ -508,6 +530,8 @@ export function WebCommunityLaunchSetupModal(
     onConnectKnowledgeGoogleDrive,
     onListKnowledgeGoogleDriveFiles,
     onImportKnowledgeGoogleDriveFiles,
+    onRemoveKnowledgeGoogleDriveSource,
+    onDisconnectKnowledgeGoogleDrive,
     onKnowledgeAutoOpenHandled,
     onLoadKnowledgeGitHubConnection,
     onConnectKnowledgeGitHub,
@@ -573,6 +597,8 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeDriveNextPageToken, setKnowledgeDriveNextPageToken] = useState<string | null>(null);
   const [knowledgeDriveConnectionLoading, setKnowledgeDriveConnectionLoading] = useState(false);
   const [knowledgeDriveFilesLoading, setKnowledgeDriveFilesLoading] = useState(false);
+  const [knowledgeDriveDisconnecting, setKnowledgeDriveDisconnecting] = useState(false);
+  const [knowledgeDriveRemovingSourceId, setKnowledgeDriveRemovingSourceId] = useState<string | null>(null);
   const [knowledgeGitHubConnection, setKnowledgeGitHubConnection] =
     useState<CommunityLaunchGitHubConnection | null>(null);
   const [knowledgeGitHubRepositories, setKnowledgeGitHubRepositories] = useState<CommunityLaunchGitHubRepository[]>([]);
@@ -590,6 +616,9 @@ export function WebCommunityLaunchSetupModal(
     starterPrompts: ["", "", ""],
   });
   const [accessDraft, setAccessDraft] = useState<CommunityEntryPolicy>("open");
+  const effectiveKnowledgeGoogleDriveSources = isCreateMode
+    ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
+    : knowledgeGoogleDriveSources;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -626,6 +655,8 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeDriveNextPageToken(null);
       setKnowledgeDriveConnectionLoading(false);
       setKnowledgeDriveFilesLoading(false);
+      setKnowledgeDriveDisconnecting(false);
+      setKnowledgeDriveRemovingSourceId(null);
       setKnowledgeGitHubConnection(null);
       setKnowledgeGitHubRepositories([]);
       setKnowledgeGitHubSelectedRepository(null);
@@ -677,6 +708,8 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeDriveNextPageToken(null);
       setKnowledgeDriveConnectionLoading(false);
       setKnowledgeDriveFilesLoading(false);
+      setKnowledgeDriveDisconnecting(false);
+      setKnowledgeDriveRemovingSourceId(null);
       setKnowledgeGitHubConnection(null);
       setKnowledgeGitHubRepositories([]);
       setKnowledgeGitHubSelectedRepository(null);
@@ -897,9 +930,25 @@ export function WebCommunityLaunchSetupModal(
     onKnowledgeAutoOpenHandled,
   ]);
 
+  const knowledgeDriveImportedExternalIds = useMemo(() => {
+    return new Set(
+      effectiveKnowledgeGoogleDriveSources
+        .map((source) => String(source.source_external_id ?? "").trim())
+        .filter(Boolean),
+    );
+  }, [effectiveKnowledgeGoogleDriveSources]);
   const knowledgeDriveVisibleImportableCount =
     knowledgeDriveFiles.filter(isImportableGoogleDriveSourceFile).length;
-  const knowledgeDriveCanImport = knowledgeDriveSelectedIds.length > 0;
+  const knowledgeDriveCanImport = knowledgeDriveSelectedIds.some(
+    (id) => !knowledgeDriveImportedExternalIds.has(id),
+  );
+
+  useEffect(() => {
+    if (knowledgeDriveImportedExternalIds.size === 0) return;
+    setKnowledgeDriveSelectedIds((ids) =>
+      ids.filter((id) => !knowledgeDriveImportedExternalIds.has(id)),
+    );
+  }, [knowledgeDriveImportedExternalIds]);
 
   if (!isOpen || !effectiveCommunity || !effectiveStatus) return null;
 
@@ -1082,6 +1131,37 @@ export function WebCommunityLaunchSetupModal(
     })();
   };
 
+  const handleDisconnectGoogleDrive = () => {
+    if (savingStep || knowledgeDriveDisconnecting || !knowledgeDriveConnection?.connected) return;
+    if (!onDisconnectKnowledgeGoogleDrive) {
+      setStepError("Google Drive disconnect is unavailable.");
+      return;
+    }
+    const shouldDisconnect = window.confirm(
+      "Disconnect Google Drive? Imported sources stay saved, but pending Drive sources may need you to reconnect before processing.",
+    );
+    if (!shouldDisconnect) return;
+    setKnowledgeDriveDisconnecting(true);
+    setStepError(null);
+    setStepSuccess(null);
+    void onDisconnectKnowledgeGoogleDrive()
+      .then((connection) => {
+        setKnowledgeDriveConnection(connection ?? { connected: false });
+        setKnowledgeDriveBrowserOpen(false);
+        setKnowledgeDriveFiles([]);
+        setKnowledgeDriveSelectedIds([]);
+        setKnowledgeDriveSearchDraft("");
+        setKnowledgeDriveQuery("");
+        setKnowledgeDriveFolderTrail([]);
+        setKnowledgeDriveNextPageToken(null);
+        setStepSuccess("Google Drive disconnected. Imported sources remain saved.");
+      })
+      .catch((error) => {
+        setStepError(error instanceof Error ? error.message : "Could not disconnect Google Drive.");
+      })
+      .finally(() => setKnowledgeDriveDisconnecting(false));
+  };
+
   const handleSearchGoogleDriveFiles = (event: FormEvent) => {
     event.preventDefault();
     if (savingStep || knowledgeDriveFilesLoading) return;
@@ -1139,7 +1219,13 @@ export function WebCommunityLaunchSetupModal(
 
   const handleToggleGoogleDriveFile = (fileId: string) => {
     const file = knowledgeDriveFiles.find((item) => item.id === fileId);
-    if (!file || !isImportableGoogleDriveSourceFile(file)) return;
+    if (
+      !file ||
+      !isImportableGoogleDriveSourceFile(file) ||
+      knowledgeDriveImportedExternalIds.has(file.id)
+    ) {
+      return;
+    }
     setKnowledgeDriveSelectedIds((current) =>
       current.includes(fileId)
         ? current.filter((id) => id !== fileId)
@@ -1148,7 +1234,8 @@ export function WebCommunityLaunchSetupModal(
   };
 
   const handleImportGoogleDriveFiles = () => {
-    if (savingStep || knowledgeDriveFilesLoading || knowledgeDriveSelectedIds.length === 0) return;
+    const importFileIds = knowledgeDriveSelectedIds.filter((id) => !knowledgeDriveImportedExternalIds.has(id));
+    if (savingStep || knowledgeDriveFilesLoading || importFileIds.length === 0) return;
     if (!onImportKnowledgeGoogleDriveFiles) {
       setStepError("Google Drive import is unavailable.");
       return;
@@ -1156,7 +1243,7 @@ export function WebCommunityLaunchSetupModal(
     setSavingStep("knowledge");
     setStepError(null);
     setStepSuccess(null);
-    void onImportKnowledgeGoogleDriveFiles(knowledgeDriveSelectedIds)
+    void onImportKnowledgeGoogleDriveFiles(importFileIds)
       .then((result) => {
         const failedIds = new Set(
           (result?.failures ?? [])
@@ -1184,6 +1271,32 @@ export function WebCommunityLaunchSetupModal(
         setStepError(error instanceof Error ? error.message : "Could not import Google Drive files.");
       })
       .finally(() => setSavingStep(null));
+  };
+
+  const handleRemoveGoogleDriveSource = (source: CommunityLaunchKnowledgeImportedSource) => {
+    if (savingStep || knowledgeDriveRemovingSourceId || !source.id) return;
+    if (!onRemoveKnowledgeGoogleDriveSource) {
+      setStepError("Drive source removal is unavailable.");
+      return;
+    }
+    setKnowledgeDriveRemovingSourceId(source.id);
+    setStepError(null);
+    setStepSuccess(null);
+    void onRemoveKnowledgeGoogleDriveSource(source.id)
+      .then((removed) => {
+        if (removed === false) {
+          setStepError("Could not remove Drive source.");
+          return;
+        }
+        setKnowledgeDriveSelectedIds((ids) =>
+          ids.filter((id) => id !== String(source.source_external_id ?? "").trim()),
+        );
+        setStepSuccess("Drive source removed.");
+      })
+      .catch((error) => {
+        setStepError(error instanceof Error ? error.message : "Could not remove Drive source.");
+      })
+      .finally(() => setKnowledgeDriveRemovingSourceId(null));
   };
 
   const handleGitHubPrimaryAction = () => {
@@ -1851,6 +1964,7 @@ export function WebCommunityLaunchSetupModal(
                     className={`community-launch-knowledge-integration-chip${knowledgeDriveConnection?.connected ? " is-connected" : ""}`}
                     disabled={
                       isSavingActiveStep ||
+                      knowledgeDriveDisconnecting ||
                       (knowledgeDriveConnection?.connected
                         ? knowledgeDriveFilesLoading || !onListKnowledgeGoogleDriveFiles
                         : knowledgeDriveConnectionLoading || !onConnectKnowledgeGoogleDrive)
@@ -1906,9 +2020,49 @@ export function WebCommunityLaunchSetupModal(
                   </button>
                 </div>
                 {knowledgeDriveConnection?.connected ? (
-                  <p className="community-launch-knowledge-integration-note">
-                    Connected{knowledgeDriveConnection.email ? ` as ${knowledgeDriveConnection.email}` : ""}.
-                  </p>
+                  <div className="community-launch-knowledge-integration-status">
+                    <p className="community-launch-knowledge-integration-note">
+                      Connected{knowledgeDriveConnection.email ? ` as ${knowledgeDriveConnection.email}` : ""}.
+                    </p>
+                    <button
+                      type="button"
+                      className="secondary community-launch-knowledge-disconnect"
+                      disabled={isSavingActiveStep || knowledgeDriveDisconnecting || !onDisconnectKnowledgeGoogleDrive}
+                      onClick={handleDisconnectGoogleDrive}
+                    >
+                      {knowledgeDriveDisconnecting ? "Disconnecting..." : "Disconnect"}
+                    </button>
+                  </div>
+                ) : null}
+                {effectiveKnowledgeGoogleDriveSources.length > 0 ? (
+                  <div className="community-launch-knowledge-imported-sources">
+                    <strong>Imported from Drive</strong>
+                    {effectiveKnowledgeGoogleDriveSources.map((source) => (
+                      <div key={source.id} className="community-launch-knowledge-imported-source">
+                        <span>{source.title || "Drive source"}</span>
+                        <small className={`community-launch-knowledge-source-status ${source.source_ingestion_status ?? "queued"}`}>
+                          {getKnowledgeSourceStatusLabel(source)}
+                        </small>
+                        {source.source_external_url ? (
+                          <a href={source.source_external_url} target="_blank" rel="noreferrer">
+                            Open
+                          </a>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={
+                            isSavingActiveStep ||
+                            knowledgeDriveRemovingSourceId === source.id ||
+                            !onRemoveKnowledgeGoogleDriveSource
+                          }
+                          onClick={() => handleRemoveGoogleDriveSource(source)}
+                        >
+                          {knowledgeDriveRemovingSourceId === source.id ? "Removing..." : "Remove"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 ) : null}
                 {knowledgeGitHubConnection?.connected ? (
                   <p className="community-launch-knowledge-integration-note">
@@ -1956,8 +2110,9 @@ export function WebCommunityLaunchSetupModal(
                       {knowledgeDriveQuery ? <span>Search: {knowledgeDriveQuery}</span> : null}
                     </div>
                     {knowledgeDriveFiles.length > 0 ? (
-                      knowledgeDriveFiles.map((file) =>
-                        file.kind === "folder" ? (
+                      knowledgeDriveFiles.map((file) => {
+                        const alreadyAdded = knowledgeDriveImportedExternalIds.has(file.id);
+                        return file.kind === "folder" ? (
                           <button
                             key={file.id}
                             type="button"
@@ -1970,18 +2125,18 @@ export function WebCommunityLaunchSetupModal(
                             <small>Folder</small>
                           </button>
                         ) : (
-                          <label key={file.id}>
+                          <label key={file.id} className={alreadyAdded ? "is-added" : undefined}>
                             <input
                               type="checkbox"
                               checked={knowledgeDriveSelectedIds.includes(file.id)}
-                              disabled={!isImportableGoogleDriveSourceFile(file)}
+                              disabled={!isImportableGoogleDriveSourceFile(file) || alreadyAdded}
                               onChange={() => handleToggleGoogleDriveFile(file.id)}
                             />
                             <span>{file.name}</span>
-                            <small>{getGoogleDriveSourceFileTypeLabel(file)}</small>
+                            <small>{alreadyAdded ? "Added" : getGoogleDriveSourceFileTypeLabel(file)}</small>
                           </label>
-                        ),
-                      )
+                        );
+                      })
                     ) : (
                       <p className="community-launch-knowledge-drive-empty">
                         {knowledgeDriveFilesLoading

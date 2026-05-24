@@ -5004,6 +5004,76 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-size: 12px;
 }
 
+.community-launch-knowledge-integration-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.community-launch-knowledge-disconnect {
+  min-height: 28px;
+  margin-top: 8px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.community-launch-knowledge-imported-sources {
+  display: grid;
+  gap: 6px;
+  max-width: min(100%, 560px);
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 60%, transparent);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.community-launch-knowledge-imported-sources > strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.community-launch-knowledge-imported-source {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.community-launch-knowledge-imported-source span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.community-launch-knowledge-imported-source a,
+.community-launch-knowledge-imported-source button {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.community-launch-knowledge-source-status {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.community-launch-knowledge-source-status.ready {
+  color: var(--accent-success, #66b786);
+}
+
+.community-launch-knowledge-source-status.failed {
+  color: #ff8a8a;
+}
+
 .community-launch-knowledge-drive-picker {
   display: grid;
   gap: 7px;
@@ -5091,6 +5161,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 800;
+}
+
+.community-launch-knowledge-drive-picker label.is-added {
+  opacity: 0.72;
 }
 
 .community-launch-knowledge-drive-folder {

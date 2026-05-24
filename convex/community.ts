@@ -81,6 +81,7 @@ import {
   ensureCommunityResourceWikiScaffold as ensureCommunityResourceWikiScaffoldImpl,
   beginGoogleDriveSourceOAuth as beginGoogleDriveSourceOAuthImpl,
   beginGitHubSourceOAuth as beginGitHubSourceOAuthImpl,
+  disconnectGoogleDriveSourceConnection as disconnectGoogleDriveSourceConnectionImpl,
   finalizeGoogleDriveSourceOAuth as finalizeGoogleDriveSourceOAuthImpl,
   finalizeGitHubSourceOAuth as finalizeGitHubSourceOAuthImpl,
   generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl,
@@ -256,6 +257,7 @@ export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
 export const beginGoogleDriveSourceOAuth: any = beginGoogleDriveSourceOAuthImpl;
 export const beginGitHubSourceOAuth: any = beginGitHubSourceOAuthImpl;
+export const disconnectGoogleDriveSourceConnection = disconnectGoogleDriveSourceConnectionImpl;
 export const finalizeGoogleDriveSourceOAuth: any = finalizeGoogleDriveSourceOAuthImpl;
 export const finalizeGitHubSourceOAuth: any = finalizeGitHubSourceOAuthImpl;
 export const generateCommunityResourceSourceUploadUrl = generateCommunityResourceSourceUploadUrlImpl;

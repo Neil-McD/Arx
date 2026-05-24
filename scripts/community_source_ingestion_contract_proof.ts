@@ -272,6 +272,11 @@ assert.match(
 );
 assert.match(
   resources,
+  /patchCommunitySourceIngestionInternal = internalMutation\([\s\S]*if \(!existing\) return null[\s\S]*if \(!updated\) return null/,
+  "source ingestion patching should tolerate source rows removed while an ingestion run is in flight",
+);
+assert.match(
+  resources,
   /export const ingestCommunitySources(?:: any)? = action\([\s\S]*export const ingestCommunitySourceLinks(?:: any)? = action\([\s\S]*export const ingestCommunitySourceFiles(?:: any)? = action\(/,
   "source ingestion should expose combined, link-only, and file-only actions",
 );
@@ -319,6 +324,11 @@ assert.match(
   resources,
   /resolveFreshGoogleDriveAccessToken[\s\S]*decryptStoredSecret\(row\)[\s\S]*refreshGoogleDriveTokens[\s\S]*encryptSecret\(encodeStoredGoogleDriveAuth\(refreshed\)\)/,
   "Google Drive API calls should refresh expiring encrypted tokens without exposing raw tokens to the web",
+);
+assert.match(
+  resources,
+  /disconnectGoogleDriveSourceConnection = mutation\([\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManagerForAction\(ctx, userId, args\.communityId\)[\s\S]*getGoogleDriveConnectionRow\(ctx, userId\)[\s\S]*ctx\.db\.delete\(row\._id as any\)[\s\S]*toPublicGoogleDriveConnection\(null\)/,
+  "Google Drive disconnect should be manager-gated and delete only the stored credential connection",
 );
 assert.match(
   resources,
@@ -452,17 +462,17 @@ assert.match(
 
 assert.match(
   experience,
-  /generateCommunityResourceSourceUploadUrl[\s\S]*ingestCommunitySourceFiles[\s\S]*ingestCommunitySourceGitHub[\s\S]*ingestCommunitySourceGoogleDrive[\s\S]*ingestCommunitySourceLinks[\s\S]*ingestCommunitySources/,
+  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl)(?=[\s\S]*disconnectGoogleDriveSourceConnection)(?=[\s\S]*ingestCommunitySourceFiles)(?=[\s\S]*ingestCommunitySourceGitHub)(?=[\s\S]*ingestCommunitySourceGoogleDrive)(?=[\s\S]*ingestCommunitySourceLinks)(?=[\s\S]*ingestCommunitySources)/,
   "community experience barrel should expose source ingestion",
 );
 assert.match(
   community,
-  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl)(?=[\s\S]*ingestCommunitySources as ingestCommunitySourcesImpl)(?=[\s\S]*ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl)(?=[\s\S]*ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl)(?=[\s\S]*ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*ingestCommunitySourceGitHub as ingestCommunitySourceGitHubImpl)(?=[\s\S]*export const beginGoogleDriveSourceOAuth)(?=[\s\S]*export const beginGitHubSourceOAuth)(?=[\s\S]*export const finalizeGoogleDriveSourceOAuth)(?=[\s\S]*export const finalizeGitHubSourceOAuth)(?=[\s\S]*export const listGoogleDriveSourceFiles)(?=[\s\S]*export const listGitHubSourceFiles)(?=[\s\S]*export const importGoogleDriveSourceFiles)(?=[\s\S]*export const importGitHubSourceFiles)(?=[\s\S]*export const ingestCommunitySourceGoogleDrive(?:: any)? = ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*export const ingestCommunitySourceGitHub(?:: any)? = ingestCommunitySourceGitHubImpl)/,
+  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl)(?=[\s\S]*disconnectGoogleDriveSourceConnection as disconnectGoogleDriveSourceConnectionImpl)(?=[\s\S]*ingestCommunitySources as ingestCommunitySourcesImpl)(?=[\s\S]*ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl)(?=[\s\S]*ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl)(?=[\s\S]*ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*ingestCommunitySourceGitHub as ingestCommunitySourceGitHubImpl)(?=[\s\S]*export const beginGoogleDriveSourceOAuth)(?=[\s\S]*export const beginGitHubSourceOAuth)(?=[\s\S]*export const disconnectGoogleDriveSourceConnection)(?=[\s\S]*export const finalizeGoogleDriveSourceOAuth)(?=[\s\S]*export const finalizeGitHubSourceOAuth)(?=[\s\S]*export const listGoogleDriveSourceFiles)(?=[\s\S]*export const listGitHubSourceFiles)(?=[\s\S]*export const importGoogleDriveSourceFiles)(?=[\s\S]*export const importGitHubSourceFiles)(?=[\s\S]*export const ingestCommunitySourceGoogleDrive(?:: any)? = ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*export const ingestCommunitySourceGitHub(?:: any)? = ingestCommunitySourceGitHubImpl)/,
   "community API should expose source ingestion",
 );
 assert.match(
   gateway,
-  /(?=[\s\S]*community:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("community:ingestCommunitySources" as any)(?=[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:beginGoogleDriveSourceOAuth)(?=[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*community:beginGitHubSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:finalizeGoogleDriveSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*community:finalizeGitHubSourceOAuth)(?=[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*community:listGoogleDriveSourceFiles)(?=[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*community:listGitHubSourceRepositories)(?=[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*community:listGitHubSourceFiles)(?=[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*community:importGoogleDriveSourceFiles)(?=[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*community:importGitHubSourceFiles)/,
+  /(?=[\s\S]*community:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("community:ingestCommunitySources" as any)(?=[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:beginGoogleDriveSourceOAuth)(?=[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*community:beginGitHubSourceOAuth)(?=[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection[\s\S]*community:disconnectGoogleDriveSourceConnection)(?=[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:finalizeGoogleDriveSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*community:finalizeGitHubSourceOAuth)(?=[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*community:listGoogleDriveSourceFiles)(?=[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*community:listGitHubSourceRepositories)(?=[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*community:listGitHubSourceFiles)(?=[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*community:importGoogleDriveSourceFiles)(?=[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*community:importGitHubSourceFiles)/,
   "web gateway should call source ingestion and Drive/GitHub integration actions",
 );
 assert.match(
@@ -585,7 +595,7 @@ assert.match(
 );
 assert.match(
   modal,
-  /onLoadKnowledgeGoogleDriveConnection[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles/,
+  /onLoadKnowledgeGoogleDriveConnection[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles[\s\S]*onRemoveKnowledgeGoogleDriveSource[\s\S]*onDisconnectKnowledgeGoogleDrive/,
   "launch Knowledge modal props should expose the Google Drive integration lifecycle",
 );
 assert.match(
@@ -602,6 +612,11 @@ assert.match(
   modal,
   /handleImportGoogleDriveFiles[\s\S]*failedIds[\s\S]*setKnowledgeDriveSelectedIds\(\(ids\) => ids\.filter\(\(id\) => failedIds\.has\(id\)\)\)[\s\S]*result\?\.failed[\s\S]*setStepError/,
   "launch Knowledge modal should keep failed Drive imports selected and surface failures",
+);
+assert.match(
+  modal,
+  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*onDisconnectKnowledgeGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*onRemoveKnowledgeGoogleDriveSource[\s\S]*Imported from Drive[\s\S]*alreadyAdded/,
+  "launch Knowledge modal should show saved Drive sources, mark selected Drive files as Added, remove individual sources, and disconnect credentials",
 );
 assert.match(
   modal,

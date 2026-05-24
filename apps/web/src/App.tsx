@@ -129,6 +129,8 @@ import {
   beginCloudCommunityGoogleDriveSourceOAuth,
   beginCloudCommunityGitHubSourceOAuth,
   createCloudCommunity,
+  deleteCloudCommunityResource,
+  disconnectCloudCommunityGoogleDriveSourceConnection,
   draftCloudCommunityResourceContentFromSources,
   ensureCloudCommunityResourceWikiScaffold,
   fetchCloudCommunityMemberBillingHistory,
@@ -481,6 +483,7 @@ import {
 } from "./components/WebGlobalOverlayHost";
 import {
   WebCommunityLaunchSetupModal,
+  type CommunityLaunchKnowledgeImportedSource,
   type CommunityLaunchProfileSaveDraft,
 } from "./components/WebCommunityLaunchSetupModal";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
@@ -2397,6 +2400,22 @@ export default function App() {
     setIsLoadingResources,
     setIsLoadingResourceModules,
   });
+  const communityLaunchGoogleDriveSources = useMemo<CommunityLaunchKnowledgeImportedSource[]>(() => {
+    return communityResources
+      .filter((resource) =>
+        resource.resource_role === "source" &&
+        resource.source_external_provider === "google_drive",
+      )
+      .map((resource) => ({
+        id: resource.id,
+        title: resource.title,
+        source_ingestion_status: resource.source_ingestion_status,
+        source_ingestion_error: resource.source_ingestion_error ?? null,
+        source_external_id: resource.source_external_id ?? null,
+        source_external_url: resource.source_external_url ?? null,
+        source_external_mime_type: resource.source_external_mime_type ?? null,
+      }));
+  }, [communityResources]);
   const {
     loadCommunityEvents,
     handleSaveCommunityEvent,
@@ -8163,6 +8182,7 @@ export default function App() {
     };
     const handleLoadCommunityLaunchGoogleDriveConnection = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
+      void loadCommunityResources(community.id, session);
       return await loadCloudCommunityGoogleDriveSourceConnection({
         session,
         communityId: community.id,
@@ -8213,6 +8233,27 @@ export default function App() {
       await loadCommunityResources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       return result;
+    };
+    const handleRemoveCommunityLaunchGoogleDriveSource = async (resourceId: string) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      await deleteCloudCommunityResource({
+        session,
+        resourceId,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      return true;
+    };
+    const handleDisconnectCommunityLaunchGoogleDrive = async () => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const connection = await disconnectCloudCommunityGoogleDriveSourceConnection({
+        session,
+        communityId: community.id,
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+      setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
+      return connection;
     };
     const handleLoadCommunityLaunchGitHubConnection = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
@@ -10028,6 +10069,7 @@ export default function App() {
         initialStep={communityLaunchSetupInitialStep}
         knowledgeIntegrationReloadKey={communityLaunchKnowledgeIntegrationReloadKey}
         knowledgeAutoOpenProvider={communityLaunchKnowledgeAutoOpenProvider}
+        knowledgeGoogleDriveSources={communityLaunchGoogleDriveSources}
         onClose={() => {
           setIsCommunityLaunchSetupModalOpen(false);
           setIsCommunityLaunchCreateMode(false);
@@ -10056,6 +10098,8 @@ export default function App() {
         onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}
         onListKnowledgeGoogleDriveFiles={handleListCommunityLaunchGoogleDriveFiles}
         onImportKnowledgeGoogleDriveFiles={handleImportCommunityLaunchGoogleDriveFiles}
+        onRemoveKnowledgeGoogleDriveSource={handleRemoveCommunityLaunchGoogleDriveSource}
+        onDisconnectKnowledgeGoogleDrive={handleDisconnectCommunityLaunchGoogleDrive}
         onLoadKnowledgeGitHubConnection={handleLoadCommunityLaunchGitHubConnection}
         onConnectKnowledgeGitHub={handleConnectCommunityLaunchGitHub}
         onListKnowledgeGitHubRepositories={handleListCommunityLaunchGitHubRepositories}

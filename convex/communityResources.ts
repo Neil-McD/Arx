@@ -3800,6 +3800,29 @@ export const upsertGoogleDriveSourceConnectionInternal = internalMutation({
   },
 });
 
+export const disconnectGoogleDriveSourceConnection = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManagerForAction(ctx, userId, args.communityId);
+    const row = await getGoogleDriveConnectionRow(ctx, userId);
+    if (row?._id) {
+      await ctx.db.delete(row._id as any);
+    }
+    return {
+      ok: true,
+      provider: GOOGLE_DRIVE_SOURCE_PROVIDER,
+      connection: toPublicGoogleDriveConnection(null),
+    };
+  },
+});
+
 export const getGitHubSourceConnectionForUserInternal = internalQuery({
   args: {
     userId: v.id("users"),
@@ -5343,7 +5366,7 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const existing = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
-    if (!existing) throw new Error("community_source_resource_not_found");
+    if (!existing) return null;
     if (normalizeResourceRole(existing.role) !== "source") {
       throw new Error("community_source_resource_required");
     }
@@ -5380,7 +5403,7 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
     }
     await ctx.db.patch(existing._id as any, patch);
     const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
-    if (!updated) throw new Error("community_source_resource_not_found");
+    if (!updated) return null;
     await upsertArchiveDocumentForResource(ctx, updated);
     return await mapCommunityResourceRow(ctx, updated);
   },
