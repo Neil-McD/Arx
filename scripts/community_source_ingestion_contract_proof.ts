@@ -652,6 +652,11 @@ assert.match(
 );
 assert.match(
   modal,
+  /knowledgeGitHubSelectableFileIds[\s\S]*handleSelectAllGitHubFiles[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-list[\s\S]*Select first \$\{COMMUNITY_LAUNCH_MAX_GITHUB_FILES\}[\s\S]*Select all/,
+  "launch Knowledge modal should show GitHub files inline under the selected repo and support one-action capped file selection",
+);
+assert.match(
+  modal,
   /handleImportGitHubFiles[\s\S]*failedIds[\s\S]*setKnowledgeGitHubSelectedIds\(\(ids\) => ids\.filter\(\(id\) => failedIds\.has\(id\)\)\)[\s\S]*result\?\.failed[\s\S]*setStepError/,
   "launch Knowledge modal should keep failed GitHub imports selected and surface failures",
 );

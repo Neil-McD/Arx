@@ -5143,6 +5143,12 @@ button.community-launch-knowledge-integration-chip:disabled {
   text-underline-offset: 3px;
 }
 
+.community-launch-knowledge-source-list-toggle:disabled {
+  cursor: default;
+  opacity: 0.55;
+  text-decoration: none;
+}
+
 .community-launch-knowledge-source-picker {
   display: grid;
   gap: 7px;
@@ -5156,6 +5162,12 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-launch-knowledge-github-repo-list {
   width: min(100%, 420px);
   gap: 6px;
+}
+
+.community-launch-knowledge-github-repo-item {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
 }
 
 .community-launch-knowledge-github-repo-list .community-launch-knowledge-github-repo {
@@ -5209,6 +5221,26 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-launch-knowledge-github-repo.is-selected svg {
   color: var(--accent, var(--accent-gold));
+}
+
+.community-launch-knowledge-github-file-panel {
+  min-width: 0;
+  max-width: calc(100% - 24px);
+  display: grid;
+  gap: 6px;
+  margin: 0 0 3px 24px;
+  padding: 1px 0 2px;
+}
+
+.community-launch-knowledge-github-file-list {
+  min-width: 0;
+  max-height: 216px;
+  display: grid;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  scrollbar-width: thin;
 }
 
 .community-launch-knowledge-drive-search {

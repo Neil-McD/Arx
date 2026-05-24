@@ -622,6 +622,18 @@ export function WebCommunityLaunchSetupModal(
   const effectiveKnowledgeGoogleDriveSources = isCreateMode
     ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
     : knowledgeGoogleDriveSources;
+  const knowledgeGitHubSelectableFileIds = useMemo(
+    () => knowledgeGitHubFiles.map((file) => file.id).slice(0, COMMUNITY_LAUNCH_MAX_GITHUB_FILES),
+    [knowledgeGitHubFiles],
+  );
+  const knowledgeGitHubSelectedIdSet = useMemo(
+    () => new Set(knowledgeGitHubSelectedIds),
+    [knowledgeGitHubSelectedIds],
+  );
+  const knowledgeGitHubAllSelectableFilesSelected =
+    knowledgeGitHubSelectableFileIds.length > 0 &&
+    knowledgeGitHubSelectableFileIds.every((id) => knowledgeGitHubSelectedIdSet.has(id));
+  const knowledgeGitHubSelectionAtLimit = knowledgeGitHubSelectedIds.length >= COMMUNITY_LAUNCH_MAX_GITHUB_FILES;
   const onLoadKnowledgeGoogleDriveConnectionRef = useRef(onLoadKnowledgeGoogleDriveConnection);
   const onLoadKnowledgeGitHubConnectionRef = useRef(onLoadKnowledgeGitHubConnection);
   const onLoadKnowledgeSourcesRef = useRef(onLoadKnowledgeSources);
@@ -1442,8 +1454,20 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeGitHubSelectedIds((current) =>
       current.includes(fileId)
         ? current.filter((id) => id !== fileId)
-        : [...current, fileId].slice(0, COMMUNITY_LAUNCH_MAX_GITHUB_FILES),
+        : current.length >= COMMUNITY_LAUNCH_MAX_GITHUB_FILES
+          ? current
+          : [...current, fileId],
     );
+  };
+
+  const handleSelectAllGitHubFiles = () => {
+    setKnowledgeGitHubSelectedIds((current) => {
+      const currentSet = new Set(current);
+      const allSelected =
+        knowledgeGitHubSelectableFileIds.length > 0 &&
+        knowledgeGitHubSelectableFileIds.every((id) => currentSet.has(id));
+      return allSelected ? [] : knowledgeGitHubSelectableFileIds;
+    });
   };
 
   const handleCloseGitHubPicker = () => {
@@ -2312,73 +2336,94 @@ export function WebCommunityLaunchSetupModal(
                 ) : null}
                 {knowledgeGitHubRepositories.length > 0 ? (
                   <div className="community-launch-knowledge-source-picker community-launch-knowledge-github-repo-list">
-                    {knowledgeGitHubRepositories.map((repository) => (
-                      <button
-                        key={repository.id}
-                        type="button"
-                        className={`community-launch-knowledge-github-repo${
-                          knowledgeGitHubSelectedRepository?.id === repository.id ? " is-selected" : ""
-                        }`}
-                        disabled={isSavingActiveStep || knowledgeGitHubFilesLoading || !onListKnowledgeGitHubFiles}
-                        onClick={() => handleSelectGitHubRepository(repository)}
-                        aria-pressed={knowledgeGitHubSelectedRepository?.id === repository.id}
-                      >
-                        {repository.private ? (
-                          <LockKeyhole size={13} strokeWidth={2.2} aria-hidden="true" />
-                        ) : (
-                          <BookOpen size={13} strokeWidth={2.2} aria-hidden="true" />
-                        )}
-                        <span>
-                          <strong>{repository.full_name}</strong>
-                          <small>
-                            {repository.private ? "Private" : "Public"} / {repository.default_branch}
-                          </small>
-                        </span>
-                      </button>
-                    ))}
+                    {knowledgeGitHubRepositories.map((repository) => {
+                      const isSelectedRepository = knowledgeGitHubSelectedRepository?.id === repository.id;
+                      return (
+                        <div key={repository.id} className="community-launch-knowledge-github-repo-item">
+                          <button
+                            type="button"
+                            className={`community-launch-knowledge-github-repo${
+                              isSelectedRepository ? " is-selected" : ""
+                            }`}
+                            disabled={isSavingActiveStep || knowledgeGitHubFilesLoading || !onListKnowledgeGitHubFiles}
+                            onClick={() => handleSelectGitHubRepository(repository)}
+                            aria-pressed={isSelectedRepository}
+                          >
+                            {repository.private ? (
+                              <LockKeyhole size={13} strokeWidth={2.2} aria-hidden="true" />
+                            ) : (
+                              <BookOpen size={13} strokeWidth={2.2} aria-hidden="true" />
+                            )}
+                            <span>
+                              <strong>{repository.full_name}</strong>
+                              <small>
+                                {repository.private ? "Private" : "Public"} / {repository.default_branch}
+                              </small>
+                            </span>
+                          </button>
+                          {isSelectedRepository ? (
+                            <div className="community-launch-knowledge-github-file-panel">
+                              {knowledgeGitHubFiles.length > 0 ? (
+                                <div className="community-launch-knowledge-github-file-list">
+                                  {knowledgeGitHubFiles.map((file) => {
+                                    const isSelected = knowledgeGitHubSelectedIdSet.has(file.id);
+                                    return (
+                                      <label key={file.id}>
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          disabled={
+                                            isSavingActiveStep ||
+                                            knowledgeGitHubFilesLoading ||
+                                            (!isSelected && knowledgeGitHubSelectionAtLimit)
+                                          }
+                                          onChange={() => handleToggleGitHubFile(file.id)}
+                                        />
+                                        <span>{file.path}</span>
+                                        <small>{file.size ? `${Math.ceil(file.size / 1024)} KB` : file.ref}</small>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="community-launch-knowledge-source-empty">
+                                  {knowledgeGitHubFilesLoading ? "Loading GitHub files..." : "No readable GitHub files found."}
+                                </p>
+                              )}
+                              {knowledgeGitHubFiles.length > 0 ? (
+                                <div className="community-launch-knowledge-source-actions">
+                                  <span>
+                                    {knowledgeGitHubSelectedIds.length}/{COMMUNITY_LAUNCH_MAX_GITHUB_FILES} selected
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="community-launch-knowledge-source-list-toggle"
+                                    disabled={isSavingActiveStep || knowledgeGitHubFilesLoading}
+                                    onClick={handleSelectAllGitHubFiles}
+                                  >
+                                    {knowledgeGitHubAllSelectableFilesSelected
+                                      ? "Clear all"
+                                      : knowledgeGitHubFiles.length > COMMUNITY_LAUNCH_MAX_GITHUB_FILES
+                                        ? `Select first ${COMMUNITY_LAUNCH_MAX_GITHUB_FILES}`
+                                        : "Select all"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="community-launch-knowledge-source-import"
+                                    disabled={knowledgeGitHubSelectedIds.length === 0 || isSavingActiveStep || knowledgeGitHubFilesLoading}
+                                    onClick={handleImportGitHubFiles}
+                                  >
+                                    Import selected
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                     <div className="community-launch-knowledge-source-actions">
                       <span>{knowledgeGitHubRepositories.length} repositories</span>
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={isSavingActiveStep || knowledgeGitHubFilesLoading}
-                        onClick={handleCloseGitHubPicker}
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {knowledgeGitHubFiles.length > 0 ? (
-                  <div className="community-launch-knowledge-source-picker">
-                    {knowledgeGitHubSelectedRepository ? (
-                      <p className="community-launch-knowledge-integration-note">
-                        {knowledgeGitHubSelectedRepository.full_name}
-                      </p>
-                    ) : null}
-                    {knowledgeGitHubFiles.map((file) => (
-                      <label key={file.id}>
-                        <input
-                          type="checkbox"
-                          checked={knowledgeGitHubSelectedIds.includes(file.id)}
-                          onChange={() => handleToggleGitHubFile(file.id)}
-                        />
-                        <span>{file.path}</span>
-                        <small>{file.size ? `${Math.ceil(file.size / 1024)} KB` : file.ref}</small>
-                      </label>
-                    ))}
-                    <div className="community-launch-knowledge-source-actions">
-                      <span>
-                        {knowledgeGitHubSelectedIds.length}/{COMMUNITY_LAUNCH_MAX_GITHUB_FILES} selected
-                      </span>
-                      <button
-                        type="button"
-                        className="community-launch-knowledge-source-import"
-                        disabled={knowledgeGitHubSelectedIds.length === 0 || isSavingActiveStep || knowledgeGitHubFilesLoading}
-                        onClick={handleImportGitHubFiles}
-                      >
-                        Import selected
-                      </button>
                       <button
                         type="button"
                         className="secondary"

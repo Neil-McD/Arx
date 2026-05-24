@@ -683,13 +683,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*Close[\s\S]*community-launch-knowledge-source-import[\s\S]*Import selected/,
-  "launch knowledge GitHub repo picker must render scannable repo rows, close control, and text-only import action",
+  /community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-repo[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-list[\s\S]*handleSelectAllGitHubFiles[\s\S]*community-launch-knowledge-source-import[\s\S]*Import selected[\s\S]*Close/,
+  "launch knowledge GitHub repo picker must render files inline under the selected repo, support selecting all visible importable files, and keep one close control",
 );
 assert.match(
   baseCss,
-  /\.community-launch-knowledge-github-repo-list[\s\S]*\.community-launch-knowledge-github-repo\.is-selected/,
-  "launch knowledge GitHub repo picker must have dedicated row styling instead of tiny generic pills",
+  /\.community-launch-knowledge-github-repo-list[\s\S]*\.community-launch-knowledge-github-repo-item[\s\S]*\.community-launch-knowledge-github-repo\.is-selected[\s\S]*\.community-launch-knowledge-github-file-panel[\s\S]*\.community-launch-knowledge-github-file-list[\s\S]*max-height: 216px[\s\S]*overflow-y: auto/,
+  "launch knowledge GitHub repo picker must have dedicated row styling and an inline scrollable selected-repo file list",
 );
 assert.match(
   setupModal,
