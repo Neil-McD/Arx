@@ -2041,131 +2041,136 @@ export function WebCommunityLaunchSetupModal(
                   className="community-launch-knowledge-integrations"
                   aria-label="Knowledge integrations"
                 >
-                  <button
-                    type="button"
-                    className={`community-launch-knowledge-integration-chip${knowledgeDriveConnection?.connected ? " is-connected" : ""}`}
-                    disabled={
-                      isSavingActiveStep ||
-                      knowledgeDriveDisconnecting ||
-                      (knowledgeDriveConnection?.connected
-                        ? knowledgeDriveFilesLoading || !onListKnowledgeGoogleDriveFiles
-                        : knowledgeDriveConnectionLoading || !onConnectKnowledgeGoogleDrive)
-                    }
-                    onClick={handleGoogleDrivePrimaryAction}
-                  >
-                    <img
-                      className="community-launch-knowledge-provider-logo drive"
-                      src="/app-logos/google-drive.svg"
-                      alt=""
-                      aria-hidden="true"
-                    />
-                    <span>Google Drive</span>
-                    <small>
-                      {knowledgeDriveConnection?.connected
-                        ? knowledgeDriveFilesLoading
-                          ? "Loading files"
-                          : "Select files"
-                        : knowledgeDriveConnectionLoading
-                          ? "Connecting"
-                          : "Connect"}
-                    </small>
-                  </button>
-                  <button
-                    type="button"
-                    className={`community-launch-knowledge-integration-chip${knowledgeGitHubConnection?.connected ? " is-connected" : ""}`}
-                    disabled={
-                      isSavingActiveStep ||
-                      (knowledgeGitHubConnection?.connected
-                        ? knowledgeGitHubRepositoriesLoading || !onListKnowledgeGitHubRepositories
-                        : knowledgeGitHubConnectionLoading || !onConnectKnowledgeGitHub)
-                    }
-                    onClick={handleGitHubPrimaryAction}
-                  >
-                    <img
-                      className="community-launch-knowledge-provider-logo github"
-                      src="/app-logos/github.svg"
-                      alt=""
-                      aria-hidden="true"
-                    />
-                    <span>GitHub</span>
-                    <small>
-                      {knowledgeGitHubConnection?.connected
-                        ? knowledgeGitHubRepositoriesLoading
-                          ? "Loading repos"
-                          : knowledgeGitHubFilesLoading
-                            ? "Loading files"
-                            : "Select repo"
-                        : knowledgeGitHubConnectionLoading
-                          ? "Connecting"
-                          : "Connect"}
-                    </small>
-                  </button>
-                </div>
-                {knowledgeDriveConnection?.connected ? (
-                  <div className="community-launch-knowledge-integration-status">
+                  <div className="community-launch-knowledge-integration-provider">
                     <button
                       type="button"
-                      className="community-launch-knowledge-disconnect"
-                      disabled={isSavingActiveStep || knowledgeDriveDisconnecting || !onDisconnectKnowledgeGoogleDrive}
-                      onClick={handleDisconnectGoogleDrive}
+                      className={`community-launch-knowledge-integration-chip${knowledgeDriveConnection?.connected ? " is-connected" : ""}`}
+                      disabled={
+                        isSavingActiveStep ||
+                        knowledgeDriveDisconnecting ||
+                        (knowledgeDriveConnection?.connected
+                          ? knowledgeDriveFilesLoading || !onListKnowledgeGoogleDriveFiles
+                          : knowledgeDriveConnectionLoading || !onConnectKnowledgeGoogleDrive)
+                      }
+                      onClick={handleGoogleDrivePrimaryAction}
                     >
-                      {knowledgeDriveDisconnecting ? "Disconnecting..." : "Disconnect"}
+                      <img
+                        className="community-launch-knowledge-provider-logo drive"
+                        src="/app-logos/google-drive.svg"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span>Google Drive</span>
+                      <small>
+                        {knowledgeDriveConnection?.connected
+                          ? knowledgeDriveFilesLoading
+                            ? "Loading files"
+                            : "Select files"
+                          : knowledgeDriveConnectionLoading
+                            ? "Connecting"
+                            : "Connect"}
+                      </small>
                     </button>
-                  </div>
-                ) : null}
-                {effectiveKnowledgeGoogleDriveSources.length > 0 ? (
-                  <div className="community-launch-knowledge-imported-sources">
-                    {effectiveKnowledgeGoogleDriveSources.map((source) => (
-                      <div key={source.id} className="community-launch-knowledge-imported-source">
-                        <Check
-                          className="community-launch-knowledge-imported-check"
-                          size={11}
-                          strokeWidth={3}
-                          aria-hidden="true"
-                        />
-                        <span>{source.title || "Drive source"}</span>
-                        {source.source_external_url ? (
-                          <a
-                            className="community-launch-knowledge-source-action"
-                            href={source.source_external_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={`Open ${source.title || "Drive source"}`}
-                            title="Open"
-                          >
-                            <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
-                          </a>
-                        ) : null}
+                    {knowledgeDriveConnection?.connected ? (
+                      <div className="community-launch-knowledge-integration-status">
                         <button
                           type="button"
-                          className="community-launch-knowledge-source-action is-delete"
-                          disabled={
-                            isSavingActiveStep ||
-                            knowledgeDriveRemovingSourceId === source.id ||
-                            !onRemoveKnowledgeGoogleDriveSource
-                          }
-                          onClick={() => handleRemoveGoogleDriveSource(source)}
-                          aria-label={`${knowledgeDriveRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "Drive source"}`}
-                          title="Delete"
+                          className="community-launch-knowledge-disconnect"
+                          disabled={isSavingActiveStep || knowledgeDriveDisconnecting || !onDisconnectKnowledgeGoogleDrive}
+                          onClick={handleDisconnectGoogleDrive}
                         >
-                          <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
+                          {knowledgeDriveDisconnecting ? "Disconnecting..." : "Disconnect"}
                         </button>
                       </div>
-                    ))}
+                    ) : null}
+                    {effectiveKnowledgeGoogleDriveSources.length > 0 ? (
+                      <div className="community-launch-knowledge-imported-sources">
+                        {effectiveKnowledgeGoogleDriveSources.map((source) => (
+                          <div key={source.id} className="community-launch-knowledge-imported-source">
+                            <Check
+                              className="community-launch-knowledge-imported-check"
+                              size={11}
+                              strokeWidth={3}
+                              aria-hidden="true"
+                            />
+                            <span>{source.title || "Drive source"}</span>
+                            {source.source_external_url ? (
+                              <a
+                                className="community-launch-knowledge-source-action"
+                                href={source.source_external_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={`Open ${source.title || "Drive source"}`}
+                                title="Open"
+                              >
+                                <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
+                              </a>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="community-launch-knowledge-source-action is-delete"
+                              disabled={
+                                isSavingActiveStep ||
+                                knowledgeDriveRemovingSourceId === source.id ||
+                                !onRemoveKnowledgeGoogleDriveSource
+                              }
+                              onClick={() => handleRemoveGoogleDriveSource(source)}
+                              aria-label={`${knowledgeDriveRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "Drive source"}`}
+                              title="Delete"
+                            >
+                              <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-                {knowledgeGitHubConnection?.connected ? (
-                  <div className="community-launch-knowledge-integration-status">
+                  <div className="community-launch-knowledge-integration-provider">
                     <button
                       type="button"
-                      className="community-launch-knowledge-disconnect"
-                      disabled={isSavingActiveStep || knowledgeGitHubDisconnecting || !onDisconnectKnowledgeGitHub}
-                      onClick={handleDisconnectGitHub}
+                      className={`community-launch-knowledge-integration-chip${knowledgeGitHubConnection?.connected ? " is-connected" : ""}`}
+                      disabled={
+                        isSavingActiveStep ||
+                        knowledgeGitHubDisconnecting ||
+                        (knowledgeGitHubConnection?.connected
+                          ? knowledgeGitHubRepositoriesLoading || !onListKnowledgeGitHubRepositories
+                          : knowledgeGitHubConnectionLoading || !onConnectKnowledgeGitHub)
+                      }
+                      onClick={handleGitHubPrimaryAction}
                     >
-                      {knowledgeGitHubDisconnecting ? "Disconnecting..." : "Disconnect"}
+                      <img
+                        className="community-launch-knowledge-provider-logo github"
+                        src="/app-logos/github.svg"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span>GitHub</span>
+                      <small>
+                        {knowledgeGitHubConnection?.connected
+                          ? knowledgeGitHubRepositoriesLoading
+                            ? "Loading repos"
+                            : knowledgeGitHubFilesLoading
+                              ? "Loading files"
+                              : "Select repo"
+                          : knowledgeGitHubConnectionLoading
+                            ? "Connecting"
+                            : "Connect"}
+                      </small>
                     </button>
+                    {knowledgeGitHubConnection?.connected ? (
+                      <div className="community-launch-knowledge-integration-status">
+                        <button
+                          type="button"
+                          className="community-launch-knowledge-disconnect"
+                          disabled={isSavingActiveStep || knowledgeGitHubDisconnecting || !onDisconnectKnowledgeGitHub}
+                          onClick={handleDisconnectGitHub}
+                        >
+                          {knowledgeGitHubDisconnecting ? "Disconnecting..." : "Disconnect"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
+                </div>
                 {knowledgeDriveBrowserOpen ? (
                   <div className="community-launch-knowledge-source-picker community-launch-knowledge-source-browser">
                     <form className="community-launch-knowledge-drive-search" onSubmit={handleSearchGoogleDriveFiles}>

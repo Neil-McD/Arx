@@ -4940,8 +4940,16 @@ body {
 .community-launch-knowledge-integrations {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 8px;
   padding-top: 2px;
+}
+
+.community-launch-knowledge-integration-provider {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 3px;
 }
 
 .community-launch-knowledge-integration-chip {

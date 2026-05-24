@@ -513,6 +513,16 @@ assert.match(
   /GitHub[\s\S]*Select repo[\s\S]*Connect[\s\S]*handleDisconnectGitHub[\s\S]*Disconnect[\s\S]*Import selected/,
   "launch knowledge GitHub chip must connect first, support disconnecting credentials, then allow repository/file selection and import",
 );
+assert.match(
+  setupModal,
+  /community-launch-knowledge-integrations[\s\S]*community-launch-knowledge-integration-provider[\s\S]*Google Drive[\s\S]*handleDisconnectGoogleDrive[\s\S]*community-launch-knowledge-integration-provider[\s\S]*GitHub[\s\S]*handleDisconnectGitHub/,
+  "launch knowledge provider disconnect controls must be grouped under their own provider chips",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-integration-provider[\s\S]*display: grid[\s\S]*align-content: start/,
+  "launch knowledge provider groups should stack each disconnect directly below its provider chip",
+);
 assert.doesNotMatch(
   setupModal,
   /GitHub connected/,
