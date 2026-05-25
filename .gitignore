@@ -15,4 +15,6 @@ references/repos/*
 !references/repos/.gitkeep
 
 .env.local
+.env.blaxel.local
+.env.staging.local
 .vercel
