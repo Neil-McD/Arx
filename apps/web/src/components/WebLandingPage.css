@@ -1337,6 +1337,9 @@
     z-index: 2;
   }
   .polynet-network-landing .memory-fan.compounds .memory-fan-core {
+    top: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
     background: color-mix(in srgb, var(--pink) 26%, var(--pink-deep));
     border: 1px solid color-mix(in srgb, var(--pink) 60%, transparent);
     box-shadow: 0 0 28px var(--pink-glow);
@@ -1359,6 +1362,9 @@
     z-index: 1;
   }
   .polynet-network-landing .memory-fan.compounds .memory-spoke {
+    top: 50%;
+    bottom: auto;
+    width: var(--r, 116px);
     background: linear-gradient(
       90deg,
       color-mix(in srgb, var(--pink) 70%, transparent),
@@ -1395,11 +1401,11 @@
   .polynet-network-landing .memory-feedback {
     position: absolute;
     left: 50%;
-    bottom: 62px;
+    top: 50%;
     width: 240px;
     height: 240px;
     margin-left: -120px;
-    margin-bottom: -120px;
+    margin-top: -120px;
     border-radius: 50%;
     border: 1px dashed color-mix(in srgb, var(--pink) 35%, transparent);
     z-index: 0;

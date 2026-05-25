@@ -268,17 +268,25 @@ function MemorySection() {
               <span className="memory-fan-core">
                 <Brain className="memory-core-icon" />
               </span>
-              {memoryShift.map((row, index) => (
-                <span
-                  className="memory-spoke"
-                  key={`hub-${row.source}`}
-                  style={{ "--a": `${-150 + index * 30}deg`, "--i": index }}
-                >
-                  <span className="memory-spoke-chip">
-                    <row.Icon className="memory-spoke-icon" />
+              {memoryShift.map((row, index) => {
+                const angles = [-72, 0, 72, 144, 216];
+                const radii = [108, 122, 96, 116, 104];
+                return (
+                  <span
+                    className="memory-spoke"
+                    key={`hub-${row.source}`}
+                    style={{
+                      "--a": `${angles[index] ?? index * 72}deg`,
+                      "--r": `${radii[index] ?? 116}px`,
+                      "--i": index,
+                    }}
+                  >
+                    <span className="memory-spoke-chip">
+                      <row.Icon className="memory-spoke-icon" />
+                    </span>
                   </span>
-                </span>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
