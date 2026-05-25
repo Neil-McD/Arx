@@ -10,6 +10,7 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
+  communityResourceBodyChars,
   communityResourceSourceHasReadyText,
   communityResourceIsPublishedKnowledge,
   getCommunityAndMembership,
@@ -41,6 +42,12 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForResource,
 } from "./communityArchiveDocuments";
+import {
+  deleteCommunityResourceBodyContent,
+  hydrateCommunityResourceBody,
+  normalizeCommunityResourceBodyMd,
+  writeCommunityResourceBodyContent,
+} from "./communityResourceContent";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import {
   COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT,
@@ -63,8 +70,17 @@ const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MODULE_SCAN_LIMIT = 500;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS = 12_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS = 20_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_SNIPPET_CHARS = 420;
+const COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT = 50;
+const COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT = 250;
+const COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS = 240;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS = 14 * 24 * 60 * 60 * 1000;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_OPERATIONS = 25;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_SUMMARY_MAX_CHARS = 2000;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS = 24 * 60 * 60 * 1000;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_ITEM_LIMIT = 3;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS = 140;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TITLE_CHARS = 96;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES = 750_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS = 20_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS = 12_000;
@@ -178,8 +194,97 @@ const GITHUB_SOURCE_READABLE_EXTENSIONS = new Set([
   "gitattributes",
 ]);
 
+async function mapCommunityResourceRowWithBody(
+  ctx: any,
+  row: CommunityResourceLike,
+  userIdCache?: Map<string, string | null>,
+  moduleNameCache?: Map<string, string | null>,
+) {
+  const hydrated = await hydrateCommunityResourceBody(ctx, row) ?? row;
+  return await mapCommunityResourceRow(ctx, hydrated, userIdCache, moduleNameCache);
+}
+
 type SourceIntegrationProvider = typeof GOOGLE_DRIVE_SOURCE_PROVIDER | typeof GITHUB_SOURCE_PROVIDER;
 type SourceIntegrationReturnContextKind = "community_launch_knowledge" | null;
+
+type CommunityResourceBuilderChangesetRow = {
+  _id?: unknown;
+  communityId: unknown;
+  createdByUserId: unknown;
+  status: "staged" | "approved" | "applied" | "rejected" | "failed" | "expired";
+  summary: string;
+  operations: CommunityResourceBuilderChangesetOperation[];
+  preflight: unknown;
+  result?: unknown;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+  approvedAt?: number;
+  approvedByUserId?: unknown;
+  rejectedAt?: number;
+  rejectedByUserId?: unknown;
+  appliedAt?: number;
+  appliedByUserId?: unknown;
+};
+
+type CommunityResourceBuilderChangesetOperation =
+  | {
+      op: "create_module";
+      module_key?: string | null;
+      name: string;
+      description_md?: string | null;
+    }
+  | {
+      op: "edit_module";
+      module_id: string;
+      expected_updated_at: number;
+      name?: string;
+      description_md?: string | null;
+    }
+  | {
+      op: "create_page";
+      module_id?: string | null;
+      module_key?: string | null;
+      title: string;
+      body_md?: string | null;
+      source_resource_id?: string | null;
+      type?: string;
+      url?: string | null;
+      resource_status?: string;
+      pinned?: boolean;
+    }
+  | {
+      op: "edit_page";
+      resource_id: string;
+      expected_updated_at: number;
+      module_id?: string | null;
+      title?: string;
+      body_md?: string | null;
+      source_resource_id?: string | null;
+      type?: string;
+      url?: string | null;
+      resource_status?: string;
+      pinned?: boolean;
+    }
+  | {
+      op: "move_resource";
+      resource_id: string;
+      expected_updated_at: number;
+      module_id?: string | null;
+    }
+  | {
+      op: "link_source_to_page";
+      page_resource_id: string;
+      expected_updated_at: number;
+      source_resource_id: string;
+    };
+
+type CommunityResourceBuilderChangesetPreviewItem = {
+  op: CommunityResourceBuilderChangesetOperation["op"];
+  marker: "+" | "~" | ">";
+  title: string;
+  preview: string | null;
+};
 
 type UserSourceIntegrationConnectionRow = {
   _id?: unknown;
@@ -1826,6 +1931,823 @@ function normalizeBuilderResourceStatus(args: {
   return next;
 }
 
+function hasOwnField(record: Record<string, unknown>, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, field);
+}
+
+function normalizeChangesetSummary(raw: unknown): string {
+  const summary = normalizeOptionalText(raw, COMMUNITY_RESOURCE_BUILDER_CHANGESET_SUMMARY_MAX_CHARS);
+  if (!summary) throw new Error("community_resource_changeset_summary_required");
+  return summary;
+}
+
+function normalizeChangesetOperationKey(raw: unknown): string | null {
+  const value = String(raw ?? "").trim().toLowerCase();
+  return value && /^[a-z0-9_-]{1,80}$/.test(value) ? value : null;
+}
+
+function normalizeRequiredResourceRef(raw: unknown, fieldName: string): string {
+  const value = normalizeOptionalModuleId(raw);
+  if (!value) throw new Error(`${fieldName}_required`);
+  return value;
+}
+
+function normalizeExpectedUpdatedAtForChangeset(raw: unknown): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error("community_resource_changeset_expected_updated_at_required");
+  }
+  return value;
+}
+
+function normalizeChangesetPageStatus(raw: unknown): "draft" | "review" | "processing" | "failed" {
+  const status = normalizeResourceStatus(raw);
+  if (status === "published") {
+    throw new Error("community_resource_changeset_publish_deferred");
+  }
+  return status;
+}
+
+function normalizeCommunityResourceBuilderChangesetOperations(
+  rawOperations: unknown,
+): CommunityResourceBuilderChangesetOperation[] {
+  if (!Array.isArray(rawOperations)) {
+    throw new Error("community_resource_changeset_operations_required");
+  }
+  if (rawOperations.length < 1) {
+    throw new Error("community_resource_changeset_empty");
+  }
+  if (rawOperations.length > COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_OPERATIONS) {
+    throw new Error("community_resource_changeset_too_large");
+  }
+
+  return rawOperations.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error(`community_resource_changeset_operation_${index}_invalid`);
+    }
+    const record = raw as Record<string, unknown>;
+    const op = String(record.op ?? record.kind ?? "").trim().toLowerCase();
+    if (op === "create_module") {
+      return {
+        op,
+        ...(normalizeChangesetOperationKey(record.module_key)
+          ? { module_key: normalizeChangesetOperationKey(record.module_key) }
+          : null),
+        name: normalizeName(record.name),
+        description_md: normalizeOptionalText(record.description_md, 1200) ?? null,
+      };
+    }
+    if (op === "edit_module") {
+      const next: CommunityResourceBuilderChangesetOperation = {
+        op,
+        module_id: normalizeRequiredResourceRef(record.module_id, "community_resource_changeset_module_id"),
+        expected_updated_at: normalizeExpectedUpdatedAtForChangeset(record.expected_updated_at),
+      };
+      if (hasOwnField(record, "name")) next.name = normalizeName(record.name);
+      if (hasOwnField(record, "description_md")) {
+        next.description_md = normalizeOptionalText(record.description_md, 1200) ?? null;
+      }
+      if (!hasOwnField(record, "name") && !hasOwnField(record, "description_md")) {
+        throw new Error("community_resource_changeset_edit_module_empty");
+      }
+      return next;
+    }
+    if (op === "create_page") {
+      return {
+        op,
+        module_id: normalizeOptionalModuleId(record.module_id),
+        ...(normalizeChangesetOperationKey(record.module_key)
+          ? { module_key: normalizeChangesetOperationKey(record.module_key) }
+          : null),
+        title: normalizeName(record.title),
+        body_md: hasOwnField(record, "body_md")
+          ? normalizeCommunityResourceBodyMd(record.body_md, 20_000)
+          : null,
+        source_resource_id: normalizeOptionalModuleId(record.source_resource_id),
+        ...(hasOwnField(record, "type") ? { type: normalizeResourceType(record.type) } : null),
+        ...(hasOwnField(record, "url") ? { url: normalizeOptionalUrl(record.url) ?? null } : null),
+        ...(hasOwnField(record, "resource_status")
+          ? { resource_status: normalizeChangesetPageStatus(record.resource_status) }
+          : null),
+        ...(hasOwnField(record, "pinned") ? { pinned: Boolean(record.pinned) } : null),
+      };
+    }
+    if (op === "edit_page") {
+      const next: CommunityResourceBuilderChangesetOperation = {
+        op,
+        resource_id: normalizeRequiredResourceRef(record.resource_id, "community_resource_changeset_resource_id"),
+        expected_updated_at: normalizeExpectedUpdatedAtForChangeset(record.expected_updated_at),
+      };
+      if (hasOwnField(record, "module_id")) next.module_id = normalizeOptionalModuleId(record.module_id);
+      if (hasOwnField(record, "title")) next.title = normalizeName(record.title);
+      if (hasOwnField(record, "body_md")) next.body_md = normalizeCommunityResourceBodyMd(record.body_md, 20_000);
+      if (hasOwnField(record, "source_resource_id")) {
+        next.source_resource_id = normalizeOptionalModuleId(record.source_resource_id);
+      }
+      if (hasOwnField(record, "type")) next.type = normalizeResourceType(record.type);
+      if (hasOwnField(record, "url")) next.url = normalizeOptionalUrl(record.url) ?? null;
+      if (hasOwnField(record, "resource_status")) next.resource_status = normalizeChangesetPageStatus(record.resource_status);
+      if (hasOwnField(record, "pinned")) next.pinned = Boolean(record.pinned);
+      if (Object.keys(next).length <= 3) {
+        throw new Error("community_resource_changeset_edit_page_empty");
+      }
+      return next;
+    }
+    if (op === "move_resource") {
+      return {
+        op,
+        resource_id: normalizeRequiredResourceRef(record.resource_id, "community_resource_changeset_resource_id"),
+        expected_updated_at: normalizeExpectedUpdatedAtForChangeset(record.expected_updated_at),
+        module_id: normalizeOptionalModuleId(record.module_id),
+      };
+    }
+    if (op === "link_source_to_page") {
+      return {
+        op,
+        page_resource_id: normalizeRequiredResourceRef(record.page_resource_id, "community_resource_changeset_page_resource_id"),
+        expected_updated_at: normalizeExpectedUpdatedAtForChangeset(record.expected_updated_at),
+        source_resource_id: normalizeRequiredResourceRef(record.source_resource_id, "community_resource_changeset_source_resource_id"),
+      };
+    }
+    throw new Error("community_resource_changeset_operation_unsupported");
+  });
+}
+
+function communityResourceBuilderChangesetOperationSummary(
+  operation: CommunityResourceBuilderChangesetOperation,
+): string {
+  if (operation.op === "create_module") return `Create module "${operation.name}"`;
+  if (operation.op === "edit_module") return `Edit module ${operation.module_id}`;
+  if (operation.op === "create_page") return `Create page "${operation.title}"`;
+  if (operation.op === "edit_page") return `Edit page ${operation.resource_id}`;
+  if (operation.op === "move_resource") return `Move resource ${operation.resource_id}`;
+  return `Link source ${operation.source_resource_id} to page ${operation.page_resource_id}`;
+}
+
+function trimChangesetPreviewText(raw: unknown, maxChars: number): string | null {
+  const normalized = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.length > maxChars
+    ? `${normalized.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
+    : normalized;
+}
+
+function trimChangesetPreviewTitle(raw: unknown): string {
+  return trimChangesetPreviewText(raw, COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TITLE_CHARS) ?? "Resource change";
+}
+
+function changesetOperationModuleTarget(
+  operation: { module_id?: string | null; module_key?: string | null },
+): string {
+  if (operation.module_key) return operation.module_key;
+  if (operation.module_id) return operation.module_id;
+  return "Unsorted";
+}
+
+function previewCommunityResourceBuilderChangesetOperation(
+  operation: CommunityResourceBuilderChangesetOperation,
+): CommunityResourceBuilderChangesetPreviewItem {
+  if (operation.op === "create_module") {
+    return {
+      op: operation.op,
+      marker: "+",
+      title: trimChangesetPreviewTitle(operation.name),
+      preview: trimChangesetPreviewText(
+        operation.description_md,
+        COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS,
+      ),
+    };
+  }
+  if (operation.op === "edit_module") {
+    return {
+      op: operation.op,
+      marker: "~",
+      title: trimChangesetPreviewTitle(operation.name ?? operation.module_id),
+      preview: trimChangesetPreviewText(
+        operation.description_md,
+        COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS,
+      ),
+    };
+  }
+  if (operation.op === "create_page") {
+    return {
+      op: operation.op,
+      marker: "+",
+      title: trimChangesetPreviewTitle(
+        `${changesetOperationModuleTarget(operation)} / ${operation.title}`,
+      ),
+      preview: trimChangesetPreviewText(
+        operation.body_md,
+        COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS,
+      ),
+    };
+  }
+  if (operation.op === "edit_page") {
+    return {
+      op: operation.op,
+      marker: "~",
+      title: trimChangesetPreviewTitle(operation.title ?? operation.resource_id),
+      preview: trimChangesetPreviewText(
+        operation.body_md,
+        COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS,
+      ),
+    };
+  }
+  if (operation.op === "move_resource") {
+    return {
+      op: operation.op,
+      marker: ">",
+      title: trimChangesetPreviewTitle(operation.resource_id),
+      preview: `Moves to ${changesetOperationModuleTarget(operation)}`,
+    };
+  }
+  return {
+    op: operation.op,
+    marker: ">",
+    title: trimChangesetPreviewTitle(operation.page_resource_id),
+    preview: trimChangesetPreviewText(
+      `Links source ${operation.source_resource_id}`,
+      COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS,
+    ),
+  };
+}
+
+function buildCommunityResourceBuilderChangesetPreview(
+  operations: CommunityResourceBuilderChangesetOperation[],
+): {
+  total_count: number;
+  preview_limit: number;
+  preview_items: CommunityResourceBuilderChangesetPreviewItem[];
+} {
+  return {
+    total_count: operations.length,
+    preview_limit: COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_ITEM_LIMIT,
+    preview_items: operations
+      .slice(0, COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_ITEM_LIMIT)
+      .map(previewCommunityResourceBuilderChangesetOperation),
+  };
+}
+
+function getCommunityResourceBuilderPreflightIssueCount(preflight: unknown): number {
+  const record =
+    preflight && typeof preflight === "object" && !Array.isArray(preflight)
+      ? (preflight as Record<string, unknown>)
+      : null;
+  const health =
+    record?.health && typeof record.health === "object" && !Array.isArray(record.health)
+      ? (record.health as Record<string, unknown>)
+      : null;
+  const summary =
+    health?.summary && typeof health.summary === "object" && !Array.isArray(health.summary)
+      ? (health.summary as Record<string, unknown>)
+      : null;
+  const count = Number(summary?.issue_count ?? 0);
+  return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+}
+
+async function requireChangesetModuleRef(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: string | null | undefined;
+  createdModuleKeys?: Set<string>;
+  moduleKey?: string | null;
+}): Promise<void> {
+  if (args.moduleKey) {
+    if (!args.createdModuleKeys?.has(args.moduleKey)) {
+      throw new Error("community_resource_changeset_module_key_not_found");
+    }
+    return;
+  }
+  await requireValidResourceModule({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    moduleId: args.moduleId ?? null,
+  });
+}
+
+async function requireChangesetResourceRef(args: {
+  ctx: any;
+  communityId: any;
+  resourceId: string;
+  role?: "page" | "source";
+  expectedUpdatedAt?: number;
+}): Promise<CommunityResourceLike> {
+  const resource = (await args.ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+  if (!resource || String(resource.communityId) !== String(args.communityId)) {
+    throw new Error("community_resource_changeset_resource_not_found");
+  }
+  if (args.role && normalizeResourceRole(resource.role) !== args.role) {
+    throw new Error(args.role === "source" ? "community_source_resource_required" : "community_page_resource_required");
+  }
+  if (typeof args.expectedUpdatedAt === "number") {
+    requireExpectedUpdatedAt({
+      expectedUpdatedAt: args.expectedUpdatedAt,
+      actualUpdatedAt: resource.updatedAt,
+    });
+  }
+  return resource;
+}
+
+async function buildCommunityResourceBuilderChangesetPreflight(args: {
+  ctx: any;
+  communityId: any;
+  operations: CommunityResourceBuilderChangesetOperation[];
+  nowMs: number;
+}): Promise<any> {
+  const createdModuleKeys = new Set<string>();
+  const operationSummaries: Array<Record<string, unknown>> = [];
+
+  for (const [index, operation] of args.operations.entries()) {
+    if (operation.op === "create_module") {
+      if (operation.module_key) {
+        if (createdModuleKeys.has(operation.module_key)) {
+          throw new Error("community_resource_changeset_duplicate_module_key");
+        }
+        createdModuleKeys.add(operation.module_key);
+      }
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "edit_module") {
+      const module = (await args.ctx.db.get(operation.module_id as any)) as CommunityResourceModuleLike | null;
+      if (!module || String(module.communityId) !== String(args.communityId)) {
+        throw new Error("community_resource_module_not_found");
+      }
+      requireExpectedUpdatedAt({
+        expectedUpdatedAt: operation.expected_updated_at,
+        actualUpdatedAt: module.updatedAt,
+      });
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        target_id: operation.module_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "create_page") {
+      await requireChangesetModuleRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId: operation.module_id,
+        moduleKey: operation.module_key,
+        createdModuleKeys,
+      });
+      if (operation.source_resource_id) {
+        await requireChangesetResourceRef({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          resourceId: operation.source_resource_id,
+          role: "source",
+        });
+      }
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "edit_page") {
+      await requireChangesetResourceRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        resourceId: operation.resource_id,
+        role: "page",
+        expectedUpdatedAt: operation.expected_updated_at,
+      });
+      if (hasOwnField(operation as any, "module_id")) {
+        await requireChangesetModuleRef({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          moduleId: operation.module_id,
+        });
+      }
+      if (operation.source_resource_id) {
+        await requireChangesetResourceRef({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          resourceId: operation.source_resource_id,
+          role: "source",
+        });
+      }
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        target_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "move_resource") {
+      await requireChangesetResourceRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        resourceId: operation.resource_id,
+        expectedUpdatedAt: operation.expected_updated_at,
+      });
+      await requireChangesetModuleRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId: operation.module_id,
+      });
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        target_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    await requireChangesetResourceRef({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      resourceId: operation.page_resource_id,
+      role: "page",
+      expectedUpdatedAt: operation.expected_updated_at,
+    });
+    await requireChangesetResourceRef({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      resourceId: operation.source_resource_id,
+      role: "source",
+    });
+    operationSummaries.push({
+      index,
+      op: operation.op,
+      target_id: operation.page_resource_id,
+      summary: communityResourceBuilderChangesetOperationSummary(operation),
+    });
+  }
+
+  return {
+    ok: true,
+    kind: "community_resource_builder_changeset_preflight",
+    checked_at: toIsoString(args.nowMs),
+    operation_count: args.operations.length,
+    operations: operationSummaries,
+    health: await buildCommunityResourceBuilderHealthReport({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      nowMs: args.nowMs,
+    }),
+  };
+}
+
+function resolveChangesetModuleId(args: {
+  operation: { module_id?: string | null; module_key?: string | null };
+  createdModuleIdsByKey: Map<string, any>;
+}): any | undefined {
+  if (args.operation.module_key) {
+    const createdId = args.createdModuleIdsByKey.get(args.operation.module_key);
+    if (!createdId) throw new Error("community_resource_changeset_module_key_not_applied");
+    return createdId;
+  }
+  return args.operation.module_id ? args.operation.module_id : undefined;
+}
+
+async function createModuleFromChangesetOperation(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "create_module" }>;
+  nowMs: number;
+}): Promise<CommunityResourceModuleLike> {
+  const rows = (await args.ctx.db
+    .query("communityResourceModules" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+    .collect()) as CommunityResourceModuleLike[];
+  const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
+  const id = await args.ctx.db.insert("communityResourceModules" as any, {
+    communityId: args.communityId,
+    createdByUserId: args.userId,
+    name: args.operation.name,
+    descriptionMd: args.operation.description_md ?? undefined,
+    sortOrder: nextSortOrder,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const created = (await args.ctx.db.get(id as any)) as CommunityResourceModuleLike | null;
+  if (!created) throw new Error("community_resource_module_create_failed");
+  return created;
+}
+
+async function createPageFromChangesetOperation(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "create_page" }>;
+  createdModuleIdsByKey: Map<string, any>;
+  nowMs: number;
+}): Promise<CommunityResourceLike> {
+  const moduleId = resolveChangesetModuleId({
+    operation: args.operation,
+    createdModuleIdsByKey: args.createdModuleIdsByKey,
+  });
+  await requireValidResourceModule({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    moduleId: normalizeOptionalModuleId(moduleId),
+  });
+  const sourceResourceId = normalizeOptionalModuleId(args.operation.source_resource_id);
+  if (sourceResourceId) {
+    await requireChangesetResourceRef({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      resourceId: sourceResourceId,
+      role: "source",
+    });
+  }
+  const sortOrder = await getNextResourceSortOrder({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    moduleId,
+  });
+  const id = await args.ctx.db.insert("communityResources" as any, {
+    communityId: args.communityId,
+    ...(moduleId ? { moduleId } : {}),
+    createdByUserId: args.userId,
+    type: args.operation.type ? normalizeResourceType(args.operation.type) : "post",
+    role: "page",
+    status: args.operation.resource_status
+      ? normalizeBuilderResourceStatus({
+          raw: args.operation.resource_status,
+          confirmPublish: false,
+          defaultStatus: "draft",
+        })
+      : "draft",
+    ...(sourceResourceId ? { sourceResourceId } : {}),
+    title: args.operation.title,
+    ...(args.operation.url ? { url: args.operation.url } : {}),
+    sourceIngestionStatus: "not_required",
+    sourceIngestionKind: "manual",
+    pinned: Boolean(args.operation.pinned),
+    sortOrder,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const created = (await args.ctx.db.get(id as any)) as CommunityResourceLike | null;
+  if (!created) throw new Error("community_resource_create_failed");
+  if (args.operation.body_md) {
+    await writeCommunityResourceBodyContent(args.ctx, {
+      communityId: args.communityId,
+      resourceId: created._id,
+      bodyMd: args.operation.body_md,
+      nowMs: args.nowMs,
+      maxChars: 20_000,
+    });
+  }
+  const hydrated = await hydrateCommunityResourceBody(args.ctx, created) ?? created;
+  await upsertArchiveDocumentForResource(args.ctx, hydrated);
+  return hydrated;
+}
+
+async function editPageFromChangesetOperation(args: {
+  ctx: any;
+  communityId: any;
+  operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "edit_page" }>;
+  nowMs: number;
+}): Promise<CommunityResourceLike> {
+  const existing = await requireChangesetResourceRef({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    resourceId: args.operation.resource_id,
+    role: "page",
+    expectedUpdatedAt: args.operation.expected_updated_at,
+  });
+  const nextModuleId = hasOwnField(args.operation as any, "module_id")
+    ? await requireValidResourceModule({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId: normalizeOptionalModuleId(args.operation.module_id),
+      })
+    : existing.moduleId;
+  const nextSourceResourceId = hasOwnField(args.operation as any, "source_resource_id")
+    ? normalizeOptionalModuleId(args.operation.source_resource_id)
+    : normalizeIdValue(existing.sourceResourceId ?? "");
+  if (nextSourceResourceId) {
+    await requireChangesetResourceRef({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      resourceId: nextSourceResourceId,
+      role: "source",
+    });
+  }
+  const moduleChanged = resourceModuleIdentity(existing.moduleId) !== resourceModuleIdentity(nextModuleId);
+  const nextSortOrder = moduleChanged
+    ? await getNextResourceSortOrder({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId: nextModuleId,
+        excludeResourceId: existing._id,
+      })
+    : existing.sortOrder;
+  const bodyChanged = hasOwnField(args.operation as any, "body_md");
+  await args.ctx.db.patch(existing._id as any, {
+    ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
+    ...(hasOwnField(args.operation as any, "type") ? { type: normalizeResourceType(args.operation.type) } : {}),
+    ...(hasOwnField(args.operation as any, "resource_status")
+      ? {
+          status: normalizeBuilderResourceStatus({
+            raw: args.operation.resource_status,
+            confirmPublish: false,
+            defaultStatus: "draft",
+          }),
+        }
+      : {}),
+    ...(nextSourceResourceId ? { sourceResourceId: nextSourceResourceId } : { sourceResourceId: undefined }),
+    ...(hasOwnField(args.operation as any, "title") ? { title: normalizeName(args.operation.title) } : {}),
+    ...(hasOwnField(args.operation as any, "url") ? { url: normalizeOptionalUrl(args.operation.url) } : {}),
+    ...(hasOwnField(args.operation as any, "pinned") ? { pinned: Boolean(args.operation.pinned) } : {}),
+    ...(typeof nextSortOrder === "number" ? { sortOrder: nextSortOrder } : {}),
+    updatedAt: args.nowMs,
+  });
+  const updated = (await args.ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
+  if (!updated) throw new Error("community_resource_not_found");
+  if (bodyChanged) {
+    await writeCommunityResourceBodyContent(args.ctx, {
+      communityId: args.communityId,
+      resourceId: updated._id,
+      bodyMd: args.operation.body_md ?? null,
+      nowMs: args.nowMs,
+      maxChars: 20_000,
+    });
+  }
+  const hydrated = await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
+  await upsertArchiveDocumentForResource(args.ctx, hydrated);
+  return hydrated;
+}
+
+async function applyCommunityResourceBuilderChangesetOperations(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  operations: CommunityResourceBuilderChangesetOperation[];
+  nowMs: number;
+}): Promise<any> {
+  const createdModuleIdsByKey = new Map<string, any>();
+  const applied: Array<Record<string, unknown>> = [];
+
+  for (const [index, operation] of args.operations.entries()) {
+    if (operation.op === "create_module") {
+      const module = await createModuleFromChangesetOperation({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+        operation,
+        nowMs: args.nowMs,
+      });
+      if (operation.module_key) createdModuleIdsByKey.set(operation.module_key, module._id);
+      applied.push({
+        index,
+        op: operation.op,
+        module_id: normalizeIdValue(module._id),
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "edit_module") {
+      const module = (await args.ctx.db.get(operation.module_id as any)) as CommunityResourceModuleLike | null;
+      if (!module || String(module.communityId) !== String(args.communityId)) {
+        throw new Error("community_resource_module_not_found");
+      }
+      requireExpectedUpdatedAt({
+        expectedUpdatedAt: operation.expected_updated_at,
+        actualUpdatedAt: module.updatedAt,
+      });
+      await args.ctx.db.patch(module._id as any, {
+        ...(hasOwnField(operation as any, "name") ? { name: operation.name } : {}),
+        ...(hasOwnField(operation as any, "description_md") ? { descriptionMd: operation.description_md ?? undefined } : {}),
+        updatedAt: args.nowMs,
+      });
+      applied.push({
+        index,
+        op: operation.op,
+        module_id: operation.module_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "create_page") {
+      const page = await createPageFromChangesetOperation({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+        operation,
+        createdModuleIdsByKey,
+        nowMs: args.nowMs,
+      });
+      applied.push({
+        index,
+        op: operation.op,
+        resource_id: normalizeIdValue(page._id),
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "edit_page") {
+      const page = await editPageFromChangesetOperation({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        operation,
+        nowMs: args.nowMs,
+      });
+      applied.push({
+        index,
+        op: operation.op,
+        resource_id: normalizeIdValue(page._id),
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "move_resource") {
+      const resource = await requireChangesetResourceRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        resourceId: operation.resource_id,
+        expectedUpdatedAt: operation.expected_updated_at,
+      });
+      const moduleId = await requireValidResourceModule({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId: normalizeOptionalModuleId(operation.module_id),
+      });
+      const sortOrder = await getNextResourceSortOrder({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId,
+        excludeResourceId: resource._id,
+      });
+      await args.ctx.db.patch(resource._id as any, {
+        ...(moduleId ? { moduleId } : { moduleId: undefined }),
+        sortOrder,
+        updatedAt: args.nowMs,
+      });
+      const updated = (await args.ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
+      if (updated) await upsertArchiveDocumentForResource(args.ctx, updated);
+      applied.push({
+        index,
+        op: operation.op,
+        resource_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    const page = await requireChangesetResourceRef({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      resourceId: operation.page_resource_id,
+      role: "page",
+      expectedUpdatedAt: operation.expected_updated_at,
+    });
+    await requireChangesetResourceRef({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      resourceId: operation.source_resource_id,
+      role: "source",
+    });
+    await args.ctx.db.patch(page._id as any, {
+      sourceResourceId: operation.source_resource_id,
+      updatedAt: args.nowMs,
+    });
+    const updated = (await args.ctx.db.get(page._id as any)) as CommunityResourceLike | null;
+    if (updated) await upsertArchiveDocumentForResource(args.ctx, updated);
+    applied.push({
+      index,
+      op: operation.op,
+      resource_id: operation.page_resource_id,
+      source_resource_id: operation.source_resource_id,
+      summary: communityResourceBuilderChangesetOperationSummary(operation),
+    });
+  }
+
+  return {
+    ok: true,
+    kind: "community_resource_builder_changeset_apply_result",
+    operation_count: args.operations.length,
+    applied,
+    health: await buildCommunityResourceBuilderHealthReport({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      nowMs: args.nowMs,
+    }),
+  };
+}
+
 function isCommunityResourceRow(row: unknown): row is CommunityResourceLike {
   return Boolean(
     row &&
@@ -1913,10 +2835,43 @@ function buildResourceDirectoryFieldsForTool(
 function compactResourceSummary(row: CommunityResourceLike): string | null {
   const body = String(row.bodyMd ?? "").replace(/\s+/g, " ").trim();
   if (body) return body.slice(0, 220);
+  if (communityResourceBodyChars(row) > 0) return "Readable resource content stored.";
   const url = String(row.url ?? "").trim();
   if (url) return `External resource: ${url.slice(0, 180)}`;
   if (row.fileKey) return "Uploaded resource without parsed text.";
   return null;
+}
+
+function mapCompactCommunityResourceBuilderListRow(
+  row: CommunityResourceLike,
+  moduleNameMap: Map<string, string>,
+) {
+  const moduleId = row.moduleId ? normalizeIdValue(row.moduleId) : null;
+  return {
+    id: normalizeIdValue(row._id),
+    community_id: normalizeIdValue(row.communityId),
+    module_id: moduleId,
+    module_name: moduleId ? moduleNameMap.get(moduleId) ?? null : null,
+    resource_role: normalizeResourceRole(row.role),
+    resource_status: normalizeResourceStatus(row.status),
+    title: row.title,
+    type: String(row.type ?? "").trim().toLowerCase() || "post",
+    provider: row.sourceExternalProvider ?? null,
+    url: row.url ?? null,
+    source_resource_id: row.sourceResourceId ? normalizeIdValue(row.sourceResourceId) : null,
+    source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
+    source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
+    source_external_provider: row.sourceExternalProvider ?? null,
+    source_external_name: row.sourceExternalName ?? null,
+    source_external_url: row.sourceExternalUrl ?? null,
+    source_external_mime_type: row.sourceExternalMimeType ?? null,
+    source_external_modified_at:
+      typeof row.sourceExternalModifiedAt === "number" ? toIsoString(row.sourceExternalModifiedAt) : null,
+    has_file: Boolean(row.fileKey),
+    body_chars: communityResourceBodyChars(row),
+    summary: compactResourceSummary(row),
+    updated_at: toIsoString(row.updatedAt),
+  };
 }
 
 function compactModuleSummary(module: CommunityResourceModuleLike | null): string | null {
@@ -2183,8 +3138,7 @@ function resolveModuleTargetFromPath(args: {
 }
 
 function readContentUnavailableReason(row: CommunityResourceLike): string | null {
-  const body = String(row.bodyMd ?? "").trim();
-  if (body) return null;
+  if (communityResourceBodyChars(row) > 0) return null;
   if (row.fileKey && row.url) return "external_or_uploaded_content_not_parsed";
   if (row.fileKey) return "uploaded_file_not_parsed";
   if (row.url) return "external_url_metadata_only";
@@ -2449,7 +3403,7 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
       };
     }
 
-    const row = resolved.resource;
+    const row = await hydrateCommunityResourceBody(ctx, resolved.resource) ?? resolved.resource;
     const body = String(row.bodyMd ?? "");
     const offset = boundedReadOffset(args.offset);
     const limit = boundedReadLimit(args.limit);
@@ -2500,7 +3454,11 @@ export const searchCommunityResourceDirectoryInternal = internalQuery({
     const modules = await listResourceDirectoryModules(ctx, args.communityId);
     const moduleNameMap = buildModuleNameMap(modules);
     const terms = normalizeSearchQueryTerms(query);
-    const matches = (await listResourceDirectoryPublishedResources(ctx, args.communityId))
+    const publishedResources = await listResourceDirectoryPublishedResources(ctx, args.communityId);
+    const hydratedResources = await Promise.all(
+      publishedResources.map((row) => hydrateCommunityResourceBody(ctx, row).then((hydrated) => hydrated ?? row)),
+    );
+    const matches = hydratedResources
       .map((row) => ({
         row,
         score: resourceSearchScore(row, query, terms),
@@ -2540,7 +3498,13 @@ export const listCommunityResourceBuilderDirectory = query({
       communityId: args.communityId,
       userId,
     });
-    const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 1000)));
+    const limit = Math.max(
+      1,
+      Math.min(
+        COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT,
+        Math.floor(args.limit ?? COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT),
+      ),
+    );
     const [modules, resources] = await Promise.all([
       ctx.db
         .query("communityResourceModules" as any)
@@ -2551,11 +3515,20 @@ export const listCommunityResourceBuilderDirectory = query({
         .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
         .collect() as Promise<CommunityResourceLike[]>,
     ]);
-    const userIdCache = new Map<string, string | null>();
-    const moduleNameCache = new Map<string, string | null>();
+    const moduleNameMap = new Map(
+      modules.map((module) => [normalizeIdValue(module._id), module.name]),
+    );
     return {
       ok: true,
       kind: "community_resource_builder_directory",
+      limit,
+      total_resources: resources.length,
+      truncated: resources.length > limit,
+      health: buildCommunityResourceBuilderHealthReportFromRows({
+        modules,
+        resources,
+        nowMs: Date.now(),
+      }),
       modules: await Promise.all(
         modules
           .slice()
@@ -2567,7 +3540,7 @@ export const listCommunityResourceBuilderDirectory = query({
           .slice()
           .sort(compareCommunityResources)
           .slice(0, limit)
-          .map((row) => mapCommunityResourceRow(ctx, row, userIdCache, moduleNameCache)),
+          .map((row) => mapCompactCommunityResourceBuilderListRow(row, moduleNameMap)),
       ),
     };
   },
@@ -2600,7 +3573,7 @@ export const readCommunityResourceBuilderResource = query({
       return {
         ok: true,
         kind: "community_resource_builder_read",
-        resource: await mapCommunityResourceRow(ctx, resource),
+        resource: await mapCommunityResourceRowWithBody(ctx, resource),
       };
     }
     if (args.moduleId) {
@@ -2615,6 +3588,296 @@ export const readCommunityResourceBuilderResource = query({
       };
     }
     throw new Error("community_resource_builder_read_ref_required");
+  },
+});
+
+export const stageCommunityResourceBuilderChangeset = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    summary: v.string(),
+    operations: v.array(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const nowMs = Date.now();
+    const summary = normalizeChangesetSummary(args.summary);
+    const operations = normalizeCommunityResourceBuilderChangesetOperations(args.operations);
+    const preflight = await buildCommunityResourceBuilderChangesetPreflight({
+      ctx,
+      communityId: args.communityId,
+      operations,
+      nowMs,
+    });
+    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    const id = await ctx.db.insert("communityResourceBuilderChangesets" as any, {
+      communityId: args.communityId,
+      createdByUserId: userId,
+      status: "staged",
+      summary,
+      operations,
+      preflight,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return {
+      ok: true,
+      kind: "community_resource_builder_changeset_staged",
+      changeset_id: normalizeIdValue(id),
+      community_id: normalizeIdValue(args.communityId),
+      status: "staged",
+      summary,
+      operation_count: operations.length,
+      preview_items: preview.preview_items,
+      preview_total_count: preview.total_count,
+      preview_limit: preview.preview_limit,
+      warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
+      preflight,
+    };
+  },
+});
+
+export const getCommunityResourceBuilderChangesetStatus = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    changesetId: v.id("communityResourceBuilderChangesets"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
+    if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
+      throw new Error("community_resource_changeset_not_found");
+    }
+    const nowMs = Date.now();
+    const expired =
+      (changeset.status === "staged" || changeset.status === "approved") &&
+      nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS;
+    const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
+    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    return {
+      ok: true,
+      kind: "community_resource_builder_changeset_status",
+      changeset_id: normalizeIdValue(args.changesetId),
+      community_id: normalizeIdValue(args.communityId),
+      status: expired ? "expired" : changeset.status,
+      summary: changeset.summary,
+      operation_count: operations.length,
+      preview_items: preview.preview_items,
+      preview_total_count: preview.total_count,
+      preview_limit: preview.preview_limit,
+      approved_by_current_user: changeset.approvedByUserId
+        ? String(changeset.approvedByUserId) === String(userId)
+        : false,
+      updated_at: toIsoString(changeset.updatedAt),
+    };
+  },
+});
+
+export const approveCommunityResourceBuilderChangeset = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    changesetId: v.id("communityResourceBuilderChangesets"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
+    if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
+      throw new Error("community_resource_changeset_not_found");
+    }
+    if (changeset.status !== "staged") {
+      throw new Error("community_resource_changeset_not_staged");
+    }
+    const nowMs = Date.now();
+    if (nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS) {
+      await ctx.db.patch(args.changesetId as any, {
+        status: "expired",
+        updatedAt: nowMs,
+      });
+      throw new Error("community_resource_changeset_expired");
+    }
+    const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
+    const preflight = await buildCommunityResourceBuilderChangesetPreflight({
+      ctx,
+      communityId: args.communityId,
+      operations,
+      nowMs,
+    });
+    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    await ctx.db.patch(args.changesetId as any, {
+      status: "approved",
+      preflight,
+      updatedAt: nowMs,
+      approvedAt: nowMs,
+      approvedByUserId: userId,
+      rejectedAt: undefined,
+      rejectedByUserId: undefined,
+    });
+    return {
+      ok: true,
+      kind: "community_resource_builder_changeset_approved",
+      changeset_id: normalizeIdValue(args.changesetId),
+      community_id: normalizeIdValue(args.communityId),
+      status: "approved",
+      summary: changeset.summary,
+      operation_count: operations.length,
+      preview_items: preview.preview_items,
+      preview_total_count: preview.total_count,
+      preview_limit: preview.preview_limit,
+      warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
+      preflight,
+    };
+  },
+});
+
+export const rejectCommunityResourceBuilderChangeset = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    changesetId: v.id("communityResourceBuilderChangesets"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
+    if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
+      throw new Error("community_resource_changeset_not_found");
+    }
+    if (changeset.status !== "staged" && changeset.status !== "approved") {
+      throw new Error("community_resource_changeset_not_rejectable");
+    }
+    const nowMs = Date.now();
+    await ctx.db.patch(args.changesetId as any, {
+      status: "rejected",
+      error: normalizeOptionalText(args.reason, 1000),
+      updatedAt: nowMs,
+      rejectedAt: nowMs,
+      rejectedByUserId: userId,
+    });
+    return {
+      ok: true,
+      kind: "community_resource_builder_changeset_rejected",
+      changeset_id: normalizeIdValue(args.changesetId),
+      community_id: normalizeIdValue(args.communityId),
+      status: "rejected",
+      summary: changeset.summary,
+    };
+  },
+});
+
+export const applyCommunityResourceBuilderChangeset = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    changesetId: v.id("communityResourceBuilderChangesets"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
+    if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
+      throw new Error("community_resource_changeset_not_found");
+    }
+    if (changeset.status !== "approved") {
+      throw new Error("community_resource_changeset_approval_required");
+    }
+    if (!changeset.approvedByUserId || String(changeset.approvedByUserId) !== String(userId)) {
+      throw new Error("community_resource_changeset_approved_manager_required");
+    }
+    const nowMs = Date.now();
+    if (nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS) {
+      await ctx.db.patch(args.changesetId as any, {
+        status: "expired",
+        updatedAt: nowMs,
+      });
+      throw new Error("community_resource_changeset_expired");
+    }
+    const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
+    const preflight = await buildCommunityResourceBuilderChangesetPreflight({
+      ctx,
+      communityId: args.communityId,
+      operations,
+      nowMs,
+    });
+    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    const result = await applyCommunityResourceBuilderChangesetOperations({
+      ctx,
+      communityId: args.communityId,
+      userId,
+      operations,
+      nowMs,
+    });
+    await ctx.db.patch(args.changesetId as any, {
+      status: "applied",
+      preflight,
+      result,
+      updatedAt: nowMs,
+      appliedAt: nowMs,
+      appliedByUserId: userId,
+    });
+    return {
+      ok: true,
+      kind: "community_resource_builder_changeset_applied",
+      changeset_id: normalizeIdValue(args.changesetId),
+      community_id: normalizeIdValue(args.communityId),
+      status: "applied",
+      summary: changeset.summary,
+      operation_count: operations.length,
+      preview_items: preview.preview_items,
+      preview_total_count: preview.total_count,
+      preview_limit: preview.preview_limit,
+      result,
+    };
   },
 });
 
@@ -2696,7 +3959,7 @@ export const writeCommunityResourceBuilderResource = mutation({
       communityId: args.communityId,
       moduleId,
     });
-    const bodyMd = normalizeOptionalText(payload.body_md, 20_000);
+    const bodyMd = normalizeCommunityResourceBodyMd(payload.body_md, 20_000);
     const url = normalizeOptionalUrl(payload.url);
     const fileKey = normalizeOptionalFileKey(payload.file_key);
     const sourceIngestionStatus = role === "source" && bodyMd
@@ -2718,7 +3981,6 @@ export const writeCommunityResourceBuilderResource = mutation({
       status,
       ...(sourceResource ? { sourceResourceId: sourceResource._id } : {}),
       title: normalizeName(payload.title),
-      bodyMd,
       url,
       fileKey,
       sourceIngestionStatus,
@@ -2730,11 +3992,21 @@ export const writeCommunityResourceBuilderResource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
-    await upsertArchiveDocumentForResource(ctx, created);
+    if (bodyMd) {
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: args.communityId,
+        resourceId: created._id,
+        bodyMd,
+        nowMs,
+        maxChars: 20_000,
+      });
+    }
+    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+    await upsertArchiveDocumentForResource(ctx, hydrated);
     return {
       ok: true,
       kind: "community_resource_builder_write",
-      resource: await mapCommunityResourceRow(ctx, created),
+      resource: await mapCommunityResourceRow(ctx, hydrated),
     };
   },
 });
@@ -2845,19 +4117,21 @@ export const editCommunityResourceBuilderResource = mutation({
     const bodyChanged = Object.prototype.hasOwnProperty.call(payload, "body_md");
     const urlChanged = Object.prototype.hasOwnProperty.call(payload, "url");
     const fileChanged = Object.prototype.hasOwnProperty.call(payload, "file_key");
-    const nextBodyMd = bodyChanged ? normalizeOptionalText(payload.body_md, 20_000) : existing.bodyMd;
+    const nextBodyMd = bodyChanged ? normalizeCommunityResourceBodyMd(payload.body_md, 20_000) : null;
+    const nextBodyChars = bodyChanged ? String(nextBodyMd ?? "").trim().length : communityResourceBodyChars(existing);
     const nextUrl = urlChanged ? normalizeOptionalUrl(payload.url) : existing.url;
     const nextFileKey = fileChanged ? normalizeOptionalFileKey(payload.file_key) : existing.fileKey;
     const sourceIngestionPatch =
       normalizeResourceRole(existing.role) === "source"
         ? {
-            sourceIngestionStatus: bodyChanged && nextBodyMd
+            sourceIngestionStatus: bodyChanged && nextBodyChars > 0
               ? "ready"
               : urlChanged || fileChanged
                 ? "queued"
                 : normalizeResourceSourceIngestionStatus({
                     ...existing,
-                    bodyMd: nextBodyMd ?? undefined,
+                    bodyMd: bodyChanged ? nextBodyMd ?? undefined : existing.bodyMd,
+                    bodyChars: nextBodyChars,
                     url: nextUrl,
                     fileKey: nextFileKey,
                   }),
@@ -2875,7 +4149,6 @@ export const editCommunityResourceBuilderResource = mutation({
       status: nextStatus,
       ...(sourceResource ? { sourceResourceId: sourceResource._id } : { sourceResourceId: undefined }),
       ...(Object.prototype.hasOwnProperty.call(payload, "title") ? { title: normalizeName(payload.title) } : {}),
-      ...(bodyChanged ? { bodyMd: nextBodyMd } : {}),
       ...(urlChanged ? { url: nextUrl } : {}),
       ...(fileChanged ? { fileKey: nextFileKey } : {}),
       ...sourceIngestionPatch,
@@ -2885,11 +4158,21 @@ export const editCommunityResourceBuilderResource = mutation({
     });
     const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
     if (!updated) throw new Error("community_resource_not_found");
-    await upsertArchiveDocumentForResource(ctx, updated);
+    if (bodyChanged) {
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: updated.communityId,
+        resourceId: updated._id,
+        bodyMd: nextBodyMd,
+        nowMs,
+        maxChars: 20_000,
+      });
+    }
+    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+    await upsertArchiveDocumentForResource(ctx, hydrated);
     return {
       ok: true,
       kind: "community_resource_builder_edit",
-      resource: await mapCommunityResourceRow(ctx, updated),
+      resource: await mapCommunityResourceRow(ctx, hydrated),
     };
   },
 });
@@ -2919,6 +4202,60 @@ export const getCommunityResourceBuilderHealth = query({
     });
   },
 });
+
+export const compactCommunityResourceBodyStorage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const limit = Math.max(1, Math.min(250, Math.floor(args.limit ?? 50)));
+    const rows = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceLike[];
+    const candidates = rows
+      .filter((row) => String(row.bodyMd ?? "").trim())
+      .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt)
+      .slice(0, limit);
+    if (!args.dryRun) {
+      const nowMs = Date.now();
+      for (const row of candidates) {
+        await writeCommunityResourceBodyContent(ctx, {
+          communityId: row.communityId,
+          resourceId: row._id,
+          bodyMd: row.bodyMd,
+          nowMs,
+          maxChars: 20_000,
+          resourceUpdatedAt: row.updatedAt,
+        });
+      }
+    }
+    return {
+      ok: true,
+      kind: "community_resource_body_storage_compaction",
+      dry_run: Boolean(args.dryRun),
+      limit,
+      compacted: args.dryRun ? 0 : candidates.length,
+      candidates: candidates.length,
+      remaining_candidates: Math.max(0, rows.filter((row) => String(row.bodyMd ?? "").trim()).length - candidates.length),
+    };
+  },
+});
+
 export async function buildCommunityResourceBuilderHealthReport(args: {
   ctx: any;
   communityId: any;
@@ -2934,6 +4271,19 @@ export async function buildCommunityResourceBuilderHealthReport(args: {
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect() as Promise<CommunityResourceLike[]>,
   ]);
+  return buildCommunityResourceBuilderHealthReportFromRows({
+    modules,
+    resources,
+    nowMs: args.nowMs,
+  });
+}
+
+function buildCommunityResourceBuilderHealthReportFromRows(args: {
+  modules: CommunityResourceModuleLike[];
+  resources: CommunityResourceLike[];
+  nowMs: number;
+}): any {
+  const { modules, resources } = args;
   const pages = resources.filter((row) => normalizeResourceRole(row.role) === "page");
   const sources = resources.filter((row) => normalizeResourceRole(row.role) === "source");
   const existingModuleNames = new Set(modules.map((module) => normalizeBuilderHealthTitle(module.name)));
@@ -2972,7 +4322,7 @@ export async function buildCommunityResourceBuilderHealthReport(args: {
     modulePageCounts.set(moduleId, (modulePageCounts.get(moduleId) ?? 0) + 1);
   }
   const staleDraftCutoff = args.nowMs - COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS;
-  const issues = {
+  const allIssues = {
     emptyModules: modules
       .filter(
         (module) =>
@@ -2987,13 +4337,13 @@ export async function buildCommunityResourceBuilderHealthReport(args: {
       .filter(
         (page) =>
           !isBuilderScaffoldPageTitle(page.title) &&
-          String(page.bodyMd ?? "").trim().length < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS,
+          communityResourceBodyChars(page) < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS,
       )
       .map((page) => ({
         resource_id: normalizeIdValue(page._id),
         title: page.title,
         status: normalizeResourceStatus(page.status),
-        body_chars: String(page.bodyMd ?? "").trim().length,
+        body_chars: communityResourceBodyChars(page),
       })),
     pagesWithoutSourceLineage: pages
       .filter((page) => !normalizeIdValue(page.sourceResourceId ?? "") && !isBuilderScaffoldPageTitle(page.title))
@@ -3017,6 +4367,20 @@ export async function buildCommunityResourceBuilderHealthReport(args: {
         updated_at: toIsoString(page.updatedAt),
       })),
   };
+  const issueTotals = {
+    emptyModules: allIssues.emptyModules.length,
+    sparsePages: allIssues.sparsePages.length,
+    pagesWithoutSourceLineage: allIssues.pagesWithoutSourceLineage.length,
+    unreferencedSources: allIssues.unreferencedSources.length,
+    staleDrafts: allIssues.staleDrafts.length,
+  };
+  const issues = {
+    emptyModules: allIssues.emptyModules.slice(0, COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT),
+    sparsePages: allIssues.sparsePages.slice(0, COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT),
+    pagesWithoutSourceLineage: allIssues.pagesWithoutSourceLineage.slice(0, COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT),
+    unreferencedSources: allIssues.unreferencedSources.slice(0, COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT),
+    staleDrafts: allIssues.staleDrafts.slice(0, COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT),
+  };
   return {
     ok: true,
     kind: "community_resource_builder_health",
@@ -3032,11 +4396,16 @@ export async function buildCommunityResourceBuilderHealthReport(args: {
       missing_default_modules: missingDefaultModules,
       missing_scaffold_pages: missingScaffoldPages,
       issue_count:
-        issues.emptyModules.length +
-        issues.sparsePages.length +
-        issues.pagesWithoutSourceLineage.length +
-        issues.unreferencedSources.length +
-        issues.staleDrafts.length,
+        issueTotals.emptyModules +
+        issueTotals.sparsePages +
+        issueTotals.pagesWithoutSourceLineage +
+        issueTotals.unreferencedSources +
+        issueTotals.staleDrafts,
+      issue_counts: issueTotals,
+      issue_sample_limit: COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT,
+      issues_truncated: Object.values(issueTotals).some(
+        (count) => count > COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT,
+      ),
     },
     issues,
   };
@@ -3124,7 +4493,6 @@ export const ensureCommunityResourceWikiScaffold = mutation({
         role: "page",
         status: "draft",
         title: page.title,
-        bodyMd: normalizeOptionalText(page.bodyMd, 20_000),
         pinned: false,
         sortOrder,
         createdAt: nowMs,
@@ -3132,7 +4500,15 @@ export const ensureCommunityResourceWikiScaffold = mutation({
       });
       const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
       if (!created) throw new Error("community_resource_create_failed");
-      await upsertArchiveDocumentForResource(ctx, created);
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: args.communityId,
+        resourceId: created._id,
+        bodyMd: page.bodyMd,
+        nowMs,
+        maxChars: 20_000,
+      });
+      const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+      await upsertArchiveDocumentForResource(ctx, hydrated);
       pagesByModuleAndTitle.add(pageKey);
       pagesCreated.push(`${page.moduleName}/${page.title}`);
     }
@@ -3440,7 +4816,7 @@ export const listCommunityResources = query({
         .filter((row) => canManageResources || communityResourceIsPublishedKnowledge(row))
         .sort(compareCommunityResources)
         .slice(0, limit)
-        .map((row) => mapCommunityResourceRow(ctx, row, userIdCache, moduleNameCache)),
+        .map((row) => mapCommunityResourceRowWithBody(ctx, row, userIdCache, moduleNameCache)),
     );
   },
 });
@@ -5539,7 +6915,11 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
       updatedAt: nowMs,
     };
     if (Object.prototype.hasOwnProperty.call(args, "bodyMd")) {
-      patch.bodyMd = normalizeOptionalText(args.bodyMd, COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS) ?? undefined;
+      const normalizedBodyMd = normalizeCommunityResourceBodyMd(
+        args.bodyMd,
+        COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
+      );
+      patch.bodyChars = normalizedBodyMd ? normalizedBodyMd.trim().length : 0;
     }
     if (Object.prototype.hasOwnProperty.call(args, "url")) {
       patch.url = normalizeOptionalUrl(args.url);
@@ -5547,8 +6927,18 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
     await ctx.db.patch(existing._id as any, patch);
     const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
     if (!updated) return null;
-    await upsertArchiveDocumentForResource(ctx, updated);
-    return await mapCommunityResourceRow(ctx, updated);
+    if (Object.prototype.hasOwnProperty.call(args, "bodyMd")) {
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: updated.communityId,
+        resourceId: updated._id,
+        bodyMd: args.bodyMd,
+        nowMs,
+        maxChars: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
+      });
+    }
+    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+    await upsertArchiveDocumentForResource(ctx, hydrated);
+    return await mapCommunityResourceRow(ctx, hydrated);
   },
 });
 
@@ -5959,7 +7349,6 @@ export const saveCommunityResource = mutation({
       const nextStatus = Object.prototype.hasOwnProperty.call(payload, "resource_status")
         ? requireResourceStatusForWrite(nextStatusRaw)
         : normalizeResourceStatus(nextStatusRaw);
-      const nextBodyRaw = Object.prototype.hasOwnProperty.call(payload, "body_md") ? payload.body_md : existing.bodyMd;
       const nextUrlRaw = Object.prototype.hasOwnProperty.call(payload, "url") ? payload.url : existing.url;
       const nextFileKeyRaw = Object.prototype.hasOwnProperty.call(payload, "file_key")
         ? payload.file_key
@@ -5975,10 +7364,11 @@ export const saveCommunityResource = mutation({
         ? payload.module_id
         : existing.moduleId;
       const nextRole = normalizeResourceRole(nextRoleRaw);
-      const nextBodyMd = normalizeOptionalText(nextBodyRaw, 20_000);
+      const bodyChanged = Object.prototype.hasOwnProperty.call(payload, "body_md");
+      const nextBodyMd = bodyChanged ? normalizeCommunityResourceBodyMd(payload.body_md, 20_000) : null;
+      const nextBodyChars = bodyChanged ? String(nextBodyMd ?? "").trim().length : communityResourceBodyChars(existing);
       const nextUrl = normalizeOptionalUrl(nextUrlRaw);
       const nextFileKey = normalizeOptionalFileKey(nextFileKeyRaw);
-      const bodyChanged = Object.prototype.hasOwnProperty.call(payload, "body_md");
       const urlChanged = Object.prototype.hasOwnProperty.call(payload, "url") &&
         String(nextUrl ?? "") !== String(existing.url ?? "");
       const fileChanged = Object.prototype.hasOwnProperty.call(payload, "file_key") &&
@@ -5987,14 +7377,15 @@ export const saveCommunityResource = mutation({
         ? requireResourceSourceIngestionStatusForWrite(nextSourceIngestionStatusRaw)
         : nextRole !== "source"
           ? "not_required"
-          : bodyChanged && nextBodyMd
+          : bodyChanged && nextBodyChars > 0
           ? "ready"
           : urlChanged || fileChanged
             ? "queued"
             : normalizeResourceSourceIngestionStatus({
                 ...existing,
                 role: nextRole,
-                bodyMd: nextBodyMd ?? undefined,
+                bodyMd: bodyChanged ? nextBodyMd ?? undefined : existing.bodyMd,
+                bodyChars: nextBodyChars,
                 url: nextUrl,
                 fileKey: nextFileKey,
               });
@@ -6033,7 +7424,6 @@ export const saveCommunityResource = mutation({
         role: nextRole,
         status: nextStatus,
         title: nextTitle,
-        bodyMd: nextBodyMd,
         url: nextUrl,
         fileKey: nextFileKey,
         sourceIngestionStatus: nextSourceIngestionStatus,
@@ -6061,8 +7451,18 @@ export const saveCommunityResource = mutation({
       });
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
       if (!updated) throw new Error("community_resource_not_found");
-      await upsertArchiveDocumentForResource(ctx, updated);
-      return await mapCommunityResourceRow(ctx, updated);
+      if (bodyChanged) {
+        await writeCommunityResourceBodyContent(ctx, {
+          communityId: updated.communityId,
+          resourceId: updated._id,
+          bodyMd: nextBodyMd,
+          nowMs,
+          maxChars: 20_000,
+        });
+      }
+      const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+      await upsertArchiveDocumentForResource(ctx, hydrated);
+      return await mapCommunityResourceRow(ctx, hydrated);
     }
 
     const communityIdRaw = args.communityId ?? (payload.community_id as any);
@@ -6086,7 +7486,7 @@ export const saveCommunityResource = mutation({
         ? "review"
         : "published";
     const title = normalizeName(payload.title);
-    const bodyMd = normalizeOptionalText(payload.body_md, 20_000);
+    const bodyMd = normalizeCommunityResourceBodyMd(payload.body_md, 20_000);
     const url = normalizeOptionalUrl(payload.url);
     const fileKey = normalizeOptionalFileKey(payload.file_key);
     const sourceIngestionStatus = Object.prototype.hasOwnProperty.call(payload, "source_ingestion_status")
@@ -6123,7 +7523,6 @@ export const saveCommunityResource = mutation({
       role,
       status,
       title,
-      bodyMd,
       url,
       fileKey,
       sourceIngestionStatus,
@@ -6152,7 +7551,17 @@ export const saveCommunityResource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
-    await upsertArchiveDocumentForResource(ctx, created);
+    if (bodyMd) {
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: community._id,
+        resourceId: created._id,
+        bodyMd,
+        nowMs,
+        maxChars: 20_000,
+      });
+    }
+    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+    await upsertArchiveDocumentForResource(ctx, hydrated);
     if (status === "published") {
       await recordCommunityActivityEventBestEffort({
         ctx,
@@ -6160,13 +7569,13 @@ export const saveCommunityResource = mutation({
         type: "resource_added",
         actorUserId: args.userId,
         targetType: "resource",
-        targetId: created._id,
-        targetTitle: created.title,
-        dedupeKey: `resource_added:${normalizeIdValue(created._id)}`,
+        targetId: hydrated._id,
+        targetTitle: hydrated.title,
+        dedupeKey: `resource_added:${normalizeIdValue(hydrated._id)}`,
         nowMs,
       });
     }
-    return await mapCommunityResourceRow(ctx, created);
+    return await mapCommunityResourceRow(ctx, hydrated);
   },
 });
 
@@ -6185,7 +7594,8 @@ export const createCommunityResourcePageDraftFromSource = mutation({
     (args as { userId?: any }).userId = userId;
     const sourceResourceId = String(args.sourceResourceId ?? "").trim();
     if (!sourceResourceId) throw new Error("community_source_resource_id_required");
-    const source = (await ctx.db.get(sourceResourceId as any)) as CommunityResourceLike | null;
+    const sourceRow = (await ctx.db.get(sourceResourceId as any)) as CommunityResourceLike | null;
+    const source = await hydrateCommunityResourceBody(ctx, sourceRow) ?? sourceRow;
     if (!source) throw new Error("community_source_resource_not_found");
     await requireCommunityManager({
       ctx,
@@ -6214,7 +7624,6 @@ export const createCommunityResourcePageDraftFromSource = mutation({
       status: "draft",
       sourceResourceId: source._id,
       title: source.title,
-      bodyMd: normalizeOptionalText(buildPageDraftBodyFromSource(source), 20_000),
       pinned: false,
       sortOrder,
       createdAt: nowMs,
@@ -6222,8 +7631,16 @@ export const createCommunityResourcePageDraftFromSource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
-    await upsertArchiveDocumentForResource(ctx, created);
-    return await mapCommunityResourceRow(ctx, created);
+    await writeCommunityResourceBodyContent(ctx, {
+      communityId: source.communityId,
+      resourceId: created._id,
+      bodyMd: buildPageDraftBodyFromSource(source),
+      nowMs,
+      maxChars: 20_000,
+    });
+    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+    await upsertArchiveDocumentForResource(ctx, hydrated);
+    return await mapCommunityResourceRow(ctx, hydrated);
   },
 });
 
@@ -6313,6 +7730,7 @@ export const deleteCommunityResource = mutation({
       communityId: resource.communityId,
       userId: args.userId,
     });
+    await deleteCommunityResourceBodyContent(ctx, resource._id);
     await ctx.db.delete(resource._id as any);
     await deleteArchiveDocumentBySource(ctx, {
       communityId: resource.communityId,

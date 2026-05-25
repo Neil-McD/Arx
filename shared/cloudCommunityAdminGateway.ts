@@ -1364,6 +1364,68 @@ export async function ensureCloudCommunityResourceWikiScaffold<SessionT, TResult
   return payload as TResult;
 }
 
+export async function approveCloudCommunityResourceBuilderChangeset<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    changesetId: string;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:approveCommunityResourceBuilderChangeset" as any, {
+    authSubject,
+    communityId: params.communityId,
+    changesetId: params.changesetId,
+  });
+  return payload as TResult;
+}
+
+export async function getCloudCommunityResourceBuilderChangesetStatus<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    changesetId: string;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunityResourceBuilderChangesetStatus" as any, {
+    authSubject,
+    communityId: params.communityId,
+    changesetId: params.changesetId,
+  });
+  return payload as TResult;
+}
+
+export async function applyCloudCommunityResourceBuilderChangeset<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    changesetId: string;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:applyCommunityResourceBuilderChangeset" as any, {
+    authSubject,
+    communityId: params.communityId,
+    changesetId: params.changesetId,
+  });
+  return payload as TResult;
+}
+
+export async function rejectCloudCommunityResourceBuilderChangeset<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    changesetId: string;
+    reason?: string | null;
+  },
+): Promise<TResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:rejectCommunityResourceBuilderChangeset" as any, {
+    authSubject,
+    communityId: params.communityId,
+    changesetId: params.changesetId,
+    reason: String(params.reason ?? "").trim() || undefined,
+  });
+  return payload as TResult;
+}
+
 export async function ingestCloudCommunitySourceLinks<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;

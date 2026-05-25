@@ -10,11 +10,15 @@ function read(path: string): string {
 
 const packageJson = read("package.json");
 const resources = read("convex/communityResources.ts");
+const schema = read("convex/schema.ts");
 const community = read("convex/community.ts");
 const experience = read("convex/communityExperience.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const launchModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const app = read("apps/web/src/App.tsx");
+const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
+const mutationEvents = read("shared/communityResourceMutationEvents.ts");
+const toolRegistry = read("shared/toolRegistry.ts");
 
 assert.match(
   packageJson,
@@ -29,6 +33,11 @@ for (const exportName of [
   "editCommunityResourceBuilderResource",
   "getCommunityResourceBuilderHealth",
   "ensureCommunityResourceWikiScaffold",
+  "stageCommunityResourceBuilderChangeset",
+  "getCommunityResourceBuilderChangesetStatus",
+  "approveCommunityResourceBuilderChangeset",
+  "rejectCommunityResourceBuilderChangeset",
+  "applyCommunityResourceBuilderChangeset",
 ] as const) {
   assert.match(resources, new RegExp(`export const ${exportName} = (query|mutation)\\(`));
   assert.match(community, new RegExp(`export const ${exportName} = ${exportName}Impl`));
@@ -60,6 +69,32 @@ assert.match(
   /getCommunityResourceBuilderHealth[\s\S]*await requireCommunityManager/,
   "builder health must be owner/admin/manager gated",
 );
+assert.match(
+  resources,
+  /stageCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
+  "changeset staging must be owner/admin/manager gated",
+);
+assert.match(
+  resources,
+  /approveCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
+  "changeset approval must be owner/admin/manager gated",
+);
+assert.match(
+  resources,
+  /rejectCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
+  "changeset rejection must be owner/admin/manager gated",
+);
+assert.match(
+  resources,
+  /applyCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
+  "changeset apply must be owner/admin/manager gated",
+);
+
+assert.match(
+  schema,
+  /communityResourceBuilderChangesets:[\s\S]*status: v\.union\([\s\S]*v\.literal\("staged"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("applied"\)[\s\S]*operations: v\.array\(v\.any\(\)\)[\s\S]*preflight: v\.any\(\)[\s\S]*approvedAt: v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId: v\.optional\(v\.id\("users"\)\)[\s\S]*rejectedAt: v\.optional\(v\.number\(\)\)[\s\S]*rejectedByUserId: v\.optional\(v\.id\("users"\)\)/,
+  "changesets should persist explicit approval/rejection state separately from resource rows",
+);
 
 assert.match(
   resources,
@@ -70,6 +105,11 @@ assert.match(
   resources,
   /if \(next === "published" && !args\.confirmPublish\)[\s\S]*community_resource_publish_confirmation_required/,
   "publishing through builder tools should require explicit confirmation",
+);
+assert.match(
+  resources,
+  /normalizeChangesetPageStatus[\s\S]*community_resource_changeset_publish_deferred/,
+  "changeset v1 should not allow publishing as part of the staged patch",
 );
 assert.match(
   resources,
@@ -118,6 +158,21 @@ assert.match(
 );
 assert.match(
   resources,
+  /COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT = 50/,
+  "builder list should default to a compact directory payload",
+);
+assert.match(
+  resources,
+  /COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT = 250/,
+  "builder list should have a hard max suited for context budgeting",
+);
+assert.match(
+  resources,
+  /COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50/,
+  "builder health should cap per-bucket issue samples",
+);
+assert.match(
+  resources,
   /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES/,
   "health check should know the default wiki modules",
 );
@@ -130,6 +185,21 @@ assert.match(
   resources,
   /missing_scaffold_pages: missingScaffoldPages/,
   "health summary should expose missing scaffold pages",
+);
+assert.match(
+  resources,
+  /issue_counts: issueTotals/,
+  "health summary should preserve complete issue counts when issue arrays are capped",
+);
+assert.match(
+  resources,
+  /issues_truncated:/,
+  "health summary should reveal when issue samples are capped",
+);
+assert.match(
+  resources,
+  /listCommunityResourceBuilderDirectory[\s\S]*health: await buildCommunityResourceBuilderHealthReport/,
+  "builder list should include the deterministic health summary",
 );
 assert.match(
   resources,
@@ -211,6 +281,101 @@ assert.doesNotMatch(
   builderListBody,
   /communityResourceIsPublishedKnowledge/,
   "builder directory should not reuse member published-only filtering",
+);
+assert.doesNotMatch(
+  builderListBody,
+  /mapCommunityResourceRow|body_md|bodyMd/,
+  "builder directory list must stay compact and must not expose full resource bodies",
+);
+assert.match(
+  builderListBody,
+  /mapCompactCommunityResourceBuilderListRow/,
+  "builder directory list should use the compact list-row mapper",
+);
+assert.match(
+  builderListBody,
+  /truncated: resources\.length > limit/,
+  "builder directory list should report truncation",
+);
+assert.match(
+  toolRegistry,
+  /COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA[\s\S]*maximum: 250/,
+  "builder list tool schema should cap requested list size at 250",
+);
+assert.match(
+  toolRegistry,
+  /community_resource_builder_list limit", 1, 250/,
+  "builder list argument normalization should cap list size at 250",
+);
+assert.match(
+  toolRegistry,
+  /community_resource_builder_stage_changeset[\s\S]*COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA/,
+  "stage changeset tool should be registered",
+);
+assert.match(
+  toolRegistry,
+  /community_resource_builder_apply_changeset[\s\S]*COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
+  "apply changeset tool should be registered",
+);
+assert.match(
+  resources,
+  /stageCommunityResourceBuilderChangeset[\s\S]*buildCommunityResourceBuilderChangesetPreflight[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
+  "staging should validate and store a changeset without applying resource writes",
+);
+assert.match(
+  resources,
+  /getCommunityResourceBuilderChangesetStatus[\s\S]*await requireCommunityManager[\s\S]*community_resource_builder_changeset_status/,
+  "changeset status lookup should hydrate approval UI from canonical server state",
+);
+assert.match(
+  resources,
+  /getCommunityResourceBuilderChangesetStatus[\s\S]*COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS[\s\S]*approved_by_current_user/,
+  "changeset status lookup should expose effective expiry and current-user approval state",
+);
+assert.match(
+  resources,
+  /buildCommunityResourceBuilderChangesetPreview[\s\S]*preview_items[\s\S]*preview_total_count[\s\S]*warning_count/,
+  "staging should return a bounded changeset preview for builder approval UI",
+);
+assert.match(
+  resources,
+  /approveCommunityResourceBuilderChangeset[\s\S]*changeset\.status !== "staged"[\s\S]*status: "approved"[\s\S]*approvedByUserId: userId/,
+  "approval should be an explicit server-side state transition",
+);
+assert.match(
+  resources,
+  /rejectCommunityResourceBuilderChangeset[\s\S]*status: "rejected"[\s\S]*rejectedByUserId: userId/,
+  "rejection should be an explicit server-side state transition",
+);
+assert.match(
+  resources,
+  /applyCommunityResourceBuilderChangeset[\s\S]*changeset\.status !== "approved"[\s\S]*community_resource_changeset_approval_required[\s\S]*applyCommunityResourceBuilderChangesetOperations[\s\S]*status: "applied"/,
+  "apply should only execute an approved changeset and then mark it applied",
+);
+assert.match(
+  resources,
+  /!changeset\.approvedByUserId \|\| String\(changeset\.approvedByUserId\) !== String\(userId\)[\s\S]*community_resource_changeset_approved_manager_required/,
+  "apply should require the approving manager identity",
+);
+assert.match(
+  mutationEvents,
+  /COMMUNITY_RESOURCES_MUTATED_EVENT = "polynet:community-resources-mutated"/,
+  "resource mutation event should have one shared browser event name",
+);
+assert.match(
+  mutationEvents,
+  /readCommunityResourcesMutatedEventDetail[\s\S]*communityId[\s\S]*dispatchCommunityResourcesMutated/,
+  "resource mutation event should validate community id before frontend refresh",
+);
+assert.match(
+  runtimeTimeline,
+  /applyCloudCommunityResourceBuilderChangeset[\s\S]*getCloudCommunityResourceBuilderChangesetStatus[\s\S]*status === "applied"[\s\S]*dispatchCommunityResourcesMutated/,
+  "approval card should verify applied changeset state before dispatching resource refresh",
+);
+assert.match(
+  app,
+  /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*loadCommunityResourceModules[\s\S]*loadCommunityResources/,
+  "workspace should refresh modules and resources after a verified resource mutation",
 );
 
 console.log("community_resource_builder_tools_contract_proof: ok");

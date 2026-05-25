@@ -787,18 +787,23 @@ export function WebIntegrationsSettingsSection(
                 {effectiveSkills.map((effectiveSkill) => {
                   const install = effectiveSkill.personal_install;
                   const attachment = effectiveSkill.community_attachment;
+                  const isPlatform = effectiveSkill.scope === "platform";
                   const isUpdating =
                     install ? updatingUserPlatformSkillInstallId === install.id : false;
                   const isRemoving =
                     install ? removingUserPlatformSkillInstallId === install.id : false;
                   const isEditing =
                     install ? editingUserPlatformSkillInstallId === install.id : false;
-                  const scopeLabel = attachment
+                  const scopeLabel = isPlatform
+                    ? "Platform default"
+                    : attachment
                     ? install
                       ? "Personal + community"
                       : "Selected community"
                     : "Personal baseline";
-                  const statusLabel = effectiveSkill.enabled_for_current_context
+                  const statusLabel = isPlatform
+                    ? "Built in"
+                    : effectiveSkill.enabled_for_current_context
                     ? "Enabled"
                     : "Disabled";
                   return (
@@ -820,6 +825,11 @@ export function WebIntegrationsSettingsSection(
                             >
                               {statusLabel}
                             </span>
+                            {isPlatform ? (
+                              <span className="community-app-status-badge">
+                                Platform
+                              </span>
+                            ) : null}
                             {attachment ? (
                               <span className="community-app-status-badge">
                                 Community
@@ -833,7 +843,7 @@ export function WebIntegrationsSettingsSection(
                               : ""}
                           </div>
                         </div>
-                        {install ? (
+                        {install && effectiveSkill.can_edit ? (
                           <div className="agent-capability-toolbar-actions">
                             <button
                               type="button"
@@ -901,7 +911,13 @@ export function WebIntegrationsSettingsSection(
                             Invocation
                           </span>
                           <span className="agent-capability-metadata-value">
-                            Explicit <code>${effectiveSkill.skill.mentionToken}</code>
+                            {isPlatform ? (
+                              "Available by default"
+                            ) : (
+                              <>
+                                Explicit <code>${effectiveSkill.skill.mentionToken}</code>
+                              </>
+                            )}
                           </span>
                         </div>
                       </div>

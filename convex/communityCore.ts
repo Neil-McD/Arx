@@ -210,6 +210,9 @@ export type CommunityResourceLike = {
   sourceResourceId?: any;
   title: string;
   bodyMd?: string;
+  bodyChars?: number;
+  bodyHash?: string;
+  bodyMigratedAt?: number;
   url?: string;
   fileKey?: string;
   sourceIngestionStatus?: string;
@@ -562,7 +565,7 @@ export function normalizeResourceSourceIngestionStatus(
   const explicit = parseResourceSourceIngestionStatusForWrite(row.sourceIngestionStatus);
   if (explicit) return explicit;
   if (normalizeResourceRole(row.role) !== "source") return "not_required";
-  if (String(row.bodyMd ?? "").trim()) return "ready";
+  if (communityResourceBodyChars(row) > 0) return "ready";
   if (
     String(row.url ?? "").trim() ||
     String(row.fileKey ?? "").trim() ||
@@ -583,17 +586,24 @@ export function normalizeResourceSourceIngestionKind(
   return "manual";
 }
 
+export function communityResourceBodyChars(row: CommunityResourceLike): number {
+  const legacyBody = String(row.bodyMd ?? "").trim();
+  if (legacyBody) return legacyBody.length;
+  const chars = Number(row.bodyChars ?? 0);
+  return Number.isFinite(chars) && chars > 0 ? Math.floor(chars) : 0;
+}
+
 export function communityResourceSourceHasReadyText(row: CommunityResourceLike): boolean {
   return normalizeResourceRole(row.role) === "source" &&
     normalizeResourceSourceIngestionStatus(row) === "ready" &&
-    Boolean(String(row.bodyMd ?? "").trim());
+    communityResourceBodyChars(row) > 0;
 }
 
 export function communityResourceHasUsableKnowledgeContent(row: CommunityResourceLike): boolean {
   return Boolean(
     String(row.title ?? "").trim() &&
       (
-        String(row.bodyMd ?? "").trim() ||
+        communityResourceBodyChars(row) > 0 ||
         String(row.url ?? "").trim() ||
         String(row.fileKey ?? "").trim()
       ),
@@ -972,6 +982,7 @@ export async function mapCommunityResourceRow(
     source_resource_id: row.sourceResourceId ? String(row.sourceResourceId) : null,
     title: row.title,
     body_md: row.bodyMd ?? null,
+    body_chars: communityResourceBodyChars(row),
     url: row.url ?? null,
     file_key: row.fileKey ?? null,
     source_ingestion_status: normalizeResourceSourceIngestionStatus(row),

@@ -42,6 +42,7 @@ export function WebWorkspaceThreadMessageList(
           {!isUser && message.runtimeEvents.length > 0 ? (
             <RuntimeLiveTimeline
               events={message.runtimeEvents}
+              session={props.session}
               renderReasoningMarkdown={(text) =>
                 props.renderMarkdown(text, {
                   onCopyCode: props.copyTextToClipboard,

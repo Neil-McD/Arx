@@ -150,6 +150,76 @@ const COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 250,
+    },
+  },
+};
+
+const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    resource_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+      description: "Draft, review, published, failed, or source resource id.",
+    },
+    module_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+      description: "Resource module id.",
+    },
+  },
+};
+
+const COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary", "operations"],
+  properties: {
+    summary: {
+      type: "string",
+      minLength: 1,
+      maxLength: 2000,
+      description: "Short explanation of the proposed resource refactor or draft work.",
+    },
+    operations: {
+      type: "array",
+      minItems: 1,
+      maxItems: 25,
+      description:
+        "Proposed resource changes. Supported op values: create_module, edit_module, create_page, edit_page, move_resource, link_source_to_page.",
+      items: {
+        type: "object",
+        additionalProperties: true,
+      },
+    },
+  },
+};
+
+const COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["changeset_id"],
+  properties: {
+    changeset_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+      description: "Previously staged community resource builder changeset id.",
+    },
+  },
+};
+
 const EMPTY_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -551,6 +621,36 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "community_resources_search",
     description: "Search the active community's published resources and return resource paths, directory URIs, snippets, and metadata.",
     inputSchema: COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA,
+  },
+  community_resource_builder_list: {
+    name: "community_resource_builder_list",
+    description: "Manager-only Resources Architect tool. List the active community's full resource builder directory, including modules, drafts, review items, source inbox items, and published pages.",
+    inputSchema: COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA,
+  },
+  community_resource_builder_read: {
+    name: "community_resource_builder_read",
+    description: "Manager-only Resources Architect tool. Read one resource builder item by resource_id or module_id, including draft/source metadata hidden from member resource tools.",
+    inputSchema: COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA,
+  },
+  community_resource_builder_health: {
+    name: "community_resource_builder_health",
+    description: "Manager-only Resources Architect tool. Inspect resource architecture health, missing scaffold, sparse pages, missing source lineage, stale drafts, and unreferenced sources.",
+    inputSchema: EMPTY_TOOL_SCHEMA,
+  },
+  community_resource_builder_ensure_scaffold: {
+    name: "community_resource_builder_ensure_scaffold",
+    description: "Manager-only Resources Architect tool. Idempotently create missing default resource modules and scaffold pages, then return fresh health.",
+    inputSchema: EMPTY_TOOL_SCHEMA,
+  },
+  community_resource_builder_stage_changeset: {
+    name: "community_resource_builder_stage_changeset",
+    description: "Manager-only Resources Architect tool. Validate and stage a proposed resource changeset without mutating modules or pages.",
+    inputSchema: COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA,
+  },
+  community_resource_builder_apply_changeset: {
+    name: "community_resource_builder_apply_changeset",
+    description: "Manager-only Resources Architect tool. Apply a previously staged resource changeset after the builder has explicitly approved it.",
+    inputSchema: COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA,
   },
   community_search: {
     name: "community_search",
@@ -1091,6 +1191,62 @@ export function normalizeToolArguments(
     return {
       query: query.slice(0, 240),
       ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_resource_builder_list") {
+    const limit = normalizeBoundedInteger(args.limit, "community_resource_builder_list limit", 1, 250);
+    return {
+      ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_resource_builder_read") {
+    const resourceId = normalizeString(args.resource_id);
+    const moduleId = normalizeString(args.module_id);
+    if (!resourceId && !moduleId) {
+      throw new Error("community_resource_builder_read requires resource_id or module_id.");
+    }
+    if (resourceId && moduleId) {
+      throw new Error("community_resource_builder_read accepts only one of resource_id or module_id.");
+    }
+    return {
+      ...(resourceId ? { resourceId: resourceId.slice(0, 160) } : null),
+      ...(moduleId ? { moduleId: moduleId.slice(0, 160) } : null),
+    };
+  }
+  if (
+    toolName === "community_resource_builder_health" ||
+    toolName === "community_resource_builder_ensure_scaffold"
+  ) {
+    return {};
+  }
+  if (toolName === "community_resource_builder_stage_changeset") {
+    const summary = normalizeString(args.summary);
+    if (!summary) throw new Error("community_resource_builder_stage_changeset requires summary.");
+    if (!Array.isArray(args.operations)) {
+      throw new Error("community_resource_builder_stage_changeset requires operations.");
+    }
+    if (args.operations.length < 1) {
+      throw new Error("community_resource_builder_stage_changeset operations cannot be empty.");
+    }
+    if (args.operations.length > 25) {
+      throw new Error("community_resource_builder_stage_changeset supports at most 25 operations.");
+    }
+    return {
+      summary: summary.slice(0, 2000),
+      operations: args.operations.map((operation) =>
+        operation && typeof operation === "object" && !Array.isArray(operation)
+          ? operation
+          : {},
+      ),
+    };
+  }
+  if (toolName === "community_resource_builder_apply_changeset") {
+    const changesetId = normalizeString(args.changeset_id);
+    if (!changesetId) {
+      throw new Error("community_resource_builder_apply_changeset requires changeset_id.");
+    }
+    return {
+      changesetId: changesetId.slice(0, 160),
     };
   }
   if (toolName === "get_active_community_context") {

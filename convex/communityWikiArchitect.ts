@@ -18,6 +18,7 @@ import {
   type CommunityLike,
   type CommunityResourceLike,
   type CommunityResourceModuleLike,
+  communityResourceBodyChars,
   communityResourceSourceHasReadyText,
   normalizeIdValue,
   normalizeName,
@@ -36,13 +37,19 @@ import {
 import {
   buildCommunityResourceBuilderHealthReport,
 } from "./communityResources";
+import {
+  hydrateCommunityResourceBody,
+  writeCommunityResourceBodyContent,
+} from "./communityResourceContent";
 
 const COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES = 500;
 const COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS = 3600;
 const COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS = 80;
+const COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES = 240;
 const COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS = 40_000;
 const COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS = 600;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_PAGES = 8;
+const COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT = 200;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_OUTPUT_TOKENS = 4200;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_CHARS = 12_000;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_BODY_CHARS = 20_000;
@@ -134,7 +141,7 @@ function buildArchitectSourceCard(args: {
     source_external_name: String(source.sourceExternalName ?? "").trim() || null,
     source_external_provider: String(source.sourceExternalProvider ?? "").trim() || null,
     source_external_url: externalUrl || null,
-    length_chars: String(source.bodyMd ?? "").trim().length,
+    length_chars: communityResourceBodyChars(source),
     excerpt: buildSourceExcerpt(source.bodyMd),
     assigned_pages: args.assignedPages,
     created_at: toIsoString(source.createdAt),
@@ -144,6 +151,7 @@ function buildArchitectSourceCard(args: {
 
 function buildArchitectSourceWindow(args: {
   readySources: CommunityResourceLike[];
+  readySourcesTotal?: number;
   assignedPagesBySourceId: Map<string, string[]>;
   builderIntent: string | null;
 }): {
@@ -197,9 +205,23 @@ function buildArchitectSourceWindow(args: {
   return {
     sourceCards,
     visibleSourceIds: sourceCards.map((card) => String(card.id ?? "")).filter(Boolean),
-    sourcesOmitted: Math.max(0, args.readySources.length - sourceCards.length),
+    sourcesOmitted: Math.max(0, (args.readySourcesTotal ?? args.readySources.length) - sourceCards.length),
     budgetChars: COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS,
     usedChars,
+  };
+}
+
+function compareArchitectSourceCandidates(
+  assignedPagesBySourceId: Map<string, string[]>,
+): (left: CommunityResourceLike, right: CommunityResourceLike) => number {
+  return (left, right) => {
+    const leftAssigned = (assignedPagesBySourceId.get(normalizeIdValue(left._id))?.length ?? 0) > 0 ? 1 : 0;
+    const rightAssigned = (assignedPagesBySourceId.get(normalizeIdValue(right._id))?.length ?? 0) > 0 ? 1 : 0;
+    if (leftAssigned !== rightAssigned) return leftAssigned - rightAssigned;
+    const leftFreshness = Number(left.sourceIngestedAt ?? left.updatedAt ?? left.createdAt);
+    const rightFreshness = Number(right.sourceIngestedAt ?? right.updatedAt ?? right.createdAt);
+    if (leftFreshness !== rightFreshness) return rightFreshness - leftFreshness;
+    return normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id));
   };
 }
 
@@ -820,8 +842,11 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
       .filter((row) => normalizeResourceRole(row.role) === "source")
       .slice()
       .sort((left, right) => right.createdAt - left.createdAt);
-    const readySources = allSources.filter(communityResourceSourceHasReadyText);
-    const pages = allPages.slice(0, COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES);
+    const pages = await Promise.all(
+      allPages
+        .slice(0, COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES)
+        .map((page) => hydrateCommunityResourceBody(ctx, page).then((hydrated) => hydrated ?? page)),
+    );
     const assignedPagesBySourceId = new Map<string, string[]>();
     for (const page of pages) {
       const sourceId = normalizeIdValue(page.sourceResourceId ?? "");
@@ -830,9 +855,19 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
       rows.push(normalizeIdValue(page._id));
       assignedPagesBySourceId.set(sourceId, rows);
     }
+    const readySourceRows = allSources.filter(communityResourceSourceHasReadyText);
+    const readySourceCandidates = readySourceRows
+      .slice()
+      .sort(compareArchitectSourceCandidates(assignedPagesBySourceId))
+      .slice(0, COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES);
+    const readySources = await Promise.all(
+      readySourceCandidates
+        .map((source) => hydrateCommunityResourceBody(ctx, source).then((hydrated) => hydrated ?? source)),
+    );
     const builderIntent = normalizeBuilderIntent(args.builderIntent);
     const sourceWindow = buildArchitectSourceWindow({
       readySources,
+      readySourcesTotal: readySourceRows.length,
       assignedPagesBySourceId,
       builderIntent,
     });
@@ -857,7 +892,7 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
         pages_visible: pages.length,
         pages_truncated: allPages.length > pages.length,
         sources_total: allSources.length,
-        ready_sources_total: readySources.length,
+        ready_sources_total: readySourceRows.length,
         sources_pending_ingestion: allSources.filter((source) => {
           const status = normalizeResourceSourceIngestionStatus(source);
           return status === "queued" || status === "processing";
@@ -887,7 +922,7 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
           updated_at: toIsoString(page.updatedAt),
           updated_at_ms: page.updatedAt,
           source_resource_id: normalizeIdValue(page.sourceResourceId ?? "") || null,
-          body_chars: String(page.bodyMd ?? "").trim().length,
+          body_chars: communityResourceBodyChars(page),
         })),
         source_inbox: sourceWindow.sourceCards,
       },
@@ -1209,14 +1244,6 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
         status: "draft",
         ...(source ? { sourceResourceId: source._id } : {}),
         title: normalizeName(draft.title),
-        bodyMd: normalizeOptionalText(
-          buildAppliedDraftScaffoldBody({
-            title: draft.title,
-            purpose: draft.purpose,
-            hasSource: Boolean(source),
-          }),
-          20_000,
-        ),
         pinned: false,
         sortOrder,
         createdAt: nowMs,
@@ -1224,16 +1251,28 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       });
       const createdPage = (await ctx.db.get(resourceId as any)) as CommunityResourceLike | null;
       if (!createdPage) throw new Error("community_wiki_architect_page_create_failed");
-      await upsertArchiveDocumentForResource(ctx, createdPage);
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: args.communityId,
+        resourceId: createdPage._id,
+        bodyMd: buildAppliedDraftScaffoldBody({
+          title: draft.title,
+          purpose: draft.purpose,
+          hasSource: Boolean(source),
+        }),
+        nowMs,
+        maxChars: 20_000,
+      });
+      const hydratedCreatedPage = await hydrateCommunityResourceBody(ctx, createdPage) ?? createdPage;
+      await upsertArchiveDocumentForResource(ctx, hydratedCreatedPage);
       await patchSourceModuleIfNeeded(source, module._id);
       if (source && draft.source_resource_id) {
         sourceBackedPages.push({
-          page: createdPage,
+          page: hydratedCreatedPage,
           source: sourceById.get(draft.source_resource_id) ?? source,
         });
       }
       pageKeys.add(pageKey);
-      pagesCreated.push(`${module.name}/${createdPage.title}`);
+      pagesCreated.push(`${module.name}/${hydratedCreatedPage.title}`);
     }
 
     for (const update of proposal.drafts_updated) {
@@ -1328,20 +1367,41 @@ export const buildCommunityResourceContentWriterRunContextInternal = internalQue
         .collect() as Promise<CommunityResourceLike[]>,
     ]);
     const moduleNameById = buildModuleNameById(modules);
-    const readySourceById = new Map(
+    const pageCandidates = await Promise.all(
       resources
-        .filter(communityResourceSourceHasReadyText)
-        .map((source) => [normalizeIdValue(source._id), source]),
+        .filter((page) =>
+          normalizeResourceRole(page.role) === "page" &&
+          normalizeResourceStatus(page.status) === "draft" &&
+          Boolean(normalizeIdValue(page.sourceResourceId ?? "")),
+        )
+        .slice()
+        .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt)
+        .slice(0, COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT)
+        .map((page) => hydrateCommunityResourceBody(ctx, page).then((hydrated) => hydrated ?? page)),
     );
-    const pages = resources
+    const pages = pageCandidates
       .filter((page) =>
-        normalizeResourceRole(page.role) === "page" &&
-        normalizeResourceStatus(page.status) === "draft" &&
-        Boolean(normalizeIdValue(page.sourceResourceId ?? "")) &&
         isResourceDraftScaffoldBody(page.bodyMd),
       )
       .slice()
       .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt);
+    const neededSourceIds = new Set(
+      pages
+        .slice(0, limit)
+        .map((page) => normalizeIdValue(page.sourceResourceId ?? ""))
+        .filter(Boolean),
+    );
+    const readySources = await Promise.all(
+      resources
+        .filter((source) =>
+          neededSourceIds.has(normalizeIdValue(source._id)) &&
+          communityResourceSourceHasReadyText(source),
+        )
+        .map((source) => hydrateCommunityResourceBody(ctx, source).then((hydrated) => hydrated ?? source)),
+    );
+    const readySourceById = new Map(
+      readySources.map((source) => [normalizeIdValue(source._id), source]),
+    );
     const candidates = pages
       .map((page) => {
         const sourceId = normalizeIdValue(page.sourceResourceId ?? "");
@@ -1394,10 +1454,12 @@ export const patchCommunityResourceContentDraftInternal = internalMutation({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const [page, source] = await Promise.all([
+    const [pageRow, sourceRow] = await Promise.all([
       ctx.db.get(args.pageId as any) as Promise<CommunityResourceLike | null>,
       ctx.db.get(args.sourceResourceId as any) as Promise<CommunityResourceLike | null>,
     ]);
+    const page = await hydrateCommunityResourceBody(ctx, pageRow) ?? pageRow;
+    const source = await hydrateCommunityResourceBody(ctx, sourceRow) ?? sourceRow;
     if (!page || normalizeIdValue(page.communityId) !== normalizeIdValue(args.communityId)) {
       throw new Error("community_resource_content_writer_page_missing");
     }
@@ -1428,18 +1490,25 @@ export const patchCommunityResourceContentDraftInternal = internalMutation({
     }
     const nowMs = Date.now();
     await ctx.db.patch(page._id as any, {
-      bodyMd,
       status: "review",
       updatedAt: nowMs,
     });
     const updated = (await ctx.db.get(page._id as any)) as CommunityResourceLike | null;
     if (!updated) throw new Error("community_resource_content_writer_page_not_found");
-    await upsertArchiveDocumentForResource(ctx, updated);
+    await writeCommunityResourceBodyContent(ctx, {
+      communityId: args.communityId,
+      resourceId: updated._id,
+      bodyMd,
+      nowMs,
+      maxChars: COMMUNITY_RESOURCE_CONTENT_WRITER_BODY_CHARS,
+    });
+    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+    await upsertArchiveDocumentForResource(ctx, hydrated);
     return {
-      id: normalizeIdValue(updated._id),
-      title: String(updated.title ?? ""),
-      status: normalizeResourceStatus(updated.status),
-      source_resource_id: normalizeIdValue(updated.sourceResourceId ?? "") || null,
+      id: normalizeIdValue(hydrated._id),
+      title: String(hydrated.title ?? ""),
+      status: normalizeResourceStatus(hydrated.status),
+      source_resource_id: normalizeIdValue(hydrated.sourceResourceId ?? "") || null,
     };
   },
 });

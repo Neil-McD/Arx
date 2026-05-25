@@ -81,6 +81,7 @@ import {
   removePersonalMountFromEffectiveMcpApps,
 } from "../../../shared/effectiveMcpApps";
 import { buildEffectiveSkills } from "../../../shared/effectiveSkills";
+import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../shared/platformSkills";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
 import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
 import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceSurfaceController";
@@ -456,6 +457,10 @@ import { useCommunityAgentLandingLifecycle } from "../../../shared/useCommunityA
 import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
 import { useCommunityMemberRosterLifecycle } from "../../../shared/useCommunityMemberRosterLifecycle";
 import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
+import {
+  COMMUNITY_RESOURCES_MUTATED_EVENT,
+  readCommunityResourcesMutatedEventDetail,
+} from "../../../shared/communityResourceMutationEvents";
 import { useCommunityEventsTabLifecycle } from "../../../shared/useCommunityEventsTabLifecycle";
 import {
   useCommunityEventsController,
@@ -2379,6 +2384,7 @@ export default function App() {
   });
 
   const {
+    loadCommunityResourceModules,
     loadCommunityResources,
     openNewModuleModal,
     handleEditModule,
@@ -4083,10 +4089,16 @@ export default function App() {
   const effectiveSkillsForSettings = useMemo(() => {
     if (!effectiveSkillsError) return effectiveSkills;
     return buildEffectiveSkills({
+      platformSkills:
+        activeCommunityId && canManageResourcesActiveCommunity
+          ? COMMUNITY_MANAGER_PLATFORM_SKILLS
+          : [],
       personalSkills: userPlatformSkills,
       communitySkills: communitySkillAttachments,
     });
   }, [
+    activeCommunityId,
+    canManageResourcesActiveCommunity,
     communitySkillAttachments,
     effectiveSkills,
     effectiveSkillsError,
@@ -4712,6 +4724,37 @@ export default function App() {
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
   }, [activeCommunityId]);
+
+  useEffect(() => {
+    const handleCommunityResourcesMutated = (event: Event) => {
+      const detail = readCommunityResourcesMutatedEventDetail(event);
+      if (!detail) return;
+      const currentCommunityId = activeCommunityIdRef.current ?? activeCommunityId;
+      if (!currentCommunityId || detail.communityId !== currentCommunityId) return;
+      const activeSession = sessionRef.current ?? session;
+      if (!activeSession) return;
+      void (async () => {
+        try {
+          await Promise.all([
+            loadCommunityResourceModules(detail.communityId, activeSession),
+            loadCommunityResources(detail.communityId, activeSession),
+          ]);
+        } catch (error) {
+          console.warn("[community-resources] failed to refresh after resource mutation:", error);
+        }
+      })();
+    };
+    window.addEventListener(COMMUNITY_RESOURCES_MUTATED_EVENT, handleCommunityResourcesMutated);
+    return () => {
+      window.removeEventListener(COMMUNITY_RESOURCES_MUTATED_EVENT, handleCommunityResourcesMutated);
+    };
+  }, [
+    activeCommunityId,
+    loadCommunityResourceModules,
+    loadCommunityResources,
+    session,
+    sessionRef,
+  ]);
 
   useCommunityAgentLandingLifecycle<AuthSession>({
     ...authenticatedSessionArg,
@@ -8928,6 +8971,9 @@ export default function App() {
         intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
         emptyState: "Attach the first skill package to this community. Attached skills become available when members explicitly mention them in this lens.",
         addButtonLabel: "Browse skills",
+        platformSkills: canManageResourcesActiveCommunity
+          ? COMMUNITY_MANAGER_PLATFORM_SKILLS
+          : [],
         skills: communitySkillAttachments,
         packages: ownedSkillPackages,
         isLoading: isLoadingCommunitySkillAttachments,

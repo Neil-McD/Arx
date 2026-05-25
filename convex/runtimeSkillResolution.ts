@@ -1,7 +1,8 @@
 import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  requireCommunityChatAccess,
+  getCommunityAndMembership,
+  resolveCommunityAccessBundle,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import {
@@ -10,11 +11,19 @@ import {
   type SkillPackageRow,
 } from "./skillCore";
 import {
+  COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS,
+  type RuntimePlatformSkillDefinition,
+} from "./platformSkillRuntime";
+import {
   extractExplicitSkillMentions,
   resolveScopedExplicitlyMentionedSkills,
   type ScopedExplicitlyMentionedSkillCandidate,
   type RuntimeSkillInferenceMessage,
 } from "../shared/runtimeSkillActivation";
+import {
+  buildCommunityResourceRuntimeLaneState,
+  type CommunityResourceRuntimeLaneState,
+} from "../shared/communityResourceLane";
 
 type UserPlatformSkillInstallRow = {
   _id: any;
@@ -63,13 +72,30 @@ type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
   instructions_md: string;
 };
 
+type RuntimePlatformSkillInventory = {
+  platform_skill_id: string;
+  catalog_skill_id: string | null;
+  name: string;
+  mention_token: string;
+  description: string | null;
+  requires_capability: string | null;
+};
+
+type RuntimeSelectedPlatformSkill = RuntimePlatformSkillInventory & {
+  instructions_md: string;
+};
+
 type RuntimeScopedSelectedSkill =
+  | RuntimeSelectedPlatformSkill
   | RuntimeSelectedUserPlatformSkill
   | RuntimeSelectedCommunitySkill;
 
 type RuntimeSkillResolutionResult = {
   requested_mention_tokens: string[];
   ambiguous_mention_tokens: string[];
+  community_resource_lane: CommunityResourceRuntimeLaneState;
+  platform_skill_inventory: RuntimePlatformSkillInventory[];
+  selected_platform_skills: RuntimeSelectedPlatformSkill[];
   user_platform_skill_inventory: RuntimeUserPlatformSkillInventory[];
   selected_user_platform_skills: RuntimeSelectedUserPlatformSkill[];
   community_skill_inventory: RuntimeCommunitySkillInventory[];
@@ -103,6 +129,88 @@ async function listCommunitySkillAttachmentRows(
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .collect()) as CommunitySkillAttachmentRow[];
   return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+}
+
+async function resolveCommunityResourceRuntimeLane(args: {
+  ctx: any;
+  communityId: any | null;
+  userId: any;
+}): Promise<CommunityResourceRuntimeLaneState> {
+  if (!args.communityId) {
+    return buildCommunityResourceRuntimeLaneState("none");
+  }
+  const { community, membership } = await getCommunityAndMembership({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const access = await resolveCommunityAccessBundle({
+    ctx: args.ctx,
+    community,
+    membership,
+    userId: args.userId,
+  });
+  if (!access.can_enter_community) {
+    throw new Error("community_entitlement_required");
+  }
+  return buildCommunityResourceRuntimeLaneState(
+    access.can_manage_resources ? "builder" : "member",
+  );
+}
+
+function buildRuntimePlatformSkillInventoryItem(
+  skill: RuntimePlatformSkillDefinition,
+): RuntimePlatformSkillInventory {
+  return {
+    platform_skill_id: skill.id,
+    catalog_skill_id: skill.catalogSkillId ?? null,
+    name: skill.name,
+    mention_token: skill.mentionToken,
+    description: skill.description ?? null,
+    requires_capability: skill.requiresCapability,
+  };
+}
+
+async function resolveRuntimePlatformSkillScope(args: {
+  ctx: any;
+  communityId: any | null;
+  userId: any;
+  includeSelectedData: boolean;
+  communityResourceLane: CommunityResourceRuntimeLaneState;
+}): Promise<{
+  inventory: RuntimePlatformSkillInventory[];
+  selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
+    "platform",
+    RuntimeSelectedPlatformSkill
+  >[];
+}> {
+  if (
+    !args.communityId ||
+    args.communityResourceLane.lane !== "builder" ||
+    !args.communityResourceLane.can_use_resource_builder
+  ) {
+    return {
+      inventory: [],
+      selectedCandidates: [],
+    };
+  }
+
+  const inventory = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
+    buildRuntimePlatformSkillInventoryItem,
+  );
+  return {
+    inventory,
+    selectedCandidates: args.includeSelectedData
+      ? COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
+          scope: "platform" as const,
+          mentionToken: skill.mentionToken,
+          value: {
+            ...buildRuntimePlatformSkillInventoryItem(skill),
+            instructions_md: skill.instructionsMd,
+          },
+        }))
+      : [],
+  };
 }
 
 async function resolveRuntimeUserPlatformSkillScope(args: {
@@ -214,32 +322,35 @@ async function resolveRuntimeCommunitySkillScope(args: {
   };
 }
 
-function buildCommunitySkillShadowState(
-  inventory: RuntimeCommunitySkillInventory[],
+function buildRuntimeSkillShadowState(
+  inventory: Array<{
+    catalog_skill_id?: string | null;
+    mention_token?: string | null;
+  }>,
 ): {
-  communityCatalogSkillIds: Set<string>;
-  communityMentionTokens: Set<string>;
+  catalogSkillIds: Set<string>;
+  mentionTokens: Set<string>;
 } {
-  const communityCatalogSkillIds = new Set<string>();
-  const communityMentionTokens = new Set<string>();
+  const catalogSkillIds = new Set<string>();
+  const mentionTokens = new Set<string>();
   for (const skill of inventory) {
     if (typeof skill.catalog_skill_id === "string" && skill.catalog_skill_id.trim()) {
-      communityCatalogSkillIds.add(skill.catalog_skill_id.trim().toLowerCase());
+      catalogSkillIds.add(skill.catalog_skill_id.trim().toLowerCase());
     }
     if (typeof skill.mention_token === "string" && skill.mention_token.trim()) {
-      communityMentionTokens.add(skill.mention_token.trim().toLowerCase());
+      mentionTokens.add(skill.mention_token.trim().toLowerCase());
     }
   }
   return {
-    communityCatalogSkillIds,
-    communityMentionTokens,
+    catalogSkillIds,
+    mentionTokens,
   };
 }
 
-function isUserSkillShadowedByCommunity(args: {
+function isRuntimeSkillShadowed(args: {
   catalogSkillId: string | null | undefined;
   mentionToken: string | null | undefined;
-  shadowState: ReturnType<typeof buildCommunitySkillShadowState>;
+  shadowState: ReturnType<typeof buildRuntimeSkillShadowState>;
 }): boolean {
   const mentionToken =
     typeof args.mentionToken === "string"
@@ -248,14 +359,14 @@ function isUserSkillShadowedByCommunity(args: {
   if (
     typeof args.catalogSkillId === "string" &&
     args.catalogSkillId.trim() &&
-    args.shadowState.communityCatalogSkillIds.has(
+    args.shadowState.catalogSkillIds.has(
       args.catalogSkillId.trim().toLowerCase(),
     )
   ) {
     return true;
   }
   return mentionToken
-    ? args.shadowState.communityMentionTokens.has(mentionToken)
+    ? args.shadowState.mentionTokens.has(mentionToken)
     : false;
 }
 
@@ -278,11 +389,11 @@ function filterUserSkillScopeAgainstCommunity(args: {
   if (args.communityInventory.length === 0) {
     return args.userSkillScope;
   }
-  const shadowState = buildCommunitySkillShadowState(args.communityInventory);
+  const shadowState = buildRuntimeSkillShadowState(args.communityInventory);
   return {
     inventory: args.userSkillScope.inventory.filter(
       (skill) =>
-        !isUserSkillShadowedByCommunity({
+        !isRuntimeSkillShadowed({
           catalogSkillId: skill.catalog_skill_id,
           mentionToken: skill.mention_token,
           shadowState,
@@ -290,7 +401,83 @@ function filterUserSkillScopeAgainstCommunity(args: {
     ),
     selectedCandidates: args.userSkillScope.selectedCandidates.filter(
       (candidate) =>
-        !isUserSkillShadowedByCommunity({
+        !isRuntimeSkillShadowed({
+          catalogSkillId: candidate.value.catalog_skill_id,
+          mentionToken: candidate.value.mention_token,
+          shadowState,
+        }),
+    ),
+  };
+}
+
+function filterUserSkillScopeAgainstPlatform(args: {
+  userSkillScope: {
+    inventory: RuntimeUserPlatformSkillInventory[];
+    selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
+      "personal",
+      RuntimeSelectedUserPlatformSkill
+    >[];
+  };
+  platformInventory: RuntimePlatformSkillInventory[];
+}): {
+  inventory: RuntimeUserPlatformSkillInventory[];
+  selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
+    "personal",
+    RuntimeSelectedUserPlatformSkill
+  >[];
+} {
+  if (args.platformInventory.length === 0) return args.userSkillScope;
+  const shadowState = buildRuntimeSkillShadowState(args.platformInventory);
+  return {
+    inventory: args.userSkillScope.inventory.filter(
+      (skill) =>
+        !isRuntimeSkillShadowed({
+          catalogSkillId: skill.catalog_skill_id,
+          mentionToken: skill.mention_token,
+          shadowState,
+        }),
+    ),
+    selectedCandidates: args.userSkillScope.selectedCandidates.filter(
+      (candidate) =>
+        !isRuntimeSkillShadowed({
+          catalogSkillId: candidate.value.catalog_skill_id,
+          mentionToken: candidate.value.mention_token,
+          shadowState,
+        }),
+    ),
+  };
+}
+
+function filterCommunitySkillScopeAgainstPlatform(args: {
+  communitySkillScope: {
+    inventory: RuntimeCommunitySkillInventory[];
+    selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
+      "community",
+      RuntimeSelectedCommunitySkill
+    >[];
+  };
+  platformInventory: RuntimePlatformSkillInventory[];
+}): {
+  inventory: RuntimeCommunitySkillInventory[];
+  selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
+    "community",
+    RuntimeSelectedCommunitySkill
+  >[];
+} {
+  if (args.platformInventory.length === 0) return args.communitySkillScope;
+  const shadowState = buildRuntimeSkillShadowState(args.platformInventory);
+  return {
+    inventory: args.communitySkillScope.inventory.filter(
+      (skill) =>
+        !isRuntimeSkillShadowed({
+          catalogSkillId: skill.catalog_skill_id,
+          mentionToken: skill.mention_token,
+          shadowState,
+        }),
+    ),
+    selectedCandidates: args.communitySkillScope.selectedCandidates.filter(
+      (candidate) =>
+        !isRuntimeSkillShadowed({
           catalogSkillId: candidate.value.catalog_skill_id,
           mentionToken: candidate.value.mention_token,
           shadowState,
@@ -321,10 +508,26 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       args.messages as RuntimeSkillInferenceMessage[],
     );
     const includeSelectedData = requestedMentionTokens.length > 0;
+    const communityResourceLane = await resolveCommunityResourceRuntimeLane({
+      ctx,
+      communityId: args.communityId ?? null,
+      userId,
+    });
     let userPlatformSkillScope = await resolveRuntimeUserPlatformSkillScope({
       ctx,
       userId,
       includeSelectedData,
+    });
+    const platformSkillScope = await resolveRuntimePlatformSkillScope({
+      ctx,
+      communityId: args.communityId ?? null,
+      userId,
+      includeSelectedData,
+      communityResourceLane,
+    });
+    userPlatformSkillScope = filterUserSkillScopeAgainstPlatform({
+      userSkillScope: userPlatformSkillScope,
+      platformInventory: platformSkillScope.inventory,
     });
     let communitySkillInventory: RuntimeCommunitySkillInventory[] = [];
     let communitySelectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
@@ -332,18 +535,19 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       RuntimeSelectedCommunitySkill
     >[] = [];
     if (args.communityId) {
-      await requireCommunityChatAccess({
-        ctx,
-        communityId: args.communityId,
-        userId,
-      });
       const communitySkillScope = await resolveRuntimeCommunitySkillScope({
         ctx,
         communityId: args.communityId,
         includeSelectedData,
       });
-      communitySkillInventory = communitySkillScope.inventory;
-      communitySelectedCandidates = communitySkillScope.selectedCandidates;
+      const platformFilteredCommunitySkillScope =
+        filterCommunitySkillScopeAgainstPlatform({
+          communitySkillScope,
+          platformInventory: platformSkillScope.inventory,
+        });
+      communitySkillInventory = platformFilteredCommunitySkillScope.inventory;
+      communitySelectedCandidates =
+        platformFilteredCommunitySkillScope.selectedCandidates;
       userPlatformSkillScope = filterUserSkillScopeAgainstCommunity({
         userSkillScope: userPlatformSkillScope,
         communityInventory: communitySkillInventory,
@@ -351,9 +555,10 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
     }
 
     const scopedCandidates: ScopedExplicitlyMentionedSkillCandidate<
-      "personal" | "community",
+      "platform" | "personal" | "community",
       RuntimeScopedSelectedSkill
     >[] = [
+      ...platformSkillScope.selectedCandidates,
       ...userPlatformSkillScope.selectedCandidates,
       ...communitySelectedCandidates,
     ];
@@ -373,6 +578,17 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       )
       .map((selection) => selection.value as RuntimeSelectedUserPlatformSkill);
 
+    const selectedPlatformSkills = resolved.selected
+      .filter(
+        (
+          selection,
+        ): selection is {
+          scope: "platform";
+          value: RuntimeScopedSelectedSkill;
+        } => selection.scope === "platform",
+      )
+      .map((selection) => selection.value as RuntimeSelectedPlatformSkill);
+
     const selectedCommunitySkills = resolved.selected
       .filter(
         (
@@ -387,6 +603,9 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
     return {
       requested_mention_tokens: requestedMentionTokens,
       ambiguous_mention_tokens: resolved.ambiguousMentionTokens,
+      community_resource_lane: communityResourceLane,
+      platform_skill_inventory: platformSkillScope.inventory,
+      selected_platform_skills: selectedPlatformSkills,
       user_platform_skill_inventory: userPlatformSkillScope.inventory,
       selected_user_platform_skills: selectedUserPlatformSkills,
       community_skill_inventory: communitySkillInventory,

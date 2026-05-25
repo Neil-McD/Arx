@@ -7,6 +7,9 @@ import {
   normalizeResourceStatus,
   normalizeIdValue,
 } from "./communityCore";
+import {
+  hydrateCommunityResourceBody,
+} from "./communityResourceContent";
 
 export type ArchiveSourceType = "chat" | "ai_feed" | "resource";
 export type ArchiveEmbeddingStatus = "pending" | "embedded" | "failed";
@@ -375,20 +378,21 @@ export async function upsertArchiveDocumentForAiFeedPost(ctx: { db: any }, post:
 }
 
 export async function upsertArchiveDocumentForResource(ctx: { db: any }, resource: CommunityResourceLike): Promise<void> {
+  const hydratedResource = await hydrateCommunityResourceBody(ctx, resource) ?? resource;
   const existing = await getExistingArchiveDoc(ctx, {
-    communityId: resource.communityId,
+    communityId: hydratedResource.communityId,
     sourceType: "resource",
-    sourceId: normalizeIdValue(resource._id),
+    sourceId: normalizeIdValue(hydratedResource._id),
   });
   const nextDoc = buildResourceArchiveDoc({
-    resource,
+    resource: hydratedResource,
     existing,
   });
   if (!nextDoc) {
     await deleteArchiveDocumentBySource(ctx, {
-      communityId: resource.communityId,
+      communityId: hydratedResource.communityId,
       sourceType: "resource",
-      sourceId: normalizeIdValue(resource._id),
+      sourceId: normalizeIdValue(hydratedResource._id),
     });
     return;
   }

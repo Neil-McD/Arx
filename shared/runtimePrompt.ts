@@ -4,6 +4,10 @@ import {
   renderRuntimeTurnContextForPrompt,
   type RuntimeTurnContextPacket,
 } from "./runtimeTurnContextPacket.ts";
+import {
+  normalizeCommunityResourceRuntimeLaneState,
+  type CommunityResourceRuntimeLaneState,
+} from "./communityResourceLane.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -300,6 +304,64 @@ function buildCommunityFeedContextPrompt(params: {
   ].join("\n");
 }
 
+function hasPublishedCommunityResourceTools(
+  allowedToolNames: readonly RetrievalToolName[],
+): boolean {
+  return (
+    allowedToolNames.includes("community_resources_list") ||
+    allowedToolNames.includes("community_resource_read") ||
+    allowedToolNames.includes("community_resources_search")
+  );
+}
+
+function hasCommunityResourceBuilderTools(
+  allowedToolNames: readonly RetrievalToolName[],
+): boolean {
+  return (
+    allowedToolNames.includes("community_resource_builder_list") ||
+    allowedToolNames.includes("community_resource_builder_read") ||
+    allowedToolNames.includes("community_resource_builder_health") ||
+    allowedToolNames.includes("community_resource_builder_stage_changeset") ||
+    allowedToolNames.includes("community_resource_builder_apply_changeset")
+  );
+}
+
+function buildCommunityResourceLanePrompt(params: {
+  allowedToolNames: readonly RetrievalToolName[];
+  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
+}): string | null {
+  const lane = normalizeCommunityResourceRuntimeLaneState(
+    params.communityResourceLane,
+  );
+  const hasPublishedTools = hasPublishedCommunityResourceTools(
+    params.allowedToolNames,
+  );
+  const hasBuilderTools = hasCommunityResourceBuilderTools(
+    params.allowedToolNames,
+  );
+  if (lane.lane === "builder" && hasBuilderTools) {
+    return [
+      "COMMUNITY_RESOURCE_BUILDER_LANE",
+      "The active user can build Resources for this exact community lens.",
+      "Use builder-only resource state only for this community: drafts, review items, source inbox, imported source references, provenance, and health.",
+      "Broad requests like improve resources, clean this up, refactor knowledge, or organize references are discovery requests first.",
+      "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before staging any changeset.",
+      "Stage only an exact implementation proposal after the builder has agreed on the direction.",
+      "Apply only after explicit approval of the exact staged changeset, then verify by reading or listing affected resources.",
+    ].join("\n");
+  }
+  if (hasPublishedTools) {
+    return [
+      "COMMUNITY_RESOURCE_MEMBER_LANE",
+      "Use published community Resources as the member-facing knowledge directory for this active community lens.",
+      "Search or read published resources before claiming what resources exist or what a resource says.",
+      "Do not expose drafts, review items, private imports, source inbox state, builder health, or builder-only resource metadata.",
+      "If no relevant published resource exists, say that clearly and answer from other available context only when appropriate.",
+    ].join("\n");
+  }
+  return null;
+}
+
 function buildPlatformChatHarnessContextPrompt(): string {
   return [
     "PLATFORM_HARNESS_CONTEXT",
@@ -335,15 +397,20 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Treat community_search snippets as usable evidence, but do not use search results to replace explicit community identity fields already in the prompt.",
     );
   }
-  if (
-    params.allowedToolNames.includes("community_resources_list") ||
-    params.allowedToolNames.includes("community_resource_read") ||
-    params.allowedToolNames.includes("community_resources_search")
-  ) {
+  if (hasPublishedCommunityResourceTools(params.allowedToolNames)) {
     toolGuidance.push(
       "- Use community_resources_list to inspect the active community's published resource directory before claiming what resources exist.",
       "- Use community_resource_read to inspect one published resource by resource id, resources:// directory URI, or readable resource path.",
       "- Use community_resources_search for targeted lookup inside published resources. Treat draft, review, processing, and failed resources as unavailable unless another tool explicitly exposes them.",
+    );
+  }
+  if (hasCommunityResourceBuilderTools(params.allowedToolNames)) {
+    toolGuidance.push(
+      "- Resources Architect builder tools are builder-lane only and expose draft, review, source inbox, scaffold, and health state that member resource tools intentionally hide.",
+      "- Use community_resource_builder_list first; its health summary is the deterministic architecture preflight. Then use community_resource_builder_read to inspect exact module, page, and source evidence before proposing edits.",
+      "- For builder edits, explain what you found, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset.",
+      "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation.",
+      "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",
     );
   }
   if (params.allowedToolNames.includes("community_write")) {
@@ -455,6 +522,7 @@ function buildChatOperatingPolicyPrompt(): string {
 export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunityPromptFields & {
   loopBudget: RuntimeKernelBudget;
   allowedToolNames: readonly RetrievalToolName[];
+  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
   harnessName: "chat_tools";
   projectLabel?: string | null;
   projectDescription?: string | null;
@@ -483,6 +551,10 @@ export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunity
     }),
     buildCommunityFeedContextPrompt({
       allowedToolNames: params.allowedToolNames,
+    }),
+    buildCommunityResourceLanePrompt({
+      allowedToolNames: params.allowedToolNames,
+      communityResourceLane: params.communityResourceLane,
     }),
     buildPlatformHarnessContextPrompt({
       harnessName: params.harnessName,

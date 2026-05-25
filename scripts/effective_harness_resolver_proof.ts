@@ -54,6 +54,13 @@ const personalNotion = tool({
 const emptySkillResolution: RuntimeSkillResolution = {
   requested_mention_tokens: [],
   ambiguous_mention_tokens: [],
+  community_resource_lane: {
+    lane: "none",
+    can_read_published_resources: false,
+    can_use_resource_builder: false,
+  },
+  platform_skill_inventory: [],
+  selected_platform_skills: [],
   user_platform_skill_inventory: [],
   selected_user_platform_skills: [],
   community_skill_inventory: [],
@@ -99,9 +106,65 @@ function proveComposedHarnessUsesResolverAliases() {
   assert.deepEqual(runtimeToolNames(resolvedWithoutCommunity.discoveryMountedTools), [
     "me__linear__search_issues",
   ]);
+  assert.equal(resolvedWithoutCommunity.communityResourceLane.lane, "none");
   assert.deepEqual(resolvedWithoutCommunity.shadowedRuntimeToolNames, []);
   assert.equal(resolvedWithoutCommunity.activeCommunityModule, null);
   console.log("PASS: composed harness keeps MCP runtime canonical to personal tools");
+}
+
+function provePlatformSkillsArePermanentHarnessInventory() {
+  const resolved = composeResolvedRuntimeHarness({
+    personalMountedTools: [personalLinear],
+    skillResolution: {
+      ...emptySkillResolution,
+      community_resource_lane: {
+        lane: "builder",
+        can_read_published_resources: true,
+        can_use_resource_builder: true,
+      },
+      requested_mention_tokens: ["resources-architect"],
+      platform_skill_inventory: [
+        {
+          platform_skill_id: "platform:resources-architect",
+          catalog_skill_id: "platform-resources-architect",
+          name: "Resources Architect",
+          mention_token: "resources-architect",
+          description: "Organize community Resources.",
+          requires_capability: "community_resources_manage",
+        },
+      ],
+      selected_platform_skills: [
+        {
+          platform_skill_id: "platform:resources-architect",
+          catalog_skill_id: "platform-resources-architect",
+          name: "Resources Architect",
+          mention_token: "resources-architect",
+          description: "Organize community Resources.",
+          requires_capability: "community_resources_manage",
+          instructions_md: "Refactor community Resources from source evidence.",
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(
+    resolved.platformSkillInventory.map((skill) => skill.platform_skill_id),
+    ["platform:resources-architect"],
+  );
+  assert.deepEqual(
+    resolved.selectedPlatformSkills.map((skill) => skill.mention_token),
+    ["resources-architect"],
+  );
+  assert.equal(resolved.communityResourceLane.lane, "builder");
+  assert.ok(
+    resolved.systemPromptSuffix.includes("PLATFORM_WORKFLOW_CONTEXT"),
+  );
+  assert.ok(
+    resolved.systemPromptSuffix.includes(
+      "PLATFORM_SKILL_PACKAGE: Resources Architect",
+    ),
+  );
+  console.log("PASS: platform skills remain permanent harness inventory");
 }
 
 function proveCommunitySkillsStillActivateWithoutCommunityMcpRuntime() {
@@ -152,4 +215,5 @@ function proveCommunitySkillsStillActivateWithoutCommunityMcpRuntime() {
 
 provePersonalOnlyCatalog();
 proveComposedHarnessUsesResolverAliases();
+provePlatformSkillsArePermanentHarnessInventory();
 proveCommunitySkillsStillActivateWithoutCommunityMcpRuntime();

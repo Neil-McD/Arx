@@ -62,6 +62,7 @@ import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
+import type * as communityResourceContent from "../communityResourceContent.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
@@ -123,6 +124,7 @@ import type * as operatorSentryDiagnostics from "../operatorSentryDiagnostics.js
 import type * as personalMemory from "../personalMemory.js";
 import type * as platformDiagnostics from "../platformDiagnostics.js";
 import type * as platformHomeCommunity from "../platformHomeCommunity.js";
+import type * as platformSkillRuntime from "../platformSkillRuntime.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
 import type * as profiles from "../profiles.js";
@@ -225,6 +227,7 @@ declare const fullApi: ApiFromModules<{
   communityPublic: typeof communityPublic;
   communityRecentContext: typeof communityRecentContext;
   communityRecipientCore: typeof communityRecipientCore;
+  communityResourceContent: typeof communityResourceContent;
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
   communityWikiArchitect: typeof communityWikiArchitect;
@@ -286,6 +289,7 @@ declare const fullApi: ApiFromModules<{
   personalMemory: typeof personalMemory;
   platformDiagnostics: typeof platformDiagnostics;
   platformHomeCommunity: typeof platformHomeCommunity;
+  platformSkillRuntime: typeof platformSkillRuntime;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
   profiles: typeof profiles;

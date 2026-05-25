@@ -128,15 +128,20 @@ assert.match(
   /sourceExternalProvider:[\s\S]*sourceExternalConnectionUserId:[\s\S]*sourceExternalId:[\s\S]*sourceExternalName:[\s\S]*sourceExternalUrl:[\s\S]*sourceExternalMimeType:[\s\S]*sourceExternalModifiedAt:[\s\S]*\.index\("by_community_source_external", \["communityId", "sourceExternalProvider", "sourceExternalId"\]\)/,
   "community source resources should carry external source identity and credential authority for integrations",
 );
+assert.match(
+  schema,
+  /communityResourceContents:[\s\S]*resourceId: v\.id\("communityResources"\)[\s\S]*bodyMd: v\.string\(\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*\.index\("by_resource", \["resourceId"\]\)/,
+  "large parsed source text should live in resource content rows, not only the hot communityResources metadata row",
+);
 
 assert.match(
   core,
-  /normalizeResourceSourceIngestionStatus[\s\S]*String\(row\.bodyMd[\s\S]*"ready"[\s\S]*String\(row\.url[\s\S]*"queued"/,
-  "legacy source rows should infer ready only from readable body text, not URL metadata",
+  /normalizeResourceSourceIngestionStatus[\s\S]*communityResourceBodyChars\(row\) > 0[\s\S]*"ready"[\s\S]*String\(row\.url[\s\S]*"queued"/,
+  "source rows should infer ready only from readable body text metadata, not URL metadata",
 );
 assert.match(
   core,
-  /communityResourceSourceHasReadyText[\s\S]*normalizeResourceRole\(row\.role\) === "source"[\s\S]*normalizeResourceSourceIngestionStatus\(row\) === "ready"[\s\S]*row\.bodyMd/,
+  /communityResourceSourceHasReadyText[\s\S]*normalizeResourceRole\(row\.role\) === "source"[\s\S]*normalizeResourceSourceIngestionStatus\(row\) === "ready"[\s\S]*communityResourceBodyChars\(row\) > 0/,
   "ready source truth should require source role, ready status, and readable text",
 );
 assert.match(
@@ -297,8 +302,13 @@ assert.match(
 );
 assert.match(
   resources,
-  /sourceIngestionStatus: args\.status[\s\S]*sourceOriginalFilename[\s\S]*bodyMd[\s\S]*upsertArchiveDocumentForResource/,
-  "source ingestion should persist extracted text and keep archive projection in sync",
+  /sourceIngestionStatus: args\.status[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*upsertArchiveDocumentForResource/,
+  "source ingestion should persist extracted text into content storage and keep archive projection in sync",
+);
+assert.match(
+  resources,
+  /compactCommunityResourceBodyStorage[\s\S]*writeCommunityResourceBodyContent[\s\S]*resourceUpdatedAt: row\.updatedAt/,
+  "body-storage compaction should move legacy bodies without making old resources look newly edited",
 );
 assert.match(
   resources,
@@ -733,8 +743,8 @@ assert.match(
 
 assert.match(
   architect,
-  /const readySources = allSources\.filter\(communityResourceSourceHasReadyText\)/,
-  "architect context should filter source inbox to ready ingested sources",
+  /const readySourceRows = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES[\s\S]*hydrateCommunityResourceBody/,
+  "architect context should filter source inbox to ready ingested sources and hydrate only bounded selected source text",
 );
 assert.match(
   architect,

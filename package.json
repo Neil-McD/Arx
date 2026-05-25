@@ -121,6 +121,7 @@
     "check:runtime-workspace-lazy-creation-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_lazy_creation_proof.ts",
     "check:community-app-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_app_lifecycle_contract_proof.ts",
     "check:community-skill-attachment-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_attachment_contract_proof.ts",
+    "check:platform-skill-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_skill_contract_proof.ts",
     "check:community-skill-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_runtime_behavior_proof.ts",
     "check:personal-skill-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/personal_skill_runtime_contract_proof.ts",
     "check:community-overlay-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_overlay_runtime_behavior_proof.ts",

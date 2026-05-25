@@ -269,6 +269,8 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   const pattern = toStringValue(args?.pattern);
   const query = toStringValue(args?.query);
   const ref = toStringValue(args?.ref);
+  const resourceId = toStringValue(args?.resource_id);
+  const moduleId = toStringValue(args?.module_id);
   const slug = toStringValue(args?.slug);
   const url = toStringValue(args?.url);
   const action = toStringValue(args?.action);
@@ -279,6 +281,15 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "community_resources_list") return `Community resources${path ? `: ${path}` : ""}`;
   if (toolName === "community_resource_read") return `Read resource${ref ? `: ${ref}` : ""}`;
   if (toolName === "community_resources_search") return `Resource search${query ? `: ${query}` : ""}`;
+  if (toolName === "community_resource_builder_list") return "Resource builder";
+  if (toolName === "community_resource_builder_read") {
+    const target = resourceId || moduleId;
+    return `Read builder item${target ? `: ${target}` : ""}`;
+  }
+  if (toolName === "community_resource_builder_health") return "Resource health";
+  if (toolName === "community_resource_builder_ensure_scaffold") return "Resource scaffold";
+  if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
+  if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
   if (toolName === "community_write") return "Community write";
   if (toolName === "list_dir") return `Listed ${path || "."}`;

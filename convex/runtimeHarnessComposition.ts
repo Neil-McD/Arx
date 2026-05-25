@@ -2,19 +2,25 @@ import {
   buildCommunityOverlayRuntimeState,
 } from "../shared/communityOverlayRuntime.ts";
 import { buildPersonalSkillOverlayRuntimeState } from "../shared/personalSkillOverlayRuntime.ts";
+import { buildPlatformSkillOverlayRuntimeState } from "../shared/platformSkillOverlayRuntime.ts";
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
 import {
   buildUserPlatformMountedAppsPromptBlock,
   mapCommunitySkillsToOverlayRuntime,
+  mapPlatformSkillsToOverlayRuntime,
   mapSelectedCommunitySkillsToOverlayRuntime,
+  mapSelectedPlatformSkillsToOverlayRuntime,
   mapSelectedUserPlatformSkillsToOverlayRuntime,
   mapUserPlatformSkillsToOverlayRuntime,
   type RuntimeCommunitySkillInventory,
+  type RuntimePlatformSkillInventory,
   type RuntimeSelectedCommunitySkill,
+  type RuntimeSelectedPlatformSkill,
   type RuntimeSelectedUserPlatformSkill,
   type RuntimeSkillResolution,
   type RuntimeUserPlatformSkillInventory,
 } from "./runtimeHarnessShaping.ts";
+import type { CommunityResourceRuntimeLaneState } from "../shared/communityResourceLane.ts";
 
 export type ResolvedCommunityHarnessModule = {
   attachedSkills: RuntimeCommunitySkillInventory[];
@@ -22,10 +28,20 @@ export type ResolvedCommunityHarnessModule = {
   systemPromptSuffix: string;
 };
 
+export type ResolvedPlatformHarnessModule = {
+  skills: RuntimePlatformSkillInventory[];
+  selectedSkills: RuntimeSelectedPlatformSkill[];
+  systemPromptSuffix: string;
+};
+
 export type ResolvedEffectiveHarness = {
   personalMountedTools: RuntimeMountedMcpTool[];
+  communityResourceLane: CommunityResourceRuntimeLaneState;
+  platformSkillInventory: RuntimePlatformSkillInventory[];
+  selectedPlatformSkills: RuntimeSelectedPlatformSkill[];
   personalSkillInventory: RuntimeUserPlatformSkillInventory[];
   selectedPersonalSkills: RuntimeSelectedUserPlatformSkill[];
+  activePlatformModule: ResolvedPlatformHarnessModule | null;
   activeCommunityModule: ResolvedCommunityHarnessModule | null;
   runtimeMountedTools: RuntimeMountedMcpTool[];
   discoveryMountedTools: RuntimeMountedMcpTool[];
@@ -265,6 +281,9 @@ export function composeResolvedRuntimeHarness(args: {
   personalMountedTools: RuntimeMountedMcpTool[];
   skillResolution: RuntimeSkillResolution;
 }): ResolvedEffectiveHarness {
+  const platformSkillInventory = args.skillResolution.platform_skill_inventory;
+  const selectedPlatformSkills = args.skillResolution.selected_platform_skills;
+  const communityResourceLane = args.skillResolution.community_resource_lane;
   const personalSkillInventory = args.skillResolution.user_platform_skill_inventory;
   const selectedPersonalSkills =
     args.skillResolution.selected_user_platform_skills;
@@ -280,6 +299,23 @@ export function composeResolvedRuntimeHarness(args: {
       selectedPersonalSkills,
     ),
   });
+
+  const activePlatformModule =
+    platformSkillInventory.length > 0 || selectedPlatformSkills.length > 0
+      ? (() => {
+          const overlayRuntimeState = buildPlatformSkillOverlayRuntimeState({
+            skills: mapPlatformSkillsToOverlayRuntime(platformSkillInventory),
+            selectedSkills: mapSelectedPlatformSkillsToOverlayRuntime(
+              selectedPlatformSkills,
+            ),
+          });
+          return {
+            skills: platformSkillInventory,
+            selectedSkills: selectedPlatformSkills,
+            systemPromptSuffix: overlayRuntimeState.systemPromptSuffix,
+          } satisfies ResolvedPlatformHarnessModule;
+        })()
+      : null;
 
   const activeCommunityModule =
     attachedCommunitySkills.length > 0 || selectedCommunitySkills.length > 0
@@ -306,8 +342,12 @@ export function composeResolvedRuntimeHarness(args: {
 
   return {
     personalMountedTools: args.personalMountedTools,
+    communityResourceLane,
+    platformSkillInventory,
+    selectedPlatformSkills,
     personalSkillInventory,
     selectedPersonalSkills,
+    activePlatformModule,
     activeCommunityModule,
     runtimeMountedTools: resolvedMountedToolCatalog.executableTools,
     discoveryMountedTools: resolvedMountedToolCatalog.defaultDiscoveryTools,
@@ -321,7 +361,7 @@ export function composeResolvedRuntimeHarness(args: {
       args.skillResolution.ambiguous_mention_tokens,
     systemPromptSuffix: `${buildUserPlatformMountedAppsPromptBlock(
       args.personalMountedTools,
-    )}${personalSkillRuntimeState.systemPromptSuffix}${buildAmbiguousSkillMentionsPromptBlock(
+    )}${activePlatformModule?.systemPromptSuffix ?? ""}${personalSkillRuntimeState.systemPromptSuffix}${buildAmbiguousSkillMentionsPromptBlock(
       args.skillResolution.ambiguous_mention_tokens,
     )}${activeCommunityModule?.systemPromptSuffix ?? ""}`,
   };

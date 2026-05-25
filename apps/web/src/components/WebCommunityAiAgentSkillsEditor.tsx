@@ -5,6 +5,7 @@ import type {
   CreateSkillPackageInput,
   SkillPackageSummary,
 } from "../../../../shared/communitySkillTypes";
+import type { PlatformSkillSummary } from "../../../../shared/platformSkills";
 
 function buildInitialDraft(): CreateSkillPackageInput {
   return {
@@ -26,6 +27,7 @@ export type WebCommunityAiAgentSkillsEditorProps = {
   intro: string;
   emptyState: string;
   addButtonLabel: string;
+  platformSkills: PlatformSkillSummary[];
   skills: CommunityAttachedSkill[];
   packages: SkillPackageSummary[];
   isLoading: boolean;
@@ -54,6 +56,7 @@ export function WebCommunityAiAgentSkillsEditor(
     intro,
     emptyState,
     addButtonLabel,
+    platformSkills,
     skills,
     packages,
     isLoading,
@@ -85,6 +88,48 @@ export function WebCommunityAiAgentSkillsEditor(
   return (
     <div className="settings-section">
       <div className="model-note agent-editor-intro">{intro}</div>
+
+      {platformSkills.length > 0 ? (
+        <div
+          className="agent-capability-list"
+          role="list"
+          aria-label="Platform skills"
+        >
+          <div className="settings-section-subtitle">Available by default</div>
+          {platformSkills.map((skill) => (
+            <div
+              key={skill.id}
+              className="agent-capability-card"
+              role="listitem"
+            >
+              <div className="agent-capability-card-header">
+                <div>
+                  <div className="agent-capability-card-title-row">
+                    <div className="settings-section-subtitle">{skill.name}</div>
+                    <span className="community-app-status-badge">Built in</span>
+                  </div>
+                  <div className="model-note">
+                    ${skill.mentionToken}
+                    {skill.description ? ` · ${skill.description}` : ""}
+                  </div>
+                </div>
+              </div>
+              <div className="agent-capability-metadata">
+                <div className="agent-capability-metadata-item">
+                  <span className="agent-capability-metadata-label">Scope</span>
+                  <span className="agent-capability-metadata-value">
+                    Platform
+                  </span>
+                </div>
+                <div className="agent-capability-metadata-item">
+                  <span className="agent-capability-metadata-label">Status</span>
+                  <span className="agent-capability-metadata-value">Locked</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="agent-capability-toolbar">
         <button
@@ -219,7 +264,7 @@ export function WebCommunityAiAgentSkillsEditor(
         <div className="chat-empty">Loading skills…</div>
       ) : skills.length === 0 ? (
         <div className="agent-capability-empty">
-          <div className="agent-capability-empty-title">No skills attached yet</div>
+          <div className="agent-capability-empty-title">No optional skills attached yet</div>
           <div className="model-note">{emptyState}</div>
         </div>
       ) : (

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import {
   requireCommunityChatAccess,
+  requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./skillCore";
 import type { CommunityAttachedSkill } from "../shared/communitySkillTypes";
 import { buildEffectiveSkills } from "../shared/effectiveSkills";
+import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../shared/platformSkills";
 import type { UserPlatformInstalledSkill } from "../shared/userPlatformSkillTypes";
 
 type UserPlatformSkillInstallRow = {
@@ -60,6 +62,23 @@ async function listCommunitySkillAttachmentRows(
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .collect()) as CommunitySkillAttachmentRow[];
   return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+}
+
+async function canManageCommunityResources(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<boolean> {
+  try {
+    await requireCommunityManager({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function buildUserPlatformSkillInstallReadModel(args: {
@@ -120,6 +139,7 @@ export const listEffectiveSkills = query({
 
     if (!args.communityId) {
       return buildEffectiveSkills({
+        platformSkills: [],
         personalSkills,
         communitySkills: [],
       });
@@ -130,6 +150,13 @@ export const listEffectiveSkills = query({
       communityId: args.communityId,
       userId,
     });
+    const platformSkills = (await canManageCommunityResources({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    }))
+      ? COMMUNITY_MANAGER_PLATFORM_SKILLS
+      : [];
 
     const communitySkills: CommunityAttachedSkill[] = [];
     for (const attachment of await listCommunitySkillAttachmentRows(
@@ -147,6 +174,7 @@ export const listEffectiveSkills = query({
     }
 
     return buildEffectiveSkills({
+      platformSkills,
       personalSkills,
       communitySkills,
     });

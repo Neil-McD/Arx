@@ -7,6 +7,15 @@ import {
   type PersonalOverlaySkillInventory,
 } from "../shared/personalSkillOverlayRuntime.ts";
 import {
+  type PlatformOverlaySelectedSkill,
+  type PlatformOverlaySkillInventory,
+} from "../shared/platformSkillOverlayRuntime.ts";
+import {
+  EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE,
+  normalizeCommunityResourceRuntimeLaneState,
+  type CommunityResourceRuntimeLaneState,
+} from "../shared/communityResourceLane.ts";
+import {
   buildOpenAiFunctionTools,
   sanitizeMountedMcpToolSchema,
   type ResponsesApiFunctionTool,
@@ -46,6 +55,19 @@ export type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
   instructions_md: string;
 };
 
+export type RuntimePlatformSkillInventory = {
+  platform_skill_id: string;
+  catalog_skill_id: string | null;
+  name: string;
+  mention_token: string;
+  description: string | null;
+  requires_capability: string | null;
+};
+
+export type RuntimeSelectedPlatformSkill = RuntimePlatformSkillInventory & {
+  instructions_md: string;
+};
+
 export type RuntimeUserPlatformSkillInventory = {
   user_platform_skill_install_id: string;
   skill_package_id: string;
@@ -63,6 +85,9 @@ export type RuntimeSelectedUserPlatformSkill = RuntimeUserPlatformSkillInventory
 export type RuntimeSkillResolution = {
   requested_mention_tokens: string[];
   ambiguous_mention_tokens: string[];
+  community_resource_lane: CommunityResourceRuntimeLaneState;
+  platform_skill_inventory: RuntimePlatformSkillInventory[];
+  selected_platform_skills: RuntimeSelectedPlatformSkill[];
   user_platform_skill_inventory: RuntimeUserPlatformSkillInventory[];
   selected_user_platform_skills: RuntimeSelectedUserPlatformSkill[];
   community_skill_inventory: RuntimeCommunitySkillInventory[];
@@ -169,6 +194,85 @@ export function normalizeRuntimeCommunitySkillInventory(
         typeof record.description === "string" && record.description.trim()
           ? record.description.trim()
           : null,
+    });
+  }
+  return skills;
+}
+
+export function normalizeRuntimePlatformSkillInventory(
+  value: unknown,
+): RuntimePlatformSkillInventory[] {
+  if (!Array.isArray(value)) return [];
+  const skills: RuntimePlatformSkillInventory[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record =
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : null;
+    if (!record) continue;
+    const mentionToken = String(record.mention_token ?? "").trim().toLowerCase();
+    if (!mentionToken || seen.has(mentionToken)) continue;
+    seen.add(mentionToken);
+    skills.push({
+      platform_skill_id: String(record.platform_skill_id ?? "").trim(),
+      catalog_skill_id:
+        typeof record.catalog_skill_id === "string" && record.catalog_skill_id.trim()
+          ? record.catalog_skill_id.trim().toLowerCase()
+          : null,
+      name: String(record.name ?? "").trim() || mentionToken,
+      mention_token: mentionToken,
+      description:
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : null,
+      requires_capability:
+        typeof record.requires_capability === "string" &&
+        record.requires_capability.trim()
+          ? record.requires_capability.trim()
+          : null,
+    });
+  }
+  return skills;
+}
+
+export function normalizeRuntimeSelectedPlatformSkills(
+  value: unknown,
+): RuntimeSelectedPlatformSkill[] {
+  if (!Array.isArray(value)) return [];
+  const skills: RuntimeSelectedPlatformSkill[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record =
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : null;
+    if (!record) continue;
+    const mentionToken = String(record.mention_token ?? "").trim().toLowerCase();
+    const instructionsMd =
+      typeof record.instructions_md === "string"
+        ? record.instructions_md.trim()
+        : "";
+    if (!mentionToken || !instructionsMd || seen.has(mentionToken)) continue;
+    seen.add(mentionToken);
+    skills.push({
+      platform_skill_id: String(record.platform_skill_id ?? "").trim(),
+      catalog_skill_id:
+        typeof record.catalog_skill_id === "string" && record.catalog_skill_id.trim()
+          ? record.catalog_skill_id.trim().toLowerCase()
+          : null,
+      name: String(record.name ?? "").trim() || mentionToken,
+      mention_token: mentionToken,
+      description:
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : null,
+      requires_capability:
+        typeof record.requires_capability === "string" &&
+        record.requires_capability.trim()
+          ? record.requires_capability.trim()
+          : null,
+      instructions_md: instructionsMd,
     });
   }
   return skills;
@@ -317,6 +421,15 @@ export function normalizeRuntimeSkillResolution(
   return {
     requested_mention_tokens: requestedMentionTokens,
     ambiguous_mention_tokens: ambiguousMentionTokens,
+    community_resource_lane: normalizeCommunityResourceRuntimeLaneState(
+      record?.community_resource_lane ?? EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE,
+    ),
+    platform_skill_inventory: normalizeRuntimePlatformSkillInventory(
+      record?.platform_skill_inventory,
+    ),
+    selected_platform_skills: normalizeRuntimeSelectedPlatformSkills(
+      record?.selected_platform_skills,
+    ),
     user_platform_skill_inventory: normalizeRuntimeUserPlatformSkillInventory(
       record?.user_platform_skill_inventory,
     ),
@@ -397,6 +510,27 @@ export function mapCommunitySkillsToOverlayRuntime(
     name: skill.name,
     mentionToken: skill.mention_token,
     description: skill.description,
+  }));
+}
+
+export function mapPlatformSkillsToOverlayRuntime(
+  skills: RuntimePlatformSkillInventory[],
+): PlatformOverlaySkillInventory[] {
+  return skills.map((skill) => ({
+    name: skill.name,
+    mentionToken: skill.mention_token,
+    description: skill.description,
+  }));
+}
+
+export function mapSelectedPlatformSkillsToOverlayRuntime(
+  selectedSkills: RuntimeSelectedPlatformSkill[],
+): PlatformOverlaySelectedSkill[] {
+  return selectedSkills.map((skill) => ({
+    name: skill.name,
+    mentionToken: skill.mention_token,
+    description: skill.description,
+    instructionsMd: skill.instructions_md,
   }));
 }
 

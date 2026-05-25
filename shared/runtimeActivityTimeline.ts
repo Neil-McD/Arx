@@ -219,6 +219,8 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   const pattern = toStringValue(args?.pattern);
   const query = toStringValue(args?.query);
   const ref = toStringValue(args?.ref);
+  const resourceId = toStringValue(args?.resource_id);
+  const moduleId = toStringValue(args?.module_id);
   const slug = toStringValue(args?.slug);
   const url = toStringValue(args?.url);
   const action = toStringValue(args?.action);
@@ -246,6 +248,15 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "community_resources_list") return `Listed community resources${path ? ` at ${truncateLabel(path, 48)}` : ""}`;
   if (toolName === "community_resource_read") return `Read community resource${ref ? ` ${truncateLabel(ref, 48)}` : ""}`;
   if (toolName === "community_resources_search") return `Searched resources${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
+  if (toolName === "community_resource_builder_list") return "Listed resource builder state";
+  if (toolName === "community_resource_builder_read") {
+    const target = resourceId || moduleId;
+    return `Read resource builder item${target ? ` ${truncateLabel(target, 48)}` : ""}`;
+  }
+  if (toolName === "community_resource_builder_health") return "Checked resource health";
+  if (toolName === "community_resource_builder_ensure_scaffold") return "Ensured resource scaffold";
+  if (toolName === "community_resource_builder_stage_changeset") return "Staged resource changeset";
+  if (toolName === "community_resource_builder_apply_changeset") return "Applied resource changeset";
   if (toolName === "community_search") return `Searched community${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "community_write") return "Updated community";
   return toolName;

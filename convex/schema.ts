@@ -1496,6 +1496,9 @@ export default defineSchema({
     sourceResourceId: v.optional(v.id("communityResources")),
     title: v.string(),
     bodyMd: v.optional(v.string()),
+    bodyChars: v.optional(v.number()),
+    bodyHash: v.optional(v.string()),
+    bodyMigratedAt: v.optional(v.number()),
     url: v.optional(v.string()),
     fileKey: v.optional(v.string()),
     sourceIngestionStatus: v.optional(
@@ -1549,6 +1552,19 @@ export default defineSchema({
     ])
     .index("by_createdBy", ["createdByUserId"]),
 
+  communityResourceContents: defineTable({
+    communityId: v.id("communities"),
+    resourceId: v.id("communityResources"),
+    bodyMd: v.string(),
+    bodyChars: v.number(),
+    bodyHash: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_resource", ["resourceId"])
+    .index("by_community_resource", ["communityId", "resourceId"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"]),
+
   communityResourceModules: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),
@@ -1565,6 +1581,35 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"])
     .index("by_community_sortOrder", ["communityId", "sortOrder"])
+    .index("by_createdBy", ["createdByUserId"]),
+
+  communityResourceBuilderChangesets: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    status: v.union(
+      v.literal("staged"),
+      v.literal("approved"),
+      v.literal("applied"),
+      v.literal("rejected"),
+      v.literal("failed"),
+      v.literal("expired"),
+    ),
+    summary: v.string(),
+    operations: v.array(v.any()),
+    preflight: v.any(),
+    result: v.optional(v.any()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    approvedByUserId: v.optional(v.id("users")),
+    rejectedAt: v.optional(v.number()),
+    rejectedByUserId: v.optional(v.id("users")),
+    appliedAt: v.optional(v.number()),
+    appliedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityEvents: defineTable({

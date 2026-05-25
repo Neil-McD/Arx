@@ -53,6 +53,9 @@ function proveFixedPolicyBoundaries() {
     "community_resources_list",
     "community_resource_read",
     "community_resources_search",
+    "community_resource_builder_list",
+    "community_resource_builder_read",
+    "community_resource_builder_health",
     "community_search",
     "web_research",
     "list_dir",
@@ -70,6 +73,9 @@ function proveFixedPolicyBoundaries() {
 
   const exclusiveTools: RetrievalToolName[] = [
     "community_write",
+    "community_resource_builder_ensure_scaffold",
+    "community_resource_builder_stage_changeset",
+    "community_resource_builder_apply_changeset",
     "write",
     "edit",
     "bash",
@@ -108,6 +114,9 @@ function proveFixedPolicyBoundaries() {
     "community_resources_list",
     "community_resource_read",
     "community_resources_search",
+    "community_resource_builder_list",
+    "community_resource_builder_read",
+    "community_resource_builder_health",
   ] as const satisfies readonly RetrievalToolName[]) {
     assert.equal(getFixedRuntimeToolPolicy(toolName).category, "community");
     assert.equal(getFixedRuntimeToolPolicy(toolName).requiresCommunity, true);
@@ -115,6 +124,25 @@ function proveFixedPolicyBoundaries() {
   }
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
+  assert.equal(
+    getFixedRuntimeToolPolicy("community_resource_builder_ensure_scaffold")
+      .mutatesState,
+    true,
+  );
+  assert.equal(
+    getFixedRuntimeToolPolicy("community_resource_builder_ensure_scaffold")
+      .requiresCommunity,
+    true,
+  );
+  for (const toolName of [
+    "community_resource_builder_stage_changeset",
+    "community_resource_builder_apply_changeset",
+  ] as const satisfies readonly RetrievalToolName[]) {
+    const policy = getFixedRuntimeToolPolicy(toolName);
+    assert.equal(policy.mutatesState, true, `${toolName} should mutate state`);
+    assert.equal(policy.requiresCommunity, true, `${toolName} should require community`);
+    assert.equal(policy.readOnly, false, `${toolName} should not be read-only`);
+  }
   assert.equal(
     getFixedRuntimeToolPolicy("terminal_read").exclusive,
     true,

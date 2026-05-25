@@ -30,6 +30,7 @@ export function WebWorkspaceStreamingMessage(
         {hasTimeline ? (
           <RuntimeLiveTimeline
             events={view.runtimeEvents}
+            session={props.session}
             renderReasoningMarkdown={(text) =>
               props.renderMarkdown(text, {
                 onCopyCode: props.copyTextToClipboard,
