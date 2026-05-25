@@ -39,7 +39,9 @@ import {
 
 const COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES = 500;
 const COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS = 3600;
-const COMMUNITY_WIKI_ARCHITECT_SOURCE_EXCERPT_CHARS = 1800;
+const COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS = 80;
+const COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS = 40_000;
+const COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS = 600;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_PAGES = 8;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_OUTPUT_TOKENS = 4200;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_CHARS = 12_000;
@@ -74,9 +76,131 @@ function buildModuleNameById(modules: CommunityResourceModuleLike[]): Map<string
 function buildSourceExcerpt(raw: unknown): string | null {
   const value = String(raw ?? "").replace(/\s+/g, " ").trim();
   if (!value) return null;
-  return value.length <= COMMUNITY_WIKI_ARCHITECT_SOURCE_EXCERPT_CHARS
+  return value.length <= COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS
     ? value
-    : `${value.slice(0, COMMUNITY_WIKI_ARCHITECT_SOURCE_EXCERPT_CHARS - 1).trimEnd()}…`;
+    : `${value.slice(0, COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS - 1).trimEnd()}…`;
+}
+
+function buildBuilderIntentTerms(raw: unknown): string[] {
+  const value = String(raw ?? "").toLowerCase();
+  if (!value) return [];
+  return Array.from(
+    new Set(
+      value
+        .split(/[^a-z0-9]+/i)
+        .map((term) => term.trim())
+        .filter((term) => term.length >= 3)
+        .slice(0, 80),
+    ),
+  );
+}
+
+function sourceIntentMatchScore(source: CommunityResourceLike, intentTerms: string[]): number {
+  if (intentTerms.length === 0) return 0;
+  const titleText = [
+    source.title,
+    source.sourceExternalName,
+    source.sourceOriginalFilename,
+  ].join(" ").toLowerCase();
+  const bodyText = String(source.bodyMd ?? "").slice(0, 5_000).toLowerCase();
+  let score = 0;
+  for (const term of intentTerms) {
+    if (titleText.includes(term)) score += 3;
+    if (bodyText.includes(term)) score += 1;
+  }
+  return score;
+}
+
+function buildArchitectSourceCard(args: {
+  source: CommunityResourceLike;
+  assignedPages: string[];
+}): Record<string, unknown> {
+  const source = args.source;
+  const externalUrl = String(source.sourceExternalUrl ?? "").trim();
+  const url = String(source.url ?? "").trim() || externalUrl || null;
+  const provider =
+    String(source.sourceExternalProvider ?? "").trim() ||
+    String(source.sourceIngestionKind ?? "").trim() ||
+    null;
+
+  return {
+    id: normalizeIdValue(source._id),
+    title: String(source.title ?? ""),
+    type: String(source.type ?? ""),
+    provider,
+    status: normalizeResourceStatus(source.status),
+    source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
+    url,
+    source_external_name: String(source.sourceExternalName ?? "").trim() || null,
+    source_external_provider: String(source.sourceExternalProvider ?? "").trim() || null,
+    source_external_url: externalUrl || null,
+    length_chars: String(source.bodyMd ?? "").trim().length,
+    excerpt: buildSourceExcerpt(source.bodyMd),
+    assigned_pages: args.assignedPages,
+    created_at: toIsoString(source.createdAt),
+    updated_at: toIsoString(source.updatedAt),
+  };
+}
+
+function buildArchitectSourceWindow(args: {
+  readySources: CommunityResourceLike[];
+  assignedPagesBySourceId: Map<string, string[]>;
+  builderIntent: string | null;
+}): {
+  sourceCards: Record<string, unknown>[];
+  visibleSourceIds: string[];
+  sourcesOmitted: number;
+  budgetChars: number;
+  usedChars: number;
+} {
+  const intentTerms = buildBuilderIntentTerms(args.builderIntent);
+  const rankedSources = args.readySources
+    .slice()
+    .sort((left, right) => {
+      const leftId = normalizeIdValue(left._id);
+      const rightId = normalizeIdValue(right._id);
+      const leftAssigned = (args.assignedPagesBySourceId.get(leftId)?.length ?? 0) > 0 ? 1 : 0;
+      const rightAssigned = (args.assignedPagesBySourceId.get(rightId)?.length ?? 0) > 0 ? 1 : 0;
+      if (leftAssigned !== rightAssigned) return leftAssigned - rightAssigned;
+
+      const leftIntentScore = sourceIntentMatchScore(left, intentTerms);
+      const rightIntentScore = sourceIntentMatchScore(right, intentTerms);
+      if (leftIntentScore !== rightIntentScore) return rightIntentScore - leftIntentScore;
+
+      const leftFreshness = Number(left.sourceIngestedAt ?? left.updatedAt ?? left.createdAt);
+      const rightFreshness = Number(right.sourceIngestedAt ?? right.updatedAt ?? right.createdAt);
+      if (leftFreshness !== rightFreshness) return rightFreshness - leftFreshness;
+
+      return leftId.localeCompare(rightId);
+    });
+
+  const sourceCards: Record<string, unknown>[] = [];
+  let usedChars = 0;
+  for (const source of rankedSources) {
+    if (sourceCards.length >= COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS) break;
+    const sourceId = normalizeIdValue(source._id);
+    const card = buildArchitectSourceCard({
+      source,
+      assignedPages: args.assignedPagesBySourceId.get(sourceId) ?? [],
+    });
+    const cardChars = JSON.stringify(card).length + 2;
+    if (
+      sourceCards.length > 0 &&
+      usedChars + cardChars > COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS
+    ) {
+      break;
+    }
+    sourceCards.push(card);
+    usedChars += cardChars;
+  }
+
+  return {
+    sourceCards,
+    visibleSourceIds: sourceCards.map((card) => String(card.id ?? "")).filter(Boolean),
+    sourcesOmitted: Math.max(0, args.readySources.length - sourceCards.length),
+    budgetChars: COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS,
+    usedChars,
+  };
 }
 
 function truncateContentWriterSource(raw: unknown): string {
@@ -604,7 +728,6 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
       .sort((left, right) => right.createdAt - left.createdAt);
     const readySources = allSources.filter(communityResourceSourceHasReadyText);
     const pages = allPages.slice(0, COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES);
-    const sources = readySources.slice(0, COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES);
     const assignedPagesBySourceId = new Map<string, string[]>();
     for (const page of pages) {
       const sourceId = normalizeIdValue(page.sourceResourceId ?? "");
@@ -613,12 +736,18 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
       rows.push(normalizeIdValue(page._id));
       assignedPagesBySourceId.set(sourceId, rows);
     }
+    const builderIntent = normalizeBuilderIntent(args.builderIntent);
+    const sourceWindow = buildArchitectSourceWindow({
+      readySources,
+      assignedPagesBySourceId,
+      builderIntent,
+    });
 
     const communityRow = community as CommunityLike;
     return {
       ok: true,
       kind: "community_wiki_architect_run_context",
-      builder_intent: normalizeBuilderIntent(args.builderIntent),
+      builder_intent: builderIntent,
       community: {
         id: normalizeIdValue(communityRow._id),
         slug: String(communityRow.slug ?? ""),
@@ -640,8 +769,12 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
           return status === "queued" || status === "processing";
         }).length,
         sources_failed_ingestion: allSources.filter((source) => normalizeResourceSourceIngestionStatus(source) === "failed").length,
-        sources_visible: sources.length,
-        sources_truncated: readySources.length > sources.length,
+        sources_visible: sourceWindow.sourceCards.length,
+        sources_omitted: sourceWindow.sourcesOmitted,
+        sources_truncated: sourceWindow.sourcesOmitted > 0,
+        source_context_budget_chars: sourceWindow.budgetChars,
+        source_context_used_chars: sourceWindow.usedChars,
+        visible_source_ids: sourceWindow.visibleSourceIds,
         modules: modules
           .slice()
           .sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt - right.createdAt)
@@ -662,19 +795,7 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
           source_resource_id: normalizeIdValue(page.sourceResourceId ?? "") || null,
           body_chars: String(page.bodyMd ?? "").trim().length,
         })),
-        source_inbox: sources.map((source) => ({
-          id: normalizeIdValue(source._id),
-          title: String(source.title ?? ""),
-          type: String(source.type ?? ""),
-          status: normalizeResourceStatus(source.status),
-          source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
-          url: String(source.url ?? "").trim() || null,
-          length_chars: String(source.bodyMd ?? "").trim().length,
-          excerpt: buildSourceExcerpt(source.bodyMd),
-          assigned_pages: assignedPagesBySourceId.get(normalizeIdValue(source._id)) ?? [],
-          created_at: toIsoString(source.createdAt),
-          updated_at: toIsoString(source.updatedAt),
-        })),
+        source_inbox: sourceWindow.sourceCards,
       },
     };
   },
@@ -763,19 +884,53 @@ export const runCommunityWikiArchitectProposal: any = action({
         },
       };
     }
-    if (
-      (Boolean(state.pages_truncated) || Boolean(state.sources_truncated)) &&
-      (validation.value.drafts_created.length > 0 || validation.value.drafts_updated.length > 0)
-    ) {
+    const hasDraftWrites =
+      validation.value.drafts_created.length > 0 || validation.value.drafts_updated.length > 0;
+    const visibleSourceIds = new Set(
+      (Array.isArray(state.visible_source_ids) ? state.visible_source_ids : [])
+        .map((id: unknown) => String(id ?? "").trim())
+        .filter(Boolean),
+    );
+    const proposedVisibleSourceErrors = [
+      ...validation.value.drafts_created.map((draft, index) => ({
+        path: `$.drafts_created[${index}].source_resource_id`,
+        sourceId: draft.source_resource_id,
+      })),
+      ...validation.value.drafts_updated.map((draft, index) => ({
+        path: `$.drafts_updated[${index}].source_resource_id`,
+        sourceId: draft.source_resource_id,
+      })),
+    ].filter((row) => row.sourceId !== null && !visibleSourceIds.has(String(row.sourceId ?? "")));
+
+    if (proposedVisibleSourceErrors.length > 0) {
       return {
         ok: false,
         kind: "community_wiki_architect_proposal",
         code: "invalid_architect_output",
-        message: "Wiki Architect cannot propose draft writes from a truncated resource window.",
+        message: "Wiki Architect proposed source lineage outside the visible source window.",
+        errors: proposedVisibleSourceErrors.map((row) => ({
+          path: row.path,
+          message: "source_resource_id must be one of current_resource_state.visible_source_ids.",
+        })),
+        output_preview: completion.outputText.slice(0, 1600),
+        model_id: completion.resolvedModelId ?? completion.modelId,
+        usage: {
+          prompt_tokens: completion.promptTokens,
+          completion_tokens: completion.completionTokens,
+        },
+      };
+    }
+
+    if (Boolean(state.pages_truncated) && hasDraftWrites) {
+      return {
+        ok: false,
+        kind: "community_wiki_architect_proposal",
+        code: "invalid_architect_output",
+        message: "Wiki Architect cannot propose draft writes from a truncated page window.",
         errors: [
           {
             path: "$.drafts_created",
-            message: "Narrow builder intent before proposing draft writes.",
+            message: "Narrow builder intent before proposing draft writes from visible pages.",
           },
         ],
         output_preview: completion.outputText.slice(0, 1600),
@@ -803,6 +958,9 @@ export const runCommunityWikiArchitectProposal: any = action({
         pages_total: Number(state.pages_total ?? 0),
         sources_total: Number(state.sources_total ?? 0),
         ready_sources_total: Number(state.ready_sources_total ?? 0),
+        sources_omitted: Number(state.sources_omitted ?? 0),
+        source_context_budget_chars: Number(state.source_context_budget_chars ?? 0),
+        source_context_used_chars: Number(state.source_context_used_chars ?? 0),
         pages_truncated: Boolean(state.pages_truncated),
         sources_truncated: Boolean(state.sources_truncated),
       },

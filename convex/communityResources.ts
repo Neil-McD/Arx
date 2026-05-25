@@ -3641,7 +3641,12 @@ export const listCommunityLaunchKnowledgeSources = query({
     const sources = await Promise.all(
       rows
         .filter((row) => normalizeResourceRole(row.role) === "source")
-        .filter((row) => isPlainUrlSource(row) || isGoogleDriveSourceResource(row) || isGitHubSourceResource(row))
+        .filter((row) =>
+          isPlainUrlSource(row) ||
+          isPlainFileSource(row) ||
+          isGoogleDriveSourceResource(row) ||
+          isGitHubSourceResource(row)
+        )
         .sort(compareCommunityResources)
         .slice(0, limit)
         .map((row) => mapCommunityLaunchKnowledgeSourceRow(ctx, row, credentialStatusCache)),

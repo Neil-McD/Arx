@@ -120,8 +120,13 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /pages_truncated[\s\S]*sources_truncated[\s\S]*do NOT propose new draft pages or draft updates/,
-  "architect should not propose writes from truncated resource windows",
+  /pages_truncated[\s\S]*do NOT propose new draft pages[\s\S]*sources_omitted[\s\S]*may still propose drafts[\s\S]*visible source IDs[\s\S]*visible_source_ids/,
+  "architect should block writes on truncated pages while allowing bounded visible-source drafts",
+);
+assert.match(
+  promptSource,
+  /Prefer unassigned visible source-inbox items before already-assigned source-inbox items/,
+  "architect should prefer unused visible sources when budgeting draft proposals",
 );
 assert.match(
   promptSource,

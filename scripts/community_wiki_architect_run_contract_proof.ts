@@ -69,8 +69,23 @@ assert.match(
 );
 assert.match(
   architect,
-  /const readySources = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*source_inbox:[\s\S]*source_ingestion_status:[\s\S]*length_chars:[\s\S]*excerpt: buildSourceExcerpt[\s\S]*assigned_pages:/,
-  "architect context should expose ready source text excerpts and assignment state",
+  /COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS\s*=\s*80[\s\S]*COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS\s*=\s*40_000[\s\S]*COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS\s*=\s*600/,
+  "architect source context should have a hard visible-card and character budget",
+);
+assert.match(
+  architect,
+  /function buildArchitectSourceWindow[\s\S]*sourceCards[\s\S]*visibleSourceIds[\s\S]*sourcesOmitted[\s\S]*sourceCards\.length >= COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS[\s\S]*usedChars \+ cardChars > COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS/,
+  "architect context should build a bounded visible source window",
+);
+assert.match(
+  architect,
+  /const readySources = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*const sourceWindow = buildArchitectSourceWindow[\s\S]*source_inbox: sourceWindow\.sourceCards/,
+  "architect context should expose only ready source text through the bounded source window",
+);
+assert.match(
+  architect,
+  /source_ingestion_status:[\s\S]*length_chars:[\s\S]*excerpt: buildSourceExcerpt[\s\S]*assigned_pages:/,
+  "architect source cards should expose ingestion status, bounded excerpts, and assignment state",
 );
 assert.match(
   architect,
@@ -84,8 +99,8 @@ assert.match(
 );
 assert.match(
   architect,
-  /sources_total:[\s\S]*sources_visible:[\s\S]*sources_truncated:/,
-  "architect context should expose source truncation metadata",
+  /sources_total:[\s\S]*sources_visible:[\s\S]*sources_omitted:[\s\S]*sources_truncated:[\s\S]*source_context_budget_chars:[\s\S]*source_context_used_chars:[\s\S]*visible_source_ids:/,
+  "architect context should expose source window budget and visibility metadata",
 );
 assert.match(
   architect,
@@ -99,8 +114,18 @@ assert.match(
 );
 assert.match(
   architect,
-  /Wiki Architect cannot propose draft writes from a truncated resource window/,
-  "architect action should reject write proposals produced from truncated context",
+  /source_resource_id must be one of current_resource_state\.visible_source_ids/,
+  "architect action should reject source lineage outside the visible source window",
+);
+assert.match(
+  runBody,
+  /Boolean\(state\.pages_truncated\) && hasDraftWrites[\s\S]*Wiki Architect cannot propose draft writes from a truncated page window/,
+  "architect action should reject write proposals produced from a truncated page window",
+);
+assert.doesNotMatch(
+  runBody,
+  /Boolean\(state\.pages_truncated\) \|\| Boolean\(state\.sources_truncated\)/,
+  "architect action should not block all draft writes merely because some ready sources were omitted from the bounded window",
 );
 assert.doesNotMatch(
   runBody,

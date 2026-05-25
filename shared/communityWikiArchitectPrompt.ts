@@ -118,7 +118,7 @@ INPUTS YOU WILL RECEIVE
    - existing modules
    - existing pages: draft and published, with status and updatedAt
    - source-inbox items: ready ingested sources only, including id, title, type, length, bounded excerpt, assigned pages
-   - visibility metadata for the current context window: total counts, visible counts, and truncation flags
+   - visibility metadata for the current context window: total counts, visible counts, omitted counts, visible source ids, and truncation flags
 
 3. Builder intent, optional
    - free-text notes from the modal describing what the builder wants this wiki to do
@@ -127,10 +127,18 @@ INPUTS YOU WILL RECEIVE
 CONTEXT WINDOW RULE
 ================================================================
 
-If current_resource_state.pages_truncated or current_resource_state.sources_truncated
-is true, do NOT propose new draft pages or draft updates. Return an empty changeset
-and ask the builder to narrow the run in needs_from_builder. Hidden pages or sources
-can make duplicate detection unsafe.
+If current_resource_state.pages_truncated is true, do NOT propose new draft pages
+or draft updates. Return an empty changeset and ask the builder to narrow the run
+in needs_from_builder. Hidden pages can make duplicate detection unsafe.
+
+current_resource_state.source_inbox is a bounded source window, not necessarily
+every ready source in the community. If current_resource_state.sources_omitted
+is greater than 0, you may still propose drafts, but only from visible source IDs.
+Do not claim full source coverage. Leave omitted sources for future runs.
+
+Draft source_resource_id values must be one of
+current_resource_state.visible_source_ids. Sources outside that visible list were
+not available to you for this run.
 
 ================================================================
 THIN-CONTEXT RULE
@@ -189,6 +197,7 @@ ${COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES.map((title) => `    "${title}"`)
 - PolyNet currently stores one primary source per draft page. If several sources are relevant,
   choose the strongest primary source for source_resource_id and leave weaker secondary sources
   unassigned unless they justify their own page.
+- Prefer unassigned visible source-inbox items before already-assigned source-inbox items.
 - Do not create speculative pages from weak inferred links.
 - Two sources mentioning a topic is not enough to justify a page. Wait for explicit signal: either a source whose primary topic is that page, or explicit builder intent.
 - Do not duplicate existing pages. Match by normalized title plus parent module.

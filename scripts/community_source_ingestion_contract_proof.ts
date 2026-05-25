@@ -151,8 +151,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /(?=[\s\S]*listCommunityLaunchKnowledgeSources = query\(\{[\s\S]*by_community_role_status[\s\S]*isPlainUrlSource\(row\)[\s\S]*isGoogleDriveSourceResource\(row\)[\s\S]*isGitHubSourceResource\(row\))(?=[\s\S]*source_ingestion_kind: sourceIngestionKind)(?=[\s\S]*source_external_url:[\s\S]*normalizeOptionalUrl\(row\.url\))/,
-  "launch Knowledge focused source query should return saved URL links plus Drive/GitHub rows with openable source URLs",
+  /(?=[\s\S]*listCommunityLaunchKnowledgeSources = query\(\{[\s\S]*by_community_role_status[\s\S]*isPlainUrlSource\(row\)[\s\S]*isPlainFileSource\(row\)[\s\S]*isGoogleDriveSourceResource\(row\)[\s\S]*isGitHubSourceResource\(row\))(?=[\s\S]*source_ingestion_kind: sourceIngestionKind)(?=[\s\S]*source_external_url:[\s\S]*normalizeOptionalUrl\(row\.url\))/,
+  "launch Knowledge focused source query should return saved files, URL links, and Drive/GitHub rows with openable source URLs when available",
 );
 assert.doesNotMatch(
   core,
@@ -642,33 +642,33 @@ assert.match(
 );
 assert.match(
   modal,
-  /knowledgeLinkSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeGitHubSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onRemoveKnowledgeLinkSource[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onRemoveKnowledgeGitHubSource[\s\S]*onDisconnectKnowledgeGitHub/,
-  "launch Knowledge modal props should expose saved link/GitHub sources and the GitHub integration lifecycle",
+  /knowledgeLinkSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeFileSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeGitHubSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onRemoveKnowledgeLinkSource[\s\S]*onRemoveKnowledgeFileSource[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onRemoveKnowledgeGitHubSource[\s\S]*onDisconnectKnowledgeGitHub/,
+  "launch Knowledge modal props should expose saved link/file/GitHub sources and the GitHub integration lifecycle",
 );
 assert.match(
   modal,
-  /<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeLinkSources}[\s\S]*fallbackTitle="Source link"[\s\S]*onRemove={handleRemoveLinkSource}/,
-  "launch Knowledge modal should show saved link sources inline with open and delete controls",
+  /effectiveKnowledgeSavedSources[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeSavedSources}[\s\S]*fallbackTitle="Source"[\s\S]*onRemove={handleRemoveSavedKnowledgeSource}/,
+  "launch Knowledge modal should show saved source rows through one unified counter with open and delete controls",
 );
 assert.match(
   modal,
-  /loadGoogleDriveFiles[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*setKnowledgeDriveFiles[\s\S]*knowledgeAutoOpenProvider[\s\S]*handleGoogleDrivePrimaryAction[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*loadGoogleDriveFiles[\s\S]*handleImportGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles/,
-  "launch Knowledge modal should connect Drive, auto/load selectable files, and import selected files",
+  /(?=[\s\S]*loadGoogleDriveFiles[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*setKnowledgeDriveFiles)(?=[\s\S]*knowledgeAutoOpenProvider)(?=[\s\S]*handleGoogleDrivePrimaryAction[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*loadGoogleDriveFiles)(?=[\s\S]*saveKnowledgeDrafts[\s\S]*onImportKnowledgeGoogleDriveFiles)/,
+  "launch Knowledge modal should connect Drive, auto/load selectable files, and save selected files through the unified save path",
 );
 assert.match(
   modal,
-  /handleImportGoogleDriveFiles[\s\S]*failedIds[\s\S]*setKnowledgeDriveSelectedIds\(\(ids\) => ids\.filter\(\(id\) => failedIds\.has\(id\)\)\)[\s\S]*result\?\.failed[\s\S]*setStepError/,
-  "launch Knowledge modal should keep failed Drive imports selected and surface failures",
+  /driveFileIds[\s\S]*onImportKnowledgeGoogleDriveFiles\(driveFileIds\)[\s\S]*throw new Error\(firstFailure\?\.message \|\| "Could not save selected Google Drive sources\."\)[\s\S]*setStepError\(message\)/,
+  "launch Knowledge modal should surface Drive save failures from the unified save path",
 );
 assert.match(
   modal,
-  /(?=[\s\S]*knowledgeDriveImportedExternalIds)(?=[\s\S]*handleDisconnectGoogleDrive[\s\S]*onDisconnectKnowledgeGoogleDrive)(?=[\s\S]*handleRemoveGoogleDriveSource[\s\S]*removeImportedKnowledgeSource[\s\S]*onRemoveKnowledgeGoogleDriveSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeGoogleDriveSources}[\s\S]*fallbackTitle="Drive source"[\s\S]*onRemove={handleRemoveGoogleDriveSource})(?=[\s\S]*community-launch-knowledge-imported-source[\s\S]*community-launch-knowledge-source-action)(?=[\s\S]*alreadyAdded)/,
-  "launch Knowledge modal should show saved Drive sources inline, mark selected Drive files as Added, delete individual sources, and disconnect credentials",
+  /(?=[\s\S]*knowledgeDriveImportedExternalIds)(?=[\s\S]*handleDisconnectGoogleDrive[\s\S]*onDisconnectKnowledgeGoogleDrive)(?=[\s\S]*handleRemoveSavedKnowledgeSource[\s\S]*removeImportedKnowledgeSource[\s\S]*onRemoveKnowledgeGoogleDriveSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeSavedSources}[\s\S]*fallbackTitle="Source"[\s\S]*onRemove={handleRemoveSavedKnowledgeSource})(?=[\s\S]*community-launch-knowledge-imported-source[\s\S]*community-launch-knowledge-source-action)(?=[\s\S]*alreadyAdded)/,
+  "launch Knowledge modal should show saved Drive sources in the unified list, mark imported Drive files as Added, delete individual sources, and disconnect credentials",
 );
 assert.match(
   modal,
-  /loadGitHubRepositories[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*onConnectKnowledgeGitHub[\s\S]*handleSelectGitHubRepository[\s\S]*onListKnowledgeGitHubFiles[\s\S]*handleCloseGitHubPicker[\s\S]*handleDisconnectGitHub[\s\S]*onDisconnectKnowledgeGitHub[\s\S]*handleImportGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles/,
-  "launch Knowledge modal should connect GitHub, auto-open/load repositories, load files, close the picker, disconnect credentials, and import selected files",
+  /(?=[\s\S]*loadGitHubRepositories[\s\S]*onListKnowledgeGitHubRepositories)(?=[\s\S]*knowledgeAutoOpenProvider !== "github")(?=[\s\S]*handleGitHubPrimaryAction[\s\S]*onConnectKnowledgeGitHub)(?=[\s\S]*handleSelectGitHubRepository[\s\S]*onListKnowledgeGitHubFiles)(?=[\s\S]*handleCloseGitHubPicker[\s\S]*handleDisconnectGitHub[\s\S]*onDisconnectKnowledgeGitHub)(?=[\s\S]*saveKnowledgeDrafts[\s\S]*onImportKnowledgeGitHubFiles)/,
+  "launch Knowledge modal should connect GitHub, auto-open/load repositories, load files, close the picker, disconnect credentials, and save selected files",
 );
 assert.match(
   modal,
@@ -677,8 +677,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveGitHubSource[\s\S]*removeImportedKnowledgeSource[\s\S]*onRemoveKnowledgeGitHubSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeGitHubSources}[\s\S]*fallbackTitle="GitHub source"[\s\S]*onRemove={handleRemoveGitHubSource})(?=[\s\S]*community-launch-knowledge-imported-source)(?=[\s\S]*alreadyAdded = knowledgeGitHubImportedExternalIds\.has\(file\.id\))/,
-  "launch Knowledge modal should show saved GitHub sources inline, mark selected GitHub files as Added, and delete individual sources",
+  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveSavedKnowledgeSource[\s\S]*removeImportedKnowledgeSource[\s\S]*onRemoveKnowledgeGitHubSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeSavedSources}[\s\S]*fallbackTitle="Source"[\s\S]*onRemove={handleRemoveSavedKnowledgeSource})(?=[\s\S]*community-launch-knowledge-imported-source)(?=[\s\S]*alreadyAdded = knowledgeGitHubImportedExternalIds\.has\(file\.id\))/,
+  "launch Knowledge modal should show saved GitHub sources in the unified list, mark imported GitHub files as Added, and delete individual sources",
 );
 assert.match(
   modal,
@@ -687,8 +687,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /handleImportGitHubFiles[\s\S]*failedIds[\s\S]*setKnowledgeGitHubSelectedIds\(\(ids\) => ids\.filter\(\(id\) => failedIds\.has\(id\)\)\)[\s\S]*result\?\.failed[\s\S]*setStepError/,
-  "launch Knowledge modal should keep failed GitHub imports selected and surface failures",
+  /githubFileIds[\s\S]*onImportKnowledgeGitHubFiles\(githubFileIds\)[\s\S]*throw new Error\(firstFailure\?\.message \|\| "Could not save selected GitHub sources\."\)[\s\S]*setStepError\(message\)/,
+  "launch Knowledge modal should surface GitHub save failures from the unified save path",
 );
 
 assert.match(

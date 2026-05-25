@@ -2222,6 +2222,9 @@ export default function App() {
   const [communityLaunchLinkSources, setCommunityLaunchLinkSources] = useState<
     CommunityLaunchKnowledgeImportedSource[]
   >([]);
+  const [communityLaunchFileSources, setCommunityLaunchFileSources] = useState<
+    CommunityLaunchKnowledgeImportedSource[]
+  >([]);
   const [communityLaunchGoogleDriveSources, setCommunityLaunchGoogleDriveSources] = useState<
     CommunityLaunchKnowledgeImportedSource[]
   >([]);
@@ -2423,6 +2426,9 @@ export default function App() {
     const sources = result.sources ?? [];
     setCommunityLaunchLinkSources(
       sources.filter((source) => source.source_ingestion_kind === "url"),
+    );
+    setCommunityLaunchFileSources(
+      sources.filter((source) => source.source_ingestion_kind === "file"),
     );
     setCommunityLaunchGoogleDriveSources(
       sources.filter((source) => source.source_external_provider === "google_drive"),
@@ -5172,6 +5178,7 @@ export default function App() {
     setMessageReactions([]);
     setCommunityResources([]);
     setCommunityLaunchLinkSources([]);
+    setCommunityLaunchFileSources([]);
     setCommunityLaunchGoogleDriveSources([]);
     setCommunityLaunchGitHubSources([]);
     setCommunityResourceModules([]);
@@ -8118,7 +8125,7 @@ export default function App() {
       const rawUrls = draft.urls.map((url) => url.trim()).filter(Boolean);
       if (rawUrls.length === 0) throw new Error("Add a source link.");
       if (rawUrls.length > 5) throw new Error("Add up to five source links at a time.");
-      for (const rawUrl of rawUrls) {
+      const normalizedUrls = rawUrls.map((rawUrl) => {
         const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
         let parsedUrl: URL;
         try {
@@ -8129,6 +8136,9 @@ export default function App() {
         if (parsedUrl.protocol !== "https:") {
           throw new Error("Add https source links.");
         }
+        return parsedUrl;
+      });
+      for (const parsedUrl of normalizedUrls) {
         const titlePath = parsedUrl.pathname && parsedUrl.pathname !== "/" ? parsedUrl.pathname : "";
         const title = `${parsedUrl.hostname.replace(/^www\./, "")}${titlePath}`.slice(0, 120);
         await saveCloudCommunityResource({
@@ -8186,6 +8196,7 @@ export default function App() {
         });
       }
       await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
     };
     const handleIngestCommunityLaunchKnowledgeSources = async () => {
@@ -10104,6 +10115,7 @@ export default function App() {
         knowledgeIntegrationReloadKey={communityLaunchKnowledgeIntegrationReloadKey}
         knowledgeAutoOpenProvider={communityLaunchKnowledgeAutoOpenProvider}
         knowledgeLinkSources={communityLaunchLinkSources}
+        knowledgeFileSources={communityLaunchFileSources}
         knowledgeGoogleDriveSources={communityLaunchGoogleDriveSources}
         knowledgeGitHubSources={communityLaunchGitHubSources}
         onClose={() => {
@@ -10131,6 +10143,7 @@ export default function App() {
         onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
         onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
         onRemoveKnowledgeLinkSource={handleRemoveCommunityLaunchKnowledgeSource}
+        onRemoveKnowledgeFileSource={handleRemoveCommunityLaunchKnowledgeSource}
         onIngestKnowledgeSources={handleIngestCommunityLaunchKnowledgeSources}
         onLoadKnowledgeGoogleDriveConnection={handleLoadCommunityLaunchGoogleDriveConnection}
         onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}
