@@ -1861,12 +1861,15 @@
        reader; the three step blocks carry the argument. */
     .polynet-network-landing .argument .arg-head h2 { display: none; }
 
-    /* Give the hero extra bottom padding so the globe gets a clean
-       band of dedicated space below the CTAs. Then pull the globe up
-       just a few percent into that space so the horizon reads inside
-       the viewport without colliding with the CTA row. */
-    .polynet-network-landing .hero { padding-bottom: 240px; }
-    .polynet-network-landing .hero .globe { bottom: 2%; }
+    /* Give the hero a bottom band for the globe to occupy below the
+       CTAs. Make the globe bigger by extending its width past the
+       viewport so the horizon reads zoomed-in, and park it right at
+       the hero's bottom edge so it rests just above the marquee. */
+    .polynet-network-landing .hero { padding-bottom: 220px; }
+    .polynet-network-landing .hero .globe {
+      width: 145vw;
+      bottom: 0%;
+    }
 
     /* Skinnier marquee band so it reads as a scrolling rail, not a
        section. Also speed up the scroll — at 60s on a narrow viewport
