@@ -554,6 +554,11 @@ assert.match(
   /handleIngestCommunityLaunchKnowledgeSources[\s\S]*ingestCloudCommunitySources[\s\S]*loadCommunityResources[\s\S]*refreshActiveCommunityLaunchSetupStatus/,
   "launch Knowledge Next should refresh resources after source ingestion",
 );
+assert.doesNotMatch(
+  app,
+  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*limit:\s*20/,
+  "launch Knowledge Next should use the backend default ingestion window instead of truncating the provider-local source set",
+);
 assert.match(
   app,
   /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
@@ -563,6 +568,16 @@ assert.match(
   modal,
   /onIngestKnowledgeSources[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onLoadKnowledgeHealth[\s\S]*onGenerateKnowledgePlan/,
   "launch Knowledge Next must run ingestion before health/scaffold/architect",
+);
+assert.match(
+  modal,
+  /knowledgeIngestionCanContinue[\s\S]*ready_sources[\s\S]*countPendingKnowledgeIngestionSources[\s\S]*handlePrepareKnowledgeResources[\s\S]*!ingestionResult\?\.ok && !knowledgeIngestionCanContinue\(ingestionResult\)[\s\S]*formatKnowledgeIngestionResultError/,
+  "launch Knowledge Next should continue after partial source ingestion failures when ready sources exist",
+);
+assert.match(
+  modal,
+  /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_url_fetcher_failed_413[\s\S]*too large to read/,
+  "launch Knowledge Next should not surface raw source URL fetcher 413 codes to founders",
 );
 assert.match(
   modal,

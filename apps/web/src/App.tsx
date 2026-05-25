@@ -8225,7 +8225,6 @@ export default function App() {
       const result = await ingestCloudCommunitySources({
         session,
         communityId: community.id,
-        limit: 20,
       });
       await refreshCommunityLaunchKnowledgeProjectionBestEffort({
         communityId: community.id,

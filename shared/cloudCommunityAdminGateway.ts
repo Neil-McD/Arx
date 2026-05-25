@@ -156,6 +156,7 @@ export type CloudCommunitySourceLinkIngestionResult = {
   pending_file_sources?: number;
   pending_google_drive_sources?: number;
   pending_github_sources?: number;
+  pending_sources?: number;
   failures: Array<{
     resource_id: string;
     title: string;

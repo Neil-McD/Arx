@@ -184,6 +184,11 @@ export type CommunityLaunchKnowledgeSourceIngestionResult = {
   failed?: number;
   ready_sources?: number;
   total_sources?: number;
+  pending_sources?: number;
+  pending_url_sources?: number;
+  pending_file_sources?: number;
+  pending_google_drive_sources?: number;
+  pending_github_sources?: number;
   failures?: Array<{
     title?: string;
     url?: string;
@@ -661,6 +666,67 @@ function formatReconnectRequiredMessage(
 
 function formatKnowledgeResourceLabel(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function toNonNegativeInteger(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
+}
+
+function countPendingKnowledgeIngestionSources(
+  result: CommunityLaunchKnowledgeSourceIngestionResult | null | undefined,
+): number {
+  if (!result) return 0;
+  if (typeof result.pending_sources === "number") return toNonNegativeInteger(result.pending_sources);
+  return (
+    toNonNegativeInteger(result.pending_url_sources) +
+    toNonNegativeInteger(result.pending_file_sources) +
+    toNonNegativeInteger(result.pending_google_drive_sources) +
+    toNonNegativeInteger(result.pending_github_sources)
+  );
+}
+
+function knowledgeIngestionCanContinue(
+  result: CommunityLaunchKnowledgeSourceIngestionResult | null | undefined,
+): boolean {
+  return toNonNegativeInteger(result?.ready_sources) > 0 && countPendingKnowledgeIngestionSources(result) === 0;
+}
+
+function formatKnowledgeIngestionFailureMessage(message: unknown): string {
+  const code = String(message ?? "").trim();
+  if (
+    code === "community_source_url_fetcher_failed_413" ||
+    code === "community_source_url_too_large"
+  ) {
+    return "One source link was too large to read. Remove it or add that material as a file.";
+  }
+  if (code === "community_source_url_no_readable_content") {
+    return "One source link did not contain readable text. Remove it or add another source.";
+  }
+  if (code === "community_source_pdf_ingestion_not_supported") {
+    return "PDF links are not readable yet. Upload a text export or add another source.";
+  }
+  if (code.startsWith("community_source_url_fetcher_failed_")) {
+    return "One source link could not be read. Remove it or try another source.";
+  }
+  return code || "Could not read source material yet.";
+}
+
+function formatKnowledgeIngestionResultError(
+  result: CommunityLaunchKnowledgeSourceIngestionResult | null | undefined,
+): string {
+  const firstFailure = result?.failures?.[0];
+  return formatKnowledgeIngestionFailureMessage(
+    firstFailure?.message || result?.message || "Could not read source material yet.",
+  );
+}
+
+function formatKnowledgeIngestionPartialWarning(
+  result: CommunityLaunchKnowledgeSourceIngestionResult | null | undefined,
+): string | null {
+  const failed = toNonNegativeInteger(result?.failed);
+  if (failed <= 0) return null;
+  return `${failed} source${failed === 1 ? "" : "s"} could not be read.`;
 }
 
 export function WebCommunityLaunchSetupModal(
@@ -1870,14 +1936,12 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeHealthLoading(true);
       try {
         const ingestionResult = await onIngestKnowledgeSources();
-        if (!ingestionResult?.ok) {
-          const firstFailure = ingestionResult?.failures?.[0];
-          throw new Error(
-            firstFailure?.message ||
-              ingestionResult?.message ||
-              "Could not read source material yet.",
-          );
+        if (!ingestionResult?.ok && !knowledgeIngestionCanContinue(ingestionResult)) {
+          throw new Error(formatKnowledgeIngestionResultError(ingestionResult));
         }
+        const ingestionWarning = !ingestionResult?.ok
+          ? formatKnowledgeIngestionPartialWarning(ingestionResult)
+          : null;
         const currentHealth = await onLoadKnowledgeHealth();
         const missingDefaultModules =
           currentHealth?.summary?.missing_default_modules ?? [];
@@ -1917,16 +1981,15 @@ export function WebCommunityLaunchSetupModal(
               "Could not draft resource content.",
           );
         }
-        setStepSuccess(
-          draftResult.drafted
-            ? "Resources drafted for review."
-            : "Draft resources prepared for review.",
-        );
+        const successMessage = draftResult.drafted
+          ? "Resources drafted for review."
+          : "Draft resources prepared for review.";
+        setStepSuccess(ingestionWarning ? `${successMessage} ${ingestionWarning}` : successMessage);
         onOpenStep("knowledge");
       } catch (error) {
         setStepError(
           error instanceof Error
-            ? error.message
+            ? formatKnowledgeIngestionFailureMessage(error.message)
             : "Could not prepare draft resources.",
         );
       } finally {
