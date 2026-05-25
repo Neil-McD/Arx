@@ -8051,6 +8051,23 @@ export default function App() {
         community: activeCommunity,
       };
     };
+    const refreshCommunityLaunchKnowledgeProjectionBestEffort = async ({
+      communityId,
+      session: activeSession,
+      includeResources = false,
+    }: {
+      communityId: string;
+      session: AuthSession;
+      includeResources?: boolean;
+    }) => {
+      try {
+        if (includeResources) await loadCommunityResources(communityId, activeSession);
+        await loadCommunityLaunchKnowledgeSources(communityId, activeSession);
+        await refreshActiveCommunityLaunchSetupStatus();
+      } catch (error) {
+        console.warn("[community-launch] failed to refresh knowledge projection after source write:", error);
+      }
+    };
     const handleSaveCommunityLaunchProfile = async (draft: {
       name: string;
       slug: string;
@@ -8159,9 +8176,11 @@ export default function App() {
           },
         });
       }
-      await loadCommunityResources(community.id, session);
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
+      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
+        communityId: community.id,
+        session,
+        includeResources: true,
+      });
     };
     const handleAddCommunityLaunchKnowledgeFile = async (draft: { files: File[] }) => {
       const { session, community } = requireCommunityLaunchSaveContext();
@@ -8195,9 +8214,11 @@ export default function App() {
           },
         });
       }
-      await loadCommunityResources(community.id, session);
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
+      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
+        communityId: community.id,
+        session,
+        includeResources: true,
+      });
     };
     const handleIngestCommunityLaunchKnowledgeSources = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
@@ -8206,9 +8227,11 @@ export default function App() {
         communityId: community.id,
         limit: 20,
       });
-      await loadCommunityResources(community.id, session);
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
+      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
+        communityId: community.id,
+        session,
+        includeResources: true,
+      });
       return result as any;
     };
     const handleLoadCommunityLaunchKnowledgeSources = async () => {
@@ -8264,8 +8287,10 @@ export default function App() {
         communityId: community.id,
         fileIds,
       });
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
+      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
+        communityId: community.id,
+        session,
+      });
       return result;
     };
     const handleRemoveCommunityLaunchKnowledgeSource = async (resourceId: string) => {
@@ -8346,8 +8371,10 @@ export default function App() {
         communityId: community.id,
         fileIds,
       });
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
+      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
+        communityId: community.id,
+        session,
+      });
       return result;
     };
     const handleDisconnectCommunityLaunchGitHub = async () => {

@@ -504,8 +504,23 @@ assert.match(
 );
 assert.match(
   app,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)/,
+  /handleAddCommunityLaunchKnowledgeLink[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*refreshCommunityLaunchKnowledgeProjectionBestEffort\(\{[\s\S]*includeResources: true/,
   "launch links should enter the source inbox as queued URL sources and refresh focused saved link rows",
+);
+assert.match(
+  app,
+  /refreshCommunityLaunchKnowledgeProjectionBestEffort[\s\S]*try \{[\s\S]*loadCommunityLaunchKnowledgeSources\(communityId, activeSession\)[\s\S]*catch \(error\) \{[\s\S]*console\.warn\("\[community-launch\] failed to refresh knowledge projection after source write:", error\);/,
+  "launch source writes should not report successful saves/imports as failed when the follow-up projection refresh fails",
+);
+assert.match(
+  app,
+  /handleImportCommunityLaunchGoogleDriveFiles[\s\S]*const result = await importCloudCommunityGoogleDriveSourceFiles[\s\S]*refreshCommunityLaunchKnowledgeProjectionBestEffort\(\{[\s\S]*communityId: community\.id,[\s\S]*session,[\s\S]*\}\);[\s\S]*return result;/,
+  "Drive imports should return the import result after a best-effort projection refresh",
+);
+assert.match(
+  app,
+  /handleImportCommunityLaunchGitHubFiles[\s\S]*const result = await importCloudCommunityGitHubSourceFiles[\s\S]*refreshCommunityLaunchKnowledgeProjectionBestEffort\(\{[\s\S]*communityId: community\.id,[\s\S]*session,[\s\S]*\}\);[\s\S]*return result;/,
+  "GitHub imports should return the import result after a best-effort projection refresh",
 );
 assert.match(
   app,
