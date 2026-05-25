@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  resolveWorkspaceComputerProviderPolicy,
+} from "../convex/workspaceComputerProviderPolicy.ts";
 
 const rootDir = process.cwd();
 
@@ -14,6 +17,82 @@ function assertIncludes(source: string, needle: string, message: string) {
 
 function assertExcludes(source: string, needle: string, message: string) {
   assert.equal(source.includes(needle), false, message);
+}
+
+function proveProviderPolicyMatrix() {
+  const cases = [
+    {
+      name: "default provider",
+      input: {},
+      providerId: "daytona",
+      reason: "default_provider",
+    },
+    {
+      name: "invalid provider falls back",
+      input: { serverConfiguredProviderId: "bogus" },
+      providerId: "daytona",
+      reason: "server_configured_provider",
+    },
+    {
+      name: "Blaxel disabled falls back",
+      input: { serverConfiguredProviderId: "blaxel" },
+      providerId: "daytona",
+      reason: "blaxel_provider_not_enabled",
+    },
+    {
+      name: "Blaxel enabled without deployment falls back",
+      input: {
+        serverConfiguredProviderId: "blaxel",
+        blaxelEnabled: "true",
+      },
+      providerId: "daytona",
+      reason: "blaxel_provider_staging_only",
+    },
+    {
+      name: "Blaxel enabled in production falls back",
+      input: {
+        serverConfiguredProviderId: "blaxel",
+        blaxelEnabled: "true",
+        deploymentKind: "production",
+      },
+      providerId: "daytona",
+      reason: "blaxel_provider_staging_only",
+    },
+    {
+      name: "Blaxel enabled in development falls back",
+      input: {
+        serverConfiguredProviderId: "blaxel",
+        blaxelEnabled: "true",
+        deploymentKind: "development",
+      },
+      providerId: "daytona",
+      reason: "blaxel_provider_staging_only",
+    },
+    {
+      name: "Blaxel enabled in staging is selected",
+      input: {
+        serverConfiguredProviderId: "blaxel",
+        blaxelEnabled: "true",
+        deploymentKind: "staging",
+      },
+      providerId: "blaxel",
+      reason: "server_configured_provider",
+    },
+  ] as const;
+
+  for (const testCase of cases) {
+    const decision = resolveWorkspaceComputerProviderPolicy(testCase.input);
+    assert.equal(
+      decision.providerId,
+      testCase.providerId,
+      `${testCase.name}: unexpected provider`,
+    );
+    assert.equal(
+      decision.reason,
+      testCase.reason,
+      `${testCase.name}: unexpected reason`,
+    );
+  }
 }
 
 async function proveWorkspaceComputerProviderContract() {
@@ -84,7 +163,7 @@ async function proveWorkspaceComputerProviderContract() {
   assertIncludes(
     policySource,
     'reason: "blaxel_provider_staging_only"',
-    "expected production policy to refuse Blaxel",
+    "expected non-staging policy to refuse Blaxel",
   );
   assertIncludes(
     policySource,
@@ -166,6 +245,8 @@ async function proveWorkspaceComputerProviderContract() {
     "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_computer_provider_contract_proof.ts",
     "expected package script for the workspace computer provider contract proof",
   );
+
+  proveProviderPolicyMatrix();
 
   console.log("PASS workspace computer provider contract proof");
 }

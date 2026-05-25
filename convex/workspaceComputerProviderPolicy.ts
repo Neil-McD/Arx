@@ -31,6 +31,10 @@ function normalizeDeploymentKind(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function isBlaxelAllowedDeployment(value: unknown): boolean {
+  return normalizeDeploymentKind(value) === "staging";
+}
+
 function readServerEnv(name: string): string {
   try {
     const env = (globalThis as typeof globalThis & {
@@ -57,7 +61,7 @@ export function resolveWorkspaceComputerProviderPolicy(
         reason: "blaxel_provider_not_enabled",
       };
     }
-    if (normalizeDeploymentKind(input.deploymentKind) === "production") {
+    if (!isBlaxelAllowedDeployment(input.deploymentKind)) {
       return {
         providerId: DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID,
         source: "default_daytona",
