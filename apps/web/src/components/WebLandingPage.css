@@ -1511,6 +1511,8 @@
   }
 
   .polynet-network-landing .memory-col {
+    display: flex;
+    align-items: center;
     padding: 14px 20px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
