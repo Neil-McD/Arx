@@ -1861,7 +1861,14 @@
        reader; the three step blocks carry the argument. */
     .polynet-network-landing .argument .arg-head h2 { display: none; }
 
-    /* Thinner marquee band so the small mono text doesn't float in
-       50px+ of empty space. */
-    .polynet-network-landing .marquee { padding: 10px 0; }
+    /* Give the hero extra vertical room so the globe horizon has
+       space to read as a horizon, and the marquee gets pushed down
+       below it instead of cropping the curve. */
+    .polynet-network-landing .hero { min-height: 115vh; }
+
+    /* Skinnier marquee band so it reads as a scrolling rail, not a
+       section. Also speed up the scroll — at 60s on a narrow viewport
+       the motion is imperceptible. */
+    .polynet-network-landing .marquee { padding: 6px 0; }
+    .polynet-network-landing .marquee .track { animation-duration: 22s; }
   }
