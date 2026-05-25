@@ -430,8 +430,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /CommunityLaunchKnowledgeImportedSource[\s\S]*knowledgeGoogleDriveSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeSources\?:[\s\S]*onRemoveKnowledgeGoogleDriveSource\?:[\s\S]*onDisconnectKnowledgeGoogleDrive\?:/,
-  "launch knowledge Google Drive contract must expose imported source rows, explicit source loading, per-source removal, and disconnect",
+  /CommunityLaunchKnowledgeImportedSource[\s\S]*knowledgeLinkSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeGoogleDriveSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeSources\?:[\s\S]*onRemoveKnowledgeLinkSource\?:[\s\S]*onRemoveKnowledgeGoogleDriveSource\?:[\s\S]*onDisconnectKnowledgeGoogleDrive\?:/,
+  "launch knowledge contract must expose saved link and Google Drive source rows, explicit source loading, per-source removal, and disconnect",
 );
 assert.match(
   setupModal,
@@ -465,28 +465,28 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeDriveImportedExternalIds[\s\S]*handleDisconnectGoogleDrive[\s\S]*handleRemoveGoogleDriveSource[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2/,
-  "launch knowledge Google Drive UI must show imported Drive sources inline with icon actions, support deleting one source, and support disconnecting the provider",
+  /(?=[\s\S]*knowledgeDriveImportedExternalIds)(?=[\s\S]*handleDisconnectGoogleDrive)(?=[\s\S]*handleRemoveGoogleDriveSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeGoogleDriveSources}[\s\S]*fallbackTitle="Drive source"[\s\S]*onRemove={handleRemoveGoogleDriveSource})(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2)/,
+  "launch knowledge Google Drive UI must show imported Drive sources through the shared inline icon-action renderer, support deleting one source, and support disconnecting the provider",
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveGitHubSource)(?=[\s\S]*effectiveKnowledgeGitHubSources\.length > 0)(?=[\s\S]*GitHub source)(?=[\s\S]*community-launch-knowledge-imported-source)(?=[\s\S]*<Check)(?=[\s\S]*<ExternalLink)(?=[\s\S]*<Trash2)/,
-  "launch knowledge GitHub UI must show imported GitHub sources inline with icon actions and support deleting one source",
+  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveGitHubSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeGitHubSources}[\s\S]*fallbackTitle="GitHub source"[\s\S]*onRemove={handleRemoveGitHubSource})(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2)/,
+  "launch knowledge GitHub UI must show imported GitHub sources through the shared inline icon-action renderer and support deleting one source",
 );
 assert.match(
   setupModal,
-  /knowledgeDriveSourcesExpanded[\s\S]*community-launch-knowledge-imported-sources[\s\S]*is-expanded[\s\S]*Show fewer[\s\S]*View all/,
-  "launch knowledge Google Drive imported source list must stay compact and expandable",
+  /(?=[\s\S]*knowledgeDriveSourcesExpanded)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*expanded={knowledgeDriveSourcesExpanded}[\s\S]*onToggleExpanded=\{\(\) => setKnowledgeDriveSourcesExpanded)(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*resourceLabel[\s\S]*community-launch-knowledge-imported-summary[\s\S]*<span>\{resourceLabel\}<\/span>)(?=[\s\S]*community-launch-knowledge-imported-sources is-expanded[\s\S]*Show fewer)/,
+  "launch knowledge Google Drive imported sources must collapse to a resource counter and expand to detail rows",
 );
 assert.match(
   setupModal,
-  /knowledgeGitHubSourcesExpanded[\s\S]*community-launch-knowledge-imported-sources[\s\S]*is-expanded[\s\S]*Show fewer[\s\S]*View all/,
-  "launch knowledge GitHub imported source list must stay compact and expandable",
+  /(?=[\s\S]*knowledgeGitHubSourcesExpanded)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*expanded={knowledgeGitHubSourcesExpanded}[\s\S]*onToggleExpanded=\{\(\) => setKnowledgeGitHubSourcesExpanded)(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*resourceLabel[\s\S]*community-launch-knowledge-imported-summary[\s\S]*<span>\{resourceLabel\}<\/span>)(?=[\s\S]*community-launch-knowledge-imported-sources is-expanded[\s\S]*Show fewer)/,
+  "launch knowledge GitHub imported sources must collapse to a resource counter and expand to detail rows",
 );
 assert.match(
   baseCss,
-  /\.community-launch-knowledge-imported-sources[\s\S]*max-height: 47px[\s\S]*overflow-y: auto[\s\S]*\.community-launch-knowledge-imported-sources\.is-expanded[\s\S]*max-height: 136px[\s\S]*\.community-launch-knowledge-source-list-toggle/,
-  "launch knowledge imported source list must show about three rows before scrolling with an expand control",
+  /\.community-launch-knowledge-imported-summary[\s\S]*background: transparent[\s\S]*\.community-launch-knowledge-imported-sources[\s\S]*max-height: 136px[\s\S]*overflow-y: auto[\s\S]*\.community-launch-knowledge-source-list-toggle/,
+  "launch knowledge imported source list must default to a minimal resource counter and scroll only in expanded detail mode",
 );
 assert.match(
   setupModal,
@@ -606,13 +606,18 @@ assert.match(
 );
 assert.match(
   appShell,
-  /mapCommunityLaunchExternalSources[\s\S]*source_external_provider === provider[\s\S]*communityLaunchGoogleDriveSources[\s\S]*mapCommunityLaunchExternalSources\(communityResources, "google_drive"\)[\s\S]*communityLaunchGitHubSources[\s\S]*mapCommunityLaunchExternalSources\(communityResources, "github"\)[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchKnowledgeSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
-  "app shell must wire launch Knowledge external source rows plus Google Drive connection, listing, import, remove, and disconnect handlers",
+  /setCommunityLaunchLinkSources[\s\S]*setCommunityLaunchGoogleDriveSources[\s\S]*setCommunityLaunchGitHubSources[\s\S]*loadCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*source_ingestion_kind === "url"[\s\S]*source_external_provider === "google_drive"[\s\S]*source_external_provider === "github"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchKnowledgeSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
+  "app shell must wire focused launch Knowledge link rows plus Google Drive connection, listing, import, remove, and disconnect handlers",
 );
 assert.match(
   appShell,
-  /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityResources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
-  "app shell must explicitly hydrate saved launch Knowledge sources when the Knowledge step opens",
+  /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
+  "app shell must explicitly hydrate saved launch Knowledge sources through the focused source-row query when the Knowledge step opens",
+);
+assert.doesNotMatch(
+  appShell.match(/const handleLoadCommunityLaunchKnowledgeSources[\s\S]*?const handleLoadCommunityLaunchGoogleDriveConnection/)?.[0] ?? "",
+  /loadCommunityResources/,
+  "launch Knowledge saved source hydration must not depend on broad community resource hydration",
 );
 const googleDriveConnectionLoadSection =
   appShell.match(/const handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*?const handleConnectCommunityLaunchGoogleDrive/)?.[0] ?? "";
@@ -628,8 +633,8 @@ assert.match(
 );
 assert.match(
   appShell,
-  /knowledgeGitHubSources=\{communityLaunchGitHubSources\}[\s\S]*onRemoveKnowledgeGitHubSource=\{handleRemoveCommunityLaunchKnowledgeSource\}/,
-  "app shell must pass saved GitHub source rows and provider-agnostic source removal into launch Knowledge",
+  /knowledgeLinkSources=\{communityLaunchLinkSources\}[\s\S]*knowledgeGitHubSources=\{communityLaunchGitHubSources\}[\s\S]*onRemoveKnowledgeLinkSource=\{handleRemoveCommunityLaunchKnowledgeSource\}[\s\S]*onRemoveKnowledgeGitHubSource=\{handleRemoveCommunityLaunchKnowledgeSource\}/,
+  "app shell must pass saved link/GitHub source rows and provider-agnostic source removal into launch Knowledge",
 );
 assert.doesNotMatch(
   setupModal,
@@ -648,6 +653,21 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /sourceNeedsIntegrationReconnect[\s\S]*credential_status === "missing"[\s\S]*knowledgeDriveMissingCredentialSources[\s\S]*knowledgeGitHubMissingCredentialSources[\s\S]*knowledgeMissingCredentialMessage[\s\S]*handlePrepareKnowledgeResources[\s\S]*if \(knowledgeMissingCredentialMessage\)[\s\S]*setStepError\(knowledgeMissingCredentialMessage\)[\s\S]*return;[\s\S]*onIngestKnowledgeSources/,
+  "launch knowledge Next must block provider ingestion when queued Drive or GitHub sources need reconnect",
+);
+assert.match(
+  setupModal,
+  /community-launch-knowledge-reconnect-required[\s\S]*formatReconnectRequiredMessage\([\s\S]*"Google Drive"[\s\S]*community-launch-knowledge-reconnect-required[\s\S]*formatReconnectRequiredMessage\([\s\S]*"GitHub"/,
+  "launch knowledge integrations must show compact reconnect-required copy under the affected provider",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-imported-source\.is-credential-missing[\s\S]*\.community-launch-knowledge-reconnect-required/,
+  "launch knowledge missing-credential source rows must have a compact warning state",
+);
+assert.match(
+  setupModal,
   /(?=[\s\S]*Curating resources\.\.\.)(?=[\s\S]*Resources drafted for review\.)(?=[\s\S]*Draft resources prepared for review\.)/,
   "launch knowledge step must present agent preparation as an internal progress state",
 );
@@ -658,13 +678,18 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5[\s\S]*knowledgeLinkDrafts[\s\S]*Add new link[\s\S]*Add links/,
-  "launch knowledge link entry must support adding up to five links",
+  /COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5[\s\S]*knowledgeLinkDrafts[\s\S]*community-launch-knowledge-link-actions[\s\S]*community-launch-knowledge-link-add[\s\S]*<Plus[\s\S]*Add new link[\s\S]*community-launch-knowledge-link-submit-group[\s\S]*Add links/,
+  "launch knowledge link entry must support adding up to five links with a left-aligned plus add control",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-link-actions[\s\S]*justify-content: space-between[\s\S]*\.community-launch-knowledge-link-submit-group[\s\S]*\.community-launch-knowledge-link-composer button\.community-launch-knowledge-link-add[\s\S]*background: transparent/,
+  "launch knowledge link add control must sit left of the submit group without a heavy button box",
 );
 assert.match(
   setupModal,
-  /onAddKnowledgeLink[\s\S]*saveKnowledgeLinkDrafts[\s\S]*const urls = knowledgeLinkDrafts[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*community-launch-knowledge-link-composer/,
-  "launch knowledge link entries must trim source URLs and write through the onboarding save path",
+  /onAddKnowledgeLink[\s\S]*saveKnowledgeLinkDrafts[\s\S]*const urls = knowledgeLinkDrafts[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*community-launch-knowledge-link-composer[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeLinkSources}[\s\S]*fallbackTitle="Source link"[\s\S]*onRemove={handleRemoveLinkSource}/,
+  "launch knowledge link entries must trim source URLs, write through the onboarding save path, and show saved links inline",
 );
 assert.match(
   setupModal,
@@ -678,8 +703,8 @@ assert.match(
 );
 assert.match(
   appShell,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"/,
-  "launch knowledge links must create canonical reviewed source resources queued for ingestion",
+  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)/,
+  "launch knowledge links must create canonical reviewed source resources queued for ingestion and refresh focused saved link rows",
 );
 assert.doesNotMatch(
   setupModal,
@@ -698,13 +723,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-repo[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-list[\s\S]*handleSelectAllGitHubFiles[\s\S]*community-launch-knowledge-source-import[\s\S]*Import selected[\s\S]*Close/,
-  "launch knowledge GitHub repo picker must render files inline under the selected repo, support selecting all visible importable files, and keep one close control",
+  /knowledgeGitHubImportedRepoCounts[\s\S]*community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-repo[\s\S]*has-imported-sources[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*importedSourceCount[\s\S]*imported[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-truth[\s\S]*knowledgeGitHubFilesTruncated[\s\S]*\$\{knowledgeGitHubFileLimit\}-file selector limit[\s\S]*community-launch-knowledge-github-file-list[\s\S]*handleSelectAllGitHubFiles[\s\S]*community-launch-knowledge-source-import[\s\S]*Import selected[\s\S]*Close/,
+  "launch knowledge GitHub repo picker must render files inline under the selected repo, disclose file-list limits, support selecting visible importable files, and keep one close control",
 );
 assert.match(
   baseCss,
-  /\.community-launch-knowledge-github-repo-list[\s\S]*\.community-launch-knowledge-github-repo-item[\s\S]*\.community-launch-knowledge-github-repo\.is-selected[\s\S]*\.community-launch-knowledge-github-file-panel[\s\S]*\.community-launch-knowledge-github-file-list[\s\S]*max-height: 216px[\s\S]*overflow-y: auto/,
-  "launch knowledge GitHub repo picker must have dedicated row styling and an inline scrollable selected-repo file list",
+  /\.community-launch-knowledge-github-repo-list[\s\S]*\.community-launch-knowledge-github-repo-item[\s\S]*\.community-launch-knowledge-github-repo\.is-selected[\s\S]*\.community-launch-knowledge-github-repo\.has-imported-sources:not\(\.is-selected\)[\s\S]*\.community-launch-knowledge-github-file-panel[\s\S]*\.community-launch-knowledge-github-file-truth[\s\S]*\.community-launch-knowledge-github-file-list[\s\S]*max-height: 216px[\s\S]*overflow-y: auto/,
+  "launch knowledge GitHub repo picker must have dedicated row styling, imported-source highlighting, truth copy, and an inline scrollable selected-repo file list",
 );
 assert.match(
   setupModal,

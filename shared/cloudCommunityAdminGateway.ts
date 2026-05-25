@@ -252,7 +252,32 @@ export type CloudGitHubSourceFileListResult = {
   repo_full_name: string | null;
   ref: string | null;
   truncated: boolean;
+  file_limit: number | null;
   files: CloudGitHubSourceFile[];
+};
+
+export type CloudCommunityLaunchKnowledgeSource = {
+  id: string;
+  title: string;
+  source_ingestion_status: "not_required" | "queued" | "processing" | "ready" | "failed";
+  source_ingestion_kind: "manual" | "url" | "file" | "google_drive" | "github";
+  source_ingestion_error: string | null;
+  source_external_provider: "google_drive" | "github" | null;
+  source_external_id: string | null;
+  source_external_name: string | null;
+  source_external_url: string | null;
+  source_external_mime_type: string | null;
+  source_external_modified_at: string | null;
+  credential_status: "available" | "missing";
+  credential_message: string | null;
+  updated_at: string | null;
+};
+
+export type CloudCommunityLaunchKnowledgeSourceListResult = {
+  ok: boolean;
+  kind: "community_launch_knowledge_sources";
+  community_id: string | null;
+  sources: CloudCommunityLaunchKnowledgeSource[];
 };
 
 type CloudCommunityFreeAccessModeResult = {
@@ -526,6 +551,106 @@ function normalizeGitHubSourceFiles(payload: unknown): CloudGitHubSourceFile[] {
       } satisfies CloudGitHubSourceFile;
     })
     .filter((row): row is CloudGitHubSourceFile => Boolean(row));
+}
+
+function normalizeCommunityLaunchKnowledgeSources(payload: unknown): CloudCommunityLaunchKnowledgeSource[] {
+  if (!Array.isArray(payload)) return [];
+  return payload
+    .map((row) => {
+      const record = (row ?? null) as Record<string, unknown> | null;
+      const id = typeof record?.id === "string" ? record.id.trim() : "";
+      const title = typeof record?.title === "string" ? record.title.trim() : "";
+      const provider = record?.source_external_provider === "github"
+        ? "github"
+        : record?.source_external_provider === "google_drive"
+          ? "google_drive"
+          : null;
+      const status = (
+        record?.source_ingestion_status === "not_required" ||
+        record?.source_ingestion_status === "queued" ||
+        record?.source_ingestion_status === "processing" ||
+        record?.source_ingestion_status === "ready" ||
+        record?.source_ingestion_status === "failed"
+      )
+        ? record.source_ingestion_status
+        : "queued";
+      const kind = (
+        record?.source_ingestion_kind === "manual" ||
+        record?.source_ingestion_kind === "url" ||
+        record?.source_ingestion_kind === "file" ||
+        record?.source_ingestion_kind === "google_drive" ||
+        record?.source_ingestion_kind === "github"
+      )
+        ? record.source_ingestion_kind
+        : provider ?? "manual";
+      if (!id || !title) return null;
+      return {
+        id,
+        title,
+        source_ingestion_status: status,
+        source_ingestion_kind: kind,
+        source_ingestion_error:
+          typeof record?.source_ingestion_error === "string" && record.source_ingestion_error.trim()
+            ? record.source_ingestion_error.trim()
+            : null,
+        source_external_provider: provider,
+        source_external_id:
+          typeof record?.source_external_id === "string" && record.source_external_id.trim()
+            ? record.source_external_id.trim()
+            : null,
+        source_external_name:
+          typeof record?.source_external_name === "string" && record.source_external_name.trim()
+            ? record.source_external_name.trim()
+            : null,
+        source_external_url:
+          typeof record?.source_external_url === "string" && record.source_external_url.trim()
+            ? record.source_external_url.trim()
+            : null,
+        source_external_mime_type:
+          typeof record?.source_external_mime_type === "string" && record.source_external_mime_type.trim()
+            ? record.source_external_mime_type.trim()
+            : null,
+        source_external_modified_at:
+          typeof record?.source_external_modified_at === "string" && record.source_external_modified_at.trim()
+            ? record.source_external_modified_at.trim()
+            : null,
+        credential_status: !provider || record?.credential_status === "available" ? "available" : "missing",
+        credential_message:
+          typeof record?.credential_message === "string" && record.credential_message.trim()
+            ? record.credential_message.trim()
+            : null,
+        updated_at:
+          typeof record?.updated_at === "string" && record.updated_at.trim()
+            ? record.updated_at.trim()
+            : null,
+      } satisfies CloudCommunityLaunchKnowledgeSource;
+    })
+    .filter((row): row is CloudCommunityLaunchKnowledgeSource => Boolean(row));
+}
+
+export async function listCloudCommunityLaunchKnowledgeSources<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+  },
+): Promise<CloudCommunityLaunchKnowledgeSourceListResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.query("community:listCommunityLaunchKnowledgeSources" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit: typeof params.limit === "number" && Number.isFinite(params.limit)
+      ? Math.max(1, Math.floor(params.limit))
+      : undefined,
+  })) as Record<string, unknown> | null;
+  return {
+    ok: payload?.ok === true,
+    kind: "community_launch_knowledge_sources",
+    community_id:
+      typeof payload?.community_id === "string" && payload.community_id.trim()
+        ? payload.community_id.trim()
+        : null,
+    sources: normalizeCommunityLaunchKnowledgeSources(payload?.sources),
+  };
 }
 
 export async function loadCloudCommunityGoogleDriveSourceConnection<SessionT>(
@@ -845,6 +970,10 @@ export async function listCloudCommunityGitHubSourceFiles<SessionT>(
         : null,
     ref: typeof payload?.ref === "string" && payload.ref.trim() ? payload.ref.trim() : null,
     truncated: payload?.truncated === true,
+    file_limit:
+      typeof payload?.file_limit === "number" && Number.isFinite(payload.file_limit)
+        ? Math.max(1, Math.floor(payload.file_limit))
+        : null,
     files: normalizeGitHubSourceFiles(payload?.files),
   };
 }

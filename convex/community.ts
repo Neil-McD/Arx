@@ -97,6 +97,7 @@ import {
   ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl,
   ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl,
   ingestCommunitySources as ingestCommunitySourcesImpl,
+  listCommunityLaunchKnowledgeSources as listCommunityLaunchKnowledgeSourcesImpl,
   listGitHubSourceFiles as listGitHubSourceFilesImpl,
   listGitHubSourceRepositories as listGitHubSourceRepositoriesImpl,
   listGoogleDriveSourceFiles as listGoogleDriveSourceFilesImpl,
@@ -272,6 +273,7 @@ export const ingestCommunitySourceLinks: any = ingestCommunitySourceLinksImpl;
 export const ingestCommunitySourceFiles: any = ingestCommunitySourceFilesImpl;
 export const ingestCommunitySourceGitHub: any = ingestCommunitySourceGitHubImpl;
 export const ingestCommunitySourceGoogleDrive: any = ingestCommunitySourceGoogleDriveImpl;
+export const listCommunityLaunchKnowledgeSources = listCommunityLaunchKnowledgeSourcesImpl;
 export const listGitHubSourceFiles: any = listGitHubSourceFilesImpl;
 export const listGitHubSourceRepositories: any = listGitHubSourceRepositoriesImpl;
 export const listGoogleDriveSourceFiles: any = listGoogleDriveSourceFilesImpl;

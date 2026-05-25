@@ -141,6 +141,7 @@ import {
   importCloudCommunityGitHubSourceFiles,
   importCloudCommunityGoogleDriveSourceFiles,
   ingestCloudCommunitySources,
+  listCloudCommunityLaunchKnowledgeSources,
   listCloudCommunityGitHubSourceFiles,
   listCloudCommunityGitHubSourceRepositories,
   listCloudCommunityGoogleDriveSourceFiles,
@@ -897,26 +898,6 @@ type CommunityResource = {
   sort_order: number | null;
   created_at: string;
 };
-
-function mapCommunityLaunchExternalSources(
-  resources: CommunityResource[],
-  provider: "google_drive" | "github",
-): CommunityLaunchKnowledgeImportedSource[] {
-  return resources
-    .filter((resource) =>
-      resource.resource_role === "source" &&
-      resource.source_external_provider === provider,
-    )
-    .map((resource) => ({
-      id: resource.id,
-      title: resource.title,
-      source_ingestion_status: resource.source_ingestion_status,
-      source_ingestion_error: resource.source_ingestion_error ?? null,
-      source_external_id: resource.source_external_id ?? null,
-      source_external_url: resource.source_external_url ?? null,
-      source_external_mime_type: resource.source_external_mime_type ?? null,
-    }));
-}
 
 type CommunityResourceModule = {
   id: string;
@@ -2238,6 +2219,15 @@ export default function App() {
   }, []);
 
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
+  const [communityLaunchLinkSources, setCommunityLaunchLinkSources] = useState<
+    CommunityLaunchKnowledgeImportedSource[]
+  >([]);
+  const [communityLaunchGoogleDriveSources, setCommunityLaunchGoogleDriveSources] = useState<
+    CommunityLaunchKnowledgeImportedSource[]
+  >([]);
+  const [communityLaunchGitHubSources, setCommunityLaunchGitHubSources] = useState<
+    CommunityLaunchKnowledgeImportedSource[]
+  >([]);
   const [communityResourceModules, setCommunityResourceModules] = useState<CommunityResourceModule[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [isLoadingResourceModules, setIsLoadingResourceModules] = useState(false);
@@ -2421,12 +2411,26 @@ export default function App() {
     setIsLoadingResources,
     setIsLoadingResourceModules,
   });
-  const communityLaunchGoogleDriveSources = useMemo<CommunityLaunchKnowledgeImportedSource[]>(() => {
-    return mapCommunityLaunchExternalSources(communityResources, "google_drive");
-  }, [communityResources]);
-  const communityLaunchGitHubSources = useMemo<CommunityLaunchKnowledgeImportedSource[]>(() => {
-    return mapCommunityLaunchExternalSources(communityResources, "github");
-  }, [communityResources]);
+  const loadCommunityLaunchKnowledgeSources = useCallback(async (
+    communityId: string,
+    currentSession: AuthSession,
+  ): Promise<void> => {
+    const result = await listCloudCommunityLaunchKnowledgeSources({
+      session: currentSession,
+      communityId,
+      limit: 100,
+    });
+    const sources = result.sources ?? [];
+    setCommunityLaunchLinkSources(
+      sources.filter((source) => source.source_ingestion_kind === "url"),
+    );
+    setCommunityLaunchGoogleDriveSources(
+      sources.filter((source) => source.source_external_provider === "google_drive"),
+    );
+    setCommunityLaunchGitHubSources(
+      sources.filter((source) => source.source_external_provider === "github"),
+    );
+  }, []);
   const {
     loadCommunityEvents,
     handleSaveCommunityEvent,
@@ -5167,6 +5171,9 @@ export default function App() {
     setCommunityActivityEvents([]);
     setMessageReactions([]);
     setCommunityResources([]);
+    setCommunityLaunchLinkSources([]);
+    setCommunityLaunchGoogleDriveSources([]);
+    setCommunityLaunchGitHubSources([]);
     setCommunityResourceModules([]);
     setIsLoadingCommunityEvents(false);
     setCommunityEventsError(null);
@@ -8143,6 +8150,7 @@ export default function App() {
         });
       }
       await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
     };
     const handleAddCommunityLaunchKnowledgeFile = async (draft: { files: File[] }) => {
@@ -8188,12 +8196,13 @@ export default function App() {
         limit: 20,
       });
       await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       return result as any;
     };
     const handleLoadCommunityLaunchKnowledgeSources = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
-      await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
     };
     const handleLoadCommunityLaunchGoogleDriveConnection = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
@@ -8244,7 +8253,7 @@ export default function App() {
         communityId: community.id,
         fileIds,
       });
-      await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       return result;
     };
@@ -8254,7 +8263,7 @@ export default function App() {
         session,
         resourceId,
       });
-      await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       return true;
     };
@@ -8264,7 +8273,7 @@ export default function App() {
         session,
         communityId: community.id,
       });
-      await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
       return connection;
@@ -8326,7 +8335,7 @@ export default function App() {
         communityId: community.id,
         fileIds,
       });
-      await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       return result;
     };
@@ -8336,7 +8345,7 @@ export default function App() {
         session,
         communityId: community.id,
       });
-      await loadCommunityResources(community.id, session);
+      await loadCommunityLaunchKnowledgeSources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
       setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
       return connection;
@@ -10094,6 +10103,7 @@ export default function App() {
         initialStep={communityLaunchSetupInitialStep}
         knowledgeIntegrationReloadKey={communityLaunchKnowledgeIntegrationReloadKey}
         knowledgeAutoOpenProvider={communityLaunchKnowledgeAutoOpenProvider}
+        knowledgeLinkSources={communityLaunchLinkSources}
         knowledgeGoogleDriveSources={communityLaunchGoogleDriveSources}
         knowledgeGitHubSources={communityLaunchGitHubSources}
         onClose={() => {
@@ -10120,6 +10130,7 @@ export default function App() {
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
         onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
         onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
+        onRemoveKnowledgeLinkSource={handleRemoveCommunityLaunchKnowledgeSource}
         onIngestKnowledgeSources={handleIngestCommunityLaunchKnowledgeSources}
         onLoadKnowledgeGoogleDriveConnection={handleLoadCommunityLaunchGoogleDriveConnection}
         onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}

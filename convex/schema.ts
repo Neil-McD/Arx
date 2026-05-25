@@ -1540,6 +1540,13 @@ export default defineSchema({
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_source_external", ["communityId", "sourceExternalProvider", "sourceExternalId"])
+    .index("by_community_role_source_provider_status_updatedAt", [
+      "communityId",
+      "role",
+      "sourceExternalProvider",
+      "sourceIngestionStatus",
+      "updatedAt",
+    ])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityResourceModules: defineTable({

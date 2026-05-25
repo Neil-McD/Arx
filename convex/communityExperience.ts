@@ -38,6 +38,7 @@ export {
   ingestCommunitySourceGoogleDrive,
   ingestCommunitySourceLinks,
   ingestCommunitySources,
+  listCommunityLaunchKnowledgeSources,
   listGitHubSourceFiles,
   listGitHubSourceRepositories,
   listGoogleDriveSourceFiles,

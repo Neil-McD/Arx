@@ -4889,11 +4889,18 @@ body {
 .community-launch-knowledge-link-actions {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.community-launch-knowledge-link-submit-group {
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.community-launch-knowledge-link-actions > span {
+.community-launch-knowledge-link-submit-group > span {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 750;
@@ -4921,6 +4928,23 @@ body {
   padding: 0 12px;
 }
 
+.community-launch-knowledge-link-composer button.community-launch-knowledge-link-add {
+  width: fit-content;
+  min-height: 28px;
+  padding: 0;
+  border-color: transparent;
+  color: var(--accent, var(--accent-gold));
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.community-launch-knowledge-link-add svg {
+  width: 13px;
+  height: 13px;
+}
+
 .community-launch-knowledge-link-composer button.secondary {
   color: var(--text-secondary);
   background: rgba(0, 0, 0, 0.1);
@@ -4930,6 +4954,12 @@ body {
   border-color: color-mix(in srgb, var(--accent-gold) 24%, var(--border-muted));
   color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-gold) 7%, rgba(0, 0, 0, 0.2));
+}
+
+.community-launch-knowledge-link-composer button.community-launch-knowledge-link-add:hover:not(:disabled) {
+  border-color: transparent;
+  color: color-mix(in srgb, var(--accent, var(--accent-gold)) 78%, white);
+  background: transparent;
 }
 
 .community-launch-knowledge-link-composer button:disabled {
@@ -5043,21 +5073,40 @@ button.community-launch-knowledge-integration-chip:disabled {
   text-decoration: underline;
 }
 
+.community-launch-knowledge-imported-summary {
+  width: fit-content;
+  min-height: 0;
+  display: inline-grid;
+  grid-template-columns: 11px minmax(0, auto);
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  border: 0;
+  padding: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.community-launch-knowledge-imported-summary:hover {
+  color: var(--accent, var(--accent-gold));
+}
+
 .community-launch-knowledge-imported-sources {
   display: grid;
   width: fit-content;
   max-width: 100%;
-  max-height: 47px;
+  max-height: 136px;
   gap: 2px;
   margin-top: 3px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 3px;
   scrollbar-width: thin;
-}
-
-.community-launch-knowledge-imported-sources.is-expanded {
-  max-height: 136px;
 }
 
 .community-launch-knowledge-imported-source {
@@ -5071,10 +5120,18 @@ button.community-launch-knowledge-integration-chip:disabled {
   line-height: 1.35;
 }
 
+.community-launch-knowledge-imported-source.is-credential-missing {
+  color: #ffb06b;
+}
+
 .community-launch-knowledge-imported-check {
   width: 10px;
   height: 10px;
   color: var(--accent-success, #66b786);
+}
+
+.community-launch-knowledge-imported-source.is-credential-missing .community-launch-knowledge-imported-check {
+  color: #ffb06b;
 }
 
 .community-launch-knowledge-imported-source span {
@@ -5084,6 +5141,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
+}
+
+.community-launch-knowledge-imported-source.is-credential-missing span {
+  color: #ffd0a3;
 }
 
 .community-launch-knowledge-source-action {
@@ -5147,6 +5208,17 @@ button.community-launch-knowledge-integration-chip:disabled {
   cursor: default;
   opacity: 0.55;
   text-decoration: none;
+}
+
+.community-launch-knowledge-reconnect-required {
+  display: block;
+  width: fit-content;
+  max-width: 230px;
+  margin-top: 2px;
+  color: #ffb06b;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
 }
 
 .community-launch-knowledge-source-picker {
@@ -5219,8 +5291,18 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: color-mix(in srgb, var(--accent, var(--accent-gold)) 10%, transparent);
 }
 
+.community-launch-knowledge-github-repo.has-imported-sources:not(.is-selected) {
+  border-color: color-mix(in srgb, var(--accent-success, #66b786) 46%, transparent);
+  background: color-mix(in srgb, var(--accent-success, #66b786) 8%, transparent);
+}
+
 .community-launch-knowledge-github-repo.is-selected svg {
   color: var(--accent, var(--accent-gold));
+}
+
+.community-launch-knowledge-github-repo.has-imported-sources:not(.is-selected) svg,
+.community-launch-knowledge-github-repo.has-imported-sources:not(.is-selected) small {
+  color: color-mix(in srgb, var(--accent-success, #66b786) 76%, var(--text-muted));
 }
 
 .community-launch-knowledge-github-file-panel {
@@ -5230,6 +5312,15 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 6px;
   margin: 0 0 3px 24px;
   padding: 1px 0 2px;
+}
+
+.community-launch-knowledge-github-file-truth {
+  max-width: 360px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
 }
 
 .community-launch-knowledge-github-file-list {
@@ -5629,7 +5720,11 @@ button.community-launch-knowledge-integration-chip:disabled {
     flex-direction: column;
   }
 
-  .community-launch-knowledge-link-actions > span {
+  .community-launch-knowledge-link-submit-group {
+    justify-content: space-between;
+  }
+
+  .community-launch-knowledge-link-submit-group > span {
     align-self: flex-start;
   }
 

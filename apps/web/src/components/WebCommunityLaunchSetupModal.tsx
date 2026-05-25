@@ -4,9 +4,11 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type DragEvent,
   type FormEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import {
   ArrowLeft,
@@ -20,6 +22,7 @@ import {
   Image,
   Link2,
   LockKeyhole,
+  Plus,
   Search,
   Trash2,
   X,
@@ -44,6 +47,7 @@ const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
 const COMMUNITY_LAUNCH_MAX_GOOGLE_DRIVE_FILES = 20;
 const COMMUNITY_LAUNCH_MAX_GITHUB_FILES = 20;
+const COMMUNITY_LAUNCH_GITHUB_FILE_LIST_LIMIT = 80;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 
@@ -235,13 +239,132 @@ export type CommunityLaunchKnowledgeImportedSource = {
   id: string;
   title: string;
   source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
+  source_ingestion_kind?: "manual" | "url" | "file" | "google_drive" | "github";
   source_ingestion_error?: string | null;
+  source_external_provider?: "google_drive" | "github" | null;
   source_external_id?: string | null;
+  source_external_name?: string | null;
   source_external_url?: string | null;
   source_external_mime_type?: string | null;
+  source_external_modified_at?: string | null;
+  credential_status?: "available" | "missing";
+  credential_message?: string | null;
 };
 
 const EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES: CommunityLaunchKnowledgeImportedSource[] = [];
+
+type ImportedKnowledgeSourceRowsProps = {
+  sources: CommunityLaunchKnowledgeImportedSource[];
+  fallbackTitle: string;
+  expanded: boolean;
+  removingSourceId: string | null;
+  disabled: boolean;
+  canRemove: boolean;
+  onToggleExpanded: () => void;
+  onRemove: (source: CommunityLaunchKnowledgeImportedSource) => void;
+};
+
+type ImportedKnowledgeSourceRemovalConfig = {
+  source: CommunityLaunchKnowledgeImportedSource;
+  providerName: string;
+  removingSourceId: string | null;
+  setRemovingSourceId: (sourceId: string | null) => void;
+  removeSource?: (resourceId: string) => Promise<boolean | void>;
+  setSelectedIds?: Dispatch<SetStateAction<string[]>>;
+};
+
+function ImportedKnowledgeSourceRows({
+  sources,
+  fallbackTitle,
+  expanded,
+  removingSourceId,
+  disabled,
+  canRemove,
+  onToggleExpanded,
+  onRemove,
+}: ImportedKnowledgeSourceRowsProps) {
+  if (sources.length === 0) return null;
+  const resourceLabel = `${sources.length} resource${sources.length === 1 ? "" : "s"}`;
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="community-launch-knowledge-imported-summary"
+        onClick={onToggleExpanded}
+        aria-expanded="false"
+        aria-label={`View ${resourceLabel}`}
+      >
+        <Check
+          className="community-launch-knowledge-imported-check"
+          size={11}
+          strokeWidth={3}
+          aria-hidden="true"
+        />
+        <span>{resourceLabel}</span>
+      </button>
+    );
+  }
+
+  return (
+    <>
+      <div className="community-launch-knowledge-imported-sources is-expanded">
+        {sources.map((source) => {
+          const title = source.title || fallbackTitle;
+          const isRemoving = removingSourceId === source.id;
+          const credentialMessage = source.credential_message?.trim() || "";
+
+          return (
+            <div
+              key={source.id}
+              className={`community-launch-knowledge-imported-source${
+                credentialMessage ? " is-credential-missing" : ""
+              }`}
+              title={credentialMessage || undefined}
+            >
+              <Check
+                className="community-launch-knowledge-imported-check"
+                size={11}
+                strokeWidth={3}
+                aria-hidden="true"
+              />
+              <span>{title}</span>
+              {source.source_external_url ? (
+                <a
+                  className="community-launch-knowledge-source-action"
+                  href={source.source_external_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open ${title}`}
+                  title="Open"
+                >
+                  <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
+                </a>
+              ) : null}
+              <button
+                type="button"
+                className="community-launch-knowledge-source-action is-delete"
+                disabled={disabled || isRemoving || !canRemove}
+                onClick={() => onRemove(source)}
+                aria-label={`${isRemoving ? "Deleting" : "Delete"} ${title}`}
+                title="Delete"
+              >
+                <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="community-launch-knowledge-source-list-toggle"
+        onClick={onToggleExpanded}
+      >
+        Show fewer
+      </button>
+    </>
+  );
+}
 
 export type CommunityLaunchGitHubConnection = {
   connected: boolean;
@@ -285,6 +408,7 @@ export type CommunityLaunchGitHubFileListResult = {
   repo_full_name?: string | null;
   ref?: string | null;
   truncated?: boolean;
+  file_limit?: number | null;
   files?: CommunityLaunchGitHubFile[];
 };
 
@@ -319,6 +443,7 @@ type WebCommunityLaunchSetupModalProps = {
   initialStep?: CommunityLaunchSetupStep | null;
   knowledgeIntegrationReloadKey?: string | number | null;
   knowledgeAutoOpenProvider?: "google_drive" | "github" | null;
+  knowledgeLinkSources?: CommunityLaunchKnowledgeImportedSource[];
   knowledgeGoogleDriveSources?: CommunityLaunchKnowledgeImportedSource[];
   knowledgeGitHubSources?: CommunityLaunchKnowledgeImportedSource[];
   community: CommunityLaunchSetupCommunity | null;
@@ -336,6 +461,7 @@ type WebCommunityLaunchSetupModalProps = {
     draft: CommunityLaunchKnowledgeFileSaveDraft,
   ) => Promise<void>;
   onLoadKnowledgeSources?: () => Promise<void>;
+  onRemoveKnowledgeLinkSource?: (resourceId: string) => Promise<boolean | void>;
   onIngestKnowledgeSources?: () => Promise<CommunityLaunchKnowledgeSourceIngestionResult | null>;
   onLoadKnowledgeGoogleDriveConnection?: () => Promise<CommunityLaunchGoogleDriveConnection | null>;
   onConnectKnowledgeGoogleDrive?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
@@ -506,6 +632,30 @@ function getGoogleDriveSourceFileTypeLabel(file: CommunityLaunchGoogleDriveFile)
   return file.mime_type.replace("application/vnd.google-apps.", "Google ");
 }
 
+function sourceNeedsIntegrationReconnect(source: CommunityLaunchKnowledgeImportedSource): boolean {
+  return source.credential_status === "missing" && source.source_ingestion_status !== "ready";
+}
+
+function getGitHubImportedSourceRepoName(source: CommunityLaunchKnowledgeImportedSource): string | null {
+  const externalId = String(source.source_external_id ?? "").trim();
+  const atIndex = externalId.indexOf("@");
+  if (atIndex > 0) {
+    const repoName = externalId.slice(0, atIndex).trim();
+    if (repoName.includes("/")) return repoName;
+  }
+  const externalName = String(source.source_external_name ?? "").trim();
+  const [owner, repo] = externalName.split("/");
+  if (!owner || !repo) return null;
+  return `${owner}/${repo}`;
+}
+
+function formatReconnectRequiredMessage(
+  providerName: "Google Drive" | "GitHub",
+  count: number,
+): string {
+  return `Reconnect required for ${count} queued ${providerName} source${count === 1 ? "" : "s"}.`;
+}
+
 export function WebCommunityLaunchSetupModal(
   props: WebCommunityLaunchSetupModalProps,
 ) {
@@ -515,6 +665,7 @@ export function WebCommunityLaunchSetupModal(
     initialStep = null,
     knowledgeIntegrationReloadKey = null,
     knowledgeAutoOpenProvider = null,
+    knowledgeLinkSources = [],
     knowledgeGoogleDriveSources = [],
     knowledgeGitHubSources = [],
     community,
@@ -528,6 +679,7 @@ export function WebCommunityLaunchSetupModal(
     onAddKnowledgeLink,
     onAddKnowledgeFile,
     onLoadKnowledgeSources,
+    onRemoveKnowledgeLinkSource,
     onIngestKnowledgeSources,
     onLoadKnowledgeGoogleDriveConnection,
     onConnectKnowledgeGoogleDrive,
@@ -591,6 +743,7 @@ export function WebCommunityLaunchSetupModal(
   ]);
   const [knowledgeSourceFileNames, setKnowledgeSourceFileNames] = useState<string[]>([]);
   const [knowledgeSourceDragOver, setKnowledgeSourceDragOver] = useState(false);
+  const [knowledgeLinkSourcesExpanded, setKnowledgeLinkSourcesExpanded] = useState(false);
   const [knowledgeDriveSourcesExpanded, setKnowledgeDriveSourcesExpanded] = useState(false);
   const [knowledgeGitHubSourcesExpanded, setKnowledgeGitHubSourcesExpanded] = useState(false);
   const [knowledgeDriveConnection, setKnowledgeDriveConnection] =
@@ -605,6 +758,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeDriveConnectionLoading, setKnowledgeDriveConnectionLoading] = useState(false);
   const [knowledgeDriveFilesLoading, setKnowledgeDriveFilesLoading] = useState(false);
   const [knowledgeDriveDisconnecting, setKnowledgeDriveDisconnecting] = useState(false);
+  const [knowledgeLinkRemovingSourceId, setKnowledgeLinkRemovingSourceId] = useState<string | null>(null);
   const [knowledgeDriveRemovingSourceId, setKnowledgeDriveRemovingSourceId] = useState<string | null>(null);
   const [knowledgeGitHubConnection, setKnowledgeGitHubConnection] =
     useState<CommunityLaunchGitHubConnection | null>(null);
@@ -612,6 +766,8 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeGitHubSelectedRepository, setKnowledgeGitHubSelectedRepository] =
     useState<CommunityLaunchGitHubRepository | null>(null);
   const [knowledgeGitHubFiles, setKnowledgeGitHubFiles] = useState<CommunityLaunchGitHubFile[]>([]);
+  const [knowledgeGitHubFilesTruncated, setKnowledgeGitHubFilesTruncated] = useState(false);
+  const [knowledgeGitHubFileLimit, setKnowledgeGitHubFileLimit] = useState(COMMUNITY_LAUNCH_GITHUB_FILE_LIST_LIMIT);
   const [knowledgeGitHubSelectedIds, setKnowledgeGitHubSelectedIds] = useState<string[]>([]);
   const [knowledgeGitHubConnectionLoading, setKnowledgeGitHubConnectionLoading] = useState(false);
   const [knowledgeGitHubRepositoriesLoading, setKnowledgeGitHubRepositoriesLoading] = useState(false);
@@ -625,12 +781,39 @@ export function WebCommunityLaunchSetupModal(
     starterPrompts: ["", "", ""],
   });
   const [accessDraft, setAccessDraft] = useState<CommunityEntryPolicy>("open");
+  const effectiveKnowledgeLinkSources = isCreateMode
+    ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
+    : knowledgeLinkSources;
   const effectiveKnowledgeGoogleDriveSources = isCreateMode
     ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
     : knowledgeGoogleDriveSources;
   const effectiveKnowledgeGitHubSources = isCreateMode
     ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
     : knowledgeGitHubSources;
+  const knowledgeDriveMissingCredentialSources = useMemo(
+    () => effectiveKnowledgeGoogleDriveSources.filter(sourceNeedsIntegrationReconnect),
+    [effectiveKnowledgeGoogleDriveSources],
+  );
+  const knowledgeGitHubMissingCredentialSources = useMemo(
+    () => effectiveKnowledgeGitHubSources.filter(sourceNeedsIntegrationReconnect),
+    [effectiveKnowledgeGitHubSources],
+  );
+  const knowledgeMissingCredentialProviderNames = useMemo(() => {
+    const names: Array<"Google Drive" | "GitHub"> = [];
+    if (knowledgeDriveMissingCredentialSources.length > 0) names.push("Google Drive");
+    if (knowledgeGitHubMissingCredentialSources.length > 0) names.push("GitHub");
+    return names;
+  }, [knowledgeDriveMissingCredentialSources.length, knowledgeGitHubMissingCredentialSources.length]);
+  const knowledgeMissingCredentialMessage = useMemo(() => {
+    if (knowledgeMissingCredentialProviderNames.length === 0) return null;
+    const providerText =
+      knowledgeMissingCredentialProviderNames.length === 1
+        ? knowledgeMissingCredentialProviderNames[0]
+        : `${knowledgeMissingCredentialProviderNames.slice(0, -1).join(", ")} and ${
+            knowledgeMissingCredentialProviderNames[knowledgeMissingCredentialProviderNames.length - 1]
+          }`;
+    return `Reconnect ${providerText} or remove queued sources before continuing.`;
+  }, [knowledgeMissingCredentialProviderNames]);
   const knowledgeDriveImportedExternalIds = useMemo(() => {
     return new Set(
       effectiveKnowledgeGoogleDriveSources
@@ -644,6 +827,15 @@ export function WebCommunityLaunchSetupModal(
         .map((source) => String(source.source_external_id ?? "").trim())
         .filter(Boolean),
     );
+  }, [effectiveKnowledgeGitHubSources]);
+  const knowledgeGitHubImportedRepoCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    effectiveKnowledgeGitHubSources.forEach((source) => {
+      const repoName = getGitHubImportedSourceRepoName(source);
+      if (!repoName) return;
+      counts.set(repoName, (counts.get(repoName) ?? 0) + 1);
+    });
+    return counts;
   }, [effectiveKnowledgeGitHubSources]);
   const knowledgeGitHubSelectableFileIds = useMemo(
     () =>
@@ -702,6 +894,7 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeLinkDrafts([""]);
       setKnowledgeSourceFileNames([]);
       setKnowledgeSourceDragOver(false);
+      setKnowledgeLinkSourcesExpanded(false);
       setKnowledgeDriveSourcesExpanded(false);
       setKnowledgeGitHubSourcesExpanded(false);
       setKnowledgeDriveConnection(null);
@@ -715,6 +908,7 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeDriveConnectionLoading(false);
       setKnowledgeDriveFilesLoading(false);
       setKnowledgeDriveDisconnecting(false);
+      setKnowledgeLinkRemovingSourceId(null);
       setKnowledgeDriveRemovingSourceId(null);
       setKnowledgeGitHubConnection(null);
       setKnowledgeGitHubRepositories([]);
@@ -756,6 +950,7 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeLinkDrafts([""]);
     setKnowledgeSourceFileNames([]);
     setKnowledgeSourceDragOver(false);
+    setKnowledgeLinkSourcesExpanded(false);
     setKnowledgeDriveSourcesExpanded(false);
     setKnowledgeGitHubSourcesExpanded(false);
     const nextKnowledgeProviderStateCommunityKey = String(community.id ?? "").trim() || null;
@@ -772,6 +967,7 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeDriveConnectionLoading(false);
       setKnowledgeDriveFilesLoading(false);
       setKnowledgeDriveDisconnecting(false);
+      setKnowledgeLinkRemovingSourceId(null);
       setKnowledgeDriveRemovingSourceId(null);
       setKnowledgeGitHubConnection(null);
       setKnowledgeGitHubRepositories([]);
@@ -1403,56 +1599,70 @@ export function WebCommunityLaunchSetupModal(
       .finally(() => setSavingStep(null));
   };
 
-  const handleRemoveGoogleDriveSource = (source: CommunityLaunchKnowledgeImportedSource) => {
-    if (savingStep || knowledgeDriveRemovingSourceId || !source.id) return;
-    if (!onRemoveKnowledgeGoogleDriveSource) {
-      setStepError("Drive source removal is unavailable.");
+  const removeImportedKnowledgeSource = ({
+    source,
+    providerName,
+    removingSourceId,
+    setRemovingSourceId,
+    removeSource,
+    setSelectedIds,
+  }: ImportedKnowledgeSourceRemovalConfig) => {
+    if (savingStep || removingSourceId || !source.id) return;
+    if (!removeSource) {
+      setStepError(`${providerName} source removal is unavailable.`);
       return;
     }
-    setKnowledgeDriveRemovingSourceId(source.id);
+    setRemovingSourceId(source.id);
     setStepError(null);
     setStepSuccess(null);
-    void onRemoveKnowledgeGoogleDriveSource(source.id)
+    void removeSource(source.id)
       .then((removed) => {
         if (removed === false) {
-          setStepError("Could not remove Drive source.");
+          setStepError(`Could not remove ${providerName} source.`);
           return;
         }
-        setKnowledgeDriveSelectedIds((ids) =>
-          ids.filter((id) => id !== String(source.source_external_id ?? "").trim()),
-        );
-        setStepSuccess("Drive source removed.");
+        const sourceExternalId = String(source.source_external_id ?? "").trim();
+        if (sourceExternalId && setSelectedIds) {
+          setSelectedIds((ids) => ids.filter((id) => id !== sourceExternalId));
+        }
+        setStepSuccess(`${providerName} source removed.`);
       })
       .catch((error) => {
-        setStepError(error instanceof Error ? error.message : "Could not remove Drive source.");
+        setStepError(error instanceof Error ? error.message : `Could not remove ${providerName} source.`);
       })
-      .finally(() => setKnowledgeDriveRemovingSourceId(null));
+      .finally(() => setRemovingSourceId(null));
+  };
+
+  const handleRemoveLinkSource = (source: CommunityLaunchKnowledgeImportedSource) => {
+    removeImportedKnowledgeSource({
+      source,
+      providerName: "Link",
+      removingSourceId: knowledgeLinkRemovingSourceId,
+      setRemovingSourceId: setKnowledgeLinkRemovingSourceId,
+      removeSource: onRemoveKnowledgeLinkSource,
+    });
+  };
+
+  const handleRemoveGoogleDriveSource = (source: CommunityLaunchKnowledgeImportedSource) => {
+    removeImportedKnowledgeSource({
+      source,
+      providerName: "Drive",
+      removingSourceId: knowledgeDriveRemovingSourceId,
+      setRemovingSourceId: setKnowledgeDriveRemovingSourceId,
+      removeSource: onRemoveKnowledgeGoogleDriveSource,
+      setSelectedIds: setKnowledgeDriveSelectedIds,
+    });
   };
 
   const handleRemoveGitHubSource = (source: CommunityLaunchKnowledgeImportedSource) => {
-    if (savingStep || knowledgeGitHubRemovingSourceId || !source.id) return;
-    if (!onRemoveKnowledgeGitHubSource) {
-      setStepError("GitHub source removal is unavailable.");
-      return;
-    }
-    setKnowledgeGitHubRemovingSourceId(source.id);
-    setStepError(null);
-    setStepSuccess(null);
-    void onRemoveKnowledgeGitHubSource(source.id)
-      .then((removed) => {
-        if (removed === false) {
-          setStepError("Could not remove GitHub source.");
-          return;
-        }
-        setKnowledgeGitHubSelectedIds((ids) =>
-          ids.filter((id) => id !== String(source.source_external_id ?? "").trim()),
-        );
-        setStepSuccess("GitHub source removed.");
-      })
-      .catch((error) => {
-        setStepError(error instanceof Error ? error.message : "Could not remove GitHub source.");
-      })
-      .finally(() => setKnowledgeGitHubRemovingSourceId(null));
+    removeImportedKnowledgeSource({
+      source,
+      providerName: "GitHub",
+      removingSourceId: knowledgeGitHubRemovingSourceId,
+      setRemovingSourceId: setKnowledgeGitHubRemovingSourceId,
+      removeSource: onRemoveKnowledgeGitHubSource,
+      setSelectedIds: setKnowledgeGitHubSelectedIds,
+    });
   };
 
   const handleGitHubPrimaryAction = () => {
@@ -1489,12 +1699,20 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeGitHubFilesLoading(true);
     setKnowledgeGitHubSelectedRepository(repository);
     setKnowledgeGitHubFiles([]);
+    setKnowledgeGitHubFilesTruncated(false);
+    setKnowledgeGitHubFileLimit(COMMUNITY_LAUNCH_GITHUB_FILE_LIST_LIMIT);
     setKnowledgeGitHubSelectedIds([]);
     void onListKnowledgeGitHubFiles(repository.full_name, repository.default_branch)
       .then((result) => {
         if (!result?.ok) throw new Error("Could not load GitHub files.");
         setKnowledgeGitHubConnection(result.connection ?? knowledgeGitHubConnection);
         setKnowledgeGitHubFiles(result.files ?? []);
+        setKnowledgeGitHubFilesTruncated(result.truncated === true);
+        setKnowledgeGitHubFileLimit(
+          typeof result.file_limit === "number" && Number.isFinite(result.file_limit)
+            ? Math.max(1, Math.floor(result.file_limit))
+            : COMMUNITY_LAUNCH_GITHUB_FILE_LIST_LIMIT,
+        );
         setStepSuccess(
           (result.files ?? []).length > 0
             ? "Choose GitHub files to import."
@@ -1535,6 +1753,8 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeGitHubRepositories([]);
     setKnowledgeGitHubSelectedRepository(null);
     setKnowledgeGitHubFiles([]);
+    setKnowledgeGitHubFilesTruncated(false);
+    setKnowledgeGitHubFileLimit(COMMUNITY_LAUNCH_GITHUB_FILE_LIST_LIMIT);
     setKnowledgeGitHubSelectedIds([]);
     setStepSuccess(null);
   };
@@ -1610,6 +1830,10 @@ export function WebCommunityLaunchSetupModal(
     void (async () => {
       const saved = await saveKnowledgeLinkDrafts();
       if (!saved) return;
+      if (knowledgeMissingCredentialMessage) {
+        setStepError(knowledgeMissingCredentialMessage);
+        return;
+      }
       if (
         !onIngestKnowledgeSources ||
         !onLoadKnowledgeHealth ||
@@ -2093,7 +2317,7 @@ export function WebCommunityLaunchSetupModal(
                   <div className="community-launch-knowledge-link-actions">
                     <button
                       type="button"
-                      className="secondary"
+                      className="community-launch-knowledge-link-add"
                       disabled={!canAddKnowledgeLinkRow || isSavingActiveStep}
                       onClick={() => {
                         if (!canAddKnowledgeLinkRow) return;
@@ -2105,20 +2329,33 @@ export function WebCommunityLaunchSetupModal(
                         );
                       }}
                     >
+                      <Plus size={13} strokeWidth={2.6} aria-hidden="true" />
                       Add new link
                     </button>
-                    <span>
-                      {knowledgeLinkDrafts.length}/
-                      {COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}
-                    </span>
-                    <button
-                      type="submit"
-                      disabled={!canAddKnowledgeLink || isSavingActiveStep}
-                    >
-                      {isSavingActiveStep ? "Adding..." : "Add links"}
-                    </button>
+                    <div className="community-launch-knowledge-link-submit-group">
+                      <span>
+                        {knowledgeLinkDrafts.length}/
+                        {COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}
+                      </span>
+                      <button
+                        type="submit"
+                        disabled={!canAddKnowledgeLink || isSavingActiveStep}
+                      >
+                        {isSavingActiveStep ? "Adding..." : "Add links"}
+                      </button>
+                    </div>
                   </div>
                 </form>
+                <ImportedKnowledgeSourceRows
+                  sources={effectiveKnowledgeLinkSources}
+                  fallbackTitle="Source link"
+                  expanded={knowledgeLinkSourcesExpanded}
+                  removingSourceId={knowledgeLinkRemovingSourceId}
+                  disabled={isSavingActiveStep}
+                  canRemove={Boolean(onRemoveKnowledgeLinkSource)}
+                  onToggleExpanded={() => setKnowledgeLinkSourcesExpanded((expanded) => !expanded)}
+                  onRemove={handleRemoveLinkSource}
+                />
               </div>
               <span className="community-launch-knowledge-pill">Available</span>
             </section>
@@ -2184,63 +2421,23 @@ export function WebCommunityLaunchSetupModal(
                         </button>
                       </div>
                     ) : null}
-                    {effectiveKnowledgeGoogleDriveSources.length > 0 ? (
-                      <>
-                        <div
-                          className={`community-launch-knowledge-imported-sources${
-                            knowledgeDriveSourcesExpanded ? " is-expanded" : ""
-                          }`}
-                        >
-                          {effectiveKnowledgeGoogleDriveSources.map((source) => (
-                            <div key={source.id} className="community-launch-knowledge-imported-source">
-                              <Check
-                                className="community-launch-knowledge-imported-check"
-                                size={11}
-                                strokeWidth={3}
-                                aria-hidden="true"
-                              />
-                              <span>{source.title || "Drive source"}</span>
-                              {source.source_external_url ? (
-                                <a
-                                  className="community-launch-knowledge-source-action"
-                                  href={source.source_external_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  aria-label={`Open ${source.title || "Drive source"}`}
-                                  title="Open"
-                                >
-                                  <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
-                                </a>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="community-launch-knowledge-source-action is-delete"
-                                disabled={
-                                  isSavingActiveStep ||
-                                  knowledgeDriveRemovingSourceId === source.id ||
-                                  !onRemoveKnowledgeGoogleDriveSource
-                                }
-                                onClick={() => handleRemoveGoogleDriveSource(source)}
-                                aria-label={`${knowledgeDriveRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "Drive source"}`}
-                                title="Delete"
-                              >
-                                <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        {effectiveKnowledgeGoogleDriveSources.length > 3 ? (
-                          <button
-                            type="button"
-                            className="community-launch-knowledge-source-list-toggle"
-                            onClick={() => setKnowledgeDriveSourcesExpanded((expanded) => !expanded)}
-                          >
-                            {knowledgeDriveSourcesExpanded
-                              ? "Show fewer"
-                              : `View all ${effectiveKnowledgeGoogleDriveSources.length}`}
-                          </button>
-                        ) : null}
-                      </>
+                    <ImportedKnowledgeSourceRows
+                      sources={effectiveKnowledgeGoogleDriveSources}
+                      fallbackTitle="Drive source"
+                      expanded={knowledgeDriveSourcesExpanded}
+                      removingSourceId={knowledgeDriveRemovingSourceId}
+                      disabled={isSavingActiveStep}
+                      canRemove={Boolean(onRemoveKnowledgeGoogleDriveSource)}
+                      onToggleExpanded={() => setKnowledgeDriveSourcesExpanded((expanded) => !expanded)}
+                      onRemove={handleRemoveGoogleDriveSource}
+                    />
+                    {knowledgeDriveMissingCredentialSources.length > 0 ? (
+                      <span className="community-launch-knowledge-reconnect-required">
+                        {formatReconnectRequiredMessage(
+                          "Google Drive",
+                          knowledgeDriveMissingCredentialSources.length,
+                        )}
+                      </span>
                     ) : null}
                   </div>
                   <div className="community-launch-knowledge-integration-provider">
@@ -2287,63 +2484,23 @@ export function WebCommunityLaunchSetupModal(
                         </button>
                       </div>
                     ) : null}
-                    {effectiveKnowledgeGitHubSources.length > 0 ? (
-                      <>
-                        <div
-                          className={`community-launch-knowledge-imported-sources${
-                            knowledgeGitHubSourcesExpanded ? " is-expanded" : ""
-                          }`}
-                        >
-                          {effectiveKnowledgeGitHubSources.map((source) => (
-                            <div key={source.id} className="community-launch-knowledge-imported-source">
-                              <Check
-                                className="community-launch-knowledge-imported-check"
-                                size={11}
-                                strokeWidth={3}
-                                aria-hidden="true"
-                              />
-                              <span>{source.title || "GitHub source"}</span>
-                              {source.source_external_url ? (
-                                <a
-                                  className="community-launch-knowledge-source-action"
-                                  href={source.source_external_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  aria-label={`Open ${source.title || "GitHub source"}`}
-                                  title="Open"
-                                >
-                                  <ExternalLink size={12} strokeWidth={2.2} aria-hidden="true" />
-                                </a>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="community-launch-knowledge-source-action is-delete"
-                                disabled={
-                                  isSavingActiveStep ||
-                                  knowledgeGitHubRemovingSourceId === source.id ||
-                                  !onRemoveKnowledgeGitHubSource
-                                }
-                                onClick={() => handleRemoveGitHubSource(source)}
-                                aria-label={`${knowledgeGitHubRemovingSourceId === source.id ? "Deleting" : "Delete"} ${source.title || "GitHub source"}`}
-                                title="Delete"
-                              >
-                                <Trash2 size={12} strokeWidth={2.2} aria-hidden="true" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        {effectiveKnowledgeGitHubSources.length > 3 ? (
-                          <button
-                            type="button"
-                            className="community-launch-knowledge-source-list-toggle"
-                            onClick={() => setKnowledgeGitHubSourcesExpanded((expanded) => !expanded)}
-                          >
-                            {knowledgeGitHubSourcesExpanded
-                              ? "Show fewer"
-                              : `View all ${effectiveKnowledgeGitHubSources.length}`}
-                          </button>
-                        ) : null}
-                      </>
+                    <ImportedKnowledgeSourceRows
+                      sources={effectiveKnowledgeGitHubSources}
+                      fallbackTitle="GitHub source"
+                      expanded={knowledgeGitHubSourcesExpanded}
+                      removingSourceId={knowledgeGitHubRemovingSourceId}
+                      disabled={isSavingActiveStep}
+                      canRemove={Boolean(onRemoveKnowledgeGitHubSource)}
+                      onToggleExpanded={() => setKnowledgeGitHubSourcesExpanded((expanded) => !expanded)}
+                      onRemove={handleRemoveGitHubSource}
+                    />
+                    {knowledgeGitHubMissingCredentialSources.length > 0 ? (
+                      <span className="community-launch-knowledge-reconnect-required">
+                        {formatReconnectRequiredMessage(
+                          "GitHub",
+                          knowledgeGitHubMissingCredentialSources.length,
+                        )}
+                      </span>
                     ) : null}
                   </div>
                 </div>
@@ -2457,13 +2614,14 @@ export function WebCommunityLaunchSetupModal(
                   <div className="community-launch-knowledge-source-picker community-launch-knowledge-github-repo-list">
                     {knowledgeGitHubRepositories.map((repository) => {
                       const isSelectedRepository = knowledgeGitHubSelectedRepository?.id === repository.id;
+                      const importedSourceCount = knowledgeGitHubImportedRepoCounts.get(repository.full_name) ?? 0;
                       return (
                         <div key={repository.id} className="community-launch-knowledge-github-repo-item">
                           <button
                             type="button"
                             className={`community-launch-knowledge-github-repo${
                               isSelectedRepository ? " is-selected" : ""
-                            }`}
+                            }${importedSourceCount > 0 ? " has-imported-sources" : ""}`}
                             disabled={isSavingActiveStep || knowledgeGitHubFilesLoading || !onListKnowledgeGitHubFiles}
                             onClick={() => handleSelectGitHubRepository(repository)}
                             aria-pressed={isSelectedRepository}
@@ -2477,35 +2635,46 @@ export function WebCommunityLaunchSetupModal(
                               <strong>{repository.full_name}</strong>
                               <small>
                                 {repository.private ? "Private" : "Public"} / {repository.default_branch}
+                                {importedSourceCount > 0
+                                  ? ` / ${importedSourceCount} imported`
+                                  : ""}
                               </small>
                             </span>
                           </button>
                           {isSelectedRepository ? (
                             <div className="community-launch-knowledge-github-file-panel">
                               {knowledgeGitHubFiles.length > 0 ? (
-                                <div className="community-launch-knowledge-github-file-list">
-                                  {knowledgeGitHubFiles.map((file) => {
-                                    const isSelected = knowledgeGitHubSelectedIdSet.has(file.id);
-                                    const alreadyAdded = knowledgeGitHubImportedExternalIds.has(file.id);
-                                    return (
-                                      <label key={file.id} className={alreadyAdded ? "is-added" : undefined}>
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          disabled={
-                                            isSavingActiveStep ||
-                                            knowledgeGitHubFilesLoading ||
-                                            alreadyAdded ||
-                                            (!isSelected && knowledgeGitHubSelectionAtLimit)
-                                          }
-                                          onChange={() => handleToggleGitHubFile(file.id)}
-                                        />
-                                        <span>{file.path}</span>
-                                        <small>{alreadyAdded ? "Added" : file.size ? `${Math.ceil(file.size / 1024)} KB` : file.ref}</small>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
+                                <>
+                                  <p className="community-launch-knowledge-github-file-truth">
+                                    {knowledgeGitHubFilesTruncated
+                                      ? `Showing the first ${knowledgeGitHubFiles.length} readable files. This repo has more than the ${knowledgeGitHubFileLimit}-file selector limit.`
+                                      : `Showing ${knowledgeGitHubFiles.length} readable file${knowledgeGitHubFiles.length === 1 ? "" : "s"}.`}{" "}
+                                    Import up to {COMMUNITY_LAUNCH_MAX_GITHUB_FILES} at a time.
+                                  </p>
+                                  <div className="community-launch-knowledge-github-file-list">
+                                    {knowledgeGitHubFiles.map((file) => {
+                                      const isSelected = knowledgeGitHubSelectedIdSet.has(file.id);
+                                      const alreadyAdded = knowledgeGitHubImportedExternalIds.has(file.id);
+                                      return (
+                                        <label key={file.id} className={alreadyAdded ? "is-added" : undefined}>
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            disabled={
+                                              isSavingActiveStep ||
+                                              knowledgeGitHubFilesLoading ||
+                                              alreadyAdded ||
+                                              (!isSelected && knowledgeGitHubSelectionAtLimit)
+                                            }
+                                            onChange={() => handleToggleGitHubFile(file.id)}
+                                          />
+                                          <span>{file.path}</span>
+                                          <small>{alreadyAdded ? "Added" : file.size ? `${Math.ceil(file.size / 1024)} KB` : file.ref}</small>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </>
                               ) : (
                                 <p className="community-launch-knowledge-source-empty">
                                   {knowledgeGitHubFilesLoading ? "Loading GitHub files..." : "No readable GitHub files found."}

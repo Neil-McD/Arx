@@ -3540,6 +3540,121 @@ function toPublicGitHubConnection(row: UserSourceIntegrationConnectionRow | null
   };
 }
 
+async function resolveCommunityLaunchKnowledgeSourceCredentialStatus(
+  ctx: any,
+  row: CommunityResourceLike,
+  cache: Map<string, boolean>,
+): Promise<"available" | "missing"> {
+  const provider = normalizeSourceIntegrationString(row.sourceExternalProvider, 80);
+  if (provider !== GOOGLE_DRIVE_SOURCE_PROVIDER && provider !== GITHUB_SOURCE_PROVIDER) {
+    return "available";
+  }
+  const connectionUserId = row.sourceExternalConnectionUserId ?? row.createdByUserId;
+  const connectionUserIdKey = normalizeIdValue(connectionUserId);
+  if (!connectionUserIdKey) return "missing";
+  const cacheKey = `${provider}:${connectionUserIdKey}`;
+  const cached = cache.get(cacheKey);
+  if (typeof cached === "boolean") return cached ? "available" : "missing";
+  const connection = provider === GOOGLE_DRIVE_SOURCE_PROVIDER
+    ? await getGoogleDriveConnectionRow(ctx, connectionUserId)
+    : provider === GITHUB_SOURCE_PROVIDER
+      ? await getGitHubConnectionRow(ctx, connectionUserId)
+      : null;
+  const isAvailable = Boolean(connection);
+  cache.set(cacheKey, isAvailable);
+  return isAvailable ? "available" : "missing";
+}
+
+async function mapCommunityLaunchKnowledgeSourceRow(
+  ctx: any,
+  row: CommunityResourceLike,
+  credentialStatusCache: Map<string, boolean>,
+) {
+  const provider = normalizeSourceIntegrationString(row.sourceExternalProvider, 80);
+  const sourceIngestionKind = normalizeResourceSourceIngestionKind(row);
+  const sourceIngestionStatus = normalizeResourceSourceIngestionStatus(row);
+  const credentialStatus = await resolveCommunityLaunchKnowledgeSourceCredentialStatus(
+    ctx,
+    row,
+    credentialStatusCache,
+  );
+  const providerLabel = provider === GITHUB_SOURCE_PROVIDER
+    ? "GitHub"
+    : provider === GOOGLE_DRIVE_SOURCE_PROVIDER
+      ? "Google Drive"
+      : "Link";
+  return {
+    id: normalizeIdValue(row._id),
+    title: String(row.title ?? "").trim() || `${providerLabel} source`,
+    source_ingestion_status: sourceIngestionStatus,
+    source_ingestion_kind: sourceIngestionKind,
+    source_ingestion_error: normalizeOptionalText(row.sourceIngestionError, 500) ?? null,
+    source_external_provider:
+      provider === GITHUB_SOURCE_PROVIDER
+        ? GITHUB_SOURCE_PROVIDER
+        : provider === GOOGLE_DRIVE_SOURCE_PROVIDER
+          ? GOOGLE_DRIVE_SOURCE_PROVIDER
+          : null,
+    source_external_id: normalizeSourceIntegrationString(row.sourceExternalId, 1_000) || null,
+    source_external_name: normalizeSourceIntegrationString(row.sourceExternalName, 500) || null,
+    source_external_url: normalizeOptionalUrl(row.sourceExternalUrl) ?? normalizeOptionalUrl(row.url) ?? null,
+    source_external_mime_type: normalizeSourceIntegrationString(row.sourceExternalMimeType, 300) || null,
+    source_external_modified_at:
+      typeof row.sourceExternalModifiedAt === "number" && Number.isFinite(row.sourceExternalModifiedAt)
+        ? toIsoString(row.sourceExternalModifiedAt)
+        : null,
+    credential_status: credentialStatus,
+    credential_message:
+      credentialStatus === "missing" && sourceIngestionStatus !== "ready"
+        ? `Reconnect ${providerLabel} before processing this source.`
+        : null,
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+export const listCommunityLaunchKnowledgeSources = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 100)));
+    const rows = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_role_status", (q: any) =>
+        q.eq("communityId", args.communityId).eq("role", "source"),
+      )
+      .collect()) as CommunityResourceLike[];
+    const credentialStatusCache = new Map<string, boolean>();
+    const sources = await Promise.all(
+      rows
+        .filter((row) => normalizeResourceRole(row.role) === "source")
+        .filter((row) => isPlainUrlSource(row) || isGoogleDriveSourceResource(row) || isGitHubSourceResource(row))
+        .sort(compareCommunityResources)
+        .slice(0, limit)
+        .map((row) => mapCommunityLaunchKnowledgeSourceRow(ctx, row, credentialStatusCache)),
+    );
+    return {
+      ok: true,
+      kind: "community_launch_knowledge_sources",
+      community_id: normalizeIdValue(args.communityId),
+      sources,
+    };
+  },
+});
+
 async function resolveAuthenticatedActionUserId(ctx: any, authSubject?: string | null): Promise<any> {
   const actor = (await ctx.runQuery((internal as any).authActor.resolveAuthenticatedActorInternal, {
     authSubject: authSubject ?? undefined,
@@ -4980,14 +5095,15 @@ export const listGitHubSourceFiles = action({
     treeUrl.searchParams.set("recursive", "1");
     const payload = await fetchGitHubJson({ accessToken, url: treeUrl.toString() }) as Record<string, unknown>;
     const search = normalizeSourceIntegrationString(args.query, 120).toLowerCase();
-    const files = (Array.isArray(payload.tree) ? payload.tree : [])
+    const readableFiles = (Array.isArray(payload.tree) ? payload.tree : [])
       .map((entry) => mapGitHubFileCandidate(entry, {
         repoFullName: `${split.owner}/${split.repo}`,
         ref,
       }))
       .filter((file): file is GitHubFileCandidate => Boolean(file))
       .filter((file) => !search || file.path.toLowerCase().includes(search))
-      .sort((left, right) => left.path.localeCompare(right.path))
+      .sort((left, right) => left.path.localeCompare(right.path));
+    const files = readableFiles
       .slice(0, GITHUB_SOURCE_FILE_LIST_LIMIT)
       .map((file) => ({
         id: file.id,
@@ -5005,7 +5121,8 @@ export const listGitHubSourceFiles = action({
       connection: toPublicGitHubConnection(connection),
       repo_full_name: `${split.owner}/${split.repo}`,
       ref,
-      truncated: payload.truncated === true,
+      truncated: payload.truncated === true || readableFiles.length > GITHUB_SOURCE_FILE_LIST_LIMIT,
+      file_limit: GITHUB_SOURCE_FILE_LIST_LIMIT,
       files,
     };
   },
@@ -5282,7 +5399,9 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
     );
     const rows = (await ctx.db
       .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .withIndex("by_community_role_status", (q: any) =>
+        q.eq("communityId", args.communityId).eq("role", "source"),
+      )
       .collect()) as CommunityResourceLike[];
     const sources = rows.filter((row) => normalizeResourceRole(row.role) === "source");
     const readySources = sources.filter(communityResourceSourceHasReadyText);
