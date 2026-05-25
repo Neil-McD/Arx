@@ -39,8 +39,8 @@ export function WebLandingPage(props: WebLandingPageProps) {
         <NetworkSection />
         <MemorySection />
         <Pillars />
-        <Communities />
         <StackCollapse onJoin={props.onTryFree} />
+        <Communities />
         <Manifesto />
         <FinalCTA onJoin={props.onTryFree} />
       </main>

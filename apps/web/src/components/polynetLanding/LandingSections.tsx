@@ -67,8 +67,8 @@ function TopNav({ onJoin }) {
           <a href="#network" onClick={() => setMenuOpen(false)}>Network</a>
           <a href="#memory" onClick={() => setMenuOpen(false)}>Memory</a>
           <a href="#pillars" onClick={() => setMenuOpen(false)}>Product</a>
-          <a href="#communities" onClick={() => setMenuOpen(false)}>Snapshot</a>
           <a href="#stack" onClick={() => setMenuOpen(false)}>Stack</a>
+          <a href="#communities" onClick={() => setMenuOpen(false)}>Snapshot</a>
           <button className="btn btn-primary" style={{ padding: '10px 18px', fontSize: 14 }} onClick={() => { setMenuOpen(false); onJoin(); }}>
             Try Polynet free <span className="arrow">→</span>
           </button>
@@ -486,7 +486,7 @@ function Communities() {
     <section className="communities snapshot" id="communities">
       <div className="wrap">
         <div className="head reveal">
-          <div className="micro" style={{ marginBottom: 14 }}>/05 · SNAPSHOT FROM POLYNET</div>
+          <div className="micro" style={{ marginBottom: 14 }}>/06 · SNAPSHOT FROM POLYNET</div>
           <h2 className="h-1" style={{maxWidth: 1000}}>
             Snapshot from Polynet.
           </h2>
@@ -535,7 +535,7 @@ function StackCollapse({ onJoin }) {
       <div className="wrap">
         <div className="head reveal">
           <div>
-            <div className="micro" style={{ marginBottom: 14 }}>/06 · THE STACK COLLAPSES</div>
+            <div className="micro" style={{ marginBottom: 14 }}>/05 · THE STACK COLLAPSES</div>
             <h2 className="h-1">
               Four tools. Four silos.<br />No shared memory.
             </h2>
@@ -666,8 +666,8 @@ function SiteFooter() {
             <a href="#argument">Thesis</a>
             <a href="#network">Network shape</a>
             <a href="#memory">Memory mechanism</a>
-            <a href="#communities">Snapshot</a>
             <a href="#stack">Stack collapse</a>
+            <a href="#communities">Snapshot</a>
           </div>
           <div className="col">
             <h4>Company</h4>
