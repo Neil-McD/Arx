@@ -1861,10 +1861,12 @@
        reader; the three step blocks carry the argument. */
     .polynet-network-landing .argument .arg-head h2 { display: none; }
 
-    /* Give the hero extra vertical room so the globe horizon has
-       space to read as a horizon, and the marquee gets pushed down
-       below it instead of cropping the curve. */
-    .polynet-network-landing .hero { min-height: 115vh; }
+    /* Pull the globe up inside the hero so the horizon actually sits
+       in the visible viewport. The default bottom: -10% anchors it to
+       the hero's bottom edge, which on a narrow mobile viewport puts
+       the globe below the fold and the marquee right on top of where
+       the curve would have shown. */
+    .polynet-network-landing .hero .globe { bottom: 18%; }
 
     /* Skinnier marquee band so it reads as a scrolling rail, not a
        section. Also speed up the scroll — at 60s on a narrow viewport
