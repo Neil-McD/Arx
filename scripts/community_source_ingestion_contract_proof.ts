@@ -576,8 +576,8 @@ assert.match(
 );
 assert.match(
   modal,
-  /onIngestKnowledgeSources[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onLoadKnowledgeHealth[\s\S]*onGenerateKnowledgePlan/,
-  "launch Knowledge Next must run ingestion before health/scaffold/architect",
+  /onIngestKnowledgeSources[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onGenerateKnowledgePlan[\s\S]*await onApplyKnowledgePlan[\s\S]*!sourceBackedPlan[\s\S]*await onLoadKnowledgeHealth[\s\S]*await onDraftKnowledgeResources\(\)/,
+  "launch Knowledge Next must run ingestion before source-driven architect planning and only load health for scaffold fallback",
 );
 assert.match(
   modal,

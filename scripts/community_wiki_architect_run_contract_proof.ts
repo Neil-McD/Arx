@@ -20,6 +20,11 @@ const runStart = architect.indexOf("export const runCommunityWikiArchitectPropos
 assert.notEqual(runStart, -1, "architect proposal action should exist");
 const runBody = architect.slice(runStart, applyStart);
 const applyBody = architect.slice(applyStart);
+const prepareStart = modal.indexOf("const handlePrepareKnowledgeResources");
+assert.notEqual(prepareStart, -1, "knowledge prepare handler should exist");
+const prepareEnd = modal.indexOf("const handleSaveAgent", prepareStart);
+assert.notEqual(prepareEnd, -1, "knowledge prepare handler boundary should exist");
+const prepareBody = modal.slice(prepareStart, prepareEnd);
 
 assert.match(
   packageJson,
@@ -179,6 +184,21 @@ assert.match(
   "architect apply should return fresh builder health after writes",
 );
 assert.match(
+  applyBody,
+  /patchSourceModuleIfNeeded[\s\S]*ctx\.db\.patch\(source\._id as any,[\s\S]*moduleId,[\s\S]*upsertArchiveDocumentForResource\(ctx, updatedSource\)/,
+  "architect apply should persist used source rows into the page module",
+);
+assert.match(
+  applyBody,
+  /await patchSourceModuleIfNeeded\(source, module\._id\)/,
+  "architect-created pages should update their primary source module",
+);
+assert.match(
+  applyBody,
+  /await patchSourceModuleIfNeeded\(source, updatedPage\.moduleId \?\? null\)/,
+  "architect draft updates should update their primary source module",
+);
+assert.match(
   architect,
   /COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT[\s\S]*Use only the provided source text[\s\S]*Return ONLY valid JSON[\s\S]*"body_md"/,
   "resource content writer should have a source-grounded JSON-only prompt",
@@ -286,9 +306,36 @@ assert.match(
   /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
   "modal should run ingest, architect, content writer, then open Resources review from Knowledge Next",
 );
+const ingestIndex = prepareBody.indexOf("await onIngestKnowledgeSources()");
+const planIndex = prepareBody.indexOf("await onGenerateKnowledgePlan");
+const applyIndex = prepareBody.indexOf("await onApplyKnowledgePlan");
+const draftIndex = prepareBody.indexOf("await onDraftKnowledgeResources()");
+const fallbackIndex = prepareBody.indexOf("await onEnsureKnowledgeScaffold()");
+assert.ok(
+  ingestIndex !== -1 && planIndex !== -1 && applyIndex !== -1 && draftIndex !== -1,
+  "Knowledge Next should call ingest, architect, apply, and drafter",
+);
+assert.ok(
+  ingestIndex < planIndex && planIndex < applyIndex && applyIndex < draftIndex,
+  "Knowledge Next should run source ingestion, source-driven architect, apply, then drafter in order",
+);
+assert.equal(
+  prepareBody.slice(0, planIndex).includes("onEnsureKnowledgeScaffold"),
+  false,
+  "Knowledge Next must not run generic scaffold before source-driven planning",
+);
+assert.ok(
+  fallbackIndex === -1 || (fallbackIndex > applyIndex && fallbackIndex < draftIndex),
+  "generic scaffold fallback should run only after source-driven planning and before drafting",
+);
+assert.match(
+  modal,
+  /proposalHasSourceBackedWrites[\s\S]*drafts_created[\s\S]*drafts_updated/,
+  "modal should detect whether the architect produced source-backed writes before fallback scaffolding",
+);
 assert.doesNotMatch(
   modal,
-  /Build wiki plan|review-only structure plan|drafts_created|Apply draft plan/,
+  /Build wiki plan|review-only structure plan|Apply draft plan/,
   "modal should not expose architect review controls in the Knowledge UI",
 );
 

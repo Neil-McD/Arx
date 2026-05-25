@@ -648,8 +648,8 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /handlePrepareKnowledgeResources[\s\S]*Add source links before continuing[\s\S]*Import selected Google Drive files before continuing[\s\S]*Import selected GitHub files before continuing[\s\S]*onIngestKnowledgeSources[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
-  "launch knowledge Next must require provider-local saves/imports before running the internal resource preparation loop",
+  /handlePrepareKnowledgeResources[\s\S]*Add source links before continuing[\s\S]*Import selected Google Drive files before continuing[\s\S]*Import selected GitHub files before continuing[\s\S]*onIngestKnowledgeSources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*!sourceBackedPlan[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  "launch knowledge Next must require provider-local saves/imports, run source-driven planning first, and reserve scaffold for fallback",
 );
 assert.match(
   setupModal,

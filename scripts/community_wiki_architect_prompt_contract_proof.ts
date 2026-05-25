@@ -55,6 +55,16 @@ assert.match(
 );
 assert.match(
   promptSource,
+  /TARGET END STATE[\s\S]*not a pile of source material in Unsorted[\s\S]*Every visible ready source without assigned_pages must be[\s\S]*accounted for/,
+  "architect prompt should define the organized Resources end state",
+);
+assert.match(
+  promptSource,
+  /Use deferred for future page ideas, not as a replacement for source-id[\s\S]*accounting/,
+  "architect prompt should keep exact source accounting in source-id fields",
+);
+assert.match(
+  promptSource,
   /Return a proposed changeset only/,
   "architect should return proposals only",
 );
@@ -132,6 +142,21 @@ assert.match(
   promptSource,
   /single\s+"Start Here"\s+module with one\s+"Welcome"\s+page/,
   "thin-context fallback should be small",
+);
+assert.match(
+  promptSource,
+  /thin community profile should block only[\s\S]*source-less guessing[\s\S]*organize source-backed drafts/,
+  "thin profile should not block source-backed organization",
+);
+assert.match(
+  promptSource,
+  /classification heuristics[\s\S]*Start Here[\s\S]*Methodology[\s\S]*Playbooks[\s\S]*Reference Library/,
+  "architect prompt should define module classification heuristics",
+);
+assert.match(
+  promptSource,
+  /sources_assigned must contain only sources you used in drafts_created or drafts_updated/,
+  "architect prompt should prevent silent assigned source claims",
 );
 assert.match(
   promptSource,

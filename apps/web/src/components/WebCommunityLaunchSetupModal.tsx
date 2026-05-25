@@ -145,6 +145,7 @@ export type CommunityLaunchKnowledgePlanApplyResult = {
     modules_created?: string[];
     pages_created?: string[];
     pages_updated?: string[];
+    source_modules_updated?: string[];
   };
   health?: CommunityLaunchKnowledgeHealth;
   errors?: Array<{
@@ -727,6 +728,16 @@ function formatKnowledgeIngestionPartialWarning(
   const failed = toNonNegativeInteger(result?.failed);
   if (failed <= 0) return null;
   return `${failed} source${failed === 1 ? "" : "s"} could not be read.`;
+}
+
+function proposalHasSourceBackedWrites(
+  proposal: CommunityWikiArchitectProposal | null | undefined,
+): boolean {
+  if (!proposal) return false;
+  return (
+    proposal.drafts_created.some((draft) => Boolean(draft.source_resource_id)) ||
+    proposal.drafts_updated.some((draft) => Boolean(draft.source_resource_id))
+  );
 }
 
 export function WebCommunityLaunchSetupModal(
@@ -1942,17 +1953,6 @@ export function WebCommunityLaunchSetupModal(
         const ingestionWarning = !ingestionResult?.ok
           ? formatKnowledgeIngestionPartialWarning(ingestionResult)
           : null;
-        const currentHealth = await onLoadKnowledgeHealth();
-        const missingDefaultModules =
-          currentHealth?.summary?.missing_default_modules ?? [];
-        const missingScaffoldPages =
-          currentHealth?.summary?.missing_scaffold_pages ?? [];
-        if (
-          onEnsureKnowledgeScaffold &&
-          (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0)
-        ) {
-          await onEnsureKnowledgeScaffold();
-        }
         const planResult = await onGenerateKnowledgePlan({
           builderIntent: "",
         });
@@ -1961,6 +1961,7 @@ export function WebCommunityLaunchSetupModal(
             planResult?.message || "Could not prepare draft resources.",
           );
         }
+        const sourceBackedPlan = proposalHasSourceBackedWrites(planResult.proposal);
         const applyResult = await onApplyKnowledgePlan({
           proposal: planResult.proposal,
         });
@@ -1971,6 +1972,16 @@ export function WebCommunityLaunchSetupModal(
               applyResult?.message ||
               "Could not prepare draft resources.",
           );
+        }
+        if (!sourceBackedPlan && onEnsureKnowledgeScaffold) {
+          const currentHealth = await onLoadKnowledgeHealth();
+          const missingDefaultModules =
+            currentHealth?.summary?.missing_default_modules ?? [];
+          const missingScaffoldPages =
+            currentHealth?.summary?.missing_scaffold_pages ?? [];
+          if (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0) {
+            await onEnsureKnowledgeScaffold();
+          }
         }
         const draftResult = await onDraftKnowledgeResources();
         if (!draftResult?.ok) {

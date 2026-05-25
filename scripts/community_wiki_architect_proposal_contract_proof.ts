@@ -408,6 +408,16 @@ expectInvalid(
 expectInvalid(
   {
     ...validProposal,
+    sources_assigned: ["src_1", "src_2", "src_3"],
+    sources_unassigned: [],
+  },
+  "$.sources_assigned",
+  /src_3.*not used/,
+);
+
+expectInvalid(
+  {
+    ...validProposal,
     sources_unassigned: [{ id: "src_1", reason: "contradiction" }],
   },
   "$.sources_unassigned[0].id",

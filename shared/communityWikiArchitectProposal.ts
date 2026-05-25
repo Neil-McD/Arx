@@ -359,6 +359,9 @@ export function validateCommunityWikiArchitectProposal(
     if (unassignedSourceIds.has(sourceId)) {
       pushError(errors, "$.sources_assigned", `Source ${sourceId} cannot be both assigned and unassigned.`);
     }
+    if (!usedSourceIds.has(sourceId)) {
+      pushError(errors, "$.sources_assigned", `Source ${sourceId} is marked assigned but is not used by a draft create or update.`);
+    }
   }
 
   const pagesLeftUnchanged = validateObjectArray(

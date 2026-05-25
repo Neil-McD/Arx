@@ -1038,6 +1038,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
     const modulesCreated: string[] = [];
     const pagesCreated: string[] = [];
     const pagesUpdated: string[] = [];
+    const sourceModulesUpdated: string[] = [];
     let nextModuleSortOrder =
       modules.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
     const nextPageSortOrderByModule = new Map<string, number>();
@@ -1049,6 +1050,22 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       );
       nextPageSortOrderByModule.set(moduleIdentity, nextSortOrder);
     }
+    const patchSourceModuleIfNeeded = async (
+      source: CommunityResourceLike | null,
+      moduleId: any | null | undefined,
+    ): Promise<void> => {
+      if (!source || !moduleId) return;
+      if (resourceModuleIdentity(source.moduleId) === resourceModuleIdentity(moduleId)) return;
+      await ctx.db.patch(source._id as any, {
+        moduleId,
+        updatedAt: nowMs,
+      });
+      const updatedSource = (await ctx.db.get(source._id as any)) as CommunityResourceLike | null;
+      if (!updatedSource) throw new Error("community_wiki_architect_source_not_found");
+      sourceById.set(normalizeIdValue(updatedSource._id), updatedSource);
+      await upsertArchiveDocumentForResource(ctx, updatedSource);
+      sourceModulesUpdated.push(updatedSource.title);
+    };
 
     for (const moduleProposal of proposal.modules_created) {
       const normalizedName = normalizeCommunityResourceBuilderTitle(moduleProposal.name);
@@ -1113,6 +1130,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       const createdPage = (await ctx.db.get(resourceId as any)) as CommunityResourceLike | null;
       if (!createdPage) throw new Error("community_wiki_architect_page_create_failed");
       await upsertArchiveDocumentForResource(ctx, createdPage);
+      await patchSourceModuleIfNeeded(source, module._id);
       pageKeys.add(pageKey);
       pagesCreated.push(`${module.name}/${createdPage.title}`);
     }
@@ -1137,6 +1155,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       const updatedPage = (await ctx.db.get(page._id as any)) as CommunityResourceLike | null;
       if (!updatedPage) throw new Error("community_wiki_architect_page_not_found");
       await upsertArchiveDocumentForResource(ctx, updatedPage);
+      await patchSourceModuleIfNeeded(source, updatedPage.moduleId ?? null);
       pagesUpdated.push(updatedPage.title);
     }
 
@@ -1147,6 +1166,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
         modules_created: modulesCreated,
         pages_created: pagesCreated,
         pages_updated: pagesUpdated,
+        source_modules_updated: sourceModulesUpdated,
       },
       health: await buildCommunityResourceBuilderHealthReport({
         ctx,
