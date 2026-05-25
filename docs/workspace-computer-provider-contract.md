@@ -1,0 +1,52 @@
+# Workspace Computer Provider Contract
+
+PolyNet's product authority is still the project record. A workspace computer is
+the provider-backed machine attached to that project while tools, terminals,
+previews, and file inspection need execution.
+
+## Current Live Provider
+
+Daytona remains the default and only live provider in this slice.
+
+- `ensureProjectBackgroundSandbox`
+- `resolveProjectBackgroundSandboxIfReady`
+- `releaseProjectBackgroundSandboxIfIdle`
+
+Those functions still own the active workspace behavior and still use the
+Daytona client directly. The Blaxel provider is present only as a disabled
+staging stub until the lifecycle proof passes against a real project volume.
+
+## Provider Operations
+
+The provider seam is intentionally small:
+
+- `ensureWorkspaceComputer`
+- `resolveWorkspaceComputerIfReady`
+- `releaseWorkspaceComputerIfIdle`
+- `destroyWorkspaceComputer`
+- `executeWorkspaceCommand`
+- `listWorkspaceDirectory`
+- `readWorkspaceFile`
+- `writeWorkspaceFile`
+- `getWorkspacePreviewUrl`
+
+The UI should not choose the provider. Provider selection is server-owned policy.
+The user-facing flow stays the same: project files, terminals, previews, and
+workspace tools attach to the project computer.
+
+## Blaxel Gate
+
+Blaxel can only become selectable after all of these are true:
+
+- The staging readiness guard passes.
+- The Blaxel workspace lifecycle proof passes with project volumes enabled.
+- The server explicitly enables the Blaxel provider.
+- The deployment is not production.
+
+Until then, Blaxel provider calls return `blaxel_provider_not_enabled`.
+
+## Migration Rule
+
+Do not replace Daytona behavior with Blaxel behavior in the same slice that
+introduces the seam. First prove the contract, then add the provider
+implementation behind staging-only policy, then switch one internal staging path.
