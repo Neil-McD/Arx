@@ -275,6 +275,16 @@ assert.match(
   /export const patchCommunitySourceIngestionInternal = internalMutation\(/,
   "source ingestion should patch readiness through an internal mutation",
 );
+assert.doesNotMatch(
+  resources,
+  /ctx\.db\.insert\("communityResourceModules"[\s\S]{0,500}descriptionMd:\s*null/,
+  "community resource module scaffolds must omit empty descriptions instead of writing null into an optional string field",
+);
+assert.doesNotMatch(
+  architect,
+  /ctx\.db\.insert\("communityResourceModules"[\s\S]{0,500}descriptionMd:[^\n]*\?\?\s*null/,
+  "wiki architect module creation must omit empty descriptions instead of writing null into an optional string field",
+);
 assert.match(
   resources,
   /patchCommunitySourceIngestionInternal = internalMutation\([\s\S]*if \(!existing\) return null[\s\S]*if \(!updated\) return null/,

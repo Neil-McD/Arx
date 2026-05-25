@@ -117,6 +117,11 @@ assert.match(
   /source_resource_id must be one of current_resource_state\.visible_source_ids/,
   "architect action should reject source lineage outside the visible source window",
 );
+assert.doesNotMatch(
+  applyBody,
+  /ctx\.db\.insert\("communityResourceModules"[\s\S]{0,500}descriptionMd:[^\n]*\?\?\s*null/,
+  "architect apply must not write null into the optional module description field",
+);
 assert.match(
   runBody,
   /Boolean\(state\.pages_truncated\) && hasDraftWrites[\s\S]*Wiki Architect cannot propose draft writes from a truncated page window/,

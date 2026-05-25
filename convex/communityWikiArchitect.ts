@@ -1059,7 +1059,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
         communityId: args.communityId,
         createdByUserId: userId,
         name: normalizeName(moduleProposal.name),
-        descriptionMd: normalizeOptionalText(moduleProposal.purpose, 1200) ?? null,
+        descriptionMd: normalizeOptionalText(moduleProposal.purpose, 1200),
         sortOrder: nextModuleSortOrder,
         createdAt: nowMs,
         updatedAt: nowMs,

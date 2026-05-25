@@ -3080,7 +3080,6 @@ export const ensureCommunityResourceWikiScaffold = mutation({
         communityId: args.communityId,
         createdByUserId: userId,
         name: moduleName,
-        descriptionMd: null,
         sortOrder: nextModuleSortOrder,
         createdAt: nowMs,
         updatedAt: nowMs,
