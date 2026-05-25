@@ -1271,14 +1271,14 @@
     display: grid;
     gap: 56px;
   }
-  .polynet-network-landing .memory-section .head {
+  .polynet-network-landing .memory-section > .wrap > .head {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 48px;
     align-items: end;
   }
   @media (max-width: 860px) {
-    .polynet-network-landing .memory-section .head {
+    .polynet-network-landing .memory-section > .wrap > .head {
       grid-template-columns: 1fr;
       gap: 18px;
       align-items: start;
