@@ -1846,3 +1846,22 @@
     .polynet-network-landing .stack-old-row { padding: 14px 16px; }
     .polynet-network-landing .stack-new { padding: 22px 20px; }
   }
+
+  /* ============================================================
+     Mobile polish — lighten the top of the page on small viewports
+     ============================================================ */
+  @media (max-width: 760px) {
+    /* Drop the hero PREMISE / IMPLICATION / SHAPE / STAKES meta block.
+       Four stacked paragraphs push the marquee + next sections too far
+       down. The Argument section that follows carries the same thesis. */
+    .polynet-network-landing .hero .meta { display: none; }
+
+    /* Hide the Argument H2 "A logical argument, in three moves" — the
+       /01 · THE THESIS kicker and the supporting paragraph orient the
+       reader; the three step blocks carry the argument. */
+    .polynet-network-landing .argument .arg-head h2 { display: none; }
+
+    /* Thinner marquee band so the small mono text doesn't float in
+       50px+ of empty space. */
+    .polynet-network-landing .marquee { padding: 10px 0; }
+  }
