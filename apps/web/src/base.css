@@ -4568,6 +4568,107 @@ body {
   gap: 14px;
 }
 
+.community-launch-knowledge-assembly {
+  min-height: 360px;
+  align-content: start;
+  gap: 16px;
+  padding-bottom: 66px;
+}
+
+.community-launch-knowledge-assembly > div:first-child {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+}
+
+.community-launch-knowledge-assembly > div:first-child > strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.community-launch-knowledge-assembly > div:first-child > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.community-launch-knowledge-assembly-steps {
+  display: grid;
+  gap: 0;
+  max-width: 560px;
+  border-top: 1px solid color-mix(in srgb, var(--border-muted) 68%, transparent);
+}
+
+.community-launch-knowledge-assembly-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 48%, transparent);
+  color: var(--text-muted);
+}
+
+.community-launch-knowledge-assembly-step > span {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--text-secondary) 74%, transparent);
+}
+
+.community-launch-knowledge-assembly-step > strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-launch-knowledge-assembly-step.is-active {
+  color: var(--text-primary);
+}
+
+.community-launch-knowledge-assembly-step.is-active > span {
+  color: var(--accent-pink);
+}
+
+.community-launch-knowledge-assembly-step.is-active svg {
+  animation: polynet-knowledge-assembly-pulse 1.05s ease-in-out infinite;
+}
+
+.community-launch-knowledge-assembly-step.is-complete {
+  color: color-mix(in srgb, var(--text-primary) 82%, var(--text-secondary));
+}
+
+.community-launch-knowledge-assembly-step.is-complete > span {
+  color: #8ee6aa;
+}
+
+.community-launch-knowledge-assembly-step.is-failed {
+  color: var(--accent-error, #c75a4a);
+}
+
+.community-launch-knowledge-assembly-step.is-failed > span {
+  color: var(--accent-error, #c75a4a);
+}
+
+@keyframes polynet-knowledge-assembly-pulse {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .community-launch-knowledge-stack {
   display: grid;
   gap: 0;

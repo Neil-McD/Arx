@@ -591,7 +591,7 @@ assert.match(
 );
 assert.match(
   modal,
-  /sourceNeedsIntegrationReconnect[\s\S]*credential_status === "missing"[\s\S]*knowledgeMissingCredentialMessage[\s\S]*handlePrepareKnowledgeResources[\s\S]*setStepError\(knowledgeMissingCredentialMessage\)[\s\S]*return;[\s\S]*onIngestKnowledgeSources/,
+  /sourceNeedsIntegrationReconnect[\s\S]*credential_status === "missing"[\s\S]*knowledgeMissingCredentialMessage[\s\S]*getKnowledgePreparationBlocker[\s\S]*return knowledgeMissingCredentialMessage[\s\S]*handlePrepareKnowledgeResources[\s\S]*setStepError\(preparationBlocker\)[\s\S]*return;[\s\S]*onIngestKnowledgeSources/,
   "launch Knowledge Next should refuse provider ingestion when queued Drive or GitHub sources are missing credentials",
 );
 assert.match(

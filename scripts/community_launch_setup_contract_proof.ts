@@ -648,7 +648,7 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /handlePrepareKnowledgeResources[\s\S]*Add source links before continuing[\s\S]*Import selected Google Drive files before continuing[\s\S]*Import selected GitHub files before continuing[\s\S]*onIngestKnowledgeSources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*!sourceBackedPlan[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  /handlePrepareKnowledgeResources[\s\S]*getKnowledgePreparationBlocker[\s\S]*setKnowledgeView\("assemble"\)[\s\S]*setAssemblyStage\("reading"\)[\s\S]*onIngestKnowledgeSources[\s\S]*setAssemblyStage\("organizing"\)[\s\S]*onGenerateKnowledgePlan[\s\S]*setAssemblyStage\("creating"\)[\s\S]*onApplyKnowledgePlan[\s\S]*!sourceBackedPlan[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*setAssemblyStage\("writing"\)[\s\S]*onDraftKnowledgeResources[\s\S]*setAssemblyStage\("checking"\)[\s\S]*setAssemblyStage\("opening"\)[\s\S]*onOpenStep\("knowledge"\)/,
   "launch knowledge Next must require provider-local saves/imports, run source-driven planning first, and reserve scaffold for fallback",
 );
 assert.match(
@@ -658,7 +658,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /sourceNeedsIntegrationReconnect[\s\S]*credential_status === "missing"[\s\S]*knowledgeDriveMissingCredentialSources[\s\S]*knowledgeGitHubMissingCredentialSources[\s\S]*knowledgeMissingCredentialMessage[\s\S]*handlePrepareKnowledgeResources[\s\S]*if \(knowledgeMissingCredentialMessage\)[\s\S]*setStepError\(knowledgeMissingCredentialMessage\)[\s\S]*return;[\s\S]*onIngestKnowledgeSources/,
+  /sourceNeedsIntegrationReconnect[\s\S]*credential_status === "missing"[\s\S]*knowledgeDriveMissingCredentialSources[\s\S]*knowledgeGitHubMissingCredentialSources[\s\S]*knowledgeMissingCredentialMessage[\s\S]*getKnowledgePreparationBlocker[\s\S]*return knowledgeMissingCredentialMessage[\s\S]*handlePrepareKnowledgeResources[\s\S]*setStepError\(preparationBlocker\)[\s\S]*return;[\s\S]*onIngestKnowledgeSources/,
   "launch knowledge Next must block provider ingestion when queued Drive or GitHub sources need reconnect",
 );
 assert.match(
@@ -673,8 +673,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*Curating resources\.\.\.)(?=[\s\S]*Resources drafted for review\.)(?=[\s\S]*Draft resources prepared for review\.)/,
-  "launch knowledge step must present agent preparation as an internal progress state",
+  /(?=[\s\S]*type KnowledgeView = "collect" \| "assemble")(?=[\s\S]*KNOWLEDGE_ASSEMBLY_STEPS)(?=[\s\S]*Assembling resources)(?=[\s\S]*Reading source material)(?=[\s\S]*Organizing resource structure)(?=[\s\S]*Creating draft pages)(?=[\s\S]*Writing source-backed content)(?=[\s\S]*Checking organization)(?=[\s\S]*Opening Resources review)(?=[\s\S]*Back to sources)(?=[\s\S]*Try again)/,
+  "launch knowledge step must present agent preparation as an assembly progress card",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-assembly[\s\S]*\.community-launch-knowledge-assembly-step\.is-active[\s\S]*polynet-knowledge-assembly-pulse/,
+  "launch knowledge assembly progress should have compact active and completed states",
 );
 assert.doesNotMatch(
   setupModal,

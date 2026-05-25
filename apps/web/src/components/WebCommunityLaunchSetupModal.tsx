@@ -49,6 +49,29 @@ const COMMUNITY_LAUNCH_MAX_GOOGLE_DRIVE_FILES = 20;
 const COMMUNITY_LAUNCH_MAX_GITHUB_FILES = 20;
 const COMMUNITY_LAUNCH_GITHUB_FILE_LIST_LIMIT = 80;
 
+type KnowledgeView = "collect" | "assemble";
+type KnowledgeAssemblyWorkStage =
+  | "reading"
+  | "organizing"
+  | "creating"
+  | "writing"
+  | "checking"
+  | "opening";
+type KnowledgeAssemblyStage = "idle" | KnowledgeAssemblyWorkStage | "failed";
+type KnowledgeAssemblyStepStatus = "pending" | "active" | "complete" | "failed";
+
+const KNOWLEDGE_ASSEMBLY_STEPS: Array<{
+  stage: KnowledgeAssemblyWorkStage;
+  label: string;
+}> = [
+  { stage: "reading", label: "Reading source material" },
+  { stage: "organizing", label: "Organizing resource structure" },
+  { stage: "creating", label: "Creating draft pages" },
+  { stage: "writing", label: "Writing source-backed content" },
+  { stage: "checking", label: "Checking organization" },
+  { stage: "opening", label: "Opening Resources review" },
+];
+
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 
 type CommunityLaunchSetupCommunity = {
@@ -754,6 +777,34 @@ function formatKnowledgeArchitectureQualityWarning(
   return null;
 }
 
+function getKnowledgeAssemblyStepStatus(args: {
+  currentStage: KnowledgeAssemblyStage;
+  failedStage: KnowledgeAssemblyWorkStage | null;
+  stepStage: KnowledgeAssemblyWorkStage;
+}): KnowledgeAssemblyStepStatus {
+  if (args.failedStage === args.stepStage) return "failed";
+  if (args.currentStage === "failed") {
+    if (!args.failedStage) return "pending";
+    const failedIndex = KNOWLEDGE_ASSEMBLY_STEPS.findIndex(
+      (step) => step.stage === args.failedStage,
+    );
+    const stepIndex = KNOWLEDGE_ASSEMBLY_STEPS.findIndex(
+      (step) => step.stage === args.stepStage,
+    );
+    return stepIndex < failedIndex ? "complete" : "pending";
+  }
+  if (args.currentStage === "idle") return "pending";
+  const currentIndex = KNOWLEDGE_ASSEMBLY_STEPS.findIndex(
+    (step) => step.stage === args.currentStage,
+  );
+  const stepIndex = KNOWLEDGE_ASSEMBLY_STEPS.findIndex(
+    (step) => step.stage === args.stepStage,
+  );
+  if (stepIndex < currentIndex) return "complete";
+  if (stepIndex === currentIndex) return "active";
+  return "pending";
+}
+
 function proposalHasSourceBackedWrites(
   proposal: CommunityWikiArchitectProposal | null | undefined,
 ): boolean {
@@ -883,6 +934,11 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeGitHubFilesLoading, setKnowledgeGitHubFilesLoading] = useState(false);
   const [knowledgeGitHubDisconnecting, setKnowledgeGitHubDisconnecting] = useState(false);
   const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
+  const [knowledgeView, setKnowledgeView] = useState<KnowledgeView>("collect");
+  const [knowledgeAssemblyStage, setKnowledgeAssemblyStage] =
+    useState<KnowledgeAssemblyStage>("idle");
+  const [knowledgeAssemblyFailedStage, setKnowledgeAssemblyFailedStage] =
+    useState<KnowledgeAssemblyWorkStage | null>(null);
   const knowledgeProviderStateCommunityKeyRef = useRef<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
@@ -1030,6 +1086,9 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeGitHubFilesLoading(false);
       setKnowledgeGitHubDisconnecting(false);
       setKnowledgeHealthLoading(false);
+      setKnowledgeView("collect");
+      setKnowledgeAssemblyStage("idle");
+      setKnowledgeAssemblyFailedStage(null);
       knowledgeProviderStateCommunityKeyRef.current = "__create__";
       setAgentDraft({
         systemPrompt: "",
@@ -1088,6 +1147,9 @@ export function WebCommunityLaunchSetupModal(
       setKnowledgeGitHubDisconnecting(false);
     }
     setKnowledgeHealthLoading(false);
+    setKnowledgeView("collect");
+    setKnowledgeAssemblyStage("idle");
+    setKnowledgeAssemblyFailedStage(null);
     setAgentDraft({
       systemPrompt: community.agent_system_prompt ?? "",
       starterPrompts: getStarterPrompts(community),
@@ -1411,8 +1473,13 @@ export function WebCommunityLaunchSetupModal(
     }
   };
 
-  const renderFinishLaterButton = () => (
-    <button type="button" className="polynet-onboarding-back" onClick={onClose}>
+  const renderFinishLaterButton = (disabled = false) => (
+    <button
+      type="button"
+      className="polynet-onboarding-back"
+      disabled={disabled}
+      onClick={onClose}
+    >
       {isCreateMode ? "Cancel" : "Finish later"}
     </button>
   );
@@ -1933,25 +2000,44 @@ export function WebCommunityLaunchSetupModal(
       .finally(() => setKnowledgeGitHubDisconnecting(false));
   };
 
+  const resetKnowledgeAssembly = () => {
+    setKnowledgeView("collect");
+    setKnowledgeAssemblyStage("idle");
+    setKnowledgeAssemblyFailedStage(null);
+  };
+
+  const getKnowledgePreparationBlocker = (): string | null => {
+    if (knowledgeLinkDrafts.some((url) => url.trim())) {
+      return "Add source links before continuing.";
+    }
+    if (knowledgeDriveSelectedIds.some((id) => !knowledgeDriveImportedExternalIds.has(id))) {
+      return "Import selected Google Drive files before continuing.";
+    }
+    if (knowledgeGitHubSelectedIds.some((id) => !knowledgeGitHubImportedExternalIds.has(id))) {
+      return "Import selected GitHub files before continuing.";
+    }
+    if (knowledgeMissingCredentialMessage) {
+      return knowledgeMissingCredentialMessage;
+    }
+    return null;
+  };
+
+  const handleBackToKnowledgeSources = () => {
+    if (savingStep || knowledgeHealthLoading) return;
+    resetKnowledgeAssembly();
+    setStepError(null);
+    setStepSuccess(null);
+  };
+
   const handlePrepareKnowledgeResources = () => {
     if (savingStep || knowledgeHealthLoading) return;
     setStepError(null);
     setStepSuccess(null);
     void (async () => {
-      if (knowledgeLinkDrafts.some((url) => url.trim())) {
-        setStepError("Add source links before continuing.");
-        return;
-      }
-      if (knowledgeDriveSelectedIds.some((id) => !knowledgeDriveImportedExternalIds.has(id))) {
-        setStepError("Import selected Google Drive files before continuing.");
-        return;
-      }
-      if (knowledgeGitHubSelectedIds.some((id) => !knowledgeGitHubImportedExternalIds.has(id))) {
-        setStepError("Import selected GitHub files before continuing.");
-        return;
-      }
-      if (knowledgeMissingCredentialMessage) {
-        setStepError(knowledgeMissingCredentialMessage);
+      const preparationBlocker = getKnowledgePreparationBlocker();
+      if (preparationBlocker) {
+        resetKnowledgeAssembly();
+        setStepError(preparationBlocker);
         return;
       }
       if (
@@ -1969,6 +2055,14 @@ export function WebCommunityLaunchSetupModal(
       }
       setSavingStep("knowledge");
       setKnowledgeHealthLoading(true);
+      setKnowledgeView("assemble");
+      setKnowledgeAssemblyFailedStage(null);
+      let currentAssemblyStage: KnowledgeAssemblyWorkStage = "reading";
+      const setAssemblyStage = (stage: KnowledgeAssemblyWorkStage) => {
+        currentAssemblyStage = stage;
+        setKnowledgeAssemblyStage(stage);
+      };
+      setAssemblyStage("reading");
       try {
         const ingestionResult = await onIngestKnowledgeSources();
         if (!ingestionResult?.ok && !knowledgeIngestionCanContinue(ingestionResult)) {
@@ -1977,6 +2071,7 @@ export function WebCommunityLaunchSetupModal(
         const ingestionWarning = !ingestionResult?.ok
           ? formatKnowledgeIngestionPartialWarning(ingestionResult)
           : null;
+        setAssemblyStage("organizing");
         const planResult = await onGenerateKnowledgePlan({
           builderIntent: "",
         });
@@ -1986,6 +2081,7 @@ export function WebCommunityLaunchSetupModal(
           );
         }
         const sourceBackedPlan = proposalHasSourceBackedWrites(planResult.proposal);
+        setAssemblyStage("creating");
         const applyResult = await onApplyKnowledgePlan({
           proposal: planResult.proposal,
         });
@@ -2013,6 +2109,7 @@ export function WebCommunityLaunchSetupModal(
             await onEnsureKnowledgeScaffold();
           }
         }
+        setAssemblyStage("writing");
         const draftResult = await onDraftKnowledgeResources();
         if (!draftResult?.ok) {
           const firstFailure = draftResult?.failures?.[0];
@@ -2022,14 +2119,18 @@ export function WebCommunityLaunchSetupModal(
               "Could not draft resource content.",
           );
         }
+        setAssemblyStage("checking");
         const successMessage =
           architectureWarning ||
           (draftResult.drafted
             ? "Resources drafted for review."
             : "Draft resources prepared for review.");
         setStepSuccess(ingestionWarning ? `${successMessage} ${ingestionWarning}` : successMessage);
+        setAssemblyStage("opening");
         onOpenStep("knowledge");
       } catch (error) {
+        setKnowledgeAssemblyFailedStage(currentAssemblyStage);
+        setKnowledgeAssemblyStage("failed");
         setStepError(
           error instanceof Error
             ? formatKnowledgeIngestionFailureMessage(error.message)
@@ -2344,6 +2445,72 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "knowledge") {
+      if (knowledgeView === "assemble") {
+        const assemblyFailed = knowledgeAssemblyStage === "failed";
+        const assemblyWorking = !assemblyFailed && (knowledgeHealthLoading || isSavingActiveStep);
+        return (
+          <div className="community-launch-inline-form community-launch-knowledge-assembly">
+            <div>
+              <span className="community-launch-knowledge-kicker">Knowledge</span>
+              <strong>Assembling resources</strong>
+              <p>
+                Creating your Resources page from the source material you added.
+              </p>
+            </div>
+            <div
+              className="community-launch-knowledge-assembly-steps"
+              aria-live="polite"
+              aria-label="Resource assembly progress"
+            >
+              {KNOWLEDGE_ASSEMBLY_STEPS.map((step) => {
+                const status = getKnowledgeAssemblyStepStatus({
+                  currentStage: knowledgeAssemblyStage,
+                  failedStage: knowledgeAssemblyFailedStage,
+                  stepStage: step.stage,
+                });
+                return (
+                  <div
+                    key={step.stage}
+                    className={`community-launch-knowledge-assembly-step is-${status}`}
+                  >
+                    <span aria-hidden="true">
+                      {status === "complete" ? (
+                        <Check size={13} strokeWidth={2.6} />
+                      ) : status === "failed" ? (
+                        <X size={13} strokeWidth={2.6} />
+                      ) : (
+                        <Circle size={12} strokeWidth={2.4} />
+                      )}
+                    </span>
+                    <strong>{step.label}</strong>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="community-launch-step-actions">
+              {assemblyFailed ? (
+                <button
+                  type="button"
+                  className="polynet-onboarding-back"
+                  onClick={handleBackToKnowledgeSources}
+                >
+                  Back to sources
+                </button>
+              ) : (
+                renderFinishLaterButton(assemblyWorking)
+              )}
+              <button
+                type="button"
+                className="polynet-onboarding-next"
+                disabled={assemblyWorking}
+                onClick={assemblyFailed ? handlePrepareKnowledgeResources : undefined}
+              >
+                {assemblyFailed ? "Try again" : "Working..."}
+              </button>
+            </div>
+          </div>
+        );
+      }
       const canAddKnowledgeLinkRow =
         knowledgeLinkDrafts.length < COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS;
       return (
