@@ -440,8 +440,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeDriveConnection[\s\S]*knowledgeDriveFiles[\s\S]*knowledgeDriveSelectedIds[\s\S]*handleGoogleDrivePrimaryAction[\s\S]*saveKnowledgeDrafts/,
-  "launch knowledge Google Drive UI must track connection and staged file selections for the unified save path",
+  /knowledgeDriveConnection[\s\S]*knowledgeDriveFiles[\s\S]*knowledgeDriveSelectedIds[\s\S]*handleGoogleDrivePrimaryAction[\s\S]*handleImportGoogleDriveFiles/,
+  "launch knowledge Google Drive UI must track connection, file selections, and local import action",
 );
 assert.match(
   setupModal,
@@ -465,23 +465,23 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*knowledgeDriveImportedExternalIds)(?=[\s\S]*handleDisconnectGoogleDrive)(?=[\s\S]*handleRemoveSavedKnowledgeSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeSavedSources}[\s\S]*fallbackTitle="Source"[\s\S]*onRemove={handleRemoveSavedKnowledgeSource})(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2)/,
-  "launch knowledge UI must show saved sources through one shared inline icon-action renderer, support deleting one source, and support disconnecting providers",
+  /(?=[\s\S]*knowledgeDriveImportedExternalIds)(?=[\s\S]*handleDisconnectGoogleDrive)(?=[\s\S]*handleRemoveSavedKnowledgeSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeGoogleDriveSources}[\s\S]*fallbackTitle="Drive source"[\s\S]*onRemove={handleRemoveSavedKnowledgeSource})(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*community-launch-knowledge-imported-source[\s\S]*<Check[\s\S]*<ExternalLink[\s\S]*<Trash2)/,
+  "launch knowledge Drive UI must show saved Drive sources under Drive and support deleting one source",
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveSavedKnowledgeSource)(?=[\s\S]*effectiveKnowledgeSavedSources)(?=[\s\S]*onRemoveKnowledgeGitHubSource)(?=[\s\S]*community-launch-knowledge-imported-source)/,
-  "launch knowledge GitHub UI must feed GitHub imports into the unified saved-source renderer and support deleting one source",
+  /(?=[\s\S]*knowledgeGitHubImportedExternalIds)(?=[\s\S]*handleRemoveSavedKnowledgeSource)(?=[\s\S]*<ImportedKnowledgeSourceRows[\s\S]*sources={effectiveKnowledgeGitHubSources}[\s\S]*fallbackTitle="GitHub source"[\s\S]*onRemove={handleRemoveSavedKnowledgeSource})(?=[\s\S]*community-launch-knowledge-imported-source)/,
+  "launch knowledge GitHub UI must show saved GitHub sources under GitHub and support deleting one source",
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*knowledgeSavedSourcesExpanded)(?=[\s\S]*knowledgeSavedResourceLabel)(?=[\s\S]*setKnowledgeSavedSourcesExpanded)(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*resourceLabel[\s\S]*community-launch-knowledge-imported-summary[\s\S]*<span>\{resourceLabel\}<\/span>)(?=[\s\S]*community-launch-knowledge-imported-sources is-expanded[\s\S]*Show fewer)/,
-  "launch knowledge saved sources must collapse to one resource counter and expand to detail rows",
+  /(?=[\s\S]*knowledgeFileSourcesExpanded)(?=[\s\S]*knowledgeLinkSourcesExpanded)(?=[\s\S]*knowledgeDriveSourcesExpanded)(?=[\s\S]*knowledgeGitHubSourcesExpanded)(?=[\s\S]*function ImportedKnowledgeSourceRows[\s\S]*resourceLabel[\s\S]*community-launch-knowledge-imported-summary[\s\S]*<span>\{resourceLabel\}<\/span>)(?=[\s\S]*community-launch-knowledge-imported-sources is-expanded[\s\S]*Show fewer)/,
+  "launch knowledge saved source counters must be provider-local and expand to detail rows",
 );
-assert.match(
+assert.doesNotMatch(
   setupModal,
-  /(?=[\s\S]*community-launch-knowledge-savebar)(?=[\s\S]*knowledgePendingResourceLabel)(?=[\s\S]*community-launch-knowledge-save-button[\s\S]*Save sources)/,
-  "launch knowledge pending source selections must be saved through one bottom save control",
+  /effectiveKnowledgeSavedSources|knowledgePendingResourceLabel|community-launch-knowledge-savebar|Save sources/,
+  "launch knowledge must not collapse provider sources into a global saved/pending save surface",
 );
 assert.match(
   baseCss,
@@ -515,8 +515,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*knowledgeGitHubDisconnecting[\s\S]*loadGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleCloseGitHubPicker[\s\S]*handleDisconnectGitHub[\s\S]*saveKnowledgeDrafts/,
-  "launch knowledge GitHub UI must track connection, auto-open repository selection, close state, disconnect state, and staged file selection",
+  /knowledgeGitHubConnection[\s\S]*knowledgeGitHubRepositories[\s\S]*knowledgeGitHubSelectedRepository[\s\S]*knowledgeGitHubFiles[\s\S]*knowledgeGitHubSelectedIds[\s\S]*knowledgeGitHubDisconnecting[\s\S]*loadGitHubRepositories[\s\S]*knowledgeAutoOpenProvider !== "github"[\s\S]*handleGitHubPrimaryAction[\s\S]*handleSelectGitHubRepository[\s\S]*handleCloseGitHubPicker[\s\S]*handleDisconnectGitHub[\s\S]*handleImportGitHubFiles/,
+  "launch knowledge GitHub UI must track connection, auto-open repository selection, close state, disconnect state, and local import action",
 );
 assert.match(
   setupModal,
@@ -648,8 +648,8 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /handlePrepareKnowledgeResources[\s\S]*saveKnowledgeDrafts\(\)[\s\S]*onIngestKnowledgeSources[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
-  "launch knowledge Next must run the internal resource preparation loop before opening Resources review",
+  /handlePrepareKnowledgeResources[\s\S]*Add source links before continuing[\s\S]*Import selected Google Drive files before continuing[\s\S]*Import selected GitHub files before continuing[\s\S]*onIngestKnowledgeSources[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  "launch knowledge Next must require provider-local saves/imports before running the internal resource preparation loop",
 );
 assert.match(
   setupModal,
@@ -678,8 +678,8 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5[\s\S]*knowledgeLinkDrafts[\s\S]*community-launch-knowledge-link-actions[\s\S]*community-launch-knowledge-link-add[\s\S]*<Plus[\s\S]*Add new link[\s\S]*Save sources/,
-  "launch knowledge link entry must support adding up to five links with a left-aligned plus add control and one bottom save",
+  /COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5[\s\S]*knowledgeLinkDrafts[\s\S]*community-launch-knowledge-link-actions[\s\S]*community-launch-knowledge-link-add[\s\S]*<Plus[\s\S]*Add new link[\s\S]*Add links/,
+  "launch knowledge link entry must support adding up to five links with a left-aligned plus add control and local Add links action",
 );
 assert.match(
   baseCss,
@@ -688,13 +688,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /onAddKnowledgeLink[\s\S]*saveKnowledgeDrafts[\s\S]*const urls = knowledgeLinkDrafts[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*community-launch-knowledge-link-composer[\s\S]*effectiveKnowledgeSavedSources[\s\S]*handleRemoveSavedKnowledgeSource/,
-  "launch knowledge link entries must trim source URLs, write through the unified save path, and show saved links in the unified counter",
+  /onAddKnowledgeLink[\s\S]*saveKnowledgeLinkDrafts[\s\S]*const urls = knowledgeLinkDrafts[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*community-launch-knowledge-link-composer[\s\S]*effectiveKnowledgeLinkSources[\s\S]*handleRemoveSavedKnowledgeSource/,
+  "launch knowledge link entries must trim source URLs, write through the local link action, and show saved links under Links",
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*onAddKnowledgeFile)(?=[\s\S]*stageKnowledgeFiles[\s\S]*setKnowledgeSourceFiles)(?=[\s\S]*handleKnowledgeFileDrop[\s\S]*stageKnowledgeFiles)(?=[\s\S]*community-launch-knowledge-dropzone)(?=[\s\S]*saveKnowledgeDrafts[\s\S]*await onAddKnowledgeFile)/,
-  "launch knowledge file uploads must stage locally and write through the unified onboarding save path",
+  /(?=[\s\S]*onAddKnowledgeFile)(?=[\s\S]*saveKnowledgeFiles[\s\S]*await onAddKnowledgeFile)(?=[\s\S]*handleKnowledgeFileDrop[\s\S]*saveKnowledgeFiles)(?=[\s\S]*community-launch-knowledge-dropzone)(?=[\s\S]*effectiveKnowledgeFileSources)/,
+  "launch knowledge file uploads must write immediately and show saved files under Sources",
 );
 assert.match(
   appShell,
@@ -723,8 +723,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /knowledgeGitHubImportedRepoCounts[\s\S]*community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-repo[\s\S]*has-imported-sources[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*importedSourceCount[\s\S]*imported[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-truth[\s\S]*knowledgeGitHubFilesTruncated[\s\S]*\$\{knowledgeGitHubFileLimit\}-file selector limit[\s\S]*community-launch-knowledge-github-file-list[\s\S]*handleSelectAllGitHubFiles[\s\S]*Select all[\s\S]*Close/,
-  "launch knowledge GitHub repo picker must render files inline under the selected repo, disclose file-list limits, support selecting visible importable files, and keep one close control",
+  /knowledgeGitHubImportedRepoCounts[\s\S]*community-launch-knowledge-github-repo-list[\s\S]*community-launch-knowledge-github-repo-item[\s\S]*community-launch-knowledge-github-repo[\s\S]*has-imported-sources[\s\S]*aria-pressed[\s\S]*Public[\s\S]*default_branch[\s\S]*importedSourceCount[\s\S]*imported[\s\S]*community-launch-knowledge-github-file-panel[\s\S]*community-launch-knowledge-github-file-truth[\s\S]*knowledgeGitHubFilesTruncated[\s\S]*\$\{knowledgeGitHubFileLimit\}-file selector limit[\s\S]*community-launch-knowledge-github-file-list[\s\S]*handleSelectAllGitHubFiles[\s\S]*Select all[\s\S]*handleImportGitHubFiles[\s\S]*Import selected[\s\S]*Close/,
+  "launch knowledge GitHub repo picker must render files inline under the selected repo, disclose file-list limits, support local import, and keep one close control",
 );
 assert.match(
   baseCss,

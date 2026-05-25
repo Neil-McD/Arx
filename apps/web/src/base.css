@@ -4837,58 +4837,6 @@ body {
   pointer-events: none;
 }
 
-.community-launch-knowledge-file-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 6px;
-}
-
-.community-launch-knowledge-file-list span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 180px;
-  min-width: 0;
-  white-space: nowrap;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 72%, transparent);
-  border-radius: 999px;
-  padding: 4px 7px;
-  color: var(--text-secondary);
-  background: rgba(0, 0, 0, 0.16);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.community-launch-knowledge-file-list .community-launch-knowledge-file-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-}
-
-.community-launch-knowledge-file-list span button {
-  width: 13px;
-  height: 13px;
-  min-height: 0;
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 0;
-  padding: 0;
-  color: #ff7a7a;
-  background: transparent;
-  cursor: pointer;
-}
-
-.community-launch-knowledge-file-list span button:hover {
-  color: #ff9a9a;
-}
-
 .community-launch-knowledge-link-composer {
   display: grid;
   gap: 8px;
@@ -5124,45 +5072,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   cursor: default;
   color: var(--text-muted);
   opacity: 0.76;
-}
-
-.community-launch-knowledge-savebar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 28px;
-  padding: 2px 0 38px 36px;
-}
-
-.community-launch-knowledge-pending-count {
-  color: var(--accent, var(--accent-gold));
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.community-launch-knowledge-save-button {
-  min-height: 28px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-muted));
-  border-radius: 8px;
-  padding: 0 10px;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.2));
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.community-launch-knowledge-save-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent) 18%, rgba(0, 0, 0, 0.2));
-}
-
-.community-launch-knowledge-save-button:disabled {
-  cursor: default;
-  opacity: 0.54;
 }
 
 .community-launch-knowledge-imported-sources {
@@ -5589,6 +5498,24 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-primary);
 }
 
+.community-launch-knowledge-source-picker .community-launch-knowledge-source-import {
+  min-height: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: var(--accent, var(--accent-gold));
+  background: transparent;
+  box-shadow: none;
+  line-height: 1.2;
+}
+
+.community-launch-knowledge-source-picker .community-launch-knowledge-source-import:not(:disabled):hover {
+  color: color-mix(in srgb, var(--accent, var(--accent-gold)) 82%, white 18%);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .community-launch-choice-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5773,11 +5700,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 
   .community-launch-knowledge-link-composer button {
     min-height: 38px;
-  }
-
-  .community-launch-knowledge-savebar {
-    flex-wrap: wrap;
-    padding: 2px 0 0 36px;
   }
 }
 
