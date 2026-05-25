@@ -200,6 +200,16 @@ assert.match(
 );
 assert.match(
   architect,
+  /buildCommunityWikiArchitectureQuality[\s\S]*unsorted_source_backed_pages[\s\S]*source_module_mismatches[\s\S]*module_distribution/,
+  "architect apply should compute architecture quality from applied source-backed rows",
+);
+assert.match(
+  applyBody,
+  /const architectureQuality = buildCommunityWikiArchitectureQuality[\s\S]*if \(architectureQuality\.ok === false\)[\s\S]*community_wiki_architect_architecture_quality_failed[\s\S]*architecture_quality: architectureQuality/,
+  "architect apply should abort invariant-broken organization and return quality metadata",
+);
+assert.match(
+  architect,
   /COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT[\s\S]*Use only the provided source text[\s\S]*Return ONLY valid JSON[\s\S]*"body_md"/,
   "resource content writer should have a source-grounded JSON-only prompt",
 );

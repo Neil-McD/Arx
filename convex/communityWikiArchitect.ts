@@ -203,6 +203,100 @@ function buildArchitectSourceWindow(args: {
   };
 }
 
+type AppliedSourceBackedPage = {
+  page: CommunityResourceLike;
+  source: CommunityResourceLike;
+};
+
+function isUnsortedResourceModule(
+  rawModuleId: unknown,
+  moduleNameById: Map<string, string>,
+): boolean {
+  const moduleId = resourceModuleIdentity(rawModuleId);
+  if (!moduleId) return true;
+  return normalizeCommunityResourceBuilderTitle(moduleNameById.get(moduleId) ?? "") === "unsorted";
+}
+
+function buildCommunityWikiArchitectureQuality(args: {
+  sourceBackedPages: AppliedSourceBackedPage[];
+  readySourcesTotal: number;
+  moduleNameById: Map<string, string>;
+}): Record<string, unknown> {
+  const moduleDistribution = new Map<string, number>();
+  const sourceKinds = new Set<string>();
+  let sourceBackedPagesMissingModule = 0;
+  let unsortedSourceBackedPages = 0;
+  let usedSourcesInUnsorted = 0;
+  let sourceModuleMismatches = 0;
+
+  for (const row of args.sourceBackedPages) {
+    const pageModuleId = resourceModuleIdentity(row.page.moduleId);
+    const sourceModuleId = resourceModuleIdentity(row.source.moduleId);
+    const pageModuleName = pageModuleId
+      ? args.moduleNameById.get(pageModuleId) || "Unknown"
+      : "Unsorted";
+    moduleDistribution.set(pageModuleName, (moduleDistribution.get(pageModuleName) ?? 0) + 1);
+
+    const sourceKind = String(
+      row.source.sourceExternalProvider ||
+        row.source.sourceIngestionKind ||
+        row.source.type ||
+        "",
+    ).trim();
+    if (sourceKind) sourceKinds.add(sourceKind);
+
+    if (!pageModuleId) sourceBackedPagesMissingModule += 1;
+    if (isUnsortedResourceModule(row.page.moduleId, args.moduleNameById)) {
+      unsortedSourceBackedPages += 1;
+    }
+    if (isUnsortedResourceModule(row.source.moduleId, args.moduleNameById)) {
+      usedSourcesInUnsorted += 1;
+    }
+    if (!sourceModuleId || (pageModuleId && sourceModuleId !== pageModuleId)) {
+      sourceModuleMismatches += 1;
+    }
+  }
+
+  const warnings: string[] = [];
+  if (args.readySourcesTotal > 0 && args.sourceBackedPages.length === 0) {
+    warnings.push("Ready sources exist, but no source-backed pages were created.");
+  }
+  if (unsortedSourceBackedPages > 0) {
+    warnings.push("Some source-backed pages are still in Unsorted.");
+  }
+  if (usedSourcesInUnsorted > 0) {
+    warnings.push("Some used source rows are still in Unsorted.");
+  }
+  if (sourceModuleMismatches > 0) {
+    warnings.push("Some used source rows do not match their page module.");
+  }
+  if (sourceBackedPagesMissingModule > 0) {
+    warnings.push("Some source-backed pages have no module.");
+  }
+  if (
+    args.sourceBackedPages.length >= 3 &&
+    sourceKinds.size >= 3 &&
+    moduleDistribution.size === 1
+  ) {
+    warnings.push("Many distinct source types landed in one module.");
+  }
+
+  return {
+    ok: sourceModuleMismatches === 0 && sourceBackedPagesMissingModule === 0,
+    warnings,
+    source_backed_pages: args.sourceBackedPages.length,
+    unsorted_source_backed_pages: unsortedSourceBackedPages,
+    source_backed_pages_missing_module: sourceBackedPagesMissingModule,
+    used_sources: args.sourceBackedPages.length,
+    used_sources_in_unsorted: usedSourcesInUnsorted,
+    source_module_mismatches: sourceModuleMismatches,
+    module_distribution: Array.from(moduleDistribution.entries()).map(([module, pages]) => ({
+      module,
+      pages,
+    })),
+  };
+}
+
 function truncateContentWriterSource(raw: unknown): string {
   const value = String(raw ?? "").trim();
   if (!value) return "";
@@ -1039,6 +1133,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
     const pagesCreated: string[] = [];
     const pagesUpdated: string[] = [];
     const sourceModulesUpdated: string[] = [];
+    const sourceBackedPages: AppliedSourceBackedPage[] = [];
     let nextModuleSortOrder =
       modules.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
     const nextPageSortOrderByModule = new Map<string, number>();
@@ -1131,6 +1226,12 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       if (!createdPage) throw new Error("community_wiki_architect_page_create_failed");
       await upsertArchiveDocumentForResource(ctx, createdPage);
       await patchSourceModuleIfNeeded(source, module._id);
+      if (source && draft.source_resource_id) {
+        sourceBackedPages.push({
+          page: createdPage,
+          source: sourceById.get(draft.source_resource_id) ?? source,
+        });
+      }
       pageKeys.add(pageKey);
       pagesCreated.push(`${module.name}/${createdPage.title}`);
     }
@@ -1156,7 +1257,20 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       if (!updatedPage) throw new Error("community_wiki_architect_page_not_found");
       await upsertArchiveDocumentForResource(ctx, updatedPage);
       await patchSourceModuleIfNeeded(source, updatedPage.moduleId ?? null);
+      sourceBackedPages.push({
+        page: updatedPage,
+        source: sourceById.get(update.source_resource_id) ?? source,
+      });
       pagesUpdated.push(updatedPage.title);
+    }
+
+    const architectureQuality = buildCommunityWikiArchitectureQuality({
+      sourceBackedPages,
+      readySourcesTotal: sources.length,
+      moduleNameById,
+    });
+    if (architectureQuality.ok === false) {
+      throw new Error("community_wiki_architect_architecture_quality_failed");
     }
 
     return {
@@ -1168,6 +1282,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
         pages_updated: pagesUpdated,
         source_modules_updated: sourceModulesUpdated,
       },
+      architecture_quality: architectureQuality,
       health: await buildCommunityResourceBuilderHealthReport({
         ctx,
         communityId: args.communityId,

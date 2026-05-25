@@ -147,6 +147,20 @@ export type CommunityLaunchKnowledgePlanApplyResult = {
     pages_updated?: string[];
     source_modules_updated?: string[];
   };
+  architecture_quality?: {
+    ok?: boolean;
+    warnings?: string[];
+    source_backed_pages?: number;
+    unsorted_source_backed_pages?: number;
+    source_backed_pages_missing_module?: number;
+    used_sources?: number;
+    used_sources_in_unsorted?: number;
+    source_module_mismatches?: number;
+    module_distribution?: Array<{
+      module?: string;
+      pages?: number;
+    }>;
+  } | null;
   health?: CommunityLaunchKnowledgeHealth;
   errors?: Array<{
     path?: string;
@@ -728,6 +742,16 @@ function formatKnowledgeIngestionPartialWarning(
   const failed = toNonNegativeInteger(result?.failed);
   if (failed <= 0) return null;
   return `${failed} source${failed === 1 ? "" : "s"} could not be read.`;
+}
+
+function formatKnowledgeArchitectureQualityWarning(
+  quality: CommunityLaunchKnowledgePlanApplyResult["architecture_quality"],
+): string | null {
+  const warnings = Array.isArray(quality?.warnings) ? quality.warnings : [];
+  if (quality?.ok === false || warnings.length > 0) {
+    return "Resources drafted, but organization needs review.";
+  }
+  return null;
 }
 
 function proposalHasSourceBackedWrites(
@@ -1973,6 +1997,12 @@ export function WebCommunityLaunchSetupModal(
               "Could not prepare draft resources.",
           );
         }
+        if (applyResult.architecture_quality?.ok === false) {
+          throw new Error("Resource organization failed integrity checks.");
+        }
+        const architectureWarning = formatKnowledgeArchitectureQualityWarning(
+          applyResult.architecture_quality,
+        );
         if (!sourceBackedPlan && onEnsureKnowledgeScaffold) {
           const currentHealth = await onLoadKnowledgeHealth();
           const missingDefaultModules =
@@ -1992,9 +2022,11 @@ export function WebCommunityLaunchSetupModal(
               "Could not draft resource content.",
           );
         }
-        const successMessage = draftResult.drafted
-          ? "Resources drafted for review."
-          : "Draft resources prepared for review.";
+        const successMessage =
+          architectureWarning ||
+          (draftResult.drafted
+            ? "Resources drafted for review."
+            : "Draft resources prepared for review.");
         setStepSuccess(ingestionWarning ? `${successMessage} ${ingestionWarning}` : successMessage);
         onOpenStep("knowledge");
       } catch (error) {

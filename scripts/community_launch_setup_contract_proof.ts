@@ -653,6 +653,11 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /architecture_quality\?:[\s\S]*formatKnowledgeArchitectureQualityWarning[\s\S]*Resources drafted, but organization needs review\.[\s\S]*applyResult\.architecture_quality[\s\S]*setStepSuccess/,
+  "launch knowledge Next must surface architecture quality warnings compactly",
+);
+assert.match(
+  setupModal,
   /sourceNeedsIntegrationReconnect[\s\S]*credential_status === "missing"[\s\S]*knowledgeDriveMissingCredentialSources[\s\S]*knowledgeGitHubMissingCredentialSources[\s\S]*knowledgeMissingCredentialMessage[\s\S]*handlePrepareKnowledgeResources[\s\S]*if \(knowledgeMissingCredentialMessage\)[\s\S]*setStepError\(knowledgeMissingCredentialMessage\)[\s\S]*return;[\s\S]*onIngestKnowledgeSources/,
   "launch knowledge Next must block provider ingestion when queued Drive or GitHub sources need reconnect",
 );
