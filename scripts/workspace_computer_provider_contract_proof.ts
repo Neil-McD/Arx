@@ -197,6 +197,9 @@ async function proveWorkspaceComputerProviderContract() {
   const blaxelSandboxSmokeActionSource = await readRepoFile(
     "convex/blaxelWorkspaceSandboxSmoke.ts",
   );
+  const blaxelVolumeSmokeActionSource = await readRepoFile(
+    "convex/blaxelWorkspaceVolumeSmoke.ts",
+  );
   const providerSmokeSource = await readRepoFile(
     "scripts/blaxel_workspace_provider_smoke.ts",
   );
@@ -205,6 +208,9 @@ async function proveWorkspaceComputerProviderContract() {
   );
   const convexSandboxSmokeSource = await readRepoFile(
     "scripts/blaxel_convex_sandbox_smoke.ts",
+  );
+  const convexVolumeSmokeSource = await readRepoFile(
+    "scripts/blaxel_convex_volume_smoke.ts",
   );
   const backgroundServiceSource = await readRepoFile(
     "convex/workspaceTerminalBackgroundService.ts",
@@ -553,6 +559,122 @@ async function proveWorkspaceComputerProviderContract() {
     "cleanup_not_confirmed",
     "expected Convex sandbox smoke to fail if cleanup is not confirmed",
   );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    '"use node";',
+    "expected Blaxel Convex volume smoke to be isolated in a Node action",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "export const smokeBlaxelConvexVolume = action({",
+    "expected a Blaxel Convex volume smoke action",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "blaxel_convex_volume_smoke_staging_only",
+    "expected volume smoke action to fail closed outside staging",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "const volumeName = \"polynet-blaxel-convex-volume-smoke\"",
+    "expected volume smoke to use one stable reusable test volume",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "volumeName,",
+    "expected volume smoke action to intentionally attach a volume",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "volumeSizeMb: 8",
+    "expected volume smoke action to request the smallest known Blaxel test volume size",
+  );
+  for (const requiredWrapper of [
+    "ensureBlaxelWorkspaceComputer",
+    "writeBlaxelWorkspaceFile",
+    "readBlaxelWorkspaceFile",
+    "listBlaxelWorkspaceDirectory",
+    "destroyBlaxelWorkspaceComputer",
+  ]) {
+    assertIncludes(
+      blaxelVolumeSmokeActionSource,
+      requiredWrapper,
+      `expected volume smoke action to use provider wrapper ${requiredWrapper}`,
+    );
+  }
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "} finally {",
+    "expected volume smoke action to clean up sandboxes in finally",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "blaxel_volume_quota_exceeded",
+    "expected volume smoke action to preserve the known volume quota blocker",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "stable_volume_retained_for_reuse",
+    "expected volume smoke action to make retained test volume behavior explicit",
+  );
+  assert.ok(
+    blaxelVolumeSmokeActionSource.indexOf('if (deploymentKind !== "staging")') <
+      blaxelVolumeSmokeActionSource.indexOf(
+        "const policy = resolveWorkspaceComputerProviderFromServerEnv()",
+      ),
+    "expected volume smoke action to gate non-staging before reading provider policy",
+  );
+  for (const forbidden of [
+    "VolumeInstance",
+    "SandboxInstance",
+    "await import(\"@blaxel/core\")",
+    "createIfNotExists",
+    "JSON.stringify(error)",
+    ".stack",
+    "BL_WORKSPACE",
+    "BL_API_KEY",
+  ]) {
+    assertExcludes(
+      blaxelVolumeSmokeActionSource,
+      forbidden,
+      `volume smoke action must stay wrapper-based and secret-safe: ${forbidden}`,
+    );
+  }
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "EXPECTED_CONVEX_DEPLOYMENT = \"quick-porcupine-949\"",
+    "expected Convex volume smoke to target staging Convex explicitly",
+  );
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "blaxelWorkspaceVolumeSmoke:smokeBlaxelConvexVolume",
+    "expected Convex volume smoke to call the volume smoke action",
+  );
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "ACCEPTABLE_BLOCKING_CODE = \"blaxel_volume_quota_exceeded\"",
+    "expected Convex volume smoke to make the current quota blocker explicit",
+  );
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "stable_volume_retained_for_reuse",
+    "expected Convex volume smoke to verify reusable volume retention on success",
+  );
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "hot_cleanup_not_confirmed",
+    "expected Convex volume smoke to fail if hot sandbox cleanup is not confirmed",
+  );
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "cold_cleanup_not_confirmed",
+    "expected Convex volume smoke to fail if cold sandbox cleanup is not confirmed",
+  );
+  assertIncludes(
+    convexVolumeSmokeSource,
+    "--push",
+    "expected Convex volume smoke to push the smoke action to staging before running",
+  );
 
   assertIncludes(
     backgroundServiceSource,
@@ -631,6 +753,11 @@ async function proveWorkspaceComputerProviderContract() {
     packageJson.scripts["smoke:blaxel-convex-sandbox"],
     "bash scripts/run_blaxel_convex_sandbox_smoke.sh",
     "expected package script for the Blaxel Convex sandbox smoke",
+  );
+  assert.equal(
+    packageJson.scripts["smoke:blaxel-convex-volume"],
+    "bash scripts/run_blaxel_convex_volume_smoke.sh",
+    "expected package script for the Blaxel Convex volume smoke",
   );
 
   proveProviderPolicyMatrix();

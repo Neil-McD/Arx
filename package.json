@@ -112,6 +112,7 @@
     "smoke:blaxel-workspace-provider": "bash scripts/run_blaxel_workspace_provider_smoke.sh",
     "probe:blaxel-convex-runtime": "bash scripts/run_blaxel_convex_runtime_probe.sh",
     "smoke:blaxel-convex-sandbox": "bash scripts/run_blaxel_convex_sandbox_smoke.sh",
+    "smoke:blaxel-convex-volume": "bash scripts/run_blaxel_convex_volume_smoke.sh",
     "probe:blaxel-workspace-lifecycle": "bash scripts/run_blaxel_workspace_lifecycle_probe.sh",
     "check:workspace-inspector-boundary-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_inspector_boundary_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
