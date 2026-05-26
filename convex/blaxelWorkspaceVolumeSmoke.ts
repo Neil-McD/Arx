@@ -26,6 +26,18 @@ type SafeProviderFailure = {
   message: string;
 };
 
+type ProviderFailureLike = {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+};
+
+const VOLUME_SMOKE_SIZE_MB = 8192;
+const COLD_ATTACH_RETRY_TIMEOUT_MS = 90_000;
+const COLD_ATTACH_RETRY_INTERVAL_MS = 3_000;
+
 function readEnv(name: string): string {
   try {
     const value = (globalThis as typeof globalThis & {
@@ -100,6 +112,54 @@ function safeProviderFailure(value: {
     code: value.code,
     message: redactSensitiveText(value.message),
   };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function providerFailureText(value: ProviderFailureLike): string {
+  const details = value.details ?? {};
+  return [
+    value.code,
+    value.message,
+    details.errorName,
+    details.errorMessage,
+    details.providerCode,
+    details.responseStatus,
+  ]
+    .filter((part) => part !== undefined && part !== null)
+    .join(" ");
+}
+
+function isTransientVolumeAttachFailure(value: ProviderFailureLike): boolean {
+  return /409|conflict|attach|attached|detaching|in use|busy|not ready|starting|pending/i.test(
+    providerFailureText(value),
+  );
+}
+
+async function ensureColdSandboxWithVolume(params: {
+  sandboxName: string;
+  volumeName: string;
+}) {
+  const deadlineMs = Date.now() + COLD_ATTACH_RETRY_TIMEOUT_MS;
+  let lastFailure: ProviderFailureLike | null = null;
+  while (Date.now() <= deadlineMs) {
+    const result = await ensureBlaxelWorkspaceComputer({
+      sandboxName: params.sandboxName,
+      volumeName: params.volumeName,
+      volumeSizeMb: VOLUME_SMOKE_SIZE_MB,
+      labels: {
+        purpose: "convex-volume-smoke",
+        phase: "cold",
+      },
+    });
+    if (result.ok) return result;
+    lastFailure = result;
+    if (!isTransientVolumeAttachFailure(result)) return result;
+    await sleep(Math.min(COLD_ATTACH_RETRY_INTERVAL_MS, Math.max(0, deadlineMs - Date.now())));
+  }
+  return lastFailure;
 }
 
 function safeResourceName(value: string): string {
@@ -194,7 +254,7 @@ export const smokeBlaxelConvexVolume = action({
       const hotEnsure = await ensureBlaxelWorkspaceComputer({
         sandboxName: hotSandboxName,
         volumeName,
-        volumeSizeMb: 8,
+        volumeSizeMb: VOLUME_SMOKE_SIZE_MB,
         labels: {
           purpose: "convex-volume-smoke",
           phase: "hot",
@@ -207,98 +267,79 @@ export const smokeBlaxelConvexVolume = action({
           blocked = true;
           blockingCode = hotEnsure.code;
         }
-        return {
-          ok: false,
-          blocked,
-          blockingCode,
-          code: "blaxel_convex_volume_smoke_failed",
-          deploymentKind,
-          providerId: policy.providerId,
-          volumeName,
-          hotSandboxName,
-          coldSandboxName,
-          volumeCleanupMode: "not_created",
-          evidence,
-          failures,
-          errors,
-        };
-      }
-      evidence.hotSandboxEnsured = true;
-      volumeWasCreatedOrReused = true;
-
-      const writeResult = await writeBlaxelWorkspaceFile({
-        sandboxName: hotSandboxName,
-        path: markerPath,
-        content: marker,
-      });
-      if (!writeResult.ok) {
-        failures.push("marker_write_failed");
-        errors.push(safeProviderFailure(writeResult));
       } else {
-        evidence.markerWritten = true;
-      }
+        evidence.hotSandboxEnsured = true;
+        volumeWasCreatedOrReused = true;
 
-      const hotRead = await readBlaxelWorkspaceFile({
-        sandboxName: hotSandboxName,
-        path: markerPath,
-      });
-      if (!hotRead.ok) {
-        failures.push("hot_marker_read_failed");
-        errors.push(safeProviderFailure(hotRead));
-      } else {
-        evidence.hotMarkerReadBack = hotRead.content === marker;
-        if (!evidence.hotMarkerReadBack) failures.push("hot_marker_mismatch");
-      }
-
-      const hotCleanup = await destroyBlaxelWorkspaceComputer({
-        sandboxName: hotSandboxName,
-      });
-      evidence.hotSandboxDestroyed = hotCleanup.ok;
-      if (!hotCleanup.ok) {
-        failures.push("hot_cleanup_failed");
-        errors.push(safeProviderFailure(hotCleanup));
-      }
-
-      if (evidence.hotSandboxDestroyed) {
-        const coldEnsure = await ensureBlaxelWorkspaceComputer({
-          sandboxName: coldSandboxName,
-          volumeName,
-          volumeSizeMb: 8,
-          labels: {
-            purpose: "convex-volume-smoke",
-            phase: "cold",
-          },
+        const writeResult = await writeBlaxelWorkspaceFile({
+          sandboxName: hotSandboxName,
+          path: markerPath,
+          content: marker,
         });
-        if (!coldEnsure.ok) {
-          failures.push("cold_sandbox_ensure_failed");
-          errors.push(safeProviderFailure(coldEnsure));
+        if (!writeResult.ok) {
+          failures.push("marker_write_failed");
+          errors.push(safeProviderFailure(writeResult));
         } else {
-          evidence.coldSandboxEnsured = true;
+          evidence.markerWritten = true;
         }
-      }
 
-      if (evidence.coldSandboxEnsured) {
-        const coldRead = await readBlaxelWorkspaceFile({
-          sandboxName: coldSandboxName,
+        const hotRead = await readBlaxelWorkspaceFile({
+          sandboxName: hotSandboxName,
           path: markerPath,
         });
-        if (!coldRead.ok) {
-          failures.push("cold_marker_read_failed");
-          errors.push(safeProviderFailure(coldRead));
+        if (!hotRead.ok) {
+          failures.push("hot_marker_read_failed");
+          errors.push(safeProviderFailure(hotRead));
         } else {
-          evidence.coldMarkerReadBack = coldRead.content === marker;
-          if (!evidence.coldMarkerReadBack) failures.push("cold_marker_mismatch");
+          evidence.hotMarkerReadBack = hotRead.content === marker;
+          if (!evidence.hotMarkerReadBack) failures.push("hot_marker_mismatch");
         }
 
-        const coldList = await listBlaxelWorkspaceDirectory({
-          sandboxName: coldSandboxName,
-          path: ".",
+        const hotCleanup = await destroyBlaxelWorkspaceComputer({
+          sandboxName: hotSandboxName,
         });
-        if (!coldList.ok) {
-          failures.push("cold_directory_list_failed");
-          errors.push(safeProviderFailure(coldList));
-        } else {
-          evidence.coldDirectoryListed = true;
+        evidence.hotSandboxDestroyed = hotCleanup.ok;
+        if (!hotCleanup.ok) {
+          failures.push("hot_cleanup_failed");
+          errors.push(safeProviderFailure(hotCleanup));
+        }
+
+        if (evidence.hotSandboxDestroyed) {
+          const coldEnsure = await ensureColdSandboxWithVolume({
+            sandboxName: coldSandboxName,
+            volumeName,
+          });
+          if (!coldEnsure?.ok) {
+            failures.push("cold_sandbox_ensure_failed");
+            if (coldEnsure) errors.push(safeProviderFailure(coldEnsure));
+          } else {
+            evidence.coldSandboxEnsured = true;
+          }
+        }
+
+        if (evidence.coldSandboxEnsured) {
+          const coldRead = await readBlaxelWorkspaceFile({
+            sandboxName: coldSandboxName,
+            path: markerPath,
+          });
+          if (!coldRead.ok) {
+            failures.push("cold_marker_read_failed");
+            errors.push(safeProviderFailure(coldRead));
+          } else {
+            evidence.coldMarkerReadBack = coldRead.content === marker;
+            if (!evidence.coldMarkerReadBack) failures.push("cold_marker_mismatch");
+          }
+
+          const coldList = await listBlaxelWorkspaceDirectory({
+            sandboxName: coldSandboxName,
+            path: ".",
+          });
+          if (!coldList.ok) {
+            failures.push("cold_directory_list_failed");
+            errors.push(safeProviderFailure(coldList));
+          } else {
+            evidence.coldDirectoryListed = true;
+          }
         }
       }
     } catch (error) {

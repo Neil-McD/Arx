@@ -586,8 +586,51 @@ async function proveWorkspaceComputerProviderContract() {
   );
   assertIncludes(
     blaxelVolumeSmokeActionSource,
-    "volumeSizeMb: 8",
-    "expected volume smoke action to request the smallest known Blaxel test volume size",
+    "const VOLUME_SMOKE_SIZE_MB = 8192",
+    "expected volume smoke action to request Blaxel volume sizes in MB",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "volumeSizeMb: VOLUME_SMOKE_SIZE_MB",
+    "expected volume smoke action to pass MB volume size through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "COLD_ATTACH_RETRY_TIMEOUT_MS = 90_000",
+    "expected volume smoke action to use bounded retry for cold volume attachment",
+  );
+  assertIncludes(
+    blaxelVolumeSmokeActionSource,
+    "isTransientVolumeAttachFailure",
+    "expected volume smoke action to retry transient volume attach failures",
+  );
+  const lifecycleProbeSource = await readRepoFile(
+    "scripts/blaxel_workspace_lifecycle_probe.ts",
+  );
+  assertIncludes(
+    lifecycleProbeSource,
+    "volumeSizeMb: number",
+    "expected lifecycle probe config to name Blaxel volume size units as MB",
+  );
+  assertIncludes(
+    lifecycleProbeSource,
+    'readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_MB", 0)',
+    "expected lifecycle probe to prefer MB volume size env",
+  );
+  assertIncludes(
+    lifecycleProbeSource,
+    'readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_GB", 0)',
+    "expected lifecycle probe to keep legacy GB env compatibility",
+  );
+  assertIncludes(
+    lifecycleProbeSource,
+    "legacyGb * 1024",
+    "expected lifecycle probe to convert legacy GB env to MB",
+  );
+  assertIncludes(
+    lifecycleProbeSource,
+    "size: result.config.volumeSizeMb",
+    "expected lifecycle probe to pass MB volume size to Blaxel",
   );
   for (const requiredWrapper of [
     "ensureBlaxelWorkspaceComputer",

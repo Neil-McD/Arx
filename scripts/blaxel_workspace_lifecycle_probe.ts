@@ -14,7 +14,7 @@ type ProbeResult = {
     image: string;
     memoryMb: number;
     region: string;
-    volumeSizeGb: number;
+    volumeSizeMb: number;
     mountPath: string;
     serverPort: number;
     lifecycleIdleDelete: string;
@@ -61,6 +61,13 @@ function readIntEnv(name: string, fallback: number): number {
   if (!raw) return fallback;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readVolumeSizeMbEnv(): number {
+  const explicitMb = readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_MB", 0);
+  if (explicitMb > 0) return explicitMb;
+  const legacyGb = readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_GB", 0);
+  return legacyGb > 0 ? legacyGb * 1024 : 8192;
 }
 
 function safeResourceName(input: string): string {
@@ -132,7 +139,7 @@ function buildBaseResult(): ProbeResult {
       image: process.env.BLAXEL_WORKSPACE_PROBE_IMAGE || "blaxel/base-image:latest",
       memoryMb: readIntEnv("BLAXEL_WORKSPACE_PROBE_MEMORY_MB", 4096),
       region: process.env.BLAXEL_WORKSPACE_PROBE_REGION || "us-pdx-1",
-      volumeSizeGb: readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_GB", 8),
+      volumeSizeMb: readVolumeSizeMbEnv(),
       mountPath: process.env.BLAXEL_WORKSPACE_PROBE_MOUNT_PATH || "/workspace",
       serverPort: readIntEnv("BLAXEL_WORKSPACE_PROBE_SERVER_PORT", 32123),
       lifecycleIdleDelete: process.env.BLAXEL_WORKSPACE_PROBE_IDLE_DELETE || "1h",
@@ -298,7 +305,7 @@ async function main() {
       VolumeInstance.createIfNotExists({
         name: result.volumeName,
         displayName: "PolyNet Blaxel workspace lifecycle probe",
-        size: result.config.volumeSizeGb,
+        size: result.config.volumeSizeMb,
         region: result.config.region,
         labels: {
           owner: "polynet",
@@ -465,10 +472,11 @@ async function main() {
             },
           }),
       });
-      if (typeof restored?.wait === "function") {
-        await restored.wait({ maxWait: 120_000, interval: 2_000 });
+      const restoredSandbox = restored as any;
+      if (typeof restoredSandbox?.wait === "function") {
+        await restoredSandbox.wait({ maxWait: 120_000, interval: 2_000 });
       }
-      return restored;
+      return restoredSandbox;
     });
     result.evidence.coldSandboxStatus = readStatus(coldSandbox);
 

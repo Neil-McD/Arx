@@ -91,13 +91,16 @@ export BLAXEL_WORKSPACE_PROBE_NAME=polynet-blaxel-workspace-manual
 export BLAXEL_WORKSPACE_PROBE_IMAGE=blaxel/base-image:latest
 export BLAXEL_WORKSPACE_PROBE_MEMORY_MB=4096
 export BLAXEL_WORKSPACE_PROBE_REGION=us-pdx-1
-export BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_GB=8
+export BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_MB=8192
 export BLAXEL_WORKSPACE_PROBE_MOUNT_PATH=/workspace
 export BLAXEL_WORKSPACE_PROBE_SERVER_PORT=32123
 export BLAXEL_WORKSPACE_PROBE_IDLE_DELETE=1h
 export BLAXEL_WORKSPACE_PROBE_MAX_AGE_DELETE=2h
 export BLAXEL_WORKSPACE_PROBE_STANDBY_WAIT_MS=90000
 ```
+
+`BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_GB` is still accepted as a legacy
+override and is converted to MB before calling Blaxel.
 
 The default behavior deletes both probe sandboxes and the probe volume at the end. To inspect resources after the run:
 
