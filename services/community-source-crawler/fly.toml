@@ -1,0 +1,29 @@
+app = "polynet-community-source-crawler"
+primary_region = "iad"
+
+[env]
+  PORT = "11235"
+  POLYNET_CRAWLER_DEFAULT_MAX_PAGES = "75"
+  POLYNET_CRAWLER_MAX_PAGES = "100"
+  POLYNET_CRAWLER_DEFAULT_MAX_DEPTH = "3"
+  POLYNET_CRAWLER_MAX_DEPTH = "4"
+
+[http_service]
+  internal_port = 11235
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "20s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 4096
