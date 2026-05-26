@@ -772,8 +772,48 @@ async function proveWorkspaceComputerProviderContract() {
   );
   assertIncludes(
     inspectorSource,
+    "readBlaxelWorkspaceFile",
+    "expected right-panel Blaxel preview to read through the provider wrapper",
+  );
+  assertIncludes(
+    inspectorSource,
     "buildBlaxelProjectWorkspaceNames",
     "expected right-panel Blaxel listing to derive stable project workspace names",
+  );
+  assertIncludes(
+    inspectorSource,
+    "readBlaxelInspectorFilePreview",
+    "expected right-panel Blaxel preview to have an isolated preview helper",
+  );
+  assertIncludes(
+    inspectorSource,
+    "parentWorkspacePath(params.relPath)",
+    "expected right-panel Blaxel preview to inspect target metadata through the parent directory",
+  );
+  assertIncludes(
+    inspectorSource,
+    "File size is unavailable, so this file is not previewed.",
+    "expected right-panel Blaxel preview to fail closed when file size is unavailable",
+  );
+  assertIncludes(
+    inspectorSource,
+    "sizeBytes > TEXT_PREVIEW_MAX_BYTES",
+    "expected right-panel Blaxel preview to avoid reading oversized text files",
+  );
+  assertIncludes(
+    inspectorSource,
+    "Image preview is not available for Blaxel workspaces yet.",
+    "expected right-panel Blaxel preview to leave image preview unsupported until binary reads are explicit",
+  );
+  assertIncludes(
+    inspectorSource,
+    "isLikelyBinaryText",
+    "expected right-panel Blaxel preview to reject binary-looking text",
+  );
+  assertIncludes(
+    inspectorSource,
+    "return await readBlaxelInspectorFilePreview({",
+    "expected readWorkspaceFilePreview to route to Blaxel only through server policy",
   );
 
   assertIncludes(

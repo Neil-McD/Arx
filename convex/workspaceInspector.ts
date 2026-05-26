@@ -6,6 +6,7 @@ import { resolveProjectBackgroundSandboxIfReady } from "./workspaceTerminalBackg
 import {
   ensureBlaxelWorkspaceComputer,
   listBlaxelWorkspaceDirectory,
+  readBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
   resolveWorkspaceComputerProviderFromServerEnv,
@@ -162,6 +163,14 @@ function joinWorkspacePath(directoryPath: string, entryPath: string): string {
   return directoryPath === "." ? entry : `${directoryPath}/${entry}`;
 }
 
+function parentWorkspacePath(path: string): string {
+  const normalized = String(path ?? "").trim();
+  if (!normalized || normalized === ".") return ".";
+  const parts = normalized.split("/").filter(Boolean);
+  parts.pop();
+  return parts.length ? parts.join("/") : ".";
+}
+
 function safeBlaxelResourcePart(value: unknown): string {
   const normalized = String(value ?? "")
     .trim()
@@ -195,6 +204,45 @@ function blaxelEntryName(value: unknown): string | null {
   if (rawName) return basenameOfPath(rawName);
   const rawPath = String(record?.path ?? "").trim();
   return rawPath ? basenameOfPath(rawPath) : null;
+}
+
+function blaxelEntrySize(value: unknown): number | null {
+  const record = asRecord(value);
+  const parsed = Number(record?.size);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+type BlaxelDirectoryEntryKind = "file" | "directory" | "missing";
+
+function findBlaxelDirectoryEntry(rawEntries: unknown, relPath: string): {
+  kind: BlaxelDirectoryEntryKind;
+  entry: unknown | null;
+} {
+  if (relPath === ".") return { kind: "directory", entry: null };
+  const record = asRecord(rawEntries);
+  const targetName = basenameOfPath(relPath);
+  const files = Array.isArray(record?.files) ? record.files : [];
+  const subdirectories = Array.isArray(record?.subdirectories)
+    ? record.subdirectories
+    : [];
+  const directoryEntry = subdirectories.find((entry) => blaxelEntryName(entry) === targetName);
+  if (directoryEntry) return { kind: "directory", entry: directoryEntry };
+  const fileEntry = files.find((entry) => blaxelEntryName(entry) === targetName);
+  if (fileEntry) return { kind: "file", entry: fileEntry };
+  return { kind: "missing", entry: null };
+}
+
+function isLikelyBinaryText(value: string): boolean {
+  if (!value) return false;
+  if (value.includes("\0")) return true;
+  const sample = value.slice(0, 4096);
+  let controlCount = 0;
+  for (let index = 0; index < sample.length; index += 1) {
+    const code = sample.charCodeAt(index);
+    const isAllowedControl = code === 9 || code === 10 || code === 13;
+    if (code < 32 && !isAllowedControl) controlCount += 1;
+  }
+  return controlCount > Math.max(8, sample.length * 0.02);
 }
 
 function parseBlaxelDirectoryEntries(rawEntries: unknown, directoryPath: string) {
@@ -237,6 +285,34 @@ function parseBlaxelDirectoryEntries(rawEntries: unknown, directoryPath: string)
       `${left.type}:${left.name}`.localeCompare(`${right.type}:${right.name}`),
     )
     .slice(0, DIRECTORY_ENTRY_LIMIT);
+}
+
+async function ensureBlaxelInspectorWorkspace(params: {
+  ctx: any;
+  authSubject: string | null | undefined;
+  projectId: any;
+}): Promise<
+  | { ok: true; sandboxName: string; volumeName: string }
+  | WorkspaceInspectorFailure
+> {
+  const resolvedProject = await resolveInspectorProject(params);
+  if (!resolvedProject.ok) return resolvedProject;
+  const names = buildBlaxelProjectWorkspaceNames(params.projectId);
+  const ensured = await ensureBlaxelWorkspaceComputer({
+    sandboxName: names.sandboxName,
+    volumeName: names.volumeName,
+    labels: {
+      purpose: "workspace-inspector",
+      project_id: String(params.projectId),
+      owner_id: String(resolvedProject.resolved.actor.dbUserId),
+    },
+  });
+  if (!ensured.ok) return mapFailure(ensured);
+  return {
+    ok: true,
+    sandboxName: names.sandboxName,
+    volumeName: names.volumeName,
+  };
 }
 
 function mapFailure(result: {
@@ -317,22 +393,11 @@ async function listBlaxelInspectorDirectory(params: {
   projectId: any;
   relPath: string;
 }): Promise<unknown> {
-  const resolvedProject = await resolveInspectorProject(params);
-  if (!resolvedProject.ok) return resolvedProject;
-  const names = buildBlaxelProjectWorkspaceNames(params.projectId);
-  const ensured = await ensureBlaxelWorkspaceComputer({
-    sandboxName: names.sandboxName,
-    volumeName: names.volumeName,
-    labels: {
-      purpose: "workspace-inspector",
-      project_id: String(params.projectId),
-      owner_id: String(resolvedProject.resolved.actor.dbUserId),
-    },
-  });
-  if (!ensured.ok) return mapFailure(ensured);
+  const workspace = await ensureBlaxelInspectorWorkspace(params);
+  if (!workspace.ok) return workspace;
 
   const listed = await listBlaxelWorkspaceDirectory({
-    sandboxName: names.sandboxName,
+    sandboxName: workspace.sandboxName,
     path: params.relPath,
   });
   if (!listed.ok) return mapFailure(listed);
@@ -344,6 +409,122 @@ async function listBlaxelInspectorDirectory(params: {
     path: params.relPath,
     entries,
     truncated: entries.length >= DIRECTORY_ENTRY_LIMIT,
+  };
+}
+
+async function readBlaxelInspectorFilePreview(params: {
+  ctx: any;
+  authSubject: string | null | undefined;
+  projectId: any;
+  relPath: string;
+}): Promise<unknown> {
+  const workspace = await ensureBlaxelInspectorWorkspace(params);
+  if (!workspace.ok) return workspace;
+  const parentPath = parentWorkspacePath(params.relPath);
+  const parentListing = await listBlaxelWorkspaceDirectory({
+    sandboxName: workspace.sandboxName,
+    path: parentPath,
+  });
+  if (!parentListing.ok) return mapFailure(parentListing);
+
+  const target = findBlaxelDirectoryEntry(parentListing.entries, params.relPath);
+  if (target.kind === "missing") {
+    return {
+      ok: false,
+      status: 404,
+      code: "file_not_found",
+      message: "Workspace file not found.",
+    };
+  }
+  if (target.kind === "directory") {
+    return {
+      ok: true,
+      path: params.relPath,
+      name: basenameOfPath(params.relPath),
+      type: "directory",
+      previewKind: "directory",
+    };
+  }
+
+  const sizeBytes = blaxelEntrySize(target.entry);
+  const extension = extensionOfPath(params.relPath);
+  const imageMimeType = IMAGE_MIME_BY_EXTENSION[extension] ?? null;
+  if (imageMimeType) {
+    return {
+      ok: true,
+      path: params.relPath,
+      name: basenameOfPath(params.relPath),
+      type: "file",
+      previewKind: "unsupported",
+      mimeType: imageMimeType,
+      sizeBytes,
+      reason: "Image preview is not available for Blaxel workspaces yet.",
+    };
+  }
+
+  if (!isTextPreviewCandidate(params.relPath)) {
+    return {
+      ok: true,
+      path: params.relPath,
+      name: basenameOfPath(params.relPath),
+      type: "file",
+      previewKind: "unsupported",
+      sizeBytes,
+      reason: "This file type is not previewed yet.",
+    };
+  }
+
+  if (sizeBytes === null) {
+    return {
+      ok: true,
+      path: params.relPath,
+      name: basenameOfPath(params.relPath),
+      type: "file",
+      previewKind: "unsupported",
+      sizeBytes,
+      reason: "File size is unavailable, so this file is not previewed.",
+    };
+  }
+
+  if (typeof sizeBytes === "number" && sizeBytes > TEXT_PREVIEW_MAX_BYTES) {
+    return {
+      ok: true,
+      path: params.relPath,
+      name: basenameOfPath(params.relPath),
+      type: "file",
+      previewKind: "unsupported",
+      sizeBytes,
+      reason: "Text file is too large to preview in the workspace panel.",
+    };
+  }
+
+  const read = await readBlaxelWorkspaceFile({
+    sandboxName: workspace.sandboxName,
+    path: params.relPath,
+  });
+  if (!read.ok) return mapFailure(read);
+  const text = String(read.content ?? "");
+  if (isLikelyBinaryText(text)) {
+    return {
+      ok: true,
+      path: params.relPath,
+      name: basenameOfPath(params.relPath),
+      type: "file",
+      previewKind: "unsupported",
+      sizeBytes,
+      reason: "Binary files are not previewed in the workspace panel.",
+    };
+  }
+
+  return {
+    ok: true,
+    path: params.relPath,
+    name: basenameOfPath(params.relPath),
+    type: "file",
+    previewKind: "text",
+    sizeBytes,
+    text: text.slice(0, TEXT_PREVIEW_MAX_BYTES),
+    truncated: text.length > TEXT_PREVIEW_MAX_BYTES,
   };
 }
 
@@ -594,6 +775,14 @@ export const readWorkspaceFilePreview = action({
     const normalized = normalizeInspectorPath(args.path);
     if (!normalized.ok) return normalized;
     const relPath = normalized.relPath;
+    if (resolveWorkspaceComputerProviderFromServerEnv().providerId === "blaxel") {
+      return await readBlaxelInspectorFilePreview({
+        ctx,
+        authSubject: args.authSubject ?? null,
+        projectId: args.projectId,
+        relPath,
+      });
+    }
     const session = await resolveInspectorSession({
       ctx,
       authSubject: args.authSubject ?? null,
