@@ -20,7 +20,6 @@ export {
   listCommunityResources,
   countCommunityResources,
   editCommunityResourceBuilderResource,
-  ensureCommunityResourceWikiScaffold,
   beginGoogleDriveSourceOAuth,
   beginGitHubSourceOAuth,
   disconnectGitHubSourceConnection,

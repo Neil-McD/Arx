@@ -122,7 +122,7 @@ const COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA: JsonSchema = {
       type: "integer",
       minimum: 1,
       maximum: 25,
-      description: "Maximum resources to include per module.",
+      description: "Maximum resources to include per wiki category.",
     },
   },
 };
@@ -221,7 +221,7 @@ const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 1024,
-      description: "Module name, page/source title, resource id, module id, resources:// URI, or readable resource path.",
+      description: "Category/module name, page/source title, resource id, module id, resources:// URI, or readable resource path.",
     },
   },
 };
@@ -246,12 +246,12 @@ const COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA: JsonSchema = {
     module_key: {
       type: "string",
       maxLength: 120,
-      description: "Temporary key used to reference a module created earlier in the same changeset.",
+      description: "Temporary key used to reference a wiki category created earlier in the same changeset. The field name stays module_key for the internal category container.",
     },
     module_id: {
       type: "string",
       maxLength: 160,
-      description: "Existing resource module id.",
+      description: "Existing resource category id. The field name stays module_id for the internal category container.",
     },
     resource_id: {
       type: "string",
@@ -277,7 +277,7 @@ const COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA: JsonSchema = {
     name: {
       type: "string",
       maxLength: 180,
-      description: "Module name.",
+      description: "Wiki category name.",
     },
     title: {
       type: "string",
@@ -741,12 +741,12 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_resources_list: {
     name: "community_resources_list",
-    description: "List the active community's live resource modules and pages. Use paths or resources:// directory URIs returned by this tool to navigate member-visible modules.",
+    description: "List the active community's live Resources wiki categories and pages. Use paths or resources:// directory URIs returned by this tool to navigate member-visible categories.",
     inputSchema: COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA,
   },
   community_resources_map: {
     name: "community_resources_map",
-    description: "Map the active community's Resources architecture in one call. Members see live resources; managers also see draft/source/health state.",
+    description: "Map the active community's Resources wiki structure in one call. Members see live categories/pages; managers also see draft/source/health state.",
     inputSchema: COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA,
   },
   community_resources_read: {
@@ -756,37 +756,32 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_resource_read: {
     name: "community_resource_read",
-    description: "Read one member-visible resource from a live module by resource id, resources:// directory URI, or readable resource path.",
+    description: "Read one member-visible resource from a live wiki category by resource id, resources:// directory URI, or readable resource path.",
     inputSchema: COMMUNITY_RESOURCE_READ_TOOL_SCHEMA,
   },
   community_resources_search: {
     name: "community_resources_search",
-    description: "Search the active community's live module pages and return resource paths, directory URIs, snippets, and metadata.",
+    description: "Search the active community's live category pages and return resource paths, directory URIs, snippets, and metadata.",
     inputSchema: COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA,
   },
   community_resource_builder_list: {
     name: "community_resource_builder_list",
-    description: "Manager-only Resources Architect tool. List the active community's full resource builder directory, including live/draft modules, pages, and source inbox items.",
+    description: "Manager-only Resources Architect tool. List the active community's full Resources wiki builder directory, including live/draft categories, pages, and source inbox items.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA,
   },
   community_resource_builder_read: {
     name: "community_resource_builder_read",
-    description: "Manager-only Resources Architect tool. Read one resource or module by semantic ref: module name, page/source title, resource id, module id, resources:// URI, or readable path.",
+    description: "Manager-only Resources Architect tool. Read one resource or category by semantic ref: category/module name, page/source title, resource id, module id, resources:// URI, or readable path.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA,
   },
   community_resource_builder_health: {
     name: "community_resource_builder_health",
-    description: "Manager-only Resources Architect tool. Inspect resource architecture health, missing scaffold, sparse pages, missing source lineage, stale drafts, and unreferenced sources.",
-    inputSchema: EMPTY_TOOL_SCHEMA,
-  },
-  community_resource_builder_ensure_scaffold: {
-    name: "community_resource_builder_ensure_scaffold",
-    description: "Manager-only Resources Architect tool. Idempotently create missing default resource modules and scaffold pages, then return fresh health.",
+    description: "Manager-only Resources Architect tool. Inspect Resources wiki health, empty categories, sparse pages, missing source lineage, stale drafts, and unreferenced sources.",
     inputSchema: EMPTY_TOOL_SCHEMA,
   },
   community_resource_builder_stage_changeset: {
     name: "community_resource_builder_stage_changeset",
-    description: "Manager-only Resources Architect tool. Validate and stage a proposed resource changeset without mutating modules or pages.",
+    description: "Manager-only Resources Architect tool. Validate and stage a proposed resource changeset without mutating categories or pages.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA,
   },
   community_resource_builder_apply_changeset: {
@@ -1494,10 +1489,7 @@ export function normalizeToolArguments(
         : null),
     };
   }
-  if (
-    toolName === "community_resource_builder_health" ||
-    toolName === "community_resource_builder_ensure_scaffold"
-  ) {
+  if (toolName === "community_resource_builder_health") {
     return {};
   }
   if (toolName === "community_resource_builder_stage_changeset") {

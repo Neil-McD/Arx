@@ -144,8 +144,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   runBody,
-  /writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource|ensureCommunityResourceWikiScaffold/,
-  "architect run must not call builder write/edit/scaffold mutations",
+  /writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource/,
+  "architect run must not call builder write/edit mutations",
 );
 assert.doesNotMatch(
   runBody,
@@ -320,7 +320,6 @@ const ingestIndex = prepareBody.indexOf("await onIngestKnowledgeSources()");
 const planIndex = prepareBody.indexOf("await onGenerateKnowledgePlan");
 const applyIndex = prepareBody.indexOf("await onApplyKnowledgePlan");
 const draftIndex = prepareBody.indexOf("await onDraftKnowledgeResources()");
-const fallbackIndex = prepareBody.indexOf("await onEnsureKnowledgeScaffold()");
 assert.ok(
   ingestIndex !== -1 && planIndex !== -1 && applyIndex !== -1 && draftIndex !== -1,
   "Knowledge Next should call ingest, architect, apply, and drafter",
@@ -330,18 +329,9 @@ assert.ok(
   "Knowledge Next should run source ingestion, source-driven architect, apply, then drafter in order",
 );
 assert.equal(
-  prepareBody.slice(0, planIndex).includes("onEnsureKnowledgeScaffold"),
+  prepareBody.includes("onEnsureKnowledgeScaffold"),
   false,
-  "Knowledge Next must not run generic scaffold before source-driven planning",
-);
-assert.ok(
-  fallbackIndex === -1 || (fallbackIndex > applyIndex && fallbackIndex < draftIndex),
-  "generic scaffold fallback should run only after source-driven planning and before drafting",
-);
-assert.match(
-  modal,
-  /proposalHasSourceBackedWrites[\s\S]*drafts_created[\s\S]*drafts_updated/,
-  "modal should detect whether the architect produced source-backed writes before fallback scaffolding",
+  "Knowledge Next must not run generic scaffold fallback",
 );
 assert.doesNotMatch(
   modal,

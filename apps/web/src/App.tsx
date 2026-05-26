@@ -135,13 +135,11 @@ import {
   disconnectCloudCommunityGitHubSourceConnection,
   disconnectCloudCommunityGoogleDriveSourceConnection,
   draftCloudCommunityResourceContentFromSources,
-  ensureCloudCommunityResourceWikiScaffold,
   fetchCloudCommunityMemberBillingHistory,
   finalizeCloudCommunityGoogleDriveSourceOAuth,
   finalizeCloudCommunityGitHubSourceOAuth,
   getCloudCommunitySourceCrawlJob,
   getCloudCommunitySourceCrawlerStatus,
-  getCloudCommunityResourceBuilderHealth,
   importCloudCommunityGitHubSourceFiles,
   importCloudCommunityGoogleDriveSourceFiles,
   ingestCloudCommunitySources,
@@ -8560,24 +8558,6 @@ export default function App() {
       setCommunityLaunchKnowledgeIntegrationReloadKey((key) => key + 1);
       return connection;
     };
-    const handleLoadCommunityLaunchKnowledgeHealth = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const health = await getCloudCommunityResourceBuilderHealth({
-        session,
-        communityId: community.id,
-      });
-      return health as any;
-    };
-    const handleEnsureCommunityLaunchKnowledgeScaffold = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await ensureCloudCommunityResourceWikiScaffold({
-        session,
-        communityId: community.id,
-      });
-      await loadCommunityResources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-      return result as any;
-    };
     const handleGenerateCommunityLaunchKnowledgePlan = async (draft: { builderIntent: string }) => {
       const { session, community } = requireCommunityLaunchSaveContext();
       const result = await runCloudCommunityWikiArchitectProposal({
@@ -10360,12 +10340,10 @@ export default function App() {
         onImportKnowledgeGitHubFiles={handleImportCommunityLaunchGitHubFiles}
         onRemoveKnowledgeGitHubSource={handleRemoveCommunityLaunchKnowledgeSource}
         onDisconnectKnowledgeGitHub={handleDisconnectCommunityLaunchGitHub}
-        onLoadKnowledgeHealth={handleLoadCommunityLaunchKnowledgeHealth}
-	        onEnsureKnowledgeScaffold={handleEnsureCommunityLaunchKnowledgeScaffold}
-	        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
-	        onApplyKnowledgePlan={handleApplyCommunityLaunchKnowledgePlan}
-	        onDraftKnowledgeResources={handleDraftCommunityLaunchKnowledgeResources}
-	        onSaveAgent={handleSaveCommunityLaunchAgent}
+        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
+        onApplyKnowledgePlan={handleApplyCommunityLaunchKnowledgePlan}
+        onDraftKnowledgeResources={handleDraftCommunityLaunchKnowledgeResources}
+        onSaveAgent={handleSaveCommunityLaunchAgent}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}
       />

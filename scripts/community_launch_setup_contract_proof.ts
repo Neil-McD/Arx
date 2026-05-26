@@ -648,8 +648,8 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /handlePrepareKnowledgeResources[\s\S]*getKnowledgePreparationBlocker[\s\S]*setKnowledgeView\("assemble"\)[\s\S]*setAssemblyStage\("reading"\)[\s\S]*onIngestKnowledgeSources[\s\S]*setAssemblyStage\("organizing"\)[\s\S]*onGenerateKnowledgePlan[\s\S]*setAssemblyStage\("creating"\)[\s\S]*onApplyKnowledgePlan[\s\S]*!sourceBackedPlan[\s\S]*onLoadKnowledgeHealth[\s\S]*onEnsureKnowledgeScaffold[\s\S]*setAssemblyStage\("writing"\)[\s\S]*onDraftKnowledgeResources[\s\S]*setAssemblyStage\("checking"\)[\s\S]*setAssemblyStage\("opening"\)[\s\S]*onOpenStep\("knowledge"\)/,
-  "launch knowledge Next must require provider-local saves/imports, run source-driven planning first, and reserve scaffold for fallback",
+  /handlePrepareKnowledgeResources[\s\S]*getKnowledgePreparationBlocker[\s\S]*setKnowledgeView\("assemble"\)[\s\S]*setAssemblyStage\("reading"\)[\s\S]*onIngestKnowledgeSources[\s\S]*setAssemblyStage\("organizing"\)[\s\S]*onGenerateKnowledgePlan[\s\S]*setAssemblyStage\("creating"\)[\s\S]*onApplyKnowledgePlan[\s\S]*setAssemblyStage\("writing"\)[\s\S]*onDraftKnowledgeResources[\s\S]*setAssemblyStage\("checking"\)[\s\S]*setAssemblyStage\("opening"\)[\s\S]*onOpenStep\("knowledge"\)/,
+  "launch knowledge Next must require provider-local saves/imports and run source-driven planning/apply/drafting without scaffold fallback",
 );
 assert.match(
   setupModal,

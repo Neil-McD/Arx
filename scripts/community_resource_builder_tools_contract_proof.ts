@@ -32,7 +32,6 @@ for (const exportName of [
   "writeCommunityResourceBuilderResource",
   "editCommunityResourceBuilderResource",
   "getCommunityResourceBuilderHealth",
-  "ensureCommunityResourceWikiScaffold",
   "stageCommunityResourceBuilderChangeset",
   "getCommunityResourceBuilderChangesetStatus",
   "approveCommunityResourceBuilderChangeset",
@@ -188,7 +187,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /listCommunityResourceBuilderDirectory[\s\S]*health: await buildCommunityResourceBuilderHealthReport/,
+  /listCommunityResourceBuilderDirectory[\s\S]*health: buildCommunityResourceBuilderHealthReportFromRows/,
   "builder list should include the deterministic health summary",
 );
 assert.match(
@@ -211,25 +210,20 @@ assert.doesNotMatch(
   /isBuilderDefaultModuleName/,
   "health check should flag empty categories instead of exempting default modules",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /ensureCommunityResourceWikiScaffold[\s\S]*for \(const page of COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES\)[\s\S]*ctx\.db\.insert\("communityResourceModules"[\s\S]*name: page\.moduleName/,
-  "scaffold creation should create only the shared tiny fallback category/page when needed",
-);
-assert.match(
-  resources,
-  /modules_created[\s\S]*pages_created[\s\S]*health: await buildCommunityResourceBuilderHealthReport/,
-  "scaffold creation should return summary and fresh health",
+  /export const ensureCommunityResourceWikiScaffold/,
+  "builder surface should not expose a direct scaffold mutation",
 );
 assert.match(
   gateway,
   /getCloudCommunityResourceBuilderHealth[\s\S]*community:getCommunityResourceBuilderHealth/,
-  "gateway should expose builder health to the launch modal",
+  "gateway should expose builder health for explicit builder surfaces",
 );
-assert.match(
+assert.doesNotMatch(
   gateway,
-  /ensureCloudCommunityResourceWikiScaffold[\s\S]*community:ensureCommunityResourceWikiScaffold/,
-  "gateway should expose scaffold creation to the launch modal",
+  /ensureCloudCommunityResourceWikiScaffold|community:ensureCommunityResourceWikiScaffold/,
+  "frontend gateway should not expose direct scaffold creation",
 );
 assert.doesNotMatch(
   gateway,
@@ -246,10 +240,10 @@ assert.doesNotMatch(
   /Create drafts/,
   "knowledge modal should not expose a raw scaffold action on the collection screen",
 );
-assert.match(
+assert.doesNotMatch(
   launchModal,
-  /onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan/,
-  "knowledge modal should run scaffold creation internally before generating a wiki plan",
+  /onEnsureKnowledgeScaffold|sourceBackedPlan|proposalHasSourceBackedWrites/,
+  "knowledge modal should not run hidden scaffold fallback logic",
 );
 assert.doesNotMatch(
   launchModal,
@@ -258,8 +252,8 @@ assert.doesNotMatch(
 );
 assert.match(
   launchModal,
-  /await onAddKnowledgeLink[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onLoadKnowledgeHealth/,
-  "knowledge modal should ingest source links before refreshing health",
+  /await onAddKnowledgeLink[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onGenerateKnowledgePlan/,
+  "knowledge modal should ingest source links before source-driven planning",
 );
 
 const builderListBody = resources.slice(

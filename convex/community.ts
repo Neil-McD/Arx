@@ -78,7 +78,6 @@ import {
   getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
   countCommunityResources as countCommunityResourcesImpl,
   editCommunityResourceBuilderResource as editCommunityResourceBuilderResourceImpl,
-  ensureCommunityResourceWikiScaffold as ensureCommunityResourceWikiScaffoldImpl,
   beginGoogleDriveSourceOAuth as beginGoogleDriveSourceOAuthImpl,
   beginGitHubSourceOAuth as beginGitHubSourceOAuthImpl,
   disconnectGitHubSourceConnection as disconnectGitHubSourceConnectionImpl,
@@ -227,7 +226,6 @@ export const readCommunityResourceBuilderResource = readCommunityResourceBuilder
 export const writeCommunityResourceBuilderResource = writeCommunityResourceBuilderResourceImpl;
 export const editCommunityResourceBuilderResource = editCommunityResourceBuilderResourceImpl;
 export const getCommunityResourceBuilderHealth = getCommunityResourceBuilderHealthImpl;
-export const ensureCommunityResourceWikiScaffold = ensureCommunityResourceWikiScaffoldImpl;
 export const applyCommunityWikiArchitectProposal: any = applyCommunityWikiArchitectProposalImpl;
 export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;

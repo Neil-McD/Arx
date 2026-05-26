@@ -75,7 +75,6 @@ function proveFixedPolicyBoundaries() {
 
   const exclusiveTools: RetrievalToolName[] = [
     "community_write",
-    "community_resource_builder_ensure_scaffold",
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
     "write",
@@ -128,16 +127,6 @@ function proveFixedPolicyBoundaries() {
   }
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
-  assert.equal(
-    getFixedRuntimeToolPolicy("community_resource_builder_ensure_scaffold")
-      .mutatesState,
-    true,
-  );
-  assert.equal(
-    getFixedRuntimeToolPolicy("community_resource_builder_ensure_scaffold")
-      .requiresCommunity,
-    true,
-  );
   for (const toolName of [
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",

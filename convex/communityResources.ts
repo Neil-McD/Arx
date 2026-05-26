@@ -61,7 +61,6 @@ import {
   parseCommunityResourceDirectoryUri,
 } from "../shared/communityResourceDirectory";
 import {
-  COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES,
   COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES,
 } from "../shared/communityResourceBuilder";
 import type {
@@ -5961,123 +5960,6 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
     issues,
   };
 }
-
-export const ensureCommunityResourceWikiScaffold = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-
-    const nowMs = Date.now();
-    const modules = (await ctx.db
-      .query("communityResourceModules" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceModuleLike[];
-    const moduleByName = new Map(modules.map((module) => [normalizeBuilderHealthTitle(module.name), module]));
-    const modulesCreated: string[] = [];
-    const existingModules: string[] = [];
-    let nextModuleSortOrder = modules.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
-
-    const resources = (await ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceLike[];
-    const pagesByModuleAndTitle = new Set(
-      resources
-        .filter((row) => normalizeResourceRole(row.role) === "page")
-        .map((row) => `${normalizeIdValue(row.moduleId ?? "")}:${normalizeBuilderHealthTitle(row.title)}`),
-    );
-    const pagesCreated: string[] = [];
-    const existingPages: string[] = [];
-
-    for (const page of COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES) {
-      const moduleKey = normalizeBuilderHealthTitle(page.moduleName);
-      let module = moduleByName.get(moduleKey) ?? null;
-      if (!module) {
-        const moduleId = await ctx.db.insert("communityResourceModules" as any, {
-          communityId: args.communityId,
-          createdByUserId: userId,
-          status: "draft",
-          name: page.moduleName,
-          sortOrder: nextModuleSortOrder,
-          createdAt: nowMs,
-          updatedAt: nowMs,
-        });
-        nextModuleSortOrder += 1000;
-        module = (await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null;
-        if (!module) throw new Error("community_resource_module_create_failed");
-        moduleByName.set(moduleKey, module);
-        modulesCreated.push(page.moduleName);
-      } else {
-        existingModules.push(page.moduleName);
-      }
-      const pageKey = `${normalizeIdValue(module._id)}:${normalizeBuilderHealthTitle(page.title)}`;
-      if (pagesByModuleAndTitle.has(pageKey)) {
-        existingPages.push(`${page.moduleName}/${page.title}`);
-        continue;
-      }
-      const sortOrder = await getNextResourceSortOrder({
-        ctx,
-        communityId: args.communityId,
-        moduleId: module._id,
-      });
-      const id = await ctx.db.insert("communityResources" as any, {
-        communityId: args.communityId,
-        moduleId: module._id,
-        createdByUserId: userId,
-        type: "post",
-        role: "page",
-        status: "draft",
-        title: page.title,
-        pinned: false,
-        sortOrder,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
-      if (!created) throw new Error("community_resource_create_failed");
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: args.communityId,
-        resourceId: created._id,
-        bodyMd: page.bodyMd,
-        nowMs,
-        maxChars: 20_000,
-      });
-      const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-      await upsertArchiveDocumentForResource(ctx, hydrated);
-      pagesByModuleAndTitle.add(pageKey);
-      pagesCreated.push(`${page.moduleName}/${page.title}`);
-    }
-
-    return {
-      ok: true,
-      kind: "community_resource_wiki_scaffold",
-      summary: {
-        modules_created: modulesCreated,
-        modules_existing: existingModules,
-        pages_created: pagesCreated,
-        pages_existing: existingPages,
-      },
-      health: await buildCommunityResourceBuilderHealthReport({
-        ctx,
-        communityId: args.communityId,
-        nowMs: Date.now(),
-      }),
-    };
-  },
-});
 
 export const listCommunityResourceModules = query({
   args: {

@@ -132,14 +132,6 @@ export type CommunityLaunchKnowledgeHealth = {
   };
 };
 
-export type CommunityLaunchKnowledgeScaffoldResult = {
-  summary?: {
-    modules_created?: string[];
-    pages_created?: string[];
-  };
-  health?: CommunityLaunchKnowledgeHealth;
-};
-
 export type CommunityLaunchKnowledgePlanResult = {
   ok?: boolean;
   proposal?: CommunityWikiArchitectProposal | null;
@@ -529,8 +521,6 @@ type WebCommunityLaunchSetupModalProps = {
   onImportKnowledgeGitHubFiles?: (fileIds: string[]) => Promise<CommunityLaunchGitHubImportResult | null>;
   onRemoveKnowledgeGitHubSource?: (resourceId: string) => Promise<boolean | void>;
   onDisconnectKnowledgeGitHub?: () => Promise<CommunityLaunchGitHubConnection | null>;
-  onLoadKnowledgeHealth?: () => Promise<CommunityLaunchKnowledgeHealth | null>;
-  onEnsureKnowledgeScaffold?: () => Promise<CommunityLaunchKnowledgeScaffoldResult | null>;
   onGenerateKnowledgePlan?: (draft: {
     builderIntent: string;
   }) => Promise<CommunityLaunchKnowledgePlanResult | null>;
@@ -825,16 +815,6 @@ function getKnowledgeAssemblyStepStatus(args: {
   return "pending";
 }
 
-function proposalHasSourceBackedWrites(
-  proposal: CommunityWikiArchitectProposal | null | undefined,
-): boolean {
-  if (!proposal) return false;
-  return (
-    proposal.drafts_created.some((draft) => Boolean(draft.source_resource_id)) ||
-    proposal.drafts_updated.some((draft) => Boolean(draft.source_resource_id))
-  );
-}
-
 export function WebCommunityLaunchSetupModal(
   props: WebCommunityLaunchSetupModalProps,
 ) {
@@ -876,8 +856,6 @@ export function WebCommunityLaunchSetupModal(
     onImportKnowledgeGitHubFiles,
     onRemoveKnowledgeGitHubSource,
     onDisconnectKnowledgeGitHub,
-    onLoadKnowledgeHealth,
-    onEnsureKnowledgeScaffold,
     onGenerateKnowledgePlan,
     onApplyKnowledgePlan,
     onDraftKnowledgeResources,
@@ -2062,7 +2040,6 @@ export function WebCommunityLaunchSetupModal(
       }
       if (
         !onIngestKnowledgeSources ||
-        !onLoadKnowledgeHealth ||
         !onGenerateKnowledgePlan ||
         !onApplyKnowledgePlan ||
         !onDraftKnowledgeResources
@@ -2100,7 +2077,6 @@ export function WebCommunityLaunchSetupModal(
             planResult?.message || "Could not prepare draft resources.",
           );
         }
-        const sourceBackedPlan = proposalHasSourceBackedWrites(planResult.proposal);
         setAssemblyStage("creating");
         const applyResult = await onApplyKnowledgePlan({
           proposal: planResult.proposal,
@@ -2119,16 +2095,6 @@ export function WebCommunityLaunchSetupModal(
         const architectureWarning = formatKnowledgeArchitectureQualityWarning(
           applyResult.architecture_quality,
         );
-        if (!sourceBackedPlan && onEnsureKnowledgeScaffold) {
-          const currentHealth = await onLoadKnowledgeHealth();
-          const resourceShapeCount =
-            Number(currentHealth?.summary?.modules ?? 0) +
-            Number(currentHealth?.summary?.pages ?? 0) +
-            Number(currentHealth?.summary?.sources ?? currentHealth?.summary?.source_inbox_items ?? 0);
-          if (resourceShapeCount <= 0) {
-            await onEnsureKnowledgeScaffold();
-          }
-        }
         setAssemblyStage("writing");
         const draftResult = await onDraftKnowledgeResources();
         if (!draftResult?.ok) {

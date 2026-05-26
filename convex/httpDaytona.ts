@@ -814,44 +814,6 @@ async function executeRetrievalHarnessTool(params: {
     }
   }
 
-  if (params.toolName === "community_resource_builder_ensure_scaffold") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_builder_ensure_scaffold requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runMutation(
-        api.communityResources.ensureCommunityResourceWikiScaffold as any,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_builder_ensure_scaffold_failed",
-        errorMessage: message || "Community resource scaffold setup failed.",
-      };
-    }
-  }
-
   if (params.toolName === "community_resource_builder_stage_changeset") {
     if (!params.communityId) {
       return {
