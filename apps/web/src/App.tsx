@@ -565,8 +565,8 @@ function mapLaunchCommunityCreateError(error: unknown): string {
   return message;
 }
 
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES = 10;
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH = 2;
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES = 75;
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH = 3;
 const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS = 5;
 const COMMUNITY_LAUNCH_SOURCE_CRAWL_POLL_INTERVAL_MS = 1000;
 const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_POLLS = 45;
@@ -8325,9 +8325,17 @@ export default function App() {
           session,
           communityId: community.id,
         });
-        if (!crawlerStatus?.configured) {
-          throw new Error(crawlerStatus?.code || "community_source_crawler_not_configured");
+        if (!crawlerStatus?.full_site_crawl_available) {
+          throw new Error(crawlerStatus?.code || "community_source_full_site_crawl_not_configured");
         }
+        const crawlMaxPages = Math.min(
+          COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES,
+          crawlerStatus.max_pages || COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES,
+        );
+        const crawlMaxDepth = Math.min(
+          COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH,
+          crawlerStatus.max_depth || COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH,
+        );
         await Promise.all(
           Array.from(crawlTargets.entries())
             .slice(0, COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS)
@@ -8337,8 +8345,8 @@ export default function App() {
                   session,
                   communityId: community.id,
                   rootUrl,
-                  maxPages: COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES,
-                  maxDepth: COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH,
+                  maxPages: crawlMaxPages,
+                  maxDepth: crawlMaxDepth,
                 });
                 const crawlJobId = started?.job?.id ?? "";
                 if (!crawlJobId) {

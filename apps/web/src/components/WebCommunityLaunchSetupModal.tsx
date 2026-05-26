@@ -753,7 +753,8 @@ function formatKnowledgeIngestionFailureMessage(message: unknown): string {
   }
   if (
     code === "community_source_crawl4ai_not_configured" ||
-    code === "community_source_crawler_not_configured"
+    code === "community_source_crawler_not_configured" ||
+    code === "community_source_full_site_crawl_not_configured"
   ) {
     return "Full site crawling is not configured yet.";
   }

@@ -108,6 +108,7 @@ const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS = 140;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TITLE_CHARS = 96;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES = 2_500_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS = 50_000;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES = 10_000_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS = 12_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_REDIRECTS = 3;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS = 10;
@@ -119,10 +120,10 @@ const COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV = "ARX_SOURCE_CRAWLER_PROVIDER";
 const COMMUNITY_RESOURCE_CRAWL4AI_ENDPOINT_ENV = "ARX_CRAWL4AI_ENDPOINT";
 const COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV = "ARX_CRAWL4AI_TOKEN";
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 10;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 25;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 2;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 3;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 75;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 100;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 3;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 4;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_DENIED_HOSTNAME_SUFFIXES = [
   ".localhost",
   ".local",
@@ -903,16 +904,19 @@ function getHeaderNumber(headers: Headers, name: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-async function readResponseTextBounded(response: Response): Promise<string> {
+async function readResponseTextBounded(
+  response: Response,
+  maxBytes = COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES,
+): Promise<string> {
   const contentLength = getHeaderNumber(response.headers, "content-length");
-  if (contentLength !== null && contentLength > COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES) {
+  if (contentLength !== null && contentLength > maxBytes) {
     throw new Error("community_source_url_too_large");
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
     const text = await response.text();
-    if (text.length > COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES) {
+    if (text.length > maxBytes) {
       throw new Error("community_source_url_too_large");
     }
     return text;
@@ -926,7 +930,7 @@ async function readResponseTextBounded(response: Response): Promise<string> {
     if (next.done) break;
     const chunk = next.value;
     totalBytes += chunk.byteLength;
-    if (totalBytes > COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES) {
+    if (totalBytes > maxBytes) {
       throw new Error("community_source_url_too_large");
     }
     text += decoder.decode(chunk, { stream: true });
@@ -1050,6 +1054,10 @@ function getCommunitySourceCrawlerStatusValue() {
       provider: "simple" as const,
       configured: false,
       full_site_crawl_available: false,
+      default_max_pages: 0,
+      default_max_depth: 0,
+      max_pages: 0,
+      max_depth: 0,
       missing: [COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV],
       code: "community_source_crawler_provider_invalid",
       message: "Source crawler provider is invalid.",
@@ -1062,6 +1070,10 @@ function getCommunitySourceCrawlerStatusValue() {
       provider: "simple" as const,
       configured: true,
       full_site_crawl_available: false,
+      default_max_pages: 1,
+      default_max_depth: 0,
+      max_pages: 1,
+      max_depth: 0,
       missing: [] as string[],
       code: null,
       message: "Only the pasted page will be read.",
@@ -1086,6 +1098,10 @@ function getCommunitySourceCrawlerStatusValue() {
     provider: "crawl4ai" as const,
     configured,
     full_site_crawl_available: configured,
+    default_max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES,
+    default_max_depth: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH,
+    max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES,
+    max_depth: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH,
     missing,
     code: configured ? null : "community_source_crawl4ai_not_configured",
     message: configured ? null : "Full site crawling is not configured.",
@@ -1349,7 +1365,10 @@ async function crawlSourceRootWithCrawl4AI(args: {
     }),
   });
   if (!response.ok) throw new Error(`community_source_crawl4ai_failed_${response.status}`);
-  const rawPayload = await readResponseTextBounded(response);
+  const rawPayload = await readResponseTextBounded(
+    response,
+    COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES,
+  );
   let payload: unknown;
   try {
     payload = JSON.parse(rawPayload);

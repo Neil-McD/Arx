@@ -218,6 +218,10 @@ export type CloudCommunitySourceCrawlerStatus = {
   provider: "simple" | "crawl4ai";
   configured: boolean;
   full_site_crawl_available: boolean;
+  default_max_pages: number;
+  default_max_depth: number;
+  max_pages: number;
+  max_depth: number;
   missing: string[];
   code: string | null;
   message: string | null;
@@ -739,6 +743,10 @@ function normalizeCommunitySourceCrawlerStatus(payload: unknown): CloudCommunity
     provider,
     configured: record.configured === true,
     full_site_crawl_available: record.full_site_crawl_available === true,
+    default_max_pages: Math.max(0, Math.floor(parseGatewayNumberLike(record.default_max_pages) ?? 0)),
+    default_max_depth: Math.max(0, Math.floor(parseGatewayNumberLike(record.default_max_depth) ?? 0)),
+    max_pages: Math.max(0, Math.floor(parseGatewayNumberLike(record.max_pages) ?? 0)),
+    max_depth: Math.max(0, Math.floor(parseGatewayNumberLike(record.max_depth) ?? 0)),
     missing: Array.isArray(record.missing)
       ? record.missing
           .map((value) => String(value ?? "").trim())

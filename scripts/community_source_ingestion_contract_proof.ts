@@ -263,8 +263,13 @@ assert.match(
 );
 assert.match(
   resources,
-  /getCommunitySourceCrawlerStatusValue[\s\S]*provider: "simple"[\s\S]*configured: true[\s\S]*full_site_crawl_available: false[\s\S]*provider: "crawl4ai"[\s\S]*configured[\s\S]*full_site_crawl_available: configured[\s\S]*community_source_crawl4ai_not_configured/,
-  "source crawler status should expose explicit configured/full-site-crawl truth without leaking secrets",
+  /getCommunitySourceCrawlerStatusValue[\s\S]*provider: "simple"[\s\S]*configured: true[\s\S]*full_site_crawl_available: false[\s\S]*default_max_pages: 1[\s\S]*max_depth: 0[\s\S]*provider: "crawl4ai"[\s\S]*configured[\s\S]*full_site_crawl_available: configured[\s\S]*default_max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES[\s\S]*max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES[\s\S]*community_source_crawl4ai_not_configured/,
+  "source crawler status should expose explicit configured/full-site-crawl/capacity truth without leaking secrets",
+);
+assert.match(
+  resources,
+  /COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES = 10_000_000[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 75[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 100[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 3[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 4/,
+  "source crawler should use wiki-grade bounded defaults and a larger crawler response budget",
 );
 assert.match(
   resources,
@@ -280,6 +285,11 @@ assert.match(
   resources,
   /crawlSourceRootWithCrawl4AI[\s\S]*fetchSourceUrlViaConfiguredFetcher\(args\.rootUrl\)[\s\S]*crawlerRootUrl = requireSafeSourceIngestionUrl\(preflight\.finalUrl\)[\s\S]*sourceCrawlerEndpointUrl\("\/crawl"\)[\s\S]*urls: \[crawlerRootUrl\][\s\S]*"CrawlerRunConfig"[\s\S]*markdown_generator_options: \{ include_links: true \}[\s\S]*"BFSDeepCrawlStrategy"[\s\S]*max_depth: args\.maxDepth[\s\S]*max_pages: args\.maxPages[\s\S]*include_external: false/,
   "Crawl4AI adapter should preflight the root through the safe fetch broker, then use bounded same-origin BFS crawling and markdown output behind the backend",
+);
+assert.match(
+  resources,
+  /community_source_crawl4ai_failed_\$\{response\.status\}[\s\S]*readResponseTextBounded\([\s\S]*response,[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES/,
+  "Crawl4AI adapter should allow larger bounded crawler payloads than single-page URL fetches",
 );
 assert.match(
   resources,
@@ -662,8 +672,8 @@ assert.match(
 );
 assert.match(
   app,
-  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*!crawlerStatus\?\.configured[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
-  "launch Knowledge Next should preflight crawler configuration and crawl queued source links before regular source ingestion",
+  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*!crawlerStatus\?\.full_site_crawl_available[\s\S]*community_source_full_site_crawl_not_configured[\s\S]*crawlMaxPages[\s\S]*crawlerStatus\.max_pages[\s\S]*crawlMaxDepth[\s\S]*crawlerStatus\.max_depth[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
+  "launch Knowledge Next should require real full-site crawler availability and use crawler-reported capacity before regular source ingestion",
 );
 assert.doesNotMatch(
   app,
@@ -692,7 +702,7 @@ assert.match(
 );
 assert.match(
   modal,
-  /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_crawl_failed[\s\S]*community_source_crawl_no_usable_sources[\s\S]*could not be crawled[\s\S]*community_source_crawl4ai_not_configured[\s\S]*Full site crawling is not configured[\s\S]*community_source_crawler_provider_invalid[\s\S]*Source crawling is misconfigured/,
+  /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_crawl_failed[\s\S]*community_source_crawl_no_usable_sources[\s\S]*could not be crawled[\s\S]*community_source_crawl4ai_not_configured[\s\S]*community_source_full_site_crawl_not_configured[\s\S]*Full site crawling is not configured[\s\S]*community_source_crawler_provider_invalid[\s\S]*Source crawling is misconfigured/,
   "launch Knowledge Next should map crawl failures to founder-readable copy",
 );
 assert.match(
