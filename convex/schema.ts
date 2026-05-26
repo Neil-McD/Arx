@@ -1565,6 +1565,36 @@ export default defineSchema({
     .index("by_community_resource", ["communityId", "resourceId"])
     .index("by_community_updatedAt", ["communityId", "updatedAt"]),
 
+  communitySourceCrawlJobs: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    provider: v.union(v.literal("simple"), v.literal("crawl4ai")),
+    rootUrl: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("crawling"),
+      v.literal("saving_sources"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    maxPages: v.number(),
+    maxDepth: v.number(),
+    pageCount: v.number(),
+    readyPageCount: v.number(),
+    failedPageCount: v.number(),
+    savedSourceCount: v.number(),
+    skippedSourceCount: v.number(),
+    sourceResourceIds: v.optional(v.array(v.id("communityResources"))),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_createdBy", ["createdByUserId"]),
+
   communityResourceModules: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),

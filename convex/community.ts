@@ -90,6 +90,9 @@ import {
   getGitHubSourceConnectionStatus as getGitHubSourceConnectionStatusImpl,
   getGoogleDriveSourceConnectionStatus as getGoogleDriveSourceConnectionStatusImpl,
   getCommunityResourceBuilderHealth as getCommunityResourceBuilderHealthImpl,
+  crawlCommunitySourceRoot as crawlCommunitySourceRootImpl,
+  getCommunitySourceCrawlJob as getCommunitySourceCrawlJobImpl,
+  getCommunitySourceCrawlerStatus as getCommunitySourceCrawlerStatusImpl,
   importGitHubSourceFiles as importGitHubSourceFilesImpl,
   importGoogleDriveSourceFiles as importGoogleDriveSourceFilesImpl,
   ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl,
@@ -98,6 +101,7 @@ import {
   ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl,
   ingestCommunitySources as ingestCommunitySourcesImpl,
   listCommunityLaunchKnowledgeSources as listCommunityLaunchKnowledgeSourcesImpl,
+  listCommunitySourceCrawlJobs as listCommunitySourceCrawlJobsImpl,
   listGitHubSourceFiles as listGitHubSourceFilesImpl,
   listGitHubSourceRepositories as listGitHubSourceRepositoriesImpl,
   listGoogleDriveSourceFiles as listGoogleDriveSourceFilesImpl,
@@ -276,6 +280,9 @@ export const finalizeGitHubSourceOAuth: any = finalizeGitHubSourceOAuthImpl;
 export const generateCommunityResourceSourceUploadUrl = generateCommunityResourceSourceUploadUrlImpl;
 export const getGitHubSourceConnectionStatus = getGitHubSourceConnectionStatusImpl;
 export const getGoogleDriveSourceConnectionStatus = getGoogleDriveSourceConnectionStatusImpl;
+export const crawlCommunitySourceRoot: any = crawlCommunitySourceRootImpl;
+export const getCommunitySourceCrawlJob = getCommunitySourceCrawlJobImpl;
+export const getCommunitySourceCrawlerStatus = getCommunitySourceCrawlerStatusImpl;
 export const importGitHubSourceFiles: any = importGitHubSourceFilesImpl;
 export const importGoogleDriveSourceFiles: any = importGoogleDriveSourceFilesImpl;
 export const ingestCommunitySources: any = ingestCommunitySourcesImpl;
@@ -284,6 +291,7 @@ export const ingestCommunitySourceFiles: any = ingestCommunitySourceFilesImpl;
 export const ingestCommunitySourceGitHub: any = ingestCommunitySourceGitHubImpl;
 export const ingestCommunitySourceGoogleDrive: any = ingestCommunitySourceGoogleDriveImpl;
 export const listCommunityLaunchKnowledgeSources = listCommunityLaunchKnowledgeSourcesImpl;
+export const listCommunitySourceCrawlJobs = listCommunitySourceCrawlJobsImpl;
 export const listGitHubSourceFiles: any = listGitHubSourceFilesImpl;
 export const listGitHubSourceRepositories: any = listGitHubSourceRepositoriesImpl;
 export const listGoogleDriveSourceFiles: any = listGoogleDriveSourceFilesImpl;

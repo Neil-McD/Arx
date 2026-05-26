@@ -19,6 +19,7 @@ const experience = read("convex/communityExperience.ts");
 const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
+const sourceCrawler = read("shared/communitySourceCrawler.ts");
 const app = read("apps/web/src/App.tsx");
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
@@ -30,6 +31,11 @@ assert.match(
   packageJson,
   /"check:community-source-ingestion-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_ingestion_contract_proof\.ts"/,
   "source ingestion proof should be wired into package scripts",
+);
+assert.match(
+  packageJson,
+  /"check:community-source-crawl-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_crawl_behavior_proof\.ts"/,
+  "source crawl behavior proof should be wired into package scripts",
 );
 
 assert.match(
@@ -79,7 +85,7 @@ assert.match(
 );
 assert.match(
   sourceUrlFetcher,
-  /HARD_MAX_BYTES = 750_000[\s\S]*HARD_MAX_CHARS = 20_000[\s\S]*HARD_TIMEOUT_MS = 8_000[\s\S]*HARD_MAX_REDIRECTS = 3/,
+  /HARD_MAX_BYTES = 2_500_000[\s\S]*HARD_MAX_CHARS = 50_000[\s\S]*HARD_TIMEOUT_MS = 8_000[\s\S]*HARD_MAX_REDIRECTS = 3/,
   "source URL fetch broker should enforce hard byte, text, timeout, and redirect limits",
 );
 assert.match(
@@ -115,6 +121,11 @@ assert.match(
 );
 assert.match(
   schema,
+  /communitySourceCrawlJobs:[\s\S]*provider: v\.union\(v\.literal\("simple"\), v\.literal\("crawl4ai"\)\)[\s\S]*rootUrl: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("crawling"\)[\s\S]*v\.literal\("saving_sources"\)[\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*sourceResourceIds:[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
+  "source crawling should persist durable crawl job state with status, limits, counts, and saved source ids",
+);
+assert.match(
+  schema,
   /userSourceIntegrationConnections:[\s\S]*provider: v\.union\(v\.literal\("google_drive"\), v\.literal\("github"\)\)[\s\S]*authKind: v\.literal\("oauth_tokens"\)[\s\S]*encryptedSecretHex:[\s\S]*secretIvHex:[\s\S]*secretVersion:[\s\S]*accountLogin:[\s\S]*accessTokenExpiresAt:[\s\S]*\.index\("by_user_provider", \["userId", "provider"\]\)/,
   "source integrations should store Drive and GitHub OAuth tokens as encrypted per-user connections",
 );
@@ -132,6 +143,16 @@ assert.match(
   schema,
   /communityResourceContents:[\s\S]*resourceId: v\.id\("communityResources"\)[\s\S]*bodyMd: v\.string\(\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*\.index\("by_resource", \["resourceId"\]\)/,
   "large parsed source text should live in resource content rows, not only the hot communityResources metadata row",
+);
+assert.match(
+  sourceCrawler,
+  /communitySourceCrawlerUrlInRootScope[\s\S]*root\.origin !== candidate\.origin[\s\S]*rootPath === "\/"[\s\S]*candidatePath === rootPath \|\| candidatePath\.startsWith\(`\$\{rootPath\}\/`\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias[\s\S]*seenAliases[\s\S]*"existing_ready"[\s\S]*"update_existing"[\s\S]*summarizeCommunitySourceCrawlerPageSaveDecisions/,
+  "source crawler save behavior should be covered by shared pure decision helpers",
+);
+assert.match(
+  resources,
+  /planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "update_existing"[\s\S]*writeCommunityResourceBodyContent/,
+  "crawler source persistence should use the shared save decision helper instead of duplicating dedupe logic",
 );
 
 assert.match(
@@ -224,6 +245,71 @@ assert.match(
   resources,
   /fetchSourceUrlViaConfiguredFetcher[\s\S]*payload\.text[\s\S]*normalizeExtractedText[\s\S]*community_source_url_no_readable_content/,
   "URL ingestion should accept bounded readable text from the configured fetch broker",
+);
+assert.match(
+  sourceCrawler,
+  /export type CommunitySourceCrawlerProvider = "simple" \| "crawl4ai"[\s\S]*export type CommunitySourceCrawlJobStatus = "queued" \| "crawling" \| "saving_sources" \| "ready" \| "failed"[\s\S]*export type CommunitySourcePageResult = \{[\s\S]*requested_url: string[\s\S]*final_url: string[\s\S]*canonical_url: string[\s\S]*root_url: string[\s\S]*parent_url: string \| null[\s\S]*depth: number[\s\S]*markdown: string[\s\S]*links: CommunitySourcePageLink\[\][\s\S]*status: CommunitySourcePageStatus[\s\S]*error: string \| null/,
+  "source crawling should use a stable PolyNet-owned page result contract",
+);
+assert.match(
+  resources,
+  /COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV = "ARX_SOURCE_CRAWLER_PROVIDER"[\s\S]*COMMUNITY_RESOURCE_CRAWL4AI_ENDPOINT_ENV = "ARX_CRAWL4AI_ENDPOINT"[\s\S]*COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV = "ARX_CRAWL4AI_TOKEN"/,
+  "source crawling should be configured through first-party provider and Crawl4AI env vars",
+);
+assert.match(
+  resources,
+  /normalizeSourceCrawlerProvider[\s\S]*raw === "simple"[\s\S]*raw === "crawl4ai"[\s\S]*community_source_crawler_provider_invalid/,
+  "source crawler provider should default to simple and fail closed for unknown providers",
+);
+assert.match(
+  resources,
+  /getCommunitySourceCrawlerStatusValue[\s\S]*provider: "simple"[\s\S]*configured: true[\s\S]*full_site_crawl_available: false[\s\S]*provider: "crawl4ai"[\s\S]*configured[\s\S]*full_site_crawl_available: configured[\s\S]*community_source_crawl4ai_not_configured/,
+  "source crawler status should expose explicit configured/full-site-crawl truth without leaking secrets",
+);
+assert.match(
+  resources,
+  /resolveCrawl4AiEndpoint[\s\S]*community_source_crawl4ai_endpoint_not_configured[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_crawl4ai_endpoint_invalid[\s\S]*parsed\.port && parsed\.port !== "443"/,
+  "Crawl4AI adapter should require a configured HTTPS backend endpoint",
+);
+assert.match(
+  resources,
+  /crawl4AiHeaders[\s\S]*COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV[\s\S]*community_source_crawl4ai_token_not_configured[\s\S]*authorization: `Bearer \$\{token\}`/,
+  "Crawl4AI adapter should require backend bearer authentication",
+);
+assert.match(
+  resources,
+  /crawlSourceRootWithCrawl4AI[\s\S]*fetchSourceUrlViaConfiguredFetcher\(args\.rootUrl\)[\s\S]*crawlerRootUrl = requireSafeSourceIngestionUrl\(preflight\.finalUrl\)[\s\S]*sourceCrawlerEndpointUrl\("\/crawl"\)[\s\S]*urls: \[crawlerRootUrl\][\s\S]*"CrawlerRunConfig"[\s\S]*markdown_generator_options: \{ include_links: true \}[\s\S]*"BFSDeepCrawlStrategy"[\s\S]*max_depth: args\.maxDepth[\s\S]*max_pages: args\.maxPages[\s\S]*include_external: false/,
+  "Crawl4AI adapter should preflight the root through the safe fetch broker, then use bounded same-origin BFS crawling and markdown output behind the backend",
+);
+assert.match(
+  resources,
+  /normalizeCrawl4AiLinks[\s\S]*communitySourceCrawlerUrlInRootScope\(\{[\s\S]*rootUrl,[\s\S]*candidateUrl: url,[\s\S]*normalizeUrl: maybeSafeSourceCrawlerUrl[\s\S]*normalizeCrawl4AiSourcePageResult[\s\S]*communitySourceCrawlerUrlInRootScope\(\{[\s\S]*rootUrl: args\.rootUrl,[\s\S]*candidateUrl: finalUrl,[\s\S]*parentUrl = communitySourceCrawlerUrlInRootScope/,
+  "Crawl4AI result normalization should enforce same-origin plus root-path scope for pages, parents, and links",
+);
+assert.match(
+  resources,
+  /crawlCommunitySourceRoot: any = action\(\{[\s\S]*requireCommunityManagerForAction\(ctx, userId, args\.communityId\)[\s\S]*createCommunitySourceCrawlJobInternal[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*processCommunitySourceCrawlJobInternal[\s\S]*kind: "community_source_root_crawl_job"[\s\S]*job/,
+  "source root crawl should be manager-gated and create a durable asynchronous crawl job",
+);
+assert.match(
+  resources,
+  /processCommunitySourceCrawlJobInternal = internalAction\(\{[\s\S]*status: "crawling"[\s\S]*crawlSourceRootWithConfiguredProvider[\s\S]*status: "saving_sources"[\s\S]*saveCommunitySourceCrawlPagesInternal[\s\S]*sourceResourceIds\.length === 0[\s\S]*community_source_crawl_no_usable_sources[\s\S]*status: "ready"[\s\S]*status: "failed"/,
+  "source crawl jobs should move through crawling, saving, ready, and failed states and fail when no usable source rows exist",
+);
+assert.match(
+  resources,
+  /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent[\s\S]*upsertArchiveDocumentForResource/,
+  "source crawl pages should dedupe root/redirect URL aliases and persist canonical ready URL source rows with large body content and archive sync",
+);
+assert.match(
+  resources,
+  /getCommunitySourceCrawlerStatus = query\(\{[\s\S]*requireCommunityManager[\s\S]*getCommunitySourceCrawlerStatusValue[\s\S]*listCommunitySourceCrawlJobs = query\(\{[\s\S]*requireCommunityManager[\s\S]*by_community_createdAt[\s\S]*mapCommunitySourceCrawlJob[\s\S]*getCommunitySourceCrawlJob = query\(\{[\s\S]*community_source_crawl_job_not_found/,
+  "source crawl jobs should have manager-gated status and progress queries for launch polling",
+);
+assert.doesNotMatch(
+  app,
+  /crawlCommunitySourceRoot|ARX_CRAWL4AI|Crawl4AI/,
+  "Crawl4AI should not be called from the browser UI",
 );
 assert.match(
   resources,
@@ -499,17 +585,17 @@ assert.match(
 
 assert.match(
   experience,
-  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl)(?=[\s\S]*disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectGitHubSourceConnection)(?=[\s\S]*ingestCommunitySourceFiles)(?=[\s\S]*ingestCommunitySourceGitHub)(?=[\s\S]*ingestCommunitySourceGoogleDrive)(?=[\s\S]*ingestCommunitySourceLinks)(?=[\s\S]*ingestCommunitySources)(?=[\s\S]*listCommunityLaunchKnowledgeSources)/,
+  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl)(?=[\s\S]*disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectGitHubSourceConnection)(?=[\s\S]*crawlCommunitySourceRoot)(?=[\s\S]*getCommunitySourceCrawlJob)(?=[\s\S]*getCommunitySourceCrawlerStatus)(?=[\s\S]*ingestCommunitySourceFiles)(?=[\s\S]*ingestCommunitySourceGitHub)(?=[\s\S]*ingestCommunitySourceGoogleDrive)(?=[\s\S]*ingestCommunitySourceLinks)(?=[\s\S]*ingestCommunitySources)(?=[\s\S]*listCommunityLaunchKnowledgeSources)(?=[\s\S]*listCommunitySourceCrawlJobs)/,
   "community experience barrel should expose source ingestion",
 );
 assert.match(
   community,
-  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl)(?=[\s\S]*disconnectGoogleDriveSourceConnection as disconnectGoogleDriveSourceConnectionImpl)(?=[\s\S]*disconnectGitHubSourceConnection as disconnectGitHubSourceConnectionImpl)(?=[\s\S]*ingestCommunitySources as ingestCommunitySourcesImpl)(?=[\s\S]*ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl)(?=[\s\S]*ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl)(?=[\s\S]*ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*ingestCommunitySourceGitHub as ingestCommunitySourceGitHubImpl)(?=[\s\S]*listCommunityLaunchKnowledgeSources as listCommunityLaunchKnowledgeSourcesImpl)(?=[\s\S]*export const beginGoogleDriveSourceOAuth)(?=[\s\S]*export const beginGitHubSourceOAuth)(?=[\s\S]*export const disconnectGoogleDriveSourceConnection)(?=[\s\S]*export const disconnectGitHubSourceConnection)(?=[\s\S]*export const finalizeGoogleDriveSourceOAuth)(?=[\s\S]*export const finalizeGitHubSourceOAuth)(?=[\s\S]*export const listCommunityLaunchKnowledgeSources)(?=[\s\S]*export const listGoogleDriveSourceFiles)(?=[\s\S]*export const listGitHubSourceFiles)(?=[\s\S]*export const importGoogleDriveSourceFiles)(?=[\s\S]*export const importGitHubSourceFiles)(?=[\s\S]*export const ingestCommunitySourceGoogleDrive(?:: any)? = ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*export const ingestCommunitySourceGitHub(?:: any)? = ingestCommunitySourceGitHubImpl)/,
+  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl)(?=[\s\S]*disconnectGoogleDriveSourceConnection as disconnectGoogleDriveSourceConnectionImpl)(?=[\s\S]*disconnectGitHubSourceConnection as disconnectGitHubSourceConnectionImpl)(?=[\s\S]*crawlCommunitySourceRoot as crawlCommunitySourceRootImpl)(?=[\s\S]*getCommunitySourceCrawlJob as getCommunitySourceCrawlJobImpl)(?=[\s\S]*getCommunitySourceCrawlerStatus as getCommunitySourceCrawlerStatusImpl)(?=[\s\S]*ingestCommunitySources as ingestCommunitySourcesImpl)(?=[\s\S]*ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl)(?=[\s\S]*ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl)(?=[\s\S]*ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*ingestCommunitySourceGitHub as ingestCommunitySourceGitHubImpl)(?=[\s\S]*listCommunityLaunchKnowledgeSources as listCommunityLaunchKnowledgeSourcesImpl)(?=[\s\S]*listCommunitySourceCrawlJobs as listCommunitySourceCrawlJobsImpl)(?=[\s\S]*export const beginGoogleDriveSourceOAuth)(?=[\s\S]*export const beginGitHubSourceOAuth)(?=[\s\S]*export const disconnectGoogleDriveSourceConnection)(?=[\s\S]*export const disconnectGitHubSourceConnection)(?=[\s\S]*export const finalizeGoogleDriveSourceOAuth)(?=[\s\S]*export const finalizeGitHubSourceOAuth)(?=[\s\S]*export const crawlCommunitySourceRoot(?:: any)? = crawlCommunitySourceRootImpl)(?=[\s\S]*export const getCommunitySourceCrawlJob)(?=[\s\S]*export const getCommunitySourceCrawlerStatus)(?=[\s\S]*export const listCommunityLaunchKnowledgeSources)(?=[\s\S]*export const listCommunitySourceCrawlJobs)(?=[\s\S]*export const listGoogleDriveSourceFiles)(?=[\s\S]*export const listGitHubSourceFiles)(?=[\s\S]*export const importGoogleDriveSourceFiles)(?=[\s\S]*export const importGitHubSourceFiles)(?=[\s\S]*export const ingestCommunitySourceGoogleDrive(?:: any)? = ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*export const ingestCommunitySourceGitHub(?:: any)? = ingestCommunitySourceGitHubImpl)/,
   "community API should expose source ingestion",
 );
 assert.match(
   gateway,
-  /(?=[\s\S]*community:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("community:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*community:listCommunityLaunchKnowledgeSources)(?=[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:beginGoogleDriveSourceOAuth)(?=[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*community:beginGitHubSourceOAuth)(?=[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection[\s\S]*community:disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectCloudCommunityGitHubSourceConnection[\s\S]*community:disconnectGitHubSourceConnection)(?=[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:finalizeGoogleDriveSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*community:finalizeGitHubSourceOAuth)(?=[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*community:listGoogleDriveSourceFiles)(?=[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*community:listGitHubSourceRepositories)(?=[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*community:listGitHubSourceFiles)(?=[\s\S]*file_limit:[\s\S]*payload\?\.file_limit)(?=[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*community:importGoogleDriveSourceFiles)(?=[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*community:importGitHubSourceFiles)/,
+  /(?=[\s\S]*community:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*client\.query\("community:getCommunitySourceCrawlerStatus" as any)(?=[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*client\.action\("community:crawlCommunitySourceRoot" as any)(?=[\s\S]*getCloudCommunitySourceCrawlJob[\s\S]*client\.query\("community:getCommunitySourceCrawlJob" as any)(?=[\s\S]*listCloudCommunitySourceCrawlJobs[\s\S]*community:listCommunitySourceCrawlJobs)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("community:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*community:listCommunityLaunchKnowledgeSources)(?=[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:beginGoogleDriveSourceOAuth)(?=[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*community:beginGitHubSourceOAuth)(?=[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection[\s\S]*community:disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectCloudCommunityGitHubSourceConnection[\s\S]*community:disconnectGitHubSourceConnection)(?=[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*community:finalizeGoogleDriveSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*community:finalizeGitHubSourceOAuth)(?=[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*community:listGoogleDriveSourceFiles)(?=[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*community:listGitHubSourceRepositories)(?=[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*community:listGitHubSourceFiles)(?=[\s\S]*file_limit:[\s\S]*payload\?\.file_limit)(?=[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*community:importGoogleDriveSourceFiles)(?=[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*community:importGitHubSourceFiles)/,
   "web gateway should call source ingestion and Drive/GitHub integration actions",
 );
 assert.match(
@@ -574,6 +660,11 @@ assert.match(
   /handleIngestCommunityLaunchKnowledgeSources[\s\S]*ingestCloudCommunitySources[\s\S]*loadCommunityResources[\s\S]*refreshActiveCommunityLaunchSetupStatus/,
   "launch Knowledge Next should refresh resources after source ingestion",
 );
+assert.match(
+  app,
+  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*!crawlerStatus\?\.configured[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
+  "launch Knowledge Next should preflight crawler configuration and crawl queued source links before regular source ingestion",
+);
 assert.doesNotMatch(
   app,
   /handleIngestCommunityLaunchKnowledgeSources[\s\S]*limit:\s*20/,
@@ -598,6 +689,11 @@ assert.match(
   modal,
   /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_url_fetcher_failed_413[\s\S]*too large to read/,
   "launch Knowledge Next should not surface raw source URL fetcher 413 codes to founders",
+);
+assert.match(
+  modal,
+  /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_crawl_failed[\s\S]*community_source_crawl_no_usable_sources[\s\S]*could not be crawled[\s\S]*community_source_crawl4ai_not_configured[\s\S]*Full site crawling is not configured[\s\S]*community_source_crawler_provider_invalid[\s\S]*Source crawling is misconfigured/,
+  "launch Knowledge Next should map crawl failures to founder-readable copy",
 );
 assert.match(
   modal,

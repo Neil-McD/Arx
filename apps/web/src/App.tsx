@@ -129,6 +129,7 @@ import {
   applyCloudCommunityWikiArchitectProposal,
   beginCloudCommunityGoogleDriveSourceOAuth,
   beginCloudCommunityGitHubSourceOAuth,
+  crawlCloudCommunitySourceRoot,
   createCloudCommunity,
   deleteCloudCommunityResource,
   disconnectCloudCommunityGitHubSourceConnection,
@@ -138,6 +139,8 @@ import {
   fetchCloudCommunityMemberBillingHistory,
   finalizeCloudCommunityGoogleDriveSourceOAuth,
   finalizeCloudCommunityGitHubSourceOAuth,
+  getCloudCommunitySourceCrawlJob,
+  getCloudCommunitySourceCrawlerStatus,
   getCloudCommunityResourceBuilderHealth,
   importCloudCommunityGitHubSourceFiles,
   importCloudCommunityGoogleDriveSourceFiles,
@@ -153,6 +156,7 @@ import {
   saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
   uploadCloudCommunityResourceSourceFile,
+  type CloudCommunitySourceCrawlJob,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
   loadCloudCommunityLaunchSetupStatus,
@@ -559,6 +563,45 @@ function mapLaunchCommunityCreateError(error: unknown): string {
     return "That community slug is already taken.";
   }
   return message;
+}
+
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES = 10;
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH = 2;
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS = 5;
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_POLL_INTERVAL_MS = 1000;
+const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_POLLS = 45;
+
+function waitForCommunityLaunchDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function getCommunityLaunchSourceCrawlUrl(source: CommunityLaunchKnowledgeImportedSource): string | null {
+  if (source.source_ingestion_kind !== "url") return null;
+  if (source.source_external_provider) return null;
+  if (source.source_ingestion_status === "ready") return null;
+  const url = String(source.source_external_url ?? "").trim();
+  if (!url) return null;
+  return url;
+}
+
+async function waitForCommunityLaunchSourceCrawlJob(args: {
+  session: AuthSession;
+  communityId: string;
+  crawlJobId: string;
+}): Promise<CloudCommunitySourceCrawlJob> {
+  let latestJob: CloudCommunitySourceCrawlJob | null = null;
+  for (let attempt = 0; attempt < COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_POLLS; attempt += 1) {
+    const result = await getCloudCommunitySourceCrawlJob({
+      session: args.session,
+      communityId: args.communityId,
+      crawlJobId: args.crawlJobId,
+    });
+    latestJob = result?.job ?? latestJob;
+    if (latestJob?.status === "ready" || latestJob?.status === "failed") return latestJob;
+    await waitForCommunityLaunchDelay(COMMUNITY_LAUNCH_SOURCE_CRAWL_POLL_INTERVAL_MS);
+  }
+  if (latestJob) return latestJob;
+  throw new Error("community_source_crawl_status_unavailable");
 }
 
 type PublicCommunityRecord = {
@@ -8266,6 +8309,61 @@ export default function App() {
     };
     const handleIngestCommunityLaunchKnowledgeSources = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();
+      const latestSources = await listCloudCommunityLaunchKnowledgeSources({
+        session,
+        communityId: community.id,
+        limit: 100,
+      });
+      const crawlTargets = new Map<string, CommunityLaunchKnowledgeImportedSource>();
+      for (const source of latestSources.sources ?? []) {
+        const crawlUrl = getCommunityLaunchSourceCrawlUrl(source);
+        if (crawlUrl && !crawlTargets.has(crawlUrl)) crawlTargets.set(crawlUrl, source);
+      }
+      const crawlFailures: Array<{ title: string; url: string | null; message: string }> = [];
+      if (crawlTargets.size > 0) {
+        const crawlerStatus = await getCloudCommunitySourceCrawlerStatus({
+          session,
+          communityId: community.id,
+        });
+        if (!crawlerStatus?.configured) {
+          throw new Error(crawlerStatus?.code || "community_source_crawler_not_configured");
+        }
+        await Promise.all(
+          Array.from(crawlTargets.entries())
+            .slice(0, COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS)
+            .map(async ([rootUrl, source]) => {
+              try {
+                const started = await crawlCloudCommunitySourceRoot({
+                  session,
+                  communityId: community.id,
+                  rootUrl,
+                  maxPages: COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES,
+                  maxDepth: COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH,
+                });
+                const crawlJobId = started?.job?.id ?? "";
+                if (!crawlJobId) {
+                  throw new Error("community_source_crawl_job_create_failed");
+                }
+                const job = await waitForCommunityLaunchSourceCrawlJob({
+                  session,
+                  communityId: community.id,
+                  crawlJobId,
+                });
+                if (job.status === "failed") {
+                  throw new Error(job.error || "community_source_crawl_failed");
+                }
+                return { source, rootUrl, job };
+              } catch (error) {
+                crawlFailures.push({
+                  title: source.title || "Source link",
+                  url: rootUrl,
+                  message: error instanceof Error ? error.message : "community_source_crawl_failed",
+                });
+                return null;
+              }
+            }),
+        );
+      }
       const result = await ingestCloudCommunitySources({
         session,
         communityId: community.id,
@@ -8275,7 +8373,30 @@ export default function App() {
         session,
         includeResources: true,
       });
-      return result as any;
+      if (crawlFailures.length === 0) return result as any;
+      return {
+        ...(result ?? {}),
+        ok: false,
+        failed: Number(result?.failed ?? 0) + crawlFailures.length,
+        failures: [
+          ...(Array.isArray(result?.failures) ? result.failures : []),
+          ...crawlFailures.map((failure) => ({
+            resource_id: "",
+            title: failure.title,
+            url: failure.url,
+            message: failure.message,
+          })),
+        ],
+        ready_sources: Number(result?.ready_sources ?? 0),
+        total_sources: Number(result?.total_sources ?? latestSources.sources?.length ?? 0),
+        pending_sources: Number(result?.pending_sources ?? 0),
+        pending_url_sources: Number(result?.pending_url_sources ?? 0),
+        pending_file_sources: Number(result?.pending_file_sources ?? 0),
+        pending_google_drive_sources: Number(result?.pending_google_drive_sources ?? 0),
+        pending_github_sources: Number(result?.pending_github_sources ?? 0),
+        code: result?.code ?? "source_crawl_partial_failure",
+        message: "Some source links could not be fully crawled.",
+      } as any;
     };
     const handleLoadCommunityLaunchKnowledgeSources = async () => {
       const { session, community } = requireCommunityLaunchSaveContext();

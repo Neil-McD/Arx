@@ -170,6 +170,59 @@ export type CloudCommunitySourceLinkIngestionResult = {
 
 export type CloudCommunitySourceIngestionResult = CloudCommunitySourceLinkIngestionResult;
 
+export type CloudCommunitySourceCrawlJobStatus =
+  | "queued"
+  | "crawling"
+  | "saving_sources"
+  | "ready"
+  | "failed";
+
+export type CloudCommunitySourceCrawlJob = {
+  id: string;
+  community_id: string | null;
+  provider: "simple" | "crawl4ai";
+  root_url: string;
+  status: CloudCommunitySourceCrawlJobStatus;
+  max_pages: number;
+  max_depth: number;
+  page_count: number;
+  ready_page_count: number;
+  failed_page_count: number;
+  saved_source_count: number;
+  skipped_source_count: number;
+  source_resource_ids: string[];
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type CloudCommunitySourceCrawlJobResult = {
+  ok: boolean;
+  kind: "community_source_root_crawl_job" | "community_source_crawl_job";
+  job: CloudCommunitySourceCrawlJob | null;
+};
+
+export type CloudCommunitySourceCrawlJobsResult = {
+  ok: boolean;
+  kind: "community_source_crawl_jobs";
+  community_id: string | null;
+  jobs: CloudCommunitySourceCrawlJob[];
+};
+
+export type CloudCommunitySourceCrawlerStatus = {
+  ok: boolean;
+  kind: "community_source_crawler_status";
+  community_id: string | null;
+  provider: "simple" | "crawl4ai";
+  configured: boolean;
+  full_site_crawl_available: boolean;
+  missing: string[];
+  code: string | null;
+  message: string | null;
+};
+
 export type CloudGoogleDriveSourceConnectionStatus = {
   provider: "google_drive";
   auth_kind: "oauth_tokens";
@@ -629,6 +682,73 @@ function normalizeCommunityLaunchKnowledgeSources(payload: unknown): CloudCommun
     .filter((row): row is CloudCommunityLaunchKnowledgeSource => Boolean(row));
 }
 
+function normalizeCommunitySourceCrawlJob(payload: unknown): CloudCommunitySourceCrawlJob | null {
+  const record = (payload ?? null) as Record<string, unknown> | null;
+  const id = typeof record?.id === "string" ? record.id.trim() : "";
+  const rootUrl = typeof record?.root_url === "string" ? record.root_url.trim() : "";
+  const provider = record?.provider === "crawl4ai" ? "crawl4ai" : "simple";
+  const status =
+    record?.status === "queued" ||
+    record?.status === "crawling" ||
+    record?.status === "saving_sources" ||
+    record?.status === "ready" ||
+    record?.status === "failed"
+      ? record.status
+      : "failed";
+  if (!id || !rootUrl) return null;
+  return {
+    id,
+    community_id: typeof record?.community_id === "string" && record.community_id.trim()
+      ? record.community_id.trim()
+      : null,
+    provider,
+    root_url: rootUrl,
+    status,
+    max_pages: Math.max(0, Math.floor(parseGatewayNumberLike(record?.max_pages) ?? 0)),
+    max_depth: Math.max(0, Math.floor(parseGatewayNumberLike(record?.max_depth) ?? 0)),
+    page_count: Math.max(0, Math.floor(parseGatewayNumberLike(record?.page_count) ?? 0)),
+    ready_page_count: Math.max(0, Math.floor(parseGatewayNumberLike(record?.ready_page_count) ?? 0)),
+    failed_page_count: Math.max(0, Math.floor(parseGatewayNumberLike(record?.failed_page_count) ?? 0)),
+    saved_source_count: Math.max(0, Math.floor(parseGatewayNumberLike(record?.saved_source_count) ?? 0)),
+    skipped_source_count: Math.max(0, Math.floor(parseGatewayNumberLike(record?.skipped_source_count) ?? 0)),
+    source_resource_ids: Array.isArray(record?.source_resource_ids)
+      ? record.source_resource_ids
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+      : [],
+    error: typeof record?.error === "string" && record.error.trim() ? record.error.trim() : null,
+    started_at: typeof record?.started_at === "string" && record.started_at.trim() ? record.started_at.trim() : null,
+    completed_at: typeof record?.completed_at === "string" && record.completed_at.trim()
+      ? record.completed_at.trim()
+      : null,
+    created_at: typeof record?.created_at === "string" && record.created_at.trim() ? record.created_at.trim() : null,
+    updated_at: typeof record?.updated_at === "string" && record.updated_at.trim() ? record.updated_at.trim() : null,
+  };
+}
+
+function normalizeCommunitySourceCrawlerStatus(payload: unknown): CloudCommunitySourceCrawlerStatus | null {
+  const record = (payload ?? null) as Record<string, unknown> | null;
+  const provider = record?.provider === "crawl4ai" ? "crawl4ai" : "simple";
+  if (!record || record.kind !== "community_source_crawler_status") return null;
+  return {
+    ok: record.ok !== false,
+    kind: "community_source_crawler_status",
+    community_id: typeof record.community_id === "string" && record.community_id.trim()
+      ? record.community_id.trim()
+      : null,
+    provider,
+    configured: record.configured === true,
+    full_site_crawl_available: record.full_site_crawl_available === true,
+    missing: Array.isArray(record.missing)
+      ? record.missing
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+      : [],
+    code: typeof record.code === "string" && record.code.trim() ? record.code.trim() : null,
+    message: typeof record.message === "string" && record.message.trim() ? record.message.trim() : null,
+  };
+}
+
 export async function listCloudCommunityLaunchKnowledgeSources<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -651,6 +771,104 @@ export async function listCloudCommunityLaunchKnowledgeSources<SessionT>(
         ? payload.community_id.trim()
         : null,
     sources: normalizeCommunityLaunchKnowledgeSources(payload?.sources),
+  };
+}
+
+export async function getCloudCommunitySourceCrawlerStatus<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudCommunitySourceCrawlerStatus | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunitySourceCrawlerStatus" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  return normalizeCommunitySourceCrawlerStatus(payload);
+}
+
+export async function crawlCloudCommunitySourceRoot<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    rootUrl: string;
+    maxPages?: number;
+    maxDepth?: number;
+  },
+): Promise<CloudCommunitySourceCrawlJobResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.action("community:crawlCommunitySourceRoot" as any, {
+    authSubject,
+    communityId: params.communityId,
+    rootUrl: params.rootUrl,
+    maxPages:
+      typeof params.maxPages === "number" && Number.isFinite(params.maxPages)
+        ? Math.max(1, Math.floor(params.maxPages))
+        : undefined,
+    maxDepth:
+      typeof params.maxDepth === "number" && Number.isFinite(params.maxDepth)
+        ? Math.max(1, Math.floor(params.maxDepth))
+        : undefined,
+  });
+  const record = (payload ?? null) as Record<string, unknown> | null;
+  const job = normalizeCommunitySourceCrawlJob(record?.job);
+  if (!record || !job) return null;
+  return {
+    ok: record.ok !== false,
+    kind: "community_source_root_crawl_job",
+    job,
+  };
+}
+
+export async function getCloudCommunitySourceCrawlJob<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    crawlJobId: string;
+  },
+): Promise<CloudCommunitySourceCrawlJobResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunitySourceCrawlJob" as any, {
+    authSubject,
+    communityId: params.communityId,
+    crawlJobId: params.crawlJobId,
+  });
+  const record = (payload ?? null) as Record<string, unknown> | null;
+  const job = normalizeCommunitySourceCrawlJob(record?.job);
+  if (!record || !job) return null;
+  return {
+    ok: record.ok !== false,
+    kind: "community_source_crawl_job",
+    job,
+  };
+}
+
+export async function listCloudCommunitySourceCrawlJobs<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+  },
+): Promise<CloudCommunitySourceCrawlJobsResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:listCommunitySourceCrawlJobs" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit:
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : undefined,
+  });
+  const record = (payload ?? null) as Record<string, unknown> | null;
+  const jobs = Array.isArray(record?.jobs)
+    ? record.jobs
+        .map(normalizeCommunitySourceCrawlJob)
+        .filter((job): job is CloudCommunitySourceCrawlJob => Boolean(job))
+    : [];
+  return {
+    ok: record?.ok !== false,
+    kind: "community_source_crawl_jobs",
+    community_id: typeof record?.community_id === "string" && record.community_id.trim()
+      ? record.community_id.trim()
+      : null,
+    jobs,
   };
 }
 

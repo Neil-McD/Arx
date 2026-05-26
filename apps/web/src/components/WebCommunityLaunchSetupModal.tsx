@@ -741,6 +741,25 @@ function formatKnowledgeIngestionFailureMessage(message: unknown): string {
   if (code === "community_source_url_no_readable_content") {
     return "One source link did not contain readable text. Remove it or add another source.";
   }
+  if (
+    code === "community_source_crawl_failed" ||
+    code === "community_source_crawl_no_usable_sources" ||
+    code === "community_source_crawl4ai_no_results"
+  ) {
+    return "One source link could not be crawled. Remove it, try again, or add that material as a file.";
+  }
+  if (code === "community_source_crawl_status_unavailable") {
+    return "Source crawling took too long. Try again in a moment.";
+  }
+  if (
+    code === "community_source_crawl4ai_not_configured" ||
+    code === "community_source_crawler_not_configured"
+  ) {
+    return "Full site crawling is not configured yet.";
+  }
+  if (code === "community_source_crawler_provider_invalid") {
+    return "Source crawling is misconfigured.";
+  }
   if (code === "community_source_pdf_ingestion_not_supported") {
     return "PDF links are not readable yet. Upload a text export or add another source.";
   }
