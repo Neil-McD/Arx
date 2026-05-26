@@ -770,6 +770,16 @@ function proveAutomaticUnlockContract(convexSource: string, gatewaySource: strin
     "settingsGroup !== \"partners\"",
     "App shell",
   );
+  assertIncludes(
+    appSource,
+    "ensureUsableAuthSession(nextSession ?? undefined, \"builder_partner_program_load\")",
+    "Builder Partner program loads must refresh or verify even when a caller passes a session",
+  );
+  assert.doesNotMatch(
+    appSource,
+    /const usableSession = nextSession \?\? await ensureUsableAuthSession\(\)/,
+    "Builder Partner program loads must not bypass usable-session verification for passed sessions",
+  );
 }
 
 function proveEligibilityGateContract(

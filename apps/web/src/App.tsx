@@ -5944,7 +5944,7 @@ export default function App() {
   const loadBuilderPartnerProgram = useCallback(
     async (nextSession?: AuthSession | null): Promise<BuilderPartnerProgramSnapshot | null> => {
       const requestId = ++builderPartnerProgramLoadRequestIdRef.current;
-      const usableSession = nextSession ?? await ensureUsableAuthSession();
+      const usableSession = await ensureUsableAuthSession(nextSession ?? undefined, "builder_partner_program_load");
       if (!usableSession) {
         if (requestId === builderPartnerProgramLoadRequestIdRef.current) {
           setBuilderPartnerProgram(null);
