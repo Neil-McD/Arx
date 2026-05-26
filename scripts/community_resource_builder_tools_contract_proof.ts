@@ -314,6 +314,16 @@ assert.match(
 );
 assert.match(
   toolRegistry,
+  /COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA[\s\S]*additionalProperties: false[\s\S]*items: COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA/,
+  "stage changeset operation items must stay strict-provider compatible",
+);
+assert.doesNotMatch(
+  toolRegistry,
+  /COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA[\s\S]*additionalProperties: true[\s\S]*COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
+  "stage changeset schema must not expose loose nested operation objects",
+);
+assert.match(
+  toolRegistry,
   /community_resource_builder_apply_changeset[\s\S]*COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
   "apply changeset tool should be registered",
 );

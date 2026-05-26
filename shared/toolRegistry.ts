@@ -231,6 +231,96 @@ const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["op"],
+  properties: {
+    op: {
+      type: "string",
+      enum: [
+        "create_module",
+        "edit_module",
+        "create_page",
+        "edit_page",
+        "move_resource",
+        "link_source_to_page",
+      ],
+      description: "Changeset operation kind.",
+    },
+    module_key: {
+      type: "string",
+      maxLength: 120,
+      description: "Temporary key used to reference a module created earlier in the same changeset.",
+    },
+    module_id: {
+      type: "string",
+      maxLength: 160,
+      description: "Existing resource module id.",
+    },
+    resource_id: {
+      type: "string",
+      maxLength: 160,
+      description: "Existing page/source resource id.",
+    },
+    page_resource_id: {
+      type: "string",
+      maxLength: 160,
+      description: "Existing page resource id for source-link operations.",
+    },
+    source_resource_id: {
+      type: "string",
+      maxLength: 160,
+      description: "Existing source resource id.",
+    },
+    expected_updated_at: {
+      type: "integer",
+      minimum: 0,
+      maximum: 9999999999999,
+      description: "Last-seen updated_at timestamp for optimistic concurrency.",
+    },
+    name: {
+      type: "string",
+      maxLength: 180,
+      description: "Module name.",
+    },
+    title: {
+      type: "string",
+      maxLength: 180,
+      description: "Page title.",
+    },
+    description_md: {
+      type: "string",
+      maxLength: 1200,
+      description: "Module description markdown.",
+    },
+    body_md: {
+      type: "string",
+      maxLength: 20000,
+      description: "Page body markdown.",
+    },
+    module_status: {
+      type: "string",
+      enum: ["draft", "live"],
+    },
+    resource_status: {
+      type: "string",
+      enum: ["draft", "review", "processing", "failed"],
+    },
+    type: {
+      type: "string",
+      enum: ["post", "embed", "link", "file"],
+    },
+    url: {
+      type: "string",
+      maxLength: 2048,
+    },
+    pinned: {
+      type: "boolean",
+    },
+  },
+};
+
 const COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -248,10 +338,7 @@ const COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA: JsonSchema = {
       maxItems: 25,
       description:
         "Proposed resource changes. Supported op values: create_module, edit_module, create_page, edit_page, move_resource, link_source_to_page.",
-      items: {
-        type: "object",
-        additionalProperties: true,
-      },
+      items: COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA,
     },
   },
 };
@@ -1171,6 +1258,75 @@ function normalizeString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeBuilderChangesetOperationForTool(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const record = raw as Record<string, unknown>;
+  const op = String(record.op ?? record.kind ?? "").trim().toLowerCase();
+  const out: Record<string, unknown> = op ? { op: op.slice(0, 80) } : {};
+  const copyString = (from: string, to = from, maxLength = 2000) => {
+    const value = normalizeString(record[from]);
+    if (value) out[to] = value.slice(0, maxLength);
+  };
+  const copyInteger = (from: string, to = from) => {
+    const value = Math.floor(Number(record[from]));
+    if (Number.isFinite(value) && value >= 0) out[to] = value;
+  };
+
+  if (op === "create_module") {
+    copyString("module_key", "module_key", 120);
+    copyString("name", "name", 180);
+    copyString("description_md", "description_md", 1200);
+    copyString("module_status", "module_status", 20);
+    return out;
+  }
+  if (op === "edit_module") {
+    copyString("module_id", "module_id", 160);
+    copyInteger("expected_updated_at", "expected_updated_at");
+    copyString("name", "name", 180);
+    copyString("description_md", "description_md", 1200);
+    copyString("module_status", "module_status", 20);
+    return out;
+  }
+  if (op === "create_page") {
+    copyString("module_id", "module_id", 160);
+    copyString("module_key", "module_key", 120);
+    copyString("title", "title", 180);
+    copyString("body_md", "body_md", 20000);
+    copyString("source_resource_id", "source_resource_id", 160);
+    copyString("type", "type", 20);
+    copyString("url", "url", 2048);
+    copyString("resource_status", "resource_status", 20);
+    if (typeof record.pinned === "boolean") out.pinned = record.pinned;
+    return out;
+  }
+  if (op === "edit_page") {
+    copyString("resource_id", "resource_id", 160);
+    copyInteger("expected_updated_at", "expected_updated_at");
+    copyString("module_id", "module_id", 160);
+    copyString("title", "title", 180);
+    copyString("body_md", "body_md", 20000);
+    copyString("source_resource_id", "source_resource_id", 160);
+    copyString("type", "type", 20);
+    copyString("url", "url", 2048);
+    copyString("resource_status", "resource_status", 20);
+    if (typeof record.pinned === "boolean") out.pinned = record.pinned;
+    return out;
+  }
+  if (op === "move_resource") {
+    copyString("resource_id", "resource_id", 160);
+    copyInteger("expected_updated_at", "expected_updated_at");
+    copyString("module_id", "module_id", 160);
+    return out;
+  }
+  if (op === "link_source_to_page") {
+    copyString("page_resource_id", "page_resource_id", 160);
+    copyInteger("expected_updated_at", "expected_updated_at");
+    copyString("source_resource_id", "source_resource_id", 160);
+    return out;
+  }
+  return out;
+}
+
 function normalizePositiveInteger(
   value: unknown,
   fieldName: string,
@@ -1333,9 +1489,7 @@ export function normalizeToolArguments(
     return {
       summary: summary.slice(0, 2000),
       operations: args.operations.map((operation) =>
-        operation && typeof operation === "object" && !Array.isArray(operation)
-          ? operation
-          : {},
+        normalizeBuilderChangesetOperationForTool(operation),
       ),
     };
   }
