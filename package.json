@@ -113,6 +113,7 @@
     "probe:blaxel-convex-runtime": "bash scripts/run_blaxel_convex_runtime_probe.sh",
     "smoke:blaxel-convex-sandbox": "bash scripts/run_blaxel_convex_sandbox_smoke.sh",
     "smoke:blaxel-convex-volume": "bash scripts/run_blaxel_convex_volume_smoke.sh",
+    "smoke:blaxel-runtime-tools": "bash scripts/run_blaxel_runtime_workspace_tools_smoke.sh",
     "probe:blaxel-workspace-lifecycle": "bash scripts/run_blaxel_workspace_lifecycle_probe.sh",
     "probe:blaxel-workspace-lifecycle-upgrade": "bash scripts/run_blaxel_workspace_lifecycle_upgrade_probe.sh",
     "diagnose:blaxel-workspace-inspector": "bash scripts/run_blaxel_workspace_inspector_diagnostic.sh",

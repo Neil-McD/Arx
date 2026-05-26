@@ -167,6 +167,10 @@ Blaxel can only become selectable after all of these are true:
 - The Convex volume smoke passes in staging, or reports only the known Blaxel
   volume quota blocker while confirming no sandbox was left running.
 - The Blaxel workspace lifecycle proof passes with project volumes enabled.
+- The Blaxel runtime tools smoke passes against a real staging project through
+  `executeRuntimeWorkspaceTool`, proving `list_dir`, `write`, `read`, `bash`,
+  `glob`, `grep`, `sha256`, and `edit` all use the same provider-neutral path
+  chat uses.
 - The server explicitly enables the Blaxel provider.
 - The deployment is not production.
 

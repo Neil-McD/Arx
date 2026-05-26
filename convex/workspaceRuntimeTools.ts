@@ -487,7 +487,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
         "if command -v rg >/dev/null 2>&1; then",
         `  rg --no-heading --line-number --color never --max-count 200 ${shellQuote(pattern)} .`,
         "else",
-        `  grep -RIn --binary-files=without-match -m 200 -- ${shellQuote(pattern)} .`,
+        `  grep -Rns -m 200 -- ${shellQuote(pattern)} .`,
         "fi",
       ].join("\n"),
       timeoutSeconds: 20,
