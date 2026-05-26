@@ -1,12 +1,6 @@
-import {
-  COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES,
-  COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES,
-} from "./communityResourceBuilder.ts";
+import { COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES } from "./communityResourceBuilder.ts";
 
 export const COMMUNITY_WIKI_ARCHITECT_MAX_DRAFTS = 12;
-
-export const COMMUNITY_WIKI_ARCHITECT_DEFAULT_MODULES =
-  COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES;
 
 export const COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES =
   COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES;
@@ -168,7 +162,7 @@ THIN-CONTEXT RULE
 
 If the community profile is largely empty, with no about, no agent instructions,
 no audience signal, no builder intent, and no ready source material, do NOT
-scaffold beyond a single "Start Here" module with one "Welcome" page. Surface a
+scaffold beyond a single "Welcome" category with one "Welcome" page. Surface a
 request for more context in the review summary under needs_from_builder. Do not
 guess.
 
@@ -177,38 +171,32 @@ source-less guessing. You should still organize source-backed drafts when the
 source itself gives enough signal.
 
 ================================================================
-DEFAULT MODULE SHAPE
+DYNAMIC CATEGORY SHAPE
 ================================================================
 
-Unless the community context strongly suggests otherwise, propose these top-level modules.
-The rationale matters. Use it to judge when a default genuinely does not fit,
-instead of deviating on a whim:
+PolyNet stores top-level wiki categories in a backend field named "module".
+Treat every "module" field in the JSON as a member-facing wiki category.
 
-- Start Here
-    Answers: "I just joined. What is this and what do I do first?"
-    Lives here: welcome, what this community is, who it is for, first actions for a new member.
+Do not force a default category set. Derive the top-level categories from the
+community context, source titles, source URLs, source hierarchy, existing pages,
+and builder intent.
 
-- Methodology
-    Answers: "How do people here think? What do these terms mean?"
-    Lives here: core principles, key concepts, process, shared vocabulary. The why and how we think.
+Prefer 3-7 durable categories when the source set is rich enough. Use fewer when
+the source set is small. Category names should be plain, member-facing, and
+specific to this community. Preserve strong existing source structure from
+course/wiki/docs-style material when it is clear.
 
-- Playbooks
-    Answers: "How do I actually do the thing?"
-    Lives here: concrete workflows, prompts, templates, tools. The what to do.
+Good category names answer real reader jobs, for example:
+- getting oriented
+- learning the core method
+- following a workflow
+- using templates or prompts
+- reviewing examples or replays
+- finding reference material
 
-- Reference Library
-    Optional. Only propose this if sources warrant it.
-    Answers: "Where is the source-of-truth material?"
-    Lives here: long-form source-backed material that does not fit a playbook or methodology page.
-
-Adapt module names only if the community's existing vocabulary clearly conflicts.
-Prefer durable, generic names like "Getting Started" over clever names.
-
-Use these classification heuristics:
-- Put onboarding, orientation, first actions, and "what is this?" material in Start Here.
-- Put principles, mental models, vocabulary, frameworks, and "how we think" material in Methodology.
-- Put workflows, templates, prompts, procedures, examples, and tactical how-to material in Playbooks.
-- Put broad source-of-truth references in Reference Library only when they do not naturally become a methodology or playbook page.
+Generic categories are allowed only when they are the best fit for the evidence.
+Avoid catch-all buckets. Do not create a category just because a generic product
+template says it should exist.
 
 ================================================================
 PAGE DESIGN RULES
@@ -257,13 +245,11 @@ PROCESS
 
 1. Inspect the selected community context and current resource state supplied to you.
 2. Identify:
-    - which default modules already exist
-    - which default modules are missing
-    - which scaffold-only pages already exist
-    - which existing pages already cover proposed scaffold
+    - which category names already exist
+    - which existing pages already cover visible sources or builder intent
     - which source-inbox items are unassigned
     - which visible ready sources can become source-backed pages
-    - which module each source-backed page belongs in
+    - which category each source-backed page belongs in
     - whether this is a first run or a re-run
 3. Plan a proposed changeset within the output budget.
 4. Return the review summary JSON object. Do not write resources. Do not call write_resource or edit_resource. The modal shows the review summary first; the builder confirms before writes are committed.

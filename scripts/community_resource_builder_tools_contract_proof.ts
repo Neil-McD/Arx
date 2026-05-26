@@ -171,20 +171,10 @@ assert.match(
   /COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50/,
   "builder health should cap per-bucket issue samples",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES/,
-  "health check should know the default wiki modules",
-);
-assert.match(
-  resources,
-  /missing_default_modules: missingDefaultModules/,
-  "health summary should expose missing default modules",
-);
-assert.match(
-  resources,
-  /missing_scaffold_pages: missingScaffoldPages/,
-  "health summary should expose missing scaffold pages",
+  /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES|missing_default_modules|missing_scaffold_pages/,
+  "builder health should not require fixed default modules or scaffold pages",
 );
 assert.match(
   resources,
@@ -203,8 +193,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /getCommunityResourceBuilderScaffoldPageKey/,
-  "health should use the shared scaffold page key helper",
+  /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES/,
+  "health should retain the tiny fallback-page whitelist",
 );
 assert.match(
   resources,
@@ -216,15 +206,15 @@ assert.match(
   /pagesWithoutSourceLineage:[\s\S]*!isBuilderScaffoldPageTitle\(page\.title\)/,
   "health check should not flag default scaffold pages as missing source lineage",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /emptyModules:[\s\S]*!isBuilderDefaultModuleName\(module\.name\)/,
-  "health check should not flag intentionally empty default modules",
+  /isBuilderDefaultModuleName/,
+  "health check should flag empty categories instead of exempting default modules",
 );
 assert.match(
   resources,
-  /ensureCommunityResourceWikiScaffold[\s\S]*COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES[\s\S]*COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES/,
-  "scaffold creation should use shared default module/page constants",
+  /ensureCommunityResourceWikiScaffold[\s\S]*for \(const page of COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES\)[\s\S]*ctx\.db\.insert\("communityResourceModules"[\s\S]*name: page\.moduleName/,
+  "scaffold creation should create only the shared tiny fallback category/page when needed",
 );
 assert.match(
   resources,
@@ -261,10 +251,10 @@ assert.match(
   /onEnsureKnowledgeScaffold[\s\S]*onGenerateKnowledgePlan/,
   "knowledge modal should run scaffold creation internally before generating a wiki plan",
 );
-assert.match(
+assert.doesNotMatch(
   launchModal,
-  /missing_scaffold_pages/,
-  "knowledge modal should account for missing scaffold pages, not only missing modules",
+  /missing_default_modules|missing_scaffold_pages/,
+  "knowledge modal should not use fixed scaffold requirements to decide fallback creation",
 );
 assert.match(
   launchModal,

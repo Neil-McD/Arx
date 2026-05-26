@@ -61,10 +61,8 @@ import {
   parseCommunityResourceDirectoryUri,
 } from "../shared/communityResourceDirectory";
 import {
-  COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES,
   COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES,
   COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES,
-  getCommunityResourceBuilderScaffoldPageKey,
 } from "../shared/communityResourceBuilder";
 import type {
   CommunitySourceCrawlJobStatus,
@@ -2506,12 +2504,6 @@ function normalizeBuilderHealthTitle(raw: unknown): string {
 function isBuilderScaffoldPageTitle(raw: unknown): boolean {
   return COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES.some(
     (title) => normalizeBuilderHealthTitle(title) === normalizeBuilderHealthTitle(raw),
-  );
-}
-
-function isBuilderDefaultModuleName(raw: unknown): boolean {
-  return COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES.some(
-    (moduleName) => normalizeBuilderHealthTitle(moduleName) === normalizeBuilderHealthTitle(raw),
   );
 }
 
@@ -5855,30 +5847,6 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
   const { modules, resources } = args;
   const pages = resources.filter((row) => normalizeResourceRole(row.role) === "page");
   const sources = resources.filter((row) => normalizeResourceRole(row.role) === "source");
-  const existingModuleNames = new Set(modules.map((module) => normalizeBuilderHealthTitle(module.name)));
-  const missingDefaultModules = COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES.filter(
-    (moduleName) => !existingModuleNames.has(normalizeBuilderHealthTitle(moduleName)),
-  );
-  const moduleNameById = new Map(
-    modules.map((module) => [normalizeIdValue(module._id), String(module.name ?? "")]),
-  );
-  const existingScaffoldPageKeys = new Set(
-    pages.map((page) =>
-      getCommunityResourceBuilderScaffoldPageKey({
-        moduleName: moduleNameById.get(normalizeIdValue(page.moduleId ?? "")) ?? "",
-        title: page.title,
-      }),
-    ),
-  );
-  const missingScaffoldPages = COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES.filter(
-    (page) =>
-      !existingScaffoldPageKeys.has(
-        getCommunityResourceBuilderScaffoldPageKey({
-          moduleName: page.moduleName,
-          title: page.title,
-        }),
-      ),
-  ).map((page) => `${page.moduleName}/${page.title}`);
   const referencedSourceIds = new Set(
     pages
       .map((row) => normalizeIdValue(row.sourceResourceId ?? ""))
@@ -5893,11 +5861,7 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
   const staleDraftCutoff = args.nowMs - COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS;
   const allIssues = {
     emptyModules: modules
-      .filter(
-        (module) =>
-          (modulePageCounts.get(normalizeIdValue(module._id)) ?? 0) === 0 &&
-          !isBuilderDefaultModuleName(module.name),
-      )
+      .filter((module) => (modulePageCounts.get(normalizeIdValue(module._id)) ?? 0) === 0)
       .map((module) => ({
         module_id: normalizeIdValue(module._id),
         name: module.name,
@@ -5963,8 +5927,6 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
       sources: sources.length,
       draft_pages: pages.filter((page) => normalizeResourceStatus(page.status) === "draft").length,
       source_inbox_items: sources.length,
-      missing_default_modules: missingDefaultModules,
-      missing_scaffold_pages: missingScaffoldPages,
       issue_count:
         issueTotals.emptyModules +
         issueTotals.sparsePages +
@@ -6009,28 +5971,6 @@ export const ensureCommunityResourceWikiScaffold = mutation({
     const existingModules: string[] = [];
     let nextModuleSortOrder = modules.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
 
-    for (const moduleName of COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES) {
-      const key = normalizeBuilderHealthTitle(moduleName);
-      if (moduleByName.has(key)) {
-        existingModules.push(moduleName);
-        continue;
-      }
-      const id = await ctx.db.insert("communityResourceModules" as any, {
-        communityId: args.communityId,
-        createdByUserId: userId,
-        status: "draft",
-        name: moduleName,
-        sortOrder: nextModuleSortOrder,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      nextModuleSortOrder += 1000;
-      const created = (await ctx.db.get(id as any)) as CommunityResourceModuleLike | null;
-      if (!created) throw new Error("community_resource_module_create_failed");
-      moduleByName.set(key, created);
-      modulesCreated.push(moduleName);
-    }
-
     const resources = (await ctx.db
       .query("communityResources" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
@@ -6044,8 +5984,26 @@ export const ensureCommunityResourceWikiScaffold = mutation({
     const existingPages: string[] = [];
 
     for (const page of COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_PAGES) {
-      const module = moduleByName.get(normalizeBuilderHealthTitle(page.moduleName));
-      if (!module) throw new Error("community_resource_scaffold_module_missing");
+      const moduleKey = normalizeBuilderHealthTitle(page.moduleName);
+      let module = moduleByName.get(moduleKey) ?? null;
+      if (!module) {
+        const moduleId = await ctx.db.insert("communityResourceModules" as any, {
+          communityId: args.communityId,
+          createdByUserId: userId,
+          status: "draft",
+          name: page.moduleName,
+          sortOrder: nextModuleSortOrder,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+        nextModuleSortOrder += 1000;
+        module = (await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null;
+        if (!module) throw new Error("community_resource_module_create_failed");
+        moduleByName.set(moduleKey, module);
+        modulesCreated.push(page.moduleName);
+      } else {
+        existingModules.push(page.moduleName);
+      }
       const pageKey = `${normalizeIdValue(module._id)}:${normalizeBuilderHealthTitle(page.title)}`;
       if (pagesByModuleAndTitle.has(pageKey)) {
         existingPages.push(`${page.moduleName}/${page.title}`);

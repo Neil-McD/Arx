@@ -100,7 +100,7 @@ const validProposal = {
       title: "First Steps",
       module: "Start Here",
       purpose: "The first actions a new member should take.",
-      source_resource_id: null,
+      source_resource_id: "src_3",
     },
   ],
   drafts_updated: [
@@ -116,8 +116,8 @@ const validProposal = {
   proposed_changes_to_existing: [
     { title: "Published Guide", module: "Playbooks", status: "published", suggestion: "Move under Playbooks later." },
   ],
-  sources_assigned: ["src_1", "src_2"],
-  sources_unassigned: [{ id: "src_3", reason: "interesting but too weak for a standalone page" }],
+  sources_assigned: ["src_1", "src_2", "src_3"],
+  sources_unassigned: [],
   gaps: [{ title: "How we think", module: "Methodology", needed_source: "A builder principles note." }],
   deferred: [{ title: "Interview Notes", module: "Reference Library", reason: "lower leverage for first pass" }],
   recommended_next_uploads: ["Upload a short principles note."],
@@ -136,12 +136,12 @@ const validThinFirstRun = validateCommunityWikiArchitectProposal({
   sourceInbox: [],
   proposal: {
     run_type: "first",
-    modules_created: [{ name: "Start Here", purpose: "Orient new members before the wiki has sources." }],
+    modules_created: [{ name: "Welcome", purpose: "Orient new members before the wiki has sources." }],
     modules_existing: [],
     drafts_created: [
       {
         title: "Welcome",
-        module: "Start Here",
+        module: "Welcome",
         purpose: "A simple orientation page for new members.",
         source_resource_id: null,
       },
@@ -408,6 +408,7 @@ expectInvalid(
 expectInvalid(
   {
     ...validProposal,
+    drafts_created: [validProposal.drafts_created[0]],
     sources_assigned: ["src_1", "src_2", "src_3"],
     sources_unassigned: [],
   },

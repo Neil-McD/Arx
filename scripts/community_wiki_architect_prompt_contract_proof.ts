@@ -24,18 +24,14 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES/,
-  "architect defaults should reuse builder default modules",
-);
-assert.match(
-  promptSource,
   /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES/,
   "architect scaffold whitelist should reuse builder scaffold titles",
 );
-
-for (const moduleName of ["Start Here", "Methodology", "Playbooks"] as const) {
-  assert.match(promptSource, new RegExp(moduleName), `prompt should mention ${moduleName}`);
-}
+assert.doesNotMatch(
+  promptSource,
+  /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES|DEFAULT MODULE SHAPE|Start Here|Methodology|Playbooks|Reference Library/,
+  "architect prompt should not hardcode a default category set",
+);
 
 assert.match(
   promptSource,
@@ -140,7 +136,7 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /single\s+"Start Here"\s+module with one\s+"Welcome"\s+page/,
+  /single\s+"Welcome"\s+category with one\s+"Welcome"\s+page/,
   "thin-context fallback should be small",
 );
 assert.match(
@@ -150,8 +146,8 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /classification heuristics[\s\S]*Start Here[\s\S]*Methodology[\s\S]*Playbooks[\s\S]*Reference Library/,
-  "architect prompt should define module classification heuristics",
+  /DYNAMIC CATEGORY SHAPE[\s\S]*Do not force a default category set[\s\S]*Derive the top-level categories[\s\S]*Prefer 3-7 durable categories/,
+  "architect prompt should derive categories from evidence instead of fixed defaults",
 );
 assert.match(
   promptSource,

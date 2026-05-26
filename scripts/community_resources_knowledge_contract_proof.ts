@@ -473,8 +473,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /Source Inbox/,
-  "resources panel must show the source inbox inside each module",
+  /knowledge-source-inbox-section[\s\S]*Source Inbox[\s\S]*allSourceResources/,
+  "resources panel must keep builder sources in a separate source inbox",
 );
 assert.match(
   resourcesPanel,
@@ -488,8 +488,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /module\.is_virtual \? "Cleanup"/,
-  "virtual unsorted cleanup bucket must use cleanup labeling instead of live/draft module labeling",
+  /module\.is_virtual \? \([\s\S]*Cleanup/,
+  "virtual unsorted cleanup bucket must use cleanup labeling instead of live/draft category labeling",
 );
 assert.match(
   resourcesPanel,
@@ -519,7 +519,7 @@ assert.doesNotMatch(
 assert.match(
   resourcesPanel,
   /actions\.handleSetModuleStatus\(selectedModule, selectedModuleNextStatus\)/,
-  "resources panel must expose module-level live/draft changes",
+  "resources panel must expose category-level live/draft changes through the canonical module status action",
 );
 assert.match(
   resourceController,

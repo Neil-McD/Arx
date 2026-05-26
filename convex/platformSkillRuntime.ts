@@ -15,7 +15,7 @@ export const PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
   "Stage: only after explicit builder confirmation of the concrete plan, call community_resource_builder_stage_changeset to create the exact implementation proposal.",
   "Approval: never call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder approves the exact staged changeset.",
   "Verification: after applying, verify by listing or reading affected resources, then report what changed and what remains.",
-  "Architecture target: keep Resources organized into clear member-facing modules such as Start Here, Methodology, Playbooks, or a better evidence-backed module set for this community.",
+  "Architecture target: keep Resources organized into clear member-facing categories derived from this community's context, source structure, and builder intent. The tool schema may call these modules, but the product concept is a wiki category.",
   "Avoid dumping items into Unsorted unless no defensible placement exists. If something is unsorted, explain the missing signal and propose the smallest follow-up needed.",
   "Preserve source provenance. Keep URLs, provider references, file names, repo paths, and source titles attached to the drafted or refactored resource wherever possible.",
   "Prefer the smallest reliable action: dedupe obvious duplicates, move items into the right module, draft missing pages from specific source evidence, and leave unclear material for review.",

@@ -119,10 +119,10 @@ export type CommunityLaunchKnowledgeFileSaveDraft = {
 export type CommunityLaunchKnowledgeHealth = {
   summary?: {
     modules?: number;
+    pages?: number;
+    sources?: number;
     draft_pages?: number;
     source_inbox_items?: number;
-    missing_default_modules?: string[];
-    missing_scaffold_pages?: string[];
     issue_count?: number;
   };
   issues?: {
@@ -2120,11 +2120,11 @@ export function WebCommunityLaunchSetupModal(
         );
         if (!sourceBackedPlan && onEnsureKnowledgeScaffold) {
           const currentHealth = await onLoadKnowledgeHealth();
-          const missingDefaultModules =
-            currentHealth?.summary?.missing_default_modules ?? [];
-          const missingScaffoldPages =
-            currentHealth?.summary?.missing_scaffold_pages ?? [];
-          if (missingDefaultModules.length > 0 || missingScaffoldPages.length > 0) {
+          const resourceShapeCount =
+            Number(currentHealth?.summary?.modules ?? 0) +
+            Number(currentHealth?.summary?.pages ?? 0) +
+            Number(currentHealth?.summary?.sources ?? currentHealth?.summary?.source_inbox_items ?? 0);
+          if (resourceShapeCount <= 0) {
             await onEnsureKnowledgeScaffold();
           }
         }

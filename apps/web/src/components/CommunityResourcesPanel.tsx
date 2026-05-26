@@ -6,9 +6,9 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
 } from "react";
 import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
-import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import type {
   CommunityResource,
   CommunityResourceModule,
@@ -63,10 +63,6 @@ function getResourceLineageDetail(resource: CommunityResource): string {
     meta.primary,
     meta.secondary,
   ].filter(Boolean).join(" · ");
-}
-
-function getResourceModuleSelectionId(resource: CommunityResource): string {
-  return resource.module_id ?? LEGACY_RESOURCE_MODULE_ID;
 }
 
 function compareResources(a: CommunityResource, b: CommunityResource): number {
@@ -140,15 +136,6 @@ function LinkIcon() {
   );
 }
 
-function BackIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M19 12H5" />
-      <path d="M12 19l-7-7 7-7" />
-    </svg>
-  );
-}
-
 function ModuleStatusIcon(props: { status: "draft" | "live" }) {
   return props.status === "live" ? (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -162,28 +149,35 @@ function ModuleStatusIcon(props: { status: "draft" | "live" }) {
   );
 }
 
-function ResourceModuleCard(props: {
+function ResourceCategorySection(props: {
   module: ResourceModuleView;
-  onOpen: () => void;
+  pageCount: number;
+  sourceCount: number;
+  isActive: boolean;
   onEdit: () => void;
   onSetStatus: (status: "draft" | "live") => void;
   onDelete: () => void;
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
-  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onSelectCategory: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>) => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDragLeave: () => void;
-  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
   canManage: boolean;
   canReorder: boolean;
   isDragging: boolean;
   isDropTarget: boolean;
+  children: ReactNode;
 }) {
   const {
     module,
-    onOpen,
+    pageCount,
+    sourceCount,
+    isActive,
     onEdit,
     onSetStatus,
     onDelete,
+    onSelectCategory,
     onDragStart,
     onDragOver,
     onDragLeave,
@@ -193,16 +187,16 @@ function ResourceModuleCard(props: {
     canReorder,
     isDragging,
     isDropTarget,
+    children,
   } = props;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const moduleStatus = module.module_status === "live" ? "live" : "draft";
   const nextModuleStatus = moduleStatus === "live" ? "draft" : "live";
-  const cornerBadge = module.is_virtual ? "Cleanup" : moduleStatus === "draft" ? "Draft" : null;
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    onOpen();
+    onSelectCategory();
   };
   const handleMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -215,43 +209,64 @@ function ResourceModuleCard(props: {
   };
 
   return (
-    <div
+    <section
       className={[
-        "discover-card clickable resource-module-card",
+        "knowledge-category-section",
+        isActive ? "is-active" : "",
         module.is_virtual ? "is-virtual" : "",
         canReorder ? "can-reorder" : "",
         isDragging ? "is-dragging" : "",
         isDropTarget ? "is-drop-target" : "",
       ].filter(Boolean).join(" ")}
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${module.name}`}
-      draggable={canReorder}
-      onClick={onOpen}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      onKeyDown={handleKeyDown}
       onMouseLeave={() => setIsMenuOpen(false)}
     >
-      {canManage ? (
-        <div className="resource-module-card-menu">
-          <button
-            className="resource-module-card-menu-trigger"
-            type="button"
-            title="Module actions"
-            aria-label={`Actions for ${module.name}`}
-            aria-haspopup="menu"
-            aria-expanded={isMenuOpen}
-            onClick={handleMenuClick}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <MoreIcon />
-          </button>
-          {isMenuOpen ? (
-            <div className="resource-module-card-menu-popover" role="menu">
+      <div
+        className="knowledge-category-header"
+        role="button"
+        tabIndex={0}
+        aria-label={`Select ${module.name}`}
+        draggable={canReorder}
+        onClick={onSelectCategory}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
+        onKeyDown={handleKeyDown}
+      >
+        <div className="knowledge-category-copy">
+          <div className="knowledge-category-title-row">
+            <span className="knowledge-category-title">{module.name}</span>
+            {module.is_virtual ? (
+              <span className="knowledge-category-badge is-cleanup">Cleanup</span>
+            ) : canManage && moduleStatus === "draft" ? (
+              <span className="knowledge-category-badge is-draft">Draft</span>
+            ) : null}
+          </div>
+          <div className="knowledge-category-count">
+            {pageCount} {pageCount === 1 ? "page" : "pages"}
+            {sourceCount > 0 && canManage
+              ? ` · ${sourceCount} ${sourceCount === 1 ? "source" : "sources"}`
+              : ""}
+          </div>
+        </div>
+        <div className="knowledge-category-header-actions">
+          {canManage && !module.is_virtual ? (
+            <button
+              className="knowledge-category-menu-trigger"
+              type="button"
+              title="Category actions"
+              aria-label={`Actions for ${module.name}`}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+              onClick={handleMenuClick}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <MoreIcon />
+            </button>
+          ) : null}
+          {canManage && !module.is_virtual && isMenuOpen ? (
+            <div className="knowledge-category-menu-popover" role="menu">
               <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, onEdit)}>
                 <EditIcon />
                 <span>Edit</span>
@@ -276,37 +291,9 @@ function ResourceModuleCard(props: {
             </div>
           ) : null}
         </div>
-      ) : null}
-      <div className="discover-card-banner">
-        {module.banner_url ? (
-          <img
-            className="discover-card-banner-img"
-            src={module.banner_url}
-            alt=""
-            decoding="async"
-            draggable={false}
-            style={getCommunityBannerImageStyle({
-              focusX: module.banner_focus_x,
-              focusY: module.banner_focus_y,
-              zoom: module.banner_zoom,
-            })}
-          />
-        ) : null}
-        {cornerBadge ? (
-          <span className={`resource-module-corner-badge ${module.is_virtual ? "is-cleanup" : "is-draft"}`}>
-            {cornerBadge}
-          </span>
-        ) : null}
       </div>
-      <div className="discover-card-body resource-module-card-body">
-        <div className="discover-card-meta">
-          <div className="discover-card-name">{module.name}</div>
-        </div>
-        <div className="discover-card-desc">
-          {module.description_md?.trim() || "Knowledge shared by the community team."}
-        </div>
-      </div>
-    </div>
+      <div className="knowledge-category-pages">{children}</div>
+    </section>
   );
 }
 
@@ -444,6 +431,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
   const [dropTargetModuleId, setDropTargetModuleId] = useState<string | null>(null);
   const [draggingResourceId, setDraggingResourceId] = useState<string | null>(null);
+  const [draggingResourceModuleId, setDraggingResourceModuleId] = useState<string | null>(null);
   const [dropTargetResourceId, setDropTargetResourceId] = useState<string | null>(null);
   const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
 
@@ -458,9 +446,17 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     });
     return map;
   }, [state.resources]);
+  const realModuleIdLookup = useMemo(
+    () => new Set(state.modules.map((module) => module.id)),
+    [state.modules],
+  );
+  const getResourceCategoryId = (resource: CommunityResource) =>
+    resource.module_id && realModuleIdLookup.has(resource.module_id)
+      ? resource.module_id
+      : LEGACY_RESOURCE_MODULE_ID;
   const hasLegacyResources = useMemo(
-    () => state.resources.some((resource) => !resource.module_id),
-    [state.resources],
+    () => state.resources.some((resource) => !resource.module_id || !realModuleIdLookup.has(resource.module_id)),
+    [realModuleIdLookup, state.resources],
   );
   const moduleViews = useMemo<ResourceModuleView[]>(() => {
     const modules = state.modules.slice().sort((a, b) => {
@@ -481,7 +477,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         directory_path: "/unsorted",
         module_status: "draft",
         name: "Needs sorting",
-        description_md: "Resources without a module. Move these into the right place.",
+        description_md: "Resources that need a category. Move these into the right place.",
         banner_url: null,
         banner_focus_x: null,
         banner_focus_y: null,
@@ -491,47 +487,100 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       },
     ];
   }, [hasLegacyResources, state.modules, state.resources]);
-  const realModuleCount = state.modules.length;
-  const selectedModule = useMemo(
-    () => moduleViews.find((module) => module.id === selectedModuleId) ?? null,
-    [moduleViews, selectedModuleId],
-  );
-  const selectedModuleResourceTargetId =
-    selectedModule && selectedModule.id !== LEGACY_RESOURCE_MODULE_ID ? selectedModule.id : null;
   const reorderableModuleIds = useMemo(
     () => moduleViews.filter((module) => !module.is_virtual).map((module) => module.id),
     [moduleViews],
   );
   const canReorderModules = capabilities.canOperateResources && reorderableModuleIds.length > 1;
-  const visibleResources = useMemo(() => {
-    if (!selectedModule) return [];
-    if (selectedModule.id === LEGACY_RESOURCE_MODULE_ID) {
-      return state.resources.filter((resource) => !resource.module_id).sort(compareResources);
-    }
-    return state.resources.filter((resource) => resource.module_id === selectedModule.id).sort(compareResources);
-  }, [selectedModule, state.resources]);
-  const reorderableResourceIds = useMemo(() => visibleResources.map((resource) => resource.id), [visibleResources]);
-  const canReorderResources = capabilities.canOperateResources && reorderableResourceIds.length > 1;
-  const pageResources = useMemo(
-    () => visibleResources.filter((resource) => getResourceRole(resource) === "page"),
-    [visibleResources],
+  const resourcesBySelectionId = useMemo(() => {
+    const map = new Map<string, CommunityResource[]>();
+    moduleViews.forEach((module) => {
+      map.set(module.id, []);
+    });
+    state.resources.forEach((resource) => {
+      const selectionId =
+        resource.module_id && realModuleIdLookup.has(resource.module_id)
+          ? resource.module_id
+          : LEGACY_RESOURCE_MODULE_ID;
+      const current = map.get(selectionId) ?? [];
+      current.push(resource);
+      map.set(selectionId, current);
+    });
+    map.forEach((resources, selectionId) => {
+      map.set(selectionId, resources.slice().sort(compareResources));
+    });
+    return map;
+  }, [moduleViews, realModuleIdLookup, state.resources]);
+  const categorySections = useMemo(
+    () =>
+      moduleViews.map((module) => {
+        const resources = resourcesBySelectionId.get(module.id) ?? [];
+        return {
+          module,
+          resources,
+          pageResources: resources.filter((resource) => getResourceRole(resource) === "page"),
+          sourceResources: resources.filter((resource) => getResourceRole(resource) === "source"),
+        };
+      }),
+    [moduleViews, resourcesBySelectionId],
   );
-  const sourceResources = useMemo(
-    () => visibleResources.filter((resource) => getResourceRole(resource) === "source"),
-    [visibleResources],
+  const allPageResources = useMemo(
+    () => categorySections.flatMap((section) => section.pageResources),
+    [categorySections],
   );
-  const shouldShowSourceInbox = capabilities.canOperateResources || sourceResources.length > 0;
+  const allSourceResources = useMemo(
+    () => categorySections.flatMap((section) => section.sourceResources),
+    [categorySections],
+  );
+  const displayableResources = useMemo(
+    () => (capabilities.canOperateResources ? [...allPageResources, ...allSourceResources] : allPageResources),
+    [allPageResources, allSourceResources, capabilities.canOperateResources],
+  );
+  const displayableResourceIds = useMemo(
+    () => new Set(displayableResources.map((resource) => resource.id)),
+    [displayableResources],
+  );
   const selectedResource = useMemo(() => {
-    if (!selectedModule || visibleResources.length === 0) return null;
-    return visibleResources.find((resource) => resource.id === selectedResourceId) ?? visibleResources[0] ?? null;
-  }, [selectedModule, selectedResourceId, visibleResources]);
+    if (!selectedResourceId || !displayableResourceIds.has(selectedResourceId)) return null;
+    return resourcesById.get(selectedResourceId) ?? null;
+  }, [displayableResourceIds, resourcesById, selectedResourceId]);
+  const selectedResourceCategoryId = selectedResource ? getResourceCategoryId(selectedResource) : null;
+  const selectedModule = useMemo(() => {
+    const selectedModuleExists = selectedModuleId
+      ? moduleViews.some((module) => module.id === selectedModuleId)
+      : false;
+    const activeId = selectedModuleExists ? selectedModuleId : selectedResourceCategoryId;
+    if (!activeId) return null;
+    return moduleViews.find((module) => module.id === activeId) ?? null;
+  }, [moduleViews, selectedModuleId, selectedResourceCategoryId]);
+  const selectedCategorySection = selectedModule
+    ? categorySections.find((section) => section.module.id === selectedModule.id) ?? null
+    : null;
+  const selectedModuleResourceTargetId =
+    selectedModule && selectedModule.id !== LEGACY_RESOURCE_MODULE_ID ? selectedModule.id : null;
+  const reorderableResourceIdsByModule = useMemo(() => {
+    const map = new Map<string, string[]>();
+    categorySections.forEach((section) => {
+      map.set(section.module.id, section.pageResources.map((resource) => resource.id));
+    });
+    return map;
+  }, [categorySections]);
+  const getFirstResourceForCategory = (module: ResourceModuleView | null) => {
+    if (!module) return null;
+    const section = categorySections.find((candidate) => candidate.module.id === module.id);
+    if (!section) return null;
+    return section.pageResources[0] ?? (capabilities.canOperateResources ? section.sourceResources[0] : null) ?? null;
+  };
+  const firstDisplayableResource = displayableResources[0] ?? null;
+  const selectedCategoryFirstResource = selectedModule ? getFirstResourceForCategory(selectedModule) : null;
+  const shouldShowSourceInbox = capabilities.canOperateResources && allSourceResources.length > 0;
   const selectedSourceResource = useMemo(() => {
     const sourceId = selectedResource?.source_resource_id?.trim();
     if (!sourceId) return null;
     return resourcesById.get(sourceId) ?? null;
   }, [resourcesById, selectedResource?.source_resource_id]);
   const selectedSourceResourceModuleId = selectedSourceResource
-    ? getResourceModuleSelectionId(selectedSourceResource)
+    ? getResourceCategoryId(selectedSourceResource)
     : null;
   const canOpenSelectedSourceResource = Boolean(
     capabilities.canOperateResources &&
@@ -567,28 +616,44 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     isRefreshingResources && !hasResourceContent && !hasCompletedResourceLoadRef.current;
 
   useEffect(() => {
-    if (selectedModuleId && !selectedModule && !isRefreshingResources) {
+    const selectedModuleExists = selectedModuleId
+      ? moduleViews.some((module) => module.id === selectedModuleId)
+      : false;
+    if (selectedModuleId && !selectedModuleExists && !isRefreshingResources) {
       if (!hasResourceContent && !hasCompletedResourceLoadRef.current) return;
       actions.handleSelectModule(null);
     }
-  }, [actions, hasResourceContent, isRefreshingResources, selectedModule, selectedModuleId]);
+  }, [actions, hasResourceContent, isRefreshingResources, moduleViews, selectedModuleId]);
 
   useEffect(() => {
-    if (!selectedModule) {
+    if (isRefreshingResources) return;
+    if (displayableResources.length === 0) {
       if (selectedResourceId) actions.setOpenResourceEmbedId(null);
       return;
     }
-    if (visibleResources.length === 0) {
-      if (selectedResourceId) actions.setOpenResourceEmbedId(null);
+    if (selectedResourceId && displayableResourceIds.has(selectedResourceId)) return;
+    if (selectedModule) {
+      if (selectedCategoryFirstResource) {
+        actions.setOpenResourceEmbedId(selectedCategoryFirstResource.id);
+      } else if (selectedResourceId) {
+        actions.setOpenResourceEmbedId(null);
+      }
       return;
     }
-    const hasSelectedResource = Boolean(
-      selectedResourceId && visibleResources.some((resource) => resource.id === selectedResourceId),
-    );
-    if (!hasSelectedResource) {
-      actions.setOpenResourceEmbedId(visibleResources[0]?.id ?? null);
+    if (firstDisplayableResource) {
+      actions.handleSelectModule(getResourceCategoryId(firstDisplayableResource));
+      actions.setOpenResourceEmbedId(firstDisplayableResource.id);
     }
-  }, [actions, selectedModule, selectedResourceId, visibleResources]);
+  }, [
+    actions,
+    displayableResourceIds,
+    displayableResources.length,
+    firstDisplayableResource,
+    isRefreshingResources,
+    selectedCategoryFirstResource,
+    selectedModule,
+    selectedResourceId,
+  ]);
 
   useEffect(() => {
     if (pendingDeleteResourceId && !pendingDeleteResource) {
@@ -599,12 +664,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   useEffect(() => {
     if (!pendingOpenResourceId) return;
-    if (!visibleResources.some((resource) => resource.id === pendingOpenResourceId)) return;
+    const pendingResource = resourcesById.get(pendingOpenResourceId);
+    if (!pendingResource || !displayableResourceIds.has(pendingOpenResourceId)) return;
+    actions.handleSelectModule(getResourceCategoryId(pendingResource));
     actions.setOpenResourceEmbedId(pendingOpenResourceId);
     setPendingOpenResourceId(null);
-  }, [actions, pendingOpenResourceId, visibleResources]);
+  }, [actions, displayableResourceIds, pendingOpenResourceId, resourcesById]);
 
-  const handleModuleDragStart = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
+  const handleModuleDragStart = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
     if (!canReorderModules || module.is_virtual) {
       event.preventDefault();
       return;
@@ -615,14 +682,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     event.dataTransfer.setData("text/plain", module.id);
   };
 
-  const handleModuleDragOver = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
+  const handleModuleDragOver = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
     if (!draggingModuleId || module.is_virtual || module.id === draggingModuleId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropTargetModuleId(module.id);
   };
 
-  const handleModuleDrop = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
+  const handleModuleDrop = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
     event.preventDefault();
     const draggedId = draggingModuleId ?? event.dataTransfer.getData("text/plain");
     setDraggingModuleId(null);
@@ -643,18 +710,23 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
-    if (!canReorderResources) {
+    const categoryId = getResourceCategoryId(resource);
+    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    if (!capabilities.canOperateResources || getResourceRole(resource) !== "page" || reorderableIds.length < 2) {
       event.preventDefault();
       return;
     }
     setDraggingResourceId(resource.id);
+    setDraggingResourceModuleId(categoryId);
     setDropTargetResourceId(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", resource.id);
   };
 
   const handleResourceDragOver = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
-    if (!draggingResourceId || resource.id === draggingResourceId) return;
+    const categoryId = getResourceCategoryId(resource);
+    if (!draggingResourceId || draggingResourceModuleId !== categoryId || resource.id === draggingResourceId) return;
+    if (getResourceRole(resource) !== "page") return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropTargetResourceId(resource.id);
@@ -663,45 +735,67 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const handleResourceDrop = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
     event.preventDefault();
     const draggedId = draggingResourceId ?? event.dataTransfer.getData("text/plain");
+    const categoryId = getResourceCategoryId(resource);
     setDraggingResourceId(null);
+    setDraggingResourceModuleId(null);
     setDropTargetResourceId(null);
-    if (!selectedModule || !draggedId || draggedId === resource.id) return;
-    const fromIndex = reorderableResourceIds.indexOf(draggedId);
-    const toIndex = reorderableResourceIds.indexOf(resource.id);
+    if (!draggedId || draggingResourceModuleId !== categoryId || draggedId === resource.id) return;
+    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    const fromIndex = reorderableIds.indexOf(draggedId);
+    const toIndex = reorderableIds.indexOf(resource.id);
     if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
-    const nextIds = reorderableResourceIds.slice();
+    const nextIds = reorderableIds.slice();
     const [movedId] = nextIds.splice(fromIndex, 1);
     nextIds.splice(toIndex, 0, movedId);
-    const moduleId = selectedModule.id === LEGACY_RESOURCE_MODULE_ID ? null : selectedModule.id;
+    const moduleId = categoryId === LEGACY_RESOURCE_MODULE_ID ? null : categoryId;
     void actions.handleReorderResources(moduleId, nextIds);
   };
 
   const handleResourceDragEnd = () => {
     setDraggingResourceId(null);
+    setDraggingResourceModuleId(null);
     setDropTargetResourceId(null);
   };
 
-  const renderResourceRailItem = (resource: CommunityResource) => (
-    <ResourceRailItem
-      key={resource.id}
-      resource={resource}
-      isActive={selectedResource?.id === resource.id}
-      onSelect={() => actions.setOpenResourceEmbedId(resource.id)}
-      onEdit={() => actions.handleEditResource(resource)}
-      onDelete={() => setPendingDeleteResourceId(resource.id)}
-      onDragStart={(event) => handleResourceDragStart(event, resource)}
-      onDragOver={(event) => handleResourceDragOver(event, resource)}
-      onDragLeave={() => {
-        if (dropTargetResourceId === resource.id) setDropTargetResourceId(null);
-      }}
-      onDrop={(event) => handleResourceDrop(event, resource)}
-      onDragEnd={handleResourceDragEnd}
-      canManage={capabilities.canOperateResources}
-      canReorder={canReorderResources}
-      isDragging={draggingResourceId === resource.id}
-      isDropTarget={dropTargetResourceId === resource.id}
-    />
-  );
+  const handleSelectCategory = (module: ResourceModuleView) => {
+    actions.handleSelectModule(module.id);
+    const firstResource = getFirstResourceForCategory(module);
+    actions.setOpenResourceEmbedId(firstResource?.id ?? null);
+  };
+
+  const handleSelectResource = (resource: CommunityResource) => {
+    actions.handleSelectModule(getResourceCategoryId(resource));
+    actions.setOpenResourceEmbedId(resource.id);
+  };
+
+  const renderResourceRailItem = (resource: CommunityResource) => {
+    const categoryId = getResourceCategoryId(resource);
+    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    const canReorderResource =
+      capabilities.canOperateResources && getResourceRole(resource) === "page" && reorderableIds.length > 1;
+
+    return (
+      <ResourceRailItem
+        key={resource.id}
+        resource={resource}
+        isActive={selectedResource?.id === resource.id}
+        onSelect={() => handleSelectResource(resource)}
+        onEdit={() => actions.handleEditResource(resource)}
+        onDelete={() => setPendingDeleteResourceId(resource.id)}
+        onDragStart={(event) => handleResourceDragStart(event, resource)}
+        onDragOver={(event) => handleResourceDragOver(event, resource)}
+        onDragLeave={() => {
+          if (dropTargetResourceId === resource.id) setDropTargetResourceId(null);
+        }}
+        onDrop={(event) => handleResourceDrop(event, resource)}
+        onDragEnd={handleResourceDragEnd}
+        canManage={capabilities.canOperateResources}
+        canReorder={canReorderResource}
+        isDragging={draggingResourceId === resource.id}
+        isDropTarget={dropTargetResourceId === resource.id}
+      />
+    );
+  };
 
   const selectedModuleStatus = selectedModule?.module_status === "live" ? "live" : "draft";
   const selectedModuleNextStatus = selectedModuleStatus === "live" ? "draft" : "live";
@@ -711,73 +805,61 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       <div className="community-panel resources-panel">
         <div className="feed-header-row">
           <div className="feed-header-copy">
-            {selectedModule ? (
-              <button className="resources-back-btn" type="button" onClick={() => actions.handleSelectModule(null)}>
-                <BackIcon />
-                <span>Knowledge</span>
-              </button>
-            ) : null}
-            <div className="resources-header">{selectedModule?.name ?? "Knowledge"}</div>
+            <div className="resources-header">Resources</div>
             <div className="feed-header-subtitle">
-              {selectedModule
-                ? selectedModule.description_md?.trim() ||
-                  `Durable knowledge and source material for ${capabilities.activeCommunityName ?? "this community"}.`
-                : `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
+              {selectedModule?.description_md?.trim() ||
+                `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
             {selectedModule?.is_virtual ? (
-              <div className="resource-module-status-line is-cleanup">Cleanup bucket</div>
-            ) : selectedModule && selectedModuleStatus === "draft" ? (
-              <div className="resource-module-status-line is-draft">Draft module</div>
+              <div className="resource-module-status-line is-cleanup">Needs sorting</div>
+            ) : capabilities.canOperateResources && selectedModule && selectedModuleStatus === "draft" ? (
+              <div className="resource-module-status-line is-draft">Draft category</div>
             ) : null}
           </div>
           <div className="feed-header-actions">
-            <div
-              className="feed-header-badge"
-              aria-label={selectedModule ? `${visibleResources.length} knowledge items` : `${realModuleCount} modules`}
-            >
-              {selectedModule ? visibleResources.length : realModuleCount}
+            <div className="feed-header-badge" aria-label={`${allPageResources.length} pages`}>
+              {allPageResources.length}
             </div>
             {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
-              selectedModule && !selectedModule.is_virtual ? (
-                <div className="resources-add-split" role="group" aria-label="Add knowledge">
+              <div className="resources-add-split" role="group" aria-label="Resource actions">
+                {selectedModule && !selectedModule.is_virtual ? (
                   <button
                     className={`resources-module-status-action is-${selectedModuleNextStatus}`}
                     type="button"
                     onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
-                    title={selectedModuleStatus === "live" ? "Move module to draft" : "Make module live"}
+                    title={selectedModuleStatus === "live" ? "Move category to draft" : "Make category live"}
                   >
                     {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
                   </button>
-                  <button
-                    className="resources-add-choice"
-                    type="button"
-                    onClick={() => actions.openNewResourceModal(selectedModuleResourceTargetId)}
-                    title="Add page"
-                  >
-                    <span aria-hidden="true">+</span>
-                    <span>Page</span>
-                  </button>
-                  <button
-                    className="resources-add-choice"
-                    type="button"
-                    onClick={() => actions.openNewSourceModal(selectedModuleResourceTargetId)}
-                    title="Add source"
-                  >
-                    <span aria-hidden="true">+</span>
-                    <span>Source</span>
-                  </button>
-                </div>
-              ) : (
+                ) : null}
                 <button
-                  className="resources-add-btn"
+                  className="resources-add-choice"
+                  type="button"
+                  onClick={() => actions.openNewResourceModal(selectedModuleResourceTargetId)}
+                  title="Add page"
+                >
+                  <span aria-hidden="true">+</span>
+                  <span>Page</span>
+                </button>
+                <button
+                  className="resources-add-choice"
+                  type="button"
+                  onClick={() => actions.openNewSourceModal(selectedModuleResourceTargetId)}
+                  title="Add source"
+                >
+                  <span aria-hidden="true">+</span>
+                  <span>Source</span>
+                </button>
+                <button
+                  className="resources-add-choice"
                   type="button"
                   onClick={() => actions.openNewModuleModal()}
-                  title="Add knowledge module"
-                  aria-label="Add knowledge module"
+                  title="Add category"
                 >
-                  +
+                  <span aria-hidden="true">+</span>
+                  <span>Category</span>
                 </button>
-              )
+              </div>
             ) : null}
           </div>
         </div>
@@ -796,7 +878,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
-        ) : !selectedModule && moduleViews.length === 0 ? (
+        ) : !hasResourceContent ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
               <div className="chat-empty-icon">
@@ -806,88 +888,60 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 </svg>
               </div>
               <div className="chat-empty-title">
-                Welcome to {capabilities.activeCommunityName ?? "your"} knowledge
+                Welcome to {capabilities.activeCommunityName ?? "your"} resources
               </div>
               <div className="chat-empty-text">
                 {capabilities.canOperateResources
-                  ? "Create modules to organize durable pages, sources, and references."
-                  : "Knowledge shared by the community team will show up here."}
-              </div>
-            </div>
-          </div>
-        ) : !selectedModule ? (
-          <div className="resource-library">
-            <div className="discover-grid resource-module-grid">
-              {moduleViews.map((module) => (
-                <ResourceModuleCard
-                  key={module.id}
-                  module={module}
-                  onOpen={() => actions.handleSelectModule(module.id)}
-                  onEdit={() => actions.handleEditModule(module)}
-                  onSetStatus={(status) => void actions.handleSetModuleStatus(module, status)}
-                  onDelete={() => void actions.handleDeleteModule(module.id)}
-                  canManage={capabilities.canOperateResources && !module.is_virtual}
-                  canReorder={canReorderModules && !module.is_virtual}
-                  isDragging={draggingModuleId === module.id}
-                  isDropTarget={dropTargetModuleId === module.id}
-                  onDragStart={(event) => handleModuleDragStart(event, module)}
-                  onDragOver={(event) => handleModuleDragOver(event, module)}
-                  onDragLeave={() => {
-                    if (dropTargetModuleId === module.id) setDropTargetModuleId(null);
-                  }}
-                  onDrop={(event) => handleModuleDrop(event, module)}
-                  onDragEnd={handleModuleDragEnd}
-                />
-              ))}
-            </div>
-          </div>
-        ) : visibleResources.length === 0 ? (
-          <div className="community-panel-state-shell">
-            <div className="chat-empty-state">
-              <div className="chat-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
-                  <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
-                </svg>
-              </div>
-              <div className="chat-empty-title">No knowledge items yet</div>
-              <div className="chat-empty-text">
-                {capabilities.canOperateResources
-                  ? "Add the first page, source, or reference for this module."
-                  : "Knowledge shared by the community team will show up here."}
+                  ? "Create a category to organize durable pages, sources, and references."
+                  : "Resources shared by the community team will show up here."}
               </div>
             </div>
           </div>
         ) : (
           <div className="knowledge-workspace">
-            <aside className="knowledge-resource-rail" aria-label={`${selectedModule.name} knowledge items`}>
+            <aside className="knowledge-resource-rail" aria-label="Resources">
               <div className="knowledge-resource-rail-header">
-                <div className="knowledge-resource-rail-kicker">Knowledge</div>
-                <div className="knowledge-resource-rail-count">{visibleResources.length}</div>
+                <div className="knowledge-resource-rail-kicker">Wiki</div>
+                <div className="knowledge-resource-rail-count">{allPageResources.length}</div>
               </div>
               <div className="knowledge-resource-list">
-                <div className="knowledge-resource-section">
-                  <div className="knowledge-resource-section-header">
-                    <span>Pages</span>
-                    <span>{pageResources.length}</span>
-                  </div>
-                  {pageResources.length > 0 ? (
-                    pageResources.map(renderResourceRailItem)
-                  ) : (
-                    <div className="knowledge-resource-empty-line">No pages yet</div>
-                  )}
-                </div>
+                {categorySections.map((section) => (
+                  <ResourceCategorySection
+                    key={section.module.id}
+                    module={section.module}
+                    pageCount={section.pageResources.length}
+                    sourceCount={section.sourceResources.length}
+                    isActive={selectedModule?.id === section.module.id}
+                    onSelectCategory={() => handleSelectCategory(section.module)}
+                    onEdit={() => actions.handleEditModule(section.module)}
+                    onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
+                    onDelete={() => void actions.handleDeleteModule(section.module.id)}
+                    canManage={capabilities.canOperateResources && !section.module.is_virtual}
+                    canReorder={canReorderModules && !section.module.is_virtual}
+                    isDragging={draggingModuleId === section.module.id}
+                    isDropTarget={dropTargetModuleId === section.module.id}
+                    onDragStart={(event) => handleModuleDragStart(event, section.module)}
+                    onDragOver={(event) => handleModuleDragOver(event, section.module)}
+                    onDragLeave={() => {
+                      if (dropTargetModuleId === section.module.id) setDropTargetModuleId(null);
+                    }}
+                    onDrop={(event) => handleModuleDrop(event, section.module)}
+                    onDragEnd={handleModuleDragEnd}
+                  >
+                    {section.pageResources.length > 0 ? (
+                      section.pageResources.map(renderResourceRailItem)
+                    ) : (
+                      <div className="knowledge-resource-empty-line">No pages yet</div>
+                    )}
+                  </ResourceCategorySection>
+                ))}
                 {shouldShowSourceInbox ? (
-                  <div className="knowledge-resource-section">
+                  <div className="knowledge-source-inbox-section">
                     <div className="knowledge-resource-section-header">
                       <span>Source Inbox</span>
-                      <span>{sourceResources.length}</span>
+                      <span>{allSourceResources.length}</span>
                     </div>
-                    {sourceResources.length > 0 ? (
-                      sourceResources.map(renderResourceRailItem)
-                    ) : (
-                      <div className="knowledge-resource-empty-line">Sources added for review will appear here.</div>
-                    )}
+                    {allSourceResources.map(renderResourceRailItem)}
                   </div>
                 ) : null}
               </div>
@@ -901,21 +955,19 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     capabilities.canOperateResources ? (
                       <>
                         {getResourceRole(selectedResource) === "source" ? (
-                          <>
-                            <button
-                              className="resource-card-action resource-source-draft-action"
-                              type="button"
-                              title="Create page draft"
-                              onClick={() => {
-                                if (!selectedResource) return;
-                                void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
-                                  if (created) setPendingOpenResourceId(created.id);
-                                });
-                              }}
-                            >
-                              Draft page
-                            </button>
-                          </>
+                          <button
+                            className="resource-card-action resource-source-draft-action"
+                            type="button"
+                            title="Create page draft"
+                            onClick={() => {
+                              if (!selectedResource) return;
+                              void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
+                                if (created) setPendingOpenResourceId(created.id);
+                              });
+                            }}
+                          >
+                            Draft page
+                          </button>
                         ) : null}
                         <button
                           className="resource-card-action"
@@ -937,7 +989,24 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     ) : null
                   }
                 />
-              ) : null}
+              ) : (
+                <div className="community-panel-state-shell">
+                  <div className="chat-empty-state">
+                    <div className="chat-empty-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+                        <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+                      </svg>
+                    </div>
+                    <div className="chat-empty-title">No page selected</div>
+                    <div className="chat-empty-text">
+                      {selectedCategorySection
+                        ? "This category does not have a page yet."
+                        : "Choose a page from the wiki."}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
