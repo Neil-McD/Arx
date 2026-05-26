@@ -180,6 +180,11 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /Use community_resources_map first/);
   assert.match(platformHarnessPrompt, /Use community_resources_read to batch-read/);
   assert.match(platformHarnessPrompt, /Use community_resources_list to inspect/);
+  assert.doesNotMatch(
+    platformHarnessPrompt,
+    /community_resource_builder_read with target_type and an exact id copied from list output/,
+    "member/read prompt fixture must not include builder resource edit guidance",
+  );
   assert.match(platformHarnessPrompt, /Use community_search when active community activity/);
   assert.match(platformHarnessPrompt, /Use read to inspect specific files/);
   assert.doesNotMatch(
@@ -187,6 +192,47 @@ function provePromptEntrypoints() {
     /\bfree tier\b|\bbuilder tier\b|\bpro tier\b|builder_tier|canonicalTier|effectiveTier/i,
     "runtime prompt output must not describe a tier-specific prompt stack",
   );
+
+  const builderHarnessPrompt = buildPlatformHarnessRuntimeSystemPrompt({
+    loopBudget: {
+      maxToolSteps: 8,
+      maxRepeatedIdenticalCalls: 2,
+      maxConsecutiveFailures: 3,
+      maxNoProgressSteps: 3,
+    },
+    allowedToolNames: [
+      "get_active_community_context",
+      "community_resources_map",
+      "community_resources_read",
+      "community_resources_list",
+      "community_resource_read",
+      "community_resources_search",
+      "community_resource_builder_list",
+      "community_resource_builder_read",
+      "community_resource_builder_stage_changeset",
+      "community_resource_builder_apply_changeset",
+    ],
+    harnessName: "chat_tools",
+    communityId: "community_1",
+    communityName: "Unified Community",
+    communitySlug: "unified-community",
+    communityOneLiner: "One prompt stack.",
+    communityAbout: "Used to prove the one-platform-harness context model.",
+    communitySystemPrompt: "Answer through the community lens when relevant.",
+    agentName: "James",
+    agentSoul: "Keep the product simple.",
+    projectLabel: "Unified project",
+    projectDescription: "Project context activates workspace tools.",
+    runtimeTurnContext,
+    currentDateTimeIso: "2026-05-07T12:00:00.000Z",
+    currentDateLabel: "Thursday, May 7, 2026 at 8:00:00 AM EDT",
+    currentTimeZone: "America/New_York",
+  });
+  assert.match(
+    builderHarnessPrompt,
+    /community_resource_builder_read with target_type and an exact id copied from list output/,
+  );
+  assert.match(builderHarnessPrompt, /wait for explicit builder approval before calling community_resource_builder_apply_changeset/);
 
   const platformChatPrompt = composePlatformChatRuntimeSystemPrompt({
     communityId: "community_1",

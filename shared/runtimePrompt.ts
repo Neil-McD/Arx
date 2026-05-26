@@ -424,7 +424,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   if (hasCommunityResourceBuilderTools(params.allowedToolNames)) {
     toolGuidance.push(
       "- Resources Architect builder tools are builder-lane only and expose draft, review, source inbox, scaffold, and health state that member resource tools intentionally hide.",
-      "- Use community_resource_builder_list first; its health summary is the deterministic architecture preflight. Then use community_resource_builder_read to inspect exact module, page, and source evidence before proposing edits.",
+      "- Use community_resource_builder_list first; its health summary is the deterministic architecture preflight. Then use community_resource_builder_read with target_type and an exact id copied from list output to inspect module, page, and source evidence before proposing edits.",
       "- For builder edits, explain what you found, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset.",
       "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation.",
       "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",

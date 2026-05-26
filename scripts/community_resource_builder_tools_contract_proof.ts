@@ -304,6 +304,16 @@ assert.match(
 );
 assert.match(
   toolRegistry,
+  /COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA[\s\S]*required: \["target_type", "id"\][\s\S]*target_type:[\s\S]*enum: \["resource", "module"\]/,
+  "builder read tool should expose an explicit strict target shape",
+);
+assert.match(
+  toolRegistry,
+  /toolName === "community_resource_builder_read"[\s\S]*targetType === "resource"[\s\S]*resourceId[\s\S]*targetType === "module"[\s\S]*moduleId/,
+  "builder read normalization should translate explicit target shape to backend ids",
+);
+assert.match(
+  toolRegistry,
   /community_resource_builder_list limit", 1, 250/,
   "builder list argument normalization should cap list size at 250",
 );

@@ -215,18 +215,18 @@ const COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA: JsonSchema = {
 const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
+  required: ["target_type", "id"],
   properties: {
-    resource_id: {
+    target_type: {
       type: "string",
-      minLength: 1,
-      maxLength: 160,
-      description: "Draft, review, failed, or source resource id.",
+      enum: ["resource", "module"],
+      description: "Read a resource/page/source item or a module container.",
     },
-    module_id: {
+    id: {
       type: "string",
       minLength: 1,
       maxLength: 160,
-      description: "Resource module id.",
+      description: "The exact id copied from community_resource_builder_list output.",
     },
   },
 };
@@ -776,7 +776,7 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_resource_builder_read: {
     name: "community_resource_builder_read",
-    description: "Manager-only Resources Architect tool. Read one resource builder item by resource_id or module_id, including draft/source metadata hidden from member resource tools.",
+    description: "Manager-only Resources Architect tool. Read one exact resource or module from community_resource_builder_list output. Pass target_type and id.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA,
   },
   community_resource_builder_health: {
@@ -1455,17 +1455,29 @@ export function normalizeToolArguments(
     };
   }
   if (toolName === "community_resource_builder_read") {
+    const targetType = normalizeString(args.target_type)?.toLowerCase() ?? null;
+    const id = normalizeString(args.id);
+    if (targetType === "resource" && id) {
+      return { targetType: "resource", id: id.slice(0, 160), resourceId: id.slice(0, 160) };
+    }
+    if (targetType === "module" && id) {
+      return { targetType: "module", id: id.slice(0, 160), moduleId: id.slice(0, 160) };
+    }
     const resourceId = normalizeString(args.resource_id);
     const moduleId = normalizeString(args.module_id);
     if (!resourceId && !moduleId) {
-      throw new Error("community_resource_builder_read requires resource_id or module_id.");
+      throw new Error("community_resource_builder_read requires target_type and id.");
     }
     if (resourceId && moduleId) {
-      throw new Error("community_resource_builder_read accepts only one of resource_id or module_id.");
+      throw new Error("community_resource_builder_read accepts only one target id.");
     }
     return {
-      ...(resourceId ? { resourceId: resourceId.slice(0, 160) } : null),
-      ...(moduleId ? { moduleId: moduleId.slice(0, 160) } : null),
+      ...(resourceId
+        ? { targetType: "resource", id: resourceId.slice(0, 160), resourceId: resourceId.slice(0, 160) }
+        : null),
+      ...(moduleId
+        ? { targetType: "module", id: moduleId.slice(0, 160), moduleId: moduleId.slice(0, 160) }
+        : null),
     };
   }
   if (

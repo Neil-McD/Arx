@@ -752,10 +752,14 @@ async function executeRetrievalHarnessTool(params: {
           resourceId:
             typeof normalizedArgs.resourceId === "string"
               ? normalizedArgs.resourceId
+              : normalizedArgs.targetType === "resource" && typeof normalizedArgs.id === "string"
+                ? normalizedArgs.id
               : undefined,
           moduleId:
             typeof normalizedArgs.moduleId === "string"
               ? normalizedArgs.moduleId
+              : normalizedArgs.targetType === "module" && typeof normalizedArgs.id === "string"
+                ? normalizedArgs.id
               : undefined,
         },
       );
