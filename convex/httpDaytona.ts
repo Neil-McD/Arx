@@ -749,18 +749,12 @@ async function executeRetrievalHarnessTool(params: {
           userId: params.userId,
           authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
-          resourceId:
-            typeof normalizedArgs.resourceId === "string"
-              ? normalizedArgs.resourceId
-              : normalizedArgs.targetType === "resource" && typeof normalizedArgs.id === "string"
+          ref:
+            typeof normalizedArgs.ref === "string"
+              ? normalizedArgs.ref
+              : typeof normalizedArgs.id === "string"
                 ? normalizedArgs.id
-              : undefined,
-          moduleId:
-            typeof normalizedArgs.moduleId === "string"
-              ? normalizedArgs.moduleId
-              : normalizedArgs.targetType === "module" && typeof normalizedArgs.id === "string"
-                ? normalizedArgs.id
-              : undefined,
+                : undefined,
         },
       );
       return {

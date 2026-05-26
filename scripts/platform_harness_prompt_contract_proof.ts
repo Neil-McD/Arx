@@ -230,8 +230,9 @@ function provePromptEntrypoints() {
   });
   assert.match(
     builderHarnessPrompt,
-    /community_resource_builder_read with target_type and an exact id copied from list output/,
+    /community_resource_builder_read with ref to inspect a module, page, source, readable path, resources:\/\/ URI, or exact id/,
   );
+  assert.match(builderHarnessPrompt, /retry with the most specific directory_uri/);
   assert.match(builderHarnessPrompt, /wait for explicit builder approval before calling community_resource_builder_apply_changeset/);
 
   const platformChatPrompt = composePlatformChatRuntimeSystemPrompt({

@@ -304,13 +304,23 @@ assert.match(
 );
 assert.match(
   toolRegistry,
-  /COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA[\s\S]*required: \["target_type", "id"\][\s\S]*target_type:[\s\S]*enum: \["resource", "module"\]/,
-  "builder read tool should expose an explicit strict target shape",
+  /COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA[\s\S]*required: \["ref"\][\s\S]*ref:[\s\S]*maxLength: 1024/,
+  "builder read tool should expose one model-friendly semantic ref",
 );
 assert.match(
   toolRegistry,
-  /toolName === "community_resource_builder_read"[\s\S]*targetType === "resource"[\s\S]*resourceId[\s\S]*targetType === "module"[\s\S]*moduleId/,
-  "builder read normalization should translate explicit target shape to backend ids",
+  /toolName === "community_resource_builder_read"[\s\S]*const ref = normalizeString\(args\.ref\)[\s\S]*targetType === "resource"[\s\S]*resourceId[\s\S]*targetType === "module"[\s\S]*moduleId/,
+  "builder read normalization should prefer ref while accepting legacy target/id inputs",
+);
+assert.match(
+  resources,
+  /readCommunityResourceBuilderResource[\s\S]*ref: v\.optional\(v\.string\(\)\)[\s\S]*resolveCommunityResourceBuilderRef/,
+  "builder read backend should accept and resolve semantic refs",
+);
+assert.match(
+  resources,
+  /ambiguous_resource_builder_ref[\s\S]*resource_builder_ref_not_found/,
+  "builder read backend should return recoverable ambiguity and not-found outputs",
 );
 assert.match(
   toolRegistry,

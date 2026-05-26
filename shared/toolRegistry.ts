@@ -215,18 +215,13 @@ const COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA: JsonSchema = {
 const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["target_type", "id"],
+  required: ["ref"],
   properties: {
-    target_type: {
-      type: "string",
-      enum: ["resource", "module"],
-      description: "Read a resource/page/source item or a module container.",
-    },
-    id: {
+    ref: {
       type: "string",
       minLength: 1,
-      maxLength: 160,
-      description: "The exact id copied from community_resource_builder_list output.",
+      maxLength: 1024,
+      description: "Module name, page/source title, resource id, module id, resources:// URI, or readable resource path.",
     },
   },
 };
@@ -776,7 +771,7 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_resource_builder_read: {
     name: "community_resource_builder_read",
-    description: "Manager-only Resources Architect tool. Read one exact resource or module from community_resource_builder_list output. Pass target_type and id.",
+    description: "Manager-only Resources Architect tool. Read one resource or module by semantic ref: module name, page/source title, resource id, module id, resources:// URI, or readable path.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA,
   },
   community_resource_builder_health: {
@@ -1455,28 +1450,47 @@ export function normalizeToolArguments(
     };
   }
   if (toolName === "community_resource_builder_read") {
+    const ref = normalizeString(args.ref);
+    if (ref) {
+      return { ref: ref.slice(0, 1024) };
+    }
     const targetType = normalizeString(args.target_type)?.toLowerCase() ?? null;
     const id = normalizeString(args.id);
     if (targetType === "resource" && id) {
-      return { targetType: "resource", id: id.slice(0, 160), resourceId: id.slice(0, 160) };
+      const normalizedId = id.slice(0, 160);
+      return { ref: normalizedId, targetType: "resource", id: normalizedId, resourceId: normalizedId };
     }
     if (targetType === "module" && id) {
-      return { targetType: "module", id: id.slice(0, 160), moduleId: id.slice(0, 160) };
+      const normalizedId = id.slice(0, 160);
+      return { ref: normalizedId, targetType: "module", id: normalizedId, moduleId: normalizedId };
+    }
+    if (id) {
+      return { ref: id.slice(0, 1024), id: id.slice(0, 160) };
     }
     const resourceId = normalizeString(args.resource_id);
     const moduleId = normalizeString(args.module_id);
     if (!resourceId && !moduleId) {
-      throw new Error("community_resource_builder_read requires target_type and id.");
+      throw new Error("community_resource_builder_read requires ref.");
     }
     if (resourceId && moduleId) {
       throw new Error("community_resource_builder_read accepts only one target id.");
     }
     return {
       ...(resourceId
-        ? { targetType: "resource", id: resourceId.slice(0, 160), resourceId: resourceId.slice(0, 160) }
+        ? {
+            ref: resourceId.slice(0, 160),
+            targetType: "resource",
+            id: resourceId.slice(0, 160),
+            resourceId: resourceId.slice(0, 160),
+          }
         : null),
       ...(moduleId
-        ? { targetType: "module", id: moduleId.slice(0, 160), moduleId: moduleId.slice(0, 160) }
+        ? {
+            ref: moduleId.slice(0, 160),
+            targetType: "module",
+            id: moduleId.slice(0, 160),
+            moduleId: moduleId.slice(0, 160),
+          }
         : null),
     };
   }

@@ -8,7 +8,7 @@ export type RuntimePlatformSkillDefinition = PlatformSkillSummary & {
 export const PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
   "Purpose: help community builders organize, refactor, and draft the active community Resources area from source material and existing resource records.",
   "Ground truth: inspect this community's current resource modules, pages, source inbox, source links, imported source references, and resource metadata before deciding what should change.",
-  "Discovery: start with community_resource_builder_list and its health summary. Use community_resource_builder_read to inspect exact modules, pages, source records, source lineage, and provenance.",
+  "Discovery: start with community_resource_builder_list and its health summary. Use community_resource_builder_read with a ref such as a module name, page/source title, readable path, resources:// URI, or exact id to inspect modules, pages, source records, source lineage, and provenance. If the read result is ambiguous or not found, retry with a returned directory_uri.",
   "Broad requests: when the builder asks to improve resources, clean this up, refactor knowledge, or organize references, do not stage edits immediately. First explain the current mental model: what exists, what is missing, what is duplicated, what is unsorted, what is stale, and what architecture seems most useful.",
   "Alignment: ask the builder what direction they want to take unless they already gave explicit implementation instructions. Discuss tradeoffs and converge on a concrete direction before editing ground truth.",
   "Plan: after alignment, propose the smallest concrete update plan and name the modules, pages, sources, or links affected.",

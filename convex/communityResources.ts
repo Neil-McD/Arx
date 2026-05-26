@@ -4067,6 +4067,505 @@ export const searchCommunityResourceDirectoryInternal = internalQuery({
   },
 });
 
+type CommunityResourceBuilderRefMatch =
+  | {
+      target_type: "resource";
+      id: string;
+      resource_id: string;
+      title: string;
+      module_id: string | null;
+      module_name: string | null;
+      directory_path: string;
+      directory_uri: string;
+      resource_role: string;
+      resource_status: string;
+    }
+  | {
+      target_type: "module";
+      id: string | null;
+      module_id: string | null;
+      name: string;
+      directory_path: string;
+      directory_uri: string;
+      module_status: string | null;
+      source_inbox?: boolean;
+      resource_count: number;
+      page_count: number;
+      source_count: number;
+    };
+
+type ResolvedCommunityResourceBuilderRef =
+  | {
+      ok: true;
+      target_type: "resource";
+      resource: CommunityResourceLike;
+    }
+  | {
+      ok: true;
+      target_type: "module";
+      module: CommunityResourceModuleLike | null;
+      sourceInbox: boolean;
+    }
+  | {
+      ok: false;
+      reason_code: "ambiguous_resource_builder_ref";
+      message: string;
+      matches: CommunityResourceBuilderRefMatch[];
+    }
+  | {
+      ok: false;
+      reason_code: "resource_builder_ref_not_found";
+      message: string;
+      suggested_refs: CommunityResourceBuilderRefMatch[];
+    };
+
+function normalizeBuilderRefLookupText(raw: unknown): string {
+  return String(raw ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeBuilderRefSlug(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+}
+
+function buildBuilderResourceRefMatch(
+  row: CommunityResourceLike,
+  moduleNameMap: Map<string, string>,
+): CommunityResourceBuilderRefMatch {
+  const compact = mapCompactCommunityResourceBuilderListRow(row, moduleNameMap);
+  return {
+    target_type: "resource",
+    id: compact.id,
+    resource_id: compact.id,
+    title: compact.title,
+    module_id: compact.module_id,
+    module_name: compact.module_name,
+    directory_path: compact.directory_path,
+    directory_uri: compact.directory_uri,
+    resource_role: compact.resource_role,
+    resource_status: compact.resource_status,
+  };
+}
+
+function buildBuilderModuleRefMatch(args: {
+  communityId: any;
+  module: CommunityResourceModuleLike | null;
+  resources: CommunityResourceLike[];
+  sourceInbox?: boolean;
+}): CommunityResourceBuilderRefMatch {
+  const rows = moduleResources(
+    args.resources,
+    args.module ? normalizeIdValue(args.module._id) : null,
+  );
+  const resourceRows = args.sourceInbox
+    ? rows.filter((row) => normalizeResourceRole(row.role) === "source")
+    : rows;
+  const entry = buildModuleDirectoryEntry({
+    communityId: args.communityId,
+    module: args.module,
+    resources: resourceRows,
+  });
+  return {
+    target_type: "module",
+    id: entry.module_id,
+    module_id: entry.module_id,
+    name: args.sourceInbox ? `${entry.name} Source Inbox` : entry.name,
+    directory_path: args.sourceInbox
+      ? `${entry.directory_path}/${COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT}`
+      : entry.directory_path,
+    directory_uri: args.sourceInbox
+      ? `${entry.directory_uri}/${COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT}`
+      : entry.directory_uri,
+    module_status: args.module ? normalizeResourceModuleStatus(args.module.status) : null,
+    ...(args.sourceInbox ? { source_inbox: true } : null),
+    resource_count: resourceRows.length,
+    page_count: resourceRows.filter((row) => normalizeResourceRole(row.role) !== "source").length,
+    source_count: resourceRows.filter((row) => normalizeResourceRole(row.role) === "source").length,
+  };
+}
+
+function uniqueBuilderRefMatches(matches: CommunityResourceBuilderRefMatch[]): CommunityResourceBuilderRefMatch[] {
+  const seen = new Set<string>();
+  const out: CommunityResourceBuilderRefMatch[] = [];
+  for (const match of matches) {
+    const key = `${match.target_type}:${match.id ?? "unsorted"}:${"source_inbox" in match && match.source_inbox ? "source" : "main"}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(match);
+  }
+  return out;
+}
+
+function ambiguousBuilderRef(matches: CommunityResourceBuilderRefMatch[], ref: string): ResolvedCommunityResourceBuilderRef {
+  return {
+    ok: false,
+    reason_code: "ambiguous_resource_builder_ref",
+    message: `Multiple resource builder targets match "${ref}". Call community_resource_builder_read again with one exact directory_uri or id from matches.`,
+    matches: uniqueBuilderRefMatches(matches).slice(0, COMMUNITY_RESOURCE_DIRECTORY_TOOL_MAX_LIMIT),
+  };
+}
+
+function missingBuilderRef(args: {
+  ref: string;
+  modules: CommunityResourceModuleLike[];
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+  communityId: any;
+}): ResolvedCommunityResourceBuilderRef {
+  const suggestedModules = args.modules
+    .slice()
+    .sort(compareCommunityResourceModules)
+    .slice(0, 5)
+    .map((module) =>
+      buildBuilderModuleRefMatch({
+        communityId: args.communityId,
+        module,
+        resources: args.resources,
+      }),
+    );
+  const suggestedResources = args.resources
+    .slice()
+    .sort(compareSuggestedResourceReadTargets)
+    .slice(0, 7)
+    .map((row) => buildBuilderResourceRefMatch(row, args.moduleNameMap));
+  return {
+    ok: false,
+    reason_code: "resource_builder_ref_not_found",
+    message: `No resource builder target matched "${args.ref}". Use a module name, page/source title, id, directory_uri, or readable path from community_resource_builder_list or community_resources_map.`,
+    suggested_refs: uniqueBuilderRefMatches([...suggestedModules, ...suggestedResources]),
+  };
+}
+
+function resolveBuilderModuleById(args: {
+  communityId: any;
+  modules: CommunityResourceModuleLike[];
+  resources: CommunityResourceLike[];
+  moduleId: string;
+  sourceInbox?: boolean;
+}): ResolvedCommunityResourceBuilderRef {
+  if (args.moduleId === COMMUNITY_RESOURCE_UNSORTED_MODULE_SEGMENT) {
+    return {
+      ok: true,
+      target_type: "module",
+      module: null,
+      sourceInbox: Boolean(args.sourceInbox),
+    };
+  }
+  const module = args.modules.find((candidate) => normalizeIdValue(candidate._id) === args.moduleId) ?? null;
+  if (!module) {
+    return missingBuilderRef({
+      ref: args.moduleId,
+      modules: args.modules,
+      resources: args.resources,
+      moduleNameMap: buildModuleNameMap(args.modules),
+      communityId: args.communityId,
+    });
+  }
+  return {
+    ok: true,
+    target_type: "module",
+    module,
+    sourceInbox: Boolean(args.sourceInbox),
+  };
+}
+
+function resolveBuilderRefStage(args: {
+  ref: string;
+  matches: Array<
+    | { target_type: "resource"; resource: CommunityResourceLike; match: CommunityResourceBuilderRefMatch }
+    | {
+        target_type: "module";
+        module: CommunityResourceModuleLike | null;
+        sourceInbox: boolean;
+        match: CommunityResourceBuilderRefMatch;
+      }
+  >;
+}): ResolvedCommunityResourceBuilderRef | null {
+  if (args.matches.length === 0) return null;
+  if (args.matches.length > 1) {
+    return ambiguousBuilderRef(args.matches.map((match) => match.match), args.ref);
+  }
+  const match = args.matches[0];
+  if (match.target_type === "resource") {
+    return {
+      ok: true,
+      target_type: "resource",
+      resource: match.resource,
+    };
+  }
+  return {
+    ok: true,
+    target_type: "module",
+    module: match.module,
+    sourceInbox: match.sourceInbox,
+  };
+}
+
+function resolveCommunityResourceBuilderRef(args: {
+  communityId: any;
+  ref: string;
+  modules: CommunityResourceModuleLike[];
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+}): ResolvedCommunityResourceBuilderRef {
+  const ref = String(args.ref ?? "").trim();
+  if (!ref) throw new Error("community_resource_builder_read_ref_required");
+
+  const resourceById = args.resources.find((row) => normalizeIdValue(row._id) === ref) ?? null;
+  if (resourceById) {
+    return {
+      ok: true,
+      target_type: "resource",
+      resource: resourceById,
+    };
+  }
+
+  const moduleById = resolveBuilderRefStage({
+    ref,
+    matches: args.modules
+      .filter((module) => normalizeIdValue(module._id) === ref)
+      .map((module) => ({
+        target_type: "module" as const,
+        module,
+        sourceInbox: false,
+        match: buildBuilderModuleRefMatch({
+          communityId: args.communityId,
+          module,
+          resources: args.resources,
+        }),
+      })),
+  });
+  if (moduleById) return moduleById;
+  if (ref === COMMUNITY_RESOURCE_UNSORTED_MODULE_SEGMENT) {
+    return {
+      ok: true,
+      target_type: "module",
+      module: null,
+      sourceInbox: false,
+    };
+  }
+
+  const parsed = parseCommunityResourceDirectoryUri(ref);
+  if (parsed) {
+    if (parsed.communityId !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_resource_directory_community_mismatch");
+    }
+    if (parsed.resourceId) {
+      const resource = args.resources.find((row) => normalizeIdValue(row._id) === parsed.resourceId) ?? null;
+      if (!resource) {
+        return missingBuilderRef({
+          ref,
+          modules: args.modules,
+          resources: args.resources,
+          moduleNameMap: args.moduleNameMap,
+          communityId: args.communityId,
+        });
+      }
+      return {
+        ok: true,
+        target_type: "resource",
+        resource,
+      };
+    }
+    return resolveBuilderModuleById({
+      communityId: args.communityId,
+      modules: args.modules,
+      resources: args.resources,
+      moduleId: parsed.moduleId,
+      sourceInbox: parsed.sourceInbox,
+    });
+  }
+
+  const resourcePathMatches = args.resources
+    .filter((row) => {
+      const directory = buildResourceDirectoryFieldsForTool(row, args.moduleNameMap);
+      return normalizeDirectoryPathForMatch(directory.directory_path) === normalizeDirectoryPathForMatch(ref);
+    })
+    .map((resource) => ({
+      target_type: "resource" as const,
+      resource,
+      match: buildBuilderResourceRefMatch(resource, args.moduleNameMap),
+    }));
+  const resourcePath = resolveBuilderRefStage({
+    ref,
+    matches: resourcePathMatches,
+  });
+  if (resourcePath) return resourcePath;
+
+  const modulePathCandidates: Array<{
+    target_type: "module";
+    module: CommunityResourceModuleLike | null;
+    sourceInbox: boolean;
+    match: CommunityResourceBuilderRefMatch;
+  }> = [];
+  for (const module of args.modules) {
+    for (const match of [
+      buildBuilderModuleRefMatch({
+        communityId: args.communityId,
+        module,
+        resources: args.resources,
+      }),
+      buildBuilderModuleRefMatch({
+        communityId: args.communityId,
+        module,
+        resources: args.resources,
+        sourceInbox: true,
+      }),
+    ]) {
+      modulePathCandidates.push({
+        target_type: "module",
+        module,
+        sourceInbox: match.target_type === "module" && Boolean(match.source_inbox),
+        match,
+      });
+    }
+  }
+  for (const match of [
+    buildBuilderModuleRefMatch({
+      communityId: args.communityId,
+      module: null,
+      resources: args.resources,
+    }),
+    buildBuilderModuleRefMatch({
+      communityId: args.communityId,
+      module: null,
+      resources: args.resources,
+      sourceInbox: true,
+    }),
+  ]) {
+    modulePathCandidates.push({
+      target_type: "module",
+      module: null,
+      sourceInbox: match.target_type === "module" && Boolean(match.source_inbox),
+      match,
+    });
+  }
+  const modulePathMatches = modulePathCandidates.filter((candidate) =>
+    normalizeDirectoryPathForMatch(candidate.match.directory_path) === normalizeDirectoryPathForMatch(ref),
+  );
+  const modulePath = resolveBuilderRefStage({
+    ref,
+    matches: modulePathMatches,
+  });
+  if (modulePath) return modulePath;
+
+  const refText = normalizeBuilderRefLookupText(ref);
+  const moduleName = resolveBuilderRefStage({
+    ref,
+    matches: args.modules
+      .filter((module) => normalizeBuilderRefLookupText(module.name) === refText)
+      .map((module) => ({
+        target_type: "module" as const,
+        module,
+        sourceInbox: false,
+        match: buildBuilderModuleRefMatch({
+          communityId: args.communityId,
+          module,
+          resources: args.resources,
+        }),
+      })),
+  });
+  if (moduleName) return moduleName;
+
+  const resourceTitle = resolveBuilderRefStage({
+    ref,
+    matches: args.resources
+      .filter((resource) => normalizeBuilderRefLookupText(resource.title) === refText)
+      .map((resource) => ({
+        target_type: "resource" as const,
+        resource,
+        match: buildBuilderResourceRefMatch(resource, args.moduleNameMap),
+      })),
+  });
+  if (resourceTitle) return resourceTitle;
+
+  const refSlug = normalizeBuilderRefSlug(ref);
+  if (refSlug) {
+    const moduleSlug = resolveBuilderRefStage({
+      ref,
+      matches: args.modules
+        .filter((module) => normalizeBuilderRefSlug(module.name) === refSlug)
+        .map((module) => ({
+          target_type: "module" as const,
+          module,
+          sourceInbox: false,
+          match: buildBuilderModuleRefMatch({
+            communityId: args.communityId,
+            module,
+            resources: args.resources,
+          }),
+        })),
+    });
+    if (moduleSlug) return moduleSlug;
+
+    const resourceSlug = resolveBuilderRefStage({
+      ref,
+      matches: args.resources
+        .filter((resource) => normalizeBuilderRefSlug(resource.title) === refSlug)
+        .map((resource) => ({
+          target_type: "resource" as const,
+          resource,
+          match: buildBuilderResourceRefMatch(resource, args.moduleNameMap),
+        })),
+    });
+    if (resourceSlug) return resourceSlug;
+  }
+
+  return missingBuilderRef({
+    ref,
+    modules: args.modules,
+    resources: args.resources,
+    moduleNameMap: args.moduleNameMap,
+    communityId: args.communityId,
+  });
+}
+
+async function buildCommunityResourceBuilderModuleReadPayload(args: {
+  ctx: any;
+  communityId: any;
+  module: CommunityResourceModuleLike | null;
+  sourceInbox: boolean;
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+}) {
+  const moduleId = args.module ? normalizeIdValue(args.module._id) : null;
+  const rows = moduleResources(args.resources, moduleId)
+    .filter((row) => !args.sourceInbox || normalizeResourceRole(row.role) === "source")
+    .sort(compareCommunityResources);
+  const module = args.module
+    ? await mapCommunityResourceModuleRow(args.ctx, args.module)
+    : {
+        id: null,
+        community_id: normalizeIdValue(args.communityId),
+        ...buildUnsortedModuleDirectoryFields(args.communityId),
+        module_status: null,
+        name: "Unsorted",
+        description_md: "Existing knowledge items that are not assigned to a module.",
+        banner_url: null,
+        banner_storage_id: null,
+        banner_focus_x: null,
+        banner_focus_y: null,
+        banner_zoom: null,
+        sort_order: null,
+        created_at: null,
+        updated_at: null,
+      };
+  return {
+    ok: true,
+    kind: "community_resource_builder_read",
+    target_type: "module",
+    source_inbox: args.sourceInbox,
+    module,
+    resource_count: rows.length,
+    resources: rows.map((row) => mapCompactCommunityResourceBuilderListRow(row, args.moduleNameMap)),
+  };
+}
+
 export const listCommunityResourceBuilderDirectory = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -4138,6 +4637,7 @@ export const readCommunityResourceBuilderResource = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    ref: v.optional(v.string()),
     resourceId: v.optional(v.union(v.id("communityResources"), v.null())),
     moduleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
   },
@@ -4152,29 +4652,49 @@ export const readCommunityResourceBuilderResource = query({
       communityId: args.communityId,
       userId,
     });
-    if (args.resourceId) {
-      const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
-      if (!resource || String(resource.communityId) !== String(args.communityId)) {
-        throw new Error("community_resource_not_found");
-      }
+    const ref = String(args.ref ?? args.resourceId ?? args.moduleId ?? "").trim();
+    if (!ref) throw new Error("community_resource_builder_read_ref_required");
+
+    const [modules, resources] = await Promise.all([
+      ctx.db
+        .query("communityResourceModules" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect() as Promise<CommunityResourceModuleLike[]>,
+      ctx.db
+        .query("communityResources" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect() as Promise<CommunityResourceLike[]>,
+    ]);
+    const moduleNameMap = buildModuleNameMap(modules);
+    const resolved = resolveCommunityResourceBuilderRef({
+      communityId: args.communityId,
+      ref,
+      modules,
+      resources,
+      moduleNameMap,
+    });
+    if (!resolved.ok) {
+      return {
+        kind: "community_resource_builder_read",
+        ...resolved,
+      };
+    }
+    if (resolved.target_type === "resource") {
       return {
         ok: true,
         kind: "community_resource_builder_read",
-        resource: await mapCommunityResourceRowWithBody(ctx, resource),
+        target_type: "resource",
+        resource: await mapCommunityResourceRowWithBody(ctx, resolved.resource),
       };
     }
-    if (args.moduleId) {
-      const module = (await ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
-      if (!module || String(module.communityId) !== String(args.communityId)) {
-        throw new Error("community_resource_module_not_found");
-      }
-      return {
-        ok: true,
-        kind: "community_resource_builder_read",
-        module: await mapCommunityResourceModuleRow(ctx, module),
-      };
-    }
-    throw new Error("community_resource_builder_read_ref_required");
+    return await buildCommunityResourceBuilderModuleReadPayload({
+      ctx,
+      communityId: args.communityId,
+      module: resolved.module,
+      sourceInbox: resolved.sourceInbox,
+      resources,
+      moduleNameMap,
+    });
   },
 });
 
