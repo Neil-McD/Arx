@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  normalizeBlaxelWorkspacePath,
+  sanitizeBlaxelErrorDetails,
+} from "../convex/blaxelWorkspaceClient.ts";
+import {
   resolveWorkspaceComputerProviderPolicy,
 } from "../convex/workspaceComputerProviderPolicy.ts";
 
@@ -93,6 +97,89 @@ function proveProviderPolicyMatrix() {
       `${testCase.name}: unexpected reason`,
     );
   }
+}
+
+function proveBlaxelWorkspacePathGuard() {
+  const acceptedCases = [
+    { raw: ".", expected: "/workspace" },
+    { raw: "src/App.tsx", expected: "/workspace/src/App.tsx" },
+    { raw: "/workspace/src/App.tsx", expected: "/workspace/src/App.tsx" },
+    { raw: "nested/./file.txt", expected: "/workspace/nested/file.txt" },
+    { raw: "", expected: "/workspace" },
+  ];
+  for (const testCase of acceptedCases) {
+    assert.equal(
+      normalizeBlaxelWorkspacePath(testCase.raw),
+      testCase.expected,
+      `expected Blaxel path guard to accept ${JSON.stringify(testCase.raw)}`,
+    );
+  }
+
+  for (const raw of ["..", "../secret", "src/../../secret", "/etc/passwd", "/tmp/foo", "a\0b"]) {
+    assert.throws(
+      () => normalizeBlaxelWorkspacePath(raw),
+      /workspace_path_outside_root/,
+      `expected Blaxel path guard to reject ${JSON.stringify(raw)}`,
+    );
+  }
+}
+
+function proveBlaxelErrorSanitizer() {
+  const details = sanitizeBlaxelErrorDetails({
+    name: "ProviderError",
+    message: "Quota exceeded: 0/0 volumes",
+    config: {
+      headers: {
+        Authorization: "Bearer should-not-leak",
+      },
+      apiKey: "should-not-leak",
+    },
+    response: {
+      status: 429,
+      headers: {
+        authorization: "Bearer should-not-leak",
+      },
+      data: {
+        code: "quota_exceeded",
+        error: "Quota exceeded: 0/0 volumes",
+        apiKey: "should-not-leak",
+      },
+    },
+  });
+  assert.equal(details.errorName, "ProviderError");
+  assert.equal(details.errorMessage, "Quota exceeded: 0/0 volumes");
+  assert.equal(details.responseStatus, 429);
+  assert.equal(details.providerCode, "quota_exceeded");
+  const serialized = JSON.stringify(details);
+  for (const forbidden of [
+    "should-not-leak",
+    "Authorization",
+    "authorization",
+    "headers",
+    "apiKey",
+    "config",
+  ]) {
+    assert.equal(
+      serialized.includes(forbidden),
+      false,
+      `expected sanitized Blaxel error details not to include ${forbidden}`,
+    );
+  }
+
+  const sensitiveErrorDetails = sanitizeBlaxelErrorDetails(
+    new Error("Authorization: Bearer should-not-leak apiKey=should-not-leak"),
+  );
+  const sensitiveSerialized = JSON.stringify(sensitiveErrorDetails);
+  assert.equal(
+    sensitiveSerialized.includes("should-not-leak"),
+    false,
+    "expected sanitized Error messages not to include secret-like values",
+  );
+  assert.equal(
+    sensitiveSerialized.includes("Authorization"),
+    false,
+    "expected sanitized Error messages not to include authorization details",
+  );
 }
 
 async function proveWorkspaceComputerProviderContract() {
@@ -206,6 +293,21 @@ async function proveWorkspaceComputerProviderContract() {
     "expected Blaxel client to normalize volume quota failures",
   );
   assertIncludes(
+    blaxelClientSource,
+    "normalizeBlaxelWorkspacePath",
+    "expected Blaxel client to expose a workspace path guard",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "sanitizeBlaxelErrorDetails",
+    "expected Blaxel client to expose a safe provider error sanitizer",
+  );
+  assertExcludes(
+    blaxelClientSource,
+    "JSON.stringify(error)",
+    "Blaxel client must not stringify raw provider error objects",
+  );
+  assertIncludes(
     providerSmokeSource,
     "ensureBlaxelWorkspaceComputer",
     "expected provider smoke to exercise the Blaxel provider wrapper",
@@ -294,6 +396,8 @@ async function proveWorkspaceComputerProviderContract() {
   );
 
   proveProviderPolicyMatrix();
+  proveBlaxelWorkspacePathGuard();
+  proveBlaxelErrorSanitizer();
 
   console.log("PASS workspace computer provider contract proof");
 }

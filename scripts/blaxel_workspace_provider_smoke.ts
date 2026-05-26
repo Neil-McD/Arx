@@ -87,7 +87,7 @@ async function main() {
   }
 
   const marker = `polynet-blaxel-provider-smoke:${Date.now()}`;
-  const filePath = `/tmp/${result.sandboxName}.txt`;
+  const filePath = `${result.sandboxName}.txt`;
 
   try {
     const ensured = await ensureBlaxelWorkspaceComputer({
@@ -119,6 +119,7 @@ async function main() {
 
     const commandResult = await executeBlaxelWorkspaceCommand({
       sandboxName: result.sandboxName,
+      cwd: ".",
       command: `sh -lc 'test -f ${filePath} && printf provider-smoke-ok'`,
       waitForCompletion: true,
       timeoutSeconds: 60,
@@ -133,7 +134,7 @@ async function main() {
 
     const listResult = await listBlaxelWorkspaceDirectory({
       sandboxName: result.sandboxName,
-      path: "/tmp",
+      path: ".",
     });
     if (!listResult.ok) throw new Error(`${listResult.code}: ${listResult.message}`);
     result.evidence.listedDirectory = true;

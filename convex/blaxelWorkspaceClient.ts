@@ -85,6 +85,13 @@ export type BlaxelWorkspacePreviewResult =
 
 type BlaxelCoreModule = typeof import("@blaxel/core");
 
+type SafeBlaxelErrorDetails = {
+  errorName?: string;
+  errorMessage?: string;
+  responseStatus?: number;
+  providerCode?: string;
+};
+
 function readEnv(name: string): string {
   try {
     const value = (globalThis as typeof globalThis & {
@@ -116,6 +123,48 @@ function normalizeOptionalString(value: unknown): string | null {
   return normalized || null;
 }
 
+function normalizeWorkspaceRoot(value: unknown): string {
+  const raw = normalizeOptionalString(value) ?? BLAXEL_WORKSPACE_ROOT;
+  if (raw.includes("\0")) throw new Error("invalid_workspace_root");
+  const normalized = raw.replace(/\/+/g, "/").replace(/\/+$/g, "") || "/";
+  const segments = normalized.split("/").filter(Boolean);
+  if (
+    !normalized.startsWith("/") ||
+    normalized === "/" ||
+    segments.some((segment) => segment === "." || segment === "..")
+  ) {
+    throw new Error("invalid_workspace_root");
+  }
+  return normalized;
+}
+
+export function normalizeBlaxelWorkspacePath(
+  rawPath: unknown,
+  workspaceRoot: unknown = BLAXEL_WORKSPACE_ROOT,
+): string {
+  const root = normalizeWorkspaceRoot(workspaceRoot);
+  const raw = String(rawPath ?? ".").trim() || ".";
+  if (raw.includes("\0")) throw new Error("workspace_path_outside_root");
+  const normalizedRaw = raw.replace(/\\/g, "/").replace(/\/+/g, "/");
+  const rootPrefix = `${root}/`;
+  const relative =
+    normalizedRaw === root
+      ? "."
+      : normalizedRaw.startsWith(rootPrefix)
+        ? normalizedRaw.slice(rootPrefix.length)
+        : normalizedRaw.startsWith("/")
+          ? null
+          : normalizedRaw;
+  if (relative === null) throw new Error("workspace_path_outside_root");
+  const segments = String(relative)
+    .split("/")
+    .filter((segment) => segment.length > 0 && segment !== ".");
+  if (segments.some((segment) => segment === "..")) {
+    throw new Error("workspace_path_outside_root");
+  }
+  return segments.length === 0 ? root : `${root}/${segments.join("/")}`;
+}
+
 function failure(params: {
   status: number;
   code: string;
@@ -129,6 +178,14 @@ function failure(params: {
     message: params.message,
     ...(params.details ? { details: params.details } : null),
   };
+}
+
+function invalidWorkspacePathFailure(): WorkspaceComputerProviderFailure {
+  return failure({
+    status: 400,
+    code: "workspace_path_outside_root",
+    message: "Workspace path is outside the Blaxel workspace root.",
+  });
 }
 
 export function loadBlaxelWorkspaceConfig():
@@ -160,25 +217,74 @@ export function loadBlaxelWorkspaceConfig():
 }
 
 function describeError(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return Object.prototype.toString.call(error);
-    }
+  const details = sanitizeBlaxelErrorDetails(error);
+  const message = [
+    details.errorName,
+    details.errorMessage,
+    details.providerCode,
+    Number.isFinite(details.responseStatus) ? `status:${details.responseStatus}` : null,
+  ].filter(Boolean).join(": ");
+  return message || "Blaxel provider error";
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
   }
-  return String(error);
+  return null;
+}
+
+function redactSensitiveText(value: string): string {
+  const clipped = value.slice(0, 500);
+  if (/(authorization|api[_-]?key|x-api-key|token|secret|headers|config|bearer\s+)/i.test(clipped)) {
+    return "[redacted_provider_error]";
+  }
+  return clipped;
+}
+
+function safeText(value: unknown): string | undefined {
+  if (typeof value === "string") return redactSensitiveText(value);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).slice(0, 500);
+  }
+  return undefined;
+}
+
+function safeNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function sanitizeBlaxelErrorDetails(error: unknown): SafeBlaxelErrorDetails {
+  const record = asRecord(error);
+  const response = asRecord(record?.response);
+  const responseData = asRecord(response?.data);
+  return {
+    errorName:
+      error instanceof Error
+        ? safeText(error.name)
+        : safeText(record?.name),
+    errorMessage:
+      error instanceof Error
+        ? safeText(error.message)
+        : safeText(record?.message) ??
+          safeText(record?.error) ??
+          safeText(responseData?.message) ??
+          safeText(responseData?.error),
+    responseStatus: safeNumber(record?.status ?? record?.statusCode ?? response?.status),
+    providerCode: safeText(record?.code ?? responseData?.code),
+  };
 }
 
 function classifyBlaxelError(error: unknown): WorkspaceComputerProviderFailure {
   const message = describeError(error);
+  const details = sanitizeBlaxelErrorDetails(error);
   if (/quota exceeded|0\/0 volumes|volume quota/i.test(message)) {
     return failure({
       status: 402,
       code: "blaxel_volume_quota_exceeded",
       message: "Blaxel volume quota is exhausted or not enabled for this workspace.",
-      details: { error: message.slice(0, 1000) },
+      details,
     });
   }
   if (/404|not found|not_found|does not exist/i.test(message)) {
@@ -186,7 +292,7 @@ function classifyBlaxelError(error: unknown): WorkspaceComputerProviderFailure {
       status: 404,
       code: "blaxel_sandbox_not_found",
       message: "Blaxel sandbox not found.",
-      details: { error: message.slice(0, 1000) },
+      details,
     });
   }
   if (/wait|timeout|not ready|starting|pending/i.test(message)) {
@@ -194,14 +300,14 @@ function classifyBlaxelError(error: unknown): WorkspaceComputerProviderFailure {
       status: 503,
       code: "blaxel_sandbox_not_ready",
       message: "Blaxel sandbox is not ready.",
-      details: { error: message.slice(0, 1000) },
+      details,
     });
   }
   return failure({
     status: 503,
     code: "blaxel_request_failed",
     message: "Blaxel workspace provider request failed.",
-    details: { error: message.slice(0, 1000) },
+    details,
   });
 }
 
@@ -222,8 +328,26 @@ async function loadBlaxelCore():
       status: 500,
       code: "blaxel_sdk_unavailable",
       message: "Blaxel SDK could not be loaded.",
-      details: { error: describeError(error).slice(0, 1000) },
+      details: sanitizeBlaxelErrorDetails(error),
     });
+  }
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return /exist|already/i.test(describeError(error));
+}
+
+async function ensureBlaxelWorkspaceRootDirectory(
+  sandbox: any,
+  workspaceRoot: string,
+) {
+  try {
+    await sandbox.fs.mkdir(workspaceRoot);
+  } catch (error) {
+    if (!isAlreadyExistsError(error)) {
+      // Best effort. Some mounted volumes already exist but do not report mkdir
+      // idempotently through the SDK.
+    }
   }
 }
 
@@ -326,6 +450,7 @@ export async function ensureBlaxelWorkspaceSandbox(
     if (typeof sandbox?.wait === "function") {
       await sandbox.wait({ maxWait: 120_000, interval: 2_000 });
     }
+    await ensureBlaxelWorkspaceRootDirectory(sandbox, workspaceRoot);
     return {
       ok: true,
       providerId: "blaxel",
@@ -419,7 +544,14 @@ export async function executeBlaxelWorkspaceCommand(
     const processName =
       normalizeOptionalString(params.processName) ??
       `polynet-command-${crypto.randomUUID().slice(0, 8)}`;
-    const workingDir = normalizeOptionalString(params.cwd);
+    let workingDir: string | null = null;
+    try {
+      workingDir = params.cwd
+        ? normalizeBlaxelWorkspacePath(params.cwd, resolved.workspaceRoot)
+        : null;
+    } catch {
+      return invalidWorkspacePathFailure();
+    }
     const result = await sandbox.process.exec({
       name: processName,
       command: params.command,
@@ -468,7 +600,15 @@ export async function listBlaxelWorkspaceDirectory(params: {
   if (!resolved.ok) return resolved;
   const loadedCore = await loadBlaxelCore();
   if (!loadedCore.ok) return loadedCore;
-  const directoryPath = normalizeOptionalString(params.path) ?? resolved.workspaceRoot;
+  let directoryPath: string;
+  try {
+    directoryPath = normalizeBlaxelWorkspacePath(
+      params.path ?? ".",
+      resolved.workspaceRoot,
+    );
+  } catch {
+    return invalidWorkspacePathFailure();
+  }
   try {
     const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
     const entries = await sandbox.fs.ls(directoryPath);
@@ -494,14 +634,20 @@ export async function readBlaxelWorkspaceFile(params: {
   if (!resolved.ok) return resolved;
   const loadedCore = await loadBlaxelCore();
   if (!loadedCore.ok) return loadedCore;
+  let filePath: string;
+  try {
+    filePath = normalizeBlaxelWorkspacePath(params.path, resolved.workspaceRoot);
+  } catch {
+    return invalidWorkspacePathFailure();
+  }
   try {
     const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
-    const content = await sandbox.fs.read(params.path);
+    const content = await sandbox.fs.read(filePath);
     return {
       ok: true,
       providerId: "blaxel",
       providerSandboxId: resolved.providerSandboxId,
-      path: params.path,
+      path: filePath,
       content: String(content),
     };
   } catch (error) {
@@ -520,14 +666,20 @@ export async function writeBlaxelWorkspaceFile(params: {
   if (!resolved.ok) return resolved;
   const loadedCore = await loadBlaxelCore();
   if (!loadedCore.ok) return loadedCore;
+  let filePath: string;
+  try {
+    filePath = normalizeBlaxelWorkspacePath(params.path, resolved.workspaceRoot);
+  } catch {
+    return invalidWorkspacePathFailure();
+  }
   try {
     const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
-    await sandbox.fs.write(params.path, params.content);
+    await sandbox.fs.write(filePath, params.content);
     return {
       ok: true,
       providerId: "blaxel",
       providerSandboxId: resolved.providerSandboxId,
-      path: params.path,
+      path: filePath,
     };
   } catch (error) {
     return classifyBlaxelError(error);
