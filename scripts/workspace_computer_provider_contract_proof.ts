@@ -191,8 +191,14 @@ async function proveWorkspaceComputerProviderContract() {
     "convex/blaxelWorkspaceComputerProvider.ts",
   );
   const blaxelClientSource = await readRepoFile("convex/blaxelWorkspaceClient.ts");
+  const blaxelDiagnosticsSource = await readRepoFile(
+    "convex/blaxelWorkspaceDiagnostics.ts",
+  );
   const providerSmokeSource = await readRepoFile(
     "scripts/blaxel_workspace_provider_smoke.ts",
+  );
+  const convexRuntimeProbeSource = await readRepoFile(
+    "scripts/blaxel_convex_runtime_probe.ts",
   );
   const backgroundServiceSource = await readRepoFile(
     "convex/workspaceTerminalBackgroundService.ts",
@@ -325,6 +331,122 @@ async function proveWorkspaceComputerProviderContract() {
     "POLYNET_DEPLOYMENT_KIND",
     "expected provider smoke runner to set staging deployment kind through server env",
   );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    '"use node";',
+    "expected Blaxel Convex runtime diagnostics to be isolated in a Node action",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "export const diagnoseBlaxelConvexRuntime = action({",
+    "expected a Blaxel Convex runtime diagnostic action",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "resolveWorkspaceComputerProviderFromServerEnv",
+    "expected diagnostic action to report the server-owned provider policy",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "blaxel_diagnostic_staging_only",
+    "expected diagnostic action to fail closed outside staging",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    'readEnv("POLYNET_DEPLOYMENT_KIND")',
+    "expected diagnostic action to use server deployment kind",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    'await import("@blaxel/core")',
+    "expected diagnostic action to prove the Blaxel SDK imports inside Convex",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "SandboxInstance",
+    "expected diagnostic action to verify SandboxInstance export shape",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "VolumeInstance",
+    "expected diagnostic action to verify VolumeInstance export shape",
+  );
+  assert.ok(
+    blaxelDiagnosticsSource.indexOf('if (deploymentKind !== "staging")') <
+      blaxelDiagnosticsSource.indexOf(
+        "const policy = resolveWorkspaceComputerProviderFromServerEnv()",
+      ),
+    "expected diagnostic action to gate non-staging before reading provider policy",
+  );
+  assert.ok(
+    blaxelDiagnosticsSource.indexOf('if (deploymentKind !== "staging")') <
+      blaxelDiagnosticsSource.indexOf('readEnv("BL_WORKSPACE")'),
+    "expected diagnostic action to gate non-staging before reading Blaxel env",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "blWorkspacePresent",
+    "expected diagnostic action to report only BL_WORKSPACE presence",
+  );
+  assertIncludes(
+    blaxelDiagnosticsSource,
+    "blApiKeyPresent",
+    "expected diagnostic action to report only BL_API_KEY presence",
+  );
+  for (const forbidden of [
+    "SandboxInstance.create",
+    "SandboxInstance.createIfNotExists",
+    "VolumeInstance.create",
+    "VolumeInstance.createIfNotExists",
+    ".process.",
+    ".fs.",
+    ".delete(",
+    "JSON.stringify(error)",
+    ".stack",
+  ]) {
+    assertExcludes(
+      blaxelDiagnosticsSource,
+      forbidden,
+      `diagnostic action must not create/delete sandboxes, execute tools, or leak raw errors: ${forbidden}`,
+    );
+  }
+  for (const forbidden of [
+    "workspace: readEnv",
+    "apiKey: readEnv",
+    "BL_WORKSPACE: readEnv",
+    "BL_API_KEY: readEnv",
+  ]) {
+    assertExcludes(
+      blaxelDiagnosticsSource,
+      forbidden,
+      `diagnostic action must not return raw provider env values: ${forbidden}`,
+    );
+  }
+  assertIncludes(
+    convexRuntimeProbeSource,
+    "EXPECTED_CONVEX_DEPLOYMENT = \"quick-porcupine-949\"",
+    "expected Convex runtime probe to target staging Convex explicitly",
+  );
+  assertIncludes(
+    convexRuntimeProbeSource,
+    "blaxelWorkspaceDiagnostics:diagnoseBlaxelConvexRuntime",
+    "expected Convex runtime probe to call the diagnostic action",
+  );
+  assertIncludes(
+    convexRuntimeProbeSource,
+    "--deployment-name",
+    "expected Convex runtime probe to pass the staging deployment explicitly",
+  );
+  assertIncludes(
+    convexRuntimeProbeSource,
+    "--push",
+    "expected Convex runtime probe to push the diagnostic action to staging before running",
+  );
+  assertIncludes(
+    convexRuntimeProbeSource,
+    "remote_bl_api_key_missing",
+    "expected Convex runtime probe to fail if staging Convex lacks Blaxel API key env",
+  );
 
   assertIncludes(
     backgroundServiceSource,
@@ -393,6 +515,11 @@ async function proveWorkspaceComputerProviderContract() {
     packageJson.scripts["smoke:blaxel-workspace-provider"],
     "bash scripts/run_blaxel_workspace_provider_smoke.sh",
     "expected package script for the Blaxel provider smoke",
+  );
+  assert.equal(
+    packageJson.scripts["probe:blaxel-convex-runtime"],
+    "bash scripts/run_blaxel_convex_runtime_probe.sh",
+    "expected package script for the Blaxel Convex runtime probe",
   );
 
   proveProviderPolicyMatrix();

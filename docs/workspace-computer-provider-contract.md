@@ -40,6 +40,8 @@ workspace tools attach to the project computer.
 Blaxel can only become selectable after all of these are true:
 
 - The staging readiness guard passes.
+- The Convex runtime diagnostic passes in staging, proving Convex can import the
+  Blaxel SDK and see the server-owned Blaxel env without creating a sandbox.
 - The Blaxel workspace lifecycle proof passes with project volumes enabled.
 - The server explicitly enables the Blaxel provider.
 - The deployment is not production.
