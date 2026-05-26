@@ -67,7 +67,7 @@ function readVolumeSizeMbEnv(): number {
   const explicitMb = readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_MB", 0);
   if (explicitMb > 0) return explicitMb;
   const legacyGb = readIntEnv("BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_GB", 0);
-  return legacyGb > 0 ? legacyGb * 1024 : 8192;
+  return legacyGb > 0 ? legacyGb * 1024 : 2048;
 }
 
 function safeResourceName(input: string): string {

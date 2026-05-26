@@ -586,7 +586,7 @@ async function proveWorkspaceComputerProviderContract() {
   );
   assertIncludes(
     blaxelVolumeSmokeActionSource,
-    "const VOLUME_SMOKE_SIZE_MB = 8192",
+    "const VOLUME_SMOKE_SIZE_MB = 2048",
     "expected volume smoke action to request Blaxel volume sizes in MB",
   );
   assertIncludes(

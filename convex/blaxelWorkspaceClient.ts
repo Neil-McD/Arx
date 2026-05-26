@@ -208,7 +208,7 @@ export function loadBlaxelWorkspaceConfig():
       image: readEnv("BLAXEL_WORKSPACE_IMAGE") || "blaxel/base-image:latest",
       memoryMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_MEMORY_MB", 4096),
       region: readEnv("BLAXEL_WORKSPACE_REGION") || "us-pdx-1",
-      volumeSizeMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_VOLUME_SIZE_MB", 8192),
+      volumeSizeMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_VOLUME_SIZE_MB", 2048),
       workspaceRoot: readEnv("BLAXEL_WORKSPACE_ROOT") || BLAXEL_WORKSPACE_ROOT,
       idleDeleteAfter: readEnv("BLAXEL_WORKSPACE_IDLE_DELETE_AFTER") || "1h",
       maxAgeDeleteAfter: readEnv("BLAXEL_WORKSPACE_MAX_AGE_DELETE_AFTER") || "2h",

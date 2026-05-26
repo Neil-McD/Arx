@@ -34,7 +34,7 @@ type ProviderFailureLike = {
   details?: Record<string, unknown>;
 };
 
-const VOLUME_SMOKE_SIZE_MB = 8192;
+const VOLUME_SMOKE_SIZE_MB = 2048;
 const COLD_ATTACH_RETRY_TIMEOUT_MS = 90_000;
 const COLD_ATTACH_RETRY_INTERVAL_MS = 3_000;
 
