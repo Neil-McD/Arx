@@ -779,6 +779,9 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     providerSandboxId: v.optional(v.string()),
+    providerSandboxProviderId: v.optional(
+      v.union(v.literal("daytona"), v.literal("blaxel")),
+    ),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
     providerSandboxLastActivityAt: v.optional(v.number()),
@@ -788,6 +791,9 @@ export default defineSchema({
     providerSandboxCreditBudgetCredits: v.optional(v.number()),
     providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
     providerVolumeId: v.optional(v.string()),
+    providerVolumeProviderId: v.optional(
+      v.union(v.literal("daytona"), v.literal("blaxel")),
+    ),
     providerVolumeName: v.optional(v.string()),
     providerVolumeState: v.optional(v.string()),
     providerVolumeLastSeenAt: v.optional(v.number()),

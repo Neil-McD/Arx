@@ -96,23 +96,42 @@ function printAndExit(result: ProbeResult, exitCode: number): never {
   process.exit(exitCode);
 }
 
+function redactSensitiveText(value: string): string {
+  const clipped = value.slice(0, 500);
+  if (/(authorization|api[_-]?key|x-api-key|token|secret|headers|config|bearer\s+)/i.test(clipped)) {
+    return "[redacted_provider_error]";
+  }
+  return clipped;
+}
+
+function safeText(value: unknown): string | undefined {
+  if (typeof value === "string") return redactSensitiveText(value);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).slice(0, 500);
+  }
+  return undefined;
+}
+
 function describeError(error: unknown): string {
   if (error instanceof Error) {
-    const extras: Record<string, unknown> = {};
-    for (const key of Object.keys(error as unknown as Record<string, unknown>)) {
-      extras[key] = (error as unknown as Record<string, unknown>)[key];
-    }
-    const extraText = Object.keys(extras).length > 0 ? ` ${JSON.stringify(extras)}` : "";
-    return `${error.name}: ${error.message}${extraText}`;
+    return [
+      safeText(error.name),
+      safeText(error.message),
+    ].filter(Boolean).join(": ") || "provider_error";
   }
   if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return Object.prototype.toString.call(error);
-    }
+    const record = error as Record<string, unknown>;
+    return (
+      [
+        safeText(record.name),
+        safeText(record.message),
+        safeText(record.error),
+        safeText(record.code),
+      ].filter(Boolean).join(": ") ||
+      Object.prototype.toString.call(error)
+    );
   }
-  return String(error);
+  return safeText(error) ?? "provider_error";
 }
 
 function buildBaseResult(): ProbeResult {
@@ -142,8 +161,8 @@ function buildBaseResult(): ProbeResult {
       volumeSizeMb: readVolumeSizeMbEnv(),
       mountPath: process.env.BLAXEL_WORKSPACE_PROBE_MOUNT_PATH || "/workspace",
       serverPort: readIntEnv("BLAXEL_WORKSPACE_PROBE_SERVER_PORT", 32123),
-      lifecycleIdleDelete: process.env.BLAXEL_WORKSPACE_PROBE_IDLE_DELETE || "1h",
-      lifecycleMaxAgeDelete: process.env.BLAXEL_WORKSPACE_PROBE_MAX_AGE_DELETE || "2h",
+      lifecycleIdleDelete: process.env.BLAXEL_WORKSPACE_PROBE_IDLE_DELETE || "30m",
+      lifecycleMaxAgeDelete: process.env.BLAXEL_WORKSPACE_PROBE_MAX_AGE_DELETE || "1h",
       standbyWaitMs: readIntEnv("BLAXEL_WORKSPACE_PROBE_STANDBY_WAIT_MS", 90_000),
       keepResources,
     },

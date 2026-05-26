@@ -416,6 +416,8 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
         try {
           await ctx.runMutation(internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any, {
             projectId: effectiveProjectId,
+            providerSandboxId,
+            providerSandboxProviderId: "daytona",
           });
         } catch {
           // project sandbox pointer cleanup is best-effort

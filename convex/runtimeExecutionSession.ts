@@ -1,5 +1,4 @@
 import { internal } from "./_generated/api";
-import type { WorkspaceSandboxSession } from "./daytonaWorkspaceSession";
 import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
   isWorkspaceTerminalActiveStatus,
@@ -17,6 +16,10 @@ import {
   releaseProjectBackgroundSandboxIfIdle,
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";
+import {
+  createProjectRuntimeWorkspaceSession,
+  type RuntimeWorkspaceSession,
+} from "./workspaceRuntimeSession.ts";
 import { reconcileWorkspaceTerminalRow } from "./workspaceTerminalReconciliation";
 import {
   createRuntimeMcpManager,
@@ -162,14 +165,14 @@ function normalizeRuntimeTerminalIdentityCommand(
 }
 
 function isWorkspaceCreditBudgetExpired(
-  session: WorkspaceSandboxSession | null | undefined,
+  session: RuntimeWorkspaceSession | null | undefined,
 ): boolean {
   const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
   return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
 }
 
 function buildWorkspaceCreditBudgetSignal(
-  session: WorkspaceSandboxSession,
+  session: RuntimeWorkspaceSession,
   parentSignal?: AbortSignal,
 ): { signal?: AbortSignal; cleanup: () => void } {
   const expiresAt = Number(session.creditBudgetExpiresAt ?? 0);
@@ -295,7 +298,7 @@ export function createPolyNetExecutionSession(params: {
   mountedTools: RuntimeMountedMcpTool[];
   mountedToolDiscoveryCatalog?: RuntimeMountedMcpTool[] | null;
   mountedPromptSuffix?: string | null;
-  initialWorkspaceSession?: WorkspaceSandboxSession | null;
+  initialWorkspaceSession?: RuntimeWorkspaceSession | null;
   appendRunEvent: (event: RuntimeExecutionSessionRunEvent) => Promise<void>;
   touchRunHeartbeat?: () => Promise<void>;
   loadConnectionBundle: (params: {
@@ -359,7 +362,7 @@ export function createPolyNetExecutionSession(params: {
 
   const persistWorkspaceSessionState = async (paramsForPersist: {
     state: "active" | "released" | "failed";
-    session: WorkspaceSandboxSession;
+    session: RuntimeWorkspaceSession;
     projectId: string;
     phase: "create" | "dispose";
   }): Promise<{ ok: true } | { ok: false; attemptCount: number }> => {
@@ -378,8 +381,14 @@ export function createPolyNetExecutionSession(params: {
             runId: params.runId,
             state: paramsForPersist.state,
             providerSandboxId: paramsForPersist.session.providerSandboxId,
-            toolboxProxyUrl: paramsForPersist.session.toolboxProxyUrl,
-            region: paramsForPersist.session.region ?? undefined,
+            toolboxProxyUrl:
+              paramsForPersist.session.providerId === "daytona"
+                ? paramsForPersist.session.toolboxProxyUrl
+                : undefined,
+            region:
+              paramsForPersist.session.providerId === "daytona"
+                ? paramsForPersist.session.region ?? undefined
+                : undefined,
           },
         );
         return { ok: true };
@@ -472,7 +481,7 @@ export function createPolyNetExecutionSession(params: {
     hasWorkspaceSession(): boolean {
       return workspaceSession !== null && workspaceSessionFailure === null;
     },
-    getWorkspaceSession(): WorkspaceSandboxSession | null {
+    getWorkspaceSession(): RuntimeWorkspaceSession | null {
       return workspaceSessionFailure ? null : workspaceSession;
     },
     async createWorkspaceSession(paramsForCreate?: {
@@ -510,9 +519,8 @@ export function createPolyNetExecutionSession(params: {
           session: workspaceSession,
         };
       }
-      const authSubject = String(params.authSubject ?? "").trim();
       const projectId = String(params.projectId ?? "").trim();
-      if (!authSubject || !projectId) {
+      if (!projectId) {
         return {
           ok: false as const,
           status: 400,
@@ -527,16 +535,17 @@ export function createPolyNetExecutionSession(params: {
           run_id: params.runId,
           project_id: projectId,
           tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+          provider_id: null,
         },
         `${params.runId}:workspace_session_create_started:1`,
       );
-      const backgroundSandbox = await ensureProjectBackgroundSandbox({
+      const createdWorkspace = await createProjectRuntimeWorkspaceSession({
         ctx: params.ctx,
-        authSubject,
+        authSubject: params.authSubject,
         userId: params.userId,
         projectId,
       });
-      if (!backgroundSandbox.ok) {
+      if (!createdWorkspace.ok) {
         await emitRunEvent(
           "workspace_session_create_completed",
           {
@@ -545,52 +554,42 @@ export function createPolyNetExecutionSession(params: {
             tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
             latency_ms: Date.now() - createStartedAt,
             status: "error",
-            code: backgroundSandbox.code,
+            code: createdWorkspace.code,
             source: "project_background",
+            provider_id: null,
           },
           `${params.runId}:workspace_session_create_completed:error`,
         );
         workspaceSessionFailure = {
-          status: backgroundSandbox.status,
-          code: backgroundSandbox.code,
-          message: backgroundSandbox.message,
-          details: ((backgroundSandbox as { details?: Record<string, unknown> | null }).details ?? null),
+          status: createdWorkspace.status,
+          code: createdWorkspace.code,
+          message: createdWorkspace.message,
+          details: ((createdWorkspace as { details?: Record<string, unknown> | null }).details ?? null),
         };
         return {
           ok: false as const,
-          status: backgroundSandbox.status,
-          code: backgroundSandbox.code,
-          message: backgroundSandbox.message,
-          details: (backgroundSandbox as { details?: unknown }).details,
+          status: createdWorkspace.status,
+          code: createdWorkspace.code,
+          message: createdWorkspace.message,
+          details: (createdWorkspace as { details?: unknown }).details,
         };
       }
 
       workspaceSessionFailure = null;
-      workspaceSession = {
-        config: backgroundSandbox.config,
-        projectId,
-        projectVolumeId: backgroundSandbox.projectVolumeId,
-        providerSandboxId: backgroundSandbox.providerSandboxId,
-        toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
-        region: null,
-        sandboxCpu: backgroundSandbox.sandboxCpu,
-        sandboxMemoryGiB: backgroundSandbox.sandboxMemoryGiB,
-        sandboxDiskGiB: backgroundSandbox.sandboxDiskGiB,
-        startedAt: backgroundSandbox.startedAt,
-        creditReservationKey: backgroundSandbox.creditReservationKey,
-        creditBudgetCredits: backgroundSandbox.creditBudgetCredits,
-        creditBudgetExpiresAt: backgroundSandbox.creditBudgetExpiresAt,
-        lifecycleMode: "native_stop_delete",
-      };
+      workspaceSession = createdWorkspace.session;
       ensureWorkspaceHeartbeat();
       await emitRunEvent(
         "workspace_session_adopted",
         {
           run_id: params.runId,
-          sandbox_id: backgroundSandbox.providerSandboxId,
+          sandbox_id: workspaceSession.providerSandboxId,
           project_id: projectId,
           source: "project_background",
-          toolbox_proxy_url: backgroundSandbox.toolboxProxyUrl,
+          provider_id: workspaceSession.providerId,
+          toolbox_proxy_url:
+            workspaceSession.providerId === "daytona"
+              ? workspaceSession.toolboxProxyUrl
+              : null,
         },
         `${params.runId}:workspace_session_adopted:project_background`,
       );
@@ -622,8 +621,11 @@ export function createPolyNetExecutionSession(params: {
           tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
           latency_ms: Date.now() - createStartedAt,
           status: "ok",
-          sandbox_id: backgroundSandbox.providerSandboxId,
-          region: null,
+          sandbox_id: workspaceSession.providerSandboxId,
+          provider_id: workspaceSession.providerId,
+          region: workspaceSession.providerId === "daytona"
+            ? workspaceSession.region
+            : null,
           source: "project_background",
         },
         `${params.runId}:workspace_session_create_completed:ok`,
@@ -1161,6 +1163,19 @@ export function createPolyNetExecutionSession(params: {
           };
         }
         activeWorkspaceSession = created.session;
+      }
+      if (activeWorkspaceSession.providerId !== "daytona") {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "workspace_computer_provider_unsupported",
+          errorMessage:
+            "Computer-use tools are not available for this workspace provider yet.",
+          details: {
+            provider_id: activeWorkspaceSession.providerId,
+          },
+        };
       }
       if (isWorkspaceCreditBudgetExpired(activeWorkspaceSession)) {
         return {

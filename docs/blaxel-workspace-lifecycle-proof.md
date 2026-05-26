@@ -7,7 +7,7 @@ The first Blaxel slice is deliberately not a product integration. It is a provid
 ## Target Model
 
 ```text
-Project = WorkspaceVolume + WorkspaceComputer
+Project = WorkspaceVolume + WorkspaceComputer + ProviderOwner
 ```
 
 For Blaxel:
@@ -17,12 +17,35 @@ For Blaxel:
 - Standby should preserve running process state, writable filesystem state, and volume-mounted files.
 - Cold restore should recreate a sandbox from the durable volume after the warm sandbox is deleted.
 
+PolyNet maps product intent to provider lifecycle:
+
+- File inspection: wake on demand, idle delete after 5 minutes, max age 1 hour.
+- Interactive terminals/previews/tools: idle delete after 30 minutes, max age 1 hour.
+- Active agent runs: idle delete after 30 minutes after activity stops, with no
+  unconditional provider max-age kill while the run is active.
+
+Project resource ids are provider-owned. A Blaxel Files-panel sandbox writes
+Blaxel-owned volume and sandbox ids to the project row; Daytona terminal/runtime
+paths must reject those ids instead of calling Daytona APIs with them.
+
+When a project sandbox already exists, stronger lifecycle intent wins. A
+file-inspection sandbox can be reused for later file inspection. Agent work
+must upgrade a weaker sandbox in place before running. If the provider rejects
+the lifecycle update, PolyNet falls back to deleting/recreating from the same
+volume.
+
 ## Probe
 
 Run:
 
 ```bash
 npm run probe:blaxel-workspace-lifecycle
+```
+
+To verify Blaxel supports the upgrade path without losing warm state:
+
+```bash
+npm run probe:blaxel-workspace-lifecycle-upgrade
 ```
 
 Required environment for live execution:
@@ -46,6 +69,7 @@ BL_API_KEY="your-staging-api-key"
 ```
 
 The npm probe command loads `.env.blaxel.local` automatically through `scripts/run_blaxel_workspace_lifecycle_probe.sh`.
+The upgrade probe loads the same file through `scripts/run_blaxel_workspace_lifecycle_upgrade_probe.sh`.
 
 ## Staging Safety
 
@@ -94,8 +118,8 @@ export BLAXEL_WORKSPACE_PROBE_REGION=us-pdx-1
 export BLAXEL_WORKSPACE_PROBE_VOLUME_SIZE_MB=2048
 export BLAXEL_WORKSPACE_PROBE_MOUNT_PATH=/workspace
 export BLAXEL_WORKSPACE_PROBE_SERVER_PORT=32123
-export BLAXEL_WORKSPACE_PROBE_IDLE_DELETE=1h
-export BLAXEL_WORKSPACE_PROBE_MAX_AGE_DELETE=2h
+export BLAXEL_WORKSPACE_PROBE_IDLE_DELETE=30m
+export BLAXEL_WORKSPACE_PROBE_MAX_AGE_DELETE=1h
 export BLAXEL_WORKSPACE_PROBE_STANDBY_WAIT_MS=90000
 ```
 
@@ -127,6 +151,20 @@ The proof tests the exact migration risk:
 11. Recreate a cold sandbox from the same volume.
 12. Verify the volume file survived, while temp/process state did not.
 
+## Lifecycle Upgrade Probe
+
+The upgrade proof tests the cheaper hot path:
+
+1. Create a volume.
+2. Create a file-inspection sandbox with `ttl-idle: 5m` and `ttl-max-age: 1h`.
+3. Write a volume marker.
+4. Start a named long-running process.
+5. Call `SandboxInstance.updateLifecycle` to upgrade to `agent_run`.
+6. Call `SandboxInstance.updateMetadata` to repair `lifecycle_intent`.
+7. Verify provider policy has no `ttl-max-age`.
+8. Verify the named process and volume marker survived the upgrade.
+9. Restore `interactive` lifecycle and verify `ttl-max-age: 1h` returns.
+
 ## Pass Criteria
 
 The live proof must return:
@@ -145,14 +183,31 @@ The live proof must return:
 - `coldRestoreProcessAbsent: true`
 - `cleanupOk: true`
 
+The live lifecycle upgrade proof must return:
+
+- `initialFileInspectionPolicyOk: true`
+- `namedProcessStarted: true`
+- `agentLifecycleUpdateOk: true`
+- `agentMetadataUpdateOk: true`
+- `agentPolicyHasNoMaxAge: true`
+- `processSurvivedAgentUpgrade: true`
+- `volumeFileSurvivedAgentUpgrade: true`
+- `interactiveLifecycleRestoreOk: true`
+- `interactiveMetadataUpdateOk: true`
+- `interactivePolicyHasMaxAge: true`
+- `cleanupOk: true`
+
 ## Decision Rule
 
-Only after this live proof passes should PolyNet add a provider-neutral workspace-computer seam.
+The provider-neutral workspace-computer seam exists behind staging-only policy in
+this branch. Blaxel should only become a broader staging runtime after both the
+standby proof and lifecycle-upgrade proof pass.
 
 The next implementation slice after a passing proof is:
 
 - keep Daytona as the default provider
-- add Blaxel as a feature-flagged provider
 - keep Convex as project authority
 - keep server-side path guards and entitlement gates
-- replace Daytona idle stop/delete with Blaxel standby/expiration behavior only for Blaxel projects
+- route one internal staging workspace path through Blaxel
+- replace Daytona idle stop/delete with Blaxel standby/expiration behavior only
+  for Blaxel projects

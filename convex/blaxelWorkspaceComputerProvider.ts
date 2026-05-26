@@ -7,6 +7,7 @@ import {
   ensureBlaxelWorkspaceSandbox,
   executeBlaxelWorkspaceCommand as executeBlaxelWorkspaceClientCommand,
   getBlaxelWorkspacePreviewUrl as getBlaxelWorkspaceClientPreviewUrl,
+  inspectBlaxelWorkspaceSandbox,
   listBlaxelWorkspaceDirectory as listBlaxelWorkspaceClientDirectory,
   readBlaxelWorkspaceFile as readBlaxelWorkspaceClientFile,
   releaseBlaxelWorkspaceSandboxIfIdle,
@@ -65,6 +66,15 @@ export async function resolveBlaxelWorkspaceComputerIfReady(
     return buildDisabledFailure("resolveWorkspaceComputerIfReady");
   }
   return await resolveBlaxelWorkspaceSandboxIfReady(params);
+}
+
+export async function inspectBlaxelWorkspaceComputer(
+  params: BlaxelWorkspaceSandboxNameParams,
+) {
+  if (!isBlaxelProviderEnabled()) {
+    return buildDisabledFailure("resolveWorkspaceComputerIfReady");
+  }
+  return await inspectBlaxelWorkspaceSandbox(params);
 }
 
 export async function releaseBlaxelWorkspaceComputerIfIdle(

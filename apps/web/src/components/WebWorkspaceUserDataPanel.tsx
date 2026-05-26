@@ -404,6 +404,12 @@ function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): str
   if (result.code === "background_sandbox_not_found" || result.code === "sandbox_not_found") {
     return "Turn on computer to view files.";
   }
+  if (
+    result.code === "blaxel_sandbox_not_found" ||
+    result.code === "blaxel_workspace_recreate_failed"
+  ) {
+    return "Workspace is waking up. Try again in a moment.";
+  }
   if (result.code === "workspace_credits_exhausted") return "Turn on computer to view files.";
   return result.message;
 }

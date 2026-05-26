@@ -2,12 +2,28 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  blaxelSandboxLifecycleMatchesIntent,
+  buildBlaxelWorkspacePathGuardCommand,
   normalizeBlaxelWorkspacePath,
+  resolveBlaxelSandboxLifecyclePolicies,
+  resolveBlaxelSandboxLifecycleIntent,
+  resolveBlaxelSandboxLifecycleState,
+  resolveBlaxelWorkspaceLifecyclePolicy,
   sanitizeBlaxelErrorDetails,
+  shouldReplaceBlaxelSandboxForLifecycle,
+  updateBlaxelWorkspaceSandboxLifecycle,
 } from "../convex/blaxelWorkspaceClient.ts";
 import {
   resolveWorkspaceComputerProviderPolicy,
 } from "../convex/workspaceComputerProviderPolicy.ts";
+import {
+  WORKSPACE_COMPUTER_LIFECYCLE_POLICY,
+  compareWorkspaceComputerLifecycleIntents,
+  normalizeRecordedWorkspaceResourceProviderId,
+  normalizeWorkspaceComputerLifecycleIntent,
+  resolveRecordedWorkspaceResourceProviderId,
+  resolveStrongestWorkspaceComputerLifecycleIntent,
+} from "../shared/workspaceComputerProvider.ts";
 
 const rootDir = process.cwd();
 
@@ -99,6 +115,56 @@ function proveProviderPolicyMatrix() {
   }
 }
 
+function proveRecordedWorkspaceResourceProviderOwnership() {
+  assert.equal(
+    normalizeRecordedWorkspaceResourceProviderId("blaxel"),
+    "blaxel",
+    "expected explicit Blaxel provider ownership to normalize",
+  );
+  assert.equal(
+    normalizeRecordedWorkspaceResourceProviderId("daytona"),
+    "daytona",
+    "expected explicit Daytona provider ownership to normalize",
+  );
+  assert.equal(
+    normalizeRecordedWorkspaceResourceProviderId("bogus"),
+    null,
+    "expected invalid recorded provider ownership not to default",
+  );
+  assert.equal(
+    resolveRecordedWorkspaceResourceProviderId({
+      providerId: "blaxel",
+      resourceId: "some-daytona-shaped-id",
+    }),
+    "blaxel",
+    "expected explicit provider ownership to beat id shape",
+  );
+  assert.equal(
+    resolveRecordedWorkspaceResourceProviderId({
+      providerId: null,
+      resourceId: "pn-p-project123",
+    }),
+    "blaxel",
+    "expected legacy Blaxel project resource ids to be inferred centrally",
+  );
+  assert.equal(
+    resolveRecordedWorkspaceResourceProviderId({
+      providerId: null,
+      resourceId: "daytona-resource-id",
+    }),
+    "daytona",
+    "expected legacy non-Blaxel resource ids to remain Daytona-owned",
+  );
+  assert.equal(
+    resolveRecordedWorkspaceResourceProviderId({
+      providerId: null,
+      resourceId: "",
+    }),
+    null,
+    "expected missing project resource ids to have no provider owner",
+  );
+}
+
 function proveBlaxelWorkspacePathGuard() {
   const acceptedCases = [
     { raw: ".", expected: "/workspace" },
@@ -122,6 +188,27 @@ function proveBlaxelWorkspacePathGuard() {
       `expected Blaxel path guard to reject ${JSON.stringify(raw)}`,
     );
   }
+
+  const command = buildBlaxelWorkspacePathGuardCommand({
+    workspaceRoot: "/workspace",
+    path: "/workspace/link-to-etc-passwd",
+    kind: "file",
+  });
+  assertIncludes(
+    command,
+    'if [ -L "$abs" ]; then printf symlink; exit 0; fi;',
+    "expected Blaxel runtime path guard to reject symlink path components",
+  );
+  assertIncludes(
+    command,
+    'resolved="$( { realpath -- "$abs" 2>/dev/null || readlink -f -- "$abs" 2>/dev/null || true; } | sed -n "1p" )";',
+    "expected Blaxel runtime path guard to resolve paths inside the sandbox",
+  );
+  assertIncludes(
+    command,
+    'case "$resolved" in "$resolved_root"|"$resolved_root"/*) ;; *) printf outside; exit 0;; esac;',
+    "expected Blaxel runtime path guard to fail closed outside the workspace root",
+  );
 }
 
 function proveBlaxelErrorSanitizer() {
@@ -182,7 +269,348 @@ function proveBlaxelErrorSanitizer() {
   );
 }
 
+function proveWorkspaceComputerLifecyclePolicy() {
+  assert.equal(
+    normalizeWorkspaceComputerLifecycleIntent("file_inspection"),
+    "file_inspection",
+    "expected file inspection lifecycle intent to normalize",
+  );
+  assert.equal(
+    normalizeWorkspaceComputerLifecycleIntent("agent_run"),
+    "agent_run",
+    "expected agent run lifecycle intent to normalize",
+  );
+  assert.equal(
+    normalizeWorkspaceComputerLifecycleIntent("bogus"),
+    "interactive",
+    "expected unknown lifecycle intent to fall back to interactive",
+  );
+  assert.equal(
+    compareWorkspaceComputerLifecycleIntents("agent_run", "file_inspection") > 0,
+    true,
+    "expected agent lifecycle intent to rank above file inspection",
+  );
+  assert.equal(
+    compareWorkspaceComputerLifecycleIntents("file_inspection", "agent_run") < 0,
+    true,
+    "expected file inspection lifecycle intent to rank below agent runs",
+  );
+  assert.equal(
+    resolveStrongestWorkspaceComputerLifecycleIntent([
+      "file_inspection",
+      "agent_run",
+      "interactive",
+    ]),
+    "agent_run",
+    "expected strongest lifecycle intent helper to choose the highest-cost active intent",
+  );
+  assert.equal(
+    resolveStrongestWorkspaceComputerLifecycleIntent([]),
+    null,
+    "expected strongest lifecycle intent helper to distinguish missing observations from interactive fallback",
+  );
+  assert.equal(
+    WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter,
+    "5m",
+    "expected file inspection to use a five-minute idle window",
+  );
+  assert.equal(
+    WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter,
+    "30m",
+    "expected normal interactive work to use a thirty-minute idle window",
+  );
+  assert.equal(
+    WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.maxAgeDeleteAfter,
+    "1h",
+    "expected non-agent workspace computers to use a one-hour max age",
+  );
+  assert.equal(
+    WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.maxAgeDeleteAfter,
+    null,
+    "active agent runs must not receive an unconditional provider max-age kill switch",
+  );
+  assert.equal(
+    WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.allowActiveRunPastMaxAge,
+    true,
+    "expected agent work to be allowed past the non-agent max age while active",
+  );
+
+  const config = {
+    fileInspectionIdleDeleteAfter: "5m",
+    interactiveIdleDeleteAfter: "30m",
+    nonAgentMaxAgeDeleteAfter: "1h",
+  };
+  const filePolicy = resolveBlaxelWorkspaceLifecyclePolicy({
+    lifecycleIntent: "file_inspection",
+    config,
+  });
+  assert.deepEqual(
+    filePolicy.expirationPolicies,
+    [
+      { type: "ttl-idle", value: "5m", action: "delete" },
+      { type: "ttl-max-age", value: "1h", action: "delete" },
+    ],
+    "expected file inspection Blaxel policy to be cheap and bounded",
+  );
+
+  const interactivePolicy = resolveBlaxelWorkspaceLifecyclePolicy({
+    lifecycleIntent: "interactive",
+    config,
+  });
+  assert.deepEqual(
+    interactivePolicy.expirationPolicies,
+    [
+      { type: "ttl-idle", value: "30m", action: "delete" },
+      { type: "ttl-max-age", value: "1h", action: "delete" },
+    ],
+    "expected interactive Blaxel policy to idle at thirty minutes and max at one hour",
+  );
+
+  const agentPolicy = resolveBlaxelWorkspaceLifecyclePolicy({
+    lifecycleIntent: "agent_run",
+    config,
+  });
+  assert.deepEqual(
+    agentPolicy.expirationPolicies,
+    [{ type: "ttl-idle", value: "30m", action: "delete" }],
+    "expected agent Blaxel policy to omit ttl-max-age while the run is active",
+  );
+  assert.equal(
+    agentPolicy.allowActiveRunPastMaxAge,
+    true,
+    "expected resolved agent lifecycle policy to preserve active run allowance",
+  );
+
+  assert.equal(
+    resolveBlaxelSandboxLifecycleIntent({
+      metadata: { labels: { lifecycle_intent: "file_inspection" } },
+    }),
+    "file_inspection",
+    "expected Blaxel sandbox lifecycle intent to read metadata labels",
+  );
+  assert.equal(
+    resolveBlaxelSandboxLifecycleIntent({
+      labels: { lifecycle_intent: "agent_run" },
+    }),
+    "agent_run",
+    "expected Blaxel sandbox lifecycle intent to read direct labels",
+  );
+  assert.equal(
+    resolveBlaxelSandboxLifecycleIntent({ metadata: { labels: {} } }),
+    "interactive",
+    "expected missing Blaxel lifecycle labels to fall back to interactive",
+  );
+  const fileInspectionSandbox = {
+    metadata: { labels: { lifecycle_intent: "file_inspection" } },
+    spec: {
+      lifecycle: {
+        expirationPolicies: filePolicy.expirationPolicies,
+      },
+    },
+  };
+  assert.deepEqual(
+    resolveBlaxelSandboxLifecyclePolicies(fileInspectionSandbox),
+    filePolicy.expirationPolicies,
+    "expected Blaxel sandbox lifecycle policies to be readable from provider spec",
+  );
+  assert.equal(
+    blaxelSandboxLifecycleMatchesIntent({
+      sandbox: fileInspectionSandbox,
+      lifecycleIntent: "file_inspection",
+      config,
+    }),
+    true,
+    "expected a labeled file-inspection sandbox to match its provider lifecycle",
+  );
+  assert.equal(
+    blaxelSandboxLifecycleMatchesIntent({
+      sandbox: {
+        metadata: { labels: { lifecycle_intent: "file_inspection" } },
+        spec: {
+          lifecycle: {
+            expirationPolicies: [
+              ...filePolicy.expirationPolicies,
+              { type: "date", value: "2099-01-01T00:00:00Z", action: "delete" },
+            ],
+          },
+        },
+      },
+      lifecycleIntent: "file_inspection",
+      config,
+    }),
+    false,
+    "expected unexpected provider expiration policies to force lifecycle repair",
+  );
+  const unlabeledFileInspectionState = resolveBlaxelSandboxLifecycleState({
+    sandbox: {
+      metadata: { labels: {} },
+      spec: {
+        lifecycle: {
+          expirationPolicies: filePolicy.expirationPolicies,
+        },
+      },
+    },
+    config,
+  });
+  assert.equal(
+    unlabeledFileInspectionState.inferredIntent,
+    "file_inspection",
+    "expected lifecycle state to infer intent from provider policies when labels are missing",
+  );
+  assert.equal(
+    unlabeledFileInspectionState.effectiveIntent,
+    "file_inspection",
+    "expected inferred lifecycle intent to prevent accidental downgrade/upgrade decisions",
+  );
+  assert.equal(
+    unlabeledFileInspectionState.labelMatchesEffectiveIntent,
+    false,
+    "expected missing lifecycle labels to be repaired even when provider policy is correct",
+  );
+  const staleFileLabelAgentPolicyState = resolveBlaxelSandboxLifecycleState({
+    sandbox: {
+      metadata: { labels: { lifecycle_intent: "file_inspection" } },
+      spec: {
+        lifecycle: {
+          expirationPolicies: agentPolicy.expirationPolicies,
+        },
+      },
+    },
+    config,
+  });
+  assert.equal(
+    staleFileLabelAgentPolicyState.labelIntent,
+    "file_inspection",
+    "expected stale lifecycle label to remain observable",
+  );
+  assert.equal(
+    staleFileLabelAgentPolicyState.inferredIntent,
+    "agent_run",
+    "expected lifecycle state to infer stronger agent intent from provider policy",
+  );
+  assert.equal(
+    staleFileLabelAgentPolicyState.effectiveIntent,
+    "agent_run",
+    "expected strongest observed lifecycle fact to prevent stale label downgrades",
+  );
+  assert.equal(
+    staleFileLabelAgentPolicyState.policyMatchesEffectiveIntent,
+    true,
+    "expected agent provider policy to match the stronger effective intent",
+  );
+  assert.equal(
+    staleFileLabelAgentPolicyState.labelMatchesEffectiveIntent,
+    false,
+    "expected stale lifecycle labels to be repaired after provider policy wins",
+  );
+  assert.equal(
+    shouldReplaceBlaxelSandboxForLifecycle({
+      currentIntent: "file_inspection",
+      requestedIntent: "agent_run",
+    }),
+    true,
+    "expected agent work to replace a file-inspection sandbox",
+  );
+  assert.equal(
+    shouldReplaceBlaxelSandboxForLifecycle({
+      currentIntent: "interactive",
+      requestedIntent: "agent_run",
+    }),
+    true,
+    "expected agent work to require a stronger lifecycle than an interactive sandbox",
+  );
+  assert.equal(
+    shouldReplaceBlaxelSandboxForLifecycle({
+      currentIntent: "agent_run",
+      requestedIntent: "file_inspection",
+    }),
+    false,
+    "expected file inspection to reuse a stronger active agent sandbox",
+  );
+  assert.equal(
+    shouldReplaceBlaxelSandboxForLifecycle({
+      currentIntent: "interactive",
+      requestedIntent: "file_inspection",
+    }),
+    false,
+    "expected file inspection not to downgrade an interactive sandbox",
+  );
+}
+
+async function proveBlaxelLifecycleUpdateHelper() {
+  const config = {
+    fileInspectionIdleDeleteAfter: "5m",
+    interactiveIdleDeleteAfter: "30m",
+    nonAgentMaxAgeDeleteAfter: "1h",
+  };
+  const calls: string[] = [];
+  let observedLifecycle: unknown = null;
+  let observedMetadata: unknown = null;
+  const fakeSandboxInstance = {
+    async updateLifecycle(
+      sandboxName: string,
+      lifecycle: { expirationPolicies: unknown[] },
+    ) {
+      calls.push(`updateLifecycle:${sandboxName}`);
+      observedLifecycle = lifecycle;
+      return {
+        metadata: {
+          labels: {
+            existing: "preserved",
+            lifecycle_intent: "file_inspection",
+          },
+        },
+        spec: { lifecycle },
+      };
+    },
+    async updateMetadata(sandboxName: string, metadata: unknown) {
+      calls.push(`updateMetadata:${sandboxName}`);
+      observedMetadata = metadata;
+      return {
+        metadata,
+        spec: { lifecycle: observedLifecycle },
+      };
+    },
+  };
+
+  await updateBlaxelWorkspaceSandboxLifecycle({
+    SandboxInstance: fakeSandboxInstance,
+    sandboxName: "pn-p-example",
+    lifecycleIntent: "agent_run",
+    config,
+    labels: { purpose: "contract-proof" },
+  });
+
+  assert.deepEqual(
+    calls,
+    ["updateLifecycle:pn-p-example", "updateMetadata:pn-p-example"],
+    "expected lifecycle upgrades to update provider lifecycle before metadata",
+  );
+  assert.deepEqual(
+    observedLifecycle,
+    {
+      expirationPolicies: [{ type: "ttl-idle", value: "30m", action: "delete" }],
+    },
+    "expected agent lifecycle update to omit ttl-max-age",
+  );
+  assert.deepEqual(
+    observedMetadata,
+    {
+      labels: {
+        existing: "preserved",
+        lifecycle_intent: "agent_run",
+        purpose: "contract-proof",
+        owner: "polynet",
+        provider: "blaxel",
+      },
+    },
+    "expected lifecycle metadata update to preserve labels and write authoritative intent",
+  );
+}
+
 async function proveWorkspaceComputerProviderContract() {
+  const schemaSource = await readRepoFile("convex/schema.ts");
+  const projectsSource = await readRepoFile("convex/projects.ts");
   const sharedSource = await readRepoFile("shared/workspaceComputerProvider.ts");
   const policySource = await readRepoFile(
     "convex/workspaceComputerProviderPolicy.ts",
@@ -191,6 +619,12 @@ async function proveWorkspaceComputerProviderContract() {
     "convex/blaxelWorkspaceComputerProvider.ts",
   );
   const blaxelClientSource = await readRepoFile("convex/blaxelWorkspaceClient.ts");
+  const blaxelProjectNamesSource = await readRepoFile(
+    "convex/blaxelWorkspaceProjectNames.ts",
+  );
+  const blaxelInspectorDiagnosticsSource = await readRepoFile(
+    "convex/blaxelWorkspaceInspectorDiagnostics.ts",
+  );
   const blaxelDiagnosticsSource = await readRepoFile(
     "convex/blaxelWorkspaceDiagnostics.ts",
   );
@@ -212,12 +646,35 @@ async function proveWorkspaceComputerProviderContract() {
   const convexVolumeSmokeSource = await readRepoFile(
     "scripts/blaxel_convex_volume_smoke.ts",
   );
+  const inspectorDiagnosticScriptSource = await readRepoFile(
+    "scripts/blaxel_workspace_inspector_diagnostic.ts",
+  );
+  const inspectorDiagnosticRunnerSource = await readRepoFile(
+    "scripts/run_blaxel_workspace_inspector_diagnostic.sh",
+  );
   const backgroundServiceSource = await readRepoFile(
     "convex/workspaceTerminalBackgroundService.ts",
   );
+  const workspaceTerminalsSource = await readRepoFile("convex/workspaceTerminals.ts");
   const inspectorSource = await readRepoFile("convex/workspaceInspector.ts");
+  const runtimeSessionSource = await readRepoFile(
+    "convex/workspaceRuntimeSession.ts",
+  );
+  const runtimeToolsSource = await readRepoFile(
+    "convex/workspaceRuntimeTools.ts",
+  );
+  const executionSessionSource = await readRepoFile(
+    "convex/runtimeExecutionSession.ts",
+  );
+  const httpDaytonaSource = await readRepoFile("convex/httpDaytona.ts");
+  const workspacePanelSource = await readRepoFile(
+    "apps/web/src/components/WebWorkspaceUserDataPanel.tsx",
+  );
   const readinessGuardSource = await readRepoFile(
     "scripts/blaxel_staging_readiness_guard.sh",
+  );
+  const contractDocSource = await readRepoFile(
+    "docs/workspace-computer-provider-contract.md",
   );
   const packageJson = JSON.parse(await readRepoFile("package.json"));
 
@@ -227,9 +684,110 @@ async function proveWorkspaceComputerProviderContract() {
     "expected the provider contract to name Daytona and Blaxel explicitly",
   );
   assertIncludes(
+    schemaSource,
+    "providerSandboxProviderId",
+    "expected cloudProjects to persist sandbox provider ownership",
+  );
+  assertIncludes(
+    schemaSource,
+    "providerVolumeProviderId",
+    "expected cloudProjects to persist volume provider ownership",
+  );
+  assertIncludes(
+    projectsSource,
+    "providerVolumeProviderId: args.providerId",
+    "expected project volume attachment to write provider ownership",
+  );
+  assertIncludes(
+    projectsSource,
+    'existingVolumeProviderId !== "daytona"',
+    "expected Daytona volume creation to reject non-Daytona project volume ids",
+  );
+  assertIncludes(
+    sharedSource,
+    'resourceId.startsWith("pn-p-") ? "blaxel" : "daytona"',
+    "expected legacy Blaxel project resource ids to be inferred only by the shared provider ownership helper",
+  );
+  for (const [sourceName, source] of [
+    ["projects", projectsSource],
+    ["workspace terminals", workspaceTerminalsSource],
+    ["background service", backgroundServiceSource],
+  ] as const) {
+    assertIncludes(
+      source,
+      "resolveRecordedWorkspaceResourceProviderId",
+      `expected ${sourceName} to use the shared provider ownership helper`,
+    );
+    assertExcludes(
+      source,
+      "function recordedWorkspaceResourceProviderId",
+      `expected ${sourceName} not to duplicate provider ownership inference`,
+    );
+  }
+  assertIncludes(
+    projectsSource,
+    "destroyBlaxelWorkspaceVolume",
+    "expected project deletion to dispatch Blaxel volume cleanup by provider owner",
+  );
+  assertIncludes(
+    projectsSource,
+    "destroyBlaxelWorkspaceSandbox",
+    "expected project deletion to dispatch Blaxel sandbox cleanup by provider owner",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "destroyBlaxelWorkspaceVolume",
+    "expected Blaxel client to expose volume cleanup for project deletion",
+  );
+  assertIncludes(
+    workspaceTerminalsSource,
+    "providerSandboxProviderId: args.providerSandboxProviderId",
+    "expected project sandbox setter to write provider ownership",
+  );
+  assertIncludes(
+    workspaceTerminalsSource,
+    "clearSandboxAccounting",
+    "expected project sandbox setter to clear stale accounting when ownership changes",
+  );
+  assertIncludes(
+    backgroundServiceSource,
+    "workspace_computer_provider_mismatch",
+    "expected Daytona background service to fail closed on non-Daytona project resources",
+  );
+  assertIncludes(
     sharedSource,
     'DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID =\n  "daytona"',
     "expected Daytona to remain the default workspace computer provider",
+  );
+  assertIncludes(
+    sharedSource,
+    'WORKSPACE_COMPUTER_LIFECYCLE_INTENTS = [\n  "file_inspection",\n  "interactive",\n  "agent_run"',
+    "expected provider contract to expose explicit workspace lifecycle intents",
+  );
+  assertIncludes(
+    sharedSource,
+    'file_inspection: {\n    idleDeleteAfter: "5m"',
+    "expected file inspection lifecycle policy to use five-minute idle cleanup",
+  );
+  assertIncludes(
+    sharedSource,
+    'interactive: {\n    idleDeleteAfter: "30m"',
+    "expected interactive lifecycle policy to use thirty-minute idle cleanup",
+  );
+  assertIncludes(
+    sharedSource,
+    'maxAgeDeleteAfter: "1h"',
+    "expected non-agent lifecycle policy to use one-hour max age",
+  );
+  assertIncludes(
+    sharedSource,
+    'agent_run: {\n    idleDeleteAfter: "30m",\n    maxAgeDeleteAfter: null',
+    "expected agent lifecycle policy to omit unconditional max-age cleanup",
+  );
+  assertIncludes(
+    sharedSource,
+    "resolveStrongestWorkspaceComputerLifecycleIntent",
+    "expected provider contract to expose strongest-observed lifecycle intent resolution",
   );
   for (const operation of [
     "ensureWorkspaceComputer",
@@ -317,8 +875,128 @@ async function proveWorkspaceComputerProviderContract() {
   );
   assertIncludes(
     blaxelClientSource,
+    "buildBlaxelWorkspacePathGuardCommand",
+    "expected Blaxel client to build a runtime path guard for provider file operations",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "resolveGuardedBlaxelWorkspacePath",
+    "expected Blaxel client to resolve paths inside the sandbox before provider file operations",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "workspace_symlink_not_supported",
+    "expected Blaxel client to reject workspace symlinks before provider file operations",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    'kind: "writable_file"',
+    "expected Blaxel writes to use the guarded writable-file path mode",
+  );
+  assertIncludes(
+    blaxelClientSource,
     "sanitizeBlaxelErrorDetails",
     "expected Blaxel client to expose a safe provider error sanitizer",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "resolveBlaxelWorkspaceLifecyclePolicy",
+    "expected Blaxel client to resolve provider lifecycle from explicit intent",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "resolveBlaxelSandboxLifecycleIntent",
+    "expected Blaxel client to read existing sandbox lifecycle intent from provider labels",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "shouldReplaceBlaxelSandboxForLifecycle",
+    "expected Blaxel client to expose the stronger-intent-wins replacement guard",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "resolveBlaxelSandboxLifecycleState",
+    "expected Blaxel client to resolve existing lifecycle from labels and provider policy",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "updateBlaxelWorkspaceSandboxLifecycle",
+    "expected Blaxel client to expose a provider lifecycle update helper",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "inspectBlaxelWorkspaceSandbox",
+    "expected Blaxel client to expose a read-only sandbox inspection primitive",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    'mode: "provider_standby"',
+    "expected Blaxel release to acknowledge provider standby instead of deleting the sandbox",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    'exists: false,\n        state: "missing",\n        missingReason: "not_found"',
+    "expected Blaxel sandbox inspection to classify definitely missing sandboxes without treating them as provider failures",
+  );
+  assertIncludes(
+    blaxelStubSource,
+    "inspectBlaxelWorkspaceComputer",
+    "expected Blaxel provider wrapper to expose sandbox inspection behind server policy",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "await params.SandboxInstance.updateLifecycle",
+    "expected Blaxel lifecycle update helper to call updateLifecycle",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "await params.SandboxInstance.updateMetadata",
+    "expected Blaxel lifecycle update helper to repair metadata after updateLifecycle",
+  );
+  assert.ok(
+    blaxelClientSource.indexOf("await params.SandboxInstance.updateLifecycle") <
+      blaxelClientSource.indexOf("await params.SandboxInstance.updateMetadata"),
+    "expected Blaxel lifecycle update helper to update lifecycle before metadata",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "await SandboxInstance.get(sandboxName)",
+    "expected Blaxel ensure to inspect an existing sandbox before createIfNotExists",
+  );
+  assert.ok(
+    blaxelClientSource.indexOf("await SandboxInstance.get(sandboxName)") <
+      blaxelClientSource.indexOf("SandboxInstance.createIfNotExists"),
+    "expected Blaxel ensure to inspect and optionally replace before createIfNotExists",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "await SandboxInstance.delete(sandboxName)",
+    "expected Blaxel ensure to preserve a delete/recreate fallback from the same volume",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER",
+    "expected Blaxel client to allow file inspection idle policy override",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER",
+    "expected Blaxel client to allow interactive idle policy override",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER",
+    "expected Blaxel client to allow non-agent max-age policy override",
+  );
+  assertExcludes(
+    blaxelClientSource,
+    "BLAXEL_WORKSPACE_IDLE_DELETE_AFTER",
+    "Blaxel lifecycle policy should not inherit the old generic idle env across all intents",
+  );
+  assertExcludes(
+    blaxelClientSource,
+    "BLAXEL_WORKSPACE_MAX_AGE_DELETE_AFTER",
+    "Blaxel lifecycle policy should not inherit the old generic max-age env across all intents",
   );
   assertExcludes(
     blaxelClientSource,
@@ -329,6 +1007,31 @@ async function proveWorkspaceComputerProviderContract() {
     providerSmokeSource,
     "ensureBlaxelWorkspaceComputer",
     "expected provider smoke to exercise the Blaxel provider wrapper",
+  );
+  assertIncludes(
+    providerSmokeSource,
+    "symlinkReadRejected",
+    "expected provider smoke to prove symlink reads are rejected",
+  );
+  assertIncludes(
+    providerSmokeSource,
+    "symlinkWriteRejected",
+    "expected provider smoke to prove symlink writes are rejected",
+  );
+  assertIncludes(
+    providerSmokeSource,
+    "symlinkListRejected",
+    "expected provider smoke to prove symlink directory listing is rejected",
+  );
+  assertIncludes(
+    providerSmokeSource,
+    "symlinkCwdRejected",
+    "expected provider smoke to prove symlink cwd execution is rejected",
+  );
+  assertExcludes(
+    providerSmokeSource,
+    "JSON.stringify(error)",
+    "provider smoke must not stringify raw provider error objects",
   );
   const providerSmokeRunnerSource = await readRepoFile(
     "scripts/run_blaxel_workspace_provider_smoke.sh",
@@ -607,6 +1310,12 @@ async function proveWorkspaceComputerProviderContract() {
   const lifecycleProbeSource = await readRepoFile(
     "scripts/blaxel_workspace_lifecycle_probe.ts",
   );
+  const lifecycleUpgradeProbeSource = await readRepoFile(
+    "scripts/blaxel_workspace_lifecycle_upgrade_probe.ts",
+  );
+  const lifecycleUpgradeProbeRunnerSource = await readRepoFile(
+    "scripts/run_blaxel_workspace_lifecycle_upgrade_probe.sh",
+  );
   assertIncludes(
     lifecycleProbeSource,
     "volumeSizeMb: number",
@@ -631,6 +1340,46 @@ async function proveWorkspaceComputerProviderContract() {
     lifecycleProbeSource,
     "size: result.config.volumeSizeMb",
     "expected lifecycle probe to pass MB volume size to Blaxel",
+  );
+  assertExcludes(
+    lifecycleProbeSource,
+    "JSON.stringify(error)",
+    "lifecycle probe must not stringify raw provider error objects",
+  );
+  assertIncludes(
+    lifecycleUpgradeProbeSource,
+    "SandboxInstance.updateLifecycle",
+    "expected lifecycle upgrade probe to call Blaxel updateLifecycle",
+  );
+  assertIncludes(
+    lifecycleUpgradeProbeSource,
+    "SandboxInstance.updateMetadata",
+    "expected lifecycle upgrade probe to repair lifecycle metadata",
+  );
+  assertIncludes(
+    lifecycleUpgradeProbeSource,
+    "agentPolicyHasNoMaxAge",
+    "expected lifecycle upgrade probe to verify active agent policy omits max age",
+  );
+  assertIncludes(
+    lifecycleUpgradeProbeSource,
+    "processSurvivedAgentUpgrade",
+    "expected lifecycle upgrade probe to verify process continuity across upgrade",
+  );
+  assertIncludes(
+    lifecycleUpgradeProbeSource,
+    "interactivePolicyHasMaxAge",
+    "expected lifecycle upgrade probe to verify interactive policy restores max age",
+  );
+  assertExcludes(
+    lifecycleUpgradeProbeSource,
+    "JSON.stringify(error)",
+    "lifecycle upgrade probe must not stringify raw provider error objects",
+  );
+  assertIncludes(
+    lifecycleUpgradeProbeRunnerSource,
+    ".env.blaxel.local",
+    "expected lifecycle upgrade probe runner to load local Blaxel credentials",
   );
   for (const requiredWrapper of [
     "ensureBlaxelWorkspaceComputer",
@@ -741,6 +1490,131 @@ async function proveWorkspaceComputerProviderContract() {
   );
 
   assertIncludes(
+    runtimeSessionSource,
+    "resolveWorkspaceComputerProviderFromServerEnv",
+    "expected runtime workspace session creation to use server-owned provider policy",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    "ensureProjectBackgroundSandbox",
+    "expected runtime workspace session creation to preserve the Daytona provider path",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    "ensureBlaxelWorkspaceComputer",
+    "expected runtime workspace session creation to use the Blaxel provider wrapper",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    "buildBlaxelProjectWorkspaceNames",
+    "expected runtime workspace sessions to use stable project Blaxel names",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    'lifecycleIntent: "agent_run"',
+    "expected agent workspace tools to upgrade/reuse Blaxel sandboxes with agent-run lifecycle",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    'providerId: "blaxel"',
+    "expected Blaxel runtime workspace sessions to carry provider identity",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    'providerId: "daytona"',
+    "expected Daytona runtime workspace sessions to carry provider identity",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    'providerId: "blaxel"',
+    "expected Blaxel runtime session to record provider ownership",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    'providerSandboxProviderId: "blaxel"',
+    "expected Blaxel runtime session to record sandbox provider ownership",
+  );
+  assertIncludes(
+    runtimeSessionSource,
+    "workspace_computer_provider_mismatch",
+    "expected runtime workspace session creation to fail closed on provider ownership mismatches",
+  );
+  assertIncludes(
+    runtimeToolsSource,
+    "executeRuntimeWorkspaceTool",
+    "expected a provider-neutral runtime workspace tool executor",
+  );
+  assertIncludes(
+    runtimeToolsSource,
+    'params.session.providerId === "blaxel"',
+    "expected runtime workspace tools to dispatch Blaxel by session provider",
+  );
+  assertIncludes(
+    runtimeToolsSource,
+    "executeDaytonaRuntimeWorkspaceTool",
+    "expected runtime workspace tools to preserve Daytona tool behavior behind the provider branch",
+  );
+  for (const wrapper of [
+    "executeBlaxelWorkspaceCommand",
+    "readBlaxelWorkspaceFile",
+    "writeBlaxelWorkspaceFile",
+  ]) {
+    assertIncludes(
+      runtimeToolsSource,
+      wrapper,
+      `expected Blaxel runtime workspace tools to use provider wrapper ${wrapper}`,
+    );
+  }
+  assertIncludes(
+    runtimeToolsSource,
+    "mkdir -p --",
+    "expected Blaxel write tool to create parent directories for generated apps",
+  );
+  assertIncludes(
+    runtimeToolsSource,
+    "write_verification_failed",
+    "expected Blaxel write tool to verify writes",
+  );
+  assertIncludes(
+    executionSessionSource,
+    "createProjectRuntimeWorkspaceSession",
+    "expected runtime execution session to create provider-neutral workspace sessions",
+  );
+  const createWorkspaceSessionSource = executionSessionSource.slice(
+    executionSessionSource.indexOf("async createWorkspaceSession"),
+    executionSessionSource.indexOf("async ensureWorkspaceForTool"),
+  );
+  assertIncludes(
+    createWorkspaceSessionSource,
+    "createProjectRuntimeWorkspaceSession",
+    "expected createWorkspaceSession to avoid calling the Daytona-only background service directly",
+  );
+  assertExcludes(
+    createWorkspaceSessionSource,
+    "ensureProjectBackgroundSandbox",
+    "expected createWorkspaceSession not to route all workspace tools through Daytona",
+  );
+  assertIncludes(
+    createWorkspaceSessionSource,
+    "provider_id: workspaceSession.providerId",
+    "expected workspace session events to include provider identity",
+  );
+  const workspaceToolBranchSource = httpDaytonaSource.slice(
+    httpDaytonaSource.indexOf('params.toolName === "list_dir"'),
+    httpDaytonaSource.indexOf('return {\n    status: "error",', httpDaytonaSource.indexOf('params.toolName === "list_dir"')),
+  );
+  assertIncludes(
+    workspaceToolBranchSource,
+    "executeRuntimeWorkspaceTool",
+    "expected chat workspace tool calls to execute through the provider-neutral workspace tool executor",
+  );
+  assertExcludes(
+    workspaceToolBranchSource,
+    "listDaytonaWorkspaceDirectory({",
+    "expected chat workspace tool branch not to call Daytona list directly",
+  );
+
+  assertIncludes(
     inspectorSource,
     'import { DAYTONA_WORKSPACE_ROOT } from "./daytonaSandboxClient";',
     "expected right-panel inspection to preserve the Daytona workspace root for Daytona paths",
@@ -767,6 +1641,170 @@ async function proveWorkspaceComputerProviderContract() {
   );
   assertIncludes(
     inspectorSource,
+    "inspectBlaxelWorkspaceComputer",
+    "expected right-panel Blaxel listing to inspect existing project sandbox truth before creating",
+  );
+  assertIncludes(
+    inspectorSource,
+    "clearBlaxelInspectorWorkspaceState",
+    "expected right-panel Blaxel listing to clear stale matching sandbox ids",
+  );
+  assertIncludes(
+    inspectorSource,
+    "runWithBlaxelInspectorWorkspace",
+    "expected right-panel Blaxel Files operations to share stale sandbox reconciliation",
+  );
+  assertIncludes(
+    inspectorSource,
+    'code !== "blaxel_request_failed"',
+    "expected stale Blaxel detection to tolerate provider request wrappers",
+  );
+  assertIncludes(
+    inspectorSource,
+    'code !== "workspace_inspector_unavailable"',
+    "expected stale Blaxel detection to tolerate inspector-wrapped provider failures",
+  );
+  assertIncludes(
+    inspectorSource,
+    "\\b404\\b",
+    "expected stale Blaxel detection to recognize provider 404 evidence",
+  );
+  assertIncludes(
+    inspectorSource,
+    "providerSandboxId: params.sandboxName",
+    "expected stale Blaxel cleanup to clear only the matching project sandbox id",
+  );
+  const clearBlaxelInspectorWorkspaceSource = inspectorSource.slice(
+    inspectorSource.indexOf("async function clearBlaxelInspectorWorkspaceState"),
+    inspectorSource.indexOf("async function runWithBlaxelInspectorWorkspace"),
+  );
+  assertExcludes(
+    clearBlaxelInspectorWorkspaceSource,
+    "providerVolumeId",
+    "expected stale Blaxel sandbox cleanup to preserve the durable project volume pointer",
+  );
+  const runWithBlaxelInspectorWorkspaceSource = inspectorSource.slice(
+    inspectorSource.indexOf("async function runWithBlaxelInspectorWorkspace"),
+    inspectorSource.indexOf("function mapFailure"),
+  );
+  assertIncludes(
+    runWithBlaxelInspectorWorkspaceSource,
+    "sandboxName: names.sandboxName",
+    "expected stale Blaxel cleanup during ensure to clear only the deterministic project sandbox",
+  );
+  assertIncludes(
+    runWithBlaxelInspectorWorkspaceSource,
+    "sandboxName: workspace.sandboxName",
+    "expected stale Blaxel cleanup during file operations to clear only the active matching sandbox",
+  );
+  assertIncludes(
+    runWithBlaxelInspectorWorkspaceSource,
+    "blaxel_workspace_recreate_failed",
+    "expected stale Blaxel retry exhaustion to return a provider-neutral Files failure",
+  );
+  const listBlaxelInspectorDirectorySource = inspectorSource.slice(
+    inspectorSource.indexOf("async function listBlaxelInspectorDirectory"),
+    inspectorSource.indexOf("async function readBlaxelInspectorFilePreview"),
+  );
+  assertIncludes(
+    listBlaxelInspectorDirectorySource,
+    "runWithBlaxelInspectorWorkspace",
+    "expected Blaxel directory listing to retry through the shared stale sandbox wrapper",
+  );
+  const readBlaxelInspectorFilePreviewSource = inspectorSource.slice(
+    inspectorSource.indexOf("async function readBlaxelInspectorFilePreview"),
+    inspectorSource.indexOf("function parseDirectoryEntries"),
+  );
+  assertIncludes(
+    readBlaxelInspectorFilePreviewSource,
+    "runWithBlaxelInspectorWorkspace",
+    "expected Blaxel file preview to retry through the shared stale sandbox wrapper",
+  );
+  assertIncludes(
+    workspacePanelSource,
+    'result.code === "blaxel_sandbox_not_found"',
+    "expected Files UI to avoid exposing raw Blaxel sandbox-not-found provider text",
+  );
+  assertIncludes(
+    workspacePanelSource,
+    "Workspace is waking up. Try again in a moment.",
+    "expected Files UI to show provider-neutral wakeup copy for Blaxel stale sandbox failures",
+  );
+  assertIncludes(
+    inspectorSource,
+    'providerId: "blaxel"',
+    "expected Blaxel inspector volume state to record Blaxel provider ownership",
+  );
+  assertIncludes(
+    inspectorSource,
+    'providerSandboxProviderId: "blaxel"',
+    "expected Blaxel inspector sandbox state to record Blaxel provider ownership",
+  );
+  assertIncludes(
+    inspectorSource,
+    "clearSandboxAccounting: true",
+    "expected Blaxel inspector sandbox state to clear stale Daytona accounting fields",
+  );
+  assertIncludes(
+    inspectorSource,
+    "recordBlaxelInspectorWorkspaceState",
+    "expected right-panel Blaxel listing to record sandbox and volume truth on the project",
+  );
+  assertIncludes(
+    inspectorSource,
+    "validateBlaxelInspectorWorkspaceOwnership",
+    "expected right-panel Blaxel listing to validate provider ownership before creating Blaxel resources",
+  );
+  assertIncludes(
+    inspectorSource,
+    "workspace_provider_transition_required",
+    "expected right-panel Blaxel listing to reject implicit Daytona-to-Blaxel transitions",
+  );
+  const ensureBlaxelInspectorWorkspaceSource = inspectorSource.slice(
+    inspectorSource.indexOf("async function ensureBlaxelInspectorWorkspace"),
+  );
+  assert.ok(
+    ensureBlaxelInspectorWorkspaceSource.indexOf("const ownership = await validateBlaxelInspectorWorkspaceOwnership") <
+      ensureBlaxelInspectorWorkspaceSource.indexOf("const ensured = await ensureBlaxelWorkspaceComputer"),
+    "expected Blaxel Files provider ownership guard to run before provider ensure creates resources",
+  );
+  assertIncludes(
+    inspectorSource,
+    "attachCloudProjectVolumeInternal",
+    "expected right-panel Blaxel listing to preserve the project volume id separately from the sandbox id",
+  );
+  assertIncludes(
+    inspectorSource,
+    "attempt < 2",
+    "expected right-panel Blaxel listing to retry once after a stale sandbox expires",
+  );
+  assertIncludes(
+    inspectorSource,
+    'lifecycleIntent: "file_inspection"',
+    "expected right-panel Blaxel listing to use the cheap file-inspection lifecycle intent",
+  );
+  assertIncludes(
+    contractDocSource,
+    "Stale Sandbox Reconciliation",
+    "expected the provider contract to document stale Blaxel sandbox reconciliation",
+  );
+  assertIncludes(
+    contractDocSource,
+    "Before routing\n`agent_run` through an existing Blaxel project computer",
+    "expected the contract to call out existing-sandbox lifecycle upgrade risk before agent routing",
+  );
+  assertIncludes(
+    contractDocSource,
+    "weaker existing intent: update lifecycle in place, then repair metadata",
+    "expected the contract to prefer Blaxel lifecycle update over sandbox replacement",
+  );
+  assertIncludes(
+    contractDocSource,
+    "provider update failure: delete and recreate from the same volume as fallback",
+    "expected the contract to preserve delete/recreate fallback after update failure",
+  );
+  assertIncludes(
+    inspectorSource,
     "listBlaxelWorkspaceDirectory",
     "expected right-panel Blaxel listing to list through the provider wrapper",
   );
@@ -781,14 +1819,89 @@ async function proveWorkspaceComputerProviderContract() {
     "expected right-panel Blaxel listing to derive stable project workspace names",
   );
   assertIncludes(
-    inspectorSource,
+    blaxelProjectNamesSource,
     "sandboxName: `pn-p-${resourcePart}`",
-    "expected right-panel Blaxel sandbox names to stay inside Blaxel metadata name limits",
+    "expected shared Blaxel project helper to keep sandbox names inside Blaxel metadata name limits",
   );
   assertIncludes(
-    inspectorSource,
+    blaxelProjectNamesSource,
     "volumeName: `pn-p-${resourcePart}-v`",
-    "expected right-panel Blaxel volume names to stay inside Blaxel metadata name limits",
+    "expected shared Blaxel project helper to keep volume names inside Blaxel metadata name limits",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "diagnoseBlaxelWorkspaceInspectorProject",
+    "expected a Blaxel workspace inspector diagnostic action",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "blaxel_workspace_inspector_diagnostic_staging_only",
+    "expected Blaxel workspace inspector diagnostics to be staging-only",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "blaxel_workspace_inspector_diagnostic_auth_subject_required",
+    "expected Blaxel workspace inspector diagnostics to require auth subject for real Files listing",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "providerVolumeProviderId",
+    "expected Blaxel workspace inspector diagnostics to report volume provider ownership",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "providerSandboxProviderId",
+    "expected Blaxel workspace inspector diagnostics to report sandbox provider ownership",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "buildBlaxelProjectWorkspaceNames",
+    "expected diagnostics to use the same Blaxel project naming helper as the Files panel",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "inspectBlaxelWorkspaceComputer",
+    "expected diagnostics to inspect provider sandbox truth",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    'projectSandboxOwner === "blaxel"',
+    "expected diagnostics to inspect sandbox truth only for Blaxel-owned project sandboxes",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "workspace_provider_mismatch",
+    "expected diagnostics to report provider mismatch instead of inspecting Daytona ids through Blaxel",
+  );
+  assertIncludes(
+    blaxelInspectorDiagnosticsSource,
+    "api.workspaceInspector.listWorkspaceDirectory",
+    "expected diagnostics to call the real workspaceInspector.listWorkspaceDirectory path",
+  );
+  assertIncludes(
+    inspectorDiagnosticScriptSource,
+    "blaxelWorkspaceInspectorDiagnostics:diagnoseBlaxelWorkspaceInspectorProject",
+    "expected local diagnostic script to call the Convex inspector diagnostic action",
+  );
+  assertIncludes(
+    inspectorDiagnosticScriptSource,
+    "auth_subject_required_for_list_diagnostic",
+    "expected local diagnostic script to require auth subject for real list diagnostics",
+  );
+  assertIncludes(
+    inspectorDiagnosticScriptSource,
+    "project_volume_provider_not_blaxel_after_list",
+    "expected local diagnostic script to validate Blaxel volume ownership after listing",
+  );
+  assertIncludes(
+    inspectorDiagnosticScriptSource,
+    "workspace_inspector_list_not_ok",
+    "expected local diagnostic script to fail when the real inspector list path fails",
+  );
+  assertIncludes(
+    inspectorDiagnosticRunnerSource,
+    "blaxel_staging_readiness_guard.sh",
+    "expected local diagnostic runner to verify staging safety before calling Convex",
   );
   assertIncludes(
     inspectorSource,
@@ -853,6 +1966,16 @@ async function proveWorkspaceComputerProviderContract() {
     "expected package script for the Blaxel lifecycle probe",
   );
   assert.equal(
+    packageJson.scripts["probe:blaxel-workspace-lifecycle-upgrade"],
+    "bash scripts/run_blaxel_workspace_lifecycle_upgrade_probe.sh",
+    "expected package script for the Blaxel lifecycle upgrade probe",
+  );
+  assert.equal(
+    packageJson.scripts["diagnose:blaxel-workspace-inspector"],
+    "bash scripts/run_blaxel_workspace_inspector_diagnostic.sh",
+    "expected package script for the Blaxel workspace inspector diagnostic",
+  );
+  assert.equal(
     packageJson.scripts["check:workspace-computer-provider-contract"],
     "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_computer_provider_contract_proof.ts",
     "expected package script for the workspace computer provider contract proof",
@@ -879,6 +2002,9 @@ async function proveWorkspaceComputerProviderContract() {
   );
 
   proveProviderPolicyMatrix();
+  proveRecordedWorkspaceResourceProviderOwnership();
+  proveWorkspaceComputerLifecyclePolicy();
+  await proveBlaxelLifecycleUpdateHelper();
   proveBlaxelWorkspacePathGuard();
   proveBlaxelErrorSanitizer();
 

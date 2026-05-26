@@ -7,7 +7,6 @@ import {
 import { loadDaytonaConfig, type DaytonaConfig } from "./daytonaSandboxClient";
 import {
   resolveWorkspaceProjectContext,
-  type WorkspaceSandboxSession,
 } from "./daytonaWorkspaceSession";
 import {
   appendWorkspaceToolCallFinished,
@@ -20,15 +19,14 @@ import {
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import {
-  editDaytonaWorkspaceFile,
-  globDaytonaWorkspacePaths,
-  grepDaytonaWorkspaceFiles,
   listDaytonaWorkspaceDirectory,
-  readDaytonaWorkspaceFile,
-  runDaytonaWorkspaceBash,
-  sha256DaytonaWorkspaceFile,
-  writeDaytonaWorkspaceFile,
 } from "./daytonaWorkspaceTools";
+import {
+  executeRuntimeWorkspaceTool,
+} from "./workspaceRuntimeTools.ts";
+import type {
+  RuntimeWorkspaceSession,
+} from "./workspaceRuntimeSession.ts";
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
 import {
@@ -148,14 +146,14 @@ function newCreditKey(prefix: string): string {
 }
 
 function isWorkspaceCreditBudgetExpired(
-  session: WorkspaceSandboxSession | null | undefined,
+  session: RuntimeWorkspaceSession | null | undefined,
 ): boolean {
   const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
   return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
 }
 
 function buildWorkspaceCreditBudgetSignal(
-  session: WorkspaceSandboxSession,
+  session: RuntimeWorkspaceSession,
   parentSignal?: AbortSignal,
 ): { signal?: AbortSignal; cleanup: () => void } {
   const expiresAt = Number(session.creditBudgetExpiresAt ?? 0);
@@ -270,7 +268,7 @@ async function executeRetrievalHarnessTool(params: {
   communityId: string | null;
   toolName: RetrievalToolName;
   args: Record<string, unknown>;
-  workspaceSession?: WorkspaceSandboxSession | null;
+  workspaceSession?: RuntimeWorkspaceSession | null;
   signal?: AbortSignal;
 }): Promise<NativeToolExecutionResult> {
   let normalizedArgs: Record<string, unknown>;
@@ -800,93 +798,12 @@ async function executeRetrievalHarnessTool(params: {
     const startedBeforeBudgetExpiry = !isWorkspaceCreditBudgetExpired(workspaceSession);
     const result = await (async () => {
       try {
-        return params.toolName === "list_dir"
-          ? await listDaytonaWorkspaceDirectory({
-            config: workspaceSession.config,
-            toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-            sandboxId: workspaceSession.providerSandboxId,
-            relPath: String(normalizedArgs.path ?? ".") || ".",
-            signal: budgetSignal.signal,
-          })
-          : params.toolName === "read"
-            ? await readDaytonaWorkspaceFile({
-              config: workspaceSession.config,
-              toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-              sandboxId: workspaceSession.providerSandboxId,
-              relPath: String(normalizedArgs.path ?? "").trim(),
-              offset:
-                typeof normalizedArgs.offset === "number"
-                  ? normalizedArgs.offset
-                  : undefined,
-              limit:
-                typeof normalizedArgs.limit === "number"
-                  ? normalizedArgs.limit
-                  : undefined,
-              signal: budgetSignal.signal,
-            })
-            : params.toolName === "glob"
-              ? await globDaytonaWorkspacePaths({
-                config: workspaceSession.config,
-                toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-                sandboxId: workspaceSession.providerSandboxId,
-                pattern: String(normalizedArgs.pattern ?? "").trim(),
-                relPath:
-                  typeof normalizedArgs.path === "string"
-                    ? normalizedArgs.path
-                    : undefined,
-                signal: budgetSignal.signal,
-              })
-              : params.toolName === "grep"
-                ? await grepDaytonaWorkspaceFiles({
-                  config: workspaceSession.config,
-                  toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-                  sandboxId: workspaceSession.providerSandboxId,
-                  pattern: String(normalizedArgs.pattern ?? "").trim(),
-                  relPath:
-                    typeof normalizedArgs.path === "string"
-                      ? normalizedArgs.path
-                      : undefined,
-                  signal: budgetSignal.signal,
-                })
-                : params.toolName === "sha256"
-                  ? await sha256DaytonaWorkspaceFile({
-                    config: workspaceSession.config,
-                    toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-                    sandboxId: workspaceSession.providerSandboxId,
-                    relPath: String(normalizedArgs.path ?? "").trim(),
-                    signal: budgetSignal.signal,
-                  })
-                  : params.toolName === "write"
-                    ? await writeDaytonaWorkspaceFile({
-                      config: workspaceSession.config,
-                      toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-                      sandboxId: workspaceSession.providerSandboxId,
-                      relPath: String(normalizedArgs.path ?? "").trim(),
-                      content: String(normalizedArgs.content ?? ""),
-                      signal: budgetSignal.signal,
-                    })
-                    : params.toolName === "edit"
-                      ? await editDaytonaWorkspaceFile({
-                        config: workspaceSession.config,
-                        toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-                        sandboxId: workspaceSession.providerSandboxId,
-                        relPath: String(normalizedArgs.path ?? "").trim(),
-                        oldText: String(normalizedArgs.old_text ?? ""),
-                        newText: String(normalizedArgs.new_text ?? ""),
-                        replaceAll: normalizedArgs.replace_all === true,
-                        signal: budgetSignal.signal,
-                      })
-                      : await runDaytonaWorkspaceBash({
-                        config: workspaceSession.config,
-                        toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-                        sandboxId: workspaceSession.providerSandboxId,
-                        command: String(normalizedArgs.command ?? ""),
-                        relPath:
-                          typeof normalizedArgs.cwd === "string"
-                            ? normalizedArgs.cwd
-                            : undefined,
-                        signal: budgetSignal.signal,
-                      });
+        return await executeRuntimeWorkspaceTool({
+          session: workspaceSession,
+          toolName: params.toolName,
+          normalizedArgs,
+          signal: budgetSignal.signal,
+        });
       } finally {
         budgetSignal.cleanup();
       }
@@ -1020,7 +937,7 @@ async function executeRetrievalAgentLoop(
     projectId?: string | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
-    workspaceSession?: WorkspaceSandboxSession | null;
+    workspaceSession?: RuntimeWorkspaceSession | null;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;

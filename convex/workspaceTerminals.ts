@@ -37,11 +37,19 @@ import {
   type WorkspaceTerminalPreviewTransportStatus,
 } from "./workspaceTerminalProcessCore";
 import { classifyRuntimePreviewProbe } from "../shared/runtimePreviewProbe";
+import {
+  normalizeRecordedWorkspaceResourceProviderId,
+  resolveRecordedWorkspaceResourceProviderId,
+} from "../shared/workspaceComputerProvider";
 
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
 const RECENT_TERMINAL_FAILURE_VISIBLE_MS = 5 * 60_000;
 const RECENT_TERMINAL_FAILURE_LIMIT = 4;
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
+const workspaceResourceProviderIdValidator = v.union(
+  v.literal("daytona"),
+  v.literal("blaxel"),
+);
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
 type WorkspaceTerminalCompletionReason =
@@ -442,6 +450,7 @@ export const acquireProjectBackgroundSandboxLeaseInternal = internalMutation({
     }
 
     await ctx.db.patch(project._id, {
+      providerSandboxProviderId: "daytona",
       providerSandboxState: "creating",
       providerSandboxLastSeenAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -470,6 +479,7 @@ export const clearProjectBackgroundSandboxLeaseInternal = internalMutation({
       return await ctx.db.get(project._id);
     }
     await ctx.db.patch(project._id, {
+      providerSandboxProviderId: undefined,
       providerSandboxState: undefined,
       providerSandboxLastSeenAt: undefined,
       updatedAt: args.nowMs,
@@ -545,30 +555,51 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
   args: {
     projectId: v.id("cloudProjects"),
     providerSandboxId: v.string(),
+    providerSandboxProviderId: workspaceResourceProviderIdValidator,
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
     providerSandboxStartedAt: v.optional(v.number()),
     providerSandboxCreditReservationKey: v.optional(v.string()),
     providerSandboxCreditBudgetCredits: v.optional(v.number()),
     providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
+    clearSandboxAccounting: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.projectId);
+    const previousProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project?.providerSandboxProviderId,
+      resourceId: project?.providerSandboxId,
+    });
+    const previousSandboxId = normalizeOptionalString(project?.providerSandboxId);
+    const sandboxOwnershipChanged =
+      previousProviderId !== null &&
+      (previousProviderId !== args.providerSandboxProviderId ||
+        previousSandboxId !== normalizeOptionalString(args.providerSandboxId));
+    const clearSandboxAccounting =
+      args.clearSandboxAccounting === true || sandboxOwnershipChanged;
     await ctx.db.patch(args.projectId, {
       providerSandboxId: args.providerSandboxId,
+      providerSandboxProviderId: args.providerSandboxProviderId,
       providerSandboxState: args.providerSandboxState,
       providerSandboxLastSeenAt: args.providerSandboxLastSeenAt,
       providerSandboxStartedAt:
-        args.providerSandboxStartedAt ?? project?.providerSandboxStartedAt,
+        args.providerSandboxStartedAt ??
+        (clearSandboxAccounting ? undefined : project?.providerSandboxStartedAt),
       providerSandboxCreditReservationKey:
         args.providerSandboxCreditReservationKey ??
-        project?.providerSandboxCreditReservationKey,
+        (clearSandboxAccounting
+          ? undefined
+          : project?.providerSandboxCreditReservationKey),
       providerSandboxCreditBudgetCredits:
         args.providerSandboxCreditBudgetCredits ??
-        project?.providerSandboxCreditBudgetCredits,
+        (clearSandboxAccounting
+          ? undefined
+          : project?.providerSandboxCreditBudgetCredits),
       providerSandboxCreditBudgetExpiresAt:
         args.providerSandboxCreditBudgetExpiresAt ??
-        project?.providerSandboxCreditBudgetExpiresAt,
+        (clearSandboxAccounting
+          ? undefined
+          : project?.providerSandboxCreditBudgetExpiresAt),
       updatedAt: Date.now(),
     });
     return await ctx.db.get(args.projectId);
@@ -578,10 +609,33 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
 export const clearProjectBackgroundSandboxInternal = internalMutation({
   args: {
     projectId: v.id("cloudProjects"),
+    providerSandboxId: v.optional(v.string()),
+    providerSandboxProviderId: v.optional(workspaceResourceProviderIdValidator),
   },
   handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    const expectedSandboxId = normalizeOptionalString(args.providerSandboxId);
+    const expectedProviderId = normalizeRecordedWorkspaceResourceProviderId(
+      args.providerSandboxProviderId,
+    );
+    if (
+      expectedSandboxId &&
+      normalizeOptionalString(project?.providerSandboxId) !== expectedSandboxId
+    ) {
+      return project;
+    }
+    if (
+      expectedProviderId &&
+      resolveRecordedWorkspaceResourceProviderId({
+        providerId: project?.providerSandboxProviderId,
+        resourceId: project?.providerSandboxId,
+      }) !== expectedProviderId
+    ) {
+      return project;
+    }
     await ctx.db.patch(args.projectId, {
       providerSandboxId: undefined,
+      providerSandboxProviderId: undefined,
       providerSandboxState: undefined,
       providerSandboxLastSeenAt: undefined,
       providerSandboxStartedAt: undefined,
@@ -772,6 +826,7 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
     await ctx.runMutation(internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any, {
       projectId: args.projectId,
       providerSandboxId,
+      providerSandboxProviderId: "daytona",
       providerSandboxState: "started",
       providerSandboxLastSeenAt: nowMs,
     });

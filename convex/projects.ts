@@ -19,12 +19,23 @@ import {
 } from "./daytonaWorkspaceSession";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
 import { buildNextDefaultComputerName, formatDefaultComputerName } from "../shared/projectNaming";
+import {
+  resolveRecordedWorkspaceResourceProviderId,
+} from "../shared/workspaceComputerProvider";
+import {
+  destroyBlaxelWorkspaceSandbox,
+  destroyBlaxelWorkspaceVolume,
+} from "./blaxelWorkspaceClient.ts";
 
 const ACCOUNT_MAX_PROJECTS = 5;
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
 const PROJECT_IMPORT_MAX_FILES = 25_000;
 const PROJECT_IMPORT_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
 const PROJECT_IMPORT_LEASE_MS = 20 * 60 * 1000;
+const workspaceResourceProviderIdValidator = v.union(
+  v.literal("daytona"),
+  v.literal("blaxel"),
+);
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -797,6 +808,7 @@ export const attachCloudProjectVolumeInternal = internalMutation({
   args: {
     projectId: v.id("cloudProjects"),
     providerVolumeId: v.string(),
+    providerId: workspaceResourceProviderIdValidator,
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -807,6 +819,7 @@ export const attachCloudProjectVolumeInternal = internalMutation({
     if (!providerVolumeId) throw new Error("provider_volume_id_required");
     await ctx.db.patch(existing._id, {
       providerVolumeId,
+      providerVolumeProviderId: args.providerId,
       updatedAt: nowMs,
     });
     return await ctx.db.get(existing._id);
@@ -876,6 +889,13 @@ export const ensureCloudProjectVolumeInternal = internalAction({
 
     let volume: DaytonaVolumeApiDto | null = null;
     const existingVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
+    const existingVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerVolumeProviderId,
+      resourceId: existingVolumeId,
+    });
+    if (existingVolumeId && existingVolumeProviderId !== "daytona") {
+      throw new Error("project_volume_provider_mismatch");
+    }
     if (existingVolumeId) {
       const lookupById = await fetchDaytonaVolumeById({
         config,
@@ -925,6 +945,7 @@ export const ensureCloudProjectVolumeInternal = internalAction({
     const updated: unknown = await ctx.runMutation(internal.projects.attachCloudProjectVolumeInternal as any, {
       projectId: args.projectId,
       providerVolumeId: volumeId,
+      providerId: "daytona",
       nowMs: Date.now(),
     });
     if (!updated) throw new Error("project_not_found");
@@ -1294,8 +1315,33 @@ export const deleteCloudProjectForOwner = action({
       throw new Error("project_run_in_progress");
     }
 
+    const providerSandboxId = normalizeOptionalVolumeValue(project.providerSandboxId);
+    const providerSandboxProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerSandboxProviderId,
+      resourceId: providerSandboxId,
+    });
+    if (providerSandboxId && providerSandboxProviderId === "blaxel") {
+      const cleanup = await destroyBlaxelWorkspaceSandbox({
+        sandboxName: providerSandboxId,
+      });
+      if (!cleanup.ok) {
+        throw new Error(cleanup.message);
+      }
+    }
+
     const providerVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
-    if (providerVolumeId) {
+    const providerVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerVolumeProviderId,
+      resourceId: providerVolumeId,
+    });
+    if (providerVolumeId && providerVolumeProviderId === "blaxel") {
+      const cleanup = await destroyBlaxelWorkspaceVolume({
+        volumeName: providerVolumeId,
+      });
+      if (!cleanup.ok) {
+        throw new Error(cleanup.message);
+      }
+    } else if (providerVolumeId && providerVolumeProviderId === "daytona") {
       const loadedDaytonaConfig = loadDaytonaConfig();
       if (!loadedDaytonaConfig.ok) {
         throw new Error(loadedDaytonaConfig.message);

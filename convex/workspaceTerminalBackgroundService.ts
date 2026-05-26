@@ -23,6 +23,10 @@ import {
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceDaytonaWorkspaceUsageCredits,
 } from "../shared/workspaceCredits";
+import {
+  resolveRecordedWorkspaceResourceProviderId,
+  type WorkspaceComputerProviderId,
+} from "../shared/workspaceComputerProvider";
 
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 const PROJECT_BACKGROUND_SANDBOX_WAIT_MS = 65_000;
@@ -35,6 +39,24 @@ function normalizeString(value: unknown): string {
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
+}
+
+function workspaceProviderMismatchFailure(params: {
+  resourceKind: "sandbox" | "volume";
+  expectedProviderId: WorkspaceComputerProviderId;
+  actualProviderId: WorkspaceComputerProviderId | null;
+}) {
+  return {
+    ok: false as const,
+    status: 409,
+    code: "workspace_computer_provider_mismatch",
+    message: "This workspace computer is managed by a different provider.",
+    details: {
+      resource_kind: params.resourceKind,
+      expected_provider_id: params.expectedProviderId,
+      actual_provider_id: params.actualProviderId,
+    },
+  };
 }
 
 function isProjectBackgroundSandboxGoneFailure(value: unknown): boolean {
@@ -179,6 +201,7 @@ export async function ensureProjectBackgroundSandbox(params: {
   });
   if (existing.ok) return existing;
   if (existing.code === "workspace_credits_exhausted") return existing;
+  if (existing.code === "workspace_computer_provider_mismatch") return existing;
 
   const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
     authSubject: params.authSubject,
@@ -192,6 +215,18 @@ export async function ensureProjectBackgroundSandbox(params: {
       code: "project_not_found",
       message: "Computer not found.",
     };
+  }
+  const projectVolumeId = normalizeOptionalString(project.providerVolumeId);
+  const projectVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
+    providerId: project.providerVolumeProviderId,
+    resourceId: projectVolumeId,
+  });
+  if (projectVolumeId && projectVolumeProviderId !== "daytona") {
+    return workspaceProviderMismatchFailure({
+      resourceKind: "volume",
+      expectedProviderId: "daytona",
+      actualProviderId: projectVolumeProviderId,
+    });
   }
 
   let leaseAcquired = false;
@@ -430,6 +465,7 @@ export async function ensureProjectBackgroundSandbox(params: {
       {
         projectId: params.projectId,
         providerSandboxId,
+        providerSandboxProviderId: "daytona",
         providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
         providerSandboxLastSeenAt: sandboxStartedAt,
         providerSandboxStartedAt: sandboxStartedAt,
@@ -528,6 +564,29 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       message: "No active computer background sandbox is registered.",
     };
   }
+  const existingSandboxProviderId = resolveRecordedWorkspaceResourceProviderId({
+    providerId: project.providerSandboxProviderId,
+    resourceId: existingSandboxId,
+  });
+  if (existingSandboxProviderId !== "daytona") {
+    return workspaceProviderMismatchFailure({
+      resourceKind: "sandbox",
+      expectedProviderId: "daytona",
+      actualProviderId: existingSandboxProviderId,
+    });
+  }
+  const existingProjectVolumeId = normalizeOptionalString(project.providerVolumeId);
+  const existingVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
+    providerId: project.providerVolumeProviderId,
+    resourceId: existingProjectVolumeId,
+  });
+  if (existingProjectVolumeId && existingVolumeProviderId !== "daytona") {
+    return workspaceProviderMismatchFailure({
+      resourceKind: "volume",
+      expectedProviderId: "daytona",
+      actualProviderId: existingVolumeProviderId,
+    });
+  }
   const credit = readBackgroundCreditReservation(project);
   if (
     credit.creditBudgetExpiresAt > 0 &&
@@ -601,6 +660,8 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
       {
         projectId: params.projectId,
+        providerSandboxId: existingSandboxId,
+        providerSandboxProviderId: "daytona",
       },
     );
     return {
@@ -620,6 +681,8 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
       {
         projectId: params.projectId,
+        providerSandboxId: existingSandboxId,
+        providerSandboxProviderId: "daytona",
       },
     );
     return {
@@ -635,6 +698,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
     {
       projectId: params.projectId,
       providerSandboxId: existingSandboxId,
+      providerSandboxProviderId: "daytona",
       providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
       providerSandboxLastSeenAt: Date.now(),
     },
@@ -645,7 +709,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
     config,
     providerSandboxId: existingSandboxId,
     toolboxProxyUrl: toolbox.toolboxProxyUrl,
-    projectVolumeId: normalizeOptionalString(project.providerVolumeId),
+    projectVolumeId: existingProjectVolumeId,
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
     sandboxDiskGiB: config.sandboxDiskGiB,
@@ -680,6 +744,17 @@ export async function resolveTerminalSandboxContext(params: {
   if (
     String(project?.providerSandboxId ?? "").trim() === params.providerSandboxId
   ) {
+    const providerId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project?.providerSandboxProviderId,
+      resourceId: project?.providerSandboxId,
+    });
+    if (providerId !== "daytona") {
+      return workspaceProviderMismatchFailure({
+        resourceKind: "sandbox",
+        expectedProviderId: "daytona",
+        actualProviderId: providerId,
+      });
+    }
     const credit = readBackgroundCreditReservation(project);
     if (
       credit.creditBudgetExpiresAt > 0 &&
@@ -728,6 +803,7 @@ export async function resolveTerminalSandboxContext(params: {
       {
         projectId: params.projectId,
         providerSandboxId: params.providerSandboxId,
+        providerSandboxProviderId: "daytona",
         providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
         providerSandboxLastSeenAt: Date.now(),
       },
@@ -770,6 +846,13 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
     },
   );
   if (String(project?.providerSandboxId ?? "").trim() !== params.providerSandboxId) {
+    return;
+  }
+  const providerId = resolveRecordedWorkspaceResourceProviderId({
+    providerId: project?.providerSandboxProviderId,
+    resourceId: project?.providerSandboxId,
+  });
+  if (providerId !== "daytona") {
     return;
   }
 
@@ -885,6 +968,8 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
       internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
       {
         projectId: params.projectId,
+        providerSandboxId: params.providerSandboxId,
+        providerSandboxProviderId: "daytona",
       },
     );
     return;
@@ -895,6 +980,7 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
     {
       projectId: params.projectId,
       providerSandboxId: params.providerSandboxId,
+      providerSandboxProviderId: "daytona",
       providerSandboxState: "error",
       providerSandboxLastSeenAt: Date.now(),
     },
