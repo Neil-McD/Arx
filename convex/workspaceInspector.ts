@@ -187,8 +187,8 @@ function buildBlaxelProjectWorkspaceNames(projectId: unknown): {
 } {
   const resourcePart = safeBlaxelResourcePart(projectId);
   return {
-    sandboxName: `polynet-project-${resourcePart}`,
-    volumeName: `polynet-project-${resourcePart}-vol`,
+    sandboxName: `pn-p-${resourcePart}`,
+    volumeName: `pn-p-${resourcePart}-v`,
   };
 }
 

@@ -782,6 +782,16 @@ async function proveWorkspaceComputerProviderContract() {
   );
   assertIncludes(
     inspectorSource,
+    "sandboxName: `pn-p-${resourcePart}`",
+    "expected right-panel Blaxel sandbox names to stay inside Blaxel metadata name limits",
+  );
+  assertIncludes(
+    inspectorSource,
+    "volumeName: `pn-p-${resourcePart}-v`",
+    "expected right-panel Blaxel volume names to stay inside Blaxel metadata name limits",
+  );
+  assertIncludes(
+    inspectorSource,
     "readBlaxelInspectorFilePreview",
     "expected right-panel Blaxel preview to have an isolated preview helper",
   );
