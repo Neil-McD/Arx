@@ -4,6 +4,13 @@ import { v } from "convex/values";
 import { DAYTONA_WORKSPACE_ROOT } from "./daytonaSandboxClient";
 import { resolveProjectBackgroundSandboxIfReady } from "./workspaceTerminalBackgroundService";
 import {
+  ensureBlaxelWorkspaceComputer,
+  listBlaxelWorkspaceDirectory,
+} from "./blaxelWorkspaceComputerProvider.ts";
+import {
+  resolveWorkspaceComputerProviderFromServerEnv,
+} from "./workspaceComputerProviderPolicy.ts";
+import {
   normalizeWorkspacePath,
   runDaytonaWorkspaceBash,
 } from "./daytonaWorkspaceTools";
@@ -88,6 +95,11 @@ type WorkspaceInspectorSession = {
   toolboxProxyUrl: string;
 };
 
+type WorkspaceInspectorProject = {
+  actor: any;
+  project: any;
+};
+
 type WorkspaceInspectorPathKind = "file" | "directory" | "missing" | "other";
 type WorkspaceInspectorResolvedPath =
   | {
@@ -150,6 +162,83 @@ function joinWorkspacePath(directoryPath: string, entryPath: string): string {
   return directoryPath === "." ? entry : `${directoryPath}/${entry}`;
 }
 
+function safeBlaxelResourcePart(value: unknown): string {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return (normalized || "project").slice(0, 40);
+}
+
+function buildBlaxelProjectWorkspaceNames(projectId: unknown): {
+  sandboxName: string;
+  volumeName: string;
+} {
+  const resourcePart = safeBlaxelResourcePart(projectId);
+  return {
+    sandboxName: `polynet-project-${resourcePart}`,
+    volumeName: `polynet-project-${resourcePart}-vol`,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function blaxelEntryName(value: unknown): string | null {
+  const record = asRecord(value);
+  const rawName = String(record?.name ?? "").trim();
+  if (rawName) return basenameOfPath(rawName);
+  const rawPath = String(record?.path ?? "").trim();
+  return rawPath ? basenameOfPath(rawPath) : null;
+}
+
+function parseBlaxelDirectoryEntries(rawEntries: unknown, directoryPath: string) {
+  const record = asRecord(rawEntries);
+  const files = Array.isArray(record?.files) ? record.files : [];
+  const subdirectories = Array.isArray(record?.subdirectories)
+    ? record.subdirectories
+    : [];
+  const rows = [
+    ...subdirectories.flatMap((entry) => {
+      const name = blaxelEntryName(entry);
+      if (!name) return [];
+      return [{
+        name,
+        path: joinWorkspacePath(directoryPath, name),
+        type: "directory" as const,
+        extension: null,
+        heavy: HEAVY_DIRECTORY_NAMES.has(name),
+        previewable: false,
+      }];
+    }),
+    ...files.flatMap((entry) => {
+      const name = blaxelEntryName(entry);
+      if (!name) return [];
+      const extension = extensionOfPath(name);
+      return [{
+        name,
+        path: joinWorkspacePath(directoryPath, name),
+        type: "file" as const,
+        extension,
+        heavy: false,
+        previewable:
+          Boolean(IMAGE_MIME_BY_EXTENSION[extension]) ||
+          isTextPreviewCandidate(name),
+      }];
+    }),
+  ];
+  return rows
+    .sort((left, right) =>
+      `${left.type}:${left.name}`.localeCompare(`${right.type}:${right.name}`),
+    )
+    .slice(0, DIRECTORY_ENTRY_LIMIT);
+}
+
 function mapFailure(result: {
   status?: number;
   code?: string;
@@ -169,12 +258,12 @@ async function resolveActor(ctx: any, authSubject: string | null | undefined) {
   });
 }
 
-async function resolveInspectorSession(params: {
+async function resolveInspectorProject(params: {
   ctx: any;
   authSubject: string | null | undefined;
   projectId: any;
 }): Promise<
-  | { ok: true; session: WorkspaceInspectorSession }
+  | { ok: true; resolved: WorkspaceInspectorProject }
   | WorkspaceInspectorFailure
 > {
   const actor = await resolveActor(params.ctx, params.authSubject);
@@ -191,11 +280,27 @@ async function resolveInspectorSession(params: {
       message: "Computer not found.",
     };
   }
+  return {
+    ok: true,
+    resolved: { actor, project },
+  };
+}
+
+async function resolveInspectorSession(params: {
+  ctx: any;
+  authSubject: string | null | undefined;
+  projectId: any;
+}): Promise<
+  | { ok: true; session: WorkspaceInspectorSession }
+  | WorkspaceInspectorFailure
+> {
+  const resolvedProject = await resolveInspectorProject(params);
+  if (!resolvedProject.ok) return resolvedProject;
 
   const resolved = await resolveProjectBackgroundSandboxIfReady({
     ctx: params.ctx,
     authSubject: params.authSubject ?? null,
-    userId: actor.dbUserId,
+    userId: resolvedProject.resolved.actor.dbUserId,
     projectId: params.projectId,
   });
   if (!resolved.ok) return mapFailure(resolved);
@@ -203,6 +308,42 @@ async function resolveInspectorSession(params: {
   return {
     ok: true,
     session: resolved,
+  };
+}
+
+async function listBlaxelInspectorDirectory(params: {
+  ctx: any;
+  authSubject: string | null | undefined;
+  projectId: any;
+  relPath: string;
+}): Promise<unknown> {
+  const resolvedProject = await resolveInspectorProject(params);
+  if (!resolvedProject.ok) return resolvedProject;
+  const names = buildBlaxelProjectWorkspaceNames(params.projectId);
+  const ensured = await ensureBlaxelWorkspaceComputer({
+    sandboxName: names.sandboxName,
+    volumeName: names.volumeName,
+    labels: {
+      purpose: "workspace-inspector",
+      project_id: String(params.projectId),
+      owner_id: String(resolvedProject.resolved.actor.dbUserId),
+    },
+  });
+  if (!ensured.ok) return mapFailure(ensured);
+
+  const listed = await listBlaxelWorkspaceDirectory({
+    sandboxName: names.sandboxName,
+    path: params.relPath,
+  });
+  if (!listed.ok) return mapFailure(listed);
+  const entries = parseBlaxelDirectoryEntries(listed.entries, params.relPath);
+  return {
+    ok: true,
+    providerId: "blaxel",
+    status: "active",
+    path: params.relPath,
+    entries,
+    truncated: entries.length >= DIRECTORY_ENTRY_LIMIT,
   };
 }
 
@@ -366,6 +507,14 @@ export const listWorkspaceDirectory = action({
     const normalized = normalizeInspectorPath(args.path ?? ".");
     if (!normalized.ok) return normalized;
     const relPath = normalized.relPath;
+    if (resolveWorkspaceComputerProviderFromServerEnv().providerId === "blaxel") {
+      return await listBlaxelInspectorDirectory({
+        ctx,
+        authSubject: args.authSubject ?? null,
+        projectId: args.projectId,
+        relPath,
+      });
+    }
     const session = await resolveInspectorSession({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -426,6 +575,7 @@ export const listWorkspaceDirectory = action({
     const entries = parseDirectoryEntries(listed.outputText, relPath);
     return {
       ok: true,
+      providerId: "daytona",
       status: "active",
       path: relPath,
       entries,

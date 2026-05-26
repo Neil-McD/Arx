@@ -743,12 +743,37 @@ async function proveWorkspaceComputerProviderContract() {
   assertIncludes(
     inspectorSource,
     'import { DAYTONA_WORKSPACE_ROOT } from "./daytonaSandboxClient";',
-    "expected right-panel inspection to stay on the Daytona workspace root in this slice",
+    "expected right-panel inspection to preserve the Daytona workspace root for Daytona paths",
   );
   assertIncludes(
     inspectorSource,
     'import { resolveProjectBackgroundSandboxIfReady } from "./workspaceTerminalBackgroundService";',
-    "expected right-panel inspection to keep using the existing background sandbox resolver",
+    "expected right-panel inspection to keep using the existing Daytona background sandbox resolver",
+  );
+  assertIncludes(
+    inspectorSource,
+    "resolveWorkspaceComputerProviderFromServerEnv",
+    "expected right-panel inspection provider selection to be server-owned",
+  );
+  assertIncludes(
+    inspectorSource,
+    'if (resolveWorkspaceComputerProviderFromServerEnv().providerId === "blaxel")',
+    "expected right-panel directory listing to route to Blaxel only through server policy",
+  );
+  assertIncludes(
+    inspectorSource,
+    "ensureBlaxelWorkspaceComputer",
+    "expected right-panel Blaxel listing to create or reuse a workspace computer through the provider wrapper",
+  );
+  assertIncludes(
+    inspectorSource,
+    "listBlaxelWorkspaceDirectory",
+    "expected right-panel Blaxel listing to list through the provider wrapper",
+  );
+  assertIncludes(
+    inspectorSource,
+    "buildBlaxelProjectWorkspaceNames",
+    "expected right-panel Blaxel listing to derive stable project workspace names",
   );
 
   assertIncludes(

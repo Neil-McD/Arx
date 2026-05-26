@@ -15,6 +15,7 @@ export type WorkspaceInspectorDirectoryEntry = {
 export type WorkspaceInspectorDirectoryResult =
   | {
       ok: true;
+      providerId: "daytona" | "blaxel" | null;
       status: "active";
       path: string;
       entries: WorkspaceInspectorDirectoryEntry[];
@@ -114,6 +115,10 @@ export async function listWorkspaceDirectoryCanonical(params: {
   if (!isRecord(payload) || payload.ok !== true) return normalizeFailure(payload);
   return {
     ok: true,
+    providerId:
+      payload.providerId === "daytona" || payload.providerId === "blaxel"
+        ? payload.providerId
+        : null,
     status: "active",
     path: String(payload.path ?? ".").trim() || ".",
     entries: Array.isArray(payload.entries)

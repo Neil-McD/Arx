@@ -655,6 +655,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [directoryErrorCode, setDirectoryErrorCode] = useState<string | null>(null);
   const [isComputerOnForFiles, setIsComputerOnForFiles] = useState(false);
+  const [workspaceFilesProviderId, setWorkspaceFilesProviderId] = useState<"daytona" | "blaxel" | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<WorkspaceInspectorFilePreview | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState(false);
@@ -671,6 +672,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryError(null);
     setDirectoryErrorCode(null);
     setIsComputerOnForFiles(false);
+    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -695,6 +697,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -719,10 +722,12 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           setDirectoryError(formatWorkspaceInspectorFailure(result));
           setDirectoryErrorCode(result.code);
           setIsComputerOnForFiles(false);
+          setWorkspaceFilesProviderId(null);
           return;
         }
         setDirectoryEntries(result.entries);
         setIsComputerOnForFiles(true);
+        setWorkspaceFilesProviderId(result.providerId);
       })
       .catch((error) => {
         if (!isAlive) return;
@@ -730,6 +735,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         setDirectoryError(error instanceof Error ? error.message : "Workspace files unavailable.");
         setDirectoryErrorCode(null);
         setIsComputerOnForFiles(false);
+        setWorkspaceFilesProviderId(null);
       })
       .finally(() => {
         if (isAlive) setIsLoadingDirectory(false);
@@ -813,6 +819,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryError("Computer turning on");
     setDirectoryErrorCode("computer_starting");
     setIsComputerOnForFiles(false);
+    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -825,12 +832,14 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       setDirectoryError(error instanceof Error ? error.message : "Computer could not turn on.");
       setDirectoryErrorCode("computer_start_failed");
       setIsComputerOnForFiles(false);
+      setWorkspaceFilesProviderId(null);
       return;
     }
     if (result.ok === false) {
       setDirectoryEntries([]);
       setDirectoryError(formatWorkspaceInspectorFailure(result));
       setDirectoryErrorCode(result.code);
+      setWorkspaceFilesProviderId(null);
       return;
     }
     setFilesExpandedForProject(true);
@@ -839,6 +848,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryError(null);
     setDirectoryErrorCode(null);
     setIsComputerOnForFiles(true);
+    setWorkspaceFilesProviderId("daytona");
     setDirectoryRefreshNonce((value) => value + 1);
   }, [canTurnOnComputer, props.onTurnOnComputer, setFilesExpandedForProject]);
 
@@ -851,6 +861,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryError("Turn on computer to view files.");
     setDirectoryErrorCode("background_sandbox_not_found");
     setIsComputerOnForFiles(false);
+    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -982,7 +993,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                 </button>
               ) : null}
               <span className="workspace-files-path">{formatWorkspaceBreadcrumb(directoryPath)}</span>
-              {isComputerOnForFiles ? (
+              {isComputerOnForFiles && workspaceFilesProviderId !== "blaxel" ? (
                 <label
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
                     props.isStoppingWorkspaceComputer ? " is-disabled" : ""
