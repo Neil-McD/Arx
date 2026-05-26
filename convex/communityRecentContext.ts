@@ -4,9 +4,12 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityLike,
+  type CommunityResourceModuleLike,
   type CommunityResourceLike,
-  communityResourceIsPublishedKnowledge,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   normalizeResourceRole,
+  normalizeResourceStatus,
   requireCommunityChatAccess,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
@@ -177,24 +180,26 @@ async function listRecentResourceItems(args: {
   communityId: any;
   tokens: string[];
 }): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const publishedRows = (await args.ctx.db
-    .query("communityResources" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", args.communityId).eq("status", "published"),
-    )
-    .order("desc")
-    .take(RESOURCE_SCAN_LIMIT)) as CommunityResourceLike[];
+  const modules = (await args.ctx.db
+    .query("communityResourceModules" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+    .collect()) as CommunityResourceModuleLike[];
+  const liveModuleIds = new Set(
+    modules
+      .filter(communityResourceModuleIsLive)
+      .map((module) => String(module._id)),
+  );
   const recentRows = (await args.ctx.db
     .query("communityResources" as any)
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
     .order("desc")
     .take(RESOURCE_SCAN_LIMIT)) as CommunityResourceLike[];
   const uniqueRows = new Map<string, CommunityResourceLike>();
-  for (const row of [...publishedRows, ...recentRows]) {
+  for (const row of recentRows) {
     uniqueRows.set(String(row._id), row);
   }
   const sorted = Array.from(uniqueRows.values())
-    .filter((row) => communityResourceIsPublishedKnowledge(row))
+    .filter((row) => communityResourceIsLiveModulePage(row, liveModuleIds))
     .sort((a, b) => {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
       return b.createdAt - a.createdAt;
@@ -212,7 +217,7 @@ async function listRecentResourceItems(args: {
       url: row.url ?? null,
       resource_type: String(row.type ?? "").trim().toLowerCase() || null,
       resource_role: normalizeResourceRole(row.role),
-      resource_status: "published" as const,
+      resource_status: normalizeResourceStatus(row.status),
     };
   }).slice(0, RESOURCE_WINDOW_LIMIT);
   return { items, considered: sorted.length };

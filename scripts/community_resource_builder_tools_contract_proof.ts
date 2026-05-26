@@ -103,8 +103,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /if \(next === "published" && !args\.confirmPublish\)[\s\S]*community_resource_publish_confirmation_required/,
-  "publishing through builder tools should require explicit confirmation",
+  /if \(next === "published"\)[\s\S]*community_resource_page_status_deprecated/,
+  "builder tools should reject page-level publish writes",
 );
 assert.match(
   resources,
@@ -279,8 +279,8 @@ const builderListBody = resources.slice(
 assert.ok(builderListBody.length > 0, "builder list body should be discoverable");
 assert.doesNotMatch(
   builderListBody,
-  /communityResourceIsPublishedKnowledge/,
-  "builder directory should not reuse member published-only filtering",
+  /communityResourceIsLiveModulePage/,
+  "builder directory should not reuse member live-only filtering",
 );
 assert.doesNotMatch(
   builderListBody,

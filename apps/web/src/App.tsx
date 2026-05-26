@@ -909,6 +909,7 @@ type CommunityResourceModule = {
   community_id?: string | null;
   directory_uri: string;
   directory_path: string;
+  module_status: "draft" | "live";
   name: string;
   description_md: string | null;
   banner_url: string | null;
@@ -2388,6 +2389,7 @@ export default function App() {
     loadCommunityResources,
     openNewModuleModal,
     handleEditModule,
+    handleSetModuleStatus,
     handleDeleteModule,
     handleReorderModules,
     handleReorderResources,
@@ -2395,7 +2397,6 @@ export default function App() {
     openNewSourceModal,
     handleEditResource,
     handleDeleteResource,
-    handlePublishResource,
     handleCreatePageDraftFromSource,
     setShowResourceModal,
     setEditingResourceId,
@@ -9049,6 +9050,7 @@ export default function App() {
         handleSelectModule: setCommunityResourceModuleId,
         openNewModuleModal,
         handleEditModule,
+        handleSetModuleStatus,
         handleDeleteModule,
         handleReorderModules,
         handleReorderResources,
@@ -9056,7 +9058,6 @@ export default function App() {
         openNewSourceModal,
         handleEditResource,
         handleDeleteResource,
-        handlePublishResource,
         handleCreatePageDraftFromSource,
       },
       eventsState: {

@@ -11,8 +11,10 @@ import {
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
   communityResourceBodyChars,
+  communityResourceHasUsableKnowledgeContent,
+  communityResourceIsLiveModulePage,
   communityResourceSourceHasReadyText,
-  communityResourceIsPublishedKnowledge,
+  communityResourceModuleIsLive,
   getCommunityAndMembership,
   mapCommunityResourceModuleRow,
   mapCommunityResourceRow,
@@ -25,6 +27,7 @@ import {
   normalizeOptionalText,
   normalizeOptionalUrl,
   normalizeResourceRole,
+  normalizeResourceModuleStatus,
   normalizeResourceSourceIngestionKind,
   normalizeResourceSourceIngestionStatus,
   normalizeResourceStatus,
@@ -34,6 +37,7 @@ import {
   requireCommunityManager,
   requireResourceSourceIngestionKindForWrite,
   requireResourceSourceIngestionStatusForWrite,
+  requireResourceModuleStatusForWrite,
   requireResourceStatusForWrite,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
@@ -233,6 +237,7 @@ type CommunityResourceBuilderChangesetOperation =
       module_key?: string | null;
       name: string;
       description_md?: string | null;
+      module_status?: "draft" | "live";
     }
   | {
       op: "edit_module";
@@ -240,6 +245,7 @@ type CommunityResourceBuilderChangesetOperation =
       expected_updated_at: number;
       name?: string;
       description_md?: string | null;
+      module_status?: "draft" | "live";
     }
   | {
       op: "create_page";
@@ -1736,6 +1742,129 @@ async function getNextResourceSortOrder(args: {
   );
 }
 
+async function syncArchiveDocumentsForModule(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: any;
+}): Promise<void> {
+  const rows = (await args.ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_module", (q: any) =>
+      q.eq("communityId", args.communityId).eq("moduleId", args.moduleId),
+    )
+    .collect()) as CommunityResourceLike[];
+  for (const row of rows) {
+    await upsertArchiveDocumentForResource(args.ctx, row);
+  }
+}
+
+function hasPersistedResourceModuleStatus(module: CommunityResourceModuleLike): boolean {
+  return Object.prototype.hasOwnProperty.call(module, "status") &&
+    parseResourceModuleStatusForBackfill(module.status) !== null;
+}
+
+function parseResourceModuleStatusForBackfill(raw: unknown): "draft" | "live" | null {
+  const status = String(raw ?? "").trim().toLowerCase();
+  if (status === "draft") return "draft";
+  if (status === "live") return "live";
+  return null;
+}
+
+function isLegacyLivePageResource(row: CommunityResourceLike): boolean {
+  return normalizeResourceRole(row.role) === "page" &&
+    normalizeResourceStatus(row.status) === "published" &&
+    communityResourceHasUsableKnowledgeContent(row);
+}
+
+async function inferLegacyResourceModuleStatus(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: any;
+}): Promise<"draft" | "live"> {
+  const rows = (await args.ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_module", (q: any) =>
+      q.eq("communityId", args.communityId).eq("moduleId", args.moduleId),
+    )
+    .collect()) as CommunityResourceLike[];
+  return rows.some(isLegacyLivePageResource) ? "live" : "draft";
+}
+
+export const backfillCommunityResourceModuleStatusesInternal = internalMutation({
+  args: {
+    communityId: v.optional(v.id("communities")),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<{
+    ok: true;
+    kind: "community_resource_module_status_backfill";
+    dry_run: boolean;
+    community_id: string | null;
+    limit: number;
+    modules_checked: number;
+    modules_already_explicit: number;
+    modules_updated: number;
+    modules_live: number;
+    modules_draft: number;
+  }> => {
+    const dryRun = args.dryRun !== false;
+    const limit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 500)));
+    const modules = args.communityId
+      ? ((await ctx.db
+          .query("communityResourceModules" as any)
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+          .take(limit)) as CommunityResourceModuleLike[])
+      : ((await ctx.db
+          .query("communityResourceModules" as any)
+          .take(limit)) as CommunityResourceModuleLike[]);
+    const nowMs = Date.now();
+    let modulesAlreadyExplicit = 0;
+    let modulesUpdated = 0;
+    let modulesLive = 0;
+    let modulesDraft = 0;
+
+    for (const module of modules) {
+      if (hasPersistedResourceModuleStatus(module)) {
+        modulesAlreadyExplicit += 1;
+        continue;
+      }
+      const nextStatus = await inferLegacyResourceModuleStatus({
+        ctx,
+        communityId: module.communityId,
+        moduleId: module._id,
+      });
+      if (nextStatus === "live") modulesLive += 1;
+      else modulesDraft += 1;
+      if (!dryRun) {
+        await ctx.db.patch(module._id as any, {
+          status: nextStatus,
+          updatedAt: nowMs,
+        });
+        await syncArchiveDocumentsForModule({
+          ctx,
+          communityId: module.communityId,
+          moduleId: module._id,
+        });
+      }
+      modulesUpdated += 1;
+    }
+
+    return {
+      ok: true,
+      kind: "community_resource_module_status_backfill",
+      dry_run: dryRun,
+      community_id: args.communityId ? normalizeIdValue(args.communityId) : null,
+      limit,
+      modules_checked: modules.length,
+      modules_already_explicit: modulesAlreadyExplicit,
+      modules_updated: modulesUpdated,
+      modules_live: modulesLive,
+      modules_draft: modulesDraft,
+    };
+  },
+});
+
 function normalizeDraftLine(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
 }
@@ -1815,8 +1944,8 @@ function buildPageDraftBodyFromSource(source: CommunityResourceLike): string {
       "- Remove anything that should stay as raw source material.",
     ];
   const memberUse = sourceBody
-    ? "Use this page as the member-facing version of the source. Tighten the summary, remove private notes, and publish when the content is accurate."
-    : "Review the source, add the member-facing takeaway, and publish only after the page is accurate.";
+    ? "Use this page as the member-facing version of the source. Tighten the summary, remove private notes, then move it into a live module when the content is accurate."
+    : "Review the source, add the member-facing takeaway, then move it into a live module when the page is accurate.";
   const sourceNotes = sourceBody
     ? sourceBody
     : "Review the original source and replace this note with the durable context members should reuse.";
@@ -1922,11 +2051,11 @@ function normalizeBuilderResourceStatus(args: {
     : args.existingStatus !== undefined
       ? normalizeResourceStatus(args.existingStatus)
       : args.defaultStatus;
-  if (next === "published" && !args.confirmPublish) {
-    throw new Error("community_resource_publish_confirmation_required");
+  if (next === "published") {
+    throw new Error("community_resource_page_status_deprecated");
   }
-  if (args.publishing && next !== "published") {
-    throw new Error("community_resource_publish_status_required");
+  if (args.publishing) {
+    throw new Error("community_resource_page_status_deprecated");
   }
   return next;
 }
@@ -1968,6 +2097,10 @@ function normalizeChangesetPageStatus(raw: unknown): "draft" | "review" | "proce
   return status;
 }
 
+function normalizeChangesetModuleStatus(raw: unknown): "draft" | "live" {
+  return requireResourceModuleStatusForWrite(raw);
+}
+
 function normalizeCommunityResourceBuilderChangesetOperations(
   rawOperations: unknown,
 ): CommunityResourceBuilderChangesetOperation[] {
@@ -1995,6 +2128,9 @@ function normalizeCommunityResourceBuilderChangesetOperations(
           : null),
         name: normalizeName(record.name),
         description_md: normalizeOptionalText(record.description_md, 1200) ?? null,
+        module_status: hasOwnField(record, "module_status")
+          ? normalizeChangesetModuleStatus(record.module_status)
+          : "draft",
       };
     }
     if (op === "edit_module") {
@@ -2007,7 +2143,10 @@ function normalizeCommunityResourceBuilderChangesetOperations(
       if (hasOwnField(record, "description_md")) {
         next.description_md = normalizeOptionalText(record.description_md, 1200) ?? null;
       }
-      if (!hasOwnField(record, "name") && !hasOwnField(record, "description_md")) {
+      if (hasOwnField(record, "module_status")) {
+        next.module_status = normalizeChangesetModuleStatus(record.module_status);
+      }
+      if (!hasOwnField(record, "name") && !hasOwnField(record, "description_md") && !hasOwnField(record, "module_status")) {
         throw new Error("community_resource_changeset_edit_module_empty");
       }
       return next;
@@ -2430,6 +2569,7 @@ async function createModuleFromChangesetOperation(args: {
   const id = await args.ctx.db.insert("communityResourceModules" as any, {
     communityId: args.communityId,
     createdByUserId: args.userId,
+    status: args.operation.module_status ?? "draft",
     name: args.operation.name,
     descriptionMd: args.operation.description_md ?? undefined,
     sortOrder: nextSortOrder,
@@ -2625,11 +2765,21 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         expectedUpdatedAt: operation.expected_updated_at,
         actualUpdatedAt: module.updatedAt,
       });
+      const moduleStatusChanged = hasOwnField(operation as any, "module_status") &&
+        normalizeResourceModuleStatus(module.status) !== operation.module_status;
       await args.ctx.db.patch(module._id as any, {
         ...(hasOwnField(operation as any, "name") ? { name: operation.name } : {}),
         ...(hasOwnField(operation as any, "description_md") ? { descriptionMd: operation.description_md ?? undefined } : {}),
+        ...(hasOwnField(operation as any, "module_status") ? { status: operation.module_status } : {}),
         updatedAt: args.nowMs,
       });
+      if (moduleStatusChanged) {
+        await syncArchiveDocumentsForModule({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          moduleId: module._id,
+        });
+      }
       applied.push({
         index,
         op: operation.op,
@@ -2748,20 +2898,6 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
   };
 }
 
-function isCommunityResourceRow(row: unknown): row is CommunityResourceLike {
-  return Boolean(
-    row &&
-      typeof row === "object" &&
-      !Array.isArray(row) &&
-      (row as CommunityResourceLike).communityId !== undefined &&
-      (row as CommunityResourceLike).createdByUserId !== undefined &&
-      typeof (row as CommunityResourceLike).title === "string" &&
-      typeof (row as CommunityResourceLike).pinned === "boolean" &&
-      typeof (row as CommunityResourceLike).createdAt === "number" &&
-      typeof (row as CommunityResourceLike).updatedAt === "number",
-  );
-}
-
 async function requireCommunityResourceDirectoryToolAccess(args: {
   ctx: any;
   userId?: any;
@@ -2790,15 +2926,26 @@ async function listResourceDirectoryModules(
     .take(COMMUNITY_RESOURCE_DIRECTORY_TOOL_MODULE_SCAN_LIMIT)) as CommunityResourceModuleLike[];
 }
 
-async function listResourceDirectoryPublishedResources(
+async function listResourceDirectoryLiveModules(
   ctx: any,
   communityId: any,
+): Promise<CommunityResourceModuleLike[]> {
+  const rows = await listResourceDirectoryModules(ctx, communityId);
+  return rows.filter(communityResourceModuleIsLive);
+}
+
+async function listResourceDirectoryLivePageResources(
+  ctx: any,
+  communityId: any,
+  liveModuleIds: Set<string>,
 ): Promise<CommunityResourceLike[]> {
   const rows = (await ctx.db
     .query("communityResources" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .take(COMMUNITY_RESOURCE_DIRECTORY_TOOL_SCAN_LIMIT)) as CommunityResourceLike[];
-  return rows.filter(communityResourceIsPublishedKnowledge).sort(compareCommunityResources);
+  return rows
+    .filter((row) => communityResourceIsLiveModulePage(row, liveModuleIds))
+    .sort(compareCommunityResources);
 }
 
 function buildModuleNameMap(modules: CommunityResourceModuleLike[]): Map<string, string> {
@@ -2960,7 +3107,7 @@ function sourceInboxEntry(args: {
     directory_uri: `${moduleDirectory.directory_uri}/${COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT}`,
     resource_count: args.sourceCount,
     resource_role: "source",
-    summary: "Published source materials for this module.",
+    summary: "Source materials for this module.",
     updated_at: null,
   };
 }
@@ -3145,21 +3292,12 @@ function readContentUnavailableReason(row: CommunityResourceLike): string | null
   return "resource_has_no_readable_content";
 }
 
-async function resolveResourceById(args: {
-  ctx: any;
-  communityId: any;
+function resolveVisibleResourceById(args: {
+  resources: CommunityResourceLike[];
   resourceId: string;
-}): Promise<CommunityResourceLike | null> {
-  let row: unknown;
-  try {
-    row = await args.ctx.db.get(args.resourceId as any);
-  } catch {
-    return null;
-  }
-  if (!isCommunityResourceRow(row)) return null;
-  if (normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)) return null;
-  if (!communityResourceIsPublishedKnowledge(row)) return null;
-  return row;
+}): CommunityResourceLike | null {
+  const resourceId = normalizeIdValue(args.resourceId);
+  return args.resources.find((row) => normalizeIdValue(row._id) === resourceId) ?? null;
 }
 
 async function resolveResourceByRef(args: {
@@ -3185,18 +3323,16 @@ async function resolveResourceByRef(args: {
     if (parsed.communityId !== normalizeIdValue(args.communityId)) {
       throw new Error("community_resource_directory_community_mismatch");
     }
-    const byUri = await resolveResourceById({
-      ctx: args.ctx,
-      communityId: args.communityId,
+    const byUri = resolveVisibleResourceById({
+      resources: args.resources,
       resourceId: parsed.resourceId,
     });
     if (!byUri) throw new Error("community_resource_not_found");
     return { ok: true, resource: byUri };
   }
 
-  const byId = await resolveResourceById({
-    ctx: args.ctx,
-    communityId: args.communityId,
+  const byId = resolveVisibleResourceById({
+    resources: args.resources,
     resourceId: ref,
   });
   if (byId) return { ok: true, resource: byId };
@@ -3225,11 +3361,11 @@ async function buildSourceResourceMetadata(args: {
   ctx: any;
   communityId: any;
   sourceResourceId: any;
+  resources: CommunityResourceLike[];
   moduleNameMap: Map<string, string>;
 }) {
-  const source = await resolveResourceById({
-    ctx: args.ctx,
-    communityId: args.communityId,
+  const source = resolveVisibleResourceById({
+    resources: args.resources,
     resourceId: normalizeIdValue(args.sourceResourceId),
   });
   if (!source) {
@@ -3307,8 +3443,9 @@ export const listCommunityResourceDirectoryInternal = internalQuery({
     });
     const limit = boundedToolLimit(args.limit);
     const path = String(args.path ?? "/").trim() || "/";
-    const modules = await listResourceDirectoryModules(ctx, args.communityId);
-    const resources = await listResourceDirectoryPublishedResources(ctx, args.communityId);
+    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
+    const liveModuleIds = new Set(modules.map((module) => normalizeIdValue(module._id)));
+    const resources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds);
     const moduleNameMap = buildModuleNameMap(modules);
 
     if (normalizeDirectoryToolPath(path) === "/" && !parseCommunityResourceDirectoryUri(path)) {
@@ -3386,8 +3523,9 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
-    const modules = await listResourceDirectoryModules(ctx, args.communityId);
-    const resources = await listResourceDirectoryPublishedResources(ctx, args.communityId);
+    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
+    const liveModuleIds = new Set(modules.map((module) => normalizeIdValue(module._id)));
+    const resources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds);
     const moduleNameMap = buildModuleNameMap(modules);
     const resolved = await resolveResourceByRef({
       ctx,
@@ -3413,6 +3551,7 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
           ctx,
           communityId: args.communityId,
           sourceResourceId: row.sourceResourceId,
+          resources,
           moduleNameMap,
         })
       : null;
@@ -3451,12 +3590,13 @@ export const searchCommunityResourceDirectoryInternal = internalQuery({
     const query = String(args.query ?? "").trim().toLowerCase();
     if (!query) throw new Error("community_resource_search_query_required");
     const limit = boundedToolLimit(args.limit);
-    const modules = await listResourceDirectoryModules(ctx, args.communityId);
+    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
     const moduleNameMap = buildModuleNameMap(modules);
     const terms = normalizeSearchQueryTerms(query);
-    const publishedResources = await listResourceDirectoryPublishedResources(ctx, args.communityId);
+    const liveModuleIds = new Set(modules.map((module) => normalizeIdValue(module._id)));
+    const liveResources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds);
     const hydratedResources = await Promise.all(
-      publishedResources.map((row) => hydrateCommunityResourceBody(ctx, row).then((hydrated) => hydrated ?? row)),
+      liveResources.map((row) => hydrateCommunityResourceBody(ctx, row).then((hydrated) => hydrated ?? row)),
     );
     const matches = hydratedResources
       .map((row) => ({
@@ -3916,6 +4056,9 @@ export const writeCommunityResourceBuilderResource = mutation({
       const id = await ctx.db.insert("communityResourceModules" as any, {
         communityId: args.communityId,
         createdByUserId: userId,
+        status: Object.prototype.hasOwnProperty.call(payload, "module_status")
+          ? requireResourceModuleStatusForWrite(payload.module_status)
+          : "draft",
         name: normalizeName(payload.name),
         descriptionMd: normalizeOptionalText(payload.description_md, 1200),
         sortOrder: nextSortOrder,
@@ -4048,6 +4191,8 @@ export const editCommunityResourceBuilderResource = mutation({
         expectedUpdatedAt: args.expectedUpdatedAt,
         actualUpdatedAt: existing.updatedAt,
       });
+      const moduleStatusChanged = Object.prototype.hasOwnProperty.call(payload, "module_status") &&
+        normalizeResourceModuleStatus(existing.status) !== requireResourceModuleStatusForWrite(payload.module_status);
       await ctx.db.patch(existing._id as any, {
         ...(Object.prototype.hasOwnProperty.call(payload, "name")
           ? { name: normalizeName(payload.name) }
@@ -4055,8 +4200,18 @@ export const editCommunityResourceBuilderResource = mutation({
         ...(Object.prototype.hasOwnProperty.call(payload, "description_md")
           ? { descriptionMd: normalizeOptionalText(payload.description_md, 1200) }
           : {}),
+        ...(Object.prototype.hasOwnProperty.call(payload, "module_status")
+          ? { status: requireResourceModuleStatusForWrite(payload.module_status) }
+          : {}),
         updatedAt: nowMs,
       });
+      if (moduleStatusChanged) {
+        await syncArchiveDocumentsForModule({
+          ctx,
+          communityId: args.communityId,
+          moduleId: existing._id,
+        });
+      }
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
       if (!updated) throw new Error("community_resource_module_not_found");
       return {
@@ -4387,10 +4542,11 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
     checked_at: toIsoString(args.nowMs),
     summary: {
       modules: modules.length,
+      live_modules: modules.filter(communityResourceModuleIsLive).length,
+      draft_modules: modules.filter((module) => !communityResourceModuleIsLive(module)).length,
       resources: resources.length,
       pages: pages.length,
       sources: sources.length,
-      published_pages: pages.filter((page) => normalizeResourceStatus(page.status) === "published").length,
       draft_pages: pages.filter((page) => normalizeResourceStatus(page.status) === "draft").length,
       source_inbox_items: sources.length,
       missing_default_modules: missingDefaultModules,
@@ -4448,6 +4604,7 @@ export const ensureCommunityResourceWikiScaffold = mutation({
       const id = await ctx.db.insert("communityResourceModules" as any, {
         communityId: args.communityId,
         createdByUserId: userId,
+        status: "draft",
         name: moduleName,
         sortOrder: nextModuleSortOrder,
         createdAt: nowMs,
@@ -4550,6 +4707,11 @@ export const listCommunityResourceModules = query({
       communityId: args.communityId,
       userId: args.userId,
     });
+    const canManageResources = await canManageCommunityResources({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
     const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 200)));
     const rows = (await ctx.db
       .query("communityResourceModules" as any)
@@ -4562,6 +4724,7 @@ export const listCommunityResourceModules = query({
           if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
           return b.createdAt - a.createdAt;
         })
+        .filter((row) => canManageResources || communityResourceModuleIsLive(row))
         .slice(0, limit)
         .map((row) => mapCommunityResourceModuleRow(ctx, row)),
     );
@@ -4612,9 +4775,16 @@ export const saveCommunityResourceModule = mutation({
         ? (payload.banner_storage_id ?? undefined)
         : existing.bannerStorageId;
       const previousBannerStorageId = existing.bannerStorageId;
+      const nextModuleStatus = Object.prototype.hasOwnProperty.call(payload, "module_status")
+        ? requireResourceModuleStatusForWrite(payload.module_status)
+        : normalizeResourceModuleStatus(existing.status);
+      const moduleStatusChanged = normalizeResourceModuleStatus(existing.status) !== nextModuleStatus;
       await ctx.db.patch(existing._id as any, {
         name: normalizeName(nextNameRaw),
         descriptionMd: normalizeOptionalText(nextDescriptionRaw, 1200),
+        ...(Object.prototype.hasOwnProperty.call(payload, "module_status")
+          ? { status: nextModuleStatus }
+          : {}),
         bannerUrl: nextBannerStorageId ? undefined : normalizeOptionalUrl(nextBannerUrlRaw),
         bannerStorageId: nextBannerStorageId,
         bannerFocusX: normalizeBannerFocus(payload.banner_focus_x ?? existing.bannerFocusX),
@@ -4624,6 +4794,13 @@ export const saveCommunityResourceModule = mutation({
       });
       if (previousBannerStorageId && String(previousBannerStorageId) !== String(nextBannerStorageId ?? "")) {
         await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
+      }
+      if (moduleStatusChanged) {
+        await syncArchiveDocumentsForModule({
+          ctx,
+          communityId: existing.communityId,
+          moduleId: existing._id,
+        });
       }
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
       if (!updated) throw new Error("community_resource_module_not_found");
@@ -4651,6 +4828,9 @@ export const saveCommunityResourceModule = mutation({
     const id = await ctx.db.insert("communityResourceModules" as any, {
       communityId: community._id,
       createdByUserId: args.userId,
+      status: Object.prototype.hasOwnProperty.call(payload, "module_status")
+        ? requireResourceModuleStatusForWrite(payload.module_status)
+        : "draft",
       name: normalizeName(payload.name),
       descriptionMd: normalizeOptionalText(payload.description_md, 1200),
       bannerUrl: bannerStorageId ? undefined : normalizeOptionalUrl(payload.banner_url),
@@ -4808,12 +4988,23 @@ export const listCommunityResources = query({
       .query("communityResources" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect()) as CommunityResourceLike[];
+    const modules = canManageResources
+      ? []
+      : ((await ctx.db
+          .query("communityResourceModules" as any)
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+          .collect()) as CommunityResourceModuleLike[]);
+    const liveModuleIds = new Set(
+      modules
+        .filter(communityResourceModuleIsLive)
+        .map((module) => normalizeIdValue(module._id)),
+    );
     const userIdCache = new Map<string, string | null>();
     const moduleNameCache = new Map<string, string | null>();
     return await Promise.all(
       rows
         .slice()
-        .filter((row) => canManageResources || communityResourceIsPublishedKnowledge(row))
+        .filter((row) => canManageResources || communityResourceIsLiveModulePage(row, liveModuleIds))
         .sort(compareCommunityResources)
         .slice(0, limit)
         .map((row) => mapCommunityResourceRowWithBody(ctx, row, userIdCache, moduleNameCache)),
@@ -7484,7 +7675,7 @@ export const saveCommunityResource = mutation({
       ? requireResourceStatusForWrite(payload.resource_status)
       : role === "source"
         ? "review"
-        : "published";
+        : "draft";
     const title = normalizeName(payload.title);
     const bodyMd = normalizeCommunityResourceBodyMd(payload.body_md, 20_000);
     const url = normalizeOptionalUrl(payload.url);
@@ -7562,7 +7753,15 @@ export const saveCommunityResource = mutation({
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
     await upsertArchiveDocumentForResource(ctx, hydrated);
-    if (status === "published") {
+    const createdModule = moduleId
+      ? ((await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null)
+      : null;
+    const liveModuleIds = new Set(
+      createdModule && communityResourceModuleIsLive(createdModule)
+        ? [normalizeIdValue(createdModule._id)]
+        : [],
+    );
+    if (communityResourceIsLiveModulePage(hydrated, liveModuleIds)) {
       await recordCommunityActivityEventBestEffort({
         ctx,
         communityId: community._id,

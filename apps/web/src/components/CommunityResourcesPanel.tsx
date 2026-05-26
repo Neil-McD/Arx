@@ -56,21 +56,12 @@ function getResourceRoleLabel(resource: CommunityResource): string {
   return getResourceRole(resource) === "source" ? "Source" : "Page";
 }
 
-function getResourceStatusLabel(resource: CommunityResource): string {
-  if (resource.resource_status === "draft") return "Draft";
-  if (resource.resource_status === "review") return "Needs review";
-  if (resource.resource_status === "processing") return "Processing";
-  if (resource.resource_status === "failed") return "Failed";
-  return "Published";
-}
-
 function getResourceLineageDetail(resource: CommunityResource): string {
   const meta = getResourceMeta(resource);
   return [
     getResourceRoleLabel(resource),
     meta.primary,
     meta.secondary,
-    getResourceStatusLabel(resource),
   ].filter(Boolean).join(" · ");
 }
 
@@ -158,10 +149,24 @@ function BackIcon() {
   );
 }
 
+function ModuleStatusIcon(props: { status: "draft" | "live" }) {
+  return props.status === "live" ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 4h9l3 3v13H6z" />
+      <path d="M15 4v4h4" />
+    </svg>
+  );
+}
+
 function ResourceModuleCard(props: {
   module: ResourceModuleView;
   onOpen: () => void;
   onEdit: () => void;
+  onSetStatus: (status: "draft" | "live") => void;
   onDelete: () => void;
   onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
@@ -177,6 +182,7 @@ function ResourceModuleCard(props: {
     module,
     onOpen,
     onEdit,
+    onSetStatus,
     onDelete,
     onDragStart,
     onDragOver,
@@ -189,6 +195,8 @@ function ResourceModuleCard(props: {
     isDropTarget,
   } = props;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const moduleStatus = module.module_status === "live" ? "live" : "draft";
+  const nextModuleStatus = moduleStatus === "live" ? "draft" : "live";
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -247,6 +255,14 @@ function ResourceModuleCard(props: {
                 <span>Edit</span>
               </button>
               <button
+                type="button"
+                role="menuitem"
+                onClick={(event) => closeAndRun(event, () => onSetStatus(nextModuleStatus))}
+              >
+                <ModuleStatusIcon status={nextModuleStatus} />
+                <span>{moduleStatus === "live" ? "Move to draft" : "Make live"}</span>
+              </button>
+              <button
                 className="danger"
                 type="button"
                 role="menuitem"
@@ -278,6 +294,7 @@ function ResourceModuleCard(props: {
       <div className="discover-card-body resource-module-card-body">
         <div className="discover-card-meta">
           <div className="discover-card-name">{module.name}</div>
+          <span className={`resource-module-status is-${moduleStatus}`}>{moduleStatus}</span>
         </div>
         <div className="discover-card-desc">
           {module.description_md?.trim() || "Knowledge shared by the community team."}
@@ -339,8 +356,6 @@ function ResourceRailItem(props: {
     isDropTarget,
   } = props;
   const summary = (resource.body_md ?? "").trim();
-  const isUnpublished =
-    resource.resource_status !== undefined && resource.resource_status !== "published";
 
   const handleItemKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -380,9 +395,6 @@ function ResourceRailItem(props: {
           <div className="knowledge-resource-item-title">{resource.title}</div>
           {resource.pinned ? <PinIcon /> : null}
         </div>
-        {isUnpublished ? (
-          <div className="knowledge-resource-item-status">{getResourceStatusLabel(resource)}</div>
-        ) : null}
         {summary ? <div className="knowledge-resource-item-summary">{summary}</div> : null}
       </div>
       {canManage ? (
@@ -460,6 +472,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         id: LEGACY_RESOURCE_MODULE_ID,
         directory_uri: legacyDirectoryUri,
         directory_path: "/unsorted",
+        module_status: "draft",
         name: "Unsorted",
         description_md: "Existing knowledge items that are not assigned to a module.",
         banner_url: null,
@@ -683,6 +696,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     />
   );
 
+  const selectedModuleStatus = selectedModule?.module_status === "live" ? "live" : "draft";
+  const selectedModuleNextStatus = selectedModuleStatus === "live" ? "draft" : "live";
+
   return (
     <>
       <div className="community-panel resources-panel">
@@ -701,6 +717,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   `Durable knowledge and source material for ${capabilities.activeCommunityName ?? "this community"}.`
                 : `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
+            {selectedModule ? (
+              <div className={`resource-module-status-line is-${selectedModuleStatus}`}>
+                {selectedModuleStatus === "live" ? "Live module" : "Draft module"}
+              </div>
+            ) : null}
           </div>
           <div className="feed-header-actions">
             <div
@@ -712,6 +733,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
               selectedModule ? (
                 <div className="resources-add-split" role="group" aria-label="Add knowledge">
+                  {!selectedModule.is_virtual ? (
+                    <button
+                      className={`resources-module-status-action is-${selectedModuleNextStatus}`}
+                      type="button"
+                      onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
+                      title={selectedModuleStatus === "live" ? "Move module to draft" : "Make module live"}
+                    >
+                      {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
+                    </button>
+                  ) : null}
                   <button
                     className="resources-add-choice"
                     type="button"
@@ -788,6 +819,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   module={module}
                   onOpen={() => actions.handleSelectModule(module.id)}
                   onEdit={() => actions.handleEditModule(module)}
+                  onSetStatus={(status) => void actions.handleSetModuleStatus(module, status)}
                   onDelete={() => void actions.handleDeleteModule(module.id)}
                   canManage={capabilities.canOperateResources && !module.is_virtual}
                   canReorder={canReorderModules && !module.is_virtual}
@@ -866,7 +898,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                         {getResourceRole(selectedResource) === "source" ? (
                           <>
                             <button
-                              className="resource-card-action resource-publish-action resource-draft-action"
+                              className="resource-card-action resource-source-draft-action"
                               type="button"
                               title="Create page draft"
                               onClick={() => {
@@ -878,16 +910,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                             >
                               Draft page
                             </button>
-                            {selectedResource.resource_status !== "published" ? (
-                              <button
-                                className="resource-card-action resource-publish-action"
-                                type="button"
-                                title="Publish source"
-                                onClick={() => void actions.handlePublishResource(selectedResource)}
-                              >
-                                Publish
-                              </button>
-                            ) : null}
                           </>
                         ) : null}
                         <button

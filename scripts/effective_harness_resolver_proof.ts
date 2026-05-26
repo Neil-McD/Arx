@@ -56,7 +56,7 @@ const emptySkillResolution: RuntimeSkillResolution = {
   ambiguous_mention_tokens: [],
   community_resource_lane: {
     lane: "none",
-    can_read_published_resources: false,
+    can_read_live_resources: false,
     can_use_resource_builder: false,
   },
   platform_skill_inventory: [],
@@ -119,7 +119,7 @@ function provePlatformSkillsArePermanentHarnessInventory() {
       ...emptySkillResolution,
       community_resource_lane: {
         lane: "builder",
-        can_read_published_resources: true,
+        can_read_live_resources: true,
         can_use_resource_builder: true,
       },
       requested_mention_tokens: ["resources-architect"],

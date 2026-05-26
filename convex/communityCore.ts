@@ -254,6 +254,7 @@ export type CommunityResourceModuleLike = {
   _id: any;
   communityId: any;
   createdByUserId: any;
+  status?: CommunityResourceModuleStatus;
   name: string;
   descriptionMd?: string;
   bannerUrl?: string;
@@ -494,6 +495,7 @@ export function normalizeResourceRole(raw: unknown): "page" | "source" {
 }
 
 export type CommunityResourceStatus = "draft" | "review" | "published" | "processing" | "failed";
+export type CommunityResourceModuleStatus = "draft" | "live";
 
 export function parseResourceStatusForWrite(raw: unknown): CommunityResourceStatus | null {
   const status = String(raw ?? "")
@@ -510,6 +512,7 @@ export function parseResourceStatusForWrite(raw: unknown): CommunityResourceStat
 export function requireResourceStatusForWrite(raw: unknown): CommunityResourceStatus {
   const status = parseResourceStatusForWrite(raw);
   if (!status) throw new Error("community_resource_status_invalid");
+  if (status === "published") throw new Error("community_resource_page_status_deprecated");
   return status;
 }
 
@@ -517,6 +520,29 @@ export function normalizeResourceStatus(raw: unknown): CommunityResourceStatus {
   const status = String(raw ?? "").trim();
   if (!status) return "published";
   return parseResourceStatusForWrite(status) ?? "draft";
+}
+
+export function parseResourceModuleStatusForWrite(raw: unknown): CommunityResourceModuleStatus | null {
+  const status = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (status === "draft") return "draft";
+  if (status === "live" || status === "published") return "live";
+  return null;
+}
+
+export function requireResourceModuleStatusForWrite(raw: unknown): CommunityResourceModuleStatus {
+  const rawStatus = String(raw ?? "").trim().toLowerCase();
+  if (rawStatus === "published") throw new Error("community_resource_module_status_invalid");
+  const status = parseResourceModuleStatusForWrite(raw);
+  if (!status) throw new Error("community_resource_module_status_invalid");
+  return status;
+}
+
+export function normalizeResourceModuleStatus(raw: unknown): CommunityResourceModuleStatus {
+  const rawStatus = String(raw ?? "").trim();
+  if (!rawStatus) return "live";
+  return parseResourceModuleStatusForWrite(rawStatus) ?? "draft";
 }
 
 export function parseResourceSourceIngestionStatusForWrite(
@@ -610,8 +636,21 @@ export function communityResourceHasUsableKnowledgeContent(row: CommunityResourc
   );
 }
 
-export function communityResourceIsPublishedKnowledge(row: CommunityResourceLike): boolean {
-  return normalizeResourceStatus(row.status) === "published" && communityResourceHasUsableKnowledgeContent(row);
+export function communityResourceModuleIsLive(row: CommunityResourceModuleLike): boolean {
+  return normalizeResourceModuleStatus(row.status) === "live";
+}
+
+export function communityResourceIsLiveModulePage(
+  row: CommunityResourceLike,
+  liveModuleIds: Set<string>,
+): boolean {
+  const moduleId = normalizeIdValue(row.moduleId);
+  return Boolean(
+    moduleId &&
+      liveModuleIds.has(moduleId) &&
+      normalizeResourceRole(row.role) === "page" &&
+      communityResourceHasUsableKnowledgeContent(row),
+  );
 }
 
 export function normalizeOptionalUrl(raw: unknown): string | undefined {
@@ -1032,6 +1071,7 @@ export async function mapCommunityResourceModuleRow(
     community_id: String(row.communityId),
     directory_uri: moduleDirectory.directory_uri,
     directory_path: moduleDirectory.directory_path,
+    module_status: normalizeResourceModuleStatus(row.status),
     name: row.name,
     description_md: row.descriptionMd ?? null,
     banner_url: resolvedBannerUrl ?? row.bannerUrl ?? null,

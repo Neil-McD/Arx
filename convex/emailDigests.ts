@@ -3,7 +3,11 @@ import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
-import { communityResourceIsPublishedKnowledge } from "./communityCore";
+import {
+  type CommunityResourceModuleLike,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
+} from "./communityCore";
 import {
   buildWeeklyDigestDedupeKey,
   buildWeeklyDigestPeriod,
@@ -255,16 +259,11 @@ async function listRecentResources(ctx: any, params: {
   periodStartMs: number;
   periodEndMs: number;
 }): Promise<CommunityResourceRow[]> {
-  const [publishedRows, recentRows] = await Promise.all([
+  const [modules, recentRows] = await Promise.all([
     ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q
-          .eq("communityId", params.communityId)
-          .eq("status", "published")
-          .gte("createdAt", params.periodStartMs),
-      )
-      .collect(),
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", params.communityId))
+      .collect() as Promise<CommunityResourceModuleLike[]>,
     ctx.db
       .query("communityResources" as any)
       .withIndex("by_community_createdAt", (q: any) =>
@@ -273,14 +272,19 @@ async function listRecentResources(ctx: any, params: {
       .collect(),
   ]);
   const uniqueRows = new Map<string, CommunityResourceRow>();
-  for (const row of [...publishedRows, ...recentRows] as CommunityResourceRow[]) {
+  const liveModuleIds = new Set(
+    modules
+      .filter(communityResourceModuleIsLive)
+      .map((module) => String(module._id)),
+  );
+  for (const row of recentRows as CommunityResourceRow[]) {
     uniqueRows.set(String(row._id), row);
   }
   return Array.from(uniqueRows.values())
     .filter(
       (row) =>
         row.createdAt <= params.periodEndMs &&
-        communityResourceIsPublishedKnowledge(row as any),
+        communityResourceIsLiveModulePage(row as any, liveModuleIds),
     )
     .sort((a, b) => {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;

@@ -23,6 +23,7 @@ const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerM
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
+const resourceEditorController = read("shared/useCommunityResourceEditorController.ts");
 const webResourceController = read("apps/web/src/controllers/useWebCommunityResourceUiController.ts");
 const resourceGateway = read("shared/cloudCommunityAdminGateway.ts");
 const communityExperience = read("convex/communityExperience.ts");
@@ -51,12 +52,12 @@ assert.match(
 assert.match(
   schema,
   /resourceStatus: v\.optional\([\s\S]*v\.literal\("published"\)/,
-  "archive documents must preserve resource publication status",
+  "archive documents must preserve legacy resource lifecycle status",
 );
 assert.match(
   schema,
-  /by_community_status_createdAt/,
-  "published resource reads must have a direct status/time index",
+  /communityResourceModules:[\s\S]*status: v\.optional\(v\.union\(v\.literal\("draft"\), v\.literal\("live"\)\)\)/,
+  "community resource modules must own the member visibility state",
 );
 assert.doesNotMatch(
   schema,
@@ -159,8 +160,18 @@ assert.match(
 );
 assert.match(
   communityCore,
-  /export function communityResourceIsPublishedKnowledge/,
-  "published usable knowledge must have one shared predicate",
+  /community_resource_page_status_deprecated/,
+  "page-level publish writes must fail closed",
+);
+assert.match(
+  communityCore,
+  /export function communityResourceModuleIsLive/,
+  "module live state must have one shared predicate",
+);
+assert.match(
+  communityCore,
+  /export function communityResourceIsLiveModulePage/,
+  "member-visible pages must be derived from live modules",
 );
 assert.match(
   communityCore,
@@ -194,14 +205,24 @@ assert.match(
 );
 assert.match(
   communityCore,
+  /if \(!rawStatus\) return "live"/,
+  "legacy modules with missing status must remain live until the module status backfill canonicalizes them",
+);
+assert.match(
+  communityCore,
+  /module_status: normalizeResourceModuleStatus\(row\.status\)/,
+  "module API rows must expose normalized draft/live status",
+);
+assert.match(
+  communityCore,
   /source_resource_id: row\.sourceResourceId \? String\(row\.sourceResourceId\) : null/,
   "resource API rows must expose source lineage for drafts",
 );
 
 assert.match(
   resources,
-  /canManageResources \|\| communityResourceIsPublishedKnowledge\(row\)/,
-  "non-manager resource listing must only return usable published knowledge",
+  /canManageResources \|\| communityResourceIsLiveModulePage\(row, liveModuleIds\)/,
+  "non-manager resource listing must only return pages from live modules",
 );
 assert.match(
   resources,
@@ -217,6 +238,26 @@ assert.match(
   resources,
   /requireResourceStatusForWrite\(nextStatusRaw\)/,
   "resource updates with explicit status must fail closed on invalid values",
+);
+assert.match(
+  resources,
+  /export const backfillCommunityResourceModuleStatusesInternal = internalMutation/,
+  "legacy module visibility must have an idempotent internal status backfill",
+);
+assert.match(
+  resources,
+  /hasPersistedResourceModuleStatus/,
+  "module status backfill must only patch modules without explicit draft/live status",
+);
+assert.match(
+  resources,
+  /normalizeResourceRole\(row\.role\) === "page"[\s\S]*normalizeResourceStatus\(row\.status\) === "published"[\s\S]*communityResourceHasUsableKnowledgeContent\(row\)/,
+  "module status backfill must infer live only from usable legacy-published pages",
+);
+assert.match(
+  resources,
+  /backfillCommunityResourceModuleStatusesInternal[\s\S]*syncArchiveDocumentsForModule/,
+  "module status backfill must resync archive documents after canonicalizing visibility",
 );
 assert.match(
   resources,
@@ -236,7 +277,7 @@ assert.match(
 assert.match(
   resources,
   /role: "page"[\s\S]*status: "draft"/,
-  "source-to-page draft creation must create unpublished page drafts",
+  "source-to-page draft creation must create page drafts",
 );
 assert.match(
   resources,
@@ -261,17 +302,27 @@ assert.match(
 assert.match(
   resources,
   /## How Members Should Use This/,
-  "source-to-page draft creation must include an operator editing/publishing guidance section",
+  "source-to-page draft creation must include operator editing guidance",
 );
 assert.match(
   resourceController,
   /resource_role: current\.resourceRoleInput/,
   "web saves must send resource role to the backend",
 );
+assert.doesNotMatch(
+  resourceController,
+  /resource_status: current\.resourceStatusInput,/,
+  "web saves must not blindly send hidden legacy page-level publish state",
+);
 assert.match(
   resourceController,
-  /resource_status: current\.resourceStatusInput/,
-  "web saves must send resource status to the backend",
+  /if \(current\.resourceRoleInput === "source"\)[\s\S]*basePayload\.resource_status = current\.resourceStatusInput === "published"[\s\S]*\? "review"[\s\S]*: current\.resourceStatusInput/,
+  "web saves may only send source lifecycle status and must coerce legacy published sources back to review",
+);
+assert.match(
+  resourceEditorController,
+  /resource\.resource_status === "published"[\s\S]*resourceRole === "source" \? "review" : "draft"/,
+  "resource editor state must not retain hidden legacy published status",
 );
 assert.match(
   resourceGateway,
@@ -316,13 +367,13 @@ assert.match(
 
 assert.match(
   archiveDocuments,
-  /communityResourceIsPublishedKnowledge\(params\.resource\)/,
-  "only usable published resources must be archived for community search",
+  /communityResourceIsLiveModulePage\(hydratedResource, liveModuleIds\)/,
+  "only pages inside live modules must be archived for community search",
 );
 assert.match(
   archiveDocuments,
   /deleteArchiveDocumentBySource\([\s\S]*sourceType: "resource"/,
-  "moving a resource out of published state must remove stale archive documents",
+  "moving a page out of live module visibility must remove stale archive documents",
 );
 assert.match(
   archiveRetrieval,
@@ -336,28 +387,28 @@ assert.match(
 );
 assert.match(
   recentContext,
-  /by_community_status_createdAt/,
-  "recent context must query the published resource index",
+  /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/,
+  "recent context must filter resources through live modules",
 );
 assert.match(
   recentContext,
-  /communityResourceIsPublishedKnowledge\(row\)/,
-  "recent context must exclude staged and unusable resources",
+  /communityResourceIsLiveModulePage\(row, liveModuleIds\)/,
+  "recent context must exclude draft modules and unusable resources",
 );
 assert.match(
   attention,
-  /by_community_status_createdAt/,
-  "resource attention must query the published resource index",
+  /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/,
+  "resource attention must filter resources through live modules",
 );
 assert.match(
   attention,
-  /communityResourceIsPublishedKnowledge\(row\)/,
-  "resource attention must not be triggered by staged or unusable resources",
+  /communityResourceIsLiveModulePage\(row, liveModuleIds\)/,
+  "resource attention must not be triggered by draft modules or unusable resources",
 );
 assert.match(
   emailDigests,
-  /communityResourceIsPublishedKnowledge\(row as any\)/,
-  "weekly digests must not include staged or unusable resources",
+  /communityResourceIsLiveModulePage\(row as any, liveModuleIds\)/,
+  "weekly digests must not include draft modules or unusable resources",
 );
 
 assert.match(
@@ -365,10 +416,10 @@ assert.match(
   /resourceRoleInput === "source"/,
   "resource modal must expose source-specific authoring behavior",
 );
-assert.match(
+assert.doesNotMatch(
   resourceModal,
   /Only published items are visible to members and available to community search/,
-  "resource modal must explain the publication boundary",
+  "resource modal must not expose page-level publication controls",
 );
 assert.match(
   resourceViewer,
@@ -431,24 +482,29 @@ assert.match(
   "web resources controller must make new source intake land in review status",
 );
 assert.match(
-  resourceController,
-  /handlePublishResource[\s\S]*payload:\s*{\s*resource_status: "published"/,
-  "source publishing must be a status-only backend patch",
-);
-assert.match(
   resourcesPanel,
   /actions\.openNewSourceModal/,
   "resources panel must expose source intake from a selected module",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
   /actions\.handlePublishResource\(selectedResource\)/,
-  "resources panel must expose manual source publishing from the reader",
+  "resources panel must not expose page-level publishing from the reader",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  />\s*Publish\s*</,
+  "source reader must not expose a page-level Publish action",
 );
 assert.match(
   resourcesPanel,
-  />\s*Publish\s*</,
-  "source reader publish action must be visible to community operators",
+  /actions\.handleSetModuleStatus\(selectedModule, selectedModuleNextStatus\)/,
+  "resources panel must expose module-level live/draft changes",
+);
+assert.match(
+  resourceController,
+  /handleSetCommunityResourceModuleStatus[\s\S]*module_status: status/,
+  "web controller must patch module visibility through module_status",
 );
 assert.match(
   resourcesPanel,

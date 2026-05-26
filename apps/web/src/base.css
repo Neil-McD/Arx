@@ -10560,6 +10560,34 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--accent-gold) 14%, var(--bg-card));
 }
 
+.resources-module-status-action {
+  height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.resources-module-status-action:hover {
+  color: var(--text-primary);
+}
+
+.resources-module-status-action.is-live {
+  color: color-mix(in srgb, var(--accent-pink) 88%, var(--text-primary));
+}
+
+.resources-module-status-action.is-draft {
+  color: var(--text-muted);
+}
+
 .resource-form {
   display: grid;
   gap: 18px;
@@ -11519,6 +11547,36 @@ button.chat-reply-quote:hover {
   padding-top: 14px;
 }
 
+.resource-module-status,
+.resource-module-status-line {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.resource-module-status {
+  margin-left: auto;
+}
+
+.resource-module-status.is-live,
+.resource-module-status-line.is-live {
+  color: color-mix(in srgb, #66d18f 82%, var(--text-primary));
+}
+
+.resource-module-status.is-draft,
+.resource-module-status-line.is-draft {
+  color: var(--text-muted);
+}
+
+.resource-module-status-line {
+  margin-top: 6px;
+}
+
 .resource-module-card .discover-card-desc {
   min-height: 32px;
 }
@@ -11740,7 +11798,7 @@ button.chat-reply-quote:hover {
   opacity: 1;
 }
 
-.resource-publish-action {
+.resource-source-draft-action {
   width: auto;
   min-width: 62px;
   height: 24px;
@@ -11755,12 +11813,12 @@ button.chat-reply-quote:hover {
   line-height: 1;
 }
 
-.resource-publish-action:hover {
+.resource-source-draft-action:hover {
   border-color: color-mix(in srgb, var(--accent-gold) 68%, var(--border-default));
   background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
 }
 
-.resource-draft-action {
+.resource-source-draft-action {
   min-width: 82px;
 }
 
@@ -11992,41 +12050,6 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--bg-card-alt) 80%, transparent);
   color: var(--text-muted);
   font: 11px/1.4 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
-}
-
-.resource-viewer-status-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 85%, transparent);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.resource-viewer-status-draft {
-  color: color-mix(in srgb, #ffd166 70%, var(--text-primary));
-  border-color: color-mix(in srgb, #ffd166 35%, var(--border-default));
-}
-
-.resource-viewer-status-review {
-  color: color-mix(in srgb, #f0a04b 70%, var(--text-primary));
-  border-color: color-mix(in srgb, #f0a04b 35%, var(--border-default));
-}
-
-.resource-viewer-status-processing {
-  color: color-mix(in srgb, #6cb4ff 70%, var(--text-primary));
-  border-color: color-mix(in srgb, #6cb4ff 35%, var(--border-default));
-}
-
-.resource-viewer-status-failed {
-  color: color-mix(in srgb, #ff6b6b 75%, var(--text-primary));
-  border-color: color-mix(in srgb, #ff6b6b 40%, var(--border-default));
 }
 
 .resource-viewer-actions {
@@ -12559,20 +12582,6 @@ button.chat-reply-quote:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-
-/* Rail: replace removed meta line with a small unpublished pill */
-.knowledge-resource-item-status {
-  align-self: start;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 70%, transparent);
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .resource-card-link-label {

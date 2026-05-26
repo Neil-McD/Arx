@@ -2,13 +2,13 @@ export type CommunityResourceRuntimeLane = "none" | "member" | "builder";
 
 export type CommunityResourceRuntimeLaneState = {
   lane: CommunityResourceRuntimeLane;
-  can_read_published_resources: boolean;
+  can_read_live_resources: boolean;
   can_use_resource_builder: boolean;
 };
 
 export const EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE: CommunityResourceRuntimeLaneState = {
   lane: "none",
-  can_read_published_resources: false,
+  can_read_live_resources: false,
   can_use_resource_builder: false,
 };
 
@@ -18,14 +18,14 @@ export function buildCommunityResourceRuntimeLaneState(
   if (lane === "builder") {
     return {
       lane,
-      can_read_published_resources: true,
+      can_read_live_resources: true,
       can_use_resource_builder: true,
     };
   }
   if (lane === "member") {
     return {
       lane,
-      can_read_published_resources: true,
+      can_read_live_resources: true,
       can_use_resource_builder: false,
     };
   }
@@ -49,8 +49,11 @@ export function normalizeCommunityResourceRuntimeLaneState(
   if (lane === "none") return EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE;
   return {
     lane,
-    can_read_published_resources:
-      record.can_read_published_resources === true || lane === "member" || lane === "builder",
+    can_read_live_resources:
+      record.can_read_live_resources === true ||
+      record.can_read_published_resources === true ||
+      lane === "member" ||
+      lane === "builder",
     can_use_resource_builder:
       record.can_use_resource_builder === true && lane === "builder",
   };

@@ -1222,7 +1222,7 @@ export function WebCommunityLaunchSetupModal(
         bannerUrl: profileDraft.bannerUrl,
         about: null,
         hasKnowledgeMaterial: false,
-        hasPublishedKnowledge: false,
+        hasLiveKnowledge: false,
         hasAgentConfig: false,
         entryPolicy: null,
         visibility: "unlisted",

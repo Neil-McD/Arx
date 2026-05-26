@@ -28,6 +28,7 @@ type ResourceLike = {
 type ResourceModuleLike = {
   id: string;
   name: string;
+  module_status?: "draft" | "live";
   description_md: string | null;
   banner_url: string | null;
   banner_storage_id?: string | null;
@@ -70,6 +71,7 @@ export type UseWebCommunityResourceUiControllerResult<
   setIsSavingResource: Dispatch<SetStateAction<boolean>>;
   openNewModuleModal: () => void;
   handleEditModule: (module: ResourceModuleT) => void;
+  handleSetModuleStatus: (module: ResourceModuleT, status: "draft" | "live") => Promise<boolean>;
   handleDeleteModule: (moduleId: string) => Promise<boolean>;
   handleReorderModules: (moduleIds: string[]) => Promise<boolean>;
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean>;
@@ -77,7 +79,6 @@ export type UseWebCommunityResourceUiControllerResult<
   openNewSourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: ResourceT) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
-  handlePublishResource: (resource: ResourceT) => Promise<boolean>;
   handleCreatePageDraftFromSource: (resource: ResourceT) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
@@ -105,7 +106,7 @@ export function useWebCommunityResourceUiController<
   const [resourcePinnedInput, setResourcePinnedInput] = useState(false);
   const [resourceRoleInput, setResourceRoleInput] = useState<"page" | "source">("page");
   const [resourceStatusInput, setResourceStatusInput] =
-    useState<"draft" | "review" | "published" | "processing" | "failed">("published");
+    useState<"draft" | "review" | "published" | "processing" | "failed">("draft");
   const [resourceModuleIdInput, setResourceModuleIdInput] = useState<string | null>(null);
   const [moduleNameInput, setModuleNameInput] = useState("");
   const [moduleDescriptionInput, setModuleDescriptionInput] = useState("");
@@ -131,12 +132,12 @@ export function useWebCommunityResourceUiController<
     loadCommunityResourceModules,
     loadCommunityResources,
     handleSaveCommunityResourceModule,
+    handleSetCommunityResourceModuleStatus,
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
     handleReorderCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
-    handlePublishResource,
     handleCreatePageDraftFromSource,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
     activeCommunityId: params.activeCommunityId,
@@ -228,7 +229,7 @@ export function useWebCommunityResourceUiController<
   const handleChangeResourceRole = (role: "page" | "source") => {
     setResourceRoleInput(role);
     if (!editingResourceId) {
-      setResourceStatusInput(role === "source" ? "review" : "published");
+      setResourceStatusInput(role === "source" ? "review" : "draft");
     }
   };
 
@@ -354,6 +355,7 @@ export function useWebCommunityResourceUiController<
     setIsSavingResource,
     openNewModuleModal,
     handleEditModule,
+    handleSetModuleStatus: handleSetCommunityResourceModuleStatus,
     handleDeleteModule,
     handleReorderModules: handleReorderCommunityResourceModules,
     handleReorderResources: handleReorderCommunityResources,
@@ -361,7 +363,6 @@ export function useWebCommunityResourceUiController<
     openNewSourceModal,
     handleEditResource,
     handleDeleteResource,
-    handlePublishResource,
     handleCreatePageDraftFromSource,
     resourceModuleModalProps: {
       isOpen: showResourceModuleModal,
@@ -444,7 +445,6 @@ export function useWebCommunityResourceUiController<
       resourceBodyInput,
       resourcePinnedInput,
       resourceRoleInput,
-      resourceStatusInput,
       resourceError,
       isSavingResource,
       onClose: closeResourceModal,
@@ -458,7 +458,6 @@ export function useWebCommunityResourceUiController<
       onChangeBody: setResourceBodyInput,
       onChangePinned: setResourcePinnedInput,
       onChangeRole: handleChangeResourceRole,
-      onChangeStatus: setResourceStatusInput,
     },
     loadCommunityResourceModules,
     loadCommunityResources,

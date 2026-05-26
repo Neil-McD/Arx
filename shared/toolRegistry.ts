@@ -170,7 +170,7 @@ const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 160,
-      description: "Draft, review, published, failed, or source resource id.",
+      description: "Draft, review, failed, or source resource id.",
     },
     module_id: {
       type: "string",
@@ -609,22 +609,22 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_resources_list: {
     name: "community_resources_list",
-    description: "List the active community's published resource directory. Use paths or resources:// directory URIs returned by this tool to navigate modules and source inboxes.",
+    description: "List the active community's live resource modules and pages. Use paths or resources:// directory URIs returned by this tool to navigate member-visible modules.",
     inputSchema: COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA,
   },
   community_resource_read: {
     name: "community_resource_read",
-    description: "Read one published resource from the active community by resource id, resources:// directory URI, or readable resource path.",
+    description: "Read one member-visible resource from a live module by resource id, resources:// directory URI, or readable resource path.",
     inputSchema: COMMUNITY_RESOURCE_READ_TOOL_SCHEMA,
   },
   community_resources_search: {
     name: "community_resources_search",
-    description: "Search the active community's published resources and return resource paths, directory URIs, snippets, and metadata.",
+    description: "Search the active community's live module pages and return resource paths, directory URIs, snippets, and metadata.",
     inputSchema: COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA,
   },
   community_resource_builder_list: {
     name: "community_resource_builder_list",
-    description: "Manager-only Resources Architect tool. List the active community's full resource builder directory, including modules, drafts, review items, source inbox items, and published pages.",
+    description: "Manager-only Resources Architect tool. List the active community's full resource builder directory, including live/draft modules, pages, and source inbox items.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA,
   },
   community_resource_builder_read: {

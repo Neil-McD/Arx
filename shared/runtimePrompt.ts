@@ -304,7 +304,7 @@ function buildCommunityFeedContextPrompt(params: {
   ].join("\n");
 }
 
-function hasPublishedCommunityResourceTools(
+function hasLiveCommunityResourceTools(
   allowedToolNames: readonly RetrievalToolName[],
 ): boolean {
   return (
@@ -333,7 +333,7 @@ function buildCommunityResourceLanePrompt(params: {
   const lane = normalizeCommunityResourceRuntimeLaneState(
     params.communityResourceLane,
   );
-  const hasPublishedTools = hasPublishedCommunityResourceTools(
+  const hasLiveTools = hasLiveCommunityResourceTools(
     params.allowedToolNames,
   );
   const hasBuilderTools = hasCommunityResourceBuilderTools(
@@ -350,13 +350,13 @@ function buildCommunityResourceLanePrompt(params: {
       "Apply only after explicit approval of the exact staged changeset, then verify by reading or listing affected resources.",
     ].join("\n");
   }
-  if (hasPublishedTools) {
+  if (hasLiveTools) {
     return [
       "COMMUNITY_RESOURCE_MEMBER_LANE",
-      "Use published community Resources as the member-facing knowledge directory for this active community lens.",
-      "Search or read published resources before claiming what resources exist or what a resource says.",
+      "Use live community Resources as the member-facing knowledge directory for this active community lens.",
+      "Search or read live module resources before claiming what resources exist or what a resource says.",
       "Do not expose drafts, review items, private imports, source inbox state, builder health, or builder-only resource metadata.",
-      "If no relevant published resource exists, say that clearly and answer from other available context only when appropriate.",
+      "If no relevant live resource exists, say that clearly and answer from other available context only when appropriate.",
     ].join("\n");
   }
   return null;
@@ -397,11 +397,11 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Treat community_search snippets as usable evidence, but do not use search results to replace explicit community identity fields already in the prompt.",
     );
   }
-  if (hasPublishedCommunityResourceTools(params.allowedToolNames)) {
+  if (hasLiveCommunityResourceTools(params.allowedToolNames)) {
     toolGuidance.push(
-      "- Use community_resources_list to inspect the active community's published resource directory before claiming what resources exist.",
-      "- Use community_resource_read to inspect one published resource by resource id, resources:// directory URI, or readable resource path.",
-      "- Use community_resources_search for targeted lookup inside published resources. Treat draft, review, processing, and failed resources as unavailable unless another tool explicitly exposes them.",
+      "- Use community_resources_list to inspect the active community's live resource modules before claiming what resources exist.",
+      "- Use community_resource_read to inspect one member-visible resource by resource id, resources:// directory URI, or readable resource path.",
+      "- Use community_resources_search for targeted lookup inside live module pages. Treat draft modules and source inbox material as unavailable unless another tool explicitly exposes them.",
     );
   }
   if (hasCommunityResourceBuilderTools(params.allowedToolNames)) {

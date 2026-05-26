@@ -82,7 +82,7 @@ assert.equal(
 );
 assert.deepEqual(
   draftStatus.steps.find((step) => step.step === "knowledge")?.missing,
-  ["community_knowledge_material", "community_knowledge_published"],
+  ["community_knowledge_material", "community_knowledge_live"],
 );
 
 const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
@@ -92,7 +92,7 @@ const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: false,
-  hasPublishedKnowledge: false,
+  hasLiveKnowledge: false,
   hasAgentConfig: false,
   entryPolicy: "approval",
   visibility: "unlisted",
@@ -106,7 +106,7 @@ const knowledgeBeforePublishStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: false,
-  hasPublishedKnowledge: false,
+  hasLiveKnowledge: false,
   hasAgentConfig: true,
   entryPolicy: "approval",
   visibility: "unlisted",
@@ -120,7 +120,7 @@ const accessBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: false,
-  hasPublishedKnowledge: false,
+  hasLiveKnowledge: false,
   hasAgentConfig: true,
   entryPolicy: null,
   visibility: "unlisted",
@@ -134,7 +134,7 @@ const stagedKnowledgeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: true,
-  hasPublishedKnowledge: false,
+  hasLiveKnowledge: false,
   hasAgentConfig: true,
   entryPolicy: "approval",
   visibility: "published",
@@ -147,7 +147,7 @@ assert.equal(stagedKnowledgeStep?.completed, false);
 assert.equal(stagedKnowledgeStep?.completed_items, 1);
 assert.equal(stagedKnowledgeStep?.total_items, 2);
 assert.deepEqual(stagedKnowledgeStep?.missing, [
-  "community_knowledge_published",
+  "community_knowledge_live",
 ]);
 
 const paidWithoutPriceStatus = buildCommunityLaunchSetupStatus({
@@ -157,7 +157,7 @@ const paidWithoutPriceStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: true,
-  hasPublishedKnowledge: true,
+  hasLiveKnowledge: true,
   hasAgentConfig: true,
   entryPolicy: "paid_subscription",
   hasPaidAccessConfig: false,
@@ -178,7 +178,7 @@ const completeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: true,
-  hasPublishedKnowledge: true,
+  hasLiveKnowledge: true,
   hasAgentConfig: true,
   entryPolicy: "paid_subscription",
   hasPaidAccessConfig: true,
@@ -205,12 +205,12 @@ assert.match(
 );
 assert.match(
   launchSetup,
-  /hasPublishedKnowledge/,
-  "launch setup knowledge step must track published usable knowledge separately",
+  /hasLiveKnowledge/,
+  "launch setup knowledge step must track live module knowledge separately",
 );
 assert.match(
   launchSetup,
-  /community_knowledge_material[\s\S]*community_knowledge_published/,
+  /community_knowledge_material[\s\S]*community_knowledge_live/,
   "launch setup knowledge step must expose separate activation points",
 );
 assert.match(
@@ -220,8 +220,8 @@ assert.match(
 );
 assert.match(
   launchQuery,
-  /communityResourceIsPublishedKnowledge/,
-  "launch setup knowledge completion must require published usable knowledge",
+  /communityResourceIsLiveModulePage/,
+  "launch setup knowledge completion must require a page inside a live module",
 );
 assert.match(
   launchQuery,
@@ -230,13 +230,13 @@ assert.match(
 );
 assert.match(
   launchQuery,
-  /hasPublishedKnowledge: rows\.some\(\(row\) => communityResourceIsPublishedKnowledge\(row\)\)/,
-  "launch setup published knowledge progress must use the shared usable knowledge predicate",
+  /hasLiveKnowledge: rows\.some\(\(row\) => communityResourceIsLiveModulePage\(row, liveModuleIds\)\)/,
+  "launch setup live knowledge progress must use the shared live-module predicate",
 );
 assert.match(
   launchQuery,
-  /by_community_status_createdAt/,
-  "launch setup knowledge completion must use the published-resource index",
+  /query\("communityResourceModules"[\s\S]*by_community_createdAt/,
+  "launch setup knowledge completion must inspect modules and recent resources",
 );
 assert.match(
   launchQuery,
@@ -258,10 +258,10 @@ assert.match(
   /hasUsablePaidAccessConfig/,
   "launch setup paid access check must reject archived current price points",
 );
-assert.doesNotMatch(
+assert.match(
   launchQuery,
-  /communityResourceModules/,
-  "empty resource modules must not complete the knowledge setup step",
+  /communityResourceModules[\s\S]*communityResourceIsLiveModulePage/,
+  "launch setup must use live modules without letting empty modules complete knowledge",
 );
 assert.doesNotMatch(
   launchQuery,

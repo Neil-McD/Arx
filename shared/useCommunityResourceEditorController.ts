@@ -39,7 +39,7 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
     current.setResourceBodyInput("");
     current.setResourcePinnedInput(false);
     current.setResourceRoleInput?.("page");
-    current.setResourceStatusInput?.("published");
+    current.setResourceStatusInput?.("draft");
     current.setResourceError(null);
     current.onReset?.();
   }, []);
@@ -58,13 +58,17 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
 
   const handleEditResource = useCallback((resource: ResourceT) => {
     const current = argsRef.current;
+    const resourceRole = resource.resource_role ?? "page";
+    const resourceStatus = resource.resource_status === "published"
+      ? (resourceRole === "source" ? "review" : "draft")
+      : resource.resource_status ?? "draft";
     current.setEditingResourceId(resource.id);
     current.setResourceTitleInput(resource.title);
     current.setResourceUrlInput(resource.url ?? "");
     current.setResourceBodyInput(resource.body_md ?? "");
     current.setResourcePinnedInput(resource.pinned);
-    current.setResourceRoleInput?.(resource.resource_role ?? "page");
-    current.setResourceStatusInput?.(resource.resource_status ?? "published");
+    current.setResourceRoleInput?.(resourceRole);
+    current.setResourceStatusInput?.(resourceStatus);
     current.onEdit?.(resource);
     current.setResourceError(null);
     current.setShowResourceModal(true);

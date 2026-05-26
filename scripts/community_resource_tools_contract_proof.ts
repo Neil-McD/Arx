@@ -148,8 +148,8 @@ assert.match(resources, /resolveUserIdForAuthenticatedRequest/);
 assert.match(resources, /requireCommunityChatAccess/);
 assert.match(
   resources,
-  /listResourceDirectoryPublishedResources[\s\S]*communityResourceIsPublishedKnowledge/,
-  "resource tools should use the published usable knowledge boundary",
+  /listResourceDirectoryLiveModules[\s\S]*listResourceDirectoryLivePageResources[\s\S]*communityResourceIsLiveModulePage/,
+  "resource tools should use the live-module page boundary",
 );
 assert.match(
   resources,
@@ -204,7 +204,7 @@ assert.match(
 
 assert.match(runtimePrompt, /When available, use community resource tools when canonical resource navigation/);
 assert.match(runtimePrompt, /Use community_resources_list to inspect/);
-assert.match(runtimePrompt, /Use community_resource_read to inspect one published resource/);
+assert.match(runtimePrompt, /Use community_resource_read to inspect one member-visible resource/);
 assert.match(runtimePrompt, /Use community_resources_search for targeted lookup/);
 assert.match(timeline, /community_resources_list/);
 assert.match(timeline, /community_resource_read/);
@@ -220,7 +220,7 @@ assert.doesNotMatch(
 );
 assert.match(
   cognitionDocs,
-  /first platform-harness slice is the resource directory[\s\S]*list, read, and search published usable resources/,
+  /first platform-harness slice is the resource directory[\s\S]*list, read, and search pages inside live resource modules/,
   "community cognition contract should describe the resource direct-read slice",
 );
 

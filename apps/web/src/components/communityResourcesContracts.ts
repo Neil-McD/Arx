@@ -34,6 +34,7 @@ export type CommunityResourceModule = {
   id: string;
   directory_uri: string;
   directory_path: string;
+  module_status: "draft" | "live";
   name: string;
   description_md: string | null;
   banner_url: string | null;
@@ -65,6 +66,7 @@ export type CommunityResourcesActions = {
   handleSelectModule: (moduleId: string | null) => void;
   openNewModuleModal: () => void;
   handleEditModule: (module: CommunityResourceModule) => void;
+  handleSetModuleStatus: (module: CommunityResourceModule, status: "draft" | "live") => Promise<boolean> | boolean;
   handleDeleteModule: (moduleId: string) => Promise<boolean> | boolean;
   handleReorderModules: (moduleIds: string[]) => Promise<boolean> | boolean;
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean> | boolean;
@@ -72,6 +74,5 @@ export type CommunityResourcesActions = {
   openNewSourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: CommunityResource) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
-  handlePublishResource: (resource: CommunityResource) => Promise<boolean> | boolean;
   handleCreatePageDraftFromSource: (resource: CommunityResource) => Promise<CommunityResource | null>;
 };

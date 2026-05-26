@@ -33,6 +33,7 @@ type ResourceLike = {
 type ResourceModuleLike = {
   id: string;
   name: string;
+  module_status?: "draft" | "live";
   description_md: string | null;
   banner_url: string | null;
   banner_storage_id?: string | null;
@@ -134,7 +135,7 @@ export function useCommunityResourceController<
     current.setResourceBodyInput("");
     current.setResourcePinnedInput(false);
     current.setResourceRoleInput("page");
-    current.setResourceStatusInput("published");
+    current.setResourceStatusInput("draft");
     current.setResourceModuleIdInput(null);
     if (clearError) {
       current.setResourceError(null);
@@ -242,13 +243,17 @@ export function useCommunityResourceController<
     const basePayload: Record<string, unknown> = {
       type: resourceType,
       resource_role: current.resourceRoleInput,
-      resource_status: current.resourceStatusInput,
       title,
       body_md: description,
       url: rawUrl ? rawUrl : null,
       pinned: current.resourcePinnedInput,
       module_id: current.resourceModuleIdInput,
     };
+    if (current.resourceRoleInput === "source") {
+      basePayload.resource_status = current.resourceStatusInput === "published"
+        ? "review"
+        : current.resourceStatusInput;
+    }
     if (current.includeFileKeyOnSave) {
       basePayload.file_key = null;
     }
@@ -366,6 +371,44 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResourceModules, loadCommunityResources, resetModuleEditor]);
 
+  const handleSetCommunityResourceModuleStatus = useCallback(
+    async (module: ResourceModuleT, status: "draft" | "live") => {
+      const current = argsRef.current;
+      const session = await resolveUsableSession(current.session, current.ensureSession);
+      if (!session || !current.activeCommunityId) return false;
+      const previousModules: ResourceModuleT[] = [];
+      current.setCommunityResourceModules((modules) => {
+        previousModules.splice(0, previousModules.length, ...modules);
+        return modules.map((candidate) =>
+          candidate.id === module.id
+            ? ({ ...candidate, module_status: status } as ResourceModuleT)
+            : candidate,
+        );
+      });
+      try {
+        await saveCloudCommunityResourceModule({
+          session,
+          moduleId: module.id,
+          isPatch: true,
+          payload: { module_status: status },
+        });
+        await loadCommunityResourceModules(current.activeCommunityId, session);
+        await loadCommunityResources(current.activeCommunityId, session);
+        return true;
+      } catch (error) {
+        current.setCommunityResourceModules(previousModules);
+        const message = typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to update module status.";
+        current.setResourceModuleError(message);
+        return false;
+      }
+    },
+    [loadCommunityResourceModules, loadCommunityResources],
+  );
+
   const handleReorderCommunityResourceModules = useCallback(async (moduleIds: string[]) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -479,33 +522,6 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResources, resetResourceEditor]);
 
-  const handlePublishResource = useCallback(async (resource: ResourceT) => {
-    const current = argsRef.current;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !current.activeCommunityId) return false;
-
-    try {
-      await saveCloudCommunityResource({
-        session,
-        resourceId: resource.id,
-        isPatch: true,
-        payload: {
-          resource_status: "published",
-        },
-      });
-      await loadCommunityResources(current.activeCommunityId, session);
-      return true;
-    } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : current.saveFailureMessage;
-      current.setResourceError(message);
-      return false;
-    }
-  }, [loadCommunityResources]);
-
   const handleCreatePageDraftFromSource = useCallback(async (resource: ResourceT): Promise<ResourceT | null> => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -533,12 +549,12 @@ export function useCommunityResourceController<
     loadCommunityResourceModules,
     loadCommunityResources,
     handleSaveCommunityResourceModule,
+    handleSetCommunityResourceModuleStatus,
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
     handleReorderCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
-    handlePublishResource,
     handleCreatePageDraftFromSource,
   };
 }

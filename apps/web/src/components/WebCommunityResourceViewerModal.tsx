@@ -37,18 +37,6 @@ function getRoleLabel(resource: CommunityResource): string {
   return resource.resource_role === "source" ? "Source" : "Page";
 }
 
-function getStatusLabel(resource: CommunityResource): string {
-  if (resource.resource_status === "draft") return "Draft";
-  if (resource.resource_status === "review") return "Needs review";
-  if (resource.resource_status === "processing") return "Processing";
-  if (resource.resource_status === "failed") return "Failed";
-  return "Published";
-}
-
-function isUnpublishedStatus(resource: CommunityResource): boolean {
-  return resource.resource_status !== undefined && resource.resource_status !== "published";
-}
-
 function buildEyebrow(resource: CommunityResource): string {
   const role = getRoleLabel(resource);
   const embed = resource.url ? parseEmbedUrl(resource.url) : null;
@@ -143,7 +131,6 @@ function ResourceDetailsSheet(props: {
 }) {
   const { resource, sourceLineage, actions, onClose } = props;
   const createdAt = formatCreatedAt(resource.created_at);
-  const status = getStatusLabel(resource);
   const hasLineage = Boolean(resource.source_resource_id && sourceLineage);
 
   useEffect(() => {
@@ -170,17 +157,6 @@ function ResourceDetailsSheet(props: {
       </div>
 
       <div className="resource-viewer-details-body">
-        <div className="resource-viewer-details-row">
-          <div className="resource-viewer-details-label">Status</div>
-          <div className="resource-viewer-details-value">
-            <span
-              className={`resource-viewer-status-pill resource-viewer-status-${resource.resource_status ?? "draft"}`}
-            >
-              {status}
-            </span>
-          </div>
-        </div>
-
         {hasLineage ? (
           <div className="resource-viewer-details-row">
             <div className="resource-viewer-details-label">Drafted from</div>
@@ -248,8 +224,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const sourceUrl = normalizeExternalUrl(resource.url);
   const hostLabel = getHostLabel(resource.url);
   const eyebrow = buildEyebrow(resource);
-  const showStatusPill = isUnpublishedStatus(resource);
-  const statusLabel = getStatusLabel(resource);
   const trimmedBody = resource.body_md?.trim() ?? "";
   const hasBody = trimmedBody.length > 0;
   const verificationLink: { label: string; href: string } | null = sourceUrl
@@ -274,13 +248,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
             {resource.pinned ? <PinIcon /> : null}
           </h1>
           <div className="resource-viewer-header-aside">
-            {showStatusPill ? (
-              <span
-                className={`resource-viewer-status-pill resource-viewer-status-${resource.resource_status ?? "draft"}`}
-              >
-                {statusLabel}
-              </span>
-            ) : null}
             {showDetailsTrigger ? (
               <button
                 className="resource-viewer-details-trigger"

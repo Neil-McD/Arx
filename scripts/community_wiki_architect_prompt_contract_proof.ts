@@ -85,18 +85,18 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /status "draft"/,
+  /New page proposals are drafts inside their parent module/,
   "new page proposals must be draft-only",
 );
 assert.match(
   promptSource,
-  /You may not set status to "published"/,
-  "architect must not publish",
+  /You may not set module_status to "live"/,
+  "architect must not make modules live",
 );
 assert.match(
   promptSource,
-  /You may not edit a page whose status is "published"/,
-  "architect must not edit published pages",
+  /You may not edit a page inside a live module without builder confirmation/,
+  "architect must not edit live module pages without builder confirmation",
 );
 assert.match(
   promptSource,

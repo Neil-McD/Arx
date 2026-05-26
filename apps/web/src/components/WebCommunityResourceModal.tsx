@@ -9,7 +9,6 @@ type WebCommunityResourceModalProps = {
   resourceBodyInput: string;
   resourcePinnedInput: boolean;
   resourceRoleInput: "page" | "source";
-  resourceStatusInput: "draft" | "review" | "published" | "processing" | "failed";
   resourceError: string | null;
   isSavingResource: boolean;
   onClose: () => void;
@@ -20,7 +19,6 @@ type WebCommunityResourceModalProps = {
   onChangeBody: (value: string) => void;
   onChangePinned: (value: boolean) => void;
   onChangeRole: (value: "page" | "source") => void;
-  onChangeStatus: (value: "draft" | "review" | "published" | "processing" | "failed") => void;
 };
 
 function LinkIcon() {
@@ -66,7 +64,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
     resourceBodyInput,
     resourcePinnedInput,
     resourceRoleInput,
-    resourceStatusInput,
     resourceError,
     isSavingResource,
     onClose,
@@ -77,7 +74,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
     onChangeBody,
     onChangePinned,
     onChangeRole,
-    onChangeStatus,
   } = props;
 
   if (!isOpen) return null;
@@ -228,27 +224,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                 onChange={(event) => onChangeBody(event.target.value)}
                 disabled={!hasActiveCommunity}
               />
-            </div>
-
-            <div className="resource-form-section">
-              <div className="resource-field-label">Status</div>
-              <select
-                className="resource-status-select"
-                value={resourceStatusInput}
-                onChange={(event) =>
-                  onChangeStatus(event.target.value as "draft" | "review" | "published" | "processing" | "failed")
-                }
-                disabled={!hasActiveCommunity}
-              >
-                <option value="published">Published</option>
-                <option value="draft">Draft</option>
-                <option value="review">Needs review</option>
-                <option value="processing">Processing</option>
-                <option value="failed">Failed</option>
-              </select>
-              <div className="resource-source-hint">
-                Only published items are visible to members and available to community search.
-              </div>
             </div>
 
             {resourceError && <div className="auth-error">{resourceError}</div>}

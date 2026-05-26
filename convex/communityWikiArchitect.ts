@@ -64,7 +64,7 @@ Rules:
 - Write for a community member who needs to understand and act.
 - Keep the page concise, structured, and review-ready.
 - If the source is thin or unclear, say what is known and add a short "Needs review" section.
-- Do not publish. This is a human-review draft.
+- Do not make modules live. This is a human-review draft.
 
 Return ONLY valid JSON:
 {
@@ -401,7 +401,7 @@ function buildAppliedDraftScaffoldBody(args: {
   return [
     `# ${String(args.title ?? "").trim()}`,
     "",
-    "> Draft scaffold. This page is not published yet.",
+    "> Draft scaffold. This page is not in a live module yet.",
     "",
     `Purpose: ${String(args.purpose ?? "").trim()}`,
     "",
@@ -1205,6 +1205,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       const moduleId = await ctx.db.insert("communityResourceModules" as any, {
         communityId: args.communityId,
         createdByUserId: userId,
+        status: "draft",
         name: normalizeName(moduleProposal.name),
         descriptionMd: normalizeOptionalText(moduleProposal.purpose, 1200),
         sortOrder: nextModuleSortOrder,

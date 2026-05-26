@@ -4,8 +4,10 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityMemberSettingsLike,
+  type CommunityResourceModuleLike,
   type CommunityResourceLike,
-  communityResourceIsPublishedKnowledge,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
@@ -113,21 +115,21 @@ async function getLatestCommunityResourcesCreatedAt(
   ctx: any,
   communityId: any,
 ): Promise<number | null> {
-  const publishedRows = (await ctx.db
-    .query("communityResources" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", communityId).eq("status", "published"),
-    )
-    .order("desc")
-    .take(5)) as CommunityResourceLike[];
+  const modules = (await ctx.db
+    .query("communityResourceModules" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .collect()) as CommunityResourceModuleLike[];
+  const liveModuleIds = new Set(
+    modules
+      .filter(communityResourceModuleIsLive)
+      .map((module) => String(module._id)),
+  );
   const recentRows = (await ctx.db
     .query("communityResources" as any)
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
     .order("desc")
     .take(50)) as CommunityResourceLike[];
-  const createdAt = [...publishedRows, ...recentRows].find((row) =>
-    communityResourceIsPublishedKnowledge(row),
-  )?.createdAt;
+  const createdAt = recentRows.find((row) => communityResourceIsLiveModulePage(row, liveModuleIds))?.createdAt;
   return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
     ? Math.floor(createdAt)
     : null;

@@ -7,8 +7,10 @@ import {
   type CommunityAgentConfigLike,
   type CommunityLike,
   type CommunityPricePointLike,
+  type CommunityResourceModuleLike,
   type CommunityResourceLike,
-  communityResourceIsPublishedKnowledge,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   requireCommunityManager,
   resolveCommunityEntryPolicy,
   resolveUserIdForAuthenticatedRequest,
@@ -27,26 +29,28 @@ function hasUsablePaidAccessConfig(rows: CommunityPricePointLike[]): boolean {
 
 async function getKnowledgeResourceProgress(ctx: any, communityId: any): Promise<{
   hasKnowledgeMaterial: boolean;
-  hasPublishedKnowledge: boolean;
+  hasLiveKnowledge: boolean;
 }> {
-  const [publishedResources, recentResources] = await Promise.all([
+  const [modules, recentResources] = await Promise.all([
     ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", communityId).eq("status", "published"),
-      )
-      .order("desc")
-      .take(20),
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+      .take(250),
     ctx.db
       .query("communityResources" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
       .order("desc")
       .take(50),
   ]);
-  const rows = [...publishedResources, ...recentResources] as CommunityResourceLike[];
+  const liveModuleIds = new Set(
+    (modules as CommunityResourceModuleLike[])
+      .filter(communityResourceModuleIsLive)
+      .map((module) => String(module._id)),
+  );
+  const rows = recentResources as CommunityResourceLike[];
   return {
     hasKnowledgeMaterial: rows.length > 0,
-    hasPublishedKnowledge: rows.some((row) => communityResourceIsPublishedKnowledge(row)),
+    hasLiveKnowledge: rows.some((row) => communityResourceIsLiveModulePage(row, liveModuleIds)),
   };
 }
 
@@ -95,7 +99,7 @@ export const getCommunityLaunchSetupStatus = query({
       bannerStorageId: (community as CommunityLike).bannerStorageId ?? null,
       about: (community as CommunityLike).about ?? null,
       hasKnowledgeMaterial: knowledgeResourceProgress.hasKnowledgeMaterial,
-      hasPublishedKnowledge: knowledgeResourceProgress.hasPublishedKnowledge,
+      hasLiveKnowledge: knowledgeResourceProgress.hasLiveKnowledge,
       hasAgentConfig: hasAgentConfig(primaryAgentConfig),
       entryPolicy: resolveCommunityEntryPolicy(community as CommunityLike),
       hasPaidAccessConfig: hasUsablePaidAccessConfig(currentPricePointRows as CommunityPricePointLike[]),

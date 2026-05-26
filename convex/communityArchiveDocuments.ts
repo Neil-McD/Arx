@@ -1,8 +1,10 @@
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
+  type CommunityResourceModuleLike,
   type CommunityResourceLike,
-  communityResourceIsPublishedKnowledge,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   normalizeResourceRole,
   normalizeResourceStatus,
   normalizeIdValue,
@@ -228,7 +230,6 @@ function buildResourceArchiveDoc(params: {
   const isPdf = isPdfUrl(url);
   const resourceRole = normalizeResourceRole(params.resource.role);
   const resourceStatus = normalizeResourceStatus(params.resource.status);
-  if (!communityResourceIsPublishedKnowledge(params.resource)) return null;
   const sourceText = buildArchiveText([
     params.resource.title,
     params.resource.bodyMd ?? "",
@@ -379,11 +380,29 @@ export async function upsertArchiveDocumentForAiFeedPost(ctx: { db: any }, post:
 
 export async function upsertArchiveDocumentForResource(ctx: { db: any }, resource: CommunityResourceLike): Promise<void> {
   const hydratedResource = await hydrateCommunityResourceBody(ctx, resource) ?? resource;
+  const module = hydratedResource.moduleId
+    ? ((await ctx.db.get(hydratedResource.moduleId as any)) as CommunityResourceModuleLike | null)
+    : null;
+  const liveModuleIds = new Set(
+    module &&
+      String(module.communityId) === String(hydratedResource.communityId) &&
+      communityResourceModuleIsLive(module)
+      ? [normalizeIdValue(module._id)]
+      : [],
+  );
   const existing = await getExistingArchiveDoc(ctx, {
     communityId: hydratedResource.communityId,
     sourceType: "resource",
     sourceId: normalizeIdValue(hydratedResource._id),
   });
+  if (!communityResourceIsLiveModulePage(hydratedResource, liveModuleIds)) {
+    await deleteArchiveDocumentBySource(ctx, {
+      communityId: hydratedResource.communityId,
+      sourceType: "resource",
+      sourceId: normalizeIdValue(hydratedResource._id),
+    });
+    return;
+  }
   const nextDoc = buildResourceArchiveDoc({
     resource: hydratedResource,
     existing,

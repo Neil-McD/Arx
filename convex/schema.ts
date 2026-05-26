@@ -1568,6 +1568,7 @@ export default defineSchema({
   communityResourceModules: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),
+    status: v.optional(v.union(v.literal("draft"), v.literal("live"))),
     name: v.string(),
     descriptionMd: v.optional(v.string()),
     bannerUrl: v.optional(v.string()),
