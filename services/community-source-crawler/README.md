@@ -25,6 +25,7 @@ CRAWLER_TOKEN="$(openssl rand -hex 32)"
 flyctl secrets set ARX_CRAWLER_TOKEN="$CRAWLER_TOKEN"
 
 flyctl deploy
+flyctl scale count 3
 
 curl -fsS https://polynet-community-source-crawler.fly.dev/health
 
@@ -43,6 +44,28 @@ After Convex deploy, the community source crawler status should report:
   "full_site_crawl_available": true
 }
 ```
+
+## Cost and scale
+
+The default deployment is a three-machine stopped pool:
+
+- `shared-cpu-2x`
+- `4096MB` RAM
+- zero warm machines
+- one active crawl request per machine
+
+Fly starts machines on demand and stops them after idle periods. This keeps idle
+cost near root filesystem storage only while preserving up to three concurrent
+crawls during onboarding bursts.
+
+If queue wait becomes a product issue, increase the pool:
+
+```bash
+flyctl scale count 5
+```
+
+Do not increase concurrency per machine until crawl memory has been tested under
+real wiki workloads.
 
 ## Security
 
