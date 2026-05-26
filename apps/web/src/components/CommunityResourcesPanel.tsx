@@ -197,6 +197,7 @@ function ResourceModuleCard(props: {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const moduleStatus = module.module_status === "live" ? "live" : "draft";
   const nextModuleStatus = moduleStatus === "live" ? "draft" : "live";
+  const cornerBadge = module.is_virtual ? "Cleanup" : moduleStatus === "draft" ? "Draft" : null;
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -217,6 +218,7 @@ function ResourceModuleCard(props: {
     <div
       className={[
         "discover-card clickable resource-module-card",
+        module.is_virtual ? "is-virtual" : "",
         canReorder ? "can-reorder" : "",
         isDragging ? "is-dragging" : "",
         isDropTarget ? "is-drop-target" : "",
@@ -290,8 +292,10 @@ function ResourceModuleCard(props: {
             })}
           />
         ) : null}
-        {moduleStatus === "draft" ? (
-          <span className="resource-module-draft-badge">Draft</span>
+        {cornerBadge ? (
+          <span className={`resource-module-corner-badge ${module.is_virtual ? "is-cleanup" : "is-draft"}`}>
+            {cornerBadge}
+          </span>
         ) : null}
       </div>
       <div className="discover-card-body resource-module-card-body">
@@ -470,23 +474,24 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       ? firstLegacyResource.directory_uri.replace(/\/resources\/[^/]+$/, "")
       : "resources://community/unknown/modules/unsorted";
     return [
+      ...modules,
       {
         id: LEGACY_RESOURCE_MODULE_ID,
         directory_uri: legacyDirectoryUri,
         directory_path: "/unsorted",
         module_status: "draft",
-        name: "Unsorted",
-        description_md: "Existing knowledge items that are not assigned to a module.",
+        name: "Needs sorting",
+        description_md: "Resources without a module. Move these into the right place.",
         banner_url: null,
         banner_focus_x: null,
         banner_focus_y: null,
         banner_zoom: null,
-        sort_order: -1,
+        sort_order: Number.MAX_SAFE_INTEGER,
         is_virtual: true,
       },
-      ...modules,
     ];
   }, [hasLegacyResources, state.modules, state.resources]);
+  const realModuleCount = state.modules.length;
   const selectedModule = useMemo(
     () => moduleViews.find((module) => module.id === selectedModuleId) ?? null,
     [moduleViews, selectedModuleId],
@@ -719,30 +724,30 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   `Durable knowledge and source material for ${capabilities.activeCommunityName ?? "this community"}.`
                 : `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
-            {selectedModule && selectedModuleStatus === "draft" ? (
+            {selectedModule?.is_virtual ? (
+              <div className="resource-module-status-line is-cleanup">Cleanup bucket</div>
+            ) : selectedModule && selectedModuleStatus === "draft" ? (
               <div className="resource-module-status-line is-draft">Draft module</div>
             ) : null}
           </div>
           <div className="feed-header-actions">
             <div
               className="feed-header-badge"
-              aria-label={selectedModule ? `${visibleResources.length} knowledge items` : `${moduleViews.length} modules`}
+              aria-label={selectedModule ? `${visibleResources.length} knowledge items` : `${realModuleCount} modules`}
             >
-              {selectedModule ? visibleResources.length : moduleViews.length}
+              {selectedModule ? visibleResources.length : realModuleCount}
             </div>
             {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
-              selectedModule ? (
+              selectedModule && !selectedModule.is_virtual ? (
                 <div className="resources-add-split" role="group" aria-label="Add knowledge">
-                  {!selectedModule.is_virtual ? (
-                    <button
-                      className={`resources-module-status-action is-${selectedModuleNextStatus}`}
-                      type="button"
-                      onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
-                      title={selectedModuleStatus === "live" ? "Move module to draft" : "Make module live"}
-                    >
-                      {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
-                    </button>
-                  ) : null}
+                  <button
+                    className={`resources-module-status-action is-${selectedModuleNextStatus}`}
+                    type="button"
+                    onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
+                    title={selectedModuleStatus === "live" ? "Move module to draft" : "Make module live"}
+                  >
+                    {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
+                  </button>
                   <button
                     className="resources-add-choice"
                     type="button"

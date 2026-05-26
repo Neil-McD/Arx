@@ -11452,6 +11452,23 @@ button.chat-reply-quote:hover {
     var(--shadow-md);
 }
 
+.resource-module-card.is-virtual {
+  border-style: dashed;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.028), transparent 42%),
+    color-mix(in srgb, var(--bg-card) 90%, transparent);
+}
+
+.resource-module-card.is-virtual .discover-card-banner {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.08), transparent 60%),
+    linear-gradient(120deg, rgba(138, 143, 156, 0.16), rgba(110, 212, 216, 0.08));
+}
+
+.resource-module-card.is-virtual .discover-card-name {
+  color: var(--text-secondary);
+}
+
 .resource-module-card-menu {
   position: absolute;
   top: 10px;
@@ -11562,11 +11579,15 @@ button.chat-reply-quote:hover {
   color: var(--text-muted);
 }
 
+.resource-module-status-line.is-cleanup {
+  color: var(--text-muted);
+}
+
 .resource-module-status-line {
   margin-top: 6px;
 }
 
-.resource-module-draft-badge {
+.resource-module-corner-badge {
   position: absolute;
   top: 10px;
   left: 10px;
@@ -11586,6 +11607,11 @@ button.chat-reply-quote:hover {
   text-transform: uppercase;
   backdrop-filter: blur(14px);
   pointer-events: none;
+}
+
+.resource-module-corner-badge.is-cleanup {
+  border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  color: var(--text-muted);
 }
 
 .resource-module-card .discover-card-desc {

@@ -477,6 +477,26 @@ assert.match(
   "resources panel must show the source inbox inside each module",
 );
 assert.match(
+  resourcesPanel,
+  /return \[\s*\.\.\.modules,[\s\S]*id: LEGACY_RESOURCE_MODULE_ID/,
+  "virtual unsorted cleanup bucket must render after real modules",
+);
+assert.match(
+  resourcesPanel,
+  /name: "Needs sorting"[\s\S]*is_virtual: true/,
+  "virtual unsorted cleanup bucket must not present as a normal module",
+);
+assert.match(
+  resourcesPanel,
+  /module\.is_virtual \? "Cleanup"/,
+  "virtual unsorted cleanup bucket must use cleanup labeling instead of live/draft module labeling",
+);
+assert.match(
+  resourcesPanel,
+  /selectedModule && !selectedModule\.is_virtual/,
+  "resource creation controls must not add new resources directly into the virtual cleanup bucket",
+);
+assert.match(
   webResourceController,
   /openNewSourceModal[\s\S]*setResourceRoleInput\("source"\)[\s\S]*setResourceStatusInput\("review"\)/,
   "web resources controller must make new source intake land in review status",
