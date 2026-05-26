@@ -227,12 +227,14 @@ export function resolveAllowedToolNames(params: {
   if (params.activeCapabilityFamilies.includes("product_docs")) {
     toolNames.push("search_product_docs", "get_product_doc");
   }
-  if (params.activeCapabilityFamilies.includes("community_tools")) {
-    toolNames.push(
-      "get_active_community_context",
-      "community_resources_list",
-      "community_resource_read",
-      "community_resources_search",
+	  if (params.activeCapabilityFamilies.includes("community_tools")) {
+	    toolNames.push(
+	      "get_active_community_context",
+	      "community_resources_map",
+	      "community_resources_read",
+	      "community_resources_list",
+	      "community_resource_read",
+	      "community_resources_search",
       "community_search",
       "community_write",
     );

@@ -245,6 +245,8 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "search_product_docs") return `Searched docs${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? ` ${truncateLabel(slug, 48)}` : ""}`;
   if (toolName === "get_active_community_context") return "Read community context";
+  if (toolName === "community_resources_map") return "Mapped community resources";
+  if (toolName === "community_resources_read") return "Read community resources";
   if (toolName === "community_resources_list") return `Listed community resources${path ? ` at ${truncateLabel(path, 48)}` : ""}`;
   if (toolName === "community_resource_read") return `Read community resource${ref ? ` ${truncateLabel(ref, 48)}` : ""}`;
   if (toolName === "community_resources_search") return `Searched resources${query ? ` for ${truncateLabel(query, 48)}` : ""}`;

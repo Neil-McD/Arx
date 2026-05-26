@@ -74,6 +74,16 @@ const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MODULE_SCAN_LIMIT = 500;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS = 12_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS = 20_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_SNIPPET_CHARS = 420;
+const COMMUNITY_RESOURCE_MAP_DEFAULT_LIMIT = 100;
+const COMMUNITY_RESOURCE_MAP_MAX_LIMIT = 250;
+const COMMUNITY_RESOURCE_MAP_DEFAULT_PER_MODULE_LIMIT = 8;
+const COMMUNITY_RESOURCE_MAP_MAX_PER_MODULE_LIMIT = 25;
+const COMMUNITY_RESOURCE_MAP_SUGGESTED_TARGET_LIMIT = 12;
+const COMMUNITY_RESOURCE_BATCH_READ_MAX_REFS = 10;
+const COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS = 36_000;
+const COMMUNITY_RESOURCE_BATCH_READ_MAX_TOTAL_CHARS = 50_000;
+const COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS = 12_000;
+const COMMUNITY_RESOURCE_BATCH_READ_MAX_PER_RESOURCE_CHARS = 20_000;
 const COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT = 50;
 const COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT = 250;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50;
@@ -1991,6 +2001,40 @@ function boundedReadLimit(raw: unknown): number {
   return Math.max(1, Math.min(COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS, parsed));
 }
 
+function boundedMapLimit(raw: unknown): number {
+  const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_MAP_DEFAULT_LIMIT));
+  if (!Number.isFinite(parsed)) return COMMUNITY_RESOURCE_MAP_DEFAULT_LIMIT;
+  return Math.max(1, Math.min(COMMUNITY_RESOURCE_MAP_MAX_LIMIT, parsed));
+}
+
+function boundedMapPerModuleLimit(raw: unknown): number {
+  const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_MAP_DEFAULT_PER_MODULE_LIMIT));
+  if (!Number.isFinite(parsed)) return COMMUNITY_RESOURCE_MAP_DEFAULT_PER_MODULE_LIMIT;
+  return Math.max(1, Math.min(COMMUNITY_RESOURCE_MAP_MAX_PER_MODULE_LIMIT, parsed));
+}
+
+function boundedBatchReadMaxChars(raw: unknown): number {
+  const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS));
+  if (!Number.isFinite(parsed)) return COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS;
+  return Math.max(1, Math.min(COMMUNITY_RESOURCE_BATCH_READ_MAX_TOTAL_CHARS, parsed));
+}
+
+function boundedBatchReadPerResourceChars(raw: unknown, maxChars: number): number {
+  const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS));
+  const fallback = Math.min(COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS, maxChars);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(COMMUNITY_RESOURCE_BATCH_READ_MAX_PER_RESOURCE_CHARS, maxChars, parsed));
+}
+
+function normalizeBatchReadRefs(raw: unknown): string[] {
+  if (!Array.isArray(raw)) throw new Error("community_resources_read_refs_required");
+  const refs = raw
+    .map((ref) => String(ref ?? "").trim().slice(0, 1024))
+    .filter(Boolean);
+  if (refs.length < 1) throw new Error("community_resources_read_refs_required");
+  return refs.slice(0, COMMUNITY_RESOURCE_BATCH_READ_MAX_REFS);
+}
+
 function normalizeDirectoryToolPath(raw: unknown): string {
   const value = String(raw ?? "/").trim() || "/";
   const withRoot = value.startsWith("/") ? value : `/${value}`;
@@ -2903,7 +2947,7 @@ async function requireCommunityResourceDirectoryToolAccess(args: {
   userId?: any;
   authSubject?: string | null;
   communityId: any;
-}): Promise<void> {
+}): Promise<any> {
   const userId = await resolveUserIdForAuthenticatedRequest({
     ctx: args.ctx,
     userId: args.userId,
@@ -2914,6 +2958,7 @@ async function requireCommunityResourceDirectoryToolAccess(args: {
     communityId: args.communityId,
     userId,
   });
+  return userId;
 }
 
 async function listResourceDirectoryModules(
@@ -2945,6 +2990,17 @@ async function listResourceDirectoryLivePageResources(
     .take(COMMUNITY_RESOURCE_DIRECTORY_TOOL_SCAN_LIMIT)) as CommunityResourceLike[];
   return rows
     .filter((row) => communityResourceIsLiveModulePage(row, liveModuleIds))
+    .sort(compareCommunityResources);
+}
+
+async function listResourceDirectoryAllResources(
+  ctx: any,
+  communityId: any,
+): Promise<CommunityResourceLike[]> {
+  return ((await ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .take(COMMUNITY_RESOURCE_DIRECTORY_TOOL_SCAN_LIMIT)) as CommunityResourceLike[])
     .sort(compareCommunityResources);
 }
 
@@ -2994,11 +3050,14 @@ function mapCompactCommunityResourceBuilderListRow(
   moduleNameMap: Map<string, string>,
 ) {
   const moduleId = row.moduleId ? normalizeIdValue(row.moduleId) : null;
+  const directory = buildResourceDirectoryFieldsForTool(row, moduleNameMap);
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
     module_id: moduleId,
     module_name: moduleId ? moduleNameMap.get(moduleId) ?? null : null,
+    directory_uri: directory.directory_uri,
+    directory_path: directory.directory_path,
     resource_role: normalizeResourceRole(row.role),
     resource_status: normalizeResourceStatus(row.status),
     title: row.title,
@@ -3142,6 +3201,201 @@ function listRootResourceDirectory(args: {
     );
   }
   return entries.slice(0, args.limit);
+}
+
+function compareCommunityResourceModules(
+  a: CommunityResourceModuleLike,
+  b: CommunityResourceModuleLike,
+): number {
+  const aSortOrder = typeof a.sortOrder === "number" && Number.isFinite(a.sortOrder)
+    ? a.sortOrder
+    : Number.MAX_SAFE_INTEGER;
+  const bSortOrder = typeof b.sortOrder === "number" && Number.isFinite(b.sortOrder)
+    ? b.sortOrder
+    : Number.MAX_SAFE_INTEGER;
+  if (aSortOrder !== bSortOrder) return aSortOrder - bSortOrder;
+  return b.createdAt - a.createdAt;
+}
+
+function compareSuggestedResourceReadTargets(
+  a: CommunityResourceLike,
+  b: CommunityResourceLike,
+): number {
+  if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
+  const aRole = normalizeResourceRole(a.role);
+  const bRole = normalizeResourceRole(b.role);
+  if (aRole !== bRole) return aRole === "page" ? -1 : 1;
+  const aBodyReady = communityResourceBodyChars(a) > 0;
+  const bBodyReady = communityResourceBodyChars(b) > 0;
+  if (aBodyReady !== bBodyReady) return aBodyReady ? -1 : 1;
+  return compareCommunityResources(a, b);
+}
+
+function buildCommunityResourceMapResourceEntry(args: {
+  row: CommunityResourceLike;
+  moduleNameMap: Map<string, string>;
+  builder: boolean;
+}) {
+  const entry = buildResourceDirectoryEntry(args.row, args.moduleNameMap);
+  if (!args.builder) return entry;
+  return {
+    ...entry,
+    builder_metadata: mapCompactCommunityResourceBuilderListRow(args.row, args.moduleNameMap),
+  };
+}
+
+function buildCommunityResourceMapModuleEntry(args: {
+  communityId: any;
+  module: CommunityResourceModuleLike;
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+  perModuleLimit: number;
+  remainingResourceSlots: number;
+  builder: boolean;
+}) {
+  const rows = moduleResources(args.resources, normalizeIdValue(args.module._id));
+  const resourceLimit = Math.max(0, Math.min(args.perModuleLimit, args.remainingResourceSlots));
+  return {
+    ...buildModuleDirectoryEntry({
+      communityId: args.communityId,
+      module: args.module,
+      resources: rows,
+    }),
+    module_status: normalizeResourceModuleStatus(args.module.status),
+    resources: rows
+      .slice(0, resourceLimit)
+      .map((row) =>
+        buildCommunityResourceMapResourceEntry({
+          row,
+          moduleNameMap: args.moduleNameMap,
+          builder: args.builder,
+        }),
+      ),
+    resources_truncated: rows.length > resourceLimit,
+  };
+}
+
+function buildCommunityResourceMapUnassignedEntry(args: {
+  communityId: any;
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+  perModuleLimit: number;
+  remainingResourceSlots: number;
+}) {
+  const rows = moduleResources(args.resources, null);
+  const resourceLimit = Math.max(0, Math.min(args.perModuleLimit, args.remainingResourceSlots));
+  return {
+    ...buildModuleDirectoryEntry({
+      communityId: args.communityId,
+      module: null,
+      resources: rows,
+    }),
+    module_status: null,
+    resources: rows
+      .slice(0, resourceLimit)
+      .map((row) =>
+        buildCommunityResourceMapResourceEntry({
+          row,
+          moduleNameMap: args.moduleNameMap,
+          builder: true,
+        }),
+      ),
+    resources_truncated: rows.length > resourceLimit,
+  };
+}
+
+function buildCommunityResourceSuggestedReadTargets(args: {
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+  builder: boolean;
+}) {
+  return args.resources
+    .slice()
+    .filter(communityResourceHasUsableKnowledgeContent)
+    .sort(compareSuggestedResourceReadTargets)
+    .slice(0, COMMUNITY_RESOURCE_MAP_SUGGESTED_TARGET_LIMIT)
+    .map((row) =>
+      buildCommunityResourceMapResourceEntry({
+        row,
+        moduleNameMap: args.moduleNameMap,
+        builder: args.builder,
+      }),
+    );
+}
+
+function buildCommunityResourceMapPayload(args: {
+  communityId: any;
+  modules: CommunityResourceModuleLike[];
+  resources: CommunityResourceLike[];
+  scope: "member" | "builder";
+  limit: number;
+  perModuleLimit: number;
+  nowMs: number;
+}) {
+  const moduleNameMap = buildModuleNameMap(args.modules);
+  const modules = args.modules.slice().sort(compareCommunityResourceModules);
+  const builder = args.scope === "builder";
+  let remainingResourceSlots = args.limit;
+  let returnedResourceCount = 0;
+  const mappedModules = modules.map((module) => {
+    const entry = buildCommunityResourceMapModuleEntry({
+      communityId: args.communityId,
+      module,
+      resources: args.resources,
+      moduleNameMap,
+      perModuleLimit: args.perModuleLimit,
+      remainingResourceSlots,
+      builder,
+    });
+    const included = entry.resources.length;
+    returnedResourceCount += included;
+    remainingResourceSlots = Math.max(0, remainingResourceSlots - included);
+    return entry;
+  });
+  const unassignedEntry = builder
+    ? buildCommunityResourceMapUnassignedEntry({
+        communityId: args.communityId,
+        resources: args.resources,
+        moduleNameMap,
+        perModuleLimit: args.perModuleLimit,
+        remainingResourceSlots,
+      })
+    : null;
+  if (unassignedEntry) {
+    const included = unassignedEntry.resources.length;
+    returnedResourceCount += included;
+    remainingResourceSlots = Math.max(0, remainingResourceSlots - included);
+  }
+
+  return {
+    ok: true,
+    kind: "community_resources_map",
+    scope: args.scope,
+    limit: args.limit,
+    per_module_limit: args.perModuleLimit,
+    total_modules: modules.length,
+    total_resources: args.resources.length,
+    returned_resources: returnedResourceCount,
+    truncated: returnedResourceCount < args.resources.length,
+    modules: mappedModules,
+    ...(unassignedEntry && unassignedEntry.resource_count > 0
+      ? { unassigned_resources: unassignedEntry }
+      : null),
+    suggested_read_targets: buildCommunityResourceSuggestedReadTargets({
+      resources: args.resources,
+      moduleNameMap,
+      builder,
+    }),
+    ...(builder
+      ? {
+          health: buildCommunityResourceBuilderHealthReportFromRows({
+            modules: args.modules,
+            resources: args.resources,
+            nowMs: args.nowMs,
+          }),
+        }
+      : null),
+  };
 }
 
 type ResolvedResourceDirectoryModuleTarget =
@@ -3381,6 +3635,75 @@ async function buildSourceResourceMetadata(args: {
   };
 }
 
+function buildBatchReadFailure(ref: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    ok: false,
+    ref,
+    reason_code: message || "community_resource_read_failed",
+    message: message || "Community resource read failed.",
+  };
+}
+
+async function buildBatchReadResourceResult(args: {
+  ctx: any;
+  communityId: any;
+  ref: string;
+  resources: CommunityResourceLike[];
+  moduleNameMap: Map<string, string>;
+  builder: boolean;
+  contentLimit: number;
+}) {
+  const resolved = await resolveResourceByRef({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    ref: args.ref,
+    resources: args.resources,
+    moduleNameMap: args.moduleNameMap,
+  });
+  if (!resolved.ok) {
+    const { ok: _ok, ...failure } = resolved;
+    return {
+      ok: false,
+      ref: args.ref,
+      ...failure,
+    };
+  }
+
+  const row = await hydrateCommunityResourceBody(args.ctx, resolved.resource) ?? resolved.resource;
+  const body = String(row.bodyMd ?? "");
+  const contentLimit = Math.max(0, Math.floor(args.contentLimit));
+  const bodySlice = body && contentLimit > 0 ? body.slice(0, contentLimit) : null;
+  const source = row.sourceResourceId
+    ? await buildSourceResourceMetadata({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        sourceResourceId: row.sourceResourceId,
+        resources: args.resources,
+        moduleNameMap: args.moduleNameMap,
+      })
+    : null;
+
+  return {
+    ok: true,
+    ref: args.ref,
+    resource: buildCommunityResourceMapResourceEntry({
+      row,
+      moduleNameMap: args.moduleNameMap,
+      builder: args.builder,
+    }),
+    source,
+    content: {
+      body_md: bodySlice,
+      offset: 0,
+      limit: contentLimit,
+      total_chars: body.length,
+      truncated: Boolean(body && (bodySlice?.length ?? 0) < body.length),
+      unavailable_reason: readContentUnavailableReason(row),
+    },
+  };
+}
+
 function normalizeSearchQueryTerms(query: string): string[] {
   return query
     .toLowerCase()
@@ -3507,6 +3830,50 @@ export const listCommunityResourceDirectoryInternal = internalQuery({
   },
 });
 
+export const mapCommunityResourcesForToolInternal = internalQuery({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+    perModuleLimit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireCommunityResourceDirectoryToolAccess({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+      communityId: args.communityId,
+    });
+    const canManage = await canManageCommunityResources({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const limit = boundedMapLimit(args.limit);
+    const perModuleLimit = boundedMapPerModuleLimit(args.perModuleLimit);
+    const modules = canManage
+      ? await listResourceDirectoryModules(ctx, args.communityId)
+      : await listResourceDirectoryLiveModules(ctx, args.communityId);
+    const resources = canManage
+      ? await listResourceDirectoryAllResources(ctx, args.communityId)
+      : await listResourceDirectoryLivePageResources(
+          ctx,
+          args.communityId,
+          new Set(modules.map((module) => normalizeIdValue(module._id))),
+        );
+    return buildCommunityResourceMapPayload({
+      communityId: args.communityId,
+      modules,
+      resources,
+      scope: canManage ? "builder" : "member",
+      limit,
+      perModuleLimit,
+      nowMs: Date.now(),
+    });
+  },
+});
+
 export const readCommunityResourceDirectoryInternal = internalQuery({
   args: {
     userId: v.optional(v.id("users")),
@@ -3568,6 +3935,86 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
         truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
         unavailable_reason: readContentUnavailableReason(row),
       },
+    };
+  },
+});
+
+export const readCommunityResourcesForToolInternal = internalQuery({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    refs: v.array(v.string()),
+    maxChars: v.optional(v.number()),
+    perResourceChars: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireCommunityResourceDirectoryToolAccess({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+      communityId: args.communityId,
+    });
+    const canManage = await canManageCommunityResources({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const refs = normalizeBatchReadRefs(args.refs);
+    const maxChars = boundedBatchReadMaxChars(args.maxChars);
+    const perResourceChars = boundedBatchReadPerResourceChars(args.perResourceChars, maxChars);
+    const modules = canManage
+      ? await listResourceDirectoryModules(ctx, args.communityId)
+      : await listResourceDirectoryLiveModules(ctx, args.communityId);
+    const resources = canManage
+      ? await listResourceDirectoryAllResources(ctx, args.communityId)
+      : await listResourceDirectoryLivePageResources(
+          ctx,
+          args.communityId,
+          new Set(modules.map((module) => normalizeIdValue(module._id))),
+        );
+    const moduleNameMap = buildModuleNameMap(modules);
+    let remainingChars = maxChars;
+    const results = [];
+    for (const ref of refs) {
+      if (remainingChars <= 0) {
+        results.push({
+          ok: false,
+          ref,
+          reason_code: "community_resources_read_budget_exhausted",
+          message: "The community_resources_read character budget was exhausted before this resource could be read.",
+        });
+        continue;
+      }
+      try {
+        const item = await buildBatchReadResourceResult({
+          ctx,
+          communityId: args.communityId,
+          ref,
+          resources,
+          moduleNameMap,
+          builder: canManage,
+          contentLimit: Math.min(perResourceChars, remainingChars),
+        });
+        if (item.ok && "content" in item && item.content) {
+          remainingChars = Math.max(0, remainingChars - String(item.content.body_md ?? "").length);
+        }
+        results.push(item);
+      } catch (error) {
+        results.push(buildBatchReadFailure(ref, error));
+      }
+    }
+
+    return {
+      ok: true,
+      kind: "community_resources_read",
+      scope: canManage ? "builder" : "member",
+      requested_refs: refs,
+      max_chars: maxChars,
+      per_resource_chars: perResourceChars,
+      remaining_chars: remainingChars,
+      returned_count: results.filter((item) => item.ok).length,
+      resources: results,
     };
   },
 });

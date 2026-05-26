@@ -50,6 +50,8 @@ function proveFixedPolicyBoundaries() {
     "search_product_docs",
     "get_product_doc",
     "get_active_community_context",
+    "community_resources_map",
+    "community_resources_read",
     "community_resources_list",
     "community_resource_read",
     "community_resources_search",
@@ -111,6 +113,8 @@ function proveFixedPolicyBoundaries() {
     true,
   );
   for (const toolName of [
+    "community_resources_map",
+    "community_resources_read",
     "community_resources_list",
     "community_resource_read",
     "community_resources_search",

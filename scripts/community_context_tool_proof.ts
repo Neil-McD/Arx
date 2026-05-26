@@ -68,7 +68,7 @@ const runtimeTurnResolution = readFileSync(
 );
 assert.match(
   runtimeTurnResolution,
-  /"get_active_community_context"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  /"get_active_community_context"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
   "community_tools should expose context before resource navigation/search/write",
 );
 assert.match(

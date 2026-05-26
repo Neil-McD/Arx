@@ -459,6 +459,101 @@ async function executeRetrievalHarnessTool(params: {
     }
   }
 
+  if (params.toolName === "community_resources_map") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_resources_map requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.communityResources.mapCommunityResourcesForToolInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+          perModuleLimit:
+            typeof normalizedArgs.perModuleLimit === "number"
+              ? normalizedArgs.perModuleLimit
+              : undefined,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_resources_map_failed",
+        errorMessage: message || "Community resource map failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_resources_read") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_resources_read requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.communityResources.readCommunityResourcesForToolInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          refs: Array.isArray(normalizedArgs.refs)
+            ? normalizedArgs.refs.map((ref) => String(ref ?? ""))
+            : [],
+          maxChars:
+            typeof normalizedArgs.maxChars === "number"
+              ? normalizedArgs.maxChars
+              : undefined,
+          perResourceChars:
+            typeof normalizedArgs.perResourceChars === "number"
+              ? normalizedArgs.perResourceChars
+              : undefined,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_resources_read_failed",
+        errorMessage: message || "Community resources read failed.",
+      };
+    }
+  }
+
   if (params.toolName === "community_resources_list") {
     if (!params.communityId) {
       return {

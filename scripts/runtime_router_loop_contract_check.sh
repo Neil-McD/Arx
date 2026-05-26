@@ -138,6 +138,10 @@ require_match_in_file "$TOOL_TYPES_FILE" '"get_product_doc"' \
   "tool name type includes get_product_doc"
 require_match_in_file "$TOOL_TYPES_FILE" '"get_active_community_context"' \
   "tool name type includes get_active_community_context"
+require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_map"' \
+  "tool name type includes community_resources_map"
+require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_read"' \
+  "tool name type includes community_resources_read"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_list"' \
   "tool name type includes community_resources_list"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resource_read"' \
@@ -172,6 +176,10 @@ require_match_in_file "$NATIVE_LOOP_FILE" 'buildToolResultEnvelope' \
   "native tool loop uses a canonical tool result envelope"
 require_match_in_file "$RESOLUTION_FILE" '"get_active_community_context"' \
   "runtime capability resolution includes active community context tool"
+require_match_in_file "$RESOLUTION_FILE" '"community_resources_map"' \
+  "runtime capability resolution includes community resource map tool"
+require_match_in_file "$RESOLUTION_FILE" '"community_resources_read"' \
+  "runtime capability resolution includes community resource batch read tool"
 require_match_in_file "$RESOLUTION_FILE" '"community_resources_list"' \
   "runtime capability resolution includes community resource listing tool"
 require_match_in_file "$RESOLUTION_FILE" '"community_resource_read"' \

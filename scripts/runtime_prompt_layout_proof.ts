@@ -59,6 +59,8 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   },
   allowedToolNames: [
     "get_active_community_context",
+    "community_resources_map",
+    "community_resources_read",
     "community_resources_list",
     "community_resource_read",
     "community_resources_search",
@@ -261,6 +263,8 @@ assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
 assert.match(prompt, /Use get_active_community_context when the answer depends on the active community's identity/);
 assert.match(prompt, /When available, use community resource tools when canonical resource navigation/);
+assert.match(prompt, /Use community_resources_map first/);
+assert.match(prompt, /Use community_resources_read to batch-read/);
 assert.match(prompt, /Use community_resources_list to inspect/);
 assert.match(prompt, /Use community_search when active community activity, archive memory, or learned context matter beyond the resource directory/);
 assert.match(prompt, /About excerpt: Used to prove prompt layout/);

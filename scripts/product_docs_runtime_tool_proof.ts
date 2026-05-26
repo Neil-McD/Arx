@@ -161,8 +161,8 @@ function provePromptGuidance() {
     projectDescription: null,
     runtimeTurnContext: buildRuntimeTurnContextPacket({}),
   });
-  assert.match(prompt, /Use product documentation tools for canonical Polynet definitions/);
-  assert.match(prompt, /Search product docs first; read the matching doc/);
+  assert.match(prompt, /Use product documentation tools for canonical Polynet platform definitions/);
+  assert.match(prompt, /Search product docs first only when the answer depends on exact platform wording/);
   console.log("PASS: docs tool guidance is injected when docs tools are active");
 }
 

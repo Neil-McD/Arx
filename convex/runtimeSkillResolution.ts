@@ -171,6 +171,31 @@ function buildRuntimePlatformSkillInventoryItem(
   };
 }
 
+function buildRuntimeSelectedPlatformSkill(
+  skill: RuntimePlatformSkillDefinition,
+): RuntimeSelectedPlatformSkill {
+  return {
+    ...buildRuntimePlatformSkillInventoryItem(skill),
+    instructions_md: skill.instructionsMd,
+  };
+}
+
+function dedupeRuntimeSelectedPlatformSkills(
+  skills: RuntimeSelectedPlatformSkill[],
+): RuntimeSelectedPlatformSkill[] {
+  const seen = new Set<string>();
+  const result: RuntimeSelectedPlatformSkill[] = [];
+  for (const skill of skills) {
+    const platformSkillId = String(skill.platform_skill_id ?? "").trim().toLowerCase();
+    const mentionToken = String(skill.mention_token ?? "").trim().toLowerCase();
+    const key = platformSkillId || mentionToken;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(skill);
+  }
+  return result;
+}
+
 async function resolveRuntimePlatformSkillScope(args: {
   ctx: any;
   communityId: any | null;
@@ -183,6 +208,7 @@ async function resolveRuntimePlatformSkillScope(args: {
     "platform",
     RuntimeSelectedPlatformSkill
   >[];
+  autoSelectedSkills: RuntimeSelectedPlatformSkill[];
 }> {
   if (
     !args.communityId ||
@@ -192,11 +218,15 @@ async function resolveRuntimePlatformSkillScope(args: {
     return {
       inventory: [],
       selectedCandidates: [],
+      autoSelectedSkills: [],
     };
   }
 
   const inventory = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
     buildRuntimePlatformSkillInventoryItem,
+  );
+  const autoSelectedSkills = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
+    buildRuntimeSelectedPlatformSkill,
   );
   return {
     inventory,
@@ -204,12 +234,10 @@ async function resolveRuntimePlatformSkillScope(args: {
       ? COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
           scope: "platform" as const,
           mentionToken: skill.mentionToken,
-          value: {
-            ...buildRuntimePlatformSkillInventoryItem(skill),
-            instructions_md: skill.instructionsMd,
-          },
+          value: buildRuntimeSelectedPlatformSkill(skill),
         }))
       : [],
+    autoSelectedSkills,
   };
 }
 
@@ -578,7 +606,7 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       )
       .map((selection) => selection.value as RuntimeSelectedUserPlatformSkill);
 
-    const selectedPlatformSkills = resolved.selected
+    const explicitlySelectedPlatformSkills = resolved.selected
       .filter(
         (
           selection,
@@ -588,6 +616,10 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
         } => selection.scope === "platform",
       )
       .map((selection) => selection.value as RuntimeSelectedPlatformSkill);
+    const selectedPlatformSkills = dedupeRuntimeSelectedPlatformSkills([
+      ...platformSkillScope.autoSelectedSkills,
+      ...explicitlySelectedPlatformSkills,
+    ]);
 
     const selectedCommunitySkills = resolved.selected
       .filter(

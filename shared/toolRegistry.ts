@@ -108,6 +108,25 @@ const COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 250,
+      description: "Maximum total resources to include in the map.",
+    },
+    per_module_limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 25,
+      description: "Maximum resources to include per module.",
+    },
+  },
+};
+
 const COMMUNITY_RESOURCE_READ_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -128,6 +147,37 @@ const COMMUNITY_RESOURCE_READ_TOOL_SCHEMA: JsonSchema = {
       type: "integer",
       minimum: 1,
       maximum: 20000,
+    },
+  },
+};
+
+const COMMUNITY_RESOURCES_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["refs"],
+  properties: {
+    refs: {
+      type: "array",
+      minItems: 1,
+      maxItems: 10,
+      description: "Resource ids, resources:// directory URIs, or readable resource paths.",
+      items: {
+        type: "string",
+        minLength: 1,
+        maxLength: 1024,
+      },
+    },
+    max_chars: {
+      type: "integer",
+      minimum: 1,
+      maximum: 50000,
+      description: "Maximum total readable content characters returned across all resources.",
+    },
+    per_resource_chars: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20000,
+      description: "Maximum readable content characters returned per resource.",
     },
   },
 };
@@ -611,6 +661,16 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "community_resources_list",
     description: "List the active community's live resource modules and pages. Use paths or resources:// directory URIs returned by this tool to navigate member-visible modules.",
     inputSchema: COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA,
+  },
+  community_resources_map: {
+    name: "community_resources_map",
+    description: "Map the active community's Resources architecture in one call. Members see live resources; managers also see draft/source/health state.",
+    inputSchema: COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA,
+  },
+  community_resources_read: {
+    name: "community_resources_read",
+    description: "Batch-read active community Resources by resource id, resources:// URI, or readable path under a bounded character budget. Members see live resources; managers can read builder-visible resources.",
+    inputSchema: COMMUNITY_RESOURCES_READ_TOOL_SCHEMA,
   },
   community_resource_read: {
     name: "community_resource_read",
@@ -1171,6 +1231,45 @@ export function normalizeToolArguments(
     return {
       ...(path ? { path: path.slice(0, 1024) } : null),
       ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_resources_map") {
+    const limit = normalizeBoundedInteger(args.limit, "community_resources_map limit", 1, 250);
+    const perModuleLimit = normalizeBoundedInteger(
+      args.per_module_limit,
+      "community_resources_map per_module_limit",
+      1,
+      25,
+    );
+    return {
+      ...(limit ? { limit } : null),
+      ...(perModuleLimit ? { perModuleLimit } : null),
+    };
+  }
+  if (toolName === "community_resources_read") {
+    if (!Array.isArray(args.refs) || args.refs.length < 1) {
+      throw new Error("community_resources_read requires refs.");
+    }
+    if (args.refs.length > 10) {
+      throw new Error("community_resources_read supports at most 10 refs.");
+    }
+    const refs = args.refs
+      .map((ref) => (normalizeString(ref) ?? "").slice(0, 1024))
+      .filter(Boolean);
+    if (refs.length < 1) {
+      throw new Error("community_resources_read requires refs.");
+    }
+    const maxChars = normalizeBoundedInteger(args.max_chars, "community_resources_read max_chars", 1, 50000);
+    const perResourceChars = normalizeBoundedInteger(
+      args.per_resource_chars,
+      "community_resources_read per_resource_chars",
+      1,
+      20000,
+    );
+    return {
+      refs,
+      ...(maxChars ? { maxChars } : null),
+      ...(perResourceChars ? { perResourceChars } : null),
     };
   }
   if (toolName === "community_resource_read") {

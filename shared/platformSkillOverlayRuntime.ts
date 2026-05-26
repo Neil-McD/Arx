@@ -17,7 +17,7 @@ export function buildPlatformSkillsPromptBlock(
     "PLATFORM_WORKFLOW_CONTEXT",
     "These built-in platform workflow skills are available in this community lens when your permissions allow them.",
     "They are platform defaults, not user-installed or community-attached skills, and they cannot be disabled from the workspace.",
-    "Full platform skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$resources-architect`.",
+    "Full platform skill instructions are injected automatically when the active role and community lens require them, or explicitly when the user mentions a skill.",
   ];
   for (const skill of skills.slice(0, 12)) {
     lines.push(`- $${skill.mentionToken}: ${skill.description || skill.name}`);

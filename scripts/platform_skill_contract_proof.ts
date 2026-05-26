@@ -202,6 +202,16 @@ function main() {
     "runtime selected platform skill projection",
   );
   assertIncludes(
+    runtimeSkillResolution,
+    "autoSelectedSkills",
+    "runtime Resources Architect auto-selection",
+  );
+  assertIncludes(
+    runtimeSkillResolution,
+    "...platformSkillScope.autoSelectedSkills",
+    "builder lane auto-selected platform skill injection",
+  );
+  assertIncludes(
     runtimeHarnessShaping,
     "normalizeCommunityResourceRuntimeLaneState",
     "runtime community resource lane normalization",
@@ -260,8 +270,28 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
+    "Broad read workflow: list the live resource directory first",
+    "member resource lane broad read workflow",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "When the member is stuck on a project or workflow",
+    "member resource lane project guidance",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "Do not edit, stage, refactor, or apply changes from the member lane",
+    "member resource lane edit boundary",
+  );
+  assertIncludes(
+    runtimePrompt,
     "COMMUNITY_RESOURCE_BUILDER_LANE",
     "builder resource lane prompt",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "For read-only member-style questions, follow the live Resources read workflow",
+    "builder resource lane inherits member read workflow",
   );
   assertIncludes(
     runtimePrompt,
