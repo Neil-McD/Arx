@@ -11547,7 +11547,6 @@ button.chat-reply-quote:hover {
   padding-top: 14px;
 }
 
-.resource-module-status,
 .resource-module-status-line {
   display: inline-flex;
   align-items: center;
@@ -11559,22 +11558,34 @@ button.chat-reply-quote:hover {
   text-transform: uppercase;
 }
 
-.resource-module-status {
-  margin-left: auto;
-}
-
-.resource-module-status.is-live,
-.resource-module-status-line.is-live {
-  color: color-mix(in srgb, #66d18f 82%, var(--text-primary));
-}
-
-.resource-module-status.is-draft,
 .resource-module-status-line.is-draft {
   color: var(--text-muted);
 }
 
 .resource-module-status-line {
   margin-top: 6px;
+}
+
+.resource-module-draft-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  color: var(--text-secondary);
+  padding: 0 9px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  backdrop-filter: blur(14px);
+  pointer-events: none;
 }
 
 .resource-module-card .discover-card-desc {

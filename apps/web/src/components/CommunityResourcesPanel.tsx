@@ -290,11 +290,13 @@ function ResourceModuleCard(props: {
             })}
           />
         ) : null}
+        {moduleStatus === "draft" ? (
+          <span className="resource-module-draft-badge">Draft</span>
+        ) : null}
       </div>
       <div className="discover-card-body resource-module-card-body">
         <div className="discover-card-meta">
           <div className="discover-card-name">{module.name}</div>
-          <span className={`resource-module-status is-${moduleStatus}`}>{moduleStatus}</span>
         </div>
         <div className="discover-card-desc">
           {module.description_md?.trim() || "Knowledge shared by the community team."}
@@ -717,10 +719,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   `Durable knowledge and source material for ${capabilities.activeCommunityName ?? "this community"}.`
                 : `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
-            {selectedModule ? (
-              <div className={`resource-module-status-line is-${selectedModuleStatus}`}>
-                {selectedModuleStatus === "live" ? "Live module" : "Draft module"}
-              </div>
+            {selectedModule && selectedModuleStatus === "draft" ? (
+              <div className="resource-module-status-line is-draft">Draft module</div>
             ) : null}
           </div>
           <div className="feed-header-actions">
