@@ -103,6 +103,10 @@ async function proveWorkspaceComputerProviderContract() {
   const blaxelStubSource = await readRepoFile(
     "convex/blaxelWorkspaceComputerProvider.ts",
   );
+  const blaxelClientSource = await readRepoFile("convex/blaxelWorkspaceClient.ts");
+  const providerSmokeSource = await readRepoFile(
+    "scripts/blaxel_workspace_provider_smoke.ts",
+  );
   const backgroundServiceSource = await readRepoFile(
     "convex/workspaceTerminalBackgroundService.ts",
   );
@@ -176,10 +180,48 @@ async function proveWorkspaceComputerProviderContract() {
     'BLAXEL_WORKSPACE_PROVIDER_DISABLED_CODE =\n  "blaxel_provider_not_enabled"',
     "expected Blaxel provider to be disabled explicitly",
   );
+  assertIncludes(
+    blaxelStubSource,
+    "resolveWorkspaceComputerProviderFromServerEnv",
+    "expected Blaxel provider calls to be gated by server-owned provider policy",
+  );
   assertExcludes(
     blaxelStubSource,
-    "@blaxel/core",
-    "disabled Blaxel provider stub must not import the Blaxel SDK yet",
+    "policyInput",
+    "provider calls must not accept caller-supplied provider policy input",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    'await import("@blaxel/core")',
+    "expected Blaxel SDK loading to stay isolated to the Blaxel client wrapper",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "blaxel_credentials_missing",
+    "expected Blaxel client to normalize missing credentials",
+  );
+  assertIncludes(
+    blaxelClientSource,
+    "blaxel_volume_quota_exceeded",
+    "expected Blaxel client to normalize volume quota failures",
+  );
+  assertIncludes(
+    providerSmokeSource,
+    "ensureBlaxelWorkspaceComputer",
+    "expected provider smoke to exercise the Blaxel provider wrapper",
+  );
+  const providerSmokeRunnerSource = await readRepoFile(
+    "scripts/run_blaxel_workspace_provider_smoke.sh",
+  );
+  assertIncludes(
+    providerSmokeRunnerSource,
+    "POLYNET_WORKSPACE_COMPUTER_PROVIDER",
+    "expected provider smoke runner to enable Blaxel through server env",
+  );
+  assertIncludes(
+    providerSmokeRunnerSource,
+    "POLYNET_DEPLOYMENT_KIND",
+    "expected provider smoke runner to set staging deployment kind through server env",
   );
 
   assertIncludes(
@@ -244,6 +286,11 @@ async function proveWorkspaceComputerProviderContract() {
     packageJson.scripts["check:workspace-computer-provider-contract"],
     "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_computer_provider_contract_proof.ts",
     "expected package script for the workspace computer provider contract proof",
+  );
+  assert.equal(
+    packageJson.scripts["smoke:blaxel-workspace-provider"],
+    "bash scripts/run_blaxel_workspace_provider_smoke.sh",
+    "expected package script for the Blaxel provider smoke",
   );
 
   proveProviderPolicyMatrix();

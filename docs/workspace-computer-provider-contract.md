@@ -13,8 +13,9 @@ Daytona remains the default and only live provider in this slice.
 - `releaseProjectBackgroundSandboxIfIdle`
 
 Those functions still own the active workspace behavior and still use the
-Daytona client directly. The Blaxel provider is present only as a disabled
-staging stub until the lifecycle proof passes against a real project volume.
+Daytona client directly. The Blaxel provider is implemented only behind
+server-owned staging policy. It is not routed into the live workspace path until
+the lifecycle proof passes against a real project volume.
 
 ## Provider Operations
 
@@ -43,7 +44,8 @@ Blaxel can only become selectable after all of these are true:
 - The server explicitly enables the Blaxel provider.
 - The deployment is not production.
 
-Until then, Blaxel provider calls return `blaxel_provider_not_enabled`.
+Until then, Blaxel provider calls outside explicit staging policy return
+`blaxel_provider_not_enabled`.
 
 ## Migration Rule
 

@@ -109,6 +109,7 @@
     "smoke:workspace-credit-accounting-health": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_health_smoke.ts",
     "check:blaxel-staging-readiness": "bash scripts/blaxel_staging_readiness_guard.sh",
     "check:workspace-computer-provider-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_computer_provider_contract_proof.ts",
+    "smoke:blaxel-workspace-provider": "bash scripts/run_blaxel_workspace_provider_smoke.sh",
     "probe:blaxel-workspace-lifecycle": "bash scripts/run_blaxel_workspace_lifecycle_probe.sh",
     "check:workspace-inspector-boundary-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_inspector_boundary_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
