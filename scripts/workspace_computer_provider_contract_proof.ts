@@ -194,11 +194,17 @@ async function proveWorkspaceComputerProviderContract() {
   const blaxelDiagnosticsSource = await readRepoFile(
     "convex/blaxelWorkspaceDiagnostics.ts",
   );
+  const blaxelSandboxSmokeActionSource = await readRepoFile(
+    "convex/blaxelWorkspaceSandboxSmoke.ts",
+  );
   const providerSmokeSource = await readRepoFile(
     "scripts/blaxel_workspace_provider_smoke.ts",
   );
   const convexRuntimeProbeSource = await readRepoFile(
     "scripts/blaxel_convex_runtime_probe.ts",
+  );
+  const convexSandboxSmokeSource = await readRepoFile(
+    "scripts/blaxel_convex_sandbox_smoke.ts",
   );
   const backgroundServiceSource = await readRepoFile(
     "convex/workspaceTerminalBackgroundService.ts",
@@ -447,6 +453,106 @@ async function proveWorkspaceComputerProviderContract() {
     "remote_bl_api_key_missing",
     "expected Convex runtime probe to fail if staging Convex lacks Blaxel API key env",
   );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    '"use node";',
+    "expected Blaxel Convex sandbox smoke to be isolated in a Node action",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "export const smokeBlaxelConvexSandbox = action({",
+    "expected a Blaxel Convex sandbox smoke action",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "blaxel_convex_sandbox_smoke_staging_only",
+    "expected sandbox smoke action to fail closed outside staging",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "ensureBlaxelWorkspaceComputer",
+    "expected sandbox smoke action to create through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "writeBlaxelWorkspaceFile",
+    "expected sandbox smoke action to write through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "readBlaxelWorkspaceFile",
+    "expected sandbox smoke action to read through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "executeBlaxelWorkspaceCommand",
+    "expected sandbox smoke action to execute through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "listBlaxelWorkspaceDirectory",
+    "expected sandbox smoke action to list through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "destroyBlaxelWorkspaceComputer",
+    "expected sandbox smoke action to destroy through the provider wrapper",
+  );
+  assertIncludes(
+    blaxelSandboxSmokeActionSource,
+    "} finally {",
+    "expected sandbox smoke action to clean up in finally",
+  );
+  assert.ok(
+    blaxelSandboxSmokeActionSource.indexOf('if (deploymentKind !== "staging")') <
+      blaxelSandboxSmokeActionSource.indexOf(
+        "const policy = resolveWorkspaceComputerProviderFromServerEnv()",
+      ),
+    "expected sandbox smoke action to gate non-staging before reading provider policy",
+  );
+  for (const forbidden of [
+    "VolumeInstance",
+    "volumeName",
+    "volumes",
+    "createIfNotExists",
+    "await import(\"@blaxel/core\")",
+    "SandboxInstance",
+    "JSON.stringify(error)",
+    ".stack",
+    "BL_WORKSPACE",
+    "BL_API_KEY",
+  ]) {
+    assertExcludes(
+      blaxelSandboxSmokeActionSource,
+      forbidden,
+      `sandbox smoke action must stay volume-free, wrapper-based, and secret-safe: ${forbidden}`,
+    );
+  }
+  assertIncludes(
+    convexSandboxSmokeSource,
+    "EXPECTED_CONVEX_DEPLOYMENT = \"quick-porcupine-949\"",
+    "expected Convex sandbox smoke to target staging Convex explicitly",
+  );
+  assertIncludes(
+    convexSandboxSmokeSource,
+    "blaxelWorkspaceSandboxSmoke:smokeBlaxelConvexSandbox",
+    "expected Convex sandbox smoke to call the smoke action",
+  );
+  assertIncludes(
+    convexSandboxSmokeSource,
+    "--deployment-name",
+    "expected Convex sandbox smoke to pass the staging deployment explicitly",
+  );
+  assertIncludes(
+    convexSandboxSmokeSource,
+    "--push",
+    "expected Convex sandbox smoke to push the smoke action to staging before running",
+  );
+  assertIncludes(
+    convexSandboxSmokeSource,
+    "cleanup_not_confirmed",
+    "expected Convex sandbox smoke to fail if cleanup is not confirmed",
+  );
 
   assertIncludes(
     backgroundServiceSource,
@@ -520,6 +626,11 @@ async function proveWorkspaceComputerProviderContract() {
     packageJson.scripts["probe:blaxel-convex-runtime"],
     "bash scripts/run_blaxel_convex_runtime_probe.sh",
     "expected package script for the Blaxel Convex runtime probe",
+  );
+  assert.equal(
+    packageJson.scripts["smoke:blaxel-convex-sandbox"],
+    "bash scripts/run_blaxel_convex_sandbox_smoke.sh",
+    "expected package script for the Blaxel Convex sandbox smoke",
   );
 
   proveProviderPolicyMatrix();

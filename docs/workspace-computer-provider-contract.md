@@ -42,6 +42,8 @@ Blaxel can only become selectable after all of these are true:
 - The staging readiness guard passes.
 - The Convex runtime diagnostic passes in staging, proving Convex can import the
   Blaxel SDK and see the server-owned Blaxel env without creating a sandbox.
+- The Convex sandbox smoke passes in staging, proving Convex can create, use,
+  and clean up a Blaxel sandbox through the provider wrapper without volumes.
 - The Blaxel workspace lifecycle proof passes with project volumes enabled.
 - The server explicitly enables the Blaxel provider.
 - The deployment is not production.
