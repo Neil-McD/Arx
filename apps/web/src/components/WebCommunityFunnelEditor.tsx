@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MutableRefObject,
@@ -132,10 +133,21 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     if (!isAboutEditing) return;
     const timeoutId = window.setTimeout(() => {
       aboutTextareaRef.current?.focus();
-      aboutTextareaRef.current?.select();
+      const length = aboutTextareaRef.current?.value.length ?? 0;
+      aboutTextareaRef.current?.setSelectionRange(length, length);
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [isAboutEditing]);
+  const syncAboutTextareaHeight = () => {
+    const textarea = aboutTextareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  };
+  useLayoutEffect(() => {
+    if (!isAboutEditing) return;
+    syncAboutTextareaHeight();
+  }, [funnelAbout, isAboutEditing]);
 
   const setDraftConfig = (updater: (prev: CommunityFunnelConfig) => CommunityFunnelConfig) => {
     setCommunityFunnelConfig((prev) => updater(prev));
@@ -221,6 +233,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           onChange={(event) => {
             setFunnelAbout(event.target.value);
             markCommunitySettingsDirty();
+            event.currentTarget.style.height = "auto";
+            event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
           }}
           onBlur={() => {
             if (!isFunnelAboutDirty) setIsAboutEditing(false);

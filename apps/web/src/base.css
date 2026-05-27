@@ -8493,43 +8493,51 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-secondary);
 }
 
-.funnel-editor-about-trigger {
+.funnel-editor-about-trigger,
+.funnel-editor-about-input {
+  box-sizing: border-box;
   display: block;
   width: 100%;
+  margin: 0;
+  border-radius: 8px;
+  padding: 4px 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.65;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.funnel-editor-about-trigger {
   border: 1px solid transparent;
   background: transparent;
-  padding: 0;
   text-align: left;
   white-space: pre-wrap;
-  font: inherit;
   cursor: text;
   transition: border-color 140ms ease, background 140ms ease;
+  appearance: none;
 }
 
 .funnel-editor-about-trigger:hover,
 .funnel-editor-about-trigger:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent-gold) 22%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-gold) 5%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 24%, var(--border-default));
+  background: color-mix(in srgb, var(--bg-card) 10%, transparent);
 }
 
 .funnel-editor-about-trigger.is-empty {
   border-style: dashed;
-  border-radius: 12px;
   padding: 12px 14px;
   color: var(--text-faint);
 }
 
 .funnel-editor-about-input {
-  width: 100%;
-  min-height: 180px;
-  padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--accent-gold) 38%, var(--border-default));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent-gold) 6%, transparent);
-  color: var(--text-secondary);
-  font: inherit;
-  resize: vertical;
+  background: color-mix(in srgb, var(--bg-card) 8%, transparent);
+  overflow: hidden;
+  resize: none;
   transition: border-color 140ms ease, background 140ms ease;
 }
 

@@ -60,6 +60,16 @@ assert.match(
 );
 assert.match(
   funnelEditor,
+  /const syncAboutTextareaHeight = \(\) => \{[\s\S]*textarea\.style\.height = "auto";[\s\S]*textarea\.style\.height = `\$\{textarea\.scrollHeight\}px`;/,
+  "inline About editing must auto-size to content instead of collapsing into a small textbox",
+);
+assert.doesNotMatch(
+  sliceBetween(funnelEditor, "const renderAboutEditor", "return ("),
+  /\.select\(\)/,
+  "inline About editing must not select all text on open",
+);
+assert.match(
+  funnelEditor,
   /aboutContent=\{renderAboutEditor\(\)\}/,
   "funnel editor must inject inline About editing into the actual funnel surface",
 );
