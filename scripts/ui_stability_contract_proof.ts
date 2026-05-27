@@ -8,6 +8,7 @@ function read(relativePath: string): string {
 const app = read("apps/web/src/App.tsx");
 const threadDataController = read("shared/useWebThreadDataController.ts");
 const workspaceRightPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
+const baseCss = read("apps/web/src/base.css");
 const operatorDashboardDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
 const workspaceRightPanelData = read("apps/web/src/components/workspaceRightPanelData.ts");
 const operatorPlatformPanelView = read("apps/web/src/components/OperatorPlatformPanelView.tsx");
@@ -117,6 +118,21 @@ assert.doesNotMatch(
   workspaceRightPanelData,
   /kind:\s*"(joined|member|membership)"/,
   "recent signal builder must not reintroduce joined-member items as signal feed items",
+);
+assert.match(
+  baseCss,
+  /\.workspace-composer-shell\.workspace-right-panel-open \{[\s\S]*?padding-right: var\(--workspace-right-panel-width\);[\s\S]*?\}/,
+  "right-panel workspace composer shell must reserve the panel through padding, matching the workspace body lane",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.workspace-composer-shell\.workspace-right-panel-open \{[\s\S]*?margin-right: var\(--workspace-right-panel-width\);[\s\S]*?\}/,
+  "right-panel workspace composer must not add a separate margin offset from the transcript lane",
+);
+assert.match(
+  baseCss,
+  /\.workspace-composer-shell\.workspace-right-panel-open \.workspace-composer-lane \{[\s\S]*?max-width: var\(--web-chat-max-width\);[\s\S]*?margin: 0 auto;[\s\S]*?\}/,
+  "right-panel workspace composer lane must use the same centered max-width contract as the transcript lane",
 );
 
 assert.match(

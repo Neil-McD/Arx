@@ -23964,13 +23964,22 @@ button.message-citation-chip:hover {
   flex-direction: column;
   gap: 0;
   transition:
-    margin-right 200ms cubic-bezier(0.2, 0, 0, 1),
+    padding-right 200ms cubic-bezier(0.2, 0, 0, 1),
     max-width 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .workspace-composer-shell.workspace-right-panel-open {
-  max-width: min(var(--web-chat-max-width), calc(100% - var(--workspace-right-panel-width)));
-  margin-right: var(--workspace-right-panel-width);
+  max-width: none;
+  margin: 0 0 12px;
+  padding-left: 0;
+  padding-right: var(--workspace-right-panel-width);
+}
+
+.workspace-composer-shell.workspace-right-panel-open .workspace-composer-lane {
+  max-width: var(--web-chat-max-width);
+  margin: 0 auto;
+  padding-inline: var(--web-chat-gutter);
+  box-sizing: border-box;
 }
 
 .workspace-composer-shell.preview-expanded {
@@ -28349,11 +28358,21 @@ button.message-citation-chip:hover {
 }
 
 @media (max-width: 860px) {
-  .workspace-body.workspace-right-panel-open,
-  .workspace-composer-shell.workspace-right-panel-open {
+  .workspace-body.workspace-right-panel-open {
     padding-right: 0;
-    margin-right: auto;
     max-width: var(--web-chat-max-width);
+  }
+
+  .workspace-composer-shell.workspace-right-panel-open {
+    margin: 0 auto 12px;
+    max-width: var(--web-chat-max-width);
+    padding-inline: var(--web-chat-gutter);
+  }
+
+  .workspace-composer-shell.workspace-right-panel-open .workspace-composer-lane {
+    max-width: none;
+    margin: 0;
+    padding-inline: 0;
   }
 
   .workspace-right-panel {
