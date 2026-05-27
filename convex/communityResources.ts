@@ -326,6 +326,16 @@ type CommunityResourceBuilderChangesetOperation =
       module_id?: string | null;
     }
   | {
+      op: "delete_page";
+      resource_id: string;
+      expected_updated_at: number;
+    }
+  | {
+      op: "delete_category";
+      module_id: string;
+      expected_updated_at: number;
+    }
+  | {
       op: "link_source_to_page";
       page_resource_id: string;
       expected_updated_at: number;
@@ -334,7 +344,7 @@ type CommunityResourceBuilderChangesetOperation =
 
 type CommunityResourceBuilderChangesetPreviewItem = {
   op: CommunityResourceBuilderChangesetOperation["op"];
-  marker: "+" | "~" | ">";
+  marker: "+" | "~" | ">" | "x";
   title: string;
   preview: string | null;
 };
@@ -2688,6 +2698,20 @@ function normalizeCommunityResourceBuilderChangesetOperations(
         module_id: normalizeOptionalModuleId(record.module_id),
       };
     }
+    if (op === "delete_page") {
+      return {
+        op,
+        resource_id: normalizeRequiredResourceRef(record.resource_id, "community_resource_changeset_resource_id"),
+        expected_updated_at: normalizeExpectedUpdatedAtForChangeset(record.expected_updated_at),
+      };
+    }
+    if (op === "delete_category") {
+      return {
+        op,
+        module_id: normalizeRequiredResourceRef(record.module_id, "community_resource_changeset_module_id"),
+        expected_updated_at: normalizeExpectedUpdatedAtForChangeset(record.expected_updated_at),
+      };
+    }
     if (op === "link_source_to_page") {
       return {
         op,
@@ -2708,6 +2732,8 @@ function communityResourceBuilderChangesetOperationSummary(
   if (operation.op === "create_page") return `Create page "${operation.title}"`;
   if (operation.op === "edit_page") return `Edit page ${operation.resource_id}`;
   if (operation.op === "move_resource") return `Move resource ${operation.resource_id}`;
+  if (operation.op === "delete_page") return `Delete page ${operation.resource_id}`;
+  if (operation.op === "delete_category") return `Delete empty category ${operation.module_id}`;
   return `Link source ${operation.source_resource_id} to page ${operation.page_resource_id}`;
 }
 
@@ -2786,6 +2812,22 @@ function previewCommunityResourceBuilderChangesetOperation(
       marker: ">",
       title: trimChangesetPreviewTitle(operation.resource_id),
       preview: `Moves to ${changesetOperationModuleTarget(operation)}`,
+    };
+  }
+  if (operation.op === "delete_page") {
+    return {
+      op: operation.op,
+      marker: "x",
+      title: trimChangesetPreviewTitle(operation.resource_id),
+      preview: "Deletes this page from Resources.",
+    };
+  }
+  if (operation.op === "delete_category") {
+    return {
+      op: operation.op,
+      marker: "x",
+      title: trimChangesetPreviewTitle(operation.module_id),
+      preview: "Deletes this empty category from Resources.",
     };
   }
   return {
@@ -2873,6 +2915,32 @@ async function requireChangesetResourceRef(args: {
     });
   }
   return resource;
+}
+
+async function requireChangesetEmptyModuleRef(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: string;
+  expectedUpdatedAt: number;
+}): Promise<CommunityResourceModuleLike> {
+  const module = (await args.ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+  if (!module || String(module.communityId) !== String(args.communityId)) {
+    throw new Error("community_resource_module_not_found");
+  }
+  requireExpectedUpdatedAt({
+    expectedUpdatedAt: args.expectedUpdatedAt,
+    actualUpdatedAt: module.updatedAt,
+  });
+  const children = (await args.ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_module", (q: any) =>
+      q.eq("communityId", args.communityId).eq("moduleId", module._id),
+    )
+    .take(1)) as CommunityResourceLike[];
+  if (children.length > 0) {
+    throw new Error("community_resource_changeset_category_not_empty");
+  }
+  return module;
 }
 
 async function buildCommunityResourceBuilderChangesetPreflight(args: {
@@ -2990,6 +3058,39 @@ async function buildCommunityResourceBuilderChangesetPreflight(args: {
         index,
         op: operation.op,
         target_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "delete_page") {
+      await requireChangesetResourceRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        resourceId: operation.resource_id,
+        role: "page",
+        expectedUpdatedAt: operation.expected_updated_at,
+      });
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        target_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "delete_category") {
+      await requireChangesetEmptyModuleRef({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        moduleId: operation.module_id,
+        expectedUpdatedAt: operation.expected_updated_at,
+      });
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        target_id: operation.module_id,
         summary: communityResourceBuilderChangesetOperationSummary(operation),
       });
       continue;
@@ -3215,6 +3316,46 @@ async function editPageFromChangesetOperation(args: {
   return hydrated;
 }
 
+async function deletePageFromChangesetOperation(args: {
+  ctx: any;
+  communityId: any;
+  operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "delete_page" }>;
+}): Promise<CommunityResourceLike> {
+  const existing = await requireChangesetResourceRef({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    resourceId: args.operation.resource_id,
+    role: "page",
+    expectedUpdatedAt: args.operation.expected_updated_at,
+  });
+  await deleteCommunityResourceBodyContent(args.ctx, existing._id);
+  await args.ctx.db.delete(existing._id as any);
+  await deleteArchiveDocumentBySource(args.ctx, {
+    communityId: existing.communityId,
+    sourceType: "resource",
+    sourceId: normalizeIdValue(existing._id),
+  });
+  return existing;
+}
+
+async function deleteCategoryFromChangesetOperation(args: {
+  ctx: any;
+  communityId: any;
+  operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "delete_category" }>;
+}): Promise<CommunityResourceModuleLike> {
+  const module = await requireChangesetEmptyModuleRef({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    moduleId: args.operation.module_id,
+    expectedUpdatedAt: args.operation.expected_updated_at,
+  });
+  if (module.bannerStorageId) {
+    await maybeDeleteStorageAsset(args.ctx, module.bannerStorageId);
+  }
+  await args.ctx.db.delete(module._id as any);
+  return module;
+}
+
 async function applyCommunityResourceBuilderChangesetOperations(args: {
   ctx: any;
   communityId: any;
@@ -3340,6 +3481,38 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         index,
         op: operation.op,
         resource_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "delete_page") {
+      const page = await deletePageFromChangesetOperation({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        operation,
+      });
+      applied.push({
+        index,
+        op: operation.op,
+        resource_id: operation.resource_id,
+        title: page.title,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "delete_category") {
+      const module = await deleteCategoryFromChangesetOperation({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        operation,
+      });
+      applied.push({
+        index,
+        op: operation.op,
+        module_id: operation.module_id,
+        name: module.name,
         summary: communityResourceBuilderChangesetOperationSummary(operation),
       });
       continue;

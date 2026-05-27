@@ -239,6 +239,8 @@ const COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA: JsonSchema = {
         "create_page",
         "edit_page",
         "move_resource",
+        "delete_page",
+        "delete_category",
         "link_source_to_page",
       ],
       description: "Changeset operation kind.",
@@ -332,7 +334,7 @@ const COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA: JsonSchema = {
       minItems: 1,
       maxItems: 25,
       description:
-        "Proposed resource changes. Supported op values: create_module, edit_module, create_page, edit_page, move_resource, link_source_to_page.",
+        "Proposed resource changes. Supported op values: create_module, edit_module, create_page, edit_page, move_resource, delete_page, delete_category, link_source_to_page.",
       items: COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA,
     },
   },

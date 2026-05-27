@@ -315,6 +315,11 @@ assert.match(
   /COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA[\s\S]*additionalProperties: false[\s\S]*items: COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA/,
   "stage changeset operation items must stay strict-provider compatible",
 );
+assert.match(
+  toolRegistry,
+  /"delete_page"[\s\S]*"delete_category"[\s\S]*Supported op values:[^"]*delete_page[^"]*delete_category/,
+  "changeset schema should expose safe delete page/category operations",
+);
 assert.doesNotMatch(
   toolRegistry,
   /COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA[\s\S]*additionalProperties: true[\s\S]*COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
@@ -344,6 +349,31 @@ assert.match(
   resources,
   /buildCommunityResourceBuilderChangesetPreview[\s\S]*preview_items[\s\S]*preview_total_count[\s\S]*warning_count/,
   "staging should return a bounded changeset preview for builder approval UI",
+);
+assert.match(
+  resources,
+  /op === "delete_page"[\s\S]*resource_id: normalizeRequiredResourceRef[\s\S]*expected_updated_at: normalizeExpectedUpdatedAtForChangeset/,
+  "delete_page changeset operations should require resource id and optimistic timestamp",
+);
+assert.match(
+  resources,
+  /op === "delete_category"[\s\S]*module_id: normalizeRequiredResourceRef[\s\S]*expected_updated_at: normalizeExpectedUpdatedAtForChangeset/,
+  "delete_category changeset operations should require category id and optimistic timestamp",
+);
+assert.match(
+  resources,
+  /requireChangesetEmptyModuleRef[\s\S]*community_resource_changeset_category_not_empty/,
+  "delete_category should reject non-empty categories",
+);
+assert.match(
+  resources,
+  /operation\.op === "delete_page"[\s\S]*role: "page"[\s\S]*deletePageFromChangesetOperation[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete[\s\S]*deleteArchiveDocumentBySource/,
+  "delete_page should only delete page resources and should remove body plus archive/search exposure",
+);
+assert.match(
+  resources,
+  /operation\.op === "delete_category"[\s\S]*deleteCategoryFromChangesetOperation[\s\S]*requireChangesetEmptyModuleRef[\s\S]*maybeDeleteStorageAsset[\s\S]*ctx\.db\.delete/,
+  "delete_category should delete only empty categories and clean banner storage",
 );
 assert.match(
   resources,

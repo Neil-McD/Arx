@@ -426,6 +426,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Use community_resource_builder_list first; its health summary is the deterministic architecture preflight. Then use community_resource_builder_read with ref to inspect a wiki category, page, source, readable path, resources:// URI, or exact id before proposing edits. Tool payloads may still use module_id/module_name for the internal category container.",
       "- If community_resource_builder_read returns ambiguous_resource_builder_ref or resource_builder_ref_not_found, use the returned matches or suggested_refs and retry with the most specific directory_uri instead of stopping.",
       "- For builder edits, explain what you found, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset.",
+      "- You may propose delete_page or delete_category only when deletion is clearly justified. Prefer move/edit for ambiguous material. Do not delete source inbox records; delete_category is only for empty categories.",
       "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation.",
       "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",
     );

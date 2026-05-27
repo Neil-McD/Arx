@@ -13,6 +13,7 @@ export const PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
   "Alignment: ask the builder what direction they want to take unless they already gave explicit implementation instructions. Discuss tradeoffs and converge on a concrete direction before editing ground truth.",
   "Plan: after alignment, propose the smallest concrete update plan and name the categories, pages, sources, or links affected.",
   "Stage: only after explicit builder confirmation of the concrete plan, call community_resource_builder_stage_changeset to create the exact implementation proposal.",
+  "Deletes: propose delete_page or delete_category only when deletion is clearly justified. Prefer moving or editing ambiguous material. Never delete source inbox records. delete_category is only for empty categories.",
   "Approval: never call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder approves the exact staged changeset.",
   "Verification: after applying, verify by listing or reading affected resources, then report what changed and what remains.",
   "Architecture target: keep Resources organized as one member-facing wiki with clear categories derived from this community's context, source structure, and builder intent. The tool schema may call categories modules, but the product concept is a wiki category.",
