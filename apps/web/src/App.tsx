@@ -8896,18 +8896,17 @@ export default function App() {
     navigateTo(settingsPath, opts?.replace ? { replace: true } : {});
   }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
 
-  const isCommunityFunnelCopyDirty = Boolean(activeCommunity) && (
-    communitySettingsOneLiner !== (activeCommunity?.one_liner ?? "") ||
-    communitySettingsAbout !== (activeCommunity?.about ?? "")
-  );
+  const isCommunityFunnelAboutDirty =
+    Boolean(activeCommunity) && communitySettingsAbout !== (activeCommunity?.about ?? "");
 
-  const hasCommunitySettingsDirtyOutsideFunnelCopy = useCallback(() => {
+  const hasCommunitySettingsDirtyOutsideFunnelAbout = useCallback(() => {
     if (!activeCommunity) return false;
     const numberChanged = (left: number, right: number) => Math.abs(left - right) >= 0.0001;
     return (
       communityPricingDirtyRef.current ||
       communitySettingsName !== (activeCommunity.name ?? "") ||
       communitySettingsSlug !== slugifyCommunityName(activeCommunity.slug ?? "") ||
+      communitySettingsOneLiner !== (activeCommunity.one_liner ?? "") ||
       communitySettingsVisibility !== toCanonicalCommunityVisibility(activeCommunity.visibility, "unlisted") ||
       communitySettingsAvatarUrl !== (activeCommunity.avatar_url ?? null) ||
       numberChanged(communitySettingsAvatarFocusX, activeCommunity.avatar_focus_x ?? 0.5) ||
@@ -8929,26 +8928,24 @@ export default function App() {
     communitySettingsBannerUrl,
     communitySettingsBannerZoom,
     communitySettingsName,
+    communitySettingsOneLiner,
     communitySettingsSlug,
     communitySettingsVisibility,
     slugifyCommunityName,
   ]);
 
-  const handleResetCommunityFunnelCopy = useCallback(() => {
-    setCommunitySettingsOneLiner(activeCommunity?.one_liner ?? "");
+  const handleResetCommunityFunnelAbout = useCallback(() => {
     setCommunitySettingsAbout(activeCommunity?.about ?? "");
     setCommunitySettingsError(null);
-    communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelCopy();
+    communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelAbout();
   }, [
     activeCommunity?.about,
-    activeCommunity?.one_liner,
-    hasCommunitySettingsDirtyOutsideFunnelCopy,
+    hasCommunitySettingsDirtyOutsideFunnelAbout,
     setCommunitySettingsAbout,
     setCommunitySettingsError,
-    setCommunitySettingsOneLiner,
   ]);
 
-  const handleSaveCommunityFunnelCopy = useCallback(async (): Promise<boolean> => {
+  const handleSaveCommunityFunnelAbout = useCallback(async (): Promise<boolean> => {
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession || !activeCommunity) {
       setCommunitySettingsError("Sign in and select a community before saving funnel text.");
@@ -8961,13 +8958,12 @@ export default function App() {
         session: activeSession,
         communityId: activeCommunity.id,
         input: {
-          oneLiner: communitySettingsOneLiner.trim() || null,
           about: communitySettingsAbout.trim() || null,
         },
       });
       if (!result) throw new Error("Failed to save funnel text.");
       applyCommunityLaunchProfileResult(result);
-      communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelCopy();
+      communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelAbout();
       return true;
     } catch (error) {
       const message =
@@ -8985,9 +8981,8 @@ export default function App() {
     activeCommunity,
     applyCommunityLaunchProfileResult,
     communitySettingsAbout,
-    communitySettingsOneLiner,
     ensureUsableAuthSession,
-    hasCommunitySettingsDirtyOutsideFunnelCopy,
+    hasCommunitySettingsDirtyOutsideFunnelAbout,
     setCommunitySettingsError,
     setIsSavingCommunitySettings,
   ]);
@@ -9210,13 +9205,12 @@ export default function App() {
         setCommunityFunnelConfig,
         markCommunityFunnelDirty,
         funnelOneLiner: communitySettingsOneLiner,
-        setFunnelOneLiner: setCommunitySettingsOneLiner,
         funnelAbout: communitySettingsAbout,
         setFunnelAbout: setCommunitySettingsAbout,
-        isFunnelCopyDirty: isCommunityFunnelCopyDirty,
+        isFunnelAboutDirty: isCommunityFunnelAboutDirty,
         markCommunitySettingsDirty,
-        handleSaveCommunityFunnelCopy,
-        handleResetCommunityFunnelCopy,
+        handleSaveCommunityFunnelAbout,
+        handleResetCommunityFunnelAbout,
         isSavingCommunitySettings,
         communitySettingsError,
         previewCommunity: {

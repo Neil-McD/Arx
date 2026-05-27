@@ -63,6 +63,7 @@ type CommunityFunnelSurfaceProps = {
   heroArtImageUrl?: string | null;
   heroArtImageStyle?: CSSProperties | null;
   aboutText: string;
+  aboutContent?: ReactNode;
   emptyAboutContent?: ReactNode;
   alertMessages?: string[];
   inlineActionClassName?: string;
@@ -397,6 +398,7 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
     heroArtImageUrl = null,
     heroArtImageStyle = null,
     aboutText,
+    aboutContent,
     emptyAboutContent = null,
     alertMessages = [],
     inlineActionClassName = "public-funnel-inline-cta",
@@ -437,11 +439,11 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
             action={inlineAction}
           />
 
-          {aboutText ? (
+          {aboutContent ?? (aboutText ? (
             <div className="public-funnel-about">{renderTextWithLinks(aboutText)}</div>
           ) : (
             emptyAboutContent
-          )}
+          ))}
 
           {alertMessages.length > 0 ? (
             <div className="public-funnel-alert-stack">
