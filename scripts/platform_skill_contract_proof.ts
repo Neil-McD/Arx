@@ -299,6 +299,26 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
+    "Builder-facing replies must translate resource tool results into product state",
+    "builder resource lane must orient the human to product state",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "Do not expose internal ids, database ids, resource ids",
+    "builder resource lane must hide internal ids in user-facing prose",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "Do not ask the builder to paste a changeset id",
+    "builder resource lane must use natural approval instead of id-paste approval",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "source-unit count when visible",
+    "builder resource lane must report source-unit visibility after crawls/imports",
+  );
+  assertIncludes(
+    runtimePrompt,
     "Resources Architect builder tools are builder-lane only",
     "Resources Architect tool prompt guidance",
   );

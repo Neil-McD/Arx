@@ -213,6 +213,7 @@ function provePromptEntrypoints() {
       "community_resource_builder_read",
       "community_resource_builder_stage_changeset",
       "community_resource_builder_apply_changeset",
+      "web_crawl",
     ],
     harnessName: "chat_tools",
     communityId: "community_1",
@@ -221,6 +222,11 @@ function provePromptEntrypoints() {
     communityOneLiner: "One prompt stack.",
     communityAbout: "Used to prove the one-platform-harness context model.",
     communitySystemPrompt: "Answer through the community lens when relevant.",
+    communityResourceLane: {
+      lane: "builder",
+      can_read_live_resources: true,
+      can_use_resource_builder: true,
+    },
     agentName: "James",
     agentSoul: "Keep the product simple.",
     projectLabel: "Unified project",
@@ -236,6 +242,22 @@ function provePromptEntrypoints() {
   );
   assert.match(builderHarnessPrompt, /retry with the most specific directory_uri/);
   assert.match(builderHarnessPrompt, /wait for explicit builder approval before calling community_resource_builder_apply_changeset/);
+  assert.match(
+    builderHarnessPrompt,
+    /translate resource tool results into product state/,
+  );
+  assert.match(
+    builderHarnessPrompt,
+    /Do not expose internal ids, database ids, resource ids/,
+  );
+  assert.match(
+    builderHarnessPrompt,
+    /Do not ask the builder to paste a changeset id/,
+  );
+  assert.match(
+    builderHarnessPrompt,
+    /Report saved versus reused state, page count, source-unit count when visible/,
+  );
 
   const platformChatPrompt = composePlatformChatRuntimeSystemPrompt({
     communityId: "community_1",

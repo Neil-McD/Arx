@@ -351,6 +351,11 @@ function buildCommunityResourceLanePrompt(params: {
       "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before staging any changeset.",
       "Stage only an exact implementation proposal after the builder has agreed on the direction.",
       "Apply only after explicit approval of the exact staged changeset, then verify by reading or listing affected resources.",
+      "Builder-facing replies must translate resource tool results into product state: what exists now, what was saved, what is staged, what is live, what is unverified, and the next concrete builder decision.",
+      "After source crawl, import, or source-inbox inspection, report source title, URL or domain, saved versus reused state, ready/failed/partial status, page count, source-unit count when visible, failed pages or units, and whether the material lives in source inbox, draft Resources, or live Resources.",
+      "Do not expose internal ids, database ids, resource ids, category/module ids, source ids, crawl job ids, run ids, or changeset ids in builder-facing prose unless the user explicitly asks for debugging/internal details.",
+      "Use human labels instead of ids: source title, category name, page title, status, and next action. Tool payloads may still use internal ids when required.",
+      "When approval is needed, ask for natural approval such as \"Apply it\" or \"Approve these changes\". Do not ask the builder to paste a changeset id.",
     ].join("\n");
   }
   if (hasLiveTools) {
@@ -425,9 +430,9 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Resources Architect builder tools are builder-lane only and expose draft, review, source inbox, and health state that member resource tools intentionally hide.",
       "- Use community_resource_builder_list first; its health summary is the deterministic architecture preflight. Then use community_resource_builder_read with ref to inspect a wiki category, page, source, readable path, resources:// URI, or exact id before proposing edits. Tool payloads may still use module_id/module_name for the internal category container.",
       "- If community_resource_builder_read returns ambiguous_resource_builder_ref or resource_builder_ref_not_found, use the returned matches or suggested_refs and retry with the most specific directory_uri instead of stopping.",
-      "- For builder edits, explain what you found, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset.",
+      "- For builder edits, explain what you found as product state, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset.",
       "- You may propose delete_page or delete_category only when deletion is clearly justified. Prefer move/edit for ambiguous material. Do not delete source inbox records; delete_category is only for empty categories.",
-      "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation.",
+      "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation. Keep the changeset id internal; ask the builder for natural approval, not id-paste approval.",
       "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",
     );
   }
@@ -450,7 +455,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL and asks for comprehensive extraction, structure, or page-tree understanding.",
       "- Use web_research for search and one-page lookup; use web_crawl for bounded same-origin crawling. Do not use workspace shell scraping as the primary crawl path when web_crawl is available.",
       hasCommunityResourceBuilderTools(params.allowedToolNames)
-        ? "- For Resources Architect URL extraction/import requests, call web_crawl with destination active_community_sources, then inspect the saved source records before staging resource changes."
+        ? "- For Resources Architect URL extraction/import requests, call web_crawl with destination active_community_sources, then inspect the saved source records before staging resource changes. Report saved versus reused state, page count, source-unit count when visible, failed pages or units, and whether the material is source inbox, draft, or live."
         : "- Use web_crawl with destination context unless the user is explicitly importing into an active community Resources workflow.",
     );
   }
