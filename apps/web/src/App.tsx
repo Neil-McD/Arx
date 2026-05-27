@@ -8896,6 +8896,102 @@ export default function App() {
     navigateTo(settingsPath, opts?.replace ? { replace: true } : {});
   }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
 
+  const isCommunityFunnelCopyDirty = Boolean(activeCommunity) && (
+    communitySettingsOneLiner !== (activeCommunity?.one_liner ?? "") ||
+    communitySettingsAbout !== (activeCommunity?.about ?? "")
+  );
+
+  const hasCommunitySettingsDirtyOutsideFunnelCopy = useCallback(() => {
+    if (!activeCommunity) return false;
+    const numberChanged = (left: number, right: number) => Math.abs(left - right) >= 0.0001;
+    return (
+      communityPricingDirtyRef.current ||
+      communitySettingsName !== (activeCommunity.name ?? "") ||
+      communitySettingsSlug !== slugifyCommunityName(activeCommunity.slug ?? "") ||
+      communitySettingsVisibility !== toCanonicalCommunityVisibility(activeCommunity.visibility, "unlisted") ||
+      communitySettingsAvatarUrl !== (activeCommunity.avatar_url ?? null) ||
+      numberChanged(communitySettingsAvatarFocusX, activeCommunity.avatar_focus_x ?? 0.5) ||
+      numberChanged(communitySettingsAvatarFocusY, activeCommunity.avatar_focus_y ?? 0.5) ||
+      numberChanged(communitySettingsAvatarZoom, activeCommunity.avatar_zoom ?? 1) ||
+      communitySettingsBannerUrl !== (activeCommunity.banner_url ?? null) ||
+      numberChanged(communitySettingsBannerFocusX, activeCommunity.banner_focus_x ?? 0.5) ||
+      numberChanged(communitySettingsBannerFocusY, activeCommunity.banner_focus_y ?? 0.5) ||
+      numberChanged(communitySettingsBannerZoom, activeCommunity.banner_zoom ?? 1)
+    );
+  }, [
+    activeCommunity,
+    communitySettingsAvatarFocusX,
+    communitySettingsAvatarFocusY,
+    communitySettingsAvatarUrl,
+    communitySettingsAvatarZoom,
+    communitySettingsBannerFocusX,
+    communitySettingsBannerFocusY,
+    communitySettingsBannerUrl,
+    communitySettingsBannerZoom,
+    communitySettingsName,
+    communitySettingsSlug,
+    communitySettingsVisibility,
+    slugifyCommunityName,
+  ]);
+
+  const handleResetCommunityFunnelCopy = useCallback(() => {
+    setCommunitySettingsOneLiner(activeCommunity?.one_liner ?? "");
+    setCommunitySettingsAbout(activeCommunity?.about ?? "");
+    setCommunitySettingsError(null);
+    communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelCopy();
+  }, [
+    activeCommunity?.about,
+    activeCommunity?.one_liner,
+    hasCommunitySettingsDirtyOutsideFunnelCopy,
+    setCommunitySettingsAbout,
+    setCommunitySettingsError,
+    setCommunitySettingsOneLiner,
+  ]);
+
+  const handleSaveCommunityFunnelCopy = useCallback(async (): Promise<boolean> => {
+    const activeSession = await ensureUsableAuthSession();
+    if (!activeSession || !activeCommunity) {
+      setCommunitySettingsError("Sign in and select a community before saving funnel text.");
+      return false;
+    }
+    setCommunitySettingsError(null);
+    setIsSavingCommunitySettings(true);
+    try {
+      const result = await saveCloudCommunityLaunchProfile({
+        session: activeSession,
+        communityId: activeCommunity.id,
+        input: {
+          oneLiner: communitySettingsOneLiner.trim() || null,
+          about: communitySettingsAbout.trim() || null,
+        },
+      });
+      if (!result) throw new Error("Failed to save funnel text.");
+      applyCommunityLaunchProfileResult(result);
+      communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelCopy();
+      return true;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to save funnel text.";
+      setCommunitySettingsError(message);
+      return false;
+    } finally {
+      setIsSavingCommunitySettings(false);
+    }
+  }, [
+    activeCommunity,
+    applyCommunityLaunchProfileResult,
+    communitySettingsAbout,
+    communitySettingsOneLiner,
+    ensureUsableAuthSession,
+    hasCommunitySettingsDirtyOutsideFunnelCopy,
+    setCommunitySettingsError,
+    setIsSavingCommunitySettings,
+  ]);
+
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
       activePage,
@@ -9113,11 +9209,21 @@ export default function App() {
         communityFunnelConfig,
         setCommunityFunnelConfig,
         markCommunityFunnelDirty,
+        funnelOneLiner: communitySettingsOneLiner,
+        setFunnelOneLiner: setCommunitySettingsOneLiner,
+        funnelAbout: communitySettingsAbout,
+        setFunnelAbout: setCommunitySettingsAbout,
+        isFunnelCopyDirty: isCommunityFunnelCopyDirty,
+        markCommunitySettingsDirty,
+        handleSaveCommunityFunnelCopy,
+        handleResetCommunityFunnelCopy,
+        isSavingCommunitySettings,
+        communitySettingsError,
         previewCommunity: {
           slug: activeCommunity?.slug ?? null,
           name: activeCommunity?.name ?? "Community",
-          one_liner: activeCommunity?.one_liner ?? null,
-          about: activeCommunity?.about ?? null,
+          one_liner: communitySettingsOneLiner || null,
+          about: communitySettingsAbout || null,
           avatar_url: activeCommunity?.avatar_url ?? null,
           avatar_focus_x: activeCommunity?.avatar_focus_x ?? null,
           avatar_focus_y: activeCommunity?.avatar_focus_y ?? null,

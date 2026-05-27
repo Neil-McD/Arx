@@ -51,6 +51,16 @@ export type WebCommunityFunnelEditorProps = {
   communityFunnelConfig: CommunityFunnelConfig;
   setCommunityFunnelConfig: React.Dispatch<React.SetStateAction<CommunityFunnelConfig>>;
   markCommunityFunnelDirty: () => void;
+  funnelOneLiner: string;
+  setFunnelOneLiner: (value: string) => void;
+  funnelAbout: string;
+  setFunnelAbout: (value: string) => void;
+  isFunnelCopyDirty: boolean;
+  markCommunitySettingsDirty: () => void;
+  handleSaveCommunityFunnelCopy: () => Promise<boolean> | boolean;
+  handleResetCommunityFunnelCopy: () => void;
+  isSavingCommunitySettings: boolean;
+  communitySettingsError: string | null;
   previewCommunity: PreviewCommunityLike;
   previewVisibilityLabel: string;
   previewMemberCount: number | null;
@@ -68,18 +78,30 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     communityFunnelConfig,
     setCommunityFunnelConfig,
     markCommunityFunnelDirty,
+    funnelOneLiner,
+    setFunnelOneLiner,
+    funnelAbout,
+    setFunnelAbout,
+    isFunnelCopyDirty,
+    markCommunitySettingsDirty,
+    handleSaveCommunityFunnelCopy,
+    handleResetCommunityFunnelCopy,
+    isSavingCommunitySettings,
+    communitySettingsError,
     previewCommunity,
     previewVisibilityLabel,
     previewMemberCount,
     previewFunnelAction,
   } = props;
 
-  const isDirty = communityFunnelDirtyRef.current;
+  const isMediaDirty = communityFunnelDirtyRef.current;
+  const isDirty = isMediaDirty || isFunnelCopyDirty;
+  const isSaving = isSavingCommunityFunnel || isSavingCommunitySettings;
   const funnelCopy = buildCommunityFunnelCopy(previewFunnelAction);
   const mediaPreviewUrl = communityFunnelConfig.hero_media_url ?? null;
   const mediaPreviewEmbed = mediaPreviewUrl ? parseEmbedUrl(mediaPreviewUrl) : null;
-  const cardOneLiner = previewCommunity.one_liner?.trim() || funnelCopy.body;
-  const aboutText = previewCommunity.about?.trim() || "";
+  const cardOneLiner = funnelOneLiner.trim() || funnelCopy.body;
+  const aboutText = funnelAbout.trim();
   const communityLink = previewCommunity.slug ? formatCommunityLink(previewCommunity.slug) : null;
   const actionCardArt = buildCommunityFunnelActionCardArt({
     community: previewCommunity,
@@ -113,7 +135,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   };
 
   const openVideoUrlModal = () => {
-    if (isSavingCommunityFunnel) return;
+    if (isSaving) return;
     setVideoUrlDraft(mediaPreviewUrl ?? "");
     setVideoUrlError(null);
     setIsVideoUrlModalOpen(true);
@@ -140,11 +162,19 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   };
 
   const handleReset = () => {
-    handleResetCommunityFunnel();
+    if (isMediaDirty) handleResetCommunityFunnel();
+    if (isFunnelCopyDirty) handleResetCommunityFunnelCopy();
   };
 
   const handleSave = async () => {
-    await handleSaveCommunityFunnel();
+    if (isFunnelCopyDirty) {
+      const savedCopy = await handleSaveCommunityFunnelCopy();
+      if (savedCopy === false) return;
+    }
+    if (isMediaDirty) {
+      const savedMedia = await handleSaveCommunityFunnel();
+      if (savedMedia === false) return;
+    }
   };
   const previewAction = {
     communityName: previewCommunity.name,
@@ -173,17 +203,14 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   return (
     <div className="settings-section">
       <div className="settings-section-title">Public funnel</div>
-      <div className="model-note agent-editor-intro">
-        Edit the actual funnel media. Community identity and long-form copy come from Settings.
-      </div>
 
       <div className="agent-preview-actions">
         {isDirty ? (
-          <button type="button" onClick={handleReset} disabled={isSavingCommunityFunnel}>
+          <button type="button" onClick={handleReset} disabled={isSaving}>
             Cancel
           </button>
         ) : (
-          <button type="button" onClick={handlePreviewCommunityFunnel} disabled={isSavingCommunityFunnel}>
+          <button type="button" onClick={handlePreviewCommunityFunnel} disabled={isSaving}>
             Preview
           </button>
         )}
@@ -191,13 +218,43 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           type="button"
           className={`platform-save-button ${isDirty ? "is-dirty" : "is-saved"}`}
           onClick={() => void handleSave()}
-          disabled={isSavingCommunityFunnel || !isDirty}
+          disabled={isSaving || !isDirty}
         >
-          {isSavingCommunityFunnel ? "Saving…" : isDirty ? "Save changes" : "Saved"}
+          {isSaving ? "Saving…" : isDirty ? "Save changes" : "Saved"}
         </button>
       </div>
 
+      {communitySettingsError ? <div className="auth-error">{communitySettingsError}</div> : null}
       {communityFunnelSaveError ? <div className="auth-error">{communityFunnelSaveError}</div> : null}
+
+      <div className="funnel-editor-copy-fields">
+        <label className="create-community-field">
+          <span>One-liner</span>
+          <textarea
+            placeholder="Short one-liner for the public funnel card"
+            rows={3}
+            value={funnelOneLiner}
+            disabled={isSaving}
+            onChange={(event) => {
+              setFunnelOneLiner(event.target.value);
+              markCommunitySettingsDirty();
+            }}
+          />
+        </label>
+        <label className="create-community-field">
+          <span>About</span>
+          <textarea
+            placeholder="Long-form public description for who this community is for and what members get."
+            rows={6}
+            value={funnelAbout}
+            disabled={isSaving}
+            onChange={(event) => {
+              setFunnelAbout(event.target.value);
+              markCommunitySettingsDirty();
+            }}
+          />
+        </label>
+      </div>
 
       <div className="funnel-editor-preview">
         <CommunityFunnelSurface
@@ -263,7 +320,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           aboutText={aboutText}
           emptyAboutContent={(
             <div className="public-funnel-note">
-              Add the long-form about copy in Settings. It will appear here on the landing page.
+              Add about copy to show it on the landing page.
             </div>
           )}
           inlineActionClassName="public-funnel-inline-cta funnel-editor-inline-cta"
