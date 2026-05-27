@@ -10,6 +10,10 @@ The service exposes the stable contract used by Convex:
 
 It uses Crawl4AI's `BFSDeepCrawlStrategy` under the hood, but keeps the public
 API owned by Polynet so Convex does not depend on Crawl4AI server auth details.
+When a crawl resolves to one real URL, the service also checks for visible
+lesson/tab/wiki navigation and captures those client-side states in the same
+browser session, merging them into the returned source body instead of inventing
+fake URLs.
 
 ## Deploy
 

@@ -1279,6 +1279,10 @@ function normalizeCrawl4AiSourcePageResult(args: {
   const depth = Number.isFinite(rawDepth)
     ? Math.min(Math.max(0, Math.floor(rawDepth)), args.maxDepth)
     : 0;
+  const rawVirtualPageCount = Number(metadata?.virtual_page_count ?? args.row.virtual_page_count ?? 0);
+  const virtualPageCount = Number.isFinite(rawVirtualPageCount)
+    ? Math.max(0, Math.floor(rawVirtualPageCount))
+    : 0;
   const markdown = normalizeCrawl4AiMarkdown(args.row.markdown ?? args.row.text);
   const success = args.row.success !== false && String(args.row.status ?? "").toLowerCase() !== "failed";
   const error = normalizeOptionalText(
@@ -1317,6 +1321,11 @@ function normalizeCrawl4AiSourcePageResult(args: {
     links: normalizeCrawl4AiLinks(args.row.links, args.rootUrl),
     status: success && markdown ? "ready" : "failed",
     error: success && markdown ? null : error ?? "community_source_crawl4ai_no_readable_content",
+    virtual_page_count: virtualPageCount,
+    virtual_page_strategy: normalizeOptionalText(
+      firstCrawlerString(args.row, ["virtual_page_strategy"]) || firstCrawlerString(metadata, ["virtual_page_strategy"]),
+      80,
+    ) ?? null,
   };
 }
 
@@ -1492,9 +1501,15 @@ function buildWebCrawlContextPayload(args: {
       markdown_preview: markdownPreview,
       truncated: markdownPreview.length < markdown.length,
       links: page.links.slice(0, 20),
+      virtual_page_count: Math.max(0, Math.floor(Number(page.virtual_page_count) || 0)),
+      virtual_page_strategy: normalizeOptionalText(page.virtual_page_strategy, 80) ?? null,
     });
   }
   const readyPages = args.pages.filter((page) => page.status === "ready");
+  const virtualPageCount = args.pages.reduce(
+    (total, page) => total + Math.max(0, Math.floor(Number(page.virtual_page_count) || 0)),
+    0,
+  );
   return {
     ok: true,
     kind: "web_crawl",
@@ -1502,6 +1517,7 @@ function buildWebCrawlContextPayload(args: {
     provider: args.provider,
     root_url: args.rootUrl,
     page_count: args.pages.length,
+    virtual_page_count: virtualPageCount,
     ready_page_count: readyPages.length,
     failed_page_count: args.pages.length - readyPages.length,
     returned_page_count: pagePayloads.length,
@@ -8919,6 +8935,8 @@ const communitySourceCrawlerPageArg = v.object({
   })),
   status: v.union(v.literal("ready"), v.literal("failed"), v.literal("skipped")),
   error: v.union(v.string(), v.null()),
+  virtual_page_count: v.optional(v.number()),
+  virtual_page_strategy: v.optional(v.union(v.string(), v.null())),
 });
 
 export const ingestCommunitySources: any = action({

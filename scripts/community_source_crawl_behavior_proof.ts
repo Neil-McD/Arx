@@ -164,6 +164,14 @@ assert.equal(updateDecision.reason, "existing_not_ready");
 assert.equal(updateDecision.source_id, "source_queued");
 assert.match(updateDecision.body_md, /Source URL: https:\/\/docs\.example\.com\/wiki\//);
 assert.match(updateDecision.body_md, /Crawl root: https:\/\/docs\.example\.com\/wiki/);
+assert.match(
+  buildCommunitySourceCrawledBody(page({
+    final_url: "https://docs.example.com/wiki",
+    virtual_page_count: 18,
+  })),
+  /Virtual sections captured: 18/,
+  "SPA/course crawls should preserve virtual section count in the saved source body",
+);
 
 const seenAliases = new Set<string>();
 const firstNew = planCommunitySourceCrawlerPageSave({

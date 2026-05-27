@@ -21,6 +21,8 @@ export type CommunitySourcePageResult = {
   links: CommunitySourcePageLink[];
   status: CommunitySourcePageStatus;
   error: string | null;
+  virtual_page_count?: number;
+  virtual_page_strategy?: string | null;
 };
 
 export type CommunitySourceCrawlerNormalizeUrl = (raw: unknown) => string | null;
@@ -76,6 +78,9 @@ export function buildCommunitySourceCrawledBody(
       page.root_url && page.root_url !== page.final_url ? `Crawl root: ${page.root_url}` : null,
       page.parent_url ? `Parent URL: ${page.parent_url}` : null,
       `Crawl depth: ${depth}`,
+      page.virtual_page_count && page.virtual_page_count > 0
+        ? `Virtual sections captured: ${Math.floor(page.virtual_page_count)}`
+        : null,
       markdown,
     ].filter(Boolean).join("\n\n"),
     bodyLimit,
