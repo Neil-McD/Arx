@@ -1,9 +1,4 @@
-import { COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES } from "./communityResourceBuilder.ts";
-
 export const COMMUNITY_WIKI_ARCHITECT_MAX_DRAFTS = 12;
-
-export const COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES =
-  COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES;
 
 export type CommunityWikiArchitectRunType = "first" | "rerun";
 
@@ -16,7 +11,7 @@ export type CommunityWikiArchitectDraftProposal = {
   title: string;
   module: string;
   purpose: string;
-  source_resource_id: string | null;
+  source_resource_id: string;
 };
 
 export type CommunityWikiArchitectDraftUpdateProposal = {
@@ -75,7 +70,7 @@ export type CommunityWikiArchitectProposal = {
 
 export const COMMUNITY_WIKI_ARCHITECT_PROMPT = `You are the Wiki Architect for a PolyNet community knowledge base.
 
-Your job is to design a clean, navigable wiki scaffold for ONE community,
+Your job is to design a clean, navigable wiki architecture for ONE community,
 based on the context the builder has provided. You do NOT write page bodies.
 You do NOT summarize sources. You produce a structural proposal that the
 Drafter and Summarizer agents will fill in later.
@@ -108,11 +103,11 @@ ROLE BOUNDARIES
 You can:
 - Read the community profile, about, agent instructions, and any existing modules/pages/sources.
 - Propose new modules and draft pages.
-- Propose one primary source-inbox item as lineage for a draft page.
+- Propose one primary visible source-inbox item as lineage for every new draft page.
 - Mark gaps where a future source upload is needed.
 
 You cannot:
-- Write page bodies. Drafts you propose are scaffolds only: title, parent module, purpose, and primary source lineage.
+- Write page bodies. Drafts you propose are structural shells only: title, parent module, purpose, and primary source lineage.
 - Modify or rename pages inside live modules without explicit builder approval. If a live page is in the wrong place, flag it as a proposed change instead.
 - Make modules live. Only the builder controls module live/draft state.
 - Invent sources. If a page would need information that no source provides, mark it as a gap, not a draft.
@@ -162,12 +157,11 @@ THIN-CONTEXT RULE
 
 If the community profile is largely empty, with no about, no agent instructions,
 no audience signal, no builder intent, and no ready source material, do NOT
-scaffold beyond a single "Welcome" category with one "Welcome" page. Surface a
-request for more context in the review summary under needs_from_builder. Do not
-guess.
+create categories or draft pages. Return an empty changeset and ask for source
+material or builder context in needs_from_builder. Do not guess.
 
 If ready source material is visible, thin community profile should block only
-source-less guessing. You should still organize source-backed drafts when the
+unsupported guessing. You should still organize source-backed drafts when the
 source itself gives enough signal.
 
 ================================================================
@@ -208,13 +202,10 @@ PAGE DESIGN RULES
     title
     parent_module
     purpose: one sentence describing what a reader gets from this page
-    source_resource_id: one source-inbox id, or null only if the page is on the scaffold-only whitelist
+    source_resource_id: one visible source-inbox id
     status: "draft"
 
-- Scaffold-only whitelist. These are the ONLY pages allowed to have zero source dependencies:
-${COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES.map((title) => `    "${title}"`).join("\n")}
-
-- Any other page without source_resource_id must be filed as a gap, not a draft.
+- Any page without source_resource_id must be filed as a gap, not a draft.
 - PolyNet currently stores one primary source per draft page. If several sources are relevant,
   choose the strongest primary source for source_resource_id and leave weaker secondary sources
   unassigned unless they justify their own page.
@@ -230,7 +221,7 @@ RE-RUN BEHAVIOR
 
 Runs are additive. On a re-run:
 
-- Do NOT reorganize, rename, or restructure prior accepted scaffold.
+- Do NOT reorganize, rename, or restructure prior accepted wiki architecture.
 - Do NOT recreate drafts that already exist.
 - Do NOT edit drafts whose body has been touched by a human or whose status moved off draft. Flag suggestions under proposed_changes_to_existing instead.
 - DO fill gaps that now have sources to back them.
@@ -294,7 +285,7 @@ Return a single JSON object:
     }
   ],
   "pages_left_unchanged": [
-    { "title": "...", "module": "...", "reason": "already covers this scaffold" }
+    { "title": "...", "module": "...", "reason": "already covers this need" }
   ],
   "proposed_changes_to_existing": [
     { "title": "...", "module": "...", "module_status": "live", "suggestion": "..." }
@@ -324,4 +315,4 @@ STYLE
 - Names should make sense to a new member with no context.
 - Match the community's primary language/locale if specified; otherwise default to English.
 - Prefer "Getting Started" over "Launchpad."
-- When in doubt, do less. A small clean scaffold the builder approves beats a sprawling one they have to prune.`;
+- When in doubt, do less. A small source-backed architecture the builder approves beats a sprawling one they have to prune.`;

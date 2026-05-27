@@ -60,9 +60,6 @@ import {
   buildCommunityResourceModuleDirectoryFields,
   parseCommunityResourceDirectoryUri,
 } from "../shared/communityResourceDirectory";
-import {
-  COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES,
-} from "../shared/communityResourceBuilder";
 import type {
   CommunitySourceCrawlJobStatus,
   CommunitySourceCrawlerExistingSource,
@@ -2513,16 +2510,6 @@ function normalizeBuilderWriteKind(raw: unknown): "module" | "page" | "source" {
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "module" || value === "page" || value === "source") return value;
   throw new Error("community_resource_builder_kind_invalid");
-}
-
-function normalizeBuilderHealthTitle(raw: unknown): string {
-  return String(raw ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function isBuilderScaffoldPageTitle(raw: unknown): boolean {
-  return COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES.some(
-    (title) => normalizeBuilderHealthTitle(title) === normalizeBuilderHealthTitle(raw),
-  );
 }
 
 function requireExpectedUpdatedAt(args: {
@@ -5885,11 +5872,7 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
         name: module.name,
       })),
     sparsePages: pages
-      .filter(
-        (page) =>
-          !isBuilderScaffoldPageTitle(page.title) &&
-          communityResourceBodyChars(page) < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS,
-      )
+      .filter((page) => communityResourceBodyChars(page) < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS)
       .map((page) => ({
         resource_id: normalizeIdValue(page._id),
         title: page.title,
@@ -5897,7 +5880,7 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
         body_chars: communityResourceBodyChars(page),
       })),
     pagesWithoutSourceLineage: pages
-      .filter((page) => !normalizeIdValue(page.sourceResourceId ?? "") && !isBuilderScaffoldPageTitle(page.title))
+      .filter((page) => !normalizeIdValue(page.sourceResourceId ?? ""))
       .map((page) => ({
         resource_id: normalizeIdValue(page._id),
         title: page.title,

@@ -22,21 +22,15 @@ assert.match(
   /export const COMMUNITY_WIKI_ARCHITECT_MAX_DRAFTS = 12/,
   "architect draft budget should be explicit",
 );
-assert.match(
-  promptSource,
-  /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES/,
-  "architect scaffold whitelist should reuse builder scaffold titles",
-);
 assert.doesNotMatch(
   promptSource,
   /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES|DEFAULT MODULE SHAPE|Start Here|Methodology|Playbooks|Reference Library/,
   "architect prompt should not hardcode a default category set",
 );
-
-assert.match(
+assert.doesNotMatch(
   promptSource,
-  /COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES\.map/,
-  "prompt should render every scaffold-only title from the shared whitelist",
+  /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES|COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES|scaffold-only whitelist/,
+  "architect prompt should not preserve a source-less scaffold whitelist",
 );
 
 assert.match(
@@ -96,13 +90,13 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /source_resource_id: one source-inbox id, or null only if the page is on the scaffold-only whitelist/,
-  "single-source lineage rule should be explicit",
+  /source_resource_id: one visible source-inbox id/,
+  "single-source lineage rule should require a visible source id",
 );
 assert.match(
   promptSource,
-  /Any other page without source_resource_id must be filed as a gap/,
-  "non-whitelisted source-free pages should become gaps",
+  /Any page without source_resource_id must be filed as a gap, not a draft/,
+  "source-free pages should become gaps, not drafts",
 );
 assert.match(
   promptSource,
@@ -117,7 +111,7 @@ assert.match(
 assert.match(
   promptSource,
   /THIN-CONTEXT RULE/,
-  "thin-context fallback should be present",
+  "thin-context no-op rule should be present",
 );
 assert.match(
   promptSource,
@@ -136,13 +130,18 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /single\s+"Welcome"\s+category with one\s+"Welcome"\s+page/,
-  "thin-context fallback should be small",
+  /no ready source material[\s\S]*do NOT[\s\S]*create categories or draft pages[\s\S]*Return an empty changeset[\s\S]*needs_from_builder/,
+  "thin-context no-source runs should ask for context instead of creating a fallback page",
 );
 assert.match(
   promptSource,
-  /thin community profile should block only[\s\S]*source-less guessing[\s\S]*organize source-backed drafts/,
+  /thin community profile should block only[\s\S]*unsupported guessing[\s\S]*organize source-backed drafts/,
   "thin profile should not block source-backed organization",
+);
+assert.doesNotMatch(
+  promptSource,
+  /single\s+"Welcome"\s+category|single\s+"Welcome"\s+page|source-less guessing/,
+  "architect prompt should not instruct source-less Welcome fallback creation",
 );
 assert.match(
   promptSource,

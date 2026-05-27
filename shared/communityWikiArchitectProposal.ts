@@ -1,6 +1,5 @@
 import {
   COMMUNITY_WIKI_ARCHITECT_MAX_DRAFTS,
-  COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES,
   type CommunityWikiArchitectProposal,
 } from "./communityWikiArchitectPrompt.ts";
 import {
@@ -178,13 +177,10 @@ export function validateCommunityWikiArchitectProposal(
       }),
     ),
   );
-  const scaffoldOnlyTitles = new Set(
-    COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES.map((title) =>
-      normalizeCommunityResourceBuilderTitle(title),
-    ),
-  );
-
   const modulesCreated = validateObjectArray(getArrayField(proposal, "modules_created"), "$.modules_created", errors);
+  if (sourceIds.size === 0 && modulesCreated.length > 0) {
+    pushError(errors, "$.modules_created", "Cannot propose new modules without source-inbox material.");
+  }
   const proposedModuleNames = new Set<string>();
   for (const [index, row] of modulesCreated.entries()) {
     if (!isShortString(row.name, 120)) {
@@ -288,14 +284,9 @@ export function validateCommunityWikiArchitectProposal(
         pushError(errors, `$.drafts_created[${index}].title`, "A page with this module/title already exists.");
       }
     }
-    if (row.source_resource_id !== null && !isShortString(row.source_resource_id, 160)) {
-      pushError(errors, `$.drafts_created[${index}].source_resource_id`, "source_resource_id must be a source id or null.");
-    } else if (row.source_resource_id === null) {
-      const normalizedTitle = normalizeCommunityResourceBuilderTitle(row.title);
-      if (!scaffoldOnlyTitles.has(normalizedTitle)) {
-        pushError(errors, `$.drafts_created[${index}].source_resource_id`, "Only scaffold-whitelist pages may omit source_resource_id.");
-      }
-    } else if (typeof row.source_resource_id === "string") {
+    if (!isShortString(row.source_resource_id, 160)) {
+      pushError(errors, `$.drafts_created[${index}].source_resource_id`, "source_resource_id is required for every draft page.");
+    } else {
       if (!sourceIds.has(row.source_resource_id)) {
         pushError(errors, `$.drafts_created[${index}].source_resource_id`, "source_resource_id does not exist in source inbox.");
       }

@@ -393,21 +393,18 @@ function buildWikiArchitectValidationInput(args: {
   };
 }
 
-function buildAppliedDraftScaffoldBody(args: {
+function buildAppliedDraftPlaceholderBody(args: {
   title: string;
   purpose: string;
-  hasSource: boolean;
 }): string {
   return [
     `# ${String(args.title ?? "").trim()}`,
     "",
-    "> Draft scaffold. This page is not in a live module yet.",
+    "> Draft page. This page is not in a live category yet.",
     "",
     `Purpose: ${String(args.purpose ?? "").trim()}`,
     "",
-    args.hasSource
-      ? "Source: linked source-inbox item. The page body still needs drafting from that source."
-      : "Source: scaffold-only page. Add source material later if this page needs deeper detail.",
+    "Source: linked source-inbox item. The page body still needs drafting from that source.",
   ].join("\n");
 }
 
@@ -1255,10 +1252,9 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       await writeCommunityResourceBodyContent(ctx, {
         communityId: args.communityId,
         resourceId: createdPage._id,
-        bodyMd: buildAppliedDraftScaffoldBody({
+        bodyMd: buildAppliedDraftPlaceholderBody({
           title: draft.title,
           purpose: draft.purpose,
-          hasSource: Boolean(source),
         }),
         nowMs,
         maxChars: 20_000,

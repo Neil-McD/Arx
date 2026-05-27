@@ -190,20 +190,20 @@ assert.match(
   /listCommunityResourceBuilderDirectory[\s\S]*health: buildCommunityResourceBuilderHealthReportFromRows/,
   "builder list should include the deterministic health summary",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES/,
-  "health should retain the tiny fallback-page whitelist",
+  /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES|isBuilderScaffoldPageTitle/,
+  "health should not exempt source-less fallback pages from quality checks",
 );
 assert.match(
   resources,
-  /sparsePages:[\s\S]*!isBuilderScaffoldPageTitle\(page\.title\)/,
-  "health check should not flag default scaffold pages as sparse placeholders",
+  /sparsePages:[\s\S]*communityResourceBodyChars\(page\) < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS/,
+  "health check should flag sparse pages without default scaffold exemptions",
 );
 assert.match(
   resources,
-  /pagesWithoutSourceLineage:[\s\S]*!isBuilderScaffoldPageTitle\(page\.title\)/,
-  "health check should not flag default scaffold pages as missing source lineage",
+  /pagesWithoutSourceLineage:[\s\S]*!normalizeIdValue\(page\.sourceResourceId \?\? ""\)/,
+  "health check should flag pages without source lineage without default scaffold exemptions",
 );
 assert.doesNotMatch(
   resources,

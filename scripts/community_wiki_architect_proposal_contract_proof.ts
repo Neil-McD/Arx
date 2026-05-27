@@ -30,6 +30,11 @@ assert.match(
   /source_dependencies|source_dependencies_added/,
   "validator should reject plural lineage fields",
 );
+assert.doesNotMatch(
+  validatorSource,
+  /COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES|scaffoldOnlyTitles|scaffold-whitelist/,
+  "validator must not preserve a source-less draft whitelist",
+);
 
 const baseInput: Omit<CommunityWikiArchitectProposalValidationInput, "proposal"> = {
   existingModules: [
@@ -130,22 +135,15 @@ const validResult = validateCommunityWikiArchitectProposal({
 });
 assert.equal(validResult.ok, true, JSON.stringify(validResult.errors, null, 2));
 
-const validThinFirstRun = validateCommunityWikiArchitectProposal({
+const validThinNoSourceFirstRun = validateCommunityWikiArchitectProposal({
   existingModules: [],
   existingPages: [],
   sourceInbox: [],
   proposal: {
     run_type: "first",
-    modules_created: [{ name: "Welcome", purpose: "Orient new members before the wiki has sources." }],
+    modules_created: [],
     modules_existing: [],
-    drafts_created: [
-      {
-        title: "Welcome",
-        module: "Welcome",
-        purpose: "A simple orientation page for new members.",
-        source_resource_id: null,
-      },
-    ],
+    drafts_created: [],
     drafts_updated: [],
     pages_left_unchanged: [],
     proposed_changes_to_existing: [],
@@ -154,10 +152,38 @@ const validThinFirstRun = validateCommunityWikiArchitectProposal({
     gaps: [],
     deferred: [],
     recommended_next_uploads: [],
-    needs_from_builder: ["Add community context before deeper scaffolding."],
+    needs_from_builder: ["Add source material or builder context before creating Resources pages."],
   },
 });
-assert.equal(validThinFirstRun.ok, true, JSON.stringify(validThinFirstRun.errors, null, 2));
+assert.equal(validThinNoSourceFirstRun.ok, true, JSON.stringify(validThinNoSourceFirstRun.errors, null, 2));
+
+const invalidThinNoSourceCategory = validateCommunityWikiArchitectProposal({
+  existingModules: [],
+  existingPages: [],
+  sourceInbox: [],
+  proposal: {
+    run_type: "first",
+    modules_created: [{ name: "Welcome", purpose: "Orient new members before the wiki has sources." }],
+    modules_existing: [],
+    drafts_created: [],
+    drafts_updated: [],
+    pages_left_unchanged: [],
+    proposed_changes_to_existing: [],
+    sources_assigned: [],
+    sources_unassigned: [],
+    gaps: [],
+    deferred: [],
+    recommended_next_uploads: [],
+    needs_from_builder: ["Add source material."],
+  },
+});
+assert.equal(invalidThinNoSourceCategory.ok, false, "expected source-less category creation to be invalid");
+assert.ok(
+  invalidThinNoSourceCategory.errors.some(
+    (error) => error.path === "$.modules_created" && /without source-inbox material/.test(error.message),
+  ),
+  JSON.stringify(invalidThinNoSourceCategory.errors, null, 2),
+);
 
 function expectInvalid(proposal: unknown, expectedPath: string, expectedMessagePattern: RegExp): void {
   const result = validateCommunityWikiArchitectProposal({
@@ -276,7 +302,7 @@ expectInvalid(
     ],
   },
   "$.drafts_created[0].source_resource_id",
-  /scaffold-whitelist/,
+  /required/,
 );
 
 expectInvalid(
