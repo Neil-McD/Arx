@@ -8523,8 +8523,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 .funnel-editor-about-trigger:hover,
 .funnel-editor-about-trigger:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent-gold) 24%, var(--border-default));
-  background: color-mix(in srgb, var(--bg-card) 10%, transparent);
+  border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: transparent;
 }
 
 .funnel-editor-about-trigger.is-empty {
@@ -8534,8 +8534,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .funnel-editor-about-input {
-  border: 1px solid color-mix(in srgb, var(--accent-gold) 38%, var(--border-default));
-  background: color-mix(in srgb, var(--bg-card) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: transparent;
   overflow: hidden;
   resize: none;
   transition: border-color 140ms ease, background 140ms ease;
@@ -8547,8 +8547,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .funnel-editor-about-input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent-gold) 48%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-gold) 6%, transparent);
+  border-color: color-mix(in srgb, var(--border-default) 88%, transparent);
+  background: transparent;
 }
 
 .community-chat {
