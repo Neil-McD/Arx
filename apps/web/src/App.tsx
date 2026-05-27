@@ -4625,6 +4625,7 @@ export default function App() {
     setInferenceIssueModal,
     setThreadSendingStateById,
     setThreadStreamingStateById,
+    setRuntimeEventsByRunId,
   });
   useWebRuntimeRunLifecycle<
     AuthSession,

@@ -16,6 +16,8 @@ const experience = read("convex/communityExperience.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const launchModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const app = read("apps/web/src/App.tsx");
+const turnRunner = read("shared/useWebTurnRunnerController.ts");
+const runtimeLifecycle = read("apps/web/src/controllers/useWebRuntimeRunLifecycle.ts");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
@@ -409,6 +411,31 @@ assert.match(
   runtimeTimeline,
   /applyCloudCommunityResourceBuilderChangeset[\s\S]*getCloudCommunityResourceBuilderChangesetStatus[\s\S]*status === "applied"[\s\S]*dispatchCommunityResourcesMutated/,
   "approval card should verify applied changeset state before dispatching resource refresh",
+);
+assert.match(
+  app,
+  /useWebTurnRunnerController[\s\S]*setRuntimeEventsByRunId/,
+  "workspace turn runner should receive the durable runtime event cache setter",
+);
+assert.match(
+  turnRunner,
+  /eventName === "runtime_event"[\s\S]*current\.setRuntimeEventsByRunId[\s\S]*runtimeEventRunId[\s\S]*runtimeEvent[\s\S]*setThreadStreamingState/,
+  "live runtime events should be copied into the per-run cache before the streaming message is cleared",
+);
+assert.match(
+  runtimeLifecycle,
+  /function runtimeEventsIncludeFinished[\s\S]*event_type === "run_finished"/,
+  "persisted runtime event hydration should recognize terminal run events",
+);
+assert.match(
+  runtimeLifecycle,
+  /runtimeEventsHydratedByRunIdRef = useRef<Record<string, boolean>>\(\{\}\)/,
+  "persisted runtime event hydration should track runs already backfilled",
+);
+assert.match(
+  runtimeLifecycle,
+  /if \(runtimeEventsIncludeFinished\(params\.runtimeEventsByRunId\[runId\]\)\) continue;[\s\S]*if \(runtimeEventsHydratedByRunIdRef\.current\[runId\]\) continue;[\s\S]*runtimeEventsLoadingByRunIdRef\.current\[runId\] = true;[\s\S]*runtimeEventsHydratedByRunIdRef\.current\[runId\] = true/,
+  "persisted runtime event hydration should skip completed runs and backfill unfinished runs once",
 );
 assert.match(
   app,

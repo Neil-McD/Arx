@@ -9,6 +9,10 @@ type ThreadMessageLike = {
   run_id: string | null;
 };
 
+function runtimeEventsIncludeFinished(rows: ThreadStreamingRuntimeEvent[] | undefined): boolean {
+  return Array.isArray(rows) && rows.some((row) => row.event_type === "run_finished");
+}
+
 export function useWebRuntimeRunLifecycle<
   SessionT,
   ThreadMessageT extends ThreadMessageLike,
@@ -32,6 +36,7 @@ export function useWebRuntimeRunLifecycle<
 }) {
   const threadStreamingStateByIdRef = useRef(params.threadStreamingStateById);
   const runtimeEventsLoadingByRunIdRef = useRef<Record<string, boolean>>({});
+  const runtimeEventsHydratedByRunIdRef = useRef<Record<string, boolean>>({});
   const activeRuntimeRunHydrationByThreadIdRef = useRef<Record<string, boolean>>({});
   const loadThreadsRef = useRef(params.loadThreads);
   const loadThreadMessagesRef = useRef(params.loadThreadMessages);
@@ -60,6 +65,7 @@ export function useWebRuntimeRunLifecycle<
     if (params.session) return;
     params.setRuntimeEventsByRunId({});
     runtimeEventsLoadingByRunIdRef.current = {};
+    runtimeEventsHydratedByRunIdRef.current = {};
     activeRuntimeRunHydrationByThreadIdRef.current = {};
   }, [params.session, params.setRuntimeEventsByRunId]);
 
@@ -247,7 +253,8 @@ export function useWebRuntimeRunLifecycle<
       ),
     );
     for (const runId of runIds) {
-      if (params.runtimeEventsByRunId[runId]?.length) continue;
+      if (runtimeEventsIncludeFinished(params.runtimeEventsByRunId[runId])) continue;
+      if (runtimeEventsHydratedByRunIdRef.current[runId]) continue;
       if (runtimeEventsLoadingByRunIdRef.current[runId]) continue;
       runtimeEventsLoadingByRunIdRef.current[runId] = true;
       void listConvexCloudRuntimeRunEvents({
@@ -261,6 +268,7 @@ export function useWebRuntimeRunLifecycle<
             ...prev,
             [runId]: rows,
           }));
+          runtimeEventsHydratedByRunIdRef.current[runId] = true;
         })
         .catch(() => null)
         .finally(() => {

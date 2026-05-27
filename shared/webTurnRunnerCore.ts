@@ -84,6 +84,7 @@ export type UseWebTurnRunnerControllerArgs<
   setThreadStreamingStateById: Dispatch<
     SetStateAction<Record<string, ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>>>
   >;
+  setRuntimeEventsByRunId: Dispatch<SetStateAction<Record<string, ThreadStreamingRuntimeEvent[]>>>;
 };
 
 export type PublicTurnThreadMessage = {

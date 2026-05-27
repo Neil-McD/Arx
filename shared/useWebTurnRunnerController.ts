@@ -896,6 +896,16 @@ export function useWebTurnRunnerController<
                 payload: parsed?.payload ?? null,
                 created_at: runtimeEventCreatedAt,
               };
+              current.setRuntimeEventsByRunId((prev) => {
+                const existing = prev[runtimeEventRunId] ?? [];
+                if (existing.some((row) => row.id === runtimeEvent.id)) return prev;
+                return {
+                  ...prev,
+                  [runtimeEventRunId]: [...existing, runtimeEvent].sort(
+                    (a, b) => a.seq - b.seq,
+                  ),
+                };
+              });
               if (exposeStreamingUi) {
                 setThreadStreamingState(threadId, (entry) => {
                   if (!entry) return entry;
