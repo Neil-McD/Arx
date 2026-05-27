@@ -323,7 +323,6 @@ function hasCommunityResourceBuilderTools(
   return (
     allowedToolNames.includes("community_resource_builder_list") ||
     allowedToolNames.includes("community_resource_builder_read") ||
-    allowedToolNames.includes("community_resource_builder_health") ||
     allowedToolNames.includes("community_resource_builder_stage_changeset") ||
     allowedToolNames.includes("community_resource_builder_apply_changeset")
   );

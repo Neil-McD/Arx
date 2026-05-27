@@ -29,7 +29,6 @@ export {
   generateCommunityResourceSourceUploadUrl,
   getGitHubSourceConnectionStatus,
   getGoogleDriveSourceConnectionStatus,
-  getCommunityResourceBuilderHealth,
   crawlCommunitySourceRoot,
   getCommunitySourceCrawlJob,
   getCommunitySourceCrawlerStatus,

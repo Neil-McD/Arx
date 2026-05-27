@@ -5743,32 +5743,6 @@ export const editCommunityResourceBuilderResource = mutation({
   },
 });
 
-export const getCommunityResourceBuilderHealth = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    return await buildCommunityResourceBuilderHealthReport({
-      ctx,
-      communityId: args.communityId,
-      nowMs: Number.isFinite(args.nowMs) ? Number(args.nowMs) : Date.now(),
-    });
-  },
-});
-
 export const compactCommunityResourceBodyStorage = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -5917,7 +5891,7 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
   };
   return {
     ok: true,
-    kind: "community_resource_builder_health",
+    kind: "community_resource_builder_health_report",
     checked_at: toIsoString(args.nowMs),
     summary: {
       modules: modules.length,

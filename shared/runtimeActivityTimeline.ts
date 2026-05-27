@@ -255,7 +255,6 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
     const target = resourceId || moduleId;
     return `Read resource builder item${target ? ` ${truncateLabel(target, 48)}` : ""}`;
   }
-  if (toolName === "community_resource_builder_health") return "Checked resource health";
   if (toolName === "community_resource_builder_stage_changeset") return "Staged resource changeset";
   if (toolName === "community_resource_builder_apply_changeset") return "Applied resource changeset";
   if (toolName === "community_search") return `Searched community${query ? ` for ${truncateLabel(query, 48)}` : ""}`;

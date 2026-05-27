@@ -774,11 +774,6 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     description: "Manager-only Resources Architect tool. Read one resource or category by semantic ref: category/module name, page/source title, resource id, module id, resources:// URI, or readable path.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA,
   },
-  community_resource_builder_health: {
-    name: "community_resource_builder_health",
-    description: "Manager-only Resources Architect tool. Inspect Resources wiki health, empty categories, sparse pages, missing source lineage, stale drafts, and unreferenced sources.",
-    inputSchema: EMPTY_TOOL_SCHEMA,
-  },
   community_resource_builder_stage_changeset: {
     name: "community_resource_builder_stage_changeset",
     description: "Manager-only Resources Architect tool. Validate and stage a proposed resource changeset without mutating categories or pages.",
@@ -1488,9 +1483,6 @@ export function normalizeToolArguments(
           }
         : null),
     };
-  }
-  if (toolName === "community_resource_builder_health") {
-    return {};
   }
   if (toolName === "community_resource_builder_stage_changeset") {
     const summary = normalizeString(args.summary);

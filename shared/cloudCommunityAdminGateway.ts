@@ -1564,19 +1564,6 @@ export async function createCloudCommunityResourcePageDraftFromSource<SessionT, 
   return payload as TResource;
 }
 
-export async function getCloudCommunityResourceBuilderHealth<SessionT, THealth = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<THealth> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityResourceBuilderHealth" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return payload as THealth;
-}
-
 export async function approveCloudCommunityResourceBuilderChangeset<SessionT, TResult = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;

@@ -32,7 +32,6 @@ export const COMMUNITY_MANAGER_PLATFORM_SKILLS: PlatformSkillSummary[] = [
 export const PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES = [
   "community_resource_builder_list",
   "community_resource_builder_read",
-  "community_resource_builder_health",
   "community_resource_builder_stage_changeset",
   "community_resource_builder_apply_changeset",
 ] as const satisfies readonly RetrievalToolName[];

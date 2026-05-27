@@ -288,7 +288,6 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
     const target = resourceId || moduleId;
     return `Read builder item${target ? `: ${target}` : ""}`;
   }
-  if (toolName === "community_resource_builder_health") return "Resource health";
   if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
   if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;

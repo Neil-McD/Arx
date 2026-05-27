@@ -33,7 +33,6 @@ function main() {
   assert.deepEqual(PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES, [
     "community_resource_builder_list",
     "community_resource_builder_read",
-    "community_resource_builder_health",
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
   ]);
@@ -270,7 +269,7 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
-    "Broad read workflow: list the live resource directory first",
+    "Broad read workflow: map or list the live Resources wiki first",
     "member resource lane broad read workflow",
   );
   assertIncludes(

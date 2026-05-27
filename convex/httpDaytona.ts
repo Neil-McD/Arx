@@ -776,44 +776,6 @@ async function executeRetrievalHarnessTool(params: {
     }
   }
 
-  if (params.toolName === "community_resource_builder_health") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_builder_health requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runQuery(
-        api.communityResources.getCommunityResourceBuilderHealth as any,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_builder_health_failed",
-        errorMessage: message || "Community resource builder health failed.",
-      };
-    }
-  }
-
   if (params.toolName === "community_resource_builder_stage_changeset") {
     if (!params.communityId) {
       return {

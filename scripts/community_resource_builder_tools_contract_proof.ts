@@ -31,7 +31,6 @@ for (const exportName of [
   "readCommunityResourceBuilderResource",
   "writeCommunityResourceBuilderResource",
   "editCommunityResourceBuilderResource",
-  "getCommunityResourceBuilderHealth",
   "stageCommunityResourceBuilderChangeset",
   "getCommunityResourceBuilderChangesetStatus",
   "approveCommunityResourceBuilderChangeset",
@@ -62,11 +61,6 @@ assert.match(
   resources,
   /editCommunityResourceBuilderResource[\s\S]*await requireCommunityManager/,
   "builder edit must be owner/admin/manager gated",
-);
-assert.match(
-  resources,
-  /getCommunityResourceBuilderHealth[\s\S]*await requireCommunityManager/,
-  "builder health must be owner/admin/manager gated",
 );
 assert.match(
   resources,
@@ -123,7 +117,7 @@ assert.match(
 
 const builderEditBody = resources.slice(
   resources.indexOf("export const editCommunityResourceBuilderResource"),
-  resources.indexOf("export const getCommunityResourceBuilderHealth"),
+  resources.indexOf("export const compactCommunityResourceBodyStorage"),
 );
 assert.ok(builderEditBody.length > 0, "builder edit body should be discoverable");
 assert.doesNotMatch(
@@ -215,10 +209,10 @@ assert.doesNotMatch(
   /export const ensureCommunityResourceWikiScaffold/,
   "builder surface should not expose a direct scaffold mutation",
 );
-assert.match(
+assert.doesNotMatch(
   gateway,
-  /getCloudCommunityResourceBuilderHealth[\s\S]*community:getCommunityResourceBuilderHealth/,
-  "gateway should expose builder health for explicit builder surfaces",
+  /getCloudCommunityResourceBuilderHealth|community:getCommunityResourceBuilderHealth/,
+  "standalone builder health should not be exposed through the frontend gateway",
 );
 assert.doesNotMatch(
   gateway,

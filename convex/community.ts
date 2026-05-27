@@ -88,7 +88,6 @@ import {
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
   getGitHubSourceConnectionStatus as getGitHubSourceConnectionStatusImpl,
   getGoogleDriveSourceConnectionStatus as getGoogleDriveSourceConnectionStatusImpl,
-  getCommunityResourceBuilderHealth as getCommunityResourceBuilderHealthImpl,
   crawlCommunitySourceRoot as crawlCommunitySourceRootImpl,
   getCommunitySourceCrawlJob as getCommunitySourceCrawlJobImpl,
   getCommunitySourceCrawlerStatus as getCommunitySourceCrawlerStatusImpl,
@@ -225,7 +224,6 @@ export const applyCommunityResourceBuilderChangeset = applyCommunityResourceBuil
 export const readCommunityResourceBuilderResource = readCommunityResourceBuilderResourceImpl;
 export const writeCommunityResourceBuilderResource = writeCommunityResourceBuilderResourceImpl;
 export const editCommunityResourceBuilderResource = editCommunityResourceBuilderResourceImpl;
-export const getCommunityResourceBuilderHealth = getCommunityResourceBuilderHealthImpl;
 export const applyCommunityWikiArchitectProposal: any = applyCommunityWikiArchitectProposalImpl;
 export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;

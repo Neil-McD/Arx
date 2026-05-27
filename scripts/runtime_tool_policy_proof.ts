@@ -57,7 +57,6 @@ function proveFixedPolicyBoundaries() {
     "community_resources_search",
     "community_resource_builder_list",
     "community_resource_builder_read",
-    "community_resource_builder_health",
     "community_search",
     "web_research",
     "list_dir",
@@ -119,7 +118,6 @@ function proveFixedPolicyBoundaries() {
     "community_resources_search",
     "community_resource_builder_list",
     "community_resource_builder_read",
-    "community_resource_builder_health",
   ] as const satisfies readonly RetrievalToolName[]) {
     assert.equal(getFixedRuntimeToolPolicy(toolName).category, "community");
     assert.equal(getFixedRuntimeToolPolicy(toolName).requiresCommunity, true);
