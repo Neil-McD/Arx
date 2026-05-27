@@ -240,7 +240,7 @@ export function resolveAllowedToolNames(params: {
     );
   }
   if (params.activeCapabilityFamilies.includes("web_research")) {
-    toolNames.push("web_research");
+    toolNames.push("web_research", "web_crawl");
   }
   if (params.activeCapabilityFamilies.includes("workspace_tools")) {
     toolNames.push(

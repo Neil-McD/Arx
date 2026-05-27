@@ -88,6 +88,7 @@ import {
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
   getGitHubSourceConnectionStatus as getGitHubSourceConnectionStatusImpl,
   getGoogleDriveSourceConnectionStatus as getGoogleDriveSourceConnectionStatusImpl,
+  crawlWebRoot as crawlWebRootImpl,
   crawlCommunitySourceRoot as crawlCommunitySourceRootImpl,
   getCommunitySourceCrawlJob as getCommunitySourceCrawlJobImpl,
   getCommunitySourceCrawlerStatus as getCommunitySourceCrawlerStatusImpl,
@@ -276,6 +277,7 @@ export const finalizeGitHubSourceOAuth: any = finalizeGitHubSourceOAuthImpl;
 export const generateCommunityResourceSourceUploadUrl = generateCommunityResourceSourceUploadUrlImpl;
 export const getGitHubSourceConnectionStatus = getGitHubSourceConnectionStatusImpl;
 export const getGoogleDriveSourceConnectionStatus = getGoogleDriveSourceConnectionStatusImpl;
+export const crawlWebRoot: any = crawlWebRootImpl;
 export const crawlCommunitySourceRoot: any = crawlCommunitySourceRootImpl;
 export const getCommunitySourceCrawlJob = getCommunitySourceCrawlJobImpl;
 export const getCommunitySourceCrawlerStatus = getCommunitySourceCrawlerStatusImpl;

@@ -35,6 +35,14 @@ DEFAULT_MAX_PAGES = read_int_env("POLYNET_CRAWLER_DEFAULT_MAX_PAGES", 75)
 MAX_PAGES = read_int_env("POLYNET_CRAWLER_MAX_PAGES", 100)
 DEFAULT_MAX_DEPTH = read_int_env("POLYNET_CRAWLER_DEFAULT_MAX_DEPTH", 3)
 MAX_DEPTH = read_int_env("POLYNET_CRAWLER_MAX_DEPTH", 4)
+MARKDOWN_TEXT_KEYS = (
+    "fit_markdown",
+    "raw_markdown",
+    "markdown",
+    "text",
+    "markdown_with_citations",
+    "references_markdown",
+)
 
 
 class CrawlRequest(BaseModel):
@@ -111,21 +119,53 @@ def requested_crawl_limits(payload: CrawlRequest) -> tuple[int, int]:
     return max(1, min(page_count, MAX_PAGES)), max(0, min(depth, MAX_DEPTH))
 
 
-def markdown_text(raw: Any) -> str:
-    if raw is None:
+def markdown_text(raw: Any, depth: int = 0) -> str:
+    if raw is None or depth > 5:
         return ""
     if isinstance(raw, str):
-        return raw
-    for key in ("fit_markdown", "raw_markdown", "markdown", "text"):
-        value = getattr(raw, key, None)
-        if isinstance(value, str) and value.strip():
-            return value
+        return raw.strip()
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", errors="replace").strip()
     if isinstance(raw, dict):
-        for key in ("fit_markdown", "raw_markdown", "markdown", "text"):
-            value = raw.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-    return str(raw)
+        for key in MARKDOWN_TEXT_KEYS:
+            text = markdown_text(raw.get(key), depth + 1)
+            if text.strip():
+                return text
+        for value in raw.values():
+            text = markdown_text(value, depth + 1)
+            if text.strip():
+                return text
+        return ""
+    for method_name in ("model_dump", "dict"):
+        method = getattr(raw, method_name, None)
+        if callable(method):
+            try:
+                text = markdown_text(method(), depth + 1)
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+    for key in MARKDOWN_TEXT_KEYS:
+        text = markdown_text(getattr(raw, key, None), depth + 1)
+        if text.strip():
+            return text
+    raw_dict = getattr(raw, "__dict__", None)
+    if isinstance(raw_dict, dict):
+        text = markdown_text(raw_dict, depth + 1)
+        if text.strip():
+            return text
+    fallback = str(raw).strip()
+    if fallback and fallback not in {"{}", "[]", "None"} and not fallback.startswith("<"):
+        return fallback
+    return ""
+
+
+def result_markdown(result: Any) -> str:
+    for key in ("markdown", "text", "cleaned_html", "html"):
+        text = markdown_text(getattr(result, key, None))
+        if text:
+            return text
+    return ""
 
 
 def result_row(result: Any, requested_url: str, root_url: str) -> dict[str, Any]:
@@ -137,7 +177,7 @@ def result_row(result: Any, requested_url: str, root_url: str) -> dict[str, Any]
         "url": final_url,
         "success": bool(getattr(result, "success", True)),
         "title": metadata.get("title") or getattr(result, "title", None),
-        "markdown": markdown_text(getattr(result, "markdown", "")),
+        "markdown": result_markdown(result),
         "links": getattr(result, "links", {}) or {},
         "metadata": {
             **metadata,

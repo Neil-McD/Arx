@@ -48,6 +48,7 @@ export const WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION = {
   search: 0.005,
   open_page: 0.001,
   find_in_page: 0.001,
+  crawl: 0.03,
 } as const;
 export const VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS = 1;
 export const OPENAI_VOICE_TRANSCRIPTION_USD_PER_MINUTE_BY_MODEL = {

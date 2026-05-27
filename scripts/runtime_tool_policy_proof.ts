@@ -76,6 +76,7 @@ function proveFixedPolicyBoundaries() {
     "community_write",
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
+    "web_crawl",
     "write",
     "edit",
     "bash",

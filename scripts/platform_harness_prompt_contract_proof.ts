@@ -146,6 +146,7 @@ function provePromptEntrypoints() {
       "community_search",
       "community_write",
       "web_research",
+      "web_crawl",
       "read",
       "write",
       "bash",
@@ -174,8 +175,9 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /AGENT_OPERATING_POLICY/);
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);
-  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_write,web_research,read,write,bash/);
+  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_write,web_research,web_crawl,read,write,bash/);
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
+  assert.match(platformHarnessPrompt, /Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL/);
   assert.match(platformHarnessPrompt, /Use get_active_community_context when the answer depends on the active community's identity/);
   assert.match(platformHarnessPrompt, /Use community_resources_map first/);
   assert.match(platformHarnessPrompt, /Use community_resources_read to batch-read/);
@@ -230,7 +232,7 @@ function provePromptEntrypoints() {
   });
   assert.match(
     builderHarnessPrompt,
-    /community_resource_builder_read with ref to inspect a module, page, source, readable path, resources:\/\/ URI, or exact id/,
+    /community_resource_builder_read with ref to inspect a wiki category, page, source, readable path, resources:\/\/ URI, or exact id/,
   );
   assert.match(builderHarnessPrompt, /retry with the most specific directory_uri/);
   assert.match(builderHarnessPrompt, /wait for explicit builder approval before calling community_resource_builder_apply_changeset/);
@@ -352,8 +354,8 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeTurnResolutionSource,
-    /if \(params\.activeCapabilityFamilies\.includes\("web_research"\)\)[\s\S]*toolNames\.push\("web_research"\)/,
-    "web research should be exposed by capability family, not product tier",
+    /if \(params\.activeCapabilityFamilies\.includes\("web_research"\)\)[\s\S]*toolNames\.push\("web_research", "web_crawl"\)/,
+    "web research and crawl should be exposed by capability family, not product tier",
   );
   assert.match(
     runtimeTurnResolutionSource,

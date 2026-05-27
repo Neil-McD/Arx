@@ -259,7 +259,7 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
     return "computer";
   }
   if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
-  if (toolName === "web_research") return "web";
+  if (toolName === "web_research" || toolName === "web_crawl") return "web";
   if (toolName === "get_active_community_context" || toolName.startsWith("community_")) return "community";
   return "other";
 }
@@ -334,6 +334,7 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
     }
     return "Web research";
   }
+  if (toolName === "web_crawl") return `Web crawl${summarizeUrlLabel(url) ? `: ${summarizeUrlLabel(url)}` : ""}`;
   return toolName;
 }
 
@@ -341,6 +342,7 @@ function buildCallHref(toolName: string, args: Record<string, unknown> | null): 
   if (toolName === "computer_open_url") {
     return normalizeHttpUrl(toStringValue(args?.url));
   }
+  if (toolName === "web_crawl") return normalizeHttpUrl(toStringValue(args?.url));
   if (toolName !== "web_research") return null;
   const action = toStringValue(args?.action);
   const url = toStringValue(args?.url);
@@ -358,7 +360,7 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
   const commands = calls.filter((call) => call.toolName === "bash").length;
   const computerCalls = calls.filter((call) => call.category === "computer").length;
   const docsCalls = calls.filter((call) => call.category === "docs").length;
-  const webCalls = calls.filter((call) => call.toolName === "web_research").length;
+  const webCalls = calls.filter((call) => call.toolName === "web_research" || call.toolName === "web_crawl").length;
   const communityCalls = calls.filter((call) => call.toolName.startsWith("community_")).length;
   const prefix =
     category === "exploration"

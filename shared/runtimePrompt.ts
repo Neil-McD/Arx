@@ -445,6 +445,15 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Use short, specific search queries. Refine noisy searches instead of overstuffing the first query.",
     );
   }
+  if (params.allowedToolNames.includes("web_crawl")) {
+    toolGuidance.push(
+      "- Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL and asks for comprehensive extraction, structure, or page-tree understanding.",
+      "- Use web_research for search and one-page lookup; use web_crawl for bounded same-origin crawling. Do not use workspace shell scraping as the primary crawl path when web_crawl is available.",
+      hasCommunityResourceBuilderTools(params.allowedToolNames)
+        ? "- For Resources Architect URL extraction/import requests, call web_crawl with destination active_community_sources, then inspect the saved source records before staging resource changes."
+        : "- Use web_crawl with destination context unless the user is explicitly importing into an active community Resources workflow.",
+    );
+  }
   toolGuidance.push(
     "- When a connected app/MCP tool fails, treat the failure as app-specific evidence rather than a platform break: identify the app, classify auth/permission/argument/rate-limit/provider issues, and say what is verified versus unknown.",
     "- Do not repeatedly call the same failing connected-app tool. Correct invalid arguments once when the schema/error makes the fix clear; otherwise skip that app and continue with other apps when the task spans multiple integrations.",

@@ -106,6 +106,7 @@ const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES = 2_500_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS = 50_000;
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES = 10_000_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS = 12_000;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_TIMEOUT_MS = 90_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_REDIRECTS = 3;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS = 10;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES = 10;
@@ -120,6 +121,9 @@ const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 75;
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 100;
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 3;
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 4;
+const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS = 40_000;
+const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS = 80_000;
+const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS = 8_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_DENIED_HOSTNAME_SUFFIXES = [
   ".localhost",
   ".local",
@@ -945,9 +949,13 @@ async function readResponseTextBounded(
   return text;
 }
 
-async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       ...init,
@@ -1343,33 +1351,45 @@ async function crawlSourceRootWithCrawl4AI(args: {
 }): Promise<CommunitySourcePageResult[]> {
   const preflight = await fetchSourceUrlViaConfiguredFetcher(args.rootUrl);
   const crawlerRootUrl = requireSafeSourceIngestionUrl(preflight.finalUrl);
-  const response = await fetchWithTimeout(sourceCrawlerEndpointUrl("/crawl"), {
-    method: "POST",
-    headers: crawl4AiHeaders(),
-    body: JSON.stringify({
-      urls: [crawlerRootUrl],
-      browser_config: {
-        type: "BrowserConfig",
-        params: { headless: true },
-      },
-      crawler_config: {
-        type: "CrawlerRunConfig",
-        params: {
-          stream: false,
-          cache_mode: "bypass",
-          markdown_generator_options: { include_links: true },
-          deep_crawl_strategy: {
-            type: "BFSDeepCrawlStrategy",
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      sourceCrawlerEndpointUrl("/crawl"),
+      {
+        method: "POST",
+        headers: crawl4AiHeaders(),
+        body: JSON.stringify({
+          urls: [crawlerRootUrl],
+          browser_config: {
+            type: "BrowserConfig",
+            params: { headless: true },
+          },
+          crawler_config: {
+            type: "CrawlerRunConfig",
             params: {
-              max_depth: args.maxDepth,
-              max_pages: args.maxPages,
-              include_external: false,
+              stream: false,
+              cache_mode: "bypass",
+              markdown_generator_options: { include_links: true },
+              deep_crawl_strategy: {
+                type: "BFSDeepCrawlStrategy",
+                params: {
+                  max_depth: args.maxDepth,
+                  max_pages: args.maxPages,
+                  include_external: false,
+                },
+              },
             },
           },
-        },
+        }),
       },
-    }),
-  });
+      COMMUNITY_RESOURCE_SOURCE_CRAWLER_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("community_source_crawl4ai_timeout");
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(`community_source_crawl4ai_failed_${response.status}`);
   const rawPayload = await readResponseTextBounded(
     response,
@@ -1424,6 +1444,72 @@ async function crawlSourceRootWithConfiguredProvider(args: {
     ? await crawlSourceRootWithCrawl4AI({ rootUrl, maxPages, maxDepth })
     : await crawlSourceRootWithSimpleFetcher({ rootUrl });
   return { provider, pages };
+}
+
+function normalizeWebCrawlStrategyProvider(raw: unknown): CommunitySourceCrawlerProvider | undefined {
+  const strategy = normalizeSourceIntegrationString(raw, 20).toLowerCase();
+  if (strategy === "simple") return "simple";
+  if (strategy === "crawl") return "crawl4ai";
+  return undefined;
+}
+
+function normalizeWebCrawlContextBudget(raw: unknown): number {
+  const value = Math.floor(Number(raw));
+  if (!Number.isFinite(value) || value <= 0) {
+    return COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS;
+  }
+  return Math.min(value, COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS);
+}
+
+function buildWebCrawlContextPayload(args: {
+  rootUrl: string;
+  provider: CommunitySourceCrawlerProvider;
+  pages: CommunitySourcePageResult[];
+  maxChars?: number;
+}): Record<string, unknown> {
+  const budgetChars = normalizeWebCrawlContextBudget(args.maxChars);
+  let usedChars = 0;
+  const pagePayloads: Record<string, unknown>[] = [];
+  for (const page of args.pages) {
+    if (usedChars >= budgetChars) break;
+    const pageBudget = Math.min(
+      COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS,
+      Math.max(0, budgetChars - usedChars),
+    );
+    const markdown = String(page.markdown ?? "");
+    const markdownPreview = markdown.slice(0, pageBudget);
+    usedChars += markdownPreview.length;
+    pagePayloads.push({
+      requested_url: page.requested_url,
+      final_url: page.final_url,
+      canonical_url: page.canonical_url,
+      parent_url: page.parent_url,
+      depth: page.depth,
+      title: page.title,
+      status: page.status,
+      error: page.error,
+      chars: markdown.length,
+      markdown_preview: markdownPreview,
+      truncated: markdownPreview.length < markdown.length,
+      links: page.links.slice(0, 20),
+    });
+  }
+  const readyPages = args.pages.filter((page) => page.status === "ready");
+  return {
+    ok: true,
+    kind: "web_crawl",
+    destination: "context",
+    provider: args.provider,
+    root_url: args.rootUrl,
+    page_count: args.pages.length,
+    ready_page_count: readyPages.length,
+    failed_page_count: args.pages.length - readyPages.length,
+    returned_page_count: pagePayloads.length,
+    pages_omitted: Math.max(0, args.pages.length - pagePayloads.length),
+    content_budget_chars: budgetChars,
+    content_used_chars: usedChars,
+    pages: pagePayloads,
+  };
 }
 
 function titleFromSourceCrawlerUrl(rawUrl: string): string {
@@ -9363,6 +9449,135 @@ export const processCommunitySourceCrawlJobInternal = internalAction({
         job: failed,
         error: message,
       };
+    }
+  },
+});
+
+export const crawlWebRoot: any = action({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.optional(v.id("communities")),
+    rootUrl: v.string(),
+    strategy: v.optional(v.union(v.literal("auto"), v.literal("simple"), v.literal("crawl"))),
+    destination: v.optional(v.union(v.literal("context"), v.literal("active_community_sources"))),
+    maxPages: v.optional(v.number()),
+    maxDepth: v.optional(v.number()),
+    maxChars: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const userId = args.userId ?? await resolveAuthenticatedActionUserId(ctx, args.authSubject ?? null);
+    const rootUrl = requireSafeSourceIngestionUrl(args.rootUrl);
+    const destination = args.destination === "active_community_sources"
+      ? "active_community_sources"
+      : "context";
+    const provider = normalizeWebCrawlStrategyProvider(args.strategy) ?? normalizeSourceCrawlerProvider();
+    const maxPages = normalizeSourceCrawlerLimit(
+      args.maxPages,
+      COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES,
+      COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES,
+    );
+    const maxDepth = normalizeSourceCrawlerLimit(
+      args.maxDepth,
+      COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH,
+      COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH,
+    );
+
+    if (destination === "context") {
+      const crawl = await crawlSourceRootWithConfiguredProvider({
+        rootUrl,
+        maxPages,
+        maxDepth,
+        provider,
+      });
+      return buildWebCrawlContextPayload({
+        rootUrl,
+        provider: crawl.provider,
+        pages: crawl.pages,
+        maxChars: args.maxChars,
+      });
+    }
+
+    if (!args.communityId) throw new Error("web_crawl_active_community_required");
+    await requireCommunityManagerForAction(ctx, userId, args.communityId);
+    const job = await ctx.runMutation((internal as any).communityResources.createCommunitySourceCrawlJobInternal, {
+      userId,
+      communityId: args.communityId,
+      rootUrl,
+      provider,
+      maxPages,
+      maxDepth,
+    });
+    const crawlJobId = String(job?.id ?? "").trim();
+    if (!crawlJobId) throw new Error("community_source_crawl_job_create_failed");
+    try {
+      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
+        crawlJobId,
+        status: "crawling",
+        startedAt: Date.now(),
+      });
+      const crawl = await crawlSourceRootWithConfiguredProvider({
+        rootUrl,
+        maxPages,
+        maxDepth,
+        provider,
+      });
+      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
+        crawlJobId,
+        status: "saving_sources",
+        pageCount: crawl.pages.length,
+        readyPageCount: crawl.pages.filter((page) => page.status === "ready").length,
+        failedPageCount: crawl.pages.filter((page) => page.status !== "ready").length,
+      });
+      const saved = await ctx.runMutation(
+        (internal as any).communityResources.saveCommunitySourceCrawlPagesInternal,
+        {
+          crawlJobId,
+          communityId: args.communityId,
+          userId,
+          rootUrl,
+          provider: crawl.provider,
+          pages: crawl.pages,
+        },
+      );
+      const sourceResourceIds = Array.isArray(saved?.source_resource_ids)
+        ? saved.source_resource_ids.map((id: unknown) => String(id ?? "").trim()).filter(Boolean)
+        : [];
+      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
+        crawlJobId,
+        status: sourceResourceIds.length > 0 ? "ready" : "failed",
+        pageCount: Number(saved?.page_count ?? crawl.pages.length),
+        readyPageCount: Number(saved?.ready_page_count ?? 0),
+        failedPageCount: Number(saved?.failed_page_count ?? 0),
+        savedSourceCount: Number(saved?.saved_source_count ?? 0),
+        skippedSourceCount: Number(saved?.skipped_source_count ?? 0),
+        sourceResourceIds,
+        error: sourceResourceIds.length > 0 ? null : "community_source_crawl_no_usable_sources",
+        completedAt: Date.now(),
+      });
+      return {
+        ok: sourceResourceIds.length > 0,
+        kind: "web_crawl",
+        destination,
+        provider: crawl.provider,
+        root_url: rootUrl,
+        crawl_job_id: crawlJobId,
+        page_count: Number(saved?.page_count ?? crawl.pages.length),
+        ready_page_count: Number(saved?.ready_page_count ?? 0),
+        failed_page_count: Number(saved?.failed_page_count ?? 0),
+        saved_source_count: Number(saved?.saved_source_count ?? 0),
+        skipped_source_count: Number(saved?.skipped_source_count ?? 0),
+        source_resource_ids: sourceResourceIds,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "web_crawl_failed";
+      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
+        crawlJobId,
+        status: "failed",
+        error: message,
+        completedAt: Date.now(),
+      });
+      throw error;
     }
   },
 });

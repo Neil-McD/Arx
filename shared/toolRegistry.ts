@@ -78,6 +78,45 @@ const WEB_RESEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const WEB_CRAWL_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["url"],
+  properties: {
+    url: {
+      type: "string",
+      minLength: 1,
+      maxLength: 2048,
+    },
+    strategy: {
+      type: "string",
+      enum: ["auto", "simple", "crawl"],
+      description: "auto uses the configured platform crawler, simple reads one page, crawl requires the robust crawler provider.",
+    },
+    destination: {
+      type: "string",
+      enum: ["context", "active_community_sources"],
+      description: "context returns bounded crawl output; active_community_sources saves crawled pages as source records for the active community.",
+    },
+    max_pages: {
+      type: "integer",
+      minimum: 1,
+      maximum: 100,
+    },
+    max_depth: {
+      type: "integer",
+      minimum: 0,
+      maximum: 4,
+    },
+    max_chars: {
+      type: "integer",
+      minimum: 1000,
+      maximum: 80000,
+      description: "Maximum total crawled text returned to the model when destination is context.",
+    },
+  },
+};
+
 const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -800,6 +839,11 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "web_research",
     description: "Research the live web by searching documentation, opening a page, or finding text within a page.",
     inputSchema: WEB_RESEARCH_TOOL_SCHEMA,
+  },
+  web_crawl: {
+    name: "web_crawl",
+    description: "Crawl a provided site, wiki, docs, or course URL with bounded same-origin crawling. Use active_community_sources to save crawled pages as source records for the active community.",
+    inputSchema: WEB_CRAWL_TOOL_SCHEMA,
   },
   list_dir: {
     name: "list_dir",
@@ -1594,6 +1638,31 @@ export function normalizeToolArguments(
       };
     }
     throw new Error("web_research action must be search, open_page, or find_in_page.");
+  }
+  if (toolName === "web_crawl") {
+    const url = normalizeString(args.url);
+    if (!url) throw new Error("web_crawl requires url.");
+    const rawStrategy = normalizeString(args.strategy)?.toLowerCase();
+    const strategy =
+      rawStrategy === "simple" || rawStrategy === "crawl" || rawStrategy === "auto"
+        ? rawStrategy
+        : "auto";
+    const rawDestination = normalizeString(args.destination)?.toLowerCase();
+    const destination =
+      rawDestination === "active_community_sources"
+        ? "active_community_sources"
+        : "context";
+    const maxPages = normalizeBoundedInteger(args.max_pages, "web_crawl max_pages", 1, 100);
+    const maxDepth = normalizeBoundedInteger(args.max_depth, "web_crawl max_depth", 0, 4);
+    const maxChars = normalizeBoundedInteger(args.max_chars, "web_crawl max_chars", 1000, 80000);
+    return {
+      url: url.slice(0, 2048),
+      strategy,
+      destination,
+      ...(maxPages ? { maxPages } : null),
+      ...(maxDepth !== null ? { maxDepth } : null),
+      ...(maxChars ? { maxChars } : null),
+    };
   }
   if (toolName === "read") {
     const path = normalizeString(args.path);

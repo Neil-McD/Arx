@@ -182,6 +182,7 @@ function classifyTool(toolName: string, args: Record<string, unknown> | null): A
   if (toolName === "bash") return classifyBashCommand(toStringValue(args?.command));
   if (
     toolName === "web_research" ||
+    toolName === "web_crawl" ||
     toolName === "search_product_docs" ||
     toolName === "get_product_doc" ||
     toolName === "get_active_community_context" ||
@@ -242,6 +243,7 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
     if (action === "find_in_page") return `Searched page${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
     return "Used web research";
   }
+  if (toolName === "web_crawl") return `Crawled ${summarizeUrl(url) || "site"}`;
   if (toolName === "search_product_docs") return `Searched docs${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? ` ${truncateLabel(slug, 48)}` : ""}`;
   if (toolName === "get_active_community_context") return "Read community context";
@@ -288,6 +290,7 @@ function statsForTool(toolName: string, kind: AgentActivityKind, payload: Record
     toolName === "glob" ||
     toolName === "grep" ||
     toolName === "web_research" ||
+    toolName === "web_crawl" ||
     toolName === "search_product_docs" ||
     toolName === "community_resources_search" ||
     toolName === "community_search"

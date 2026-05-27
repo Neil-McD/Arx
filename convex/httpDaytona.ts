@@ -910,6 +910,116 @@ async function executeRetrievalHarnessTool(params: {
     }
   }
 
+  if (params.toolName === "web_crawl") {
+    const webResearchAction = "crawl" as WebResearchCreditAction;
+    const webResearchCredits = priceWebResearchCredits(webResearchAction);
+    const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
+    const creditKey = newCreditKey("crawl");
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
+        creditKey,
+        userId: params.userId,
+        communityId: params.communityId ?? undefined,
+        projectId: params.projectId ?? undefined,
+        runId: params.runId,
+        toolName: params.toolName,
+        action: "crawl",
+        vendor: "crawl4ai_or_simple_fetcher",
+        credits: webResearchCredits,
+        rawVendorCostUsd: webResearchVendorCostUsd,
+        polynetPriceUsd: creditsToUsd(webResearchCredits),
+        metadata: {
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+          estimated_vendor_cost_usd: webResearchVendorCostUsd,
+        },
+        nowMs: Date.now(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+        errorMessage:
+          message === "credits_exhausted"
+            ? "Web crawl uses paid provider calls, so it needs tool balance before it runs."
+            : "Tool balance is unavailable for web crawl.",
+        details: {
+          tool_kind: "web_research",
+          required_credits: webResearchCredits,
+        },
+      };
+    }
+
+    let payload: unknown;
+    try {
+      payload = await params.ctx.runAction((api as any).community.crawlWebRoot, {
+        userId: params.userId as any,
+        authSubject: params.authSubject ?? undefined,
+        communityId:
+          normalizedArgs.destination === "active_community_sources" && params.communityId
+            ? (params.communityId as any)
+            : undefined,
+        rootUrl: String(normalizedArgs.url ?? ""),
+        strategy: normalizedArgs.strategy,
+        destination: normalizedArgs.destination,
+        maxPages: normalizedArgs.maxPages,
+        maxDepth: normalizedArgs.maxDepth,
+        maxChars: normalizedArgs.maxChars,
+      });
+    } catch (error) {
+      await settleReservedCreditsBestEffort({
+        ctx: params.ctx,
+        creditKey,
+        status: "refunded",
+        failureReason: "web_crawl_threw",
+      });
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "web_crawl_failed",
+        errorMessage: message || "Web crawl failed.",
+      };
+    }
+
+    try {
+      await settleReservedCreditsStrict({
+        ctx: params.ctx,
+        creditKey,
+        status: "succeeded",
+        creditsSettled: webResearchCredits,
+        rawVendorCostUsd: webResearchVendorCostUsd,
+        metadata: {
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          reserved_credits: webResearchCredits,
+          estimated_vendor_cost_usd: webResearchVendorCostUsd,
+        },
+      });
+    } catch {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "credits_settlement_failed",
+        errorMessage: "Web crawl succeeded, but credit settlement failed. Try again.",
+      };
+    }
+    return {
+      status: "ok",
+      exitCode: 0,
+      outputText: JSON.stringify(payload, null, 2),
+      errorCode: null,
+      errorMessage: null,
+      details: payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : null,
+    };
+  }
+
   if (params.toolName === "web_research") {
     const action =
       String(normalizedArgs.action ?? "").trim() === "find_in_page"
