@@ -20027,6 +20027,34 @@ button.message-citation-chip:hover {
   cursor: not-allowed;
 }
 
+.settings-panel button.funnel-editor-about-trigger,
+.settings-panel button.funnel-editor-about-trigger:hover:not(:disabled),
+.settings-panel button.funnel-editor-about-trigger:focus-visible {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin: 0;
+  border-radius: 8px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.65;
+  text-align: left;
+  white-space: pre-wrap;
+  border: 1px solid transparent;
+  box-shadow: none;
+  cursor: text;
+}
+
+.settings-panel button.funnel-editor-about-trigger:hover:not(:disabled),
+.settings-panel button.funnel-editor-about-trigger:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+}
+
 .settings-panel button.primary:not(.platform-save-button),
 .settings-panel button[type="submit"]:not(.platform-save-button) {
   background: var(--accent-gold);
