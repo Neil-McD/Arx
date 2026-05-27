@@ -11171,8 +11171,8 @@ button.chat-reply-quote:hover {
 
 .knowledge-workspace {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(188px, 252px) minmax(0, 1fr);
+  gap: 16px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -11185,7 +11185,7 @@ button.chat-reply-quote:hover {
   min-width: 0;
   min-height: 0;
   border-right: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  padding-right: 14px;
+  padding-right: 12px;
 }
 
 .knowledge-resource-rail-header {
@@ -11475,11 +11475,11 @@ button.chat-reply-quote:hover {
 
 .knowledge-category-pages .knowledge-resource-item,
 .knowledge-source-inbox-section .knowledge-resource-item {
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   border-radius: 8px;
-  padding: 7px 8px;
+  padding: 6px 7px;
 }
 
 .knowledge-resource-item:hover,
@@ -11523,9 +11523,9 @@ button.chat-reply-quote:hover {
 
 .knowledge-category-pages .knowledge-resource-item-icon,
 .knowledge-source-inbox-section .knowledge-resource-item-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
 }
 
 .knowledge-resource-item.is-active .knowledge-resource-item-icon {
@@ -11590,7 +11590,7 @@ button.chat-reply-quote:hover {
 
 .knowledge-category-pages .knowledge-resource-item-title,
 .knowledge-source-inbox-section .knowledge-resource-item-title {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 650;
 }
 
@@ -11657,6 +11657,7 @@ button.chat-reply-quote:hover {
 
 .knowledge-resource-reader .resource-viewer-content {
   min-height: 100%;
+  width: 100%;
 }
 
 .knowledge-resource-reader .resource-viewer-header {
@@ -12372,6 +12373,7 @@ button.chat-reply-quote:hover {
 .resource-viewer-column {
   display: grid;
   gap: 24px;
+  width: 100%;
   max-width: 740px;
   margin: 0 auto;
   min-width: 0;
@@ -12405,11 +12407,14 @@ button.chat-reply-quote:hover {
   color: var(--text-primary);
   font-size: 16px;
   line-height: 1.7;
-  word-break: break-word;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .resource-viewer-prose .md-paragraph {
   margin: 0 0 16px;
+  overflow-wrap: anywhere;
 }
 
 .resource-viewer-prose .md-paragraph:last-child {
@@ -12462,6 +12467,7 @@ button.chat-reply-quote:hover {
 
 .resource-viewer-prose .md-list li {
   margin: 4px 0;
+  overflow-wrap: anywhere;
 }
 
 .resource-viewer-prose .md-blockquote {
@@ -12471,6 +12477,7 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--bg-card-alt) 70%, transparent);
   border-radius: 0 12px 12px 0;
   color: color-mix(in srgb, var(--text-primary) 90%, var(--text-muted));
+  overflow-wrap: anywhere;
 }
 
 .resource-viewer-prose .md-hr {
@@ -12485,6 +12492,8 @@ button.chat-reply-quote:hover {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
   text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .resource-viewer-prose .md-link:hover {
@@ -12498,6 +12507,8 @@ button.chat-reply-quote:hover {
   border: 1px solid color-mix(in srgb, var(--border-default) 60%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.92em;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .resource-viewer-prose img {
@@ -12704,31 +12715,33 @@ button.chat-reply-quote:hover {
   fill: currentColor;
 }
 
-/* Details side sheet */
+/* Compact details popover */
 .resource-viewer-details {
   position: absolute;
-  top: 0;
+  top: 46px;
   right: 0;
-  bottom: 0;
-  width: min(360px, 92%);
+  width: min(318px, calc(100% - 12px));
+  max-height: min(420px, calc(100% - 58px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border-left: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
+  border-radius: 14px;
   background:
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 40%),
     color-mix(in srgb, var(--bg-panel) 98%, transparent);
-  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
+  overflow: hidden;
   z-index: 5;
   animation: resource-viewer-details-slide 160ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 @keyframes resource-viewer-details-slide {
   from {
-    transform: translateX(8px);
+    transform: translateY(-4px);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -12737,12 +12750,12 @@ button.chat-reply-quote:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 18px;
+  padding: 12px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
 }
 
 .resource-viewer-details-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -12779,9 +12792,9 @@ button.chat-reply-quote:hover {
 
 .resource-viewer-details-body {
   overflow: auto;
-  padding: 18px;
+  padding: 14px;
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .resource-viewer-details-row {

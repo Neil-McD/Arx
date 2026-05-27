@@ -254,8 +254,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
                 type="button"
                 onClick={() => setIsDetailsOpen((open) => !open)}
                 aria-expanded={isDetailsOpen}
-                aria-label="Show details"
-                title="Show details"
+                aria-label="Resource details"
               >
                 <MoreIcon />
               </button>
