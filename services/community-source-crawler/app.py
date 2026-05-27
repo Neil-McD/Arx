@@ -217,6 +217,12 @@ def content_hash(raw: str) -> str:
     return hashlib.sha256(normalize_whitespace(raw).encode("utf-8", errors="ignore")).hexdigest()
 
 
+def slugify_path(raw: Any, fallback: str) -> str:
+    text = normalize_whitespace(raw) or fallback
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return f"/{(slug or fallback)[:120]}"
+
+
 def first_js_result(result: Any) -> dict[str, Any] | None:
     execution = getattr(result, "js_execution_result", None)
     if not isinstance(execution, dict):
@@ -470,10 +476,21 @@ async def extract_virtual_sections(
             if digest in seen_hashes:
                 continue
             seen_hashes.add(digest)
+            order = len(sections) + 1
             sections.append({
                 "title": virtual_section_title(clicked, label),
                 "label": label,
                 "markdown": text,
+                "unit_kind": "virtual_section",
+                "source_url": root_url,
+                "root_url": root_url,
+                "parent_url": None,
+                "path": slugify_path(label, f"section-{order}"),
+                "order": order,
+                "depth": 0,
+                "status": "ready",
+                "error": None,
+                "capture_method": "clickable_navigation",
             })
     finally:
         await kill_crawler_session(crawler, session_id)
@@ -494,6 +511,7 @@ def merge_virtual_sections_into_root_row(
     if original:
         blocks.append(original)
     added = 0
+    source_units: list[dict[str, Any]] = []
     for section in sections:
         markdown = normalize_whitespace(section.get("markdown"))
         if not markdown:
@@ -504,6 +522,7 @@ def merge_virtual_sections_into_root_row(
         seen.add(digest)
         title = normalize_whitespace(section.get("title") or section.get("label")) or "Section"
         blocks.append(f"## {title}\n\n{markdown}")
+        source_units.append(section)
         added += 1
     if added <= 0:
         return rows
@@ -513,6 +532,7 @@ def merge_virtual_sections_into_root_row(
     metadata["virtual_page_count"] = added
     metadata["virtual_page_strategy"] = "clickable_navigation"
     root["metadata"] = metadata
+    root["source_units"] = source_units
     root["title"] = root.get("title") or (sections[0].get("title") if sections else None)
     return rows
 

@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 
 import {
+  buildCommunitySourceCrawlerUnitKey,
   buildCommunitySourceCrawledBody,
   communitySourceCrawlerUrlInRootScope,
   communitySourceCrawlerUrlAliases,
+  normalizeCommunitySourceUnitPath,
   planCommunitySourceCrawlerPageSave,
   summarizeCommunitySourceCrawlerPageSaveDecisions,
   type CommunitySourceCrawlerExistingSource,
   type CommunitySourcePageResult,
+  type CommunitySourceUnitStatus,
 } from "../shared/communitySourceCrawler.ts";
 
 function normalizeUrl(raw: unknown): string | null {
@@ -172,6 +175,25 @@ assert.match(
   /Virtual sections captured: 18/,
   "SPA/course crawls should preserve virtual section count in the saved source body",
 );
+assert.equal(
+  normalizeCommunitySourceUnitPath("Day 2 — Digital Assets"),
+  "/day-2-digital-assets",
+  "source unit paths should make dynamic lessons stable without carrying UI-specific labels",
+);
+assert.equal(
+  buildCommunitySourceCrawlerUnitKey({
+    rootUrl: "https://docs.example.com/wiki",
+    unitKind: "virtual_section",
+    sourceUrl: "https://docs.example.com/wiki#ignored",
+    path: "/day-2-digital-assets",
+    order: 2,
+    normalizeUrl,
+  }),
+  "https://docs.example.com/wiki|virtual_section|https://docs.example.com/wiki|/day-2-digital-assets",
+  "source units should have stable dedupe keys that do not depend on repeated crawl jobs or lesson reordering",
+);
+const unitStatus: CommunitySourceUnitStatus = "ready";
+assert.equal(unitStatus, "ready");
 
 const seenAliases = new Set<string>();
 const firstNew = planCommunitySourceCrawlerPageSave({

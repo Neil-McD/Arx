@@ -20,6 +20,7 @@ const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const sourceCrawler = read("shared/communitySourceCrawler.ts");
+const sourceCrawlerService = read("services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
@@ -145,14 +146,29 @@ assert.match(
   "large parsed source text should live in resource content rows, not only the hot communityResources metadata row",
 );
 assert.match(
+  schema,
+  /communitySourceUnits:[\s\S]*crawlJobId: v\.id\("communitySourceCrawlJobs"\)[\s\S]*sourceResourceId: v\.optional\(v\.id\("communityResources"\)\)[\s\S]*unitKey: v\.string\(\)[\s\S]*unitKind: v\.union\(v\.literal\("page"\), v\.literal\("virtual_section"\)\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("skipped"\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyOriginalChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*bodyTruncated: v\.optional\(v\.boolean\(\)\)[\s\S]*seenCount: v\.number\(\)[\s\S]*lastSeenAt: v\.number\(\)[\s\S]*\.index\("by_community_unit_key", \["communityId", "unitKey"\]\)[\s\S]*\.index\("by_source_resource", \["sourceResourceId"\]\)/,
+  "crawler source units should be a bounded deduped evidence layer separate from user-facing resources",
+);
+assert.match(
+  schema,
+  /communitySourceUnitContents:[\s\S]*sourceUnitId: v\.id\("communitySourceUnits"\)[\s\S]*bodyMd: v\.string\(\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*\.index\("by_source_unit", \["sourceUnitId"\]\)/,
+  "source unit bodies should be stored outside source unit metadata rows",
+);
+assert.match(
   sourceCrawler,
-  /communitySourceCrawlerUrlInRootScope[\s\S]*root\.origin !== candidate\.origin[\s\S]*rootPath === "\/"[\s\S]*candidatePath === rootPath \|\| candidatePath\.startsWith\(`\$\{rootPath\}\/`\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias[\s\S]*seenAliases[\s\S]*"existing_ready"[\s\S]*"update_existing"[\s\S]*summarizeCommunitySourceCrawlerPageSaveDecisions/,
+  /buildCommunitySourceCrawlerUnitKey[\s\S]*communitySourceCrawlerUrlInRootScope[\s\S]*root\.origin !== candidate\.origin[\s\S]*rootPath === "\/"[\s\S]*candidatePath === rootPath \|\| candidatePath\.startsWith\(`\$\{rootPath\}\/`\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias[\s\S]*seenAliases[\s\S]*"existing_ready"[\s\S]*"update_existing"[\s\S]*summarizeCommunitySourceCrawlerPageSaveDecisions/,
   "source crawler save behavior should be covered by shared pure decision helpers",
 );
 assert.match(
+  sourceCrawlerService,
+  /extract_virtual_sections[\s\S]*"unit_kind": "virtual_section"[\s\S]*"capture_method": "clickable_navigation"[\s\S]*source_units[\s\S]*virtual_page_count/,
+  "SPA/course virtual navigation should return separate source units instead of only a merged page body",
+);
+assert.match(
   resources,
-  /planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "update_existing"[\s\S]*writeCommunityResourceBodyContent/,
-  "crawler source persistence should use the shared save decision helper instead of duplicating dedupe logic",
+  /saveCommunitySourceUnitsForPage[\s\S]*COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS \+ 1[\s\S]*bodyOriginalChars = bodyRaw\.length[\s\S]*bodyTruncated = bodyOriginalChars > COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS[\s\S]*by_community_unit_key[\s\S]*existing\.bodyHash !== bodyHash[\s\S]*writeCommunitySourceUnitContent[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "update_existing"[\s\S]*writeCommunityResourceBodyContent/,
+  "crawler source persistence should dedupe source units while preserving the existing source-resource save path",
 );
 
 assert.match(

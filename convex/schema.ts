@@ -1565,6 +1565,54 @@ export default defineSchema({
     .index("by_community_resource", ["communityId", "resourceId"])
     .index("by_community_updatedAt", ["communityId", "updatedAt"]),
 
+  communitySourceUnits: defineTable({
+    communityId: v.id("communities"),
+    crawlJobId: v.id("communitySourceCrawlJobs"),
+    sourceResourceId: v.optional(v.id("communityResources")),
+    rootUrl: v.string(),
+    unitKey: v.string(),
+    unitKind: v.union(v.literal("page"), v.literal("virtual_section")),
+    title: v.optional(v.string()),
+    sourceUrl: v.string(),
+    parentUrl: v.optional(v.string()),
+    path: v.optional(v.string()),
+    order: v.number(),
+    depth: v.number(),
+    status: v.union(
+      v.literal("ready"),
+      v.literal("failed"),
+      v.literal("skipped"),
+    ),
+    bodyChars: v.number(),
+    bodyOriginalChars: v.number(),
+    bodyHash: v.string(),
+    bodyTruncated: v.optional(v.boolean()),
+    captureMethod: v.optional(v.string()),
+    error: v.optional(v.string()),
+    seenCount: v.number(),
+    lastSeenAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_crawl_job", ["communityId", "crawlJobId"])
+    .index("by_crawl_job_order", ["crawlJobId", "order"])
+    .index("by_community_unit_key", ["communityId", "unitKey"])
+    .index("by_source_resource", ["sourceResourceId"])
+    .index("by_community_status_lastSeenAt", ["communityId", "status", "lastSeenAt"]),
+
+  communitySourceUnitContents: defineTable({
+    communityId: v.id("communities"),
+    sourceUnitId: v.id("communitySourceUnits"),
+    bodyMd: v.string(),
+    bodyChars: v.number(),
+    bodyHash: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_source_unit", ["sourceUnitId"])
+    .index("by_community_source_unit", ["communityId", "sourceUnitId"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"]),
+
   communitySourceCrawlJobs: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),

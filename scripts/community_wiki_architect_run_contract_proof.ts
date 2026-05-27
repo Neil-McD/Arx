@@ -74,8 +74,8 @@ assert.match(
 );
 assert.match(
   architect,
-  /COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS\s*=\s*80[\s\S]*COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS\s*=\s*40_000[\s\S]*COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS\s*=\s*600/,
-  "architect source context should have a hard visible-card and character budget",
+  /COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS\s*=\s*80[\s\S]*COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS\s*=\s*40_000[\s\S]*COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS\s*=\s*600[\s\S]*COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_UNIT_CARDS\s*=\s*120[\s\S]*COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_UNITS_PER_SOURCE_CARD\s*=\s*8/,
+  "architect source context should have hard visible-card, source-unit, and character budgets",
 );
 assert.match(
   architect,
@@ -84,13 +84,33 @@ assert.match(
 );
 assert.match(
   architect,
-  /const readySourceRows = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES[\s\S]*const readySources = await Promise\.all\([\s\S]*readySourceCandidates[\s\S]*hydrateCommunityResourceBody[\s\S]*const sourceWindow = buildArchitectSourceWindow[\s\S]*source_inbox: sourceWindow\.sourceCards/,
-  "architect context should expose only ready hydrated source text through a bounded candidate window",
+  /const readySourceRows = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES[\s\S]*const readySources = await Promise\.all\([\s\S]*readySourceCandidates[\s\S]*hydrateCommunityResourceBody[\s\S]*const sourceUnitsBySourceId = await loadSourceUnitCardsBySourceId[\s\S]*const sourceWindow = buildArchitectSourceWindow[\s\S]*source_inbox: sourceWindow\.sourceCards/,
+  "architect context should expose only ready hydrated source text and bounded source units through a bounded candidate window",
 );
 assert.match(
   architect,
-  /source_ingestion_status:[\s\S]*length_chars:[\s\S]*excerpt: buildSourceExcerpt[\s\S]*assigned_pages:/,
-  "architect source cards should expose ingestion status, bounded excerpts, and assignment state",
+  /source_ingestion_status:[\s\S]*length_chars:[\s\S]*excerpt: buildSourceExcerpt[\s\S]*source_unit_count:[\s\S]*source_units_visible:[\s\S]*source_units_truncated:[\s\S]*source_units:[\s\S]*assigned_pages:/,
+  "architect source cards should expose ingestion status, bounded excerpts, source-unit state, and assignment state",
+);
+assert.match(
+  architect,
+  /async function readSourceUnitContent[\s\S]*query\("communitySourceUnitContents" as any\)[\s\S]*withIndex\("by_source_unit"/,
+  "architect context should read source-unit bodies through the indexed unit-content lookup",
+);
+assert.match(
+  architect,
+  /async function loadReadySourceUnitsForSource[\s\S]*query\("communitySourceUnits" as any\)[\s\S]*withIndex\("by_source_resource"[\s\S]*async function loadSourceUnitCardsBySourceId[\s\S]*const rows = await loadReadySourceUnitsForSource\(ctx, sourceId\)[\s\S]*readSourceUnitContent\(ctx, unit\._id\)[\s\S]*sourceUnitsBySourceId\.set\(sourceId,[\s\S]*total: rows\.length[\s\S]*cards/,
+  "architect context should load source units through indexed source lookups and preserve true total versus visible cards",
+);
+assert.match(
+  architect,
+  /function scoreSourceUnitForPage[\s\S]*pageTitle[\s\S]*unitTitle[\s\S]*metadata[\s\S]*body[\s\S]*return score/,
+  "content writer should score source units against the target page before drafting",
+);
+assert.match(
+  architect,
+  /async function buildContentWriterSourceFromUnits\(ctx: any, args:[\s\S]*pageTitle:[\s\S]*pageModule:[\s\S]*pageBody:[\s\S]*scoreSourceUnitForPage[\s\S]*seed\.index - 1[\s\S]*seed\.index \+ 1[\s\S]*relevance_score:/,
+  "content writer should select page-relevant source units and include nearby neighbor units by order",
 );
 assert.match(
   architect,
@@ -215,8 +235,8 @@ assert.match(
 );
 assert.match(
   architect,
-  /export const buildCommunityResourceContentWriterRunContextInternal = internalQuery\([\s\S]*COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*neededSourceIds[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hydrateCommunityResourceBody[\s\S]*source_body_md: truncateContentWriterSource\(source\.bodyMd\)/,
-  "content writer context should target only bounded scaffold draft pages with hydrated ready source text",
+  /export const buildCommunityResourceContentWriterRunContextInternal = internalQuery\([\s\S]*COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*neededSourceIds[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hydrateCommunityResourceBody[\s\S]*pages\.slice\(0, limit\)\.map[\s\S]*buildContentWriterSourceFromUnits\(ctx, \{[\s\S]*pageTitle:[\s\S]*pageModule,[\s\S]*pageBody:[\s\S]*source_units: unitContext\.sourceUnits[\s\S]*source_body_md: unitContext\.sourceBodyMd \?\? truncateContentWriterSource\(source\.bodyMd\)/,
+  "content writer context should target only bounded scaffold draft pages with hydrated ready source text and prefer source-unit bodies when present",
 );
 assert.match(
   architect,

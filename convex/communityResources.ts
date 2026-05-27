@@ -66,11 +66,16 @@ import type {
   CommunitySourceCrawlerProvider,
   CommunitySourcePageLink,
   CommunitySourcePageResult,
+  CommunitySourceUnitKind,
+  CommunitySourceUnitResult,
+  CommunitySourceUnitStatus,
 } from "../shared/communitySourceCrawler";
 import {
+  buildCommunitySourceCrawlerUnitKey,
   buildCommunitySourceCrawledBody,
   communitySourceCrawlerUrlInRootScope,
   communitySourceCrawlerUrlAliases,
+  normalizeCommunitySourceUnitPath,
   planCommunitySourceCrawlerPageSave,
 } from "../shared/communitySourceCrawler";
 
@@ -104,6 +109,8 @@ const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS = 140;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TITLE_CHARS = 96;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES = 2_500_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS = 50_000;
+const COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS = COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS;
+const COMMUNITY_SOURCE_UNIT_MAX_PER_PAGE = 100;
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES = 10_000_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS = 12_000;
 const COMMUNITY_RESOURCE_SOURCE_CRAWLER_TIMEOUT_MS = 90_000;
@@ -258,6 +265,33 @@ type CommunitySourceCrawlJobLike = {
   error?: string;
   startedAt?: number;
   completedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type CommunitySourceUnitLike = {
+  _id?: unknown;
+  communityId: unknown;
+  crawlJobId: unknown;
+  sourceResourceId?: unknown;
+  rootUrl: string;
+  unitKey: string;
+  unitKind: CommunitySourceUnitKind;
+  title?: string | null;
+  sourceUrl: string;
+  parentUrl?: string | null;
+  path?: string | null;
+  order: number;
+  depth: number;
+  status: CommunitySourceUnitStatus;
+  bodyChars: number;
+  bodyOriginalChars?: number;
+  bodyHash: string;
+  bodyTruncated?: boolean;
+  captureMethod?: string | null;
+  error?: string | null;
+  seenCount: number;
+  lastSeenAt: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -1189,6 +1223,17 @@ function normalizeCrawl4AiMarkdown(raw: unknown): string {
   ) ?? "";
 }
 
+function normalizeCrawl4AiSourceUnitMarkdown(raw: unknown): string {
+  if (typeof raw === "string") {
+    return normalizeOptionalText(raw, COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS + 1) ?? "";
+  }
+  const record = asRecord(raw);
+  return normalizeOptionalText(
+    firstCrawlerString(record, ["fit_markdown", "raw_markdown", "markdown", "text"]),
+    COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS + 1,
+  ) ?? "";
+}
+
 function maybeSafeSourceCrawlerUrl(raw: unknown): string | null {
   try {
     return requireSafeSourceIngestionUrl(raw);
@@ -1306,6 +1351,12 @@ function normalizeCrawl4AiSourcePageResult(args: {
       parentUrl = null;
     }
   }
+  const sourceUnits = normalizeCrawl4AiSourceUnitResults({
+    rawUnits: args.row.source_units,
+    rootUrl: args.rootUrl,
+    pageUrl: finalUrl,
+    maxDepth: args.maxDepth,
+  });
   return {
     requested_url: requestedUrl,
     final_url: finalUrl,
@@ -1326,7 +1377,104 @@ function normalizeCrawl4AiSourcePageResult(args: {
       firstCrawlerString(args.row, ["virtual_page_strategy"]) || firstCrawlerString(metadata, ["virtual_page_strategy"]),
       80,
     ) ?? null,
+    ...(sourceUnits.length > 0 ? { source_units: sourceUnits } : {}),
   };
+}
+
+function normalizeCrawl4AiSourceUnitResults(args: {
+  rawUnits: unknown;
+  rootUrl: string;
+  pageUrl: string;
+  maxDepth: number;
+}): CommunitySourceUnitResult[] {
+  const rows = Array.isArray(args.rawUnits)
+    ? args.rawUnits.map(asRecord).filter((row): row is Record<string, unknown> => Boolean(row))
+    : [];
+  const units: CommunitySourceUnitResult[] = [];
+  const seenKeys = new Set<string>();
+  for (const row of rows.slice(0, COMMUNITY_SOURCE_UNIT_MAX_PER_PAGE)) {
+    const unitKindRaw = String(row.unit_kind ?? row.unitKind ?? "").trim();
+    const unitKind: CommunitySourceUnitKind = unitKindRaw === "virtual_section" ? "virtual_section" : "page";
+    const rawSourceUrl = firstCrawlerString(row, ["source_url", "sourceUrl", "url"]) || args.pageUrl;
+    const rawRootUrl = firstCrawlerString(row, ["root_url", "rootUrl"]) || args.rootUrl;
+    let sourceUrl: string;
+    let rootUrl: string;
+    try {
+      sourceUrl = requireSafeSourceIngestionUrl(rawSourceUrl);
+      rootUrl = requireSafeSourceIngestionUrl(rawRootUrl);
+    } catch {
+      continue;
+    }
+    if (
+      !communitySourceCrawlerUrlInRootScope({
+        rootUrl: args.rootUrl,
+        candidateUrl: sourceUrl,
+        normalizeUrl: maybeSafeSourceCrawlerUrl,
+      }) ||
+      rootUrl !== args.rootUrl
+    ) continue;
+    const markdown = normalizeCrawl4AiSourceUnitMarkdown(row.markdown ?? row.text);
+    const statusRaw = String(row.status ?? "").toLowerCase();
+    const status: CommunitySourceUnitStatus =
+      statusRaw === "failed" || statusRaw === "skipped"
+        ? statusRaw
+        : "ready";
+    if (!markdown && status === "ready") continue;
+    const rawOrder = Number(row.order);
+    const order = Number.isFinite(rawOrder) ? Math.max(0, Math.floor(rawOrder)) : units.length + 1;
+    const rawDepth = Number(row.depth);
+    const depth = Number.isFinite(rawDepth)
+      ? Math.min(Math.max(0, Math.floor(rawDepth)), args.maxDepth)
+      : 0;
+    let parentUrl: string | null = null;
+    const rawParentUrl = firstCrawlerString(row, ["parent_url", "parentUrl"]);
+    if (rawParentUrl) {
+      try {
+        const normalizedParentUrl = requireSafeSourceIngestionUrl(rawParentUrl);
+        parentUrl = communitySourceCrawlerUrlInRootScope({
+          rootUrl: args.rootUrl,
+          candidateUrl: normalizedParentUrl,
+          normalizeUrl: maybeSafeSourceCrawlerUrl,
+        })
+          ? normalizedParentUrl
+          : null;
+      } catch {
+        parentUrl = null;
+      }
+    }
+    const title = normalizeOptionalText(firstCrawlerString(row, ["title"]) || firstCrawlerString(row, ["label"]), 240) ?? null;
+    const path = normalizeOptionalText(firstCrawlerString(row, ["path"]), 160) ?? normalizeCommunitySourceUnitPath(title);
+    const providedKey = normalizeOptionalText(firstCrawlerString(row, ["unit_key", "unitKey"]), 700);
+    const unitKey = providedKey ?? buildCommunitySourceCrawlerUnitKey({
+      rootUrl,
+      unitKind,
+      sourceUrl,
+      path,
+      title,
+      order,
+      normalizeUrl: maybeSafeSourceCrawlerUrl,
+    });
+    if (!unitKey || seenKeys.has(unitKey)) continue;
+    seenKeys.add(unitKey);
+    units.push({
+      unit_key: unitKey,
+      unit_kind: unitKind,
+      title,
+      source_url: sourceUrl,
+      root_url: rootUrl,
+      parent_url: parentUrl,
+      path,
+      order,
+      depth,
+      markdown,
+      status,
+      error: status === "ready"
+        ? null
+        : normalizeOptionalText(firstCrawlerString(row, ["error", "message"]), 500) ?? "community_source_unit_unreadable",
+      capture_method: normalizeOptionalText(firstCrawlerString(row, ["capture_method", "captureMethod"]), 80) ?? null,
+    });
+  }
+  return units;
 }
 
 async function crawlSourceRootWithSimpleFetcher(args: {
@@ -1503,11 +1651,28 @@ function buildWebCrawlContextPayload(args: {
       links: page.links.slice(0, 20),
       virtual_page_count: Math.max(0, Math.floor(Number(page.virtual_page_count) || 0)),
       virtual_page_strategy: normalizeOptionalText(page.virtual_page_strategy, 80) ?? null,
+      source_unit_count: Array.isArray(page.source_units) ? page.source_units.length : 0,
+      source_units: Array.isArray(page.source_units)
+        ? page.source_units.slice(0, 12).map((unit) => ({
+          unit_key: unit.unit_key ?? null,
+          unit_kind: unit.unit_kind,
+          title: unit.title,
+          source_url: unit.source_url,
+          path: unit.path,
+          order: unit.order,
+          status: unit.status,
+          chars: String(unit.markdown ?? "").length,
+        }))
+        : [],
     });
   }
   const readyPages = args.pages.filter((page) => page.status === "ready");
   const virtualPageCount = args.pages.reduce(
     (total, page) => total + Math.max(0, Math.floor(Number(page.virtual_page_count) || 0)),
+    0,
+  );
+  const sourceUnitCount = args.pages.reduce(
+    (total, page) => total + (Array.isArray(page.source_units) ? page.source_units.length : 0),
     0,
   );
   return {
@@ -1518,6 +1683,7 @@ function buildWebCrawlContextPayload(args: {
     root_url: args.rootUrl,
     page_count: args.pages.length,
     virtual_page_count: virtualPageCount,
+    source_unit_count: sourceUnitCount,
     ready_page_count: readyPages.length,
     failed_page_count: args.pages.length - readyPages.length,
     returned_page_count: pagePayloads.length,
@@ -8937,6 +9103,25 @@ const communitySourceCrawlerPageArg = v.object({
   error: v.union(v.string(), v.null()),
   virtual_page_count: v.optional(v.number()),
   virtual_page_strategy: v.optional(v.union(v.string(), v.null())),
+  source_units: v.optional(v.array(v.object({
+    unit_key: v.optional(v.union(v.string(), v.null())),
+    unit_kind: v.union(v.literal("page"), v.literal("virtual_section")),
+    title: v.union(v.string(), v.null()),
+    source_url: v.string(),
+    root_url: v.string(),
+    parent_url: v.union(v.string(), v.null()),
+    path: v.union(v.string(), v.null()),
+    order: v.number(),
+    depth: v.number(),
+    markdown: v.string(),
+  status: v.union(
+      v.literal("ready"),
+      v.literal("failed"),
+      v.literal("skipped"),
+    ),
+    error: v.union(v.string(), v.null()),
+    capture_method: v.optional(v.union(v.string(), v.null())),
+  }))),
 });
 
 export const ingestCommunitySources: any = action({
@@ -9222,6 +9407,225 @@ export const patchCommunitySourceCrawlJobInternal = internalMutation({
   },
 });
 
+function sourceUnitsForCrawlerPage(page: CommunitySourcePageResult): CommunitySourceUnitResult[] {
+  const explicitUnits = Array.isArray(page.source_units)
+    ? page.source_units.slice(0, COMMUNITY_SOURCE_UNIT_MAX_PER_PAGE)
+    : [];
+  if (explicitUnits.length > 0) return explicitUnits;
+  return [{
+    unit_key: null,
+    unit_kind: "page",
+    title: page.title,
+    source_url: page.final_url,
+    root_url: page.root_url,
+    parent_url: page.parent_url,
+    path: normalizeCommunitySourceUnitPath(page.title ?? page.final_url),
+    order: Math.max(0, Math.floor(Number(page.depth) || 0)),
+    depth: page.depth,
+    markdown: page.markdown,
+    status: page.status === "ready" ? "ready" : "failed",
+    error: page.error,
+    capture_method: "crawler_page",
+  }];
+}
+
+async function writeCommunitySourceUnitContent(ctx: any, args: {
+  communityId: any;
+  sourceUnitId: any;
+  bodyMd: string;
+  bodyChars: number;
+  bodyHash: string;
+  nowMs: number;
+}): Promise<void> {
+  const existing = (await ctx.db
+    .query("communitySourceUnitContents" as any)
+    .withIndex("by_source_unit", (q: any) => q.eq("sourceUnitId", args.sourceUnitId))
+    .unique()) as { _id?: unknown } | null;
+  if (existing?._id) {
+    await ctx.db.patch(existing._id as any, {
+      bodyMd: args.bodyMd,
+      bodyChars: args.bodyChars,
+      bodyHash: args.bodyHash,
+      updatedAt: args.nowMs,
+    });
+    return;
+  }
+  await ctx.db.insert("communitySourceUnitContents" as any, {
+    communityId: args.communityId,
+    sourceUnitId: args.sourceUnitId,
+    bodyMd: args.bodyMd,
+    bodyChars: args.bodyChars,
+    bodyHash: args.bodyHash,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+}
+
+async function saveCommunitySourceUnitsForPage(ctx: any, args: {
+  crawlJobId: string;
+  communityId: any;
+  sourceResourceId: string;
+  rootUrl: string;
+  page: CommunitySourcePageResult;
+  nowMs: number;
+}): Promise<{ saved: number; skipped: number; failed: number }> {
+  let saved = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const rawUnit of sourceUnitsForCrawlerPage(args.page)) {
+    const rootUrl = maybeSafeSourceCrawlerUrl(rawUnit.root_url) ?? maybeSafeSourceCrawlerUrl(args.rootUrl);
+    const sourceUrl = maybeSafeSourceCrawlerUrl(rawUnit.source_url) ?? maybeSafeSourceCrawlerUrl(args.page.final_url);
+    if (!rootUrl || !sourceUrl) {
+      failed += 1;
+      continue;
+    }
+    if (!communitySourceCrawlerUrlInRootScope({
+      rootUrl: args.rootUrl,
+      candidateUrl: sourceUrl,
+      normalizeUrl: maybeSafeSourceCrawlerUrl,
+    })) {
+      failed += 1;
+      continue;
+    }
+    const bodyRaw = normalizeOptionalText(rawUnit.markdown, COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS + 1) ?? "";
+    if (!bodyRaw.trim() || rawUnit.status === "failed") {
+      failed += 1;
+      continue;
+    }
+    if (rawUnit.status === "skipped") {
+      skipped += 1;
+      continue;
+    }
+    const bodyOriginalChars = bodyRaw.length;
+    const bodyTruncated = bodyOriginalChars > COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS;
+    const bodyMd = bodyRaw.slice(0, COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS);
+    const bodyChars = bodyMd.length;
+    const bodyHash = await sha256HexText(bodyMd);
+    const unitKind: CommunitySourceUnitKind = rawUnit.unit_kind === "virtual_section" ? "virtual_section" : "page";
+    const title = normalizeOptionalText(rawUnit.title, 240) ?? null;
+    const path = normalizeOptionalText(rawUnit.path, 160) ?? normalizeCommunitySourceUnitPath(title);
+    const rawOrder = Number(rawUnit.order);
+    const order = Number.isFinite(rawOrder) ? Math.max(0, Math.floor(rawOrder)) : 0;
+    const unitKey = normalizeOptionalText(rawUnit.unit_key, 700) ?? buildCommunitySourceCrawlerUnitKey({
+      rootUrl,
+      unitKind,
+      sourceUrl,
+      path,
+      title,
+      order,
+      normalizeUrl: maybeSafeSourceCrawlerUrl,
+    });
+    if (!unitKey) {
+      failed += 1;
+      continue;
+    }
+    const existing = (await ctx.db
+      .query("communitySourceUnits" as any)
+      .withIndex("by_community_unit_key", (q: any) =>
+        q.eq("communityId", args.communityId).eq("unitKey", unitKey),
+      )
+      .unique()) as CommunitySourceUnitLike | null;
+    const status = rawUnit.status;
+    const parentUrl = maybeSafeSourceCrawlerUrl(rawUnit.parent_url);
+    const depthValue = Number(rawUnit.depth);
+    const depth = Number.isFinite(depthValue) ? Math.max(0, Math.floor(depthValue)) : 0;
+    const captureMethod = normalizeOptionalText(rawUnit.capture_method, 80) ?? undefined;
+    const error = normalizeOptionalText(rawUnit.error, 500) ?? undefined;
+    if (existing?._id) {
+      await ctx.db.patch(existing._id as any, {
+        crawlJobId: args.crawlJobId as any,
+        sourceResourceId: args.sourceResourceId as any,
+        rootUrl,
+        unitKind,
+        title: title ?? undefined,
+        sourceUrl,
+        parentUrl: parentUrl ?? undefined,
+        path: path ?? undefined,
+        order,
+        depth,
+        status,
+        bodyChars,
+        bodyOriginalChars,
+        bodyHash,
+        bodyTruncated,
+        captureMethod,
+        error,
+        seenCount: Math.max(0, Math.floor(Number(existing.seenCount) || 0)) + 1,
+        lastSeenAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+      if (existing.bodyHash !== bodyHash) {
+        await writeCommunitySourceUnitContent(ctx, {
+          communityId: args.communityId,
+          sourceUnitId: existing._id,
+          bodyMd,
+          bodyChars,
+          bodyHash,
+          nowMs: args.nowMs,
+        });
+        saved += 1;
+      } else {
+        skipped += 1;
+      }
+      continue;
+    }
+    const id = await ctx.db.insert("communitySourceUnits" as any, {
+      communityId: args.communityId,
+      crawlJobId: args.crawlJobId as any,
+      sourceResourceId: args.sourceResourceId as any,
+      rootUrl,
+      unitKey,
+      unitKind,
+      title: title ?? undefined,
+      sourceUrl,
+      parentUrl: parentUrl ?? undefined,
+      path: path ?? undefined,
+      order,
+      depth,
+      status,
+      bodyChars,
+      bodyOriginalChars,
+      bodyHash,
+      bodyTruncated,
+      captureMethod,
+      error,
+      seenCount: 1,
+      lastSeenAt: args.nowMs,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    await writeCommunitySourceUnitContent(ctx, {
+      communityId: args.communityId,
+      sourceUnitId: id,
+      bodyMd,
+      bodyChars,
+      bodyHash,
+      nowMs: args.nowMs,
+    });
+    saved += 1;
+  }
+  return { saved, skipped, failed };
+}
+
+async function deleteCommunitySourceUnitContent(ctx: any, sourceUnitId: unknown): Promise<void> {
+  const content = (await ctx.db
+    .query("communitySourceUnitContents" as any)
+    .withIndex("by_source_unit", (q: any) => q.eq("sourceUnitId", sourceUnitId))
+    .unique()) as { _id?: unknown } | null;
+  if (content?._id) await ctx.db.delete(content._id as any);
+}
+
+async function deleteCommunitySourceUnitsForSourceResource(ctx: any, sourceResourceId: unknown): Promise<void> {
+  const rows = (await ctx.db
+    .query("communitySourceUnits" as any)
+    .withIndex("by_source_resource", (q: any) => q.eq("sourceResourceId", sourceResourceId))
+    .collect()) as CommunitySourceUnitLike[];
+  for (const row of rows) {
+    await deleteCommunitySourceUnitContent(ctx, row._id);
+    if (row._id) await ctx.db.delete(row._id as any);
+  }
+}
+
 export const saveCommunitySourceCrawlPagesInternal = internalMutation({
   args: {
     crawlJobId: v.string(),
@@ -9264,6 +9668,9 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
     let saved = 0;
     let skipped = 0;
     let failed = 0;
+    let savedUnits = 0;
+    let skippedUnits = 0;
+    let failedUnits = 0;
     const sourceResourceIds: string[] = [];
     const seenUrls = new Set<string>();
 
@@ -9284,7 +9691,20 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
       }
       if (decision.action === "skip") {
         skipped += 1;
-        if (decision.source_id) sourceResourceIds.push(decision.source_id);
+        if (decision.source_id) {
+          sourceResourceIds.push(decision.source_id);
+          const unitResult = await saveCommunitySourceUnitsForPage(ctx, {
+            crawlJobId: args.crawlJobId,
+            communityId: args.communityId,
+            sourceResourceId: decision.source_id,
+            rootUrl: args.rootUrl,
+            page,
+            nowMs,
+          });
+          savedUnits += unitResult.saved;
+          skippedUnits += unitResult.skipped;
+          failedUnits += unitResult.failed;
+        }
         continue;
       }
       const title = normalizeName(page.title || titleFromSourceCrawlerUrl(finalUrl));
@@ -9312,6 +9732,17 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
           await upsertArchiveDocumentForResource(ctx, hydrated);
         }
         sourceResourceIds.push(decision.source_id);
+        const unitResult = await saveCommunitySourceUnitsForPage(ctx, {
+          crawlJobId: args.crawlJobId,
+          communityId: args.communityId,
+          sourceResourceId: decision.source_id,
+          rootUrl: args.rootUrl,
+          page,
+          nowMs,
+        });
+        savedUnits += unitResult.saved;
+        skippedUnits += unitResult.skipped;
+        failedUnits += unitResult.failed;
         saved += 1;
         continue;
       }
@@ -9346,7 +9777,19 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
         const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
         await upsertArchiveDocumentForResource(ctx, hydrated);
       }
-      sourceResourceIds.push(normalizeIdValue(id));
+      const sourceResourceId = normalizeIdValue(id);
+      sourceResourceIds.push(sourceResourceId);
+      const unitResult = await saveCommunitySourceUnitsForPage(ctx, {
+        crawlJobId: args.crawlJobId,
+        communityId: args.communityId,
+        sourceResourceId,
+        rootUrl: args.rootUrl,
+        page,
+        nowMs,
+      });
+      savedUnits += unitResult.saved;
+      skippedUnits += unitResult.skipped;
+      failedUnits += unitResult.failed;
       saved += 1;
     }
 
@@ -9360,6 +9803,9 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
       failed_page_count: failed,
       saved_source_count: saved,
       skipped_source_count: skipped,
+      saved_source_unit_count: savedUnits,
+      skipped_source_unit_count: skippedUnits,
+      failed_source_unit_count: failedUnits,
       source_resource_ids: sourceResourceIds,
     };
   },
@@ -10092,6 +10538,7 @@ export const deleteCommunityResource = mutation({
       communityId: resource.communityId,
       userId: args.userId,
     });
+    await deleteCommunitySourceUnitsForSourceResource(ctx, resource._id);
     await deleteCommunityResourceBodyContent(ctx, resource._id);
     await ctx.db.delete(resource._id as any);
     await deleteArchiveDocumentBySource(ctx, {

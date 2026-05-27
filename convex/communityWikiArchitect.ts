@@ -48,10 +48,16 @@ const COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_CARDS = 80;
 const COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES = 240;
 const COMMUNITY_WIKI_ARCHITECT_SOURCE_WINDOW_BUDGET_CHARS = 40_000;
 const COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS = 600;
+const COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_UNIT_CARDS = 120;
+const COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_UNITS_PER_SOURCE_CARD = 8;
+const COMMUNITY_WIKI_ARCHITECT_SOURCE_UNIT_EXCERPT_CHARS = 320;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_PAGES = 8;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT = 200;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_OUTPUT_TOKENS = 4200;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_CHARS = 12_000;
+const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_SOURCE_UNITS = 12;
+const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_SEED_SOURCE_UNITS = 6;
+const COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_UNIT_CHARS = 2_500;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_BODY_CHARS = 20_000;
 
 const COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT = `You are the Resource Drafter for a PolyNet community.
@@ -88,6 +94,14 @@ function buildSourceExcerpt(raw: unknown): string | null {
     : `${value.slice(0, COMMUNITY_WIKI_ARCHITECT_SOURCE_CARD_EXCERPT_CHARS - 1).trimEnd()}…`;
 }
 
+function buildSourceUnitExcerpt(raw: unknown, maxChars = COMMUNITY_WIKI_ARCHITECT_SOURCE_UNIT_EXCERPT_CHARS): string | null {
+  const value = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!value) return null;
+  return value.length <= maxChars
+    ? value
+    : `${value.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 function buildBuilderIntentTerms(raw: unknown): string[] {
   const value = String(raw ?? "").toLowerCase();
   if (!value) return [];
@@ -121,6 +135,7 @@ function sourceIntentMatchScore(source: CommunityResourceLike, intentTerms: stri
 function buildArchitectSourceCard(args: {
   source: CommunityResourceLike;
   assignedPages: string[];
+  sourceUnits: ArchitectSourceUnitsForSource | null;
 }): Record<string, unknown> {
   const source = args.source;
   const externalUrl = String(source.sourceExternalUrl ?? "").trim();
@@ -129,6 +144,9 @@ function buildArchitectSourceCard(args: {
     String(source.sourceExternalProvider ?? "").trim() ||
     String(source.sourceIngestionKind ?? "").trim() ||
     null;
+
+  const sourceUnitCards = args.sourceUnits?.cards ?? [];
+  const sourceUnitTotal = Math.max(0, Math.floor(Number(args.sourceUnits?.total) || 0));
 
   return {
     id: normalizeIdValue(source._id),
@@ -143,6 +161,10 @@ function buildArchitectSourceCard(args: {
     source_external_url: externalUrl || null,
     length_chars: communityResourceBodyChars(source),
     excerpt: buildSourceExcerpt(source.bodyMd),
+    source_unit_count: sourceUnitTotal,
+    source_units_visible: sourceUnitCards.length,
+    source_units_truncated: sourceUnitTotal > sourceUnitCards.length,
+    source_units: sourceUnitCards,
     assigned_pages: args.assignedPages,
     created_at: toIsoString(source.createdAt),
     updated_at: toIsoString(source.updatedAt),
@@ -153,6 +175,7 @@ function buildArchitectSourceWindow(args: {
   readySources: CommunityResourceLike[];
   readySourcesTotal?: number;
   assignedPagesBySourceId: Map<string, string[]>;
+  sourceUnitsBySourceId: Map<string, ArchitectSourceUnitsForSource>;
   builderIntent: string | null;
 }): {
   sourceCards: Record<string, unknown>[];
@@ -190,6 +213,7 @@ function buildArchitectSourceWindow(args: {
     const card = buildArchitectSourceCard({
       source,
       assignedPages: args.assignedPagesBySourceId.get(sourceId) ?? [],
+      sourceUnits: args.sourceUnitsBySourceId.get(sourceId) ?? null,
     });
     const cardChars = JSON.stringify(card).length + 2;
     if (
@@ -229,6 +253,323 @@ type AppliedSourceBackedPage = {
   page: CommunityResourceLike;
   source: CommunityResourceLike;
 };
+
+type CommunitySourceUnitLike = {
+  _id?: unknown;
+  sourceResourceId?: unknown;
+  unitKind?: string;
+  title?: string | null;
+  sourceUrl?: string;
+  path?: string | null;
+  order?: number;
+  depth?: number;
+  status?: string;
+  bodyChars?: number;
+  bodyOriginalChars?: number;
+  bodyHash?: string;
+  bodyTruncated?: boolean;
+  captureMethod?: string | null;
+  error?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+type CommunitySourceUnitContentLike = {
+  _id?: unknown;
+  sourceUnitId?: unknown;
+  bodyMd?: string;
+  bodyChars?: number;
+  bodyHash?: string;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+type ArchitectSourceUnitCard = {
+  id: string;
+  kind: string;
+  title: string | null;
+  path: string | null;
+  order: number;
+  status: string;
+  source_url: string | null;
+  body_chars: number;
+  body_original_chars: number;
+  body_truncated: boolean;
+  capture_method: string | null;
+  excerpt: string | null;
+};
+
+type ArchitectSourceUnitsForSource = {
+  total: number;
+  cards: ArchitectSourceUnitCard[];
+};
+
+function compareSourceUnits(left: CommunitySourceUnitLike, right: CommunitySourceUnitLike): number {
+  const leftOrder = Number(left.order) || 0;
+  const rightOrder = Number(right.order) || 0;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  const leftPath = String(left.path ?? "");
+  const rightPath = String(right.path ?? "");
+  if (leftPath !== rightPath) return leftPath.localeCompare(rightPath);
+  return normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id));
+}
+
+function contentWriterUnitSearchTerms(...values: unknown[]): string[] {
+  const stopWords = new Set([
+    "about",
+    "after",
+    "again",
+    "also",
+    "and",
+    "are",
+    "but",
+    "can",
+    "for",
+    "from",
+    "how",
+    "into",
+    "not",
+    "page",
+    "purpose",
+    "source",
+    "that",
+    "the",
+    "this",
+    "use",
+    "what",
+    "when",
+    "with",
+    "you",
+  ]);
+  return Array.from(new Set(
+    values
+      .join(" ")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .map((term) => term.trim())
+      .filter((term) => term.length >= 3 && !stopWords.has(term))
+      .slice(0, 80),
+  ));
+}
+
+function normalizeContentWriterUnitMatchText(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreSourceUnitForPage(args: {
+  unit: CommunitySourceUnitLike;
+  bodyMd: string;
+  pageTitle: string;
+  pageModule: string | null;
+  pageBody: string;
+  terms: string[];
+}): number {
+  const pageTitle = normalizeContentWriterUnitMatchText(args.pageTitle);
+  const unitTitle = normalizeContentWriterUnitMatchText(args.unit.title);
+  const unitPath = normalizeContentWriterUnitMatchText(args.unit.path);
+  const metadata = [
+    args.unit.title,
+    args.unit.path,
+    args.unit.sourceUrl,
+    args.unit.captureMethod,
+  ].join(" ").toLowerCase();
+  const body = String(args.bodyMd ?? "").slice(0, 8_000).toLowerCase();
+  let score = 0;
+
+  if (pageTitle && unitTitle && unitTitle === pageTitle) score += 100;
+  if (pageTitle && unitTitle && unitTitle.includes(pageTitle)) score += 60;
+  if (pageTitle && unitTitle && pageTitle.includes(unitTitle)) score += 35;
+  if (pageTitle && unitPath && unitPath.includes(pageTitle)) score += 45;
+
+  for (const term of args.terms) {
+    if (metadata.includes(term)) score += 12;
+    if (body.includes(term)) score += 2;
+  }
+
+  const moduleTerms = contentWriterUnitSearchTerms(args.pageModule);
+  for (const term of moduleTerms) {
+    if (metadata.includes(term)) score += 4;
+  }
+
+  const purposeTerms = contentWriterUnitSearchTerms(args.pageBody).slice(0, 20);
+  for (const term of purposeTerms) {
+    if (metadata.includes(term)) score += 3;
+  }
+
+  return score;
+}
+
+async function loadReadySourceUnitsForSource(
+  ctx: any,
+  sourceId: string,
+): Promise<CommunitySourceUnitLike[]> {
+  return ((await ctx.db
+    .query("communitySourceUnits" as any)
+    .withIndex("by_source_resource", (q: any) => q.eq("sourceResourceId", sourceId as any))
+    .collect()) as CommunitySourceUnitLike[])
+    .filter((row) => String(row.status ?? "") === "ready")
+    .sort(compareSourceUnits);
+}
+
+async function readSourceUnitContent(
+  ctx: any,
+  sourceUnitId: unknown,
+): Promise<CommunitySourceUnitContentLike | null> {
+  return (await ctx.db
+    .query("communitySourceUnitContents" as any)
+    .withIndex("by_source_unit", (q: any) => q.eq("sourceUnitId", sourceUnitId))
+    .unique()) as CommunitySourceUnitContentLike | null;
+}
+
+async function loadSourceUnitCardsBySourceId(ctx: any, args: {
+  sourceIds: string[];
+  maxTotal: number;
+  maxPerSource: number;
+  excerptChars: number;
+}): Promise<Map<string, ArchitectSourceUnitsForSource>> {
+  const sourceUnitsBySourceId = new Map<string, ArchitectSourceUnitsForSource>();
+  let remaining = Math.max(0, Math.floor(args.maxTotal));
+  const maxPerSource = Math.max(0, Math.floor(args.maxPerSource));
+  if (remaining <= 0 || maxPerSource <= 0) return sourceUnitsBySourceId;
+
+  for (const sourceId of args.sourceIds) {
+    if (remaining <= 0) break;
+    const rows = await loadReadySourceUnitsForSource(ctx, sourceId);
+    const picked = rows.slice(0, Math.min(maxPerSource, remaining));
+    const cards: ArchitectSourceUnitCard[] = [];
+    for (const unit of picked) {
+      if (remaining <= 0) break;
+      const unitId = normalizeIdValue(unit._id);
+      if (!unitId) continue;
+      const content = await readSourceUnitContent(ctx, unit._id);
+      cards.push({
+        id: unitId,
+        kind: String(unit.unitKind ?? ""),
+        title: String(unit.title ?? "").trim() || null,
+        path: String(unit.path ?? "").trim() || null,
+        order: Number(unit.order) || 0,
+        status: String(unit.status ?? ""),
+        source_url: String(unit.sourceUrl ?? "").trim() || null,
+        body_chars: Math.max(0, Math.floor(Number(unit.bodyChars) || 0)),
+        body_original_chars: Math.max(0, Math.floor(Number(unit.bodyOriginalChars ?? unit.bodyChars) || 0)),
+        body_truncated: unit.bodyTruncated === true,
+        capture_method: String(unit.captureMethod ?? "").trim() || null,
+        excerpt: buildSourceUnitExcerpt(content?.bodyMd, args.excerptChars),
+      });
+      remaining -= 1;
+    }
+    if (rows.length > 0) {
+      sourceUnitsBySourceId.set(sourceId, {
+        total: rows.length,
+        cards,
+      });
+    }
+  }
+  return sourceUnitsBySourceId;
+}
+
+async function buildContentWriterSourceFromUnits(ctx: any, args: {
+  sourceId: string;
+  pageTitle: string;
+  pageModule: string | null;
+  pageBody: string;
+}): Promise<{
+  sourceUnits: Record<string, unknown>[];
+  sourceBodyMd: string | null;
+}> {
+  const rows = await loadReadySourceUnitsForSource(ctx, args.sourceId);
+  if (rows.length === 0) {
+    return {
+      sourceUnits: [],
+      sourceBodyMd: null,
+    };
+  }
+  const terms = contentWriterUnitSearchTerms(args.pageTitle, args.pageModule, args.pageBody);
+  const contentByUnitId = new Map<string, CommunitySourceUnitContentLike | null>();
+  const scored = await Promise.all(rows.map(async (unit, index) => {
+    const unitId = normalizeIdValue(unit._id);
+    if (!unitId) return null;
+    const content = await readSourceUnitContent(ctx, unit._id);
+    contentByUnitId.set(unitId, content);
+    return {
+      unit,
+      index,
+      unitId,
+      bodyMd: String(content?.bodyMd ?? ""),
+      score: scoreSourceUnitForPage({
+        unit,
+        bodyMd: String(content?.bodyMd ?? ""),
+        pageTitle: args.pageTitle,
+        pageModule: args.pageModule,
+        pageBody: args.pageBody,
+        terms,
+      }),
+    };
+  }));
+  const ranked = scored
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    .sort((left, right) =>
+      right.score - left.score ||
+      compareSourceUnits(left.unit, right.unit),
+    );
+  const maxUnits = COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_SOURCE_UNITS;
+  const seedUnits = (ranked.some((row) => row.score > 0)
+    ? ranked.filter((row) => row.score > 0)
+    : ranked)
+    .slice(0, Math.min(COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_SEED_SOURCE_UNITS, maxUnits));
+  const selectedById = new Map<string, typeof seedUnits[number]>();
+  const addSelected = (candidate: typeof seedUnits[number] | null | undefined) => {
+    if (!candidate || selectedById.size >= maxUnits) return;
+    selectedById.set(candidate.unitId, candidate);
+  };
+  for (const seed of seedUnits) {
+    addSelected(seed);
+    addSelected(scored.find((row) => row?.index === seed.index - 1) ?? null);
+    addSelected(scored.find((row) => row?.index === seed.index + 1) ?? null);
+  }
+  for (const row of ranked) {
+    if (selectedById.size >= maxUnits) break;
+    addSelected(row);
+  }
+  const selected = Array.from(selectedById.values())
+    .sort((left, right) => compareSourceUnits(left.unit, right.unit));
+  const blocks: string[] = [];
+  const sourceUnits: Record<string, unknown>[] = [];
+  for (const selectedUnit of selected) {
+    const unit = selectedUnit.unit;
+    const unitId = selectedUnit.unitId;
+    const body = String(contentByUnitId.get(unitId)?.bodyMd ?? selectedUnit.bodyMd ?? "").trim();
+    sourceUnits.push({
+      id: unitId,
+      kind: String(unit.unitKind ?? ""),
+      title: String(unit.title ?? "").trim() || null,
+      path: String(unit.path ?? "").trim() || null,
+      order: Number(unit.order) || 0,
+      status: String(unit.status ?? ""),
+      source_url: String(unit.sourceUrl ?? "").trim() || null,
+      body_chars: Math.max(0, Math.floor(Number(unit.bodyChars) || 0)),
+      body_original_chars: Math.max(0, Math.floor(Number(unit.bodyOriginalChars ?? unit.bodyChars) || 0)),
+      body_truncated: unit.bodyTruncated === true,
+      capture_method: String(unit.captureMethod ?? "").trim() || null,
+      relevance_score: selectedUnit.score,
+    });
+    if (!body) continue;
+    blocks.push([
+      `## ${String(unit.title ?? "").trim() || String(unit.path ?? "").trim() || "Source unit"}`,
+      `Source unit: ${String(unit.path ?? "").trim() || unitId}`,
+      body.slice(0, COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_UNIT_CHARS),
+    ].join("\n\n"));
+  }
+  return {
+    sourceUnits,
+    sourceBodyMd: blocks.join("\n\n---\n\n").slice(0, COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_CHARS) || null,
+  };
+}
 
 function isUnsortedResourceModule(
   rawModuleId: unknown,
@@ -861,11 +1202,18 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
       readySourceCandidates
         .map((source) => hydrateCommunityResourceBody(ctx, source).then((hydrated) => hydrated ?? source)),
     );
+    const sourceUnitsBySourceId = await loadSourceUnitCardsBySourceId(ctx, {
+      sourceIds: readySources.map((source) => normalizeIdValue(source._id)).filter(Boolean),
+      maxTotal: COMMUNITY_WIKI_ARCHITECT_MAX_VISIBLE_SOURCE_UNIT_CARDS,
+      maxPerSource: COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_UNITS_PER_SOURCE_CARD,
+      excerptChars: COMMUNITY_WIKI_ARCHITECT_SOURCE_UNIT_EXCERPT_CHARS,
+    });
     const builderIntent = normalizeBuilderIntent(args.builderIntent);
     const sourceWindow = buildArchitectSourceWindow({
       readySources,
       readySourcesTotal: readySourceRows.length,
       assignedPagesBySourceId,
+      sourceUnitsBySourceId,
       builderIntent,
     });
 
@@ -1399,23 +1747,32 @@ export const buildCommunityResourceContentWriterRunContextInternal = internalQue
     const readySourceById = new Map(
       readySources.map((source) => [normalizeIdValue(source._id), source]),
     );
-    const candidates = pages
-      .map((page) => {
+    const candidates = (await Promise.all(
+      pages.slice(0, limit).map(async (page) => {
         const sourceId = normalizeIdValue(page.sourceResourceId ?? "");
         const source = readySourceById.get(sourceId) ?? null;
         if (!source) return null;
+        const pageModule = moduleNameById.get(normalizeIdValue(page.moduleId ?? "")) ?? null;
+        const unitContext = await buildContentWriterSourceFromUnits(ctx, {
+          sourceId,
+          pageTitle: String(page.title ?? ""),
+          pageModule,
+          pageBody: String(page.bodyMd ?? ""),
+        });
         return {
           page_id: normalizeIdValue(page._id),
           page_title: String(page.title ?? ""),
-          page_module: moduleNameById.get(normalizeIdValue(page.moduleId ?? "")) ?? null,
+          page_module: pageModule,
           expected_updated_at: Number(page.updatedAt),
           source_resource_id: sourceId,
           source_title: String(source.title ?? ""),
           source_url: String(source.url ?? (source as any).sourceExternalUrl ?? "").trim() || null,
           source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
-          source_body_md: truncateContentWriterSource(source.bodyMd),
+          source_units: unitContext.sourceUnits,
+          source_body_md: unitContext.sourceBodyMd ?? truncateContentWriterSource(source.bodyMd),
         };
-      })
+      }),
+    ))
       .filter(Boolean)
       .slice(0, limit);
 

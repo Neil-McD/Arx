@@ -95,6 +95,21 @@ assert.match(
 );
 assert.match(
   promptSource,
+  /source_units[\s\S]*crawler found page\/section structure/,
+  "architect prompt should explain source units in the source-inbox input",
+);
+assert.match(
+  promptSource,
+  /source_units are bounded section\/page signals[\s\S]*not separate[\s\S]*lineage ids[\s\S]*parent source id as source_resource_id/,
+  "architect prompt should treat source units as structure signals under the parent source id",
+);
+assert.match(
+  promptSource,
+  /Multiple draft pages may share the same source_resource_id[\s\S]*different source_units/,
+  "architect prompt should allow one rich source to produce multiple unit-backed pages",
+);
+assert.match(
+  promptSource,
   /Any page without source_resource_id must be filed as a gap, not a draft/,
   "source-free pages should become gaps, not drafts",
 );

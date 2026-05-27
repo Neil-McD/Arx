@@ -3,6 +3,8 @@ export type CommunitySourceCrawlerProvider = "simple" | "crawl4ai";
 export type CommunitySourceCrawlJobStatus = "queued" | "crawling" | "saving_sources" | "ready" | "failed";
 
 export type CommunitySourcePageStatus = "ready" | "failed" | "skipped";
+export type CommunitySourceUnitKind = "page" | "virtual_section";
+export type CommunitySourceUnitStatus = "ready" | "failed" | "skipped";
 
 export type CommunitySourcePageLink = {
   url: string;
@@ -23,6 +25,23 @@ export type CommunitySourcePageResult = {
   error: string | null;
   virtual_page_count?: number;
   virtual_page_strategy?: string | null;
+  source_units?: CommunitySourceUnitResult[];
+};
+
+export type CommunitySourceUnitResult = {
+  unit_key?: string | null;
+  unit_kind: CommunitySourceUnitKind;
+  title: string | null;
+  source_url: string;
+  root_url: string;
+  parent_url: string | null;
+  path: string | null;
+  order: number;
+  depth: number;
+  markdown: string;
+  status: CommunitySourceUnitStatus;
+  error: string | null;
+  capture_method?: string | null;
 };
 
 export type CommunitySourceCrawlerNormalizeUrl = (raw: unknown) => string | null;
@@ -60,6 +79,51 @@ function normalizeCrawlerText(raw: unknown, maxChars: number): string {
   const value = String(raw ?? "").trim();
   if (!value) return "";
   return value.slice(0, Math.max(0, Math.floor(maxChars)));
+}
+
+function normalizeSourceUnitKeyPart(raw: unknown, maxChars: number): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .slice(0, Math.max(0, Math.floor(maxChars)));
+}
+
+export function normalizeCommunitySourceUnitPath(raw: unknown): string | null {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/['"`]+/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return value ? `/${value}` : null;
+}
+
+export function buildCommunitySourceCrawlerUnitKey(args: {
+  rootUrl: unknown;
+  unitKind: unknown;
+  sourceUrl: unknown;
+  path?: unknown;
+  title?: unknown;
+  order?: unknown;
+  normalizeUrl: CommunitySourceCrawlerNormalizeUrl;
+}): string | null {
+  const rootUrl = args.normalizeUrl(args.rootUrl);
+  const sourceUrl = args.normalizeUrl(args.sourceUrl);
+  if (!rootUrl || !sourceUrl) return null;
+  const unitKind = normalizeSourceUnitKeyPart(args.unitKind, 40);
+  if (unitKind !== "page" && unitKind !== "virtual_section") return null;
+  const path = normalizeSourceUnitKeyPart(args.path ?? normalizeCommunitySourceUnitPath(args.title), 160);
+  const rawOrder = Number(args.order);
+  const order = Number.isFinite(rawOrder) ? Math.max(0, Math.floor(rawOrder)) : 0;
+  const locator = path || `order:${order}`;
+  return [
+    rootUrl,
+    unitKind,
+    sourceUrl,
+    locator,
+  ].join("|");
 }
 
 export function buildCommunitySourceCrawledBody(
