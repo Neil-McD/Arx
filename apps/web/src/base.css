@@ -20005,7 +20005,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button) {
+.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -20017,12 +20017,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button):hover:not(:disabled) {
+.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button):disabled {
+.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

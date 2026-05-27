@@ -14,6 +14,7 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 }
 
 const app = read("apps/web/src/App.tsx");
+const baseCss = read("apps/web/src/base.css");
 const funnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
 const funnelSurface = read("apps/web/src/components/CommunityFunnelSurface.tsx");
 const governanceController = read("shared/useCommunitySettingsGovernanceController.ts");
@@ -77,6 +78,16 @@ assert.match(
   funnelSurface,
   /aboutContent\?: ReactNode;[\s\S]*aboutContent,?[\s\S]*\{aboutContent \?\? \(aboutText \?/,
   "shared funnel surface must allow editor-only About content without changing public rendering",
+);
+assert.match(
+  baseCss,
+  /\.settings-panel button:not\(\.funnel-editor-about-trigger\):not\(\.platform-save-button\)/,
+  "generic settings button styling must not apply to the inline Funnel About resting state",
+);
+assert.match(
+  baseCss,
+  /\.funnel-editor-about-trigger,\s*[\s\S]*\.funnel-editor-about-input \{[\s\S]*background: transparent;/,
+  "Funnel About resting and editing states should share native transparent styling",
 );
 
 assert.match(
