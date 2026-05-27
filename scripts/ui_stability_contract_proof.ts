@@ -131,8 +131,13 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /\.workspace-composer-shell\.workspace-right-panel-open \.workspace-composer-lane \{[\s\S]*?max-width: var\(--web-chat-max-width\);[\s\S]*?margin: 0 auto;[\s\S]*?\}/,
-  "right-panel workspace composer lane must use the same centered max-width contract as the transcript lane",
+  /\.workspace-composer-lane \{[\s\S]*?max-width: var\(--web-chat-max-width\);[\s\S]*?margin: 0 auto;[\s\S]*?padding-inline: var\(--web-chat-gutter\);[\s\S]*?\}/,
+  "workspace composer lane must be the canonical centered max-width contract in both right-panel states",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.workspace-composer-shell\.workspace-right-panel-open \.workspace-composer-lane/,
+  "right-panel workspace composer must not switch centering authority while opening or closing",
 );
 
 assert.match(
