@@ -65,7 +65,8 @@ export const COMMUNITY_LAUNCH_SETUP_STEPS: CommunityLaunchSetupStep[] = [
   "publish",
 ];
 
-const COMMUNITY_PROFILE_TOTAL_ITEMS = 4;
+const COMMUNITY_PROFILE_TOTAL_ITEMS = 2;
+const COMMUNITY_PUBLISH_TOTAL_ITEMS = 5;
 
 function hasText(value: unknown): boolean {
   return String(value ?? "").trim().length > 0;
@@ -105,7 +106,11 @@ function buildStepStatus(
 export function buildCommunityLaunchSetupStatus(
   input: CommunityLaunchSetupStatusInput,
 ): CommunityLaunchSetupStatus {
-  const profileMissing = getCommunityPublishReadinessMissingFields({
+  const profileMissing: CommunityLaunchSetupMissing[] = [
+    ...(hasText(input.name) ? [] : ["community_name" as const]),
+    ...(hasText(input.oneLiner) ? [] : ["community_one_liner" as const]),
+  ];
+  const publishReadinessMissing = getCommunityPublishReadinessMissingFields({
     name: input.name,
     oneLiner: input.oneLiner,
     avatarUrl: input.avatarUrl,
@@ -127,10 +132,12 @@ export function buildCommunityLaunchSetupStatus(
     isAccessConfigured(input)
     ? []
     : ["community_access"];
-  const publishMissing: CommunityLaunchSetupMissing[] =
-    String(input.visibility ?? "").trim() === "published"
+  const publishMissing: CommunityLaunchSetupMissing[] = [
+    ...(String(input.visibility ?? "").trim() === "published"
       ? []
-      : ["community_publish"];
+      : ["community_publish" as const]),
+    ...publishReadinessMissing,
+  ];
 
   const steps = [
     buildStepStatus("profile", profileMissing, COMMUNITY_PROFILE_TOTAL_ITEMS),
@@ -138,9 +145,9 @@ export function buildCommunityLaunchSetupStatus(
     buildStepStatus("agent", agentMissing, 1),
     buildStepStatus("access", accessMissing, 1),
     buildStepStatus("knowledge", knowledgeMissing, 2),
-    buildStepStatus("publish", publishMissing, 1),
+    buildStepStatus("publish", publishMissing, COMMUNITY_PUBLISH_TOTAL_ITEMS),
   ];
-  const missing = steps.flatMap((step) => step.missing);
+  const missing = Array.from(new Set(steps.flatMap((step) => step.missing)));
   const totalItems = steps.reduce((sum, step) => sum + step.total_items, 0);
   const completedItems = steps.reduce(
     (sum, step) => sum + step.completed_items,

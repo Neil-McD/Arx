@@ -46,12 +46,17 @@ assert.deepEqual(COMMUNITY_LAUNCH_SETUP_STEPS, [
 assert.match(
   launchSetup,
   /getCommunityPublishReadinessMissingFields/,
-  "launch setup profile step must reuse the existing publish readiness helper",
+  "launch setup publish step must reuse the existing publish readiness helper",
 );
 assert.match(
   launchSetup,
-  /const COMMUNITY_PROFILE_TOTAL_ITEMS = 4/,
-  "profile launch completion should keep current publish readiness requirements",
+  /const COMMUNITY_PROFILE_TOTAL_ITEMS = 2/,
+  "profile launch completion should require only the minimal create identity fields",
+);
+assert.match(
+  launchSetup,
+  /const COMMUNITY_PUBLISH_TOTAL_ITEMS = 5/,
+  "publish launch completion must own public readiness requirements",
 );
 assert.match(
   launchSetup,
@@ -71,7 +76,7 @@ const draftStatus = buildCommunityLaunchSetupStatus({
 });
 assert.equal(draftStatus.current_step, "profile");
 assert.equal(draftStatus.completed, false);
-assert.equal(draftStatus.total_items, 10);
+assert.equal(draftStatus.total_items, 12);
 assert.equal(
   draftStatus.steps.find((step) => step.step === "access")?.completed,
   true,
@@ -84,6 +89,29 @@ assert.deepEqual(
   draftStatus.steps.find((step) => step.step === "knowledge")?.missing,
   ["community_knowledge_material", "community_knowledge_live"],
 );
+
+const createProfileOnlyStatus = buildCommunityLaunchSetupStatus({
+  name: "Operators",
+  oneLiner: "Operators building with AI.",
+  entryPolicy: "approval",
+  visibility: "unlisted",
+});
+assert.equal(createProfileOnlyStatus.current_step, "about");
+assert.deepEqual(
+  createProfileOnlyStatus.steps.find((step) => step.step === "profile"),
+  {
+    step: "profile",
+    completed: true,
+    completed_items: 2,
+    total_items: 2,
+    missing: [],
+  },
+);
+assert.deepEqual(
+  createProfileOnlyStatus.steps.find((step) => step.step === "publish")?.missing,
+  ["community_publish", "community_avatar", "community_banner"],
+);
+assert.equal(createProfileOnlyStatus.completed, false);
 
 const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   name: "Operators",
