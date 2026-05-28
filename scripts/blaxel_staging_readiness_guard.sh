@@ -12,6 +12,7 @@ EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"
 EXPECTED_PREVIEW_PROXY_ORIGIN="https://polynet-preview-proxy.fly.dev"
 EXPECTED_PREVIEW_PROXY_APP="polynet-preview-proxy"
 EXPECTED_SOURCE_URL_FETCHER_ENDPOINT="https://polynet-staging.vercel.app/api/source-url-fetch"
+EXPECTED_COMMUNITY_WIKI_ARCHITECT_MODEL="gpt-5.5"
 
 load_env_if_present() {
   local file="$1"
@@ -95,6 +96,18 @@ if [[ "$source_url_fetcher_endpoint" != "$EXPECTED_SOURCE_URL_FETCHER_ENDPOINT" 
   fail "ARX_SOURCE_URL_FETCHER_ENDPOINT must be $EXPECTED_SOURCE_URL_FETCHER_ENDPOINT, got ${source_url_fetcher_endpoint:-missing}"
 fi
 ok "Convex staging source URL fetcher endpoint and secret are configured"
+
+if ! printf '%s\n' "$convex_env" | grep -q '^OPENAI_API_KEY='; then
+  fail "OPENAI_API_KEY missing in Convex staging env; Knowledge resource assembly cannot call OpenAI"
+fi
+if ! printf '%s\n' "$convex_env" | grep -q '^ARX_COMMUNITY_WIKI_ARCHITECT_MODEL='; then
+  fail "ARX_COMMUNITY_WIKI_ARCHITECT_MODEL missing in Convex staging env; Knowledge resource structure cannot be organized"
+fi
+community_wiki_architect_model="$(CONVEX_DEPLOYMENT="$convex_deployment" npx convex env get ARX_COMMUNITY_WIKI_ARCHITECT_MODEL 2>/dev/null | tr -d '\r' || true)"
+if [[ "$community_wiki_architect_model" != "$EXPECTED_COMMUNITY_WIKI_ARCHITECT_MODEL" ]]; then
+  fail "ARX_COMMUNITY_WIKI_ARCHITECT_MODEL must be $EXPECTED_COMMUNITY_WIKI_ARCHITECT_MODEL, got ${community_wiki_architect_model:-missing}"
+fi
+ok "Convex staging community wiki architect model is configured"
 
 source_fetcher_probe_status="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -X POST "$EXPECTED_SOURCE_URL_FETCHER_ENDPOINT" -H 'Content-Type: application/json' --data '{"url":"https://www.iana.org/help/example-domains"}' 2>/dev/null || true)"
 if [[ "$source_fetcher_probe_status" != "401" ]]; then
