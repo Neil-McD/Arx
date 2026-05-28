@@ -206,6 +206,28 @@ function shouldFocusWorkspaceComposerFromPointer(target: EventTarget | null): bo
   );
 }
 
+function shouldRestoreWorkspaceComposerAfterGlobalPointer(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (isWorkspaceEditableElement(target)) return false;
+  return !Boolean(
+    target.closest(
+      [
+        ".message-item",
+        ".message-text",
+        ".attachments-preview",
+        ".runtime-live-timeline",
+        ".runtime-computer-use-viewer",
+        ".workspace-app-preview-card",
+        ".workspace-right-panel__resize-handle",
+        ".web-empty-thread-action",
+        ".modal",
+        ".modal-overlay",
+        "[role='dialog']",
+      ].join(","),
+    ),
+  );
+}
+
 function shouldPreserveWorkspaceComposerFocus(activeElement: Element | null, input: HTMLTextAreaElement): boolean {
   if (!activeElement) return false;
   if (activeElement === input) return true;
@@ -215,7 +237,6 @@ function shouldPreserveWorkspaceComposerFocus(activeElement: Element | null, inp
   return Boolean(
     activeElement.closest(
       [
-        ".workspace-right-panel",
         ".modal",
         ".modal-overlay",
         "[role='dialog']",
@@ -1371,6 +1392,21 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [focusWorkspaceComposerSafely, isDesktopViewport]);
+
+  useEffect(() => {
+    if (!isDesktopViewport || typeof window === "undefined" || typeof document === "undefined") return;
+    const handleGlobalPointerUp = (event: globalThis.PointerEvent) => {
+      if (event.button !== 0) return;
+      if (!shouldRestoreWorkspaceComposerAfterGlobalPointer(event.target)) return;
+      window.setTimeout(() => {
+        focusWorkspaceComposerSafely({ force: true });
+      }, 0);
+    };
+    document.addEventListener("pointerup", handleGlobalPointerUp, true);
+    return () => {
+      document.removeEventListener("pointerup", handleGlobalPointerUp, true);
     };
   }, [focusWorkspaceComposerSafely, isDesktopViewport]);
 

@@ -24,13 +24,23 @@ assert.match(
 );
 assert.match(
   workspaceHost,
+  /function shouldRestoreWorkspaceComposerAfterGlobalPointer\(target: EventTarget \| null\): boolean[\s\S]*isWorkspaceEditableElement\(target\)[\s\S]*\.message-item[\s\S]*\.message-text[\s\S]*\.workspace-right-panel__resize-handle[\s\S]*\[role='dialog'\]/,
+  "global shell and panel clicks should restore composer focus while preserving editors, dialogs, previews, resize handles, and selectable message text",
+);
+assert.match(
+  workspaceHost,
   /const focusWorkspaceComposerSafely = useCallback\(\(options\?: \{ force\?: boolean \}\) => \{[\s\S]*input\.focus\(\{ preventScroll: true \}\);[\s\S]*input\.setSelectionRange\(end, end\);/,
   "composer focus must avoid scrolling the page and leave the caret at the end of the draft",
 );
 assert.match(
   workspaceHost,
-  /function shouldPreserveWorkspaceComposerFocus\(activeElement: Element \| null, input: HTMLTextAreaElement\): boolean[\s\S]*isWorkspaceEditableElement\(activeElement\)[\s\S]*\.workspace-right-panel[\s\S]*\[role='dialog'\][\s\S]*\.workspace-app-preview-card/,
-  "automatic composer focus must preserve active editable, dialog, preview, and right-panel focus",
+  /function shouldPreserveWorkspaceComposerFocus\(activeElement: Element \| null, input: HTMLTextAreaElement\): boolean[\s\S]*isWorkspaceEditableElement\(activeElement\)[\s\S]*\.modal[\s\S]*\[role='dialog'\][\s\S]*\.workspace-app-preview-card/,
+  "automatic composer focus must preserve active editable, dialog, and preview focus",
+);
+assert.doesNotMatch(
+  workspaceHost.match(/function shouldPreserveWorkspaceComposerFocus[\s\S]*?export type WorkspaceComposerDraft/)?.[0] ?? "",
+  /\.workspace-right-panel/,
+  "automatic composer focus should not preserve generic right-panel button focus",
 );
 assert.match(
   workspaceHost,
@@ -46,6 +56,11 @@ assert.match(
   workspaceHost,
   /window\.addEventListener\("focus", handleFocus\);[\s\S]*document\.addEventListener\("visibilitychange", handleFocus\);/,
   "workspace must restore composer focus when the app window becomes active again",
+);
+assert.match(
+  workspaceHost,
+  /const handleGlobalPointerUp = \(event: globalThis\.PointerEvent\) => \{[\s\S]*shouldRestoreWorkspaceComposerAfterGlobalPointer\(event\.target\)[\s\S]*focusWorkspaceComposerSafely\(\{ force: true \}\);[\s\S]*document\.addEventListener\("pointerup", handleGlobalPointerUp, true\);[\s\S]*document\.removeEventListener\("pointerup", handleGlobalPointerUp, true\);/,
+  "workspace shell panel clicks must restore composer focus after the click action completes",
 );
 assert.match(
   workspaceHost,
