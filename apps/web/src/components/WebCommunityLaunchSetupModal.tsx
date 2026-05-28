@@ -56,7 +56,7 @@ type KnowledgeAssemblyWorkStage =
   | "creating"
   | "writing"
   | "checking"
-  | "opening";
+  | "finishing";
 type KnowledgeAssemblyStage = "idle" | KnowledgeAssemblyWorkStage | "failed";
 type KnowledgeAssemblyStepStatus = "pending" | "active" | "complete" | "failed";
 
@@ -69,7 +69,7 @@ const KNOWLEDGE_ASSEMBLY_STEPS: Array<{
   { stage: "creating", label: "Creating draft pages" },
   { stage: "writing", label: "Writing source-backed content" },
   { stage: "checking", label: "Checking organization" },
-  { stage: "opening", label: "Opening Resources review" },
+  { stage: "finishing", label: "Completing Knowledge setup" },
 ];
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
@@ -596,7 +596,7 @@ const STEP_META: Record<
   knowledge: {
     label: "Knowledge",
     title: "Collect source material",
-    action: "Open resources",
+    action: "Continue",
     icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
   },
   publish: {
@@ -937,6 +937,8 @@ export function WebCommunityLaunchSetupModal(
     useState<KnowledgeAssemblyStage>("idle");
   const [knowledgeAssemblyFailedStage, setKnowledgeAssemblyFailedStage] =
     useState<KnowledgeAssemblyWorkStage | null>(null);
+  const [knowledgeCompletedDuringSession, setKnowledgeCompletedDuringSession] =
+    useState(false);
   const knowledgeProviderStateCommunityKeyRef = useRef<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
@@ -1162,6 +1164,7 @@ export function WebCommunityLaunchSetupModal(
     setProfileAvatarDragOver(false);
     setProfileBannerDragOver(false);
     setProfileSlugEdited(false);
+    setKnowledgeCompletedDuringSession(false);
   }, [
     isOpen,
     isCreateMode,
@@ -1220,7 +1223,7 @@ export function WebCommunityLaunchSetupModal(
         bannerUrl: profileDraft.bannerUrl,
         about: null,
         hasKnowledgeMaterial: false,
-        hasLiveKnowledge: false,
+        hasKnowledgeResources: false,
         hasAgentConfig: false,
         entryPolicy: null,
         visibility: "unlisted",
@@ -1261,17 +1264,28 @@ export function WebCommunityLaunchSetupModal(
   const activeTitle = activeMeta.title;
   const activeStatus =
     effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
-  const activeComplete = Boolean(activeStatus?.completed);
+  const activeComplete = activeStep === "knowledge"
+    ? Boolean(activeStatus?.completed || knowledgeCompletedDuringSession)
+    : Boolean(activeStatus?.completed);
   const missingCount = activeStatus?.missing.length ?? 0;
   const publishMissing =
     effectiveStatus?.missing.filter(isPublishProfileMissing) ?? [];
   const isSavingActiveStep = savingStep === activeStep;
+  const knowledgeAssemblyWorking =
+    activeStep === "knowledge" &&
+    knowledgeView === "assemble" &&
+    knowledgeAssemblyStage !== "failed" &&
+    (knowledgeHealthLoading || isSavingActiveStep);
+  const activeTotalItems = activeStatus?.total_items ?? 0;
+  const activeCompletedItems = activeComplete
+    ? activeTotalItems
+    : activeStatus?.completed_items ?? 0;
   const stepSummary = useMemo(() => {
     if (!activeStatus) return "Not loaded yet.";
-    if (activeStatus.completed) return "Complete";
+    if (activeComplete) return "Complete";
     if (missingCount === 1) return "1 item left";
     return `${missingCount} items left`;
-  }, [activeStatus, missingCount]);
+  }, [activeComplete, activeStatus, missingCount]);
 
   const loadGoogleDriveFiles = useCallback(async (options?: {
     append?: boolean;
@@ -2057,9 +2071,8 @@ export function WebCommunityLaunchSetupModal(
         !onDraftKnowledgeResources
       ) {
         setStepSuccess(
-          "Continue once draft resources are ready in Resources.",
+          "Knowledge preparation is unavailable right now.",
         );
-        onOpenStep("knowledge");
         return;
       }
       setSavingStep("knowledge");
@@ -2118,14 +2131,24 @@ export function WebCommunityLaunchSetupModal(
           );
         }
         setAssemblyStage("checking");
-        const successMessage =
-          architectureWarning ||
-          (draftResult.drafted
-            ? "Resources drafted for review."
-            : "Draft resources prepared for review.");
-        setStepSuccess(ingestionWarning ? `${successMessage} ${ingestionWarning}` : successMessage);
-        setAssemblyStage("opening");
-        onOpenStep("knowledge");
+        setAssemblyStage("finishing");
+        setKnowledgeCompletedDuringSession(true);
+        setKnowledgeView("collect");
+        setStepSuccess(
+          [
+            "Knowledge added.",
+            ingestionWarning,
+            architectureWarning ? "Resource organization needs review." : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+        const nextStep = getNextLaunchStep("knowledge");
+        if (nextStep) {
+          setStepOverride(nextStep);
+          setActiveStep(nextStep);
+          onStepChange?.(nextStep);
+        }
       } catch (error) {
         setKnowledgeAssemblyFailedStage(currentAssemblyStage);
         setKnowledgeAssemblyStage("failed");
@@ -2504,6 +2527,34 @@ export function WebCommunityLaunchSetupModal(
                 onClick={assemblyFailed ? handlePrepareKnowledgeResources : undefined}
               >
                 {assemblyFailed ? "Try again" : "Working..."}
+              </button>
+            </div>
+          </div>
+        );
+      }
+      if (activeComplete) {
+        return (
+          <div className="community-launch-inline-form community-launch-knowledge-complete">
+            <p className="community-launch-inline-note">
+              Knowledge added. Resources have been created for this community.
+              You can review and edit them from Resources after launch.
+            </p>
+            <div className="community-launch-step-actions">
+              {renderFinishLaterButton()}
+              <button
+                type="button"
+                className="polynet-onboarding-next"
+                onClick={() => {
+                  const nextStep = getNextLaunchStep("knowledge");
+                  if (!nextStep) return;
+                  setStepOverride(nextStep);
+                  setActiveStep(nextStep);
+                  onStepChange?.(nextStep);
+                  setStepError(null);
+                  setStepSuccess(null);
+                }}
+              >
+                Continue to publish
               </button>
             </div>
           </div>
@@ -3255,6 +3306,7 @@ export function WebCommunityLaunchSetupModal(
             className="polynet-onboarding-close community-launch-close"
             type="button"
             onClick={onClose}
+            disabled={knowledgeAssemblyWorking}
             aria-label="Close community launch setup"
           >
             <X size={16} strokeWidth={2} aria-hidden="true" />
@@ -3296,8 +3348,12 @@ export function WebCommunityLaunchSetupModal(
             >
               {STEP_ORDER.map((step) => {
                 const active = step === activeStep;
-                const complete = isStepComplete(effectiveStatus, step);
-                const disabled = isCreateMode && step !== "profile";
+                const complete =
+                  isStepComplete(effectiveStatus, step) ||
+                  (step === "knowledge" && knowledgeCompletedDuringSession);
+                const disabled =
+                  (isCreateMode && step !== "profile") ||
+                  (knowledgeAssemblyWorking && step !== activeStep);
                 return (
                   <button
                     key={step}
@@ -3305,7 +3361,7 @@ export function WebCommunityLaunchSetupModal(
                     className={`${active ? "active" : ""}${complete ? " complete" : ""}`}
                     disabled={disabled}
                     onClick={() => {
-                      if (disabled) return;
+                      if (disabled || (knowledgeAssemblyWorking && step !== activeStep)) return;
                       setStepOverride(step);
                       setActiveStep(step);
                       onStepChange?.(step);
@@ -3344,7 +3400,7 @@ export function WebCommunityLaunchSetupModal(
                 {renderStepEditor()}
                 <div
                   className={`community-launch-step-summary${activeComplete ? " complete" : ""}`}
-                  aria-label={`${activeMeta.label} progress: ${stepSummary}, ${activeStatus?.completed_items ?? 0} of ${activeStatus?.total_items ?? 0}`}
+                  aria-label={`${activeMeta.label} progress: ${stepSummary}, ${activeCompletedItems} of ${activeTotalItems}`}
                 >
                   {activeComplete ? (
                     <Check size={13} strokeWidth={2.4} aria-hidden="true" />
@@ -3353,8 +3409,8 @@ export function WebCommunityLaunchSetupModal(
                   )}
                   <span>{stepSummary}</span>
                   <span className="community-launch-status-count">
-                    {activeStatus?.completed_items ?? 0}/
-                    {activeStatus?.total_items ?? 0}
+                    {activeCompletedItems}/
+                    {activeTotalItems}
                   </span>
                 </div>
               </div>

@@ -348,8 +348,13 @@ assert.match(
 );
 assert.match(
   modal,
-  /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
-  "modal should run ingest, architect, content writer, then open Resources review from Knowledge Next",
+  /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*getNextLaunchStep\("knowledge"\)[\s\S]*setActiveStep\(nextStep\)/,
+  "modal should run ingest, architect, content writer, then continue launch setup from Knowledge Next",
+);
+assert.doesNotMatch(
+  modal,
+  /handlePrepareKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  "Knowledge Next should not redirect directly to Resources review",
 );
 const ingestIndex = prepareBody.indexOf("await onIngestKnowledgeSources()");
 const planIndex = prepareBody.indexOf("await onGenerateKnowledgePlan");

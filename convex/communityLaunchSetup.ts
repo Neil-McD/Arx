@@ -7,10 +7,9 @@ import {
   type CommunityAgentConfigLike,
   type CommunityLike,
   type CommunityPricePointLike,
-  type CommunityResourceModuleLike,
   type CommunityResourceLike,
-  communityResourceIsLiveModulePage,
-  communityResourceModuleIsLive,
+  communityResourceHasUsableKnowledgeContent,
+  normalizeResourceRole,
   requireCommunityManager,
   resolveCommunityEntryPolicy,
   resolveUserIdForAuthenticatedRequest,
@@ -29,28 +28,36 @@ function hasUsablePaidAccessConfig(rows: CommunityPricePointLike[]): boolean {
 
 async function getKnowledgeResourceProgress(ctx: any, communityId: any): Promise<{
   hasKnowledgeMaterial: boolean;
-  hasLiveKnowledge: boolean;
+  hasKnowledgeResources: boolean;
 }> {
-  const [modules, recentResources] = await Promise.all([
-    ctx.db
-      .query("communityResourceModules" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-      .take(250),
+  const [recentResources, pageResources] = await Promise.all([
     ctx.db
       .query("communityResources" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
       .order("desc")
-      .take(50),
+      .take(250),
+    ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_role_status", (q: any) =>
+        q.eq("communityId", communityId).eq("role", "page"),
+      )
+      .take(100),
   ]);
-  const liveModuleIds = new Set(
-    (modules as CommunityResourceModuleLike[])
-      .filter(communityResourceModuleIsLive)
-      .map((module) => String(module._id)),
-  );
-  const rows = recentResources as CommunityResourceLike[];
+  const rowsById = new Map<string, CommunityResourceLike>();
+  for (const row of [
+    ...(recentResources as CommunityResourceLike[]),
+    ...(pageResources as CommunityResourceLike[]),
+  ]) {
+    rowsById.set(String(row._id), row);
+  }
+  const rows = Array.from(rowsById.values());
   return {
     hasKnowledgeMaterial: rows.length > 0,
-    hasLiveKnowledge: rows.some((row) => communityResourceIsLiveModulePage(row, liveModuleIds)),
+    hasKnowledgeResources: rows.some(
+      (row) =>
+        normalizeResourceRole(row.role) === "page" &&
+        communityResourceHasUsableKnowledgeContent(row),
+    ),
   };
 }
 
@@ -99,7 +106,7 @@ export const getCommunityLaunchSetupStatus = query({
       bannerStorageId: (community as CommunityLike).bannerStorageId ?? null,
       about: (community as CommunityLike).about ?? null,
       hasKnowledgeMaterial: knowledgeResourceProgress.hasKnowledgeMaterial,
-      hasLiveKnowledge: knowledgeResourceProgress.hasLiveKnowledge,
+      hasKnowledgeResources: knowledgeResourceProgress.hasKnowledgeResources,
       hasAgentConfig: hasAgentConfig(primaryAgentConfig),
       entryPolicy: resolveCommunityEntryPolicy(community as CommunityLike),
       hasPaidAccessConfig: hasUsablePaidAccessConfig(currentPricePointRows as CommunityPricePointLike[]),

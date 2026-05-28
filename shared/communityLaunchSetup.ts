@@ -17,7 +17,7 @@ export type CommunityLaunchSetupMissing =
   | CommunityPublishReadinessMissing
   | "community_about"
   | "community_knowledge_material"
-  | "community_knowledge_live"
+  | "community_knowledge_resources"
   | "community_agent"
   | "community_access"
   | "community_publish";
@@ -49,7 +49,7 @@ export type CommunityLaunchSetupStatusInput = {
   bannerStorageId?: unknown;
   about?: string | null;
   hasKnowledgeMaterial?: boolean | null;
-  hasLiveKnowledge?: boolean | null;
+  hasKnowledgeResources?: boolean | null;
   hasAgentConfig?: boolean | null;
   entryPolicy?: string | null;
   hasPaidAccessConfig?: boolean | null;
@@ -123,7 +123,7 @@ export function buildCommunityLaunchSetupStatus(
     : ["community_about"];
   const knowledgeMissing: CommunityLaunchSetupMissing[] = [
     ...(input.hasKnowledgeMaterial ? [] : ["community_knowledge_material" as const]),
-    ...(input.hasLiveKnowledge ? [] : ["community_knowledge_live" as const]),
+    ...(input.hasKnowledgeResources ? [] : ["community_knowledge_resources" as const]),
   ];
   const agentMissing: CommunityLaunchSetupMissing[] = input.hasAgentConfig
     ? []

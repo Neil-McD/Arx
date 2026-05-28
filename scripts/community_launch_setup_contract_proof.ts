@@ -87,7 +87,7 @@ assert.equal(
 );
 assert.deepEqual(
   draftStatus.steps.find((step) => step.step === "knowledge")?.missing,
-  ["community_knowledge_material", "community_knowledge_live"],
+  ["community_knowledge_material", "community_knowledge_resources"],
 );
 
 const createProfileOnlyStatus = buildCommunityLaunchSetupStatus({
@@ -120,7 +120,7 @@ const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: false,
-  hasLiveKnowledge: false,
+  hasKnowledgeResources: false,
   hasAgentConfig: false,
   entryPolicy: "approval",
   visibility: "unlisted",
@@ -134,7 +134,7 @@ const knowledgeBeforePublishStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: false,
-  hasLiveKnowledge: false,
+  hasKnowledgeResources: false,
   hasAgentConfig: true,
   entryPolicy: "approval",
   visibility: "unlisted",
@@ -148,7 +148,7 @@ const accessBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: false,
-  hasLiveKnowledge: false,
+  hasKnowledgeResources: false,
   hasAgentConfig: true,
   entryPolicy: null,
   visibility: "unlisted",
@@ -162,7 +162,7 @@ const stagedKnowledgeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: true,
-  hasLiveKnowledge: false,
+  hasKnowledgeResources: false,
   hasAgentConfig: true,
   entryPolicy: "approval",
   visibility: "published",
@@ -175,7 +175,7 @@ assert.equal(stagedKnowledgeStep?.completed, false);
 assert.equal(stagedKnowledgeStep?.completed_items, 1);
 assert.equal(stagedKnowledgeStep?.total_items, 2);
 assert.deepEqual(stagedKnowledgeStep?.missing, [
-  "community_knowledge_live",
+  "community_knowledge_resources",
 ]);
 
 const paidWithoutPriceStatus = buildCommunityLaunchSetupStatus({
@@ -185,7 +185,7 @@ const paidWithoutPriceStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: true,
-  hasLiveKnowledge: true,
+  hasKnowledgeResources: true,
   hasAgentConfig: true,
   entryPolicy: "paid_subscription",
   hasPaidAccessConfig: false,
@@ -206,7 +206,7 @@ const completeStatus = buildCommunityLaunchSetupStatus({
   bannerUrl: "https://example.com/banner.png",
   about: "A community for operators.",
   hasKnowledgeMaterial: true,
-  hasLiveKnowledge: true,
+  hasKnowledgeResources: true,
   hasAgentConfig: true,
   entryPolicy: "paid_subscription",
   hasPaidAccessConfig: true,
@@ -233,12 +233,12 @@ assert.match(
 );
 assert.match(
   launchSetup,
-  /hasLiveKnowledge/,
-  "launch setup knowledge step must track live module knowledge separately",
+  /hasKnowledgeResources/,
+  "launch setup knowledge step must track generated resource content separately",
 );
 assert.match(
   launchSetup,
-  /community_knowledge_material[\s\S]*community_knowledge_live/,
+  /community_knowledge_material[\s\S]*community_knowledge_resources/,
   "launch setup knowledge step must expose separate activation points",
 );
 assert.match(
@@ -248,8 +248,8 @@ assert.match(
 );
 assert.match(
   launchQuery,
-  /communityResourceIsLiveModulePage/,
-  "launch setup knowledge completion must require a page inside a live module",
+  /communityResourceHasUsableKnowledgeContent/,
+  "launch setup knowledge completion must require usable generated resource content",
 );
 assert.match(
   launchQuery,
@@ -258,13 +258,13 @@ assert.match(
 );
 assert.match(
   launchQuery,
-  /hasLiveKnowledge: rows\.some\(\(row\) => communityResourceIsLiveModulePage\(row, liveModuleIds\)\)/,
-  "launch setup live knowledge progress must use the shared live-module predicate",
+  /hasKnowledgeResources: rows\.some\([\s\S]*normalizeResourceRole\(row\.role\) === "page"[\s\S]*communityResourceHasUsableKnowledgeContent\(row\)/,
+  "launch setup knowledge completion must count source-backed page content before publish",
 );
 assert.match(
   launchQuery,
-  /query\("communityResourceModules"[\s\S]*by_community_createdAt/,
-  "launch setup knowledge completion must inspect modules and recent resources",
+  /by_community_createdAt[\s\S]*by_community_role_status/,
+  "launch setup knowledge completion must inspect recent resources and generated page resources",
 );
 assert.match(
   launchQuery,
@@ -286,10 +286,10 @@ assert.match(
   /hasUsablePaidAccessConfig/,
   "launch setup paid access check must reject archived current price points",
 );
-assert.match(
+assert.doesNotMatch(
   launchQuery,
-  /communityResourceModules[\s\S]*communityResourceIsLiveModulePage/,
-  "launch setup must use live modules without letting empty modules complete knowledge",
+  /communityResourceIsLiveModulePage|communityResourceModuleIsLive/,
+  "launch setup knowledge completion must not require published live-module resources",
 );
 assert.doesNotMatch(
   launchQuery,
@@ -443,7 +443,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /community-launch-step-summary[\s\S]*completed_items[\s\S]*total_items/,
+  /community-launch-step-summary[\s\S]*activeCompletedItems[\s\S]*activeTotalItems/,
   "launch modal must show the compact aggregate progress indicator for each step",
 );
 assert.doesNotMatch(
@@ -700,8 +700,13 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /handlePrepareKnowledgeResources[\s\S]*getKnowledgePreparationBlocker[\s\S]*setKnowledgeView\("assemble"\)[\s\S]*setAssemblyStage\("reading"\)[\s\S]*onIngestKnowledgeSources[\s\S]*setAssemblyStage\("organizing"\)[\s\S]*onGenerateKnowledgePlan[\s\S]*setAssemblyStage\("creating"\)[\s\S]*onApplyKnowledgePlan[\s\S]*setAssemblyStage\("writing"\)[\s\S]*onDraftKnowledgeResources[\s\S]*setAssemblyStage\("checking"\)[\s\S]*setAssemblyStage\("opening"\)[\s\S]*onOpenStep\("knowledge"\)/,
-  "launch knowledge Next must require provider-local saves/imports and run source-driven planning/apply/drafting without scaffold fallback",
+  /handlePrepareKnowledgeResources[\s\S]*getKnowledgePreparationBlocker[\s\S]*setKnowledgeView\("assemble"\)[\s\S]*setAssemblyStage\("reading"\)[\s\S]*onIngestKnowledgeSources[\s\S]*setAssemblyStage\("organizing"\)[\s\S]*onGenerateKnowledgePlan[\s\S]*setAssemblyStage\("creating"\)[\s\S]*onApplyKnowledgePlan[\s\S]*setAssemblyStage\("writing"\)[\s\S]*onDraftKnowledgeResources[\s\S]*setAssemblyStage\("checking"\)[\s\S]*setAssemblyStage\("finishing"\)[\s\S]*setKnowledgeCompletedDuringSession\(true\)[\s\S]*getNextLaunchStep\("knowledge"\)[\s\S]*setActiveStep\(nextStep\)/,
+  "launch knowledge Next must run source-driven planning/apply/drafting, mark Knowledge complete, and continue to Publish without opening Resources",
+);
+assert.doesNotMatch(
+  setupModal,
+  /handlePrepareKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
+  "launch knowledge Next must not redirect directly to Resources review",
 );
 assert.match(
   setupModal,
@@ -725,8 +730,18 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /(?=[\s\S]*type KnowledgeView = "collect" \| "assemble")(?=[\s\S]*KNOWLEDGE_ASSEMBLY_STEPS)(?=[\s\S]*Assembling resources)(?=[\s\S]*Reading source material)(?=[\s\S]*Organizing resource structure)(?=[\s\S]*Creating draft pages)(?=[\s\S]*Writing source-backed content)(?=[\s\S]*Checking organization)(?=[\s\S]*Opening Resources review)(?=[\s\S]*Back to sources)(?=[\s\S]*Try again)/,
+  /(?=[\s\S]*type KnowledgeView = "collect" \| "assemble")(?=[\s\S]*KNOWLEDGE_ASSEMBLY_STEPS)(?=[\s\S]*Assembling resources)(?=[\s\S]*Reading source material)(?=[\s\S]*Organizing resource structure)(?=[\s\S]*Creating draft pages)(?=[\s\S]*Writing source-backed content)(?=[\s\S]*Checking organization)(?=[\s\S]*Completing Knowledge setup)(?=[\s\S]*Back to sources)(?=[\s\S]*Try again)/,
   "launch knowledge step must present agent preparation as an assembly progress card",
+);
+assert.match(
+  setupModal,
+  /knowledgeAssemblyWorking[\s\S]*knowledgeAssemblyStage !== "failed"[\s\S]*disabled=\{knowledgeAssemblyWorking\}[\s\S]*knowledgeAssemblyWorking && step !== activeStep/,
+  "launch Knowledge assembly must keep the user inside the Knowledge tab while work is running",
+);
+assert.match(
+  setupModal,
+  /activeStep === "knowledge"[\s\S]*activeStatus\?\.completed \|\| knowledgeCompletedDuringSession[\s\S]*Knowledge added[\s\S]*Continue to publish/,
+  "completed launch Knowledge must show a checked read-only state instead of the source collection UI",
 );
 assert.match(
   baseCss,
