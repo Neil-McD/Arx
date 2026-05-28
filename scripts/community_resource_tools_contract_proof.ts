@@ -24,7 +24,7 @@ const toolRegistry = read("shared/toolRegistry.ts");
 const runtimeToolPolicy = read("shared/runtimeToolPolicy.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
-const httpDaytona = read("convex/httpDaytona.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const resources = read("convex/communityResources.ts");
 const polynetMcp = read("shared/polynetMcp.ts");
 const timeline = read("shared/runtimeActivityTimeline.ts");
@@ -182,23 +182,23 @@ assert.doesNotMatch(
   "resource tool payloads should not expose raw storage file keys",
 );
 
-assert.match(httpDaytona, /toolName === "community_resources_list"/);
-assert.match(httpDaytona, /toolName === "community_resource_read"/);
-assert.match(httpDaytona, /toolName === "community_resources_search"/);
+assert.match(runtimeAgentLoop, /toolName === "community_resources_list"/);
+assert.match(runtimeAgentLoop, /toolName === "community_resource_read"/);
+assert.match(runtimeAgentLoop, /toolName === "community_resources_search"/);
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /community_resources_list requires an active community context/,
 );
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /internal\.communityResources\.listCommunityResourceDirectoryInternal/,
 );
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /internal\.communityResources\.readCommunityResourceDirectoryInternal/,
 );
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /internal\.communityResources\.searchCommunityResourceDirectoryInternal/,
 );
 

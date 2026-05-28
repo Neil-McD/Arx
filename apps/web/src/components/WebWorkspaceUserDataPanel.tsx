@@ -44,7 +44,7 @@ import {
   type WorkspaceInspectorFailure,
   type WorkspaceInspectorFilePreview,
 } from "../../../../shared/workspaceInspectorGateway";
-import type { DaytonaWorkspaceComputerStartResult } from "../../../../shared/daytonaWorkspaceTerminals";
+import type { WorkspaceComputerStartResult } from "../../../../shared/workspaceTerminalsGateway";
 import type { IntegrationSurfaceStateTone } from "../lib/integrationSurfaceRows";
 
 export type WorkspaceUserPanelCommunity = {
@@ -139,6 +139,7 @@ export type WorkspaceUserDataPanelDataProps = {
   workspaceCreditBalanceError: string | null;
   workspaceCreditTopupError: string | null;
   isStartingWorkspaceCreditTopupCheckout: boolean;
+  hasWorkspaceCardOnFile?: boolean | null;
   isStartingWorkspaceComputer: boolean;
   isStoppingWorkspaceComputer: boolean;
   workspaceComputerStartError: string | null;
@@ -149,7 +150,7 @@ export type WorkspaceUserDataPanelDataProps = {
   activeModelLabel: string | null;
   activeCommunity: WorkspaceUserPanelCommunity | null;
   onOpenWorkspaceCreditTopup: () => void;
-  onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
+  onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceUserPanelRecentSignal["target"]) => void;
   onOpenActiveCommunitySettings: () => void;
@@ -410,8 +411,34 @@ function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): str
   ) {
     return "Workspace is waking up. Try again in a moment.";
   }
+  if (result.code === "blaxel_volume_quota_exceeded") {
+    return "Workspace storage quota is full. Delete an unused computer or volume, then try again.";
+  }
+  if (
+    result.code === "workspace_volume_limit_reached" ||
+    result.code === "workspace_provider_volume_quota_headroom_exhausted"
+  ) {
+    return "Workspace storage quota is full. Delete an unused computer, then try again.";
+  }
+  if (result.code === "workspace_volume_funding_required") {
+    return "Add prepaid credits or a card before creating workspace storage.";
+  }
+  if (result.code === "workspace_card_required_for_additional_volume") {
+    return "Extra computers require a card on file.";
+  }
+  if (result.code === "workspace_uncollected_usage_blocked") {
+    return "Clear prior workspace usage before turning on this computer.";
+  }
   if (result.code === "workspace_credits_exhausted") return "Turn on computer to view files.";
   return result.message;
+}
+
+function isWorkspaceInspectorWakeRetryableCode(code: string | null | undefined): boolean {
+  return (
+    code === "blaxel_sandbox_not_found" ||
+    code === "blaxel_sandbox_not_ready" ||
+    code === "blaxel_workspace_recreate_failed"
+  );
 }
 
 function WorkspaceCommunityAnalyticsPreview(props: {
@@ -653,6 +680,11 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     props.isLoadingWorkspaceCreditBalance && !props.workspaceCreditBalance
       ? "Checking..."
       : formatWorkspaceToolBalanceUsdFromCredits(totalCredits);
+  const workspaceBillingActionLabel = props.isStartingWorkspaceCreditTopupCheckout
+    ? "Opening"
+    : props.hasWorkspaceCardOnFile === true
+      ? "Billing"
+      : "Add card";
   const [filesExpanded, setFilesExpanded] = useState(() => loadFilesExpanded(props.activeProjectId));
   const [directoryRefreshNonce, setDirectoryRefreshNonce] = useState(0);
   const [directoryPath, setDirectoryPath] = useState(".");
@@ -661,16 +693,26 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [directoryErrorCode, setDirectoryErrorCode] = useState<string | null>(null);
   const [isComputerOnForFiles, setIsComputerOnForFiles] = useState(false);
-  const [workspaceFilesProviderId, setWorkspaceFilesProviderId] = useState<"daytona" | "blaxel" | null>(null);
+  const [workspaceFilesProviderId, setWorkspaceFilesProviderId] = useState<"blaxel" | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<WorkspaceInspectorFilePreview | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState(false);
   const [filePreviewError, setFilePreviewError] = useState<string | null>(null);
   const filePreviewRequestId = useRef(0);
   const lastFilesResetNonceRef = useRef(props.filesResetNonce ?? 0);
+  const directoryAutoRetryCountRef = useRef(0);
+  const directoryAutoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canInspectFiles = Boolean(props.session && props.activeProjectId);
 
+  const clearDirectoryAutoRetryTimer = useCallback(() => {
+    if (!directoryAutoRetryTimerRef.current) return;
+    clearTimeout(directoryAutoRetryTimerRef.current);
+    directoryAutoRetryTimerRef.current = null;
+  }, []);
+
   useEffect(() => {
+    clearDirectoryAutoRetryTimer();
+    directoryAutoRetryCountRef.current = 0;
     filePreviewRequestId.current += 1;
     setFilesExpanded(loadFilesExpanded(props.activeProjectId));
     setDirectoryPath(".");
@@ -682,20 +724,28 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
-  }, [props.activeProjectId]);
+  }, [clearDirectoryAutoRetryTimer, props.activeProjectId]);
+
+  useEffect(() => clearDirectoryAutoRetryTimer, [clearDirectoryAutoRetryTimer]);
 
   const setFilesExpandedForProject = useCallback(
     (next: boolean) => {
+      if (!next) {
+        clearDirectoryAutoRetryTimer();
+        directoryAutoRetryCountRef.current = 0;
+      }
       setFilesExpanded(next);
       storeFilesExpanded(props.activeProjectId, next);
     },
-    [props.activeProjectId],
+    [clearDirectoryAutoRetryTimer, props.activeProjectId],
   );
 
   useEffect(() => {
     const nonce = props.filesResetNonce ?? 0;
     if (lastFilesResetNonceRef.current === nonce) return;
     lastFilesResetNonceRef.current = nonce;
+    clearDirectoryAutoRetryTimer();
+    directoryAutoRetryCountRef.current = 0;
     filePreviewRequestId.current += 1;
     setFilesExpanded(false);
     storeFilesExpanded(props.activeProjectId, false);
@@ -708,10 +758,11 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setFilePreview(null);
     setFilePreviewError(null);
     setIsLoadingFilePreview(false);
-  }, [props.activeProjectId, props.filesResetNonce]);
+  }, [clearDirectoryAutoRetryTimer, props.activeProjectId, props.filesResetNonce]);
 
   useEffect(() => {
     let isAlive = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     if (!filesExpanded || !props.session || !props.activeProjectId) return;
     setIsLoadingDirectory(true);
     setDirectoryError(null);
@@ -729,8 +780,21 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           setDirectoryErrorCode(result.code);
           setIsComputerOnForFiles(false);
           setWorkspaceFilesProviderId(null);
+          if (
+            isWorkspaceInspectorWakeRetryableCode(result.code) &&
+            directoryAutoRetryCountRef.current < 5
+          ) {
+            directoryAutoRetryCountRef.current += 1;
+            const retryDelayMs = directoryAutoRetryCountRef.current === 1 ? 750 : 1500;
+            retryTimer = setTimeout(() => {
+              if (isAlive) setDirectoryRefreshNonce((value) => value + 1);
+            }, retryDelayMs);
+            directoryAutoRetryTimerRef.current = retryTimer;
+          }
           return;
         }
+        clearDirectoryAutoRetryTimer();
+        directoryAutoRetryCountRef.current = 0;
         setDirectoryEntries(result.entries);
         setIsComputerOnForFiles(true);
         setWorkspaceFilesProviderId(result.providerId);
@@ -749,8 +813,19 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
 
     return () => {
       isAlive = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (directoryAutoRetryTimerRef.current === retryTimer) {
+        directoryAutoRetryTimerRef.current = null;
+      }
     };
-  }, [directoryPath, directoryRefreshNonce, filesExpanded, props.activeProjectId, props.session]);
+  }, [
+    clearDirectoryAutoRetryTimer,
+    directoryPath,
+    directoryRefreshNonce,
+    filesExpanded,
+    props.activeProjectId,
+    props.session,
+  ]);
 
   const handleSelectFile = useCallback(
     (path: string) => {
@@ -806,6 +881,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       directoryErrorCode === "sandbox_not_found" ||
       directoryErrorCode === "workspace_credits_exhausted" ||
       directoryErrorCode === "workspace_credits_unavailable" ||
+      directoryErrorCode === "workspace_uncollected_usage_blocked" ||
+      directoryErrorCode === "workspace_volume_funding_required" ||
+      directoryErrorCode === "workspace_card_required_for_additional_volume" ||
       directoryErrorCode === "computer_starting" ||
       directoryErrorCode === "computer_start_failed"
     );
@@ -830,7 +908,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setFilePreview(null);
     setFilePreviewError(null);
     setIsLoadingFilePreview(false);
-    let result: DaytonaWorkspaceComputerStartResult;
+    let result: WorkspaceComputerStartResult;
     try {
       result = await props.onTurnOnComputer();
     } catch (error) {
@@ -854,7 +932,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryError(null);
     setDirectoryErrorCode(null);
     setIsComputerOnForFiles(true);
-    setWorkspaceFilesProviderId("daytona");
+    setWorkspaceFilesProviderId("blaxel");
     setDirectoryRefreshNonce((value) => value + 1);
   }, [canTurnOnComputer, props.onTurnOnComputer, setFilesExpandedForProject]);
 
@@ -900,7 +978,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                 onClick={props.onOpenWorkspaceCreditTopup}
                 disabled={props.isStartingWorkspaceCreditTopupCheckout}
               >
-                {props.isStartingWorkspaceCreditTopupCheckout ? "Opening" : "Top up"}
+                {workspaceBillingActionLabel}
               </button>
             </dd>
           </div>

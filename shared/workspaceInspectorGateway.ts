@@ -15,7 +15,7 @@ export type WorkspaceInspectorDirectoryEntry = {
 export type WorkspaceInspectorDirectoryResult =
   | {
       ok: true;
-      providerId: "daytona" | "blaxel" | null;
+      providerId: "blaxel" | null;
       status: "active";
       path: string;
       entries: WorkspaceInspectorDirectoryEntry[];
@@ -116,7 +116,7 @@ export async function listWorkspaceDirectoryCanonical(params: {
   return {
     ok: true,
     providerId:
-      payload.providerId === "daytona" || payload.providerId === "blaxel"
+      payload.providerId === "blaxel"
         ? payload.providerId
         : null,
     status: "active",

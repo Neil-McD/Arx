@@ -12,6 +12,7 @@ import type {
   WorkspaceCreditTopupSurface,
   WorkspaceToolBalanceTopupPackId,
 } from "../../../../shared/workspaceCredits";
+import type { PaidUsageBillingMode } from "../../../../shared/paidUsageBilling";
 
 type InferenceIssueReason =
   | "quota"
@@ -29,6 +30,7 @@ type InferenceIssueModalState = {
   message: string | null;
   toolKind?: PaidToolKind | null;
   requiredCredits?: number | null;
+  paidUsageBillingMode?: PaidUsageBillingMode | null;
 } | null;
 
 type WebMemoryImportModalProps = {
@@ -49,13 +51,16 @@ type WebInferenceIssueModalProps = {
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   isStartingWorkspaceCreditTopupCheckout?: boolean;
+  isStartingWorkspaceCardSetupCheckout?: boolean;
   workspaceCreditTopupError?: string | null;
+  workspaceCardSetupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
   onStartWorkspaceCreditTopupCheckout?: (
     packId?: WorkspaceToolBalanceTopupPackId,
     surface?: WorkspaceCreditTopupSurface,
   ) => Promise<void> | void;
+  onStartWorkspaceCardSetupCheckout?: () => Promise<void> | void;
 };
 
 type PreviewAccessGateModalState = ComponentProps<

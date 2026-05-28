@@ -69,8 +69,8 @@ function kinds(events: ReturnType<typeof event>[]): AgentActivityKind[] {
   return buildAgentActivityTimeline(events).map((step) => step.kind);
 }
 
-const projection = readText("/Users/neilmcdevitt/code/arx/shared/runtimeActivityTimeline.ts");
-const runtimeTimelineUi = readText("/Users/neilmcdevitt/code/arx/shared/runtimeTimelineUi.ts");
+const projection = readText("shared/runtimeActivityTimeline.ts");
+const runtimeTimelineUi = readText("shared/runtimeTimelineUi.ts");
 
 for (const token of [
   "export type AgentActivityKind",

@@ -1,5 +1,5 @@
 import { isComputerUseToolName } from "./retrievalTools";
-import type { DaytonaCloudRuntimeRunEventTransportRow } from "./daytonaCloudThreadsRead";
+import type { CloudRuntimeRunEventTransportRow } from "./cloudThreadsRead";
 
 export type RuntimeToolCategory =
   | "exploration"
@@ -414,7 +414,7 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
 }
 
 function resolveToolCallId(
-  event: Pick<DaytonaCloudRuntimeRunEventTransportRow, "run_id" | "seq" | "payload">,
+  event: Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "payload">,
   payload: Record<string, unknown>,
   toolName: string,
 ): string {
@@ -485,7 +485,7 @@ function readComputerUseDetails(payload: Record<string, unknown> | null): {
 }
 
 export function buildRuntimeComputerUseViewer(
-  events: Array<Pick<DaytonaCloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
+  events: Array<Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
 ): RuntimeComputerUseViewerState | null {
   const pendingTitles = new Map<string, string>();
   const recentSteps: RuntimeComputerUseStep[] = [];
@@ -550,7 +550,7 @@ export function buildRuntimeComputerUseViewer(
 }
 
 function extractRuntimeToolCalls(
-  events: Array<Pick<DaytonaCloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
+  events: Array<Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
 ): Map<string, RuntimeTimelineToolCall> {
   const calls = new Map<string, RuntimeTimelineToolCall>();
   for (const event of events) {
@@ -586,13 +586,13 @@ function extractRuntimeToolCalls(
 }
 
 export function buildRuntimeLiveTimeline(
-  events: Array<Pick<DaytonaCloudRuntimeRunEventTransportRow, "seq" | "event_type" | "payload">>,
+  events: Array<Pick<CloudRuntimeRunEventTransportRow, "seq" | "event_type" | "payload">>,
 ): RuntimeLiveTimelineEntry[] {
   const sorted = [...events].sort((a, b) => a.seq - b.seq);
   if (sorted.length === 0) return [];
 
   const calls = extractRuntimeToolCalls(
-    sorted as Array<Pick<DaytonaCloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
+    sorted as Array<Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
   );
   const reasoningSections = new Map<
     string,
@@ -615,7 +615,7 @@ export function buildRuntimeLiveTimeline(
       const toolName = toStringValue(payload?.tool_name);
       if (!payload || !toolName) continue;
       const callId = resolveToolCallId(
-        event as Pick<DaytonaCloudRuntimeRunEventTransportRow, "run_id" | "seq" | "payload">,
+        event as Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "payload">,
         payload,
         toolName,
       );
@@ -736,7 +736,7 @@ export function buildRuntimeLiveTimeline(
 }
 
 export function extractRuntimeWebSources(
-  events: Array<Pick<DaytonaCloudRuntimeRunEventTransportRow, "seq" | "event_type" | "payload">>,
+  events: Array<Pick<CloudRuntimeRunEventTransportRow, "seq" | "event_type" | "payload">>,
 ): RuntimeWebSourceRef[] {
   const sorted = [...events].sort((a, b) => a.seq - b.seq);
   const searchResultsByUrl = new Map<

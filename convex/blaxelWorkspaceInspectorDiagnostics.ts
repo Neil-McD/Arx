@@ -104,8 +104,8 @@ export const diagnoseBlaxelWorkspaceInspectorProject = action({
 
     const project = await ctx.runQuery(api.projects.getCloudProjectById as any, {
       projectId: args.projectId,
-      ownerId: args.ownerId,
-      authSubject,
+      ...(args.ownerId ? { ownerId: args.ownerId } : null),
+      ...(authSubject ? { authSubject } : null),
     });
     if (!project) {
       return {
@@ -162,8 +162,8 @@ export const diagnoseBlaxelWorkspaceInspectorProject = action({
 
     const refreshedProject = await ctx.runQuery(api.projects.getCloudProjectById as any, {
       projectId: args.projectId,
-      ownerId: args.ownerId,
-      authSubject,
+      ...(args.ownerId ? { ownerId: args.ownerId } : null),
+      ...(authSubject ? { authSubject } : null),
     });
 
     const refreshedSandboxId = normalizeOptionalString(

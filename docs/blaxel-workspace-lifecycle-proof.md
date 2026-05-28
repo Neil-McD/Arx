@@ -1,6 +1,6 @@
 # Blaxel Workspace Lifecycle Proof
 
-This branch pivots away from the Codex-in-Daytona staging path and starts from current local `main`.
+This branch pivots away from the Codex-in-workspace staging path and starts from current local `main`.
 
 The first Blaxel slice is deliberately not a product integration. It is a provider proof for the workspace-computer model PolyNet actually needs.
 
@@ -25,8 +25,9 @@ PolyNet maps product intent to provider lifecycle:
   unconditional provider max-age kill while the run is active.
 
 Project resource ids are provider-owned. A Blaxel Files-panel sandbox writes
-Blaxel-owned volume and sandbox ids to the project row; Daytona terminal/runtime
-paths must reject those ids instead of calling Daytona APIs with them.
+Blaxel-owned volume and sandbox ids to the project row. Runtime and terminal
+paths must reject unknown ownerless ids instead of attaching them to Blaxel
+implicitly.
 
 When a project sandbox already exists, stronger lifecycle intent wins. A
 file-inspection sandbox can be reused for later file inspection. Agent work
@@ -199,15 +200,14 @@ The live lifecycle upgrade proof must return:
 
 ## Decision Rule
 
-The provider-neutral workspace-computer seam exists behind staging-only policy in
-this branch. Blaxel should only become a broader staging runtime after both the
-standby proof and lifecycle-upgrade proof pass.
+The provider-neutral workspace-computer seam now resolves to Blaxel in this
+branch. Blaxel should only become the production runtime after both the standby
+proof and lifecycle-upgrade proof pass on the staging path.
 
-The next implementation slice after a passing proof is:
+The staging integration keeps the irreducible pieces:
 
-- keep Daytona as the default provider
+- keep Blaxel as the default provider
 - keep Convex as project authority
 - keep server-side path guards and entitlement gates
-- route one internal staging workspace path through Blaxel
-- replace Daytona idle stop/delete with Blaxel standby/expiration behavior only
+- use Blaxel standby/expiration behavior only
   for Blaxel projects

@@ -1,24 +1,22 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { formatProjectOperationErrorMessage } from "../../../../shared/appErrorMappings";
 import {
-  createMappedDaytonaCloudProject,
-  deleteMappedDaytonaCloudProject,
-  importMappedDaytonaCloudProjectZip,
-  updateMappedDaytonaCloudProject,
-} from "../../../../shared/daytonaCloudProjects";
+  type CloudProjectRecord,
+  createMappedCloudProject,
+  deleteMappedCloudProject,
+  importMappedCloudProjectZip,
+  updateMappedCloudProject,
+} from "../../../../shared/cloudProjectsGateway";
+import type { WorkspaceStorageBillingAction } from "../../../../shared/paidUsageBilling";
 import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
+import {
+  countWorkspaceProjectsForAdmission,
+  getWorkspaceProjectVolumeLimitForTier,
+  WORKSPACE_FREE_PROJECT_VOLUME_LIMIT,
+} from "../../../../shared/workspaceResourceAdmission";
 
-export type WebCloudProjectRecord = {
-  id: string;
-  name: string | null;
-  description: string | null;
-  slug: string | null;
-  status: string;
-  created_at: number;
-  updated_at: number;
-  root_path: string;
-};
+export type WebCloudProjectRecord = CloudProjectRecord;
 
 type CreateProjectModalState = {
   isOpen: boolean;
@@ -68,24 +66,23 @@ export type WebProjectModalHostProps = {
 type UseWebProjectUiControllerParams<TSession> = {
   session: TSession | null;
   cloudProjects: WebCloudProjectRecord[];
+  hasWorkspaceCardOnFile?: boolean | null;
   ensureSession: (session: TSession) => Promise<TSession | null>;
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
+  onWorkspaceBillingRequired?: (params: {
+    action: WorkspaceStorageBillingAction;
+    message?: string | null;
+  }) => void;
   onProjectCreated: (project: WebCloudProjectRecord) => void;
   onProjectUpdated: (project: WebCloudProjectRecord) => void;
   onProjectDeleted: (project: WebCloudProjectRecord) => void;
   onStartDraftInProject: (projectId: string) => void;
 };
 
-const ACCOUNT_MAX_PROJECTS = 5;
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
 const PROJECT_IMPORT_MAX_FILES = 25_000;
 const PROJECT_IMPORT_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
-const PROJECT_ERROR_MESSAGE_OPTIONS = {
-  maxProjects: ACCOUNT_MAX_PROJECTS,
-  maxImportFiles: PROJECT_IMPORT_MAX_FILES,
-  maxExtractedBytes: PROJECT_IMPORT_MAX_EXTRACTED_BYTES,
-} as const;
 
 function toSelectedFile(files: FileList | null): File | null {
   return files?.[0] ?? null;
@@ -136,6 +133,24 @@ function formatProjectImportSummary(params: {
   return parts.join(" ");
 }
 
+function readWorkspaceBillingActionFromError(
+  error: unknown,
+): WorkspaceStorageBillingAction | null {
+  const text =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : String(error ?? "");
+  if (text.includes("workspace_card_required_for_additional_volume")) {
+    return "card_required";
+  }
+  if (text.includes("workspace_volume_funding_required")) {
+    return "funding_required";
+  }
+  return null;
+}
+
 export function useWebProjectUiController<TSession>(
   params: UseWebProjectUiControllerParams<TSession>,
 ): {
@@ -151,9 +166,11 @@ export function useWebProjectUiController<TSession>(
   const {
     session,
     cloudProjects,
+    hasWorkspaceCardOnFile = null,
     ensureSession,
     requireSignIn,
     showAppToastMessage,
+    onWorkspaceBillingRequired,
     onProjectCreated,
     onProjectUpdated,
     onProjectDeleted,
@@ -180,7 +197,17 @@ export function useWebProjectUiController<TSession>(
   const [deleteProjectError, setDeleteProjectError] = useState<string | null>(null);
 
   const canCreateAdditionalCloudProjects = Boolean(session);
-  const projectQuotaReached = cloudProjects.length >= ACCOUNT_MAX_PROJECTS;
+  const maxProjects = getWorkspaceProjectVolumeLimitForTier("paid");
+  const countableProjectCount = countWorkspaceProjectsForAdmission(cloudProjects);
+  const projectQuotaReached = countableProjectCount >= maxProjects;
+  const projectErrorMessageOptions = useMemo(
+    () => ({
+      maxProjects,
+      maxImportFiles: PROJECT_IMPORT_MAX_FILES,
+      maxExtractedBytes: PROJECT_IMPORT_MAX_EXTRACTED_BYTES,
+    }) as const,
+    [maxProjects],
+  );
   const deletingProject = deletingProjectId
     ? cloudProjects.find((project) => project.id === deletingProjectId) ?? null
     : null;
@@ -229,10 +256,26 @@ export function useWebProjectUiController<TSession>(
       requireSignIn();
       return;
     }
+    if (
+      hasWorkspaceCardOnFile === false &&
+      countableProjectCount >= WORKSPACE_FREE_PROJECT_VOLUME_LIMIT
+    ) {
+      onWorkspaceBillingRequired?.({
+        action: "card_required",
+        message: "Extra computers require a card on file.",
+      });
+      return;
+    }
     setCreateProjectError(null);
     setCreateProjectImportFile(null);
     setIsCreateProjectModalOpen(true);
-  }, [requireSignIn, session]);
+  }, [
+    countableProjectCount,
+    hasWorkspaceCardOnFile,
+    onWorkspaceBillingRequired,
+    requireSignIn,
+    session,
+  ]);
 
   const openEditProjectModal = useCallback((project: WebCloudProjectRecord) => {
     setEditingProjectId(project.id);
@@ -257,7 +300,7 @@ export function useWebProjectUiController<TSession>(
     }
     const usableSession = await ensureSession(session);
     if (!usableSession) return;
-    if (cloudProjects.length >= ACCOUNT_MAX_PROJECTS || isCreatingProject) {
+    if (projectQuotaReached || isCreatingProject) {
       return;
     }
     const importFileError = getProjectImportFileError(createProjectImportFile);
@@ -269,24 +312,15 @@ export function useWebProjectUiController<TSession>(
     setIsCreatingProject(true);
     let createdProject: WebCloudProjectRecord | null = null;
     try {
-      const created = await createMappedDaytonaCloudProject({
+      const created = await createMappedCloudProject({
         session: usableSession,
         name: createProjectName.trim() || undefined,
         description: createProjectDescription.trim() || undefined,
       });
-      const nextProject: WebCloudProjectRecord = {
-        id: created.id,
-        name: created.name,
-        description: created.description,
-        slug: created.slug,
-        status: created.status,
-        created_at: created.created_at,
-        updated_at: created.updated_at,
-        root_path: created.root_path,
-      };
+      const nextProject: WebCloudProjectRecord = created;
       createdProject = nextProject;
       if (createProjectImportFile) {
-        const importResult = await importMappedDaytonaCloudProjectZip({
+        const importResult = await importMappedCloudProjectZip({
           session: usableSession,
           projectId: nextProject.id,
           file: createProjectImportFile,
@@ -308,10 +342,22 @@ export function useWebProjectUiController<TSession>(
         setEditProjectError("Computer created, but the zip import failed. You can try the import again here.");
         setIsEditProjectModalOpen(true);
       } else {
+        const billingAction = readWorkspaceBillingActionFromError(error);
+        if (billingAction && onWorkspaceBillingRequired) {
+          resetCreateProjectModal();
+          onWorkspaceBillingRequired({
+            action: billingAction,
+            message: formatProjectOperationErrorMessage(error, {
+              operation: "create",
+              ...projectErrorMessageOptions,
+            }),
+          });
+          return;
+        }
         setCreateProjectError(
           formatProjectOperationErrorMessage(error, {
             operation: "create",
-            ...PROJECT_ERROR_MESSAGE_OPTIONS,
+            ...projectErrorMessageOptions,
           }),
         );
       }
@@ -319,7 +365,7 @@ export function useWebProjectUiController<TSession>(
       setIsCreatingProject(false);
     }
   }, [
-    cloudProjects.length,
+    projectQuotaReached,
     session,
     createProjectDescription,
     createProjectImportFile,
@@ -328,6 +374,8 @@ export function useWebProjectUiController<TSession>(
     isCreatingProject,
     onProjectCreated,
     onStartDraftInProject,
+    onWorkspaceBillingRequired,
+    projectErrorMessageOptions,
     requireSignIn,
     resetCreateProjectModal,
     showAppToastMessage,
@@ -346,7 +394,7 @@ export function useWebProjectUiController<TSession>(
     setIsUpdatingProject(true);
     let metadataUpdated = false;
     try {
-      const updated = await updateMappedDaytonaCloudProject({
+      const updated = await updateMappedCloudProject({
         session: usableSession,
         projectId: editingProjectId,
         name: editProjectName.trim(),
@@ -355,7 +403,7 @@ export function useWebProjectUiController<TSession>(
       metadataUpdated = true;
       onProjectUpdated(updated);
       if (editProjectImportFile) {
-        const importResult = await importMappedDaytonaCloudProjectZip({
+        const importResult = await importMappedCloudProjectZip({
           session: usableSession,
           projectId: editingProjectId,
           file: editProjectImportFile,
@@ -370,7 +418,7 @@ export function useWebProjectUiController<TSession>(
           ? "Computer details were saved, but the zip import failed."
           : formatProjectOperationErrorMessage(error, {
               operation: "update",
-              ...PROJECT_ERROR_MESSAGE_OPTIONS,
+              ...projectErrorMessageOptions,
             }),
       );
     } finally {
@@ -385,6 +433,7 @@ export function useWebProjectUiController<TSession>(
     ensureSession,
     isUpdatingProject,
     onProjectUpdated,
+    projectErrorMessageOptions,
     resetEditProjectModal,
     showAppToastMessage,
   ]);
@@ -406,7 +455,7 @@ export function useWebProjectUiController<TSession>(
     setIsDeletingProject(true);
     setDeleteProjectError(null);
     try {
-      await deleteMappedDaytonaCloudProject({
+      await deleteMappedCloudProject({
         session: usableSession,
         projectId: project.id,
       });
@@ -420,7 +469,7 @@ export function useWebProjectUiController<TSession>(
       setDeleteProjectError(
         formatProjectOperationErrorMessage(error, {
           operation: "delete",
-          ...PROJECT_ERROR_MESSAGE_OPTIONS,
+          ...projectErrorMessageOptions,
         }),
       );
     } finally {
@@ -435,12 +484,13 @@ export function useWebProjectUiController<TSession>(
     ensureSession,
     isDeletingProject,
     onProjectDeleted,
+    projectErrorMessageOptions,
     resetDeleteProjectModal,
     resetEditProjectModal,
   ]);
 
   return {
-    maxProjects: ACCOUNT_MAX_PROJECTS,
+    maxProjects,
     canCreateAdditionalCloudProjects,
     projectQuotaReached,
     isCreatingProject,

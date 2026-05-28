@@ -8,24 +8,17 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  deleteDaytonaProcessSession,
-  findDaytonaProcessSessionCommand,
-  listDaytonaProcessSessions,
-  readDaytonaProcessSessionCommandExitCode,
-} from "./daytonaProcessSessions";
+  releaseBlaxelWorkspaceComputerIfIdle,
+} from "./blaxelWorkspaceComputerProvider.ts";
 import {
-  ensureProjectBackgroundSandbox,
-  releaseProjectBackgroundSandboxIfIdle,
-  resolveTerminalSandboxContext,
-} from "./workspaceTerminalBackgroundService";
+  ensureBillableBlaxelWorkspaceComputer,
+  settleBillableBlaxelWorkspaceLeaseBestEffort,
+} from "./blaxelWorkspaceWake.ts";
+import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames.ts";
 import {
-  findDaytonaProcessSessionById,
-  isConfirmedSandboxGoneFailure,
-  isConfirmedSessionGoneFailure,
-  reconcileWorkspaceTerminalRow,
-} from "./workspaceTerminalReconciliation";
-import {
+  buildBlaxelTerminalProcessContextFromRow,
   isWorkspaceTerminalActiveStatus,
+  readWorkspaceTerminalProcess,
   resolveWorkspaceTerminalPreview,
   stopWorkspaceTerminalProcess,
   summarizeWorkspaceTerminalRow,
@@ -43,13 +36,10 @@ import {
 } from "../shared/workspaceComputerProvider";
 
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
-const RECENT_TERMINAL_FAILURE_VISIBLE_MS = 5 * 60_000;
-const RECENT_TERMINAL_FAILURE_LIMIT = 4;
+const RECENT_TERMINAL_ISSUE_VISIBLE_MS = 5 * 60_000;
+const RECENT_TERMINAL_ISSUE_LIMIT = 4;
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
-const workspaceResourceProviderIdValidator = v.union(
-  v.literal("daytona"),
-  v.literal("blaxel"),
-);
+const workspaceResourceProviderIdValidator = v.literal("blaxel");
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
 type WorkspaceTerminalCompletionReason =
@@ -65,6 +55,7 @@ type WorkspaceTerminalSummary = {
   lifecycle_owner: WorkspaceTerminalLifecycleOwner;
   started_by_thread_id: string | null;
   started_by_run_id: string | null;
+  provider_sandbox_provider_id: "blaxel" | null;
   status: WorkspaceTerminalStatus;
   command: string;
   cwd: string | null;
@@ -166,6 +157,36 @@ function summarizeTerminalRow(row: any): WorkspaceTerminalSummary {
   return summarizeWorkspaceTerminalRow(row) as WorkspaceTerminalSummary;
 }
 
+function isInternalDiagnosticTerminal(row: WorkspaceTerminalSummary): boolean {
+  return row.cwd === ".polynet-smoke" || row.command.includes(".polynet-smoke");
+}
+
+function isRecentTerminalIssue(row: WorkspaceTerminalSummary, nowMs: number): boolean {
+  if (isTerminalActiveStatus(row.status)) return false;
+  if (isInternalDiagnosticTerminal(row)) return false;
+  if (row.status === "stopped") return false;
+  if (row.completion_reason === "stopped") return false;
+
+  const lastSeenAt = row.finished_at ?? row.updated_at;
+  if (
+    !Number.isFinite(lastSeenAt) ||
+    lastSeenAt <= 0 ||
+    nowMs - lastSeenAt > RECENT_TERMINAL_ISSUE_VISIBLE_MS
+  ) {
+    return false;
+  }
+
+  if (row.status === "failed") return true;
+  if (row.status === "exited") {
+    return (
+      row.preview_port !== null ||
+      row.preview_status === "server_exited" ||
+      row.health_status === "unhealthy"
+    );
+  }
+  return false;
+}
+
 async function probeWorkspaceTerminalPreviewUrl(
   previewUrl: string,
 ): Promise<{
@@ -234,18 +255,10 @@ function buildTerminalSnapshot(rows: any[]): {
   const recent = summaries
     .filter((row) => {
       if (activeIds.has(row.id)) return false;
-      const isRecentCompletion =
-        row.status === "failed" || row.status === "exited" || row.status === "stopped";
-      const lastSeenAt = row.finished_at ?? row.updated_at;
-      return (
-        isRecentCompletion &&
-        Number.isFinite(lastSeenAt) &&
-        lastSeenAt > 0 &&
-        nowMs - lastSeenAt <= RECENT_TERMINAL_FAILURE_VISIBLE_MS
-      );
+      return isRecentTerminalIssue(row, nowMs);
     })
     .sort((a, b) => b.updated_at - a.updated_at)
-    .slice(0, RECENT_TERMINAL_FAILURE_LIMIT);
+    .slice(0, RECENT_TERMINAL_ISSUE_LIMIT);
   return { active, recent };
 }
 
@@ -370,6 +383,7 @@ export const createWorkspaceTerminalSessionInternal = internalMutation({
     startedByThreadId: v.optional(v.string()),
     startedByRunId: v.optional(v.string()),
     providerSandboxId: v.string(),
+    providerSandboxProviderId: v.optional(workspaceResourceProviderIdValidator),
     providerSessionId: v.string(),
     providerCommandId: v.string(),
     command: v.string(),
@@ -450,7 +464,7 @@ export const acquireProjectBackgroundSandboxLeaseInternal = internalMutation({
     }
 
     await ctx.db.patch(project._id, {
-      providerSandboxProviderId: "daytona",
+      providerSandboxProviderId: "blaxel",
       providerSandboxState: "creating",
       providerSandboxLastSeenAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -566,6 +580,13 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.projectId);
+    const previousSandboxCreditReservationKey = normalizeOptionalString(
+      project?.providerSandboxCreditReservationKey,
+    );
+    const previousSandboxCreditBudgetExpiresAt =
+      typeof project?.providerSandboxCreditBudgetExpiresAt === "number"
+        ? project.providerSandboxCreditBudgetExpiresAt
+        : null;
     const previousProviderId = resolveRecordedWorkspaceResourceProviderId({
       providerId: project?.providerSandboxProviderId,
       resourceId: project?.providerSandboxId,
@@ -602,7 +623,12 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
           : project?.providerSandboxCreditBudgetExpiresAt),
       updatedAt: Date.now(),
     });
-    return await ctx.db.get(args.projectId);
+    const updatedProject = await ctx.db.get(args.projectId);
+    return {
+      project: updatedProject,
+      previousSandboxCreditReservationKey,
+      previousSandboxCreditBudgetExpiresAt,
+    };
   },
 });
 
@@ -695,138 +721,18 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
       return buildTerminalSnapshot(rows);
     }
 
-    const markRowsFailed = async (completionReason: WorkspaceTerminalCompletionReason) => {
-      for (const row of activeRows) {
-        await ctx.runMutation(internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any, {
-          terminalSessionId: row._id,
-          status: "failed",
-          finishedAt: nowMs,
-          completionRecordedAt: row.completionRecordedAt ?? nowMs,
-          completionReason: row.completionReason ?? completionReason,
-          updatedAt: nowMs,
-          lastHeartbeatAt: nowMs,
-          healthStatus: "unhealthy",
-          healthSummary: "Process session is no longer available.",
-          previewStatus: row.previewPort ? "server_exited" : "none",
-        });
-      }
-      await releaseProjectBackgroundSandboxIfIdle({
-        ctx,
-        ownerId: args.ownerId,
-        projectId: args.projectId,
-        providerSandboxId,
-      });
-      const failedRows = (await ctx.runQuery(
-        internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
-        {
-          ownerId: args.ownerId,
-          projectId: args.projectId,
-        },
-      )) as any[];
-      return buildTerminalSnapshot(failedRows);
-    };
-
-    const sandbox = await resolveTerminalSandboxContext({
-      ctx,
-      projectId: args.projectId,
-      providerSandboxId,
-    });
-    if (!sandbox.ok) {
-      if (isConfirmedSandboxGoneFailure(sandbox)) {
-        return await markRowsFailed("sandbox_missing");
-      }
-      return buildTerminalSnapshot(rows);
-    }
-
-    const sessions = await listDaytonaProcessSessions({
-      config: sandbox.config,
-      toolboxProxyUrl: sandbox.toolboxProxyUrl,
-      sandboxId: providerSandboxId,
-    });
-    if (!sessions.ok) {
-      if (isConfirmedSessionGoneFailure(sessions)) {
-        return await markRowsFailed("session_missing");
-      }
-      return buildTerminalSnapshot(rows);
-    }
-
     for (const row of activeRows) {
-      const providerSessionId = String(row.providerSessionId ?? "").trim();
-      const providerCommandId = String(row.providerCommandId ?? "").trim();
-      const session = findDaytonaProcessSessionById(sessions.sessions, providerSessionId);
-      if (!session) {
-        await ctx.runMutation(internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any, {
-          terminalSessionId: row._id,
-          status: "failed",
-          finishedAt: nowMs,
-          completionRecordedAt: row.completionRecordedAt ?? nowMs,
-          completionReason: row.completionReason ?? "session_missing",
-          updatedAt: nowMs,
-          lastHeartbeatAt: nowMs,
-          healthStatus: "unhealthy",
-          healthSummary: "Process session is no longer available.",
-          previewStatus: row.previewPort ? "server_exited" : "none",
-        });
-        continue;
-      }
-
-      const command = findDaytonaProcessSessionCommand(session, providerCommandId);
-      if (!command) {
-        await ctx.runMutation(internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any, {
-          terminalSessionId: row._id,
-          status: "failed",
-          finishedAt: nowMs,
-          completionRecordedAt: row.completionRecordedAt ?? nowMs,
-          completionReason: row.completionReason ?? "command_missing",
-          updatedAt: nowMs,
-        });
-        continue;
-      }
-
-      const exitCode = readDaytonaProcessSessionCommandExitCode(command);
-      if (exitCode === null) {
-        if (String(row.status ?? "").trim().toLowerCase() !== "running") {
-          await ctx.runMutation(internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any, {
-            terminalSessionId: row._id,
-            status: "running",
-            updatedAt: nowMs,
-            lastHeartbeatAt: nowMs,
-            healthStatus: "healthy",
-            healthSummary: "Process is running.",
-            previewStatus: row.previewPort ? "running" : "none",
-          });
-        }
-        continue;
-      }
-
-      await ctx.runMutation(internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any, {
-        terminalSessionId: row._id,
-        status: exitCode === 0 ? "exited" : "failed",
-        finishedAt: nowMs,
-        exitCode,
-        completionRecordedAt: row.completionRecordedAt ?? nowMs,
-        completionReason: row.completionReason ?? (exitCode === 0 ? "exited" : "failed"),
-        updatedAt: nowMs,
-        lastHeartbeatAt: nowMs,
-        healthStatus: exitCode === 0 ? "exited" : "unhealthy",
-        healthSummary:
-          exitCode === 0
-            ? `Process exited with code ${exitCode}.`
-            : `Process failed with exit code ${exitCode}.`,
-        previewStatus: row.previewPort ? "server_exited" : "none",
-      });
-      await deleteDaytonaProcessSession({
-        config: sandbox.config,
-        toolboxProxyUrl: sandbox.toolboxProxyUrl,
-        sandboxId: providerSandboxId,
-        sessionId: providerSessionId,
+      await readWorkspaceTerminalProcess({
+        ctx,
+        row,
+        session: buildBlaxelTerminalProcessContextFromRow(row),
       });
     }
 
     await ctx.runMutation(internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any, {
       projectId: args.projectId,
       providerSandboxId,
-      providerSandboxProviderId: "daytona",
+      providerSandboxProviderId: "blaxel",
       providerSandboxState: "started",
       providerSandboxLastSeenAt: nowMs,
     });
@@ -838,34 +744,6 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
         projectId: args.projectId,
       },
     )) as any[];
-    let hasActiveProjectBackgroundRows = false;
-    for (const row of nextRows) {
-      if (!isTerminalActiveStatus(row.status)) continue;
-      if (
-        !projectProviderSandboxId ||
-        normalizeOptionalString(row?.providerSandboxId) === projectProviderSandboxId
-      ) {
-        hasActiveProjectBackgroundRows = true;
-        break;
-      }
-    }
-    if (!hasActiveProjectBackgroundRows) {
-      await releaseProjectBackgroundSandboxIfIdle({
-        ctx,
-        ownerId: args.ownerId,
-        projectId: args.projectId,
-        providerSandboxId,
-      });
-      const releasedRows = (await ctx.runQuery(
-        internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
-        {
-          ownerId: args.ownerId,
-          projectId: args.projectId,
-        },
-      )) as any[];
-      return buildTerminalSnapshot(releasedRows);
-    }
-
     return buildTerminalSnapshot(nextRows);
   },
 });
@@ -913,19 +791,25 @@ export const startProjectWorkspaceComputer = action({
     });
     void project;
 
-    const started = await ensureProjectBackgroundSandbox({
+    const started = await ensureBillableBlaxelWorkspaceComputer({
       ctx,
-      authSubject: args.authSubject ?? null,
-      userId: actor.dbUserId,
       projectId: args.projectId,
+      ownerId: actor.dbUserId,
+      lifecycleIntent: "interactive",
+      reservationAction: "interactive_workspace_computer",
+      reuseExistingLease: true,
+      labels: {
+        purpose: "workspace-user-computer",
+        project_id: String(args.projectId),
+        owner_id: String(actor.dbUserId),
+      },
     });
     if (!started.ok) return started;
     return {
       ok: true,
       status: "active",
       provider_sandbox_id: started.providerSandboxId,
-      credit_budget_credits: started.creditBudgetCredits,
-      credit_budget_expires_at: started.creditBudgetExpiresAt,
+      provider_id: "blaxel",
     };
   },
 });
@@ -1018,18 +902,38 @@ export const stopProjectWorkspaceComputer = action({
       });
     }
 
-    await releaseProjectBackgroundSandboxIfIdle({
+    const nowMs = Date.now();
+    const settledLease = await settleBillableBlaxelWorkspaceLeaseBestEffort({
       ctx,
-      ownerId: actor.dbUserId,
       projectId: args.projectId,
+      ownerId: actor.dbUserId,
       providerSandboxId,
+      settlementReason: "workspace_computer_stopped",
+      nowMs,
     });
+
+    await releaseBlaxelWorkspaceComputerIfIdle({
+      sandboxName: providerSandboxId,
+    });
+    await ctx.runMutation(
+      internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+      {
+        projectId: args.projectId,
+        providerSandboxId,
+        providerSandboxProviderId: "blaxel",
+        providerSandboxState: "standby",
+        providerSandboxLastSeenAt: nowMs,
+        clearSandboxAccounting: true,
+      },
+    );
 
     return {
       ok: true,
-      status: "inactive",
+      status: "standby",
       stopped_count: activeRows.length,
       provider_sandbox_id: providerSandboxId,
+      provider_id: "blaxel",
+      settled_credit_reservation_key: settledLease.creditReservationKey,
     };
   },
 });
@@ -1048,32 +952,12 @@ export const stopWorkspaceTerminalInternal = internalAction({
       runId: args.runId ?? null,
     });
     if (!access.ok) return access;
-    const { actor, row } = access;
-
-    const sandbox = await resolveTerminalSandboxContext({
-      ctx,
-      projectId: String(row.projectId ?? "").trim(),
-      providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-      touchProjectBackground: true,
-    });
+    const { row } = access;
     const result = await stopWorkspaceTerminalProcess({
       ctx,
       row,
-      session: sandbox.ok
-        ? {
-            config: sandbox.config,
-            toolboxProxyUrl: sandbox.toolboxProxyUrl,
-            providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-          }
-        : null,
+      session: buildBlaxelTerminalProcessContextFromRow(row),
       forceStoppedStatus: true,
-    });
-
-    await releaseProjectBackgroundSandboxIfIdle({
-      ctx,
-      ownerId: actor.dbUserId,
-      projectId: String(row.projectId ?? "").trim(),
-      providerSandboxId: String(row.providerSandboxId ?? "").trim(),
     });
 
     return {
@@ -1099,52 +983,38 @@ export const getWorkspaceTerminalPreviewUrl = action({
     });
     if (!access.ok) return access;
     const { row } = access;
-    const sandbox = await resolveTerminalSandboxContext({
-      ctx,
-      projectId: String(row.projectId ?? "").trim(),
-      providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-      touchProjectBackground: true,
-    });
-    if (!sandbox.ok) return sandbox;
     const preview = await resolveWorkspaceTerminalPreview({
       row,
-      session: {
-        config: sandbox.config,
-        toolboxProxyUrl: sandbox.toolboxProxyUrl,
-        providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-      },
+      session: buildBlaxelTerminalProcessContextFromRow(row),
       workspaceRequiredMessage:
         "Preview is only available while its workspace session is active.",
       previewNotEnabledMessage: "This terminal does not expose an app preview.",
       workspaceMismatchMessage:
         "Preview terminal is not attached to this workspace session.",
     });
-    if (preview.ok === true) {
-      const previewUrl = String(preview.preview_url ?? "").trim();
-      if (previewUrl) {
-        const probe = await probeWorkspaceTerminalPreviewUrl(previewUrl);
-        const nowMs = Date.now();
-        await ctx.runMutation(
-          internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-          {
-            terminalSessionId: row._id,
-            updatedAt: nowMs,
-            previewStatus: probe.previewStatus,
-            lastPreviewProbeAt: nowMs,
-            lastPreviewProbeSummary: probe.previewProbeSummary,
-            previewTransportStatus: probe.previewTransportStatus,
-            previewRenderStatus: probe.previewRenderStatus,
-          },
-        );
-        return {
-          ...preview,
-          preview_probe_summary: probe.previewProbeSummary,
-          preview_transport_status: probe.previewTransportStatus,
-          preview_render_status: probe.previewRenderStatus,
-        };
-      }
-    }
-    return preview;
+    if (preview.ok !== true) return preview;
+    const previewUrl = String(preview.preview_url ?? "").trim();
+    if (!previewUrl) return preview;
+    const probe = await probeWorkspaceTerminalPreviewUrl(previewUrl);
+    const nowMs = Date.now();
+    await ctx.runMutation(
+      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+      {
+        terminalSessionId: row._id,
+        updatedAt: nowMs,
+        previewStatus: probe.previewStatus,
+        lastPreviewProbeAt: nowMs,
+        lastPreviewProbeSummary: probe.previewProbeSummary,
+        previewTransportStatus: probe.previewTransportStatus,
+        previewRenderStatus: probe.previewRenderStatus,
+      },
+    );
+    return {
+      ...preview,
+      preview_probe_summary: probe.previewProbeSummary,
+      preview_transport_status: probe.previewTransportStatus,
+      preview_render_status: probe.previewRenderStatus,
+    };
   },
 });
 

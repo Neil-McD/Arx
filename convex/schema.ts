@@ -546,11 +546,22 @@ export default defineSchema({
     provider: v.literal("stripe"),
     providerCustomerId: v.string(),
     email: v.optional(v.string()),
+    paymentMethodStatus: v.optional(
+      v.union(v.literal("active"), v.literal("missing"), v.literal("detached")),
+    ),
+    providerDefaultPaymentMethodId: v.optional(v.string()),
+    paymentMethodCheckedAt: v.optional(v.number()),
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
+    cardExpMonth: v.optional(v.number()),
+    cardExpYear: v.optional(v.number()),
+    cardRemovedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_providerCustomerId", ["providerCustomerId"]),
+    .index("by_providerCustomerId", ["providerCustomerId"])
+    .index("by_providerDefaultPaymentMethodId", ["providerDefaultPaymentMethodId"]),
 
   purchaseClaims: defineTable({
     claimToken: v.string(),
@@ -780,7 +791,7 @@ export default defineSchema({
     status: v.optional(v.string()),
     providerSandboxId: v.optional(v.string()),
     providerSandboxProviderId: v.optional(
-      v.union(v.literal("daytona"), v.literal("blaxel")),
+      v.literal("blaxel"),
     ),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
@@ -792,16 +803,37 @@ export default defineSchema({
     providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
     providerVolumeId: v.optional(v.string()),
     providerVolumeProviderId: v.optional(
-      v.union(v.literal("daytona"), v.literal("blaxel")),
+      v.literal("blaxel"),
     ),
     providerVolumeName: v.optional(v.string()),
     providerVolumeState: v.optional(v.string()),
     providerVolumeLastSeenAt: v.optional(v.number()),
+    workspaceVolumeRetentionState: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("suspended"),
+        v.literal("pending_delete"),
+        v.literal("deleted"),
+      ),
+    ),
+    workspaceVolumeRetainUntil: v.optional(v.number()),
+    workspaceVolumeDeleteAfter: v.optional(v.number()),
+    workspaceVolumeDeletionWarningSentAt: v.optional(v.number()),
+    workspaceVolumeDeletedAt: v.optional(v.number()),
+    workspaceVolumeDeletionReason: v.optional(v.string()),
     importLeaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_owner", ["ownerId"]),
+    .index("by_owner", ["ownerId"])
+    .index("by_sandboxProvider_creditBudgetExpiresAt", [
+      "providerSandboxProviderId",
+      "providerSandboxCreditBudgetExpiresAt",
+    ])
+    .index("by_workspaceVolumeRetentionState_deleteAfter", [
+      "workspaceVolumeRetentionState",
+      "workspaceVolumeDeleteAfter",
+    ]),
 
   workspaceTerminalSessions: defineTable({
     ownerId: v.id("users"),
@@ -817,6 +849,9 @@ export default defineSchema({
     startedByThreadId: v.optional(v.string()),
     startedByRunId: v.optional(v.string()),
     providerSandboxId: v.string(),
+    providerSandboxProviderId: v.optional(
+      v.literal("blaxel"),
+    ),
     providerSessionId: v.string(),
     providerCommandId: v.string(),
     command: v.string(),
@@ -1502,6 +1537,9 @@ export default defineSchema({
     sourceResourceId: v.optional(v.id("communityResources")),
     title: v.string(),
     bodyMd: v.optional(v.string()),
+    bodyChars: v.optional(v.number()),
+    bodyHash: v.optional(v.string()),
+    bodyMigratedAt: v.optional(v.number()),
     url: v.optional(v.string()),
     fileKey: v.optional(v.string()),
     sourceIngestionStatus: v.optional(
@@ -1555,9 +1593,53 @@ export default defineSchema({
     ])
     .index("by_createdBy", ["createdByUserId"]),
 
+  communityResourceContents: defineTable({
+    communityId: v.id("communities"),
+    resourceId: v.id("communityResources"),
+    bodyMd: v.string(),
+    bodyChars: v.number(),
+    bodyHash: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_resource", ["resourceId"])
+    .index("by_community_resource", ["communityId", "resourceId"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"]),
+
+  communitySourceCrawlJobs: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    provider: v.union(v.literal("simple"), v.literal("crawl4ai")),
+    rootUrl: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("crawling"),
+      v.literal("saving_sources"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    maxPages: v.number(),
+    maxDepth: v.number(),
+    pageCount: v.number(),
+    readyPageCount: v.number(),
+    failedPageCount: v.number(),
+    savedSourceCount: v.number(),
+    skippedSourceCount: v.number(),
+    sourceResourceIds: v.optional(v.array(v.id("communityResources"))),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_createdBy", ["createdByUserId"]),
+
   communityResourceModules: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),
+    status: v.optional(v.union(v.literal("draft"), v.literal("live"))),
     name: v.string(),
     descriptionMd: v.optional(v.string()),
     bannerUrl: v.optional(v.string()),
@@ -1571,6 +1653,35 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"])
     .index("by_community_sortOrder", ["communityId", "sortOrder"])
+    .index("by_createdBy", ["createdByUserId"]),
+
+  communityResourceBuilderChangesets: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    status: v.union(
+      v.literal("staged"),
+      v.literal("approved"),
+      v.literal("applied"),
+      v.literal("rejected"),
+      v.literal("failed"),
+      v.literal("expired"),
+    ),
+    summary: v.string(),
+    operations: v.array(v.any()),
+    preflight: v.any(),
+    result: v.optional(v.any()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    approvedByUserId: v.optional(v.id("users")),
+    rejectedAt: v.optional(v.number()),
+    rejectedByUserId: v.optional(v.id("users")),
+    appliedAt: v.optional(v.number()),
+    appliedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityEvents: defineTable({
@@ -2221,7 +2332,8 @@ export default defineSchema({
     .index("by_thread_status_startedAt", ["threadId", "status", "startedAt"])
     .index("by_thread_startedAt", ["threadId", "startedAt"])
     .index("by_owner_startedAt", ["ownerId", "startedAt"])
-    .index("by_status_startedAt", ["status", "startedAt"]),
+    .index("by_status_startedAt", ["status", "startedAt"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
 
   runtimeRunEvents: defineTable({
     ownerId: v.id("users"),

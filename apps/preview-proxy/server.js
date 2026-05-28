@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import httpProxy from "http-proxy";
 import { verifyPreviewProxySessionToken } from "./previewProxySessionToken.js";
 
-const PREVIEW_COOKIE_NAME = "arx-daytona-preview";
+const PREVIEW_COOKIE_NAME = "polynet-workspace-preview";
 const PROXY_LAYER = "fly-preview-proxy";
 
 function buildRequestId() {
@@ -45,16 +45,12 @@ function logProxyEvent(level, requestId, message, detail = {}) {
   console.log(line);
 }
 
-function isAllowedDaytonaPreviewHost(hostname) {
+function isAllowedWorkspacePreviewHost(hostname) {
   const host = String(hostname ?? "").trim().toLowerCase();
   if (!host) return false;
   return (
-    host.includes("daytonaproxy") ||
-    host.endsWith(".proxy.daytona.work") ||
-    host.endsWith(".proxy.daytona.works") ||
-    host.endsWith(".proxy.daytona.dev") ||
-    host.endsWith(".daytona.work") ||
-    host.endsWith(".daytona.works")
+    host.endsWith(".preview.bl.run") ||
+    host.endsWith(".runv2.blaxel.dev")
   );
 }
 
@@ -170,11 +166,11 @@ async function resolveProxySession(req) {
     };
   }
   const parsed = parsedResult.payload;
-  if (!isAllowedDaytonaPreviewHost(parsed.previewUrl.hostname)) {
+  if (!isAllowedWorkspacePreviewHost(parsed.previewUrl.hostname)) {
     let code = "invalid_preview_proxy_token";
     if (parsed.kind !== "workspace_preview" && parsed.kind !== "live_desktop") code = "wrong_kind";
     else if (parsed.kind === "live_desktop" && !parsed.previewToken) code = "missing_preview_token";
-    else if (!isAllowedDaytonaPreviewHost(parsed.previewUrl.hostname)) code = "host_rejected";
+    else if (!isAllowedWorkspacePreviewHost(parsed.previewUrl.hostname)) code = "host_rejected";
     return {
       ok: false,
       status: 400,
@@ -227,10 +223,6 @@ const proxy = httpProxy.createProxyServer({
 proxy.on("proxyReq", (proxyReq, req) => {
   const session = req.__liveDesktopProxySession;
   if (!session) return;
-  if (typeof session.previewToken === "string" && session.previewToken.trim()) {
-    proxyReq.setHeader("X-Daytona-Preview-Token", session.previewToken);
-  }
-  proxyReq.setHeader("X-Daytona-Skip-Preview-Warning", "true");
   if (req.headers.host) {
     proxyReq.setHeader("X-Forwarded-Host", String(req.headers.host));
   }
@@ -239,10 +231,6 @@ proxy.on("proxyReq", (proxyReq, req) => {
 proxy.on("proxyReqWs", (proxyReq, req) => {
   const session = req.__liveDesktopProxySession;
   if (!session) return;
-  if (typeof session.previewToken === "string" && session.previewToken.trim()) {
-    proxyReq.setHeader("X-Daytona-Preview-Token", session.previewToken);
-  }
-  proxyReq.setHeader("X-Daytona-Skip-Preview-Warning", "true");
   if (req.headers.host) {
     proxyReq.setHeader("X-Forwarded-Host", String(req.headers.host));
   }
@@ -318,12 +306,8 @@ function validatePreviewProxyConfig() {
 }
 
 function buildForwardHeaders(req, previewToken = null) {
-  const forwarded = {
-    "X-Daytona-Skip-Preview-Warning": "true",
-  };
-  if (typeof previewToken === "string" && previewToken.trim()) {
-    forwarded["X-Daytona-Preview-Token"] = previewToken.trim();
-  }
+  void previewToken;
+  const forwarded = {};
   if (req.headers.host) {
     forwarded["X-Forwarded-Host"] = String(req.headers.host);
   }
@@ -363,7 +347,7 @@ function stripFrameAncestorsDirective(value) {
 function copyFetchHeadersToResponse(upstream, res, kind) {
   upstream.headers.forEach((value, key) => {
     const lower = key.toLowerCase();
-    if (lower === "content-length" || lower === "transfer-encoding") return;
+    if (lower === "content-encoding" || lower === "content-length" || lower === "transfer-encoding") return;
     if (kind === "workspace_preview") {
       if (lower === "x-frame-options") return;
       if (lower === "content-security-policy" || lower === "content-security-policy-report-only") {

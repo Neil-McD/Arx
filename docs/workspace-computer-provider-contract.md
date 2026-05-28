@@ -6,16 +6,11 @@ previews, and file inspection need execution.
 
 ## Current Live Provider
 
-Daytona remains the default and only live provider in this slice.
+Blaxel is the default and only live workspace provider.
 
-- `ensureProjectBackgroundSandbox`
-- `resolveProjectBackgroundSandboxIfReady`
-- `releaseProjectBackgroundSandboxIfIdle`
-
-Those functions still own the active workspace behavior and still use the
-Daytona client directly. The Blaxel provider is implemented only behind
-server-owned staging policy. It is not routed into the live workspace path until
-the lifecycle proof passes against a real project volume.
+Workspace file inspection, terminal processes, previews, and runtime workspace
+tools all resolve through the Blaxel workspace computer provider. There is no
+fallback workspace provider in the active runtime path.
 
 ## Provider Operations
 
@@ -42,30 +37,97 @@ Every persisted provider resource id must carry the provider that owns it:
 - `providerVolumeId` is paired with `providerVolumeProviderId`
 - `providerSandboxId` is paired with `providerSandboxProviderId`
 
-The id alone is not enough. Daytona sandbox and volume APIs must never receive a
-Blaxel sandbox or volume id, and Blaxel APIs must never infer ownership from a
-Daytona-shaped project field. Legacy rows with an id and no provider owner are
-treated as Daytona-owned unless the id uses the Blaxel project prefix
-`pn-p-*`, which is inferred as Blaxel during the staging migration.
+The id alone is not enough. Blaxel APIs must not infer ownership from an
+unknown project field. Rows with a Blaxel project prefix `pn-p-*` can be
+normalized to Blaxel during staging migration; unknown ownerless rows must fail
+closed instead of being attached to the Blaxel runtime implicitly.
 
 Internal project state writers are the authority boundary:
 
-- Daytona volume creation writes `providerVolumeProviderId: "daytona"`.
-- Blaxel file inspection writes `providerVolumeProviderId: "blaxel"`.
-- Daytona background sandbox registration writes
-  `providerSandboxProviderId: "daytona"`.
-- Blaxel file inspection writes `providerSandboxProviderId: "blaxel"` and
-  clears stale Daytona sandbox accounting fields.
+- Workspace volume creation writes `providerVolumeProviderId: "blaxel"`.
+- Workspace sandbox registration writes `providerSandboxProviderId: "blaxel"`.
 - Clearing by id should clear only when both the provider and id match.
 
-Provider-specific cleanup must dispatch by owner. A Daytona cleanup path may
-clean up only Daytona-owned project resources. A Blaxel cleanup path may clean
-up only Blaxel-owned project resources.
+Provider-specific cleanup must dispatch by owner. The live cleanup path may
+clean up only Blaxel-owned project resources.
 
 Provider-specific inspection must not silently migrate ownership. If a project
-currently records Daytona-owned sandbox or volume ids, the Blaxel Files path must
-return a provider-transition failure instead of replacing the project pointer.
-Explicit migration/cleanup is a separate lifecycle operation.
+records unknown sandbox or volume ownership, the Blaxel Files path must return a
+provider-transition failure instead of replacing the project pointer. Explicit
+migration/cleanup is a separate lifecycle operation.
+
+## Project Resource Truth
+
+The `cloudProjects` row is the PolyNet source of truth for resource ownership and
+retention policy. Provider state is evidence from Blaxel; retention state is
+PolyNet policy.
+
+Volume truth:
+
+- `providerVolumeId`
+- `providerVolumeProviderId`
+- `providerVolumeState`
+- `providerVolumeLastSeenAt`
+- `workspaceVolumeRetentionState`
+- `workspaceVolumeRetainUntil`
+- `workspaceVolumeDeleteAfter`
+- `workspaceVolumeDeletionWarningSentAt`
+- `workspaceVolumeDeletedAt`
+- `workspaceVolumeDeletionReason`
+
+Sandbox truth:
+
+- `providerSandboxId`
+- `providerSandboxProviderId`
+- `providerSandboxState`
+- `providerSandboxLastSeenAt`
+- `providerSandboxLastActivityAt`
+- `providerSandboxStartedAt`
+- `providerSandboxIdleExpiresAt`
+
+Allowed volume retention states are `active`, `suspended`, `pending_delete`, and
+`deleted`. New projects start as `active`. Any successful Blaxel volume attach
+reactivates the volume retention state and clears pending deletion metadata.
+Actual deletion remains a separate reconciler responsibility.
+
+## Resource Admission
+
+Resource admission is separate from compute billing.
+
+Project and volume admission uses PolyNet-owned truth:
+
+- no card on file: one project volume, and first materialization requires
+  purchased/prepaid tool balance
+- card on file: five project volumes
+- deleted or archived project rows do not count toward the limit
+- rows whose volume retention state is `deleted` do not count toward the limit
+- first volume creation for a project is gated; re-attaching the same existing
+  volume remains idempotent
+
+The paid-tier signal is card-on-file truth. Purchased workspace tool balance can
+fund the first physical volume materialization, but it does not raise the
+project-volume limit. Included/free credits can pay for compute usage but must
+not create recurring storage liability or raise the project-volume limit by
+themselves. The Stripe customer id alone is not a card-on-file truth and must
+not be used as the admission authority.
+
+Before any Blaxel provider call can create or wake a project volume, the server
+must run the central materialization admission path. For new volumes, that path
+claims the deterministic project volume id in Convex as `materializing` before
+calling Blaxel, then finalizes it as `active` after provider success. This keeps
+quota checks atomic across concurrent Files, import, terminal, and runtime tool
+requests.
+
+Provider quota is also admission evidence. If
+`BLAXEL_WORKSPACE_VOLUME_LIMIT` is configured, the server reads live Blaxel
+volume inventory and enforces that count with
+`BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER` before claiming a new project volume.
+Existing undeleted project volumes skip the provider inventory check because no
+new Blaxel volume slot is being consumed.
+
+Agent workspace compute remains gated by workspace credit reservation before a
+Blaxel sandbox is created. File inspection and interactive starts can wake the
+same project workspace, but volume creation must pass resource admission first.
 
 ## Stale Sandbox Reconciliation
 
@@ -85,10 +147,21 @@ This keeps the data model simple: one durable project volume, one disposable
 current project sandbox, and no manual UI on/off switch for normal file
 inspection.
 
-Project deletion dispatches cleanup by recorded provider owner. Daytona-owned
-resources use Daytona cleanup. Blaxel-owned resources delete the Blaxel sandbox
-first, then delete the Blaxel volume; missing provider resources count as already
-cleaned up.
+Stale sandbox pointer reconciliation is allowed to clear only Blaxel-owned
+project sandbox fields after provider sandbox inventory proves the sandbox is
+missing. It must default to dry-run, preserve volume fields, and perform no
+provider deletion.
+
+Inactive legacy pointer reconciliation is allowed to clear only inactive
+`archived` or `deleted` project rows whose recorded provider pointers are not
+Blaxel-owned. It must default to dry-run, perform no provider deletion, and must
+never clear active project rows or matched Blaxel volume pointers. Cleared legacy
+volume pointers are marked with `workspaceVolumeRetentionState: deleted` because
+the row is no longer a valid active project-volume authority.
+
+Project deletion dispatches cleanup by recorded provider owner. Blaxel-owned
+resources delete the Blaxel sandbox first, then delete the Blaxel volume;
+missing provider resources count as already cleaned up.
 
 For Blaxel, `releaseWorkspaceComputerIfIdle` does not delete the sandbox.
 Release is a PolyNet-side acknowledgement that the provider can move the sandbox
@@ -155,9 +228,10 @@ This keeps the model to one project volume and one current project sandbox while
 preventing active agent work from inheriting a file-inspection max-age policy.
 It also preserves processes and warm state when Blaxel accepts lifecycle updates.
 
-## Blaxel Gate
+## Blaxel Validation Gate
 
-Blaxel can only become selectable after all of these are true:
+Blaxel is the only live workspace provider. Before expanding usage beyond the
+staging workspace path, these checks must stay true:
 
 - The staging readiness guard passes.
 - The Convex runtime diagnostic passes in staging, proving Convex can import the
@@ -171,14 +245,14 @@ Blaxel can only become selectable after all of these are true:
   `executeRuntimeWorkspaceTool`, proving `list_dir`, `write`, `read`, `bash`,
   `glob`, `grep`, `sha256`, and `edit` all use the same provider-neutral path
   chat uses.
-- The server explicitly enables the Blaxel provider.
-- The deployment is not production.
-
-Until then, Blaxel provider calls outside explicit staging policy return
-`blaxel_provider_not_enabled`.
-
-## Migration Rule
-
-Do not replace Daytona behavior with Blaxel behavior in the same slice that
-introduces the seam. First prove the contract, then add the provider
-implementation behind staging-only policy, then switch one internal staging path.
+- The Blaxel resource inventory diagnostic can list provider volumes/sandboxes
+  and classify them against PolyNet `cloudProjects` rows without creating,
+  mutating, or deleting provider resources. The diagnostic is staging-only and
+  the public action is operator-gated because provider resource names and labels
+  are operational infrastructure data. A staging-only internal action exists for
+  admin CLI inventory checks when the staging operator-role table has not been
+  bootstrapped. It must include `attached_mismatch` and `quota_risk`
+  classifications so provider attachment drift and Blaxel workspace quota
+  headroom are visible before cleanup automation runs.
+- Provider policy resolves to Blaxel only.
+- The deployment target is the staging path until this branch is promoted.

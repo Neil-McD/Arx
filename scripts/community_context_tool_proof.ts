@@ -61,7 +61,7 @@ assert.equal(tools[0]?.parameters.type, "object");
 assert.equal(tools[0]?.parameters.additionalProperties, false);
 assert.deepEqual(tools[0]?.parameters.properties, {});
 
-const httpDaytona = readFileSync(join(root, "convex/httpDaytona.ts"), "utf8");
+const runtimeAgentLoop = readFileSync(join(root, "convex/runtimeAgentLoop.ts"), "utf8");
 const runtimeTurnResolution = readFileSync(
   join(root, "convex/runtimeTurnResolution.ts"),
   "utf8",
@@ -72,17 +72,17 @@ assert.match(
   "community_tools should expose context before resource navigation/search/write",
 );
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /toolName === "get_active_community_context"/,
   "runtime executor should handle active community context tool",
 );
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /resolveRuntimeCommunityPromptContextInternal/,
   "runtime executor should reuse server-authoritative community context resolver",
 );
 assert.match(
-  httpDaytona,
+  runtimeAgentLoop,
   /get_active_community_context requires an active community context/,
   "runtime executor should fail closed without active community",
 );

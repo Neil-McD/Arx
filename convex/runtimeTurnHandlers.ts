@@ -19,7 +19,7 @@ import {
   type SseResponseSource,
   type SseResponseStreamWriter,
 } from "./httpRuntimeTurnState";
-import { executeChatToolsAgentLoop } from "./httpDaytona";
+import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
 import {
   USER_CANCELLED_RUNTIME_CODE,
   isRuntimeRunCancelledError,
@@ -1104,6 +1104,7 @@ export async function handleRuntimeTurnRequest(args: {
                 status: loopResult.status,
                 tool_kind: loopResult.toolKind ?? null,
                 required_credits: loopResult.requiredCredits ?? null,
+                paid_usage_billing_mode: loopResult.paidUsageBillingMode ?? null,
               },
             });
             return;
@@ -1370,6 +1371,7 @@ export async function handleRuntimeTurnRequest(args: {
           message: loopResult.message,
           tool_kind: loopResult.toolKind ?? null,
           required_credits: loopResult.requiredCredits ?? null,
+          paid_usage_billing_mode: loopResult.paidUsageBillingMode ?? null,
           run_id: runId,
         });
       }

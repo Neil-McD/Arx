@@ -37,10 +37,21 @@ crons.interval(
 );
 
 crons.interval(
-  "reconcile daytona orphan sandboxes",
+  "reconcile stale runtime workspace runs",
+  { minutes: 5 },
+  (internal as any).workspaceCredits.reconcileStaleRuntimeWorkspaceRunsInternal,
+  {
+    limit: 100,
+  },
+);
+
+crons.interval(
+  "finalize expired blaxel project workspace leases",
   { minutes: 15 },
-  internal.daytonaOrphanReconciler.reconcileDaytonaOrphanedSandboxesInternal,
-  {},
+  (internal as any).blaxelWorkspaceWake.finalizeExpiredBlaxelProjectWorkspaceLeasesInternal,
+  {
+    limit: 100,
+  },
 );
 
 crons.interval(

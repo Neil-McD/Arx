@@ -14,12 +14,12 @@ function assertContains(haystack: string, needle: string, label: string): void {
   assert.ok(haystack.includes(needle), `expected ${label}`);
 }
 
-const schema = readText("/Users/neilmcdevitt/code/arx/convex/schema.ts");
-const threads = readText("/Users/neilmcdevitt/code/arx/convex/threads.ts");
-const resolution = readText("/Users/neilmcdevitt/code/arx/convex/runtimeTurnResolution.ts");
-const handlers = readText("/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts");
-const prompt = readText("/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts");
-const contextPacket = readText("/Users/neilmcdevitt/code/arx/shared/runtimeTurnContextPacket.ts");
+const schema = readText("convex/schema.ts");
+const threads = readText("convex/threads.ts");
+const resolution = readText("convex/runtimeTurnResolution.ts");
+const handlers = readText("convex/runtimeTurnHandlers.ts");
+const prompt = readText("shared/runtimePrompt.ts");
+const contextPacket = readText("shared/runtimeTurnContextPacket.ts");
 
 for (const field of [
   "version: v.optional(v.number())",
@@ -223,7 +223,7 @@ assert.ok(
   "threads should use the shared task-ledger merge helper",
 );
 assertContains(
-  readText("/Users/neilmcdevitt/code/arx/shared/runtimeWorkingStateLedger.ts"),
+  readText("shared/runtimeWorkingStateLedger.ts"),
   "export function mergeRuntimeWorkingStateTaskLedger",
   "shared runtime working state exports task-ledger merge helper",
 );

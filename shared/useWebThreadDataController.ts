@@ -8,7 +8,7 @@ import {
   isConvexCloudThreadsEnabled,
   listConvexCloudThreadMessagesPageByThreadKey,
   listConvexCloudThreadRows,
-} from "./daytonaCloudThreadsRead";
+} from "./cloudThreadsRead";
 
 const MAX_DERIVED_THREAD_TITLES_PER_LIST = 120;
 const TITLE_DERIVATION_CHUNK_SIZE = 25;

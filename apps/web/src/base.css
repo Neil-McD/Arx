@@ -22046,6 +22046,102 @@ button.message-citation-chip:hover {
   margin-bottom: 12px;
 }
 
+.workspace-billing-secondary-action {
+  margin-top: 18px;
+}
+
+.workspace-billing-modal-copy {
+  display: grid;
+  gap: 8px;
+  max-width: 480px;
+  margin-bottom: 18px;
+}
+
+.workspace-billing-modal-copy .model-note {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-primary) 86%, var(--text-secondary) 14%);
+  font-size: 13px;
+  line-height: 1.48;
+}
+
+.workspace-billing-modal-copy .model-note + .model-note {
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary) 12%);
+}
+
+.workspace-billing-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 18px 0 0;
+}
+
+.workspace-billing-primary-button,
+.workspace-billing-card-action {
+  min-width: 126px;
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 13px;
+}
+
+.workspace-billing-inline-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary) 8%);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+.workspace-billing-inline-link:hover:not(:disabled),
+.workspace-billing-inline-link:focus-visible {
+  color: var(--text-primary);
+}
+
+.workspace-billing-inline-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspace-billing-error {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #ff8a7a 24%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, #ff6b5a 9%, transparent);
+  color: #ffb8ad;
+  line-height: 1.45;
+}
+
+.workspace-billing-trust-panel {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 14px 15px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, var(--border-default));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card-alt) 64%, transparent);
+}
+
+.workspace-billing-trust-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.workspace-billing-trust-copy {
+  color: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary) 10%);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
 .tool-balance-pack-button {
   min-height: 64px;
   padding: 10px;
@@ -22087,14 +22183,44 @@ button.message-citation-chip:hover {
   padding-bottom: 8px;
 }
 
+.inference-issue-modal--workspace-card {
+  width: min(480px, calc(100vw - 32px));
+  border-color: color-mix(in srgb, var(--text-primary) 10%, var(--border-default));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-modal) 96%, #26262c 4%) 0%,
+      var(--bg-modal) 100%
+    );
+}
+
 .inference-issue-modal .modal-close {
   border: 0;
   background: transparent;
   border-radius: 999px;
 }
 
+.inference-issue-modal--workspace-card .modal-header {
+  align-items: flex-start;
+  padding: 24px 24px 0;
+}
+
+.inference-issue-modal--workspace-card .modal-title {
+  max-width: 360px;
+  color: color-mix(in srgb, var(--text-primary) 96%, #ffffff 4%);
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.18;
+  text-transform: none;
+}
+
 .inference-issue-modal .modal-body {
   padding-top: 8px;
+}
+
+.inference-issue-modal--workspace-card .modal-body {
+  padding: 0 24px 24px;
 }
 
 .inference-issue-modal .modal-footer {

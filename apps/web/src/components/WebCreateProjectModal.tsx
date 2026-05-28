@@ -23,7 +23,7 @@ export function WebCreateProjectModal(props: WebCreateProjectModalProps) {
   const {
     isOpen,
     title = "New computer",
-    subtitle = "Create a fresh Daytona computer for a workspace. Imports are staged here next.",
+    subtitle = "Create a fresh workspace computer. Imports are staged here next.",
     submitLabel = "Create computer",
     projectName,
     projectDescription,

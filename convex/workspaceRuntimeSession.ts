@@ -1,11 +1,7 @@
 import { api, internal } from "./_generated/api";
-import type { DaytonaConfig } from "./daytonaSandboxClient";
 import {
-  ensureProjectBackgroundSandbox,
-} from "./workspaceTerminalBackgroundService";
-import {
-  ensureBlaxelWorkspaceComputer,
-} from "./blaxelWorkspaceComputerProvider.ts";
+  ensureBillableBlaxelWorkspaceComputer,
+} from "./blaxelWorkspaceWake.ts";
 import {
   buildBlaxelProjectWorkspaceNames,
 } from "./blaxelWorkspaceProjectNames.ts";
@@ -16,6 +12,12 @@ import {
   resolveRecordedWorkspaceResourceProviderId,
   type WorkspaceComputerProviderId,
 } from "../shared/workspaceComputerProvider";
+import {
+  estimateWorkspaceComputeUsd,
+  PAID_TOOL_PRICING_VERSION,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceWorkspaceUsageCredits,
+} from "../shared/workspaceCredits";
 
 type WorkspaceRuntimeSessionFailure = {
   ok: false;
@@ -23,24 +25,6 @@ type WorkspaceRuntimeSessionFailure = {
   code: string;
   message: string;
   details?: Record<string, unknown>;
-};
-
-export type DaytonaRuntimeWorkspaceSession = {
-  providerId: "daytona";
-  config: DaytonaConfig;
-  projectId: string;
-  projectVolumeId: string | null;
-  providerSandboxId: string;
-  toolboxProxyUrl: string;
-  region: string | null;
-  sandboxCpu: number;
-  sandboxMemoryGiB: number;
-  sandboxDiskGiB: number;
-  startedAt: number;
-  creditReservationKey?: string | null;
-  creditBudgetCredits?: number;
-  creditBudgetExpiresAt?: number;
-  lifecycleMode: "native_stop_delete" | "manual_delete_fallback";
 };
 
 export type BlaxelRuntimeWorkspaceSession = {
@@ -53,12 +37,13 @@ export type BlaxelRuntimeWorkspaceSession = {
   creditReservationKey?: string | null;
   creditBudgetCredits?: number;
   creditBudgetExpiresAt?: number;
+  sandboxCpu: number;
+  sandboxMemoryGiB: number;
+  sandboxDiskGiB: number;
   lifecycleMode: "provider_standby";
 };
 
-export type RuntimeWorkspaceSession =
-  | DaytonaRuntimeWorkspaceSession
-  | BlaxelRuntimeWorkspaceSession;
+export type RuntimeWorkspaceSession = BlaxelRuntimeWorkspaceSession;
 
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
@@ -123,6 +108,7 @@ async function createBlaxelRuntimeWorkspaceSession(params: {
   authSubject: string;
   userId: any;
   projectId: string;
+  runId?: string | null;
 }): Promise<
   | { ok: true; session: BlaxelRuntimeWorkspaceSession }
   | WorkspaceRuntimeSessionFailure
@@ -184,87 +170,40 @@ async function createBlaxelRuntimeWorkspaceSession(params: {
     });
   }
 
-  const ensured = await ensureBlaxelWorkspaceComputer({
-    sandboxName: names.sandboxName,
-    volumeName: names.volumeName,
+  const ensured = await ensureBillableBlaxelWorkspaceComputer({
+    ctx: params.ctx,
+    projectId: params.projectId,
+    ownerId: params.userId,
+    runId: params.runId ?? null,
     lifecycleIntent: "agent_run",
+    reservationAction: "runtime_workspace_session",
     labels: {
       purpose: "workspace-agent-tools",
       project_id: String(params.projectId),
       owner_id: String(params.userId),
     },
+    clearSandboxAccounting: true,
   });
-  if (!ensured.ok) return mapProviderFailure(ensured);
-
-  const nowMs = Date.now();
-  await params.ctx.runMutation(internal.projects.attachCloudProjectVolumeInternal as any, {
-    projectId: params.projectId,
-    providerVolumeId: names.volumeName,
-    providerId: "blaxel",
-    nowMs,
-  });
-  await params.ctx.runMutation(
-    internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
-    {
-      projectId: params.projectId,
-      providerSandboxId: ensured.providerSandboxId,
-      providerSandboxProviderId: "blaxel",
-      providerSandboxState: "active",
-      providerSandboxLastSeenAt: nowMs,
-      providerSandboxStartedAt: ensured.startedAt,
-      clearSandboxAccounting: true,
-    },
-  );
+  if (!ensured.ok) {
+    return mapProviderFailure(ensured);
+  }
 
   return {
     ok: true,
     session: {
       providerId: "blaxel",
       projectId: params.projectId,
-      projectVolumeId: names.volumeName,
+      projectVolumeId: ensured.projectVolumeId,
       providerSandboxId: ensured.providerSandboxId,
       workspaceRoot: ensured.workspaceRoot,
       startedAt: ensured.startedAt,
+      creditReservationKey: ensured.creditReservationKey,
+      creditBudgetCredits: ensured.creditBudgetCredits,
+      creditBudgetExpiresAt: ensured.creditBudgetExpiresAt,
+      sandboxCpu: ensured.sandboxCpu,
+      sandboxMemoryGiB: ensured.sandboxMemoryGiB,
+      sandboxDiskGiB: ensured.sandboxDiskGiB,
       lifecycleMode: "provider_standby",
-    },
-  };
-}
-
-async function createDaytonaRuntimeWorkspaceSession(params: {
-  ctx: any;
-  authSubject: string;
-  userId: any;
-  projectId: string;
-}): Promise<
-  | { ok: true; session: DaytonaRuntimeWorkspaceSession }
-  | WorkspaceRuntimeSessionFailure
-> {
-  const backgroundSandbox = await ensureProjectBackgroundSandbox({
-    ctx: params.ctx,
-    authSubject: params.authSubject,
-    userId: params.userId,
-    projectId: params.projectId,
-  });
-  if (!backgroundSandbox.ok) return mapProviderFailure(backgroundSandbox);
-
-  return {
-    ok: true,
-    session: {
-      providerId: "daytona",
-      config: backgroundSandbox.config,
-      projectId: params.projectId,
-      projectVolumeId: backgroundSandbox.projectVolumeId,
-      providerSandboxId: backgroundSandbox.providerSandboxId,
-      toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
-      region: null,
-      sandboxCpu: backgroundSandbox.sandboxCpu,
-      sandboxMemoryGiB: backgroundSandbox.sandboxMemoryGiB,
-      sandboxDiskGiB: backgroundSandbox.sandboxDiskGiB,
-      startedAt: backgroundSandbox.startedAt,
-      creditReservationKey: backgroundSandbox.creditReservationKey,
-      creditBudgetCredits: backgroundSandbox.creditBudgetCredits,
-      creditBudgetExpiresAt: backgroundSandbox.creditBudgetExpiresAt,
-      lifecycleMode: "native_stop_delete",
     },
   };
 }
@@ -274,6 +213,7 @@ export async function createProjectRuntimeWorkspaceSession(params: {
   authSubject: string | null | undefined;
   userId: any;
   projectId: string | null | undefined;
+  runId?: string | null;
 }): Promise<
   | { ok: true; session: RuntimeWorkspaceSession }
   | WorkspaceRuntimeSessionFailure
@@ -289,20 +229,125 @@ export async function createProjectRuntimeWorkspaceSession(params: {
     };
   }
 
-  const policy = resolveWorkspaceComputerProviderFromServerEnv();
-  if (policy.providerId === "blaxel") {
-    return await createBlaxelRuntimeWorkspaceSession({
-      ctx: params.ctx,
-      authSubject,
-      userId: params.userId,
-      projectId,
-    });
-  }
-
-  return await createDaytonaRuntimeWorkspaceSession({
+  resolveWorkspaceComputerProviderFromServerEnv();
+  return await createBlaxelRuntimeWorkspaceSession({
     ctx: params.ctx,
     authSubject,
     userId: params.userId,
     projectId,
+    runId: params.runId ?? null,
   });
+}
+
+export async function settleRuntimeWorkspaceSession(params: {
+  ctx: any;
+  userId: any;
+  runId: string;
+  session: RuntimeWorkspaceSession;
+  endedAt?: number;
+}): Promise<
+  | {
+      ok: true;
+      skipped?: boolean;
+      creditReservationKey?: string | null;
+      creditsDebited?: number;
+      computeCostUsd?: number;
+      durationSeconds?: number;
+    }
+  | {
+      ok: false;
+      creditReservationKey: string;
+      creditsDebited: number;
+      computeCostUsd: number;
+      durationSeconds: number;
+      error: string;
+    }
+> {
+  const creditReservationKey = normalizeOptionalString(params.session.creditReservationKey);
+  if (!creditReservationKey) {
+    return {
+      ok: true,
+      skipped: true,
+      creditReservationKey: null,
+    };
+  }
+  const endedAt = params.endedAt ?? Date.now();
+  const durationSeconds = Math.max(0, (endedAt - params.session.startedAt) / 1000);
+  const computeCostUsd = estimateWorkspaceComputeUsd({
+    durationSeconds,
+    sandboxCpu: params.session.sandboxCpu,
+    sandboxMemoryGiB: params.session.sandboxMemoryGiB,
+  });
+  const creditsDebited = priceWorkspaceUsageCredits({ computeCostUsd });
+  const metadata = {
+    pricing_version: PAID_TOOL_PRICING_VERSION,
+    target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+    provider: "blaxel",
+    pricing_model: "blaxel_memory_gib_seconds_estimate",
+    provider_billing_reconciliation: "pending",
+    provider_billing_evidence: "delayed_billing_api",
+    provider_sandbox_id: params.session.providerSandboxId,
+    duration_seconds: durationSeconds,
+    sandbox_cpu: params.session.sandboxCpu,
+    sandbox_memory_gib: params.session.sandboxMemoryGiB,
+    sandbox_disk_gib: params.session.sandboxDiskGiB,
+  };
+  try {
+    await params.ctx.runMutation(
+      internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any,
+      {
+        chargeKey: creditReservationKey,
+        userId: params.userId,
+        projectId: params.session.projectId,
+        runId: params.runId,
+        providerSandboxId: params.session.providerSandboxId,
+        startedAt: params.session.startedAt,
+        endedAt,
+        durationSeconds,
+        sandboxCpu: params.session.sandboxCpu,
+        sandboxMemoryGiB: params.session.sandboxMemoryGiB,
+        sandboxDiskGiB: params.session.sandboxDiskGiB,
+        computeCostUsd,
+        creditsDebited,
+        creditReservationKey,
+        nowMs: endedAt,
+      },
+    );
+    return {
+      ok: true,
+      creditReservationKey,
+      creditsDebited,
+      computeCostUsd,
+      durationSeconds,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    try {
+      await params.ctx.runMutation(
+        internal.workspaceCredits.queueCreditSettlementRetryInternal as any,
+        {
+          creditKey: creditReservationKey,
+          status: "succeeded",
+          creditsSettled: creditsDebited,
+          rawVendorCostUsd: computeCostUsd,
+          metadata: {
+            ...metadata,
+            settlement_source: "workspace_compute_charge_recording_failed",
+          },
+          error: message || null,
+          nowMs: endedAt,
+        },
+      );
+    } catch {
+      // The reservation expiry reconciler remains the final fail-safe.
+    }
+    return {
+      ok: false,
+      creditReservationKey,
+      creditsDebited,
+      computeCostUsd,
+      durationSeconds,
+      error: message || "workspace_compute_charge_recording_failed",
+    };
+  }
 }

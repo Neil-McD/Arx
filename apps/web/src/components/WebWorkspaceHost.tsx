@@ -23,10 +23,10 @@ import {
   recordProjectWorkspaceTerminalPreviewObservation,
   stopAllProjectWorkspaceTerminals,
   stopProjectWorkspaceTerminal,
-  type DaytonaWorkspaceTerminalPreview,
-  type DaytonaWorkspaceTerminalRecord,
-  type DaytonaWorkspaceTerminalPreviewStatus,
-} from "../../../../shared/daytonaWorkspaceTerminals";
+  type WorkspaceTerminalPreview,
+  type WorkspaceTerminalRecord,
+  type WorkspaceTerminalPreviewStatus,
+} from "../../../../shared/workspaceTerminalsGateway";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
@@ -305,7 +305,7 @@ function buildLatestPreviewRunIdByTerminalId(params: {
 }
 
 function resolvePreviewOwningRunId(
-  terminal: DaytonaWorkspaceTerminalRecord,
+  terminal: WorkspaceTerminalRecord,
   latestPreviewRunIdByTerminalId: Record<string, string>,
 ): string | null {
   const anchoredRunId = String(latestPreviewRunIdByTerminalId[terminal.id] ?? "").trim();
@@ -315,25 +315,25 @@ function resolvePreviewOwningRunId(
 }
 
 function resolveTerminalAccessRunId(
-  terminal: DaytonaWorkspaceTerminalRecord,
+  terminal: WorkspaceTerminalRecord,
 ): string | null {
   const persistedRunId = String(terminal.started_by_run_id ?? "").trim();
   return persistedRunId || null;
 }
 
 function isRuntimeOwnedTerminalRecord(
-  terminal: DaytonaWorkspaceTerminalRecord,
+  terminal: WorkspaceTerminalRecord,
 ): boolean {
   return Boolean(resolveTerminalAccessRunId(terminal));
 }
 
-function isTerminalSnapshotStatusActive(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
+function isTerminalSnapshotStatusActive(status: WorkspaceTerminalRecord["status"]): boolean {
   return status === "starting" || status === "running";
 }
 
 function areTerminalRecordsEqual(
-  left: readonly DaytonaWorkspaceTerminalRecord[],
-  right: readonly DaytonaWorkspaceTerminalRecord[],
+  left: readonly WorkspaceTerminalRecord[],
+  right: readonly WorkspaceTerminalRecord[],
 ): boolean {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index += 1) {
@@ -368,16 +368,16 @@ function areTerminalRecordsEqual(
 
 function applyTerminalSnapshotIfChanged(
   next: {
-    active: DaytonaWorkspaceTerminalRecord[];
-    recent?: DaytonaWorkspaceTerminalRecord[];
+    active: WorkspaceTerminalRecord[];
+    recent?: WorkspaceTerminalRecord[];
   },
-  setActive: Dispatch<SetStateAction<DaytonaWorkspaceTerminalRecord[]>>,
+  setActive: Dispatch<SetStateAction<WorkspaceTerminalRecord[]>>,
 ): void {
   const combined = [...next.active, ...(next.recent ?? [])];
   setActive((prev) => (areTerminalRecordsEqual(prev, combined) ? prev : combined));
 }
 
-function isPreviewCapableTerminal(terminal: DaytonaWorkspaceTerminalRecord): boolean {
+function isPreviewCapableTerminal(terminal: WorkspaceTerminalRecord): boolean {
   return (
     typeof terminal.preview_port === "number" &&
     Number.isFinite(terminal.preview_port) &&
@@ -435,10 +435,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
 function previewObservationForLifecyclePhase(
   phase: "loading" | "ready" | "error",
 ): {
-  previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
-  previewTransportStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_transport_status"], null>;
-  previewInspectionStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_inspection_status"], null>;
-  previewRenderStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_render_status"], null>;
+  previewStatus: WorkspaceTerminalPreviewStatus;
+  previewTransportStatus: Exclude<WorkspaceTerminalRecord["preview_transport_status"], null>;
+  previewInspectionStatus: Exclude<WorkspaceTerminalRecord["preview_inspection_status"], null>;
+  previewRenderStatus: Exclude<WorkspaceTerminalRecord["preview_render_status"], null>;
   previewProbeSummary: string;
   browserObservationSummary: string | null;
 } {
@@ -476,10 +476,10 @@ function previewObservationForLifecyclePhase(
 function previewObservationForMetrics(
   metrics: WorkspacePreviewMetricsObservation,
 ): {
-  previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
-  previewTransportStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_transport_status"], null>;
-  previewInspectionStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_inspection_status"], null>;
-  previewRenderStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_render_status"], null>;
+  previewStatus: WorkspaceTerminalPreviewStatus;
+  previewTransportStatus: Exclude<WorkspaceTerminalRecord["preview_transport_status"], null>;
+  previewInspectionStatus: Exclude<WorkspaceTerminalRecord["preview_inspection_status"], null>;
+  previewRenderStatus: Exclude<WorkspaceTerminalRecord["preview_render_status"], null>;
   previewProbeSummary: string;
   browserObservationSummary: string;
 } {
@@ -884,7 +884,7 @@ function WorkspaceComposer(props: {
   workspaceAskInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   workspaceFileInputRef: MutableRefObject<HTMLInputElement | null>;
   workspaceComposerPlaceholder: string;
-  terminals: DaytonaWorkspaceTerminalRecord[];
+  terminals: WorkspaceTerminalRecord[];
   busyTerminalIds: readonly string[];
   isStoppingAllTerminals: boolean;
   guestSignupRail: ReactNode;
@@ -1044,7 +1044,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const resolveWorkspaceSessionRef = useRef(props.resolveWorkspaceSession);
   const activeProjectIdRef = useRef<string | null>(props.activeProjectId);
   const activeProjectInstanceRef = useRef(0);
-  const [activeWorkspaceTerminals, setActiveWorkspaceTerminals] = useState<DaytonaWorkspaceTerminalRecord[]>([]);
+  const [activeWorkspaceTerminals, setActiveWorkspaceTerminals] = useState<WorkspaceTerminalRecord[]>([]);
   const [busyWorkspaceTerminalIds, setBusyWorkspaceTerminalIds] = useState<string[]>([]);
   const [isStoppingAllWorkspaceTerminals, setIsStoppingAllWorkspaceTerminals] = useState(false);
   const [expandedPreviewTerminalId, setExpandedPreviewTerminalId] = useState<string | null>(null);
@@ -1549,7 +1549,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   };
 
   const handleEnsurePreview = useCallback(
-    async (terminalSessionId: string, opts?: { force?: boolean }): Promise<DaytonaWorkspaceTerminalPreview | null> => {
+    async (terminalSessionId: string, opts?: { force?: boolean }): Promise<WorkspaceTerminalPreview | null> => {
       const terminal = activePreviewCapableTerminals.find((candidate) => candidate.id === terminalSessionId) ?? null;
       if (!terminal || !isPreviewCapableTerminal(terminal)) return null;
       const owningRunId = resolvePreviewOwningRunId(
@@ -1669,11 +1669,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   const recordPreviewObservation = useCallback(
     (params: {
-      terminal: DaytonaWorkspaceTerminalRecord;
-      previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
-      previewTransportStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_transport_status"], null>;
-      previewInspectionStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_inspection_status"], null>;
-      previewRenderStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_render_status"], null>;
+      terminal: WorkspaceTerminalRecord;
+      previewStatus: WorkspaceTerminalPreviewStatus;
+      previewTransportStatus: Exclude<WorkspaceTerminalRecord["preview_transport_status"], null>;
+      previewInspectionStatus: Exclude<WorkspaceTerminalRecord["preview_inspection_status"], null>;
+      previewRenderStatus: Exclude<WorkspaceTerminalRecord["preview_render_status"], null>;
       previewProbeSummary: string;
       browserObservationSummary?: string | null;
     }) => {
@@ -1730,7 +1730,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   );
 
   const handlePreviewLifecyclePhaseChange = useCallback((params: {
-    terminal: DaytonaWorkspaceTerminalRecord;
+    terminal: WorkspaceTerminalRecord;
     phase: "loading" | "ready" | "error";
   }) => {
     setPreviewStateByTerminalId((prev) => {
@@ -1770,7 +1770,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   }, [recordPreviewObservation]);
 
   const handlePreviewMetricsObservation = useCallback((params: {
-    terminal: DaytonaWorkspaceTerminalRecord;
+    terminal: WorkspaceTerminalRecord;
     metrics: WorkspacePreviewMetricsObservation;
   }) => {
     recordPreviewObservation({
@@ -1825,9 +1825,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     (runId: string | null): ReactNode => {
       const normalizedRunId = String(runId ?? "").trim();
       if (!normalizedRunId) return null;
-      const runTerminals = activeWorkspaceTerminals.filter(
+      const runTerminals = activePreviewCapableTerminals.filter(
         (terminal) =>
-          isPreviewCapableTerminal(terminal) &&
           resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId) === normalizedRunId,
       );
       if (runTerminals.length === 0) return null;
@@ -1854,7 +1853,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       handlePreviewLifecyclePhaseChange,
       handlePreviewMetricsObservation,
       isDesktopViewport,
-      activeWorkspaceTerminals,
+      activePreviewCapableTerminals,
       latestPreviewRunIdByTerminalId,
       previewStateByTerminalId,
     ],

@@ -76,6 +76,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     activeView: params.activeView,
     activeThreadId: params.activeThreadId,
     activeCommunitySlug: params.activeCommunitySlug,
+    activeProjectId: params.project.state.activeProjectId ?? params.project.derived.resolvedActiveProjectId,
     navigateTo: params.navigateTo,
     setActivePage: params.setActivePage,
     setActiveView: params.setActiveView,

@@ -1,5 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
+import type { PaidUsageBillingMode } from "./paidUsageBilling";
 import type { PaidToolKind } from "./workspaceCredits";
 
 export type InferenceIssueModalState = {
@@ -16,6 +17,7 @@ export type InferenceIssueModalState = {
   message: string | null;
   toolKind?: PaidToolKind | null;
   requiredCredits?: number | null;
+  paidUsageBillingMode?: PaidUsageBillingMode | null;
 };
 
 export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {

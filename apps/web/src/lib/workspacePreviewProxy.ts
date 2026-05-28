@@ -1,14 +1,27 @@
 function resolvePreviewOrigin(): string {
-  const configured = String(import.meta.env.VITE_DAYTONA_PREVIEW_ORIGIN ?? "").trim();
+  const configured = String(import.meta.env.VITE_WORKSPACE_PREVIEW_ORIGIN ?? "").trim();
   if (configured) return configured.replace(/\/+$/, "");
-  if (typeof window !== "undefined" && typeof window.location?.origin === "string" && window.location.origin) {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.location?.origin === "string" &&
+    window.location.origin
+  ) {
+    const hostname = String(window.location.hostname ?? "").trim().toLowerCase();
+    const isLocalDevelopmentHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".localhost");
+    if (!isLocalDevelopmentHost) {
+      throw new Error("VITE_WORKSPACE_PREVIEW_ORIGIN is required for hosted workspace previews.");
+    }
     return window.location.origin.replace(/\/+$/, "");
   }
-  throw new Error("Daytona preview origin is unavailable.");
+  throw new Error("Workspace preview origin is unavailable.");
 }
 
 function resolveLiveDesktopProxyOrigin(): string {
-  const configured = String(import.meta.env.VITE_DAYTONA_LIVE_DESKTOP_PROXY_ORIGIN ?? "").trim();
+  const configured = String(import.meta.env.VITE_WORKSPACE_LIVE_DESKTOP_PROXY_ORIGIN ?? "").trim();
   if (configured) return configured.replace(/\/+$/, "");
   return resolvePreviewOrigin();
 }
@@ -33,14 +46,14 @@ function shouldUseSecureDesktopTransport(upstream: URL): boolean {
   }
 }
 
-export function buildDaytonaPreviewProxyUrl(params: {
+export function buildWorkspacePreviewProxyUrl(params: {
   previewProxyToken: string;
   previewPath?: string | null;
   searchParams?: Record<string, string | number | boolean | null | undefined>;
 }): string {
   const token = String(params.previewProxyToken ?? "").trim();
   if (!token) {
-    throw new Error("Preview proxy token is required for Daytona preview transport.");
+    throw new Error("Preview proxy token is required for workspace preview transport.");
   }
   const pathSuffix = normalizePreviewPath(params.previewPath);
   const previewOrigin = resolvePreviewOrigin();
@@ -55,26 +68,26 @@ export function buildDaytonaPreviewProxyUrl(params: {
   return url.toString();
 }
 
-export function buildDaytonaEmbeddedLiveDesktopUrl(params: {
+export function buildWorkspaceEmbeddedLiveDesktopUrl(params: {
   previewProxyToken: string;
 }): string {
-  return buildDaytonaLiveDesktopUrl({
+  return buildWorkspaceLiveDesktopUrl({
     previewProxyToken: params.previewProxyToken,
     viewOnly: true,
   });
 }
 
-export function buildDaytonaRawLiveDesktopUrl(params: {
+export function buildWorkspaceRawLiveDesktopUrl(params: {
   previewProxyToken: string;
   viewOnly?: boolean;
 }): string {
-  return buildDaytonaLiveDesktopUrl({
+  return buildWorkspaceLiveDesktopUrl({
     previewProxyToken: params.previewProxyToken,
     viewOnly: params.viewOnly !== false,
   });
 }
 
-function buildDaytonaLiveDesktopUrl(params: {
+function buildWorkspaceLiveDesktopUrl(params: {
   previewProxyToken: string;
   viewOnly: boolean;
 }): string {

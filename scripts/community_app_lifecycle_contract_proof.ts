@@ -25,7 +25,7 @@ function main() {
   const communityPublic = readText(join(root, "convex/communityPublic.ts"));
   const platformHomeCommunity = readText(join(root, "convex/platformHomeCommunity.ts"));
   const schema = readText(join(root, "convex/schema.ts"));
-  const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
+  const runtimeAgentLoop = readText(join(root, "convex/runtimeAgentLoop.ts"));
   const runtimeExecutionSession = readText(
     join(root, "convex/runtimeExecutionSession.ts"),
   );
@@ -303,27 +303,27 @@ function main() {
   );
 
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal",
     "runtime mounted-tool resolution",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "createPolyNetExecutionSession({",
     "runtime personal mounted-tool execution session composition",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "executionSession.executeMountedTool({",
     "runtime personal mounted-tool execution dispatch",
   );
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_app_tools_resolved",
     "runtime mounted-tool evidence event",
   );
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "mountedTool.scope === \"community\" && mountedTool.risk_level !== \"read\"",
     "community mounted write/sensitive runtime guard",
   );

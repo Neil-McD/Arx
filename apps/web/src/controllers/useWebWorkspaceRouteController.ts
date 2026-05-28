@@ -4,6 +4,7 @@ import {
   buildWorkspaceCommunityDraftPath,
   buildWorkspaceDraftPath,
   buildWorkspaceThreadPath,
+  normalizeWorkspaceDraftProjectId,
 } from "../../../../shared/webAppRouteState";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean }) => void;
@@ -13,6 +14,7 @@ type UseWebWorkspaceRouteControllerArgs = {
   activeView: AppView;
   activeThreadId: string | null;
   activeCommunitySlug: string | null;
+  activeProjectId?: string | null;
   navigateTo: NavigateFn;
   setActivePage: (value: AppPage | ((prev: AppPage) => AppPage)) => void;
   setActiveView: (value: AppView | ((prev: AppView) => AppView)) => void;
@@ -75,7 +77,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
     }) => {
       const current = argsRef.current;
       if (opts?.projectId !== undefined) {
-        current.setActiveProjectId?.(opts.projectId);
+        current.setActiveProjectId?.(normalizeWorkspaceDraftProjectId(opts.projectId));
       }
       current.setActivePage("workspace");
       current.setActiveView("home");
@@ -85,9 +87,16 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
         opts?.communitySlug !== undefined
           ? String(opts.communitySlug ?? "").trim() || null
           : String(current.activeCommunitySlug ?? "").trim() || null;
-      current.navigateTo(buildWorkspaceCommunityDraftPath(requestedSlug) ?? buildWorkspaceDraftPath(), {
-        replace: opts?.replace ?? true,
-      });
+      const requestedProjectId = normalizeWorkspaceDraftProjectId(
+        opts?.projectId !== undefined ? opts.projectId : current.activeProjectId,
+      );
+      current.navigateTo(
+        buildWorkspaceCommunityDraftPath(requestedSlug, requestedProjectId) ??
+          buildWorkspaceDraftPath(requestedProjectId),
+        {
+          replace: opts?.replace ?? true,
+        },
+      );
       opts?.focusComposer?.();
     },
     [],
@@ -149,8 +158,10 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       }
       if (!current.activeThreadId && current.activePage === "workspace" && current.activeView === "home") {
         current.setWorkspaceWantsNewChatMode(true);
+        const requestedProjectId = normalizeWorkspaceDraftProjectId(current.activeProjectId);
         current.navigateTo(
-          buildWorkspaceCommunityDraftPath(current.activeCommunitySlug) ?? buildWorkspaceDraftPath(),
+          buildWorkspaceCommunityDraftPath(current.activeCommunitySlug, requestedProjectId) ??
+            buildWorkspaceDraftPath(requestedProjectId),
           { replace: true },
         );
         opts.focusComposer?.();

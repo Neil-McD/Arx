@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import { getConvexCloudRuntimeRunComputerUseLiveSession } from "../../../../shared/daytonaCloudThreadsRead";
+import { getConvexCloudRuntimeRunComputerUseLiveSession } from "../../../../shared/cloudThreadsRead";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { buildRuntimeComputerUseViewer } from "../../../../shared/runtimeTimelineUi";
 import {
@@ -8,9 +8,9 @@ import {
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
 import {
-  buildDaytonaEmbeddedLiveDesktopUrl,
-  buildDaytonaRawLiveDesktopUrl,
-} from "../lib/daytonaPreviewProxy";
+  buildWorkspaceEmbeddedLiveDesktopUrl,
+  buildWorkspaceRawLiveDesktopUrl,
+} from "../lib/workspacePreviewProxy";
 
 const LIVE_DESKTOP_RETRY_MS = 2_500;
 
@@ -48,7 +48,7 @@ function formatLiveDesktopDebug(debug: Record<string, unknown> | null): string |
 }
 
 function describeLiveDesktopFailure(code: string | null, blocked: boolean): string {
-  if (!code) return "Connecting the live Daytona desktop.";
+  if (!code) return "Connecting the live workspace desktop.";
   if (!blocked) return "Live desktop is still starting. Retrying now.";
   if (code === "computer_use_not_started") {
     return "Computer use has not started the desktop yet.";
@@ -322,10 +322,10 @@ export function RuntimeComputerUseViewer(props: {
         dispatchLiveDesktopState({
           type: "fetch_success",
           runId: activeRunId,
-          embeddedUrl: buildDaytonaEmbeddedLiveDesktopUrl({
+          embeddedUrl: buildWorkspaceEmbeddedLiveDesktopUrl({
             previewProxyToken: result.session.preview_proxy_token,
           }),
-          rawUrl: buildDaytonaRawLiveDesktopUrl({
+          rawUrl: buildWorkspaceRawLiveDesktopUrl({
             previewProxyToken: result.session.preview_proxy_token,
             viewOnly: false,
           }),
@@ -444,7 +444,7 @@ export function RuntimeComputerUseViewer(props: {
       {shouldRequireLiveDesktop && !liveDesktopUrl && (isLoadingLiveDesktop || liveDesktopFailureCode) ? (
         <div className="runtime-computer-viewer-summary">
           {isLoadingLiveDesktop
-            ? "Connecting the live Daytona desktop."
+            ? "Connecting the live workspace desktop."
             : liveDesktopFailureCode
               ? `${liveDesktopStatusMessage} (${liveDesktopFailureCode})`
               : liveDesktopStatusMessage}

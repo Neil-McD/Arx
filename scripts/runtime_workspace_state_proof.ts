@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
-const deletedBridgePath = "/Users/neilmcdevitt/code/arx/shared/runtimeWorkspaceState.ts";
+const deletedBridgePath = "shared/runtimeWorkspaceState.ts";
 assert.equal(
   existsSync(deletedBridgePath),
   false,
@@ -65,10 +65,10 @@ assert.doesNotMatch(prompt, /BACKGROUND_TERMINAL_STATE/);
 assert.doesNotMatch(prompt, /Recent process event summary/);
 
 for (const path of [
-  "/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts",
-  "/Users/neilmcdevitt/code/arx/shared/runtimeWorkingStateLedger.ts",
-  "/Users/neilmcdevitt/code/arx/convex/runtimeTurnResolution.ts",
-  "/Users/neilmcdevitt/code/arx/convex/threads.ts",
+  "shared/runtimePrompt.ts",
+  "shared/runtimeWorkingStateLedger.ts",
+  "convex/runtimeTurnResolution.ts",
+  "convex/threads.ts",
 ]) {
   const source = readFileSync(path, "utf8");
   assert.doesNotMatch(source, /runtimeWorkspaceState/);

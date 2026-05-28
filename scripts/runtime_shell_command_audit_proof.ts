@@ -29,7 +29,7 @@ function proveShellAuditMetadataHelper() {
   assert.equal(
     getShellCommandAuditMetadataForToolCall({
       toolName: "read",
-      normalizedArgs: { path: "convex/httpDaytona.ts" },
+      normalizedArgs: { path: "convex/runtimeAgentLoop.ts" },
     }),
     null,
   );
@@ -45,9 +45,9 @@ function proveShellAuditMetadataHelper() {
 
 async function proveRuntimeEventsCarryShellAuditMetadata() {
   const runtimeToolPolicy = await readRepoFile("shared/runtimeToolPolicy.ts");
-  const daytonaRuntimeEvents = await readRepoFile("convex/daytonaRuntimeEvents.ts");
-  const httpDaytona = await readRepoFile("convex/httpDaytona.ts");
-  const daytonaWorkspaceTools = await readRepoFile("convex/daytonaWorkspaceTools.ts");
+  const runtimeToolCallEvents = await readRepoFile("convex/runtimeToolCallEvents.ts");
+  const runtimeAgentLoop = await readRepoFile("convex/runtimeAgentLoop.ts");
+  const workspaceRuntimeTools = await readRepoFile("convex/workspaceRuntimeTools.ts");
 
   assert.match(
     runtimeToolPolicy,
@@ -55,42 +55,42 @@ async function proveRuntimeEventsCarryShellAuditMetadata() {
     "expected schedule calls to include parsed shell commands",
   );
   assert.match(
-    httpDaytona,
+    runtimeAgentLoop,
     /normalizedArgs: step\.normalizedArgs/,
     "expected scheduler inputs to receive normalized tool args",
   );
   assert.match(
-    httpDaytona,
+    runtimeAgentLoop,
     /calls: schedule\.calls/,
     "expected tool_schedule_resolved to persist schedule calls",
   );
   assert.match(
-    daytonaRuntimeEvents,
+    runtimeToolCallEvents,
     /getShellCommandAuditMetadataForToolCall/,
     "expected runtime tool events to derive shell command audit metadata",
   );
   assert.match(
-    daytonaRuntimeEvents,
+    runtimeToolCallEvents,
     /\.\.\.\(shellCommandAuditMetadata \?\? \{\}\)/,
     "expected tool events to spread shell command audit metadata into payloads",
   );
   assert.match(
-    daytonaRuntimeEvents,
+    runtimeToolCallEvents,
     /eventType: "tool_call_started"/,
     "expected started event helper to remain wired",
   );
   assert.match(
-    daytonaRuntimeEvents,
+    runtimeToolCallEvents,
     /eventType: "tool_call_finished"/,
     "expected finished event helper to remain wired",
   );
   assert.match(
-    daytonaWorkspaceTools,
-    /result\.exitCode !== 0/,
+    workspaceRuntimeTools,
+    /exitCode !== 0/,
     "expected bash workspace tool failures to treat nonzero exit codes as failed tool results",
   );
   assert.match(
-    httpDaytona,
+    runtimeAgentLoop,
     /detailsExitCode/,
     "expected bash failure envelopes to preserve nonzero exit codes for runtime evidence",
   );

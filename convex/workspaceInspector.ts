@@ -1,24 +1,20 @@
 import { action } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
-import { DAYTONA_WORKSPACE_ROOT } from "./daytonaSandboxClient";
-import { resolveProjectBackgroundSandboxIfReady } from "./workspaceTerminalBackgroundService";
 import {
-  ensureBlaxelWorkspaceComputer,
   inspectBlaxelWorkspaceComputer,
   listBlaxelWorkspaceDirectory,
   readBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
-  resolveWorkspaceComputerProviderFromServerEnv,
-} from "./workspaceComputerProviderPolicy.ts";
+  ensureBillableBlaxelWorkspaceComputer,
+} from "./blaxelWorkspaceWake.ts";
+import {
+  isBlaxelWorkspaceSandboxTerminalState,
+} from "./blaxelWorkspaceClient.ts";
 import {
   buildBlaxelProjectWorkspaceNames,
 } from "./blaxelWorkspaceProjectNames.ts";
-import {
-  normalizeWorkspacePath,
-  runDaytonaWorkspaceBash,
-} from "./daytonaWorkspaceTools";
 import { isWorkspaceTerminalActiveStatus } from "./workspaceTerminalProcessCore";
 import {
   resolveRecordedWorkspaceResourceProviderId,
@@ -99,31 +95,26 @@ type WorkspaceInspectorFailure = {
   details?: Record<string, unknown>;
 };
 
-type WorkspaceInspectorSession = {
-  config: any;
-  providerSandboxId: string;
-  toolboxProxyUrl: string;
-};
-
 type WorkspaceInspectorProject = {
   actor: any;
   project: any;
 };
 
-type WorkspaceInspectorPathKind = "file" | "directory" | "missing" | "other";
-type WorkspaceInspectorResolvedPath =
-  | {
-      kind: Exclude<WorkspaceInspectorPathKind, "missing">;
-      rootPath: string;
-      resolvedPath: string;
-    }
-  | {
-      kind: "missing";
-      rootPath: string;
-      resolvedPath: null;
-    };
-
-const WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER = "__POLYNET_UNSAFE_WORKSPACE_PATH__";
+function normalizeWorkspacePath(raw: unknown): string {
+  const candidate = String(raw ?? "").trim().replaceAll("\\", "/");
+  if (!candidate) throw new Error("tool_path_required");
+  if (candidate.startsWith("/")) throw new Error("path_outside_workspace");
+  const parts = candidate
+    .split("/")
+    .filter((part) => part.length > 0 && part !== ".");
+  if (parts.some((part) => part === "..")) {
+    throw new Error("path_outside_workspace");
+  }
+  const segments =
+    parts[0]?.toLowerCase() === "workspace" ? parts.slice(1) : parts;
+  if (segments.length === 0) return ".";
+  return segments.join("/");
+}
 
 function normalizeInspectorPath(raw: unknown):
   | { ok: true; relPath: string }
@@ -143,10 +134,6 @@ function normalizeInspectorPath(raw: unknown):
       message: "Workspace path is outside the computer workspace.",
     };
   }
-}
-
-function shellQuote(value: string): string {
-  return `'${String(value).replaceAll("'", `'\\''`)}'`;
 }
 
 function normalizeOptionalString(value: unknown): string | null {
@@ -364,13 +351,15 @@ async function ensureBlaxelInspectorWorkspace(params: {
   });
   if (!ownership.ok) return ownership;
 
+  const volumeName = names.volumeName;
+
   const existingSandboxId = normalizeOptionalString(
     resolvedProject.resolved.project?.providerSandboxId,
   );
   if (existingSandboxId === names.sandboxName) {
     const inspected = await inspectBlaxelWorkspaceComputer({
       sandboxName: names.sandboxName,
-      volumeName: names.volumeName,
+      volumeName,
     });
     if (!inspected.ok) return mapFailure(inspected);
     if (!inspected.exists) {
@@ -379,13 +368,22 @@ async function ensureBlaxelInspectorWorkspace(params: {
         projectId: params.projectId,
         sandboxName: names.sandboxName,
       });
+    } else if (isBlaxelWorkspaceSandboxTerminalState(inspected.state)) {
+      await clearBlaxelInspectorWorkspaceState({
+        ctx: params.ctx,
+        projectId: params.projectId,
+        sandboxName: names.sandboxName,
+      });
     }
   }
 
-  const ensured = await ensureBlaxelWorkspaceComputer({
-    sandboxName: names.sandboxName,
-    volumeName: names.volumeName,
+  const ensured = await ensureBillableBlaxelWorkspaceComputer({
+    ctx: params.ctx,
+    projectId: params.projectId,
+    ownerId: resolvedProject.resolved.actor.dbUserId,
     lifecycleIntent: "file_inspection",
+    reservationAction: "workspace_file_inspection",
+    reuseExistingLease: true,
     labels: {
       purpose: "workspace-inspector",
       project_id: String(params.projectId),
@@ -393,17 +391,10 @@ async function ensureBlaxelInspectorWorkspace(params: {
     },
   });
   if (!ensured.ok) return mapFailure(ensured);
-  await recordBlaxelInspectorWorkspaceState({
-    ctx: params.ctx,
-    projectId: params.projectId,
-    sandboxName: names.sandboxName,
-    volumeName: names.volumeName,
-    state: "active",
-  });
   return {
     ok: true,
-    sandboxName: names.sandboxName,
-    volumeName: names.volumeName,
+    sandboxName: ensured.providerSandboxId,
+    volumeName: ensured.projectVolumeId,
   };
 }
 
@@ -472,39 +463,12 @@ async function validateBlaxelInspectorWorkspaceOwnership(params: {
   if (conflictingActiveTerminal) {
     return workspaceProviderTransitionRequiredFailure({
       resourceKind: "terminal",
-      actualProviderId: "daytona",
+      actualProviderId: "blaxel",
       resourceId: normalizeOptionalString(conflictingActiveTerminal.providerSandboxId),
     });
   }
 
   return { ok: true };
-}
-
-async function recordBlaxelInspectorWorkspaceState(params: {
-  ctx: any;
-  projectId: any;
-  sandboxName: string;
-  volumeName: string;
-  state: string;
-}) {
-  const nowMs = Date.now();
-  await params.ctx.runMutation(internal.projects.attachCloudProjectVolumeInternal as any, {
-    projectId: params.projectId,
-    providerVolumeId: params.volumeName,
-    providerId: "blaxel",
-    nowMs,
-  });
-  await params.ctx.runMutation(
-    internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
-    {
-      projectId: params.projectId,
-      providerSandboxId: params.sandboxName,
-      providerSandboxProviderId: "blaxel",
-      providerSandboxState: params.state,
-      providerSandboxLastSeenAt: nowMs,
-      clearSandboxAccounting: true,
-    },
-  );
 }
 
 async function clearBlaxelInspectorWorkspaceState(params: {
@@ -607,31 +571,6 @@ async function resolveInspectorProject(params: {
   return {
     ok: true,
     resolved: { actor, project },
-  };
-}
-
-async function resolveInspectorSession(params: {
-  ctx: any;
-  authSubject: string | null | undefined;
-  projectId: any;
-}): Promise<
-  | { ok: true; session: WorkspaceInspectorSession }
-  | WorkspaceInspectorFailure
-> {
-  const resolvedProject = await resolveInspectorProject(params);
-  if (!resolvedProject.ok) return resolvedProject;
-
-  const resolved = await resolveProjectBackgroundSandboxIfReady({
-    ctx: params.ctx,
-    authSubject: params.authSubject ?? null,
-    userId: resolvedProject.resolved.actor.dbUserId,
-    projectId: params.projectId,
-  });
-  if (!resolved.ok) return mapFailure(resolved);
-
-  return {
-    ok: true,
-    session: resolved,
   };
 }
 
@@ -781,156 +720,6 @@ async function readBlaxelInspectorFilePreview(params: {
   });
 }
 
-function parseDirectoryEntries(outputText: string, directoryPath: string) {
-  const rows = String(outputText ?? "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => line !== "(empty directory)")
-    .slice(0, DIRECTORY_ENTRY_LIMIT);
-
-  return rows.flatMap((line) => {
-    const separatorIndex = line.indexOf("\t");
-    if (separatorIndex <= 0) return [];
-    const rawType = line.slice(0, separatorIndex);
-    const rawPath = line.slice(separatorIndex + 1).trim();
-    const type = rawType === "dir" ? "directory" : rawType === "file" ? "file" : null;
-    if (!type || !rawPath) return [];
-    const name = basenameOfPath(rawPath);
-    const path = joinWorkspacePath(directoryPath, rawPath);
-    return [{
-      name,
-      path,
-      type,
-      extension: type === "file" ? extensionOfPath(name) : null,
-      heavy: type === "directory" && HEAVY_DIRECTORY_NAMES.has(name),
-      previewable:
-        type === "file" &&
-        (Boolean(IMAGE_MIME_BY_EXTENSION[extensionOfPath(name)]) ||
-          isTextPreviewCandidate(name)),
-    }];
-  });
-}
-
-async function readWorkspacePathSize(params: {
-  session: WorkspaceInspectorSession;
-  path: Extract<WorkspaceInspectorResolvedPath, { resolvedPath: string }>;
-}): Promise<number | null> {
-  const result = await runDaytonaWorkspaceBash({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    relPath: ".",
-    command: [
-      ...buildGuardedResolvedPathPrelude(params.path),
-      `if [ ! -f "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
-      `wc -c < "$safe_path" | tr -d '[:space:]'`,
-    ].join(" "),
-  });
-  if (!result.ok) return null;
-  if (String(result.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) return null;
-  const parsed = Number(String(result.outputText ?? "").trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function buildGuardedResolvedPathPrelude(path: Extract<WorkspaceInspectorResolvedPath, { resolvedPath: string }>): string[] {
-  return [
-    "set -f;",
-    `root=${shellQuote(path.rootPath)};`,
-    `safe_path=${shellQuote(path.resolvedPath)};`,
-    'resolved_root="$(realpath -- "$root" 2>/dev/null || readlink -f -- "$root" 2>/dev/null || true)";',
-    `if [ "$resolved_root" != "$root" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
-    'resolved_again="$(realpath -- "$safe_path" 2>/dev/null || readlink -f -- "$safe_path" 2>/dev/null || true)";',
-    `if [ "$resolved_again" != "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
-    `case "$resolved_again" in "$root"|"$root"/*) ;; *) printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0;; esac;`,
-  ];
-}
-
-function mapGuardedPathFailure(): WorkspaceInspectorFailure {
-  return {
-    ok: false,
-    status: 400,
-    code: "path_outside_workspace",
-    message: "Workspace path is outside the computer workspace.",
-  };
-}
-
-async function inspectWorkspacePathBoundary(params: {
-  session: WorkspaceInspectorSession;
-  relPath: string;
-}): Promise<
-  | { ok: true; path: WorkspaceInspectorResolvedPath }
-  | WorkspaceInspectorFailure
-> {
-  const result = await runDaytonaWorkspaceBash({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    relPath: ".",
-    command: [
-      "set -f;",
-      `root_input=${shellQuote(DAYTONA_WORKSPACE_ROOT)};`,
-      'root="$(realpath -- "$root_input" 2>/dev/null || readlink -f -- "$root_input" 2>/dev/null || true)";',
-      'if [ -z "$root" ]; then printf unresolved; exit 0; fi;',
-      `rel=${shellQuote(params.relPath)};`,
-      'abs="$root_input";',
-      'if [ "$rel" != "." ]; then',
-      '  old_ifs="$IFS"; IFS="/"; set -- $rel; IFS="$old_ifs";',
-      '  for part do',
-      '    [ -n "$part" ] || continue;',
-      '    abs="$abs/$part";',
-      '    if [ -L "$abs" ]; then printf symlink; exit 0; fi;',
-      "  done;",
-      "fi;",
-      'if [ ! -e "$abs" ]; then printf "missing\\t%s" "$root"; exit 0; fi;',
-      'resolved="$(realpath -- "$abs" 2>/dev/null || readlink -f -- "$abs" 2>/dev/null || true)";',
-      'if [ -z "$resolved" ]; then printf unresolved; exit 0; fi;',
-      'case "$resolved" in "$root"|"$root"/*) ;; *) printf outside; exit 0;; esac;',
-      'if [ -d "$abs" ]; then printf "directory\\t%s\\t%s" "$root" "$resolved";',
-      'elif [ -f "$abs" ]; then printf "file\\t%s\\t%s" "$root" "$resolved";',
-      'elif [ -e "$abs" ]; then printf "other\\t%s\\t%s" "$root" "$resolved";',
-      "else printf missing; fi",
-    ].join(" "),
-  });
-  if (!result.ok) return mapFailure(result);
-  const value = String(result.outputText ?? "").trim();
-  const [kind, rootPath, resolvedPath] = value.split("\t");
-  if (kind === "missing" && rootPath) {
-    return {
-      ok: true,
-      path: {
-        kind,
-        rootPath,
-        resolvedPath: null,
-      },
-    };
-  }
-  if ((kind === "file" || kind === "directory" || kind === "other") && rootPath && resolvedPath) {
-    return {
-      ok: true,
-      path: {
-        kind,
-        rootPath,
-        resolvedPath,
-      },
-    };
-  }
-  if (value === "symlink") {
-    return {
-      ok: false,
-      status: 400,
-      code: "workspace_symlink_not_supported",
-      message: "Workspace symlinks are not previewed in the workspace panel.",
-    };
-  }
-  return {
-    ok: false,
-    status: 400,
-    code: value === "outside" ? "path_outside_workspace" : "workspace_path_unresolved",
-    message: "Workspace path is outside the computer workspace.",
-  };
-}
-
 export const listWorkspaceDirectory = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -941,80 +730,12 @@ export const listWorkspaceDirectory = action({
     const normalized = normalizeInspectorPath(args.path ?? ".");
     if (!normalized.ok) return normalized;
     const relPath = normalized.relPath;
-    if (resolveWorkspaceComputerProviderFromServerEnv().providerId === "blaxel") {
-      return await listBlaxelInspectorDirectory({
-        ctx,
-        authSubject: args.authSubject ?? null,
-        projectId: args.projectId,
-        relPath,
-      });
-    }
-    const session = await resolveInspectorSession({
+    return await listBlaxelInspectorDirectory({
       ctx,
       authSubject: args.authSubject ?? null,
       projectId: args.projectId,
+      relPath,
     });
-    if (!session.ok) return session;
-
-    const boundaryResult = await inspectWorkspacePathBoundary({ session: session.session, relPath });
-    if (!boundaryResult.ok) return boundaryResult;
-    const boundary = boundaryResult.path;
-    if (boundary.kind === "missing") {
-      return {
-        ok: false,
-        status: 404,
-        code: "directory_not_found",
-        message: "Workspace folder not found.",
-      };
-    }
-    if (boundary.kind !== "directory") {
-      return {
-        ok: false,
-        status: 400,
-        code: "workspace_path_not_directory",
-        message: "Workspace path is not a folder.",
-      };
-    }
-
-    const listed = await runDaytonaWorkspaceBash({
-      config: session.session.config,
-      toolboxProxyUrl: session.session.toolboxProxyUrl,
-      sandboxId: session.session.providerSandboxId,
-      relPath: ".",
-      command: [
-        ...buildGuardedResolvedPathPrelude(boundary),
-        `if [ ! -d "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
-        'cd -- "$safe_path" || exit 1;',
-        "find . -mindepth 1 -maxdepth 1 -print",
-        "| sed 's#^\\./##'",
-        "| while IFS= read -r path; do",
-        '  [ -n "$path" ] || continue;',
-        '  if [ -L "$path" ]; then',
-        "    continue;",
-        '  elif [ -d "$path" ]; then',
-        '    printf \'dir\\t%s\\n\' "$path";',
-        '  elif [ -f "$path" ]; then',
-        '    printf \'file\\t%s\\n\' "$path";',
-        "  fi;",
-        "done",
-        "| LC_ALL=C sort",
-        `| sed -n '1,${DIRECTORY_ENTRY_LIMIT}p'`,
-      ].join(" "),
-    });
-    if (!listed.ok) return mapFailure(listed);
-    if (String(listed.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) {
-      return mapGuardedPathFailure();
-    }
-
-    const entries = parseDirectoryEntries(listed.outputText, relPath);
-    return {
-      ok: true,
-      providerId: "daytona",
-      status: "active",
-      path: relPath,
-      entries,
-      truncated: entries.length >= DIRECTORY_ENTRY_LIMIT,
-    };
   },
 });
 
@@ -1028,147 +749,11 @@ export const readWorkspaceFilePreview = action({
     const normalized = normalizeInspectorPath(args.path);
     if (!normalized.ok) return normalized;
     const relPath = normalized.relPath;
-    if (resolveWorkspaceComputerProviderFromServerEnv().providerId === "blaxel") {
-      return await readBlaxelInspectorFilePreview({
-        ctx,
-        authSubject: args.authSubject ?? null,
-        projectId: args.projectId,
-        relPath,
-      });
-    }
-    const session = await resolveInspectorSession({
+    return await readBlaxelInspectorFilePreview({
       ctx,
       authSubject: args.authSubject ?? null,
       projectId: args.projectId,
+      relPath,
     });
-    if (!session.ok) return session;
-
-    const boundaryResult = await inspectWorkspacePathBoundary({ session: session.session, relPath });
-    if (!boundaryResult.ok) return boundaryResult;
-    const boundary = boundaryResult.path;
-    if (boundary.kind === "missing") {
-      return {
-        ok: false,
-        status: 404,
-        code: "file_not_found",
-        message: "Workspace file not found.",
-      };
-    }
-    if (boundary.kind === "directory") {
-      return {
-        ok: true,
-        path: relPath,
-        name: basenameOfPath(relPath),
-        type: "directory",
-        previewKind: "directory",
-      };
-    }
-    if (boundary.kind !== "file") {
-      return {
-        ok: true,
-        path: relPath,
-        name: basenameOfPath(relPath),
-        type: "other",
-        previewKind: "unsupported",
-        reason: "This workspace path is not a regular file.",
-      };
-    }
-
-    const sizeBytes = await readWorkspacePathSize({ session: session.session, path: boundary });
-    const extension = extensionOfPath(relPath);
-    const imageMimeType = IMAGE_MIME_BY_EXTENSION[extension] ?? null;
-    if (imageMimeType) {
-      if (sizeBytes != null && sizeBytes > IMAGE_PREVIEW_MAX_BYTES) {
-        return {
-          ok: true,
-          path: relPath,
-          name: basenameOfPath(relPath),
-          type: "file",
-          previewKind: "unsupported",
-          mimeType: imageMimeType,
-          sizeBytes,
-          reason: "Image is too large to preview in the workspace panel.",
-        };
-      }
-      const encoded = await runDaytonaWorkspaceBash({
-        config: session.session.config,
-        toolboxProxyUrl: session.session.toolboxProxyUrl,
-        sandboxId: session.session.providerSandboxId,
-        relPath: ".",
-        command: [
-          ...buildGuardedResolvedPathPrelude(boundary),
-          `if [ ! -f "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
-          "(base64 -w 0 \"$safe_path\" 2>/dev/null || base64 \"$safe_path\" | tr -d '\\n')",
-        ].join(" "),
-      });
-      if (!encoded.ok) return mapFailure(encoded);
-      if (String(encoded.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) {
-        return mapGuardedPathFailure();
-      }
-      return {
-        ok: true,
-        path: relPath,
-        name: basenameOfPath(relPath),
-        type: "file",
-        previewKind: "image",
-        mimeType: imageMimeType,
-        sizeBytes,
-        dataUrl: `data:${imageMimeType};base64,${String(encoded.outputText ?? "").trim()}`,
-      };
-    }
-
-    if (!isTextPreviewCandidate(relPath)) {
-      return {
-        ok: true,
-        path: relPath,
-        name: basenameOfPath(relPath),
-        type: "file",
-        previewKind: "unsupported",
-        sizeBytes,
-        reason: "This file type is not previewed yet.",
-      };
-    }
-
-    const textPreview = await runDaytonaWorkspaceBash({
-      config: session.session.config,
-      toolboxProxyUrl: session.session.toolboxProxyUrl,
-      sandboxId: session.session.providerSandboxId,
-      relPath: ".",
-      command: [
-        ...buildGuardedResolvedPathPrelude(boundary),
-        `if [ ! -f "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
-        'if ! LC_ALL=C grep -Iq . "$safe_path" && [ "$(wc -c < "$safe_path" | tr -d \'[:space:]\')" != "0" ]; then',
-        "  printf '__POLYNET_BINARY_FILE__';",
-        "else",
-        `  head -c ${TEXT_PREVIEW_MAX_BYTES} "$safe_path";`,
-        "fi",
-      ].join(" "),
-    });
-    if (!textPreview.ok) return mapFailure(textPreview);
-    if (String(textPreview.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) {
-      return mapGuardedPathFailure();
-    }
-    if (String(textPreview.outputText ?? "").trim() === "__POLYNET_BINARY_FILE__") {
-      return {
-        ok: true,
-        path: relPath,
-        name: basenameOfPath(relPath),
-        type: "file",
-        previewKind: "unsupported",
-        sizeBytes,
-        reason: "Binary files are not previewed in the workspace panel.",
-      };
-    }
-
-    return {
-      ok: true,
-      path: relPath,
-      name: basenameOfPath(relPath),
-      type: "file",
-      previewKind: "text",
-      sizeBytes,
-      text: String(textPreview.outputText ?? ""),
-      truncated: typeof sizeBytes === "number" && sizeBytes > TEXT_PREVIEW_MAX_BYTES,
-    };
   },
 });

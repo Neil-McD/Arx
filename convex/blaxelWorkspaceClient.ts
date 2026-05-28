@@ -20,6 +20,8 @@ export type BlaxelWorkspaceConfig = {
   memoryMb: number;
   region: string;
   volumeSizeMb: number;
+  providerVolumeLimit: number | null;
+  providerVolumeSafetyBuffer: number;
   workspaceRoot: string;
   fileInspectionIdleDeleteAfter: string;
   interactiveIdleDeleteAfter: string;
@@ -74,6 +76,7 @@ export type BlaxelWorkspaceCommandSpec = {
   processName?: string | null;
   timeoutSeconds?: number | null;
   waitForCompletion?: boolean | null;
+  waitForPorts?: number[] | null;
 };
 
 export type BlaxelWorkspaceCommandResult =
@@ -86,6 +89,31 @@ export type BlaxelWorkspaceCommandResult =
       exitCode: number | null;
       stdout: string | null;
       stderr: string | null;
+      raw: unknown;
+    }
+  | WorkspaceComputerProviderFailure;
+
+export type BlaxelWorkspaceProcessResult =
+  | {
+      ok: true;
+      providerId: "blaxel";
+      providerSandboxId: string;
+      providerProcessId: string;
+      status: string | null;
+      exitCode: number | null;
+      stdout: string | null;
+      stderr: string | null;
+      logs: string | null;
+      raw: unknown;
+    }
+  | WorkspaceComputerProviderFailure;
+
+export type BlaxelWorkspaceProcessStopResult =
+  | {
+      ok: true;
+      providerId: "blaxel";
+      providerSandboxId: string;
+      providerProcessId: string;
       raw: unknown;
     }
   | WorkspaceComputerProviderFailure;
@@ -147,6 +175,40 @@ export type BlaxelWorkspaceSandboxInspectionResult =
     }
   | WorkspaceComputerProviderFailure;
 
+export type BlaxelWorkspaceInventoryResource = {
+  name: string;
+  status: string | null;
+  providerId: "blaxel";
+  kind: "sandbox" | "volume";
+  labels: Record<string, string>;
+  region: string | null;
+  sizeMb: number | null;
+  attachedTo: string | null;
+  createdAt: string | number | null;
+  updatedAt: string | number | null;
+};
+
+export type BlaxelWorkspaceInventoryListResult =
+  | {
+      ok: true;
+      providerId: "blaxel";
+      kind: "sandbox" | "volume";
+      resources: BlaxelWorkspaceInventoryResource[];
+      rawCount: number;
+    }
+  | WorkspaceComputerProviderFailure;
+
+export type BlaxelWorkspaceVolumeQuotaSnapshot =
+  | {
+      ok: true;
+      providerId: "blaxel";
+      providerVolumeCount: number;
+      providerVolumeLimit: number | null;
+      providerVolumeSafetyBuffer: number;
+      source: "provider_inventory_configured_limit" | "provider_inventory_no_limit";
+    }
+  | WorkspaceComputerProviderFailure;
+
 type BlaxelCoreModule = typeof import("@blaxel/core");
 
 type SafeBlaxelErrorDetails = {
@@ -173,6 +235,19 @@ function readPositiveIntegerEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function readOptionalPositiveIntegerEnv(name: string): number | null {
+  const raw = readEnv(name);
+  if (!raw) return null;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function readNonNegativeIntegerEnv(name: string, fallback: number): number {
+  const raw = readEnv(name);
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 function normalizePositiveInteger(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -185,6 +260,16 @@ function normalizeString(value: unknown): string {
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = normalizeString(value);
   return normalized || null;
+}
+
+function normalizeBlaxelPreviewName(value: unknown, fallbackPort: number): string {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+  return normalized || `port-${fallbackPort}`;
 }
 
 function normalizeWorkspaceRoot(value: unknown): string {
@@ -364,6 +449,11 @@ export function loadBlaxelWorkspaceConfig():
       memoryMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_MEMORY_MB", 4096),
       region: readEnv("BLAXEL_WORKSPACE_REGION") || "us-pdx-1",
       volumeSizeMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_VOLUME_SIZE_MB", 2048),
+      providerVolumeLimit: readOptionalPositiveIntegerEnv("BLAXEL_WORKSPACE_VOLUME_LIMIT"),
+      providerVolumeSafetyBuffer: readNonNegativeIntegerEnv(
+        "BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER",
+        1,
+      ),
       workspaceRoot: readEnv("BLAXEL_WORKSPACE_ROOT") || BLAXEL_WORKSPACE_ROOT,
       fileInspectionIdleDeleteAfter:
         readEnv("BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER") ||
@@ -441,11 +531,15 @@ export function sanitizeBlaxelErrorDetails(error: unknown): SafeBlaxelErrorDetai
 function classifyBlaxelError(error: unknown): WorkspaceComputerProviderFailure {
   const message = describeError(error);
   const details = sanitizeBlaxelErrorDetails(error);
-  if (/quota exceeded|0\/0 volumes|volume quota/i.test(message)) {
+  if (
+    /quota exceeded|0\/0 volumes|volume quota|total volume size|maximum allowed total size|exceeds maximum allowed/i.test(
+      message,
+    )
+  ) {
     return failure({
       status: 402,
       code: "blaxel_volume_quota_exceeded",
-      message: "Blaxel volume quota is exhausted or not enabled for this workspace.",
+      message: "Blaxel workspace storage quota is exhausted or not enabled for this workspace.",
       details,
     });
   }
@@ -549,6 +643,41 @@ function sandboxStateFrom(sandbox: any): string | null {
   );
 }
 
+function normalizeBlaxelSandboxState(value: unknown): string | null {
+  const state = normalizeOptionalString(value);
+  return state ? state.toLowerCase().replace(/[\s-]+/g, "_") : null;
+}
+
+export function isBlaxelWorkspaceSandboxTerminalState(value: unknown): boolean {
+  const state = normalizeBlaxelSandboxState(value);
+  return Boolean(
+    state &&
+    [
+      "deleted",
+      "deleting",
+      "error",
+      "failed",
+      "failure",
+      "stopped",
+      "terminated",
+      "terminating",
+    ].includes(state),
+  );
+}
+
+function terminalBlaxelSandboxFailure(
+  state: unknown,
+): WorkspaceComputerProviderFailure {
+  return failure({
+    status: 404,
+    code: "blaxel_sandbox_not_found",
+    message: "Blaxel sandbox is no longer reusable.",
+    details: {
+      provider_state: normalizeOptionalString(state) ?? null,
+    },
+  });
+}
+
 function sandboxUrlFrom(sandbox: any): string | null {
   return (
     normalizeOptionalString(sandbox?.metadata?.url) ??
@@ -587,6 +716,117 @@ function sandboxStringLabelsFrom(sandbox: unknown): Record<string, string> {
       .map(([key, value]) => [normalizeString(key), normalizeString(value)] as const)
       .filter(([key]) => Boolean(key)),
   );
+}
+
+function sanitizedInventoryLabelsFrom(value: unknown): Record<string, string> {
+  const labels = sandboxStringLabelsFrom(value);
+  const allowed = new Set([
+    "lifecycle_intent",
+    "owner",
+    "owner_id",
+    "project_id",
+    "provider",
+    "purpose",
+    "run_id",
+  ]);
+  return Object.fromEntries(
+    Object.entries(labels)
+      .filter(([key]) => allowed.has(key))
+      .map(([key, labelValue]) => [key, labelValue.slice(0, 160)]),
+  );
+}
+
+function extractListItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  const record = asRecord(value);
+  for (const key of ["items", "resources", "data", "sandboxes", "volumes"]) {
+    const maybeItems = record?.[key];
+    if (Array.isArray(maybeItems)) return maybeItems;
+  }
+  return [];
+}
+
+function metadataNameFrom(value: unknown): string | null {
+  const record = asRecord(value);
+  return (
+    normalizeOptionalString(asRecord(record?.metadata)?.name) ??
+    normalizeOptionalString(record?.name) ??
+    normalizeOptionalString(record?.id) ??
+    normalizeOptionalString(record?.identifier)
+  );
+}
+
+function inventoryStatusFrom(value: unknown): string | null {
+  const record = asRecord(value);
+  return (
+    normalizeOptionalString(record?.status) ??
+    normalizeOptionalString(record?.state) ??
+    normalizeOptionalString(asRecord(record?.metadata)?.status) ??
+    normalizeOptionalString(asRecord(record?.metadata)?.state) ??
+    normalizeOptionalString(asRecord(record?.spec)?.status) ??
+    normalizeOptionalString(asRecord(record?.spec)?.state)
+  );
+}
+
+function inventoryRegionFrom(value: unknown): string | null {
+  const record = asRecord(value);
+  return (
+    normalizeOptionalString(record?.region) ??
+    normalizeOptionalString(asRecord(record?.metadata)?.region) ??
+    normalizeOptionalString(asRecord(record?.spec)?.region)
+  );
+}
+
+function inventorySizeMbFrom(value: unknown): number | null {
+  const record = asRecord(value);
+  const spec = asRecord(record?.spec);
+  const raw = record?.size ?? record?.sizeMb ?? record?.sizeMB ?? spec?.size ?? spec?.sizeMb ?? spec?.sizeMB;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function inventoryAttachedToFrom(value: unknown): string | null {
+  const record = asRecord(value);
+  const spec = asRecord(record?.spec);
+  return (
+    normalizeOptionalString(record?.attachedTo) ??
+    normalizeOptionalString(record?.attached_to) ??
+    normalizeOptionalString(record?.attachedSandbox) ??
+    normalizeOptionalString(record?.attached_sandbox) ??
+    normalizeOptionalString(spec?.attachedTo) ??
+    normalizeOptionalString(spec?.attached_to)
+  );
+}
+
+function inventoryTimestampFrom(value: unknown, keys: string[]): string | number | null {
+  const record = asRecord(value);
+  const metadata = asRecord(record?.metadata);
+  for (const key of keys) {
+    const raw = record?.[key] ?? metadata?.[key];
+    if (typeof raw === "string" && raw.trim()) return raw.trim();
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  }
+  return null;
+}
+
+function sanitizeInventoryResource(
+  value: unknown,
+  kind: "sandbox" | "volume",
+): BlaxelWorkspaceInventoryResource | null {
+  const name = metadataNameFrom(value);
+  if (!name) return null;
+  return {
+    name,
+    status: inventoryStatusFrom(value),
+    providerId: "blaxel",
+    kind,
+    labels: sanitizedInventoryLabelsFrom(value),
+    region: inventoryRegionFrom(value),
+    sizeMb: inventorySizeMbFrom(value),
+    attachedTo: inventoryAttachedToFrom(value),
+    createdAt: inventoryTimestampFrom(value, ["createdAt", "created_at", "created"]),
+    updatedAt: inventoryTimestampFrom(value, ["updatedAt", "updated_at", "updated"]),
+  };
 }
 
 function lifecycleIntentFromLabel(value: unknown): WorkspaceComputerLifecycleIntent | null {
@@ -885,52 +1125,8 @@ export async function ensureBlaxelWorkspaceSandbox(
       if (typeof existingSandbox?.wait === "function") {
         await existingSandbox.wait({ maxWait: 120_000, interval: 2_000 });
       }
-      const existingLifecycleState = resolveBlaxelSandboxLifecycleState({
-        sandbox: existingSandbox,
-        config,
-      });
-      const targetLifecycleIntent = shouldReplaceBlaxelSandboxForLifecycle({
-        currentIntent: existingLifecycleState.effectiveIntent,
-        requestedIntent: requestedLifecycle.intent,
-      })
-        ? requestedLifecycle.intent
-        : existingLifecycleState.effectiveIntent;
-      if (
-        existingLifecycleState.effectiveIntent === targetLifecycleIntent &&
-        existingLifecycleState.policyMatchesEffectiveIntent &&
-        existingLifecycleState.labelMatchesEffectiveIntent
-      ) {
-        await ensureBlaxelWorkspaceRootDirectory(existingSandbox, workspaceRoot);
-        return {
-          ok: true,
-          providerId: "blaxel",
-          providerSandboxId: sandboxIdFrom(existingSandbox, sandboxName),
-          projectVolumeId: volumeName,
-          workspaceRoot,
-          startedAt: Date.now(),
-        };
-      }
-      try {
-        const updatedSandbox = await updateBlaxelWorkspaceSandboxLifecycle({
-          SandboxInstance,
-          sandboxName,
-          lifecycleIntent: targetLifecycleIntent,
-          config,
-          labels: params.labels,
-        });
-        if (typeof (updatedSandbox as any)?.wait === "function") {
-          await (updatedSandbox as any).wait({ maxWait: 120_000, interval: 2_000 });
-        }
-        await ensureBlaxelWorkspaceRootDirectory(updatedSandbox, workspaceRoot);
-        return {
-          ok: true,
-          providerId: "blaxel",
-          providerSandboxId: sandboxIdFrom(updatedSandbox, sandboxName),
-          projectVolumeId: volumeName,
-          workspaceRoot,
-          startedAt: Date.now(),
-        };
-      } catch {
+      const existingState = sandboxStateFrom(existingSandbox);
+      if (isBlaxelWorkspaceSandboxTerminalState(existingState)) {
         try {
           await SandboxInstance.delete(sandboxName);
         } catch (deleteError) {
@@ -939,10 +1135,66 @@ export async function ensureBlaxelWorkspaceSandbox(
             return deleteFailure;
           }
         }
-        params = {
-          ...params,
-          lifecycleIntent: targetLifecycleIntent,
-        };
+      } else {
+        const existingLifecycleState = resolveBlaxelSandboxLifecycleState({
+          sandbox: existingSandbox,
+          config,
+        });
+        const targetLifecycleIntent = shouldReplaceBlaxelSandboxForLifecycle({
+          currentIntent: existingLifecycleState.effectiveIntent,
+          requestedIntent: requestedLifecycle.intent,
+        })
+          ? requestedLifecycle.intent
+          : existingLifecycleState.effectiveIntent;
+        if (
+          existingLifecycleState.effectiveIntent === targetLifecycleIntent &&
+          existingLifecycleState.policyMatchesEffectiveIntent &&
+          existingLifecycleState.labelMatchesEffectiveIntent
+        ) {
+          await ensureBlaxelWorkspaceRootDirectory(existingSandbox, workspaceRoot);
+          return {
+            ok: true,
+            providerId: "blaxel",
+            providerSandboxId: sandboxIdFrom(existingSandbox, sandboxName),
+            projectVolumeId: volumeName,
+            workspaceRoot,
+            startedAt: Date.now(),
+          };
+        }
+        try {
+          const updatedSandbox = await updateBlaxelWorkspaceSandboxLifecycle({
+            SandboxInstance,
+            sandboxName,
+            lifecycleIntent: targetLifecycleIntent,
+            config,
+            labels: params.labels,
+          });
+          if (typeof (updatedSandbox as any)?.wait === "function") {
+            await (updatedSandbox as any).wait({ maxWait: 120_000, interval: 2_000 });
+          }
+          await ensureBlaxelWorkspaceRootDirectory(updatedSandbox, workspaceRoot);
+          return {
+            ok: true,
+            providerId: "blaxel",
+            providerSandboxId: sandboxIdFrom(updatedSandbox, sandboxName),
+            projectVolumeId: volumeName,
+            workspaceRoot,
+            startedAt: Date.now(),
+          };
+        } catch {
+          try {
+            await SandboxInstance.delete(sandboxName);
+          } catch (deleteError) {
+            const deleteFailure = classifyBlaxelError(deleteError);
+            if (deleteFailure.code !== "blaxel_sandbox_not_found") {
+              return deleteFailure;
+            }
+          }
+          params = {
+            ...params,
+            lifecycleIntent: targetLifecycleIntent,
+          };
+        }
       }
     } catch (error) {
       const failed = classifyBlaxelError(error);
@@ -953,6 +1205,10 @@ export async function ensureBlaxelWorkspaceSandbox(
     );
     if (typeof sandbox?.wait === "function") {
       await sandbox.wait({ maxWait: 120_000, interval: 2_000 });
+    }
+    const createdState = sandboxStateFrom(sandbox);
+    if (isBlaxelWorkspaceSandboxTerminalState(createdState)) {
+      return terminalBlaxelSandboxFailure(createdState);
     }
     await ensureBlaxelWorkspaceRootDirectory(sandbox, workspaceRoot);
     return {
@@ -966,6 +1222,72 @@ export async function ensureBlaxelWorkspaceSandbox(
   } catch (error) {
     return classifyBlaxelError(error);
   }
+}
+
+export async function listBlaxelWorkspaceSandboxes(): Promise<BlaxelWorkspaceInventoryListResult> {
+  const loadedConfig = loadBlaxelWorkspaceConfig();
+  if (loadedConfig.ok === false) return loadedConfig;
+  const loadedCore = await loadBlaxelCore();
+  if (loadedCore.ok === false) return loadedCore;
+  try {
+    const raw = await loadedCore.mod.SandboxInstance.list();
+    const items = extractListItems(raw);
+    return {
+      ok: true,
+      providerId: "blaxel",
+      kind: "sandbox",
+      rawCount: items.length,
+      resources: items.flatMap((item) => {
+        const sanitized = sanitizeInventoryResource(item, "sandbox");
+        return sanitized ? [sanitized] : [];
+      }),
+    };
+  } catch (error) {
+    return classifyBlaxelError(error);
+  }
+}
+
+export async function listBlaxelWorkspaceVolumes(): Promise<BlaxelWorkspaceInventoryListResult> {
+  const loadedConfig = loadBlaxelWorkspaceConfig();
+  if (loadedConfig.ok === false) return loadedConfig;
+  const loadedCore = await loadBlaxelCore();
+  if (loadedCore.ok === false) return loadedCore;
+  try {
+    const raw = await loadedCore.mod.VolumeInstance.list();
+    const items = extractListItems(raw);
+    return {
+      ok: true,
+      providerId: "blaxel",
+      kind: "volume",
+      rawCount: items.length,
+      resources: items.flatMap((item) => {
+        const sanitized = sanitizeInventoryResource(item, "volume");
+        return sanitized ? [sanitized] : [];
+      }),
+    };
+  } catch (error) {
+    return classifyBlaxelError(error);
+  }
+}
+
+export async function readBlaxelWorkspaceVolumeQuotaSnapshot():
+  Promise<BlaxelWorkspaceVolumeQuotaSnapshot> {
+  const loadedConfig = loadBlaxelWorkspaceConfig();
+  if (loadedConfig.ok === false) return loadedConfig;
+  const volumes = await listBlaxelWorkspaceVolumes();
+  if (!volumes.ok) return volumes;
+  const providerVolumeLimit = loadedConfig.config.providerVolumeLimit;
+  return {
+    ok: true,
+    providerId: "blaxel",
+    providerVolumeCount: volumes.rawCount,
+    providerVolumeLimit,
+    providerVolumeSafetyBuffer: loadedConfig.config.providerVolumeSafetyBuffer,
+    source:
+      providerVolumeLimit === null
+        ? "provider_inventory_no_limit"
+        : "provider_inventory_configured_limit",
+  };
 }
 
 export async function inspectBlaxelWorkspaceSandbox(params: {
@@ -1033,6 +1355,10 @@ export async function resolveBlaxelWorkspaceSandboxIfReady(params: {
     const sandbox = await loadedCore.mod.SandboxInstance.get(sandboxName);
     if (typeof sandbox?.wait === "function") {
       await sandbox.wait({ maxWait: 120_000, interval: 2_000 });
+    }
+    const state = sandboxStateFrom(sandbox);
+    if (isBlaxelWorkspaceSandboxTerminalState(state)) {
+      return terminalBlaxelSandboxFailure(state);
     }
     return {
       ok: true,
@@ -1199,6 +1525,9 @@ export async function executeBlaxelWorkspaceCommand(
       command: params.command,
       ...(workingDir ? { workingDir } : null),
       waitForCompletion: params.waitForCompletion ?? true,
+      ...(Array.isArray(params.waitForPorts) && params.waitForPorts.length > 0
+        ? { waitForPorts: params.waitForPorts }
+        : null),
       timeout: normalizePositiveInteger(params.timeoutSeconds, 60),
     });
     const providerCommandId = commandIdFrom(result, processName);
@@ -1226,6 +1555,95 @@ export async function executeBlaxelWorkspaceCommand(
       stdout,
       stderr,
       raw: result,
+    };
+  } catch (error) {
+    return classifyBlaxelError(error);
+  }
+}
+
+export async function readBlaxelWorkspaceProcess(params: {
+  sandboxName: string;
+  processName: string;
+}): Promise<BlaxelWorkspaceProcessResult> {
+  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+    sandboxName: params.sandboxName,
+  });
+  if (resolved.ok === false) return resolved;
+  const loadedCore = await loadBlaxelCore();
+  if (loadedCore.ok === false) return loadedCore;
+  const processName = normalizeString(params.processName);
+  try {
+    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    let process: unknown;
+    try {
+      process = await sandbox.process.get(processName);
+    } catch (error) {
+      const failed = classifyBlaxelError(error);
+      if (failed.code === "blaxel_sandbox_not_found") {
+        return failure({
+          status: 404,
+          code: "blaxel_process_not_found",
+          message: "Blaxel process not found.",
+          details: failed.details,
+        });
+      }
+      return failed;
+    }
+    let stdout: string | null = null;
+    let stderr: string | null = null;
+    let logs: string | null = null;
+    try {
+      stdout = await sandbox.process.logs(processName, "stdout");
+    } catch {
+      stdout = null;
+    }
+    try {
+      stderr = await sandbox.process.logs(processName, "stderr");
+    } catch {
+      stderr = null;
+    }
+    try {
+      logs = await sandbox.process.logs(processName, "all");
+    } catch {
+      logs = [stdout, stderr].filter(Boolean).join("\n") || null;
+    }
+    return {
+      ok: true,
+      providerId: "blaxel",
+      providerSandboxId: resolved.providerSandboxId,
+      providerProcessId: processName,
+      status: statusFrom(process),
+      exitCode: exitCodeFrom(process),
+      stdout,
+      stderr,
+      logs,
+      raw: process,
+    };
+  } catch (error) {
+    return classifyBlaxelError(error);
+  }
+}
+
+export async function stopBlaxelWorkspaceProcess(params: {
+  sandboxName: string;
+  processName: string;
+}): Promise<BlaxelWorkspaceProcessStopResult> {
+  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+    sandboxName: params.sandboxName,
+  });
+  if (resolved.ok === false) return resolved;
+  const loadedCore = await loadBlaxelCore();
+  if (loadedCore.ok === false) return loadedCore;
+  const processName = normalizeString(params.processName);
+  try {
+    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const stopped = await sandbox.process.kill(processName);
+    return {
+      ok: true,
+      providerId: "blaxel",
+      providerSandboxId: resolved.providerSandboxId,
+      providerProcessId: processName,
+      raw: stopped,
     };
   } catch (error) {
     return classifyBlaxelError(error);
@@ -1365,7 +1783,7 @@ export async function getBlaxelWorkspacePreviewUrl(params: {
     const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
     const preview = await sandbox.previews.createIfNotExists({
       metadata: {
-        name: normalizeOptionalString(params.previewName) ?? `port-${params.port}`,
+        name: normalizeBlaxelPreviewName(params.previewName, params.port),
       },
       spec: {
         port: params.port,

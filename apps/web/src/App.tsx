@@ -37,9 +37,11 @@ import {
 } from "../../../shared/cloudBusinessAnalyticsGateway";
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
+import { resolveWorkspaceActiveProject } from "../../../shared/workspaceActiveProjectSelector";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
   formatProviderConnectionErrorMessage,
+  formatWorkspaceBillingCheckoutError,
 } from "../../../shared/appErrorMappings";
 import {
   isLikelyImageFile, isLikelyTextFile, isSupportedChatRasterImage, readChatImageAsDataUrl, readTextAttachmentPreview, } from "../../../shared/attachmentHelpers";
@@ -403,15 +405,21 @@ import {
   type BuilderPartnerProgramSnapshot,
 } from "../../../shared/builderPartnerProgramGateway";
 import type { WebBuilderPartnerProgramPanelProps } from "./components/WebBuilderPartnerProgramPanel";
-import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudAccountCommerceGateway";
+import {
+  loadCloudWorkspaceCardOnFileStatus,
+  refreshCloudWorkspaceCardOnFileStatus,
+  startCloudWorkspaceCardSetupCheckout,
+  startCloudWorkspaceCreditTopupCheckout,
+  type CloudWorkspaceCardOnFileStatus,
+} from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import {
   startProjectWorkspaceComputer,
   stopProjectWorkspaceComputer,
-  type DaytonaWorkspaceComputerStartResult,
-} from "../../../shared/daytonaWorkspaceTerminals";
+  type WorkspaceComputerStartResult,
+} from "../../../shared/workspaceTerminalsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import {
   getSpendableWorkspaceToolBalanceCredits,
@@ -422,6 +430,12 @@ import type {
   WorkspaceCreditTopupSurface,
   WorkspaceToolBalanceTopupPackId,
 } from "../../../shared/workspaceCredits";
+import {
+  paidUsageBillingModeForPaidToolFailure,
+  paidUsageBillingModeForWorkspaceStorageAction,
+  type PaidUsageBillingMode,
+  type WorkspaceStorageBillingAction,
+} from "../../../shared/paidUsageBilling";
 import {
   deriveCommunityFunnelAction,
   deriveCommunityMembersJoinReviewMode,
@@ -651,7 +665,9 @@ const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY = "polynet-workspace-credit-topup-return";
+const WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY = "polynet-workspace-card-setup-return";
 const WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const WORKSPACE_CARD_SETUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const WORKSPACE_CREDIT_TOPUP_RETURN_POLL_MAX_ATTEMPTS = 12;
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
@@ -728,8 +744,43 @@ function clearPendingWorkspaceCreditTopupReturn(): void {
   }
 }
 
+function markPendingWorkspaceCardSetupReturn(): void {
+  try {
+    window.sessionStorage.setItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY, String(Date.now()));
+  } catch {
+    // Checkout return refresh is best-effort; Stripe remains the provider truth.
+  }
+}
+
+function hasPendingWorkspaceCardSetupReturn(): boolean {
+  try {
+    const markedAt = Number(window.sessionStorage.getItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY) ?? "");
+    if (!Number.isFinite(markedAt) || markedAt <= 0) return false;
+    if (Date.now() - markedAt > WORKSPACE_CARD_SETUP_RETURN_MAX_AGE_MS) {
+      window.sessionStorage.removeItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearPendingWorkspaceCardSetupReturn(): void {
+  try {
+    window.sessionStorage.removeItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function buildWorkspaceCreditTopupReturnUrl(surface: WorkspaceCreditTopupSurface): string {
   if (surface === "settings_agent") return `${window.location.origin}/settings/agent`;
+  const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
+  return `${window.location.origin}${pathname}`;
+}
+
+function buildWorkspaceCardSetupReturnUrl(): string {
   const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
   return `${window.location.origin}${pathname}`;
 }
@@ -1838,6 +1889,7 @@ export default function App() {
   const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
+  const workspaceCardOnFileLoadRequestIdRef = useRef(0);
   const workspaceCreditTopupReturnPollRef = useRef<{ attempts: number; timeoutId: number | null }>({
     attempts: 0,
     timeoutId: null,
@@ -2738,6 +2790,7 @@ export default function App() {
     setThreads,
     setActiveThreadId,
     setWorkspaceWantsNewChatMode,
+    initialActiveProjectId: initialAppRoute?.projectId ?? null,
   });
 
   const isLikelyMobileDevice = useMemo(() => {
@@ -3034,6 +3087,9 @@ export default function App() {
     if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
       setActiveThreadId(nextThreadId);
       setWorkspaceWantsNewChatMode(nextThreadId === null);
+      if (nextThreadId === null) {
+        workspaceProject.actions.setActiveProjectId(nextAppRoute.projectId ?? null);
+      }
     }
     if (nextAppRoute.page !== "workspace") {
       workspaceProject.actions.setActiveProjectId(null);
@@ -3326,6 +3382,10 @@ export default function App() {
         discoverSkillId: selectedDiscoverSkillId,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
+        projectId:
+          activePage === "workspace" && activeView === "home" && !activeThreadId
+            ? workspaceProject.state.activeProjectId ?? workspaceProject.derived.resolvedActiveProjectId
+            : null,
       }) ?? "",
       shellVariant,
     ) || null;
@@ -3487,8 +3547,14 @@ export default function App() {
     message: string | null;
     toolKind?: PaidToolKind | null;
     requiredCredits?: number | null;
+    paidUsageBillingMode?: PaidUsageBillingMode | null;
   } | null>(null);
   const [isInferenceIssueModalRunning] = useState(false);
+  const [isStartingWorkspaceCardSetupCheckout, setIsStartingWorkspaceCardSetupCheckout] = useState(false);
+  const [workspaceCardSetupError, setWorkspaceCardSetupError] = useState<string | null>(null);
+  const [workspaceCardOnFileStatus, setWorkspaceCardOnFileStatus] =
+    useState<CloudWorkspaceCardOnFileStatus | null>(null);
+  const [workspaceCardOnFileError, setWorkspaceCardOnFileError] = useState<string | null>(null);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -4635,13 +4701,54 @@ export default function App() {
     [ensureUsableAuthSession],
   );
 
+  const loadWorkspaceCardOnFileStatus = useCallback(
+    async (session: AuthSession): Promise<CloudWorkspaceCardOnFileStatus | null> => {
+      const requestId = ++workspaceCardOnFileLoadRequestIdRef.current;
+      setWorkspaceCardOnFileError(null);
+      try {
+        const usableSession = await ensureUsableAuthSession(session);
+        if (!usableSession) {
+          if (requestId === workspaceCardOnFileLoadRequestIdRef.current) {
+            setWorkspaceCardOnFileStatus(null);
+          }
+          return null;
+        }
+        const status = await loadCloudWorkspaceCardOnFileStatus({
+          session: usableSession,
+        });
+        if (requestId === workspaceCardOnFileLoadRequestIdRef.current) {
+          setWorkspaceCardOnFileStatus(status);
+          setWorkspaceCardOnFileError(null);
+        }
+        return status;
+      } catch (error) {
+        const message = formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" });
+        console.warn("Workspace card status refresh failed:", error);
+        if (requestId === workspaceCardOnFileLoadRequestIdRef.current) {
+          setWorkspaceCardOnFileStatus(null);
+          setWorkspaceCardOnFileError(message);
+        }
+        return null;
+      }
+    },
+    [ensureUsableAuthSession],
+  );
+
   useEffect(() => {
     if (!session) return;
     const shouldLoadWorkspaceCredits =
       activePage === "workspace" || (activeView === "settings" && settingsGroup === "agent");
     if (!shouldLoadWorkspaceCredits) return;
     void loadWorkspaceCreditBalance(session);
-  }, [activePage, activeView, session, loadWorkspaceCreditBalance, settingsGroup]);
+    void loadWorkspaceCardOnFileStatus(session);
+  }, [
+    activePage,
+    activeView,
+    session,
+    loadWorkspaceCardOnFileStatus,
+    loadWorkspaceCreditBalance,
+    settingsGroup,
+  ]);
 
   useEffect(() => {
     if (!session) return;
@@ -4691,6 +4798,41 @@ export default function App() {
       }
     };
   }, [loadWorkspaceCreditBalance, session, sessionRef]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const refreshPendingWorkspaceCardSetup = () => {
+      if (!hasPendingWorkspaceCardSetupReturn()) return;
+      const activeSession = sessionRef.current ?? session;
+      void refreshCloudWorkspaceCardOnFileStatus({
+        session: activeSession,
+      }).then((result) => {
+        clearPendingWorkspaceCardSetupReturn();
+        setWorkspaceCardSetupError(null);
+        setWorkspaceCardOnFileStatus(result);
+        setWorkspaceCardOnFileError(null);
+        refreshCloudProjectStatuses();
+        const hasCardOnFile = Boolean(result?.has_card_on_file);
+        captureProductAnalyticsEvent("workspace card setup refreshed", {
+          status: hasCardOnFile ? "active" : String(result?.payment_method_status ?? "missing"),
+        });
+        if (hasCardOnFile) {
+          showAppToastMessage("Card saved.");
+        }
+      }).catch((error) => {
+        const message = formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" });
+        setWorkspaceCardSetupError(message);
+        setWorkspaceCardOnFileError(message);
+      });
+    };
+
+    refreshPendingWorkspaceCardSetup();
+    window.addEventListener("pageshow", refreshPendingWorkspaceCardSetup);
+    return () => {
+      window.removeEventListener("pageshow", refreshPendingWorkspaceCardSetup);
+    };
+  }, [refreshCloudProjectStatuses, session, sessionRef, showAppToastMessage]);
 
   useEffect(() => {
     if (!session || activePage !== "workspace") return;
@@ -6054,32 +6196,80 @@ export default function App() {
       });
       window.location.assign(checkoutUrl);
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to start tool-balance checkout.";
-      setWorkspaceCreditTopupError(message);
+      setWorkspaceCreditTopupError(
+        formatWorkspaceBillingCheckoutError(error, { kind: "manual_balance" }),
+      );
     } finally {
       setIsStartingWorkspaceCreditTopupCheckout(false);
     }
   }, [ensureUsableAuthSession, loadWorkspaceCreditBalance, requireSignIn, workspaceCreditBalance]);
 
+  const startWorkspaceCardSetupCheckout = useCallback(async (): Promise<void> => {
+    const session = await ensureUsableAuthSession();
+    if (!session) {
+      requireSignIn();
+      return;
+    }
+    setWorkspaceCardSetupError(null);
+    setIsStartingWorkspaceCardSetupCheckout(true);
+    try {
+      const returnUrl = buildWorkspaceCardSetupReturnUrl();
+      const data = await startCloudWorkspaceCardSetupCheckout({
+        session,
+        successUrl: returnUrl,
+        cancelUrl: returnUrl,
+      });
+      const checkoutUrl =
+        data && typeof data === "object" && typeof (data as { checkout_url?: unknown }).checkout_url === "string"
+          ? String((data as { checkout_url?: unknown }).checkout_url).trim()
+          : "";
+      if (!checkoutUrl) throw new Error("Missing checkout_url.");
+      markPendingWorkspaceCardSetupReturn();
+      captureProductAnalyticsEvent("workspace card setup started", {
+        surface: "workspace_billing_modal",
+      });
+      window.location.assign(checkoutUrl);
+    } catch (error) {
+      setWorkspaceCardSetupError(
+        formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" }),
+      );
+    } finally {
+      setIsStartingWorkspaceCardSetupCheckout(false);
+    }
+  }, [ensureUsableAuthSession, requireSignIn]);
+
   const openWorkspaceCreditTopupModal = useCallback((params?: {
     toolKind?: PaidToolKind | null;
     message?: string | null;
     requiredCredits?: number | null;
+    paidUsageBillingMode?: PaidUsageBillingMode | null;
   }) => {
+    const toolKind = params?.toolKind ?? "workspace_tools";
     setInferenceIssueModal({
       reason: "workspace_credits",
       threadId: activeThreadId ?? GUEST_THREAD_ID,
       mode: "respond",
       message: params?.message?.trim() || null,
-      toolKind: params?.toolKind ?? "workspace_tools",
+      toolKind,
       requiredCredits: params?.requiredCredits ?? null,
+      paidUsageBillingMode:
+        params?.paidUsageBillingMode ??
+        paidUsageBillingModeForPaidToolFailure(toolKind),
     });
   }, [activeThreadId]);
+
+  const openWorkspaceStorageBillingModal = useCallback((params: {
+    action: WorkspaceStorageBillingAction;
+    message?: string | null;
+    requiredCredits?: number | null;
+  }) => {
+    openWorkspaceCreditTopupModal({
+      toolKind: "workspace_tools",
+      message: params.message ?? null,
+      requiredCredits: params.requiredCredits ?? null,
+      paidUsageBillingMode: paidUsageBillingModeForWorkspaceStorageAction(params.action),
+    });
+  }, [openWorkspaceCreditTopupModal]);
 
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const isProfileSetupCompleteForPublicActions =
@@ -7171,7 +7361,50 @@ export default function App() {
     loadThreads,
     loadModelRegistry,
   });
-  const turnOnWorkspaceComputer = useCallback(async (): Promise<DaytonaWorkspaceComputerStartResult> => {
+  const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject({
+    activeThread,
+    activeThreadId,
+    workspaceWantsNewChat,
+    resolvedActiveProjectId: workspace.derived.resolvedActiveProjectId,
+    resolvedActiveProjectName: workspace.derived.resolvedActiveProjectName,
+    projectById: workspace.derived.projectById,
+    resolveThreadProjectId: workspace.derived.resolveThreadProjectId,
+  });
+  const currentWorkspaceProjectId = currentWorkspaceProjectSelection.currentProjectId;
+  const currentWorkspaceProjectName = currentWorkspaceProjectSelection.currentProjectName;
+  useEffect(() => {
+    if (activePage !== "workspace" || activeView !== "home" || activeThreadId) return;
+    const draftProjectId = workspaceProject.state.activeProjectId ?? currentWorkspaceProjectId;
+    const routePath = buildAppRoutePath({
+      page: "workspace",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: selectedActiveCommunitySlug,
+      communityTab: "chat",
+      threadId: null,
+      projectId: draftProjectId,
+    }) ?? buildWorkspaceDraftPath(draftProjectId);
+    const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
+    const currentUrl = new URL(window.location.href);
+    const nextUrl = new URL(nextPath, window.location.origin);
+    const currentPathWithoutHash = `${currentUrl.pathname}${currentUrl.search}`;
+    const nextPathWithoutHash = `${nextUrl.pathname}${nextUrl.search}`;
+    if (currentPathWithoutHash === nextPathWithoutHash) return;
+    window.history.replaceState(
+      window.history.state ?? {},
+      document.title,
+      `${nextPathWithoutHash}${currentUrl.hash}`,
+    );
+  }, [
+    activePage,
+    activeThreadId,
+    activeView,
+    currentWorkspaceProjectId,
+    selectedActiveCommunitySlug,
+    shellVariant,
+    workspaceProject.state.activeProjectId,
+  ]);
+  const turnOnWorkspaceComputer = useCallback(async (): Promise<WorkspaceComputerStartResult> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
       requireSignIn();
@@ -7184,7 +7417,7 @@ export default function App() {
       };
     }
 
-    const projectId = workspace.derived.resolvedActiveProjectId;
+    const projectId = currentWorkspaceProjectId;
     if (!projectId) {
       return {
         ok: false,
@@ -7206,10 +7439,23 @@ export default function App() {
         setWorkspaceComputerStartError(result.message);
         if (
           result.code === "workspace_credits_exhausted" ||
-          result.code === "workspace_credits_unavailable"
+          result.code === "workspace_credits_unavailable" ||
+          result.code === "workspace_uncollected_usage_blocked"
         ) {
           openWorkspaceCreditTopupModal({
             toolKind: "workspace_tools",
+            message: result.message,
+            requiredCredits: result.required_credits,
+          });
+        } else if (result.code === "workspace_volume_funding_required") {
+          openWorkspaceStorageBillingModal({
+            action: "funding_required",
+            message: result.message,
+            requiredCredits: result.required_credits,
+          });
+        } else if (result.code === "workspace_card_required_for_additional_volume") {
+          openWorkspaceStorageBillingModal({
+            action: "card_required",
             message: result.message,
             requiredCredits: result.required_credits,
           });
@@ -7242,9 +7488,10 @@ export default function App() {
     ensureUsableAuthSession,
     loadWorkspaceCreditBalance,
     openWorkspaceCreditTopupModal,
+    openWorkspaceStorageBillingModal,
     refreshCloudProjectStatuses,
     requireSignIn,
-    workspace.derived.resolvedActiveProjectId,
+    currentWorkspaceProjectId,
   ]);
 
   const turnOffWorkspaceComputer = useCallback(async (): Promise<boolean> => {
@@ -7254,7 +7501,7 @@ export default function App() {
       return false;
     }
 
-    const projectId = workspace.derived.resolvedActiveProjectId;
+    const projectId = currentWorkspaceProjectId;
     if (!projectId) return false;
 
     setWorkspaceComputerStartError(null);
@@ -7284,14 +7531,24 @@ export default function App() {
     loadWorkspaceCreditBalance,
     refreshCloudProjectStatuses,
     requireSignIn,
-    workspace.derived.resolvedActiveProjectId,
+    currentWorkspaceProjectId,
   ]);
   const projectUiController = useWebProjectUiController<AuthSession>({
     session: session,
     cloudProjects: workspace.state.projects,
+    hasWorkspaceCardOnFile:
+      workspaceCardOnFileStatus === null
+        ? null
+        : workspaceCardOnFileStatus.has_card_on_file === true,
     ensureSession: ensureUsableAuthSession,
     requireSignIn,
     showAppToastMessage,
+    onWorkspaceBillingRequired: ({ action, message }) => {
+      openWorkspaceStorageBillingModal({
+        action,
+        message: message ?? null,
+      });
+    },
     onProjectCreated: workspace.actions.handleProjectCreated,
     onProjectUpdated: workspace.actions.handleProjectUpdated,
     onProjectDeleted: workspace.actions.handleProjectDeleted,
@@ -7608,7 +7865,7 @@ export default function App() {
       activeView,
       communityId: activeCommunityId,
       communitySlug: activeCommunitySlug,
-      projectId: workspace.derived.resolvedActiveProjectId,
+      projectId: currentWorkspaceProjectId,
       threadId: activeThreadId,
       runId: activeThreadStreamingRunId,
     });
@@ -7622,7 +7879,7 @@ export default function App() {
       activeView,
       communityId: activeCommunityId,
       communitySlug: activeCommunitySlug,
-      projectId: workspace.derived.resolvedActiveProjectId,
+      projectId: currentWorkspaceProjectId,
       threadId: activeThreadId,
       runId: activeThreadStreamingRunId,
     });
@@ -7637,7 +7894,7 @@ export default function App() {
     canonicalSessionUserId,
     publicRoute.kind,
     session,
-    workspace.derived.resolvedActiveProjectId,
+    currentWorkspaceProjectId,
   ]);
 
   useEffect(() => {
@@ -7871,8 +8128,8 @@ export default function App() {
 		    window.setTimeout(scrollToTarget, 420);
 		  };
 		  const handleOpenLandingProject = () => {
-		    if (!workspace.derived.resolvedActiveProjectId) return;
-		    handleStartDraftInCloudProject(workspace.derived.resolvedActiveProjectId);
+		    if (!currentWorkspaceProjectId) return;
+		    handleStartDraftInCloudProject(currentWorkspaceProjectId);
 		  };
 		  const handleOpenDiscover = () => {
 		    const transition = deriveOpenDiscoverTransition({ activePage });
@@ -9352,6 +9609,11 @@ export default function App() {
       handleDeletePersonalMemoryItem,
       handleCreatePersonalMemoryItem,
       startWorkspaceCreditTopupCheckout,
+      workspaceCardOnFileStatus,
+      workspaceCardOnFileError,
+      isStartingWorkspaceCardSetupCheckout,
+      workspaceCardSetupError,
+      startWorkspaceCardSetupCheckout,
       personalMemoryUi,
       billingUi,
     },
@@ -9532,8 +9794,11 @@ export default function App() {
     isInferenceIssueModalRunning,
     isStartingWorkspaceCreditTopupCheckout,
     workspaceCreditTopupError,
+    isStartingWorkspaceCardSetupCheckout,
+    workspaceCardSetupError,
     setInferenceIssueModal,
     startWorkspaceCreditTopupCheckout,
+    startWorkspaceCardSetupCheckout,
     setActiveView,
     setSettingsPage,
     isFreeAccountInfoOpen,
@@ -9548,7 +9813,6 @@ export default function App() {
       projects={workspace.state.projects}
       resolveThreadProjectId={resolveWorkspaceSidebarThreadProjectId}
       getThreadSearchText={getWorkspaceSidebarThreadSearchText}
-      onProjectToggled={workspace.actions.setActiveProjectId}
       sessionsDrawerEnabled={sessionsDrawerEnabled}
       isSessionsDrawerOpen={isSessionsDrawerOpen}
       showMobileAppShell={showMobileAppShell}
@@ -9653,7 +9917,7 @@ export default function App() {
       stopStreamingTurn(activeThreadId ?? undefined);
     },
     resolveWorkspaceSession: ensureUsableAuthSession,
-    activeProjectId: workspace.derived.resolvedActiveProjectId,
+    activeProjectId: currentWorkspaceProjectId,
     showAppToastMessage,
     activeModelLabel: workspace.derived.activeModelLabel,
     modelToggles: platformModelToggles,
@@ -9814,18 +10078,26 @@ export default function App() {
     workspaceCreditBalanceError,
     workspaceCreditTopupError,
     isStartingWorkspaceCreditTopupCheckout,
+    hasWorkspaceCardOnFile:
+      workspaceCardOnFileStatus === null
+        ? null
+        : workspaceCardOnFileStatus.has_card_on_file === true,
     isStartingWorkspaceComputer,
     isStoppingWorkspaceComputer,
     workspaceComputerStartError,
     session,
-    activeProjectId: workspace.derived.resolvedActiveProjectId,
-    activeProjectName: workspace.derived.resolvedActiveProjectName,
+    activeProjectId: currentWorkspaceProjectId,
+    activeProjectName: currentWorkspaceProjectName,
     activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
     activeModelLabel: workspace.derived.activeModelLabel,
     activeCommunity: workspaceUserDataPanelCommunity,
     isLoadingCommunityMemberSettings,
     communityMemberSettingsError,
-    onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({ toolKind: "workspace_tools" }),
+    onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({
+      toolKind: "workspace_tools",
+      message: "Add a card for automatic workspace billing.",
+      paidUsageBillingMode: "card_preferred",
+    }),
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,

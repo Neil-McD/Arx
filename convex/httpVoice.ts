@@ -674,6 +674,7 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
             tool_kind: "voice_input",
             required_credits: voiceCredits,
+            paid_usage_billing_mode: "prepaid_required",
             message:
               message === "credits_exhausted"
                 ? "Add balance to use voice input."

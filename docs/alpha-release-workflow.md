@@ -3,7 +3,7 @@
 ## Canonical Truths
 
 - Active development worktree: `/Users/neilmcdevitt/code/arx`
-- Legacy Daytona worktree snapshots are historical only and are not part of active development or release truth
+- Legacy workspace worktree snapshots are historical only and are not part of active development or release truth
 - Canonical Git remote: `origin` -> `Neil-McD/Arx`
 - Canonical release branch: `main`
 - Canonical production web target: Vercel project `polynet`

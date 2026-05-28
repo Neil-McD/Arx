@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
-const EXPECTED_CONVEX_DEPLOYMENT = "quick-porcupine-949";
+const EXPECTED_CONVEX_DEPLOYMENT = "dev:quick-porcupine-949";
 
 type ProbeFailure = {
   ok: false;

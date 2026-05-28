@@ -8,6 +8,9 @@ import {
   ensureBlaxelWorkspaceComputer,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
+  loadBlaxelWorkspaceConfig,
+} from "./blaxelWorkspaceClient.ts";
+import {
   buildBlaxelProjectWorkspaceNames,
 } from "./blaxelWorkspaceProjectNames.ts";
 import {
@@ -18,6 +21,13 @@ import {
   type WorkspaceRuntimeToolFailure,
   type WorkspaceRuntimeToolResult,
 } from "./workspaceRuntimeTools.ts";
+import {
+  buildBlaxelTerminalProcessContextFromRow,
+  readWorkspaceTerminalProcess,
+  resolveWorkspaceTerminalPreview,
+  startWorkspaceTerminalProcess,
+  stopWorkspaceTerminalProcess,
+} from "./workspaceTerminalProcessCore.ts";
 import type {
   BlaxelRuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
@@ -49,6 +59,10 @@ type ToolEvidence = {
   sha256Ok: boolean;
   editOk: boolean;
   readAfterEditOk: boolean;
+  terminalStartOk: boolean;
+  terminalReadOk: boolean;
+  terminalPreviewOk: boolean;
+  terminalStopOk: boolean;
   cleanupOk: boolean;
 };
 
@@ -62,6 +76,10 @@ type ToolOutputPreview = {
   sha256?: string;
   edit?: string;
   readAfterEdit?: string;
+  terminalStart?: string;
+  terminalRead?: string;
+  terminalPreview?: string;
+  terminalStop?: string;
   cleanup?: string;
 };
 
@@ -164,6 +182,10 @@ function initialEvidence(): ToolEvidence {
     sha256Ok: false,
     editOk: false,
     readAfterEditOk: false,
+    terminalStartOk: false,
+    terminalReadOk: false,
+    terminalPreviewOk: false,
+    terminalStopOk: false,
     cleanupOk: false,
   };
 }
@@ -189,6 +211,15 @@ function safeToolFailure(result: WorkspaceRuntimeToolFailure): WorkspaceRuntimeT
     message: redactSensitiveText(result.message),
     details: result.details,
   };
+}
+
+function safeProviderFailure(result: {
+  status?: number;
+  code?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}): WorkspaceRuntimeToolFailure {
+  return safeToolFailure(mapProviderFailure(result));
 }
 
 function providerMismatchFailure(params: {
@@ -432,6 +463,13 @@ export const smokeBlaxelRuntimeWorkspaceTools = action({
         };
       }
       evidence.sessionEnsured = true;
+      const loadedConfig = loadBlaxelWorkspaceConfig();
+      const sandboxMemoryGiB = loadedConfig.ok
+        ? Math.max(0, Number(loadedConfig.config.memoryMb) || 0) / 1024
+        : 4;
+      const sandboxDiskGiB = loadedConfig.ok
+        ? Math.max(0, Number(loadedConfig.config.volumeSizeMb) || 0) / 1024
+        : 2;
 
       const nowMs = Date.now();
       await ctx.runMutation(internal.projects.attachCloudProjectVolumeInternal as any, {
@@ -460,6 +498,9 @@ export const smokeBlaxelRuntimeWorkspaceTools = action({
         providerSandboxId: ensured.providerSandboxId,
         workspaceRoot: ensured.workspaceRoot,
         startedAt: ensured.startedAt,
+        sandboxCpu: 0,
+        sandboxMemoryGiB,
+        sandboxDiskGiB,
         lifecycleMode: "provider_standby",
       };
 
@@ -620,6 +661,115 @@ export const smokeBlaxelRuntimeWorkspaceTools = action({
         if (!evidence.sha256Ok) failures.push("sha256_output_unverified");
       }
 
+      const previewPort = 41_000 + (nowMs % 1_000);
+      const terminalStart = await startWorkspaceTerminalProcess({
+        ctx,
+        ownerId: project.ownerId,
+        projectId: String(args.projectId),
+        session: {
+          providerId: "blaxel",
+          providerSandboxId: ensured.providerSandboxId,
+          workspaceRoot: ensured.workspaceRoot,
+        },
+        terminal: {
+          command: `python3 -m http.server ${previewPort}`,
+          cwd: ".polynet-smoke",
+          previewPort,
+          previewPath: "/",
+          previewLabel: "Blaxel smoke preview",
+        },
+        providerSessionIdPrefix: "pn-smoke-term",
+      });
+      outputs.terminalStart = redactSensitiveText(
+        JSON.stringify(terminalStart).slice(0, 500),
+      );
+      let terminalRow: any | null = null;
+      if (terminalStart.ok !== true) {
+        failures.push("terminal_start_failed");
+        errors.push(safeProviderFailure(terminalStart));
+      } else {
+        evidence.terminalStartOk =
+          terminalStart.provider_sandbox_provider_id === "blaxel" &&
+          typeof terminalStart.terminal_session_id === "string" &&
+          terminalStart.terminal_session_id.length > 0;
+        if (!evidence.terminalStartOk) {
+          failures.push("terminal_start_unverified");
+        }
+        terminalRow = await ctx.runQuery(
+          internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
+          {
+            terminalSessionId: terminalStart.terminal_session_id as any,
+          },
+        );
+      }
+
+      if (terminalRow) {
+        const terminalRead = await readWorkspaceTerminalProcess({
+          ctx,
+          row: terminalRow,
+          session: buildBlaxelTerminalProcessContextFromRow(terminalRow),
+        });
+        outputs.terminalRead = redactSensitiveText(
+          JSON.stringify(terminalRead).slice(0, 500),
+        );
+        evidence.terminalReadOk =
+          terminalRead.ok === true &&
+          terminalRead.provider_sandbox_provider_id === "blaxel" &&
+          terminalRead.status === "running";
+        if (!evidence.terminalReadOk) failures.push("terminal_read_unverified");
+
+        const refreshedTerminalRow = await ctx.runQuery(
+          internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
+          {
+            terminalSessionId: terminalRow._id,
+          },
+        );
+        const preview = await resolveWorkspaceTerminalPreview({
+          row: refreshedTerminalRow ?? terminalRow,
+          session: buildBlaxelTerminalProcessContextFromRow(
+            refreshedTerminalRow ?? terminalRow,
+          ),
+          workspaceRequiredMessage:
+            "Preview is only available while its workspace session is active.",
+          previewNotEnabledMessage: "This terminal does not expose an app preview.",
+          workspaceMismatchMessage:
+            "Preview terminal is not attached to this workspace session.",
+        });
+        outputs.terminalPreview = redactSensitiveText(
+          JSON.stringify(preview).slice(0, 500),
+        );
+        if (preview.ok !== true) {
+          failures.push("terminal_preview_failed");
+          errors.push(safeProviderFailure(preview));
+        } else {
+          evidence.terminalPreviewOk =
+            preview.preview_port === previewPort &&
+            typeof preview.preview_url === "string" &&
+            preview.preview_url.length > 0 &&
+            typeof preview.preview_proxy_token === "string" &&
+            preview.preview_proxy_token.length > 0;
+          if (!evidence.terminalPreviewOk) {
+            failures.push("terminal_preview_unverified");
+          }
+        }
+
+        const stopped = await stopWorkspaceTerminalProcess({
+          ctx,
+          row: refreshedTerminalRow ?? terminalRow,
+          session: buildBlaxelTerminalProcessContextFromRow(
+            refreshedTerminalRow ?? terminalRow,
+          ),
+          forceStoppedStatus: true,
+        });
+        outputs.terminalStop = redactSensitiveText(
+          JSON.stringify(stopped).slice(0, 500),
+        );
+        evidence.terminalStopOk =
+          stopped.status === "stopped" &&
+          stopped.provider_sandbox_provider_id === "blaxel";
+        if (!evidence.terminalStopOk) failures.push("terminal_stop_unverified");
+      }
+
       if (args.cleanupFile !== false) {
         const cleanup = await runTool({
           session,
@@ -675,6 +825,10 @@ export const smokeBlaxelRuntimeWorkspaceTools = action({
         evidence.sha256Ok &&
         evidence.editOk &&
         evidence.readAfterEditOk &&
+        evidence.terminalStartOk &&
+        evidence.terminalReadOk &&
+        evidence.terminalPreviewOk &&
+        evidence.terminalStopOk &&
         evidence.cleanupOk,
       code: "blaxel_runtime_workspace_tools_smoke",
       deploymentKind,

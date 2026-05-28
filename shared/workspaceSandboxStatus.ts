@@ -1,11 +1,11 @@
-export type DaytonaSandboxStatus = "ready" | "provisioning" | "stopped" | "paused" | "error";
+export type WorkspaceSandboxStatus = "ready" | "provisioning" | "stopped" | "paused" | "error";
 
-export type DaytonaSandboxStatusBadge = {
+export type WorkspaceSandboxStatusBadge = {
   label: string;
   tone: "running" | "starting" | "stopped" | "error";
 };
 
-export function normalizeDaytonaSandboxStatus(value: unknown): DaytonaSandboxStatus | null {
+export function normalizeWorkspaceSandboxStatus(value: unknown): WorkspaceSandboxStatus | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (
     normalized === "ready" ||
@@ -19,9 +19,9 @@ export function normalizeDaytonaSandboxStatus(value: unknown): DaytonaSandboxSta
   return null;
 }
 
-export function daytonaSandboxStatusBadge(
+export function workspaceSandboxStatusBadge(
   rawStatus: string | null | undefined,
-): DaytonaSandboxStatusBadge | null {
+): WorkspaceSandboxStatusBadge | null {
   const status = String(rawStatus ?? "").trim().toLowerCase();
   if (status === "ready") return { label: "Running", tone: "running" };
   if (status === "provisioning") return { label: "Starting", tone: "starting" };

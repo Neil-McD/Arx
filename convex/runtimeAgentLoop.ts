@@ -4,14 +4,10 @@ import {
   type ChatgptFunctionTool,
   type ChatgptToolAwareMessage,
 } from "./httpChatgpt";
-import { loadDaytonaConfig, type DaytonaConfig } from "./daytonaSandboxClient";
-import {
-  resolveWorkspaceProjectContext,
-} from "./daytonaWorkspaceSession";
 import {
   appendWorkspaceToolCallFinished,
   appendWorkspaceToolCallStarted,
-} from "./daytonaRuntimeEvents";
+} from "./runtimeToolCallEvents";
 import {
   USER_CANCELLED_RUNTIME_CODE,
   isRuntimeRunCancelledError,
@@ -19,14 +15,15 @@ import {
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import {
-  listDaytonaWorkspaceDirectory,
-} from "./daytonaWorkspaceTools";
-import {
   executeRuntimeWorkspaceTool,
 } from "./workspaceRuntimeTools.ts";
 import type {
   RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
+import {
+  buildWorkspaceCreditBudgetSignal,
+  isWorkspaceCreditBudgetExpired,
+} from "./workspaceCreditBudgetSignal.ts";
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
 import {
@@ -118,6 +115,7 @@ import {
   classifyRuntimeToolSchedule,
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
+import { normalizeComputerDisplayName } from "../shared/projectNaming";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -145,48 +143,26 @@ function newCreditKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-function isWorkspaceCreditBudgetExpired(
-  session: RuntimeWorkspaceSession | null | undefined,
-): boolean {
-  const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
-  return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
-}
-
-function buildWorkspaceCreditBudgetSignal(
-  session: RuntimeWorkspaceSession,
-  parentSignal?: AbortSignal,
-): { signal?: AbortSignal; cleanup: () => void } {
-  const expiresAt = Number(session.creditBudgetExpiresAt ?? 0);
-  if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
-    return { signal: parentSignal, cleanup: () => {} };
+async function resolveWorkspaceProjectContext(params: {
+  ctx: any;
+  projectId?: string | null;
+  authSubject?: string | null;
+}): Promise<{ label: string | null; description: string | null }> {
+  if (!params.projectId || !params.authSubject) {
+    return { label: null, description: null };
   }
-  const remainingMs = Math.max(0, expiresAt - Date.now());
-  const controller = new AbortController();
-  let settled = false;
-  const cleanupFns: Array<() => void> = [];
-  const abort = () => {
-    if (settled) return;
-    settled = true;
-    controller.abort();
-  };
-  const timeout = setTimeout(abort, remainingMs);
-  cleanupFns.push(() => clearTimeout(timeout));
-  if (parentSignal) {
-    if (parentSignal.aborted) {
-      abort();
-    } else {
-      const onAbort = () => abort();
-      parentSignal.addEventListener("abort", onAbort, { once: true });
-      cleanupFns.push(() => parentSignal.removeEventListener("abort", onAbort));
-    }
+  const row = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
+    projectId: params.projectId,
+    authSubject: params.authSubject,
+  });
+  if (!row) {
+    return { label: null, description: null };
   }
-  return {
-    signal: controller.signal,
-    cleanup: () => {
-      settled = true;
-      for (const cleanup of cleanupFns) cleanup();
-    },
-  };
+  const label = normalizeComputerDisplayName(
+    typeof row.name === "string" ? row.name : null,
+  );
+  const description = String(row.description ?? "").trim() || null;
+  return { label, description };
 }
 
 function buildWebResearchSettlementMetadata(params: {
@@ -667,6 +643,7 @@ async function executeRetrievalHarnessTool(params: {
         details: {
           tool_kind: "web_research",
           required_credits: webResearchCredits,
+          paid_usage_billing_mode: "prepaid_required",
         },
       };
     }
@@ -788,6 +765,7 @@ async function executeRetrievalHarnessTool(params: {
         errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
         details: {
           tool_kind: "workspace_tools",
+          paid_usage_billing_mode: "prepaid_required",
         },
       };
     }
@@ -821,6 +799,7 @@ async function executeRetrievalHarnessTool(params: {
         errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
         details: {
           tool_kind: "workspace_tools",
+          paid_usage_billing_mode: "prepaid_required",
         },
       };
     }
@@ -2092,9 +2071,6 @@ async function executeChatToolsAgentLoop(
   });
 }
 
-export type { DaytonaConfig };
 export {
   executeChatToolsAgentLoop,
-  listDaytonaWorkspaceDirectory,
-  loadDaytonaConfig,
 };

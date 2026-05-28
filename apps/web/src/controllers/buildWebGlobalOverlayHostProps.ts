@@ -48,12 +48,15 @@ export function buildWebGlobalOverlayHostProps(params: {
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   isStartingWorkspaceCreditTopupCheckout: boolean;
+  isStartingWorkspaceCardSetupCheckout: boolean;
   workspaceCreditTopupError: string | null;
+  workspaceCardSetupError: string | null;
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
   startWorkspaceCreditTopupCheckout: (
     packId?: WorkspaceToolBalanceTopupPackId,
     surface?: WorkspaceCreditTopupSurface,
   ) => void | Promise<void>;
+  startWorkspaceCardSetupCheckout: () => void | Promise<void>;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
   isFreeAccountInfoOpen: boolean;
@@ -117,9 +120,12 @@ export function buildWebGlobalOverlayHostProps(params: {
           inferenceIssueModal: params.inferenceIssueModal,
           isInferenceIssueModalRunning: params.isInferenceIssueModalRunning,
           isStartingWorkspaceCreditTopupCheckout: params.isStartingWorkspaceCreditTopupCheckout,
+          isStartingWorkspaceCardSetupCheckout: params.isStartingWorkspaceCardSetupCheckout,
           workspaceCreditTopupError: params.workspaceCreditTopupError,
+          workspaceCardSetupError: params.workspaceCardSetupError,
           onClose: () => params.setInferenceIssueModal(null),
           onStartWorkspaceCreditTopupCheckout: params.startWorkspaceCreditTopupCheckout,
+          onStartWorkspaceCardSetupCheckout: params.startWorkspaceCardSetupCheckout,
           onOpenSettings: (reason) => {
             params.setInferenceIssueModal(null);
             params.setActiveView("settings");

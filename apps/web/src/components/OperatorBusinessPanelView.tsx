@@ -270,8 +270,8 @@ export function OperatorBusinessPanelView(props: {
             <strong>{formatCredits(props.toolEconomics?.paidTools.totals.settledCredits)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Credits refunded</span>
-            <strong>{formatCredits(props.toolEconomics?.paidTools.totals.refundedCredits)}</strong>
+            <span>Credits released</span>
+            <strong>{formatCredits(props.toolEconomics?.paidTools.totals.releasedCredits)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Still reserved</span>
@@ -300,7 +300,7 @@ export function OperatorBusinessPanelView(props: {
                     <span>
                       {[
                         `${lane.succeeded} settled`,
-                        `${lane.refunded} refunded`,
+                        `${lane.released} released`,
                         `${formatCredits(lane.settledCredits)} credits`,
                         lane.latestAt ? formatEventTime(lane.latestAt) : null,
                       ]

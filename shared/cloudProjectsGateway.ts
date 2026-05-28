@@ -1,10 +1,16 @@
 import { type AuthSessionLike } from "./authSession";
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
 import { normalizeComputerDisplayName } from "./projectNaming";
+import {
+  DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
+  normalizeWorkspaceVolumeRetentionState,
+  resolveWorkspaceProjectResourceTruth,
+  type WorkspaceVolumeRetentionState,
+} from "./workspaceProjectResources";
 
-type DaytonaCloudProjectsWarn = (message: string, error?: unknown) => void;
+type CloudProjectsWarn = (message: string, error?: unknown) => void;
 
-export type DaytonaCloudProjectRecord = {
+export type CloudProjectRecord = {
   id: string;
   name: string | null;
   description: string | null;
@@ -12,6 +18,17 @@ export type DaytonaCloudProjectRecord = {
   status: string;
   provider_volume_id: string | null;
   provider_volume_name: string | null;
+  provider_volume_state: string | null;
+  provider_volume_last_seen_at: number | null;
+  provider_sandbox_id: string | null;
+  provider_sandbox_state: string | null;
+  provider_sandbox_last_seen_at: number | null;
+  volume_retention_state: WorkspaceVolumeRetentionState;
+  volume_retain_until: number | null;
+  volume_delete_after: number | null;
+  volume_deletion_warning_sent_at: number | null;
+  volume_deleted_at: number | null;
+  volume_deletion_reason: string | null;
   created_at: number;
   updated_at: number;
   root_path: string;
@@ -25,35 +42,62 @@ type ConvexCloudProjectRow = {
   status?: string | null;
   providerVolumeId?: string | null;
   providerVolumeName?: string | null;
+  providerVolumeProviderId?: string | null;
+  providerVolumeState?: string | null;
+  providerVolumeLastSeenAt?: number | null;
+  providerSandboxId?: string | null;
+  providerSandboxProviderId?: string | null;
+  providerSandboxState?: string | null;
+  providerSandboxLastSeenAt?: number | null;
+  workspaceVolumeRetentionState?: WorkspaceVolumeRetentionState | null;
+  workspaceVolumeRetainUntil?: number | null;
+  workspaceVolumeDeleteAfter?: number | null;
+  workspaceVolumeDeletionWarningSentAt?: number | null;
+  workspaceVolumeDeletedAt?: number | null;
+  workspaceVolumeDeletionReason?: string | null;
   createdAt?: number | null;
   updatedAt?: number | null;
 };
 
 // Gateway class: authenticated read/mutation/action bridge, caller-hardened session, fail-closed.
 
-function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudProjectRecord {
+function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): CloudProjectRecord {
   const id = String(row._id ?? "").trim();
   const createdAtMs = Number(row.createdAt ?? Date.now());
   const updatedAtMs = Number(row.updatedAt ?? Date.now());
   const slug = typeof row.slug === "string" && row.slug.trim() ? row.slug.trim() : null;
   const name = normalizeComputerDisplayName(typeof row.name === "string" ? row.name : null);
+  const resourceTruth = resolveWorkspaceProjectResourceTruth(row);
   return {
     id,
     name,
     description: typeof row.description === "string" && row.description.trim() ? row.description.trim() : null,
     slug,
     status: typeof row.status === "string" && row.status.trim() ? row.status.trim() : "active",
-    provider_volume_id: typeof row.providerVolumeId === "string" ? row.providerVolumeId : null,
-    provider_volume_name: typeof row.providerVolumeName === "string" ? row.providerVolumeName : null,
+    provider_volume_id: resourceTruth.volume.resourceId,
+    provider_volume_name: resourceTruth.volume.name,
+    provider_volume_state: resourceTruth.volume.providerState,
+    provider_volume_last_seen_at: resourceTruth.volume.lastSeenAt,
+    provider_sandbox_id: resourceTruth.sandbox.resourceId,
+    provider_sandbox_state: resourceTruth.sandbox.providerState,
+    provider_sandbox_last_seen_at: resourceTruth.sandbox.lastSeenAt,
+    volume_retention_state: normalizeWorkspaceVolumeRetentionState(
+      resourceTruth.volume.retentionState ?? DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
+    ),
+    volume_retain_until: resourceTruth.volume.retainUntil,
+    volume_delete_after: resourceTruth.volume.deleteAfter,
+    volume_deletion_warning_sent_at: resourceTruth.volume.deletionWarningSentAt,
+    volume_deleted_at: resourceTruth.volume.deletedAt,
+    volume_deletion_reason: resourceTruth.volume.deletionReason,
     created_at: Number.isFinite(createdAtMs) ? Math.floor(createdAtMs / 1000) : Math.floor(Date.now() / 1000),
     updated_at: Number.isFinite(updatedAtMs) ? Math.floor(updatedAtMs / 1000) : Math.floor(Date.now() / 1000),
     root_path: slug || "workspace",
   };
 }
 
-async function fetchMappedDaytonaCloudProjectsViaConvex<TSession>(params: {
+async function fetchMappedCloudProjectsViaConvex<TSession>(params: {
   session: TSession;
-}): Promise<DaytonaCloudProjectRecord[]> {
+}): Promise<CloudProjectRecord[]> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const rows = (await client.query("projects:listCloudProjectsForOwner" as any, {
     authSubject,
@@ -67,12 +111,12 @@ async function fetchMappedDaytonaCloudProjectsViaConvex<TSession>(params: {
   return row ? [mapConvexProjectRowToRecord(row)] : [];
 }
 
-export async function fetchMappedDaytonaCloudProjects<TSession>(params: {
+export async function fetchMappedCloudProjects<TSession>(params: {
   session: TSession;
-  onWarn?: DaytonaCloudProjectsWarn;
-}): Promise<DaytonaCloudProjectRecord[]> {
+  onWarn?: CloudProjectsWarn;
+}): Promise<CloudProjectRecord[]> {
   void params.onWarn;
-  return await fetchMappedDaytonaCloudProjectsViaConvex({
+  return await fetchMappedCloudProjectsViaConvex({
     session: params.session,
   });
 }
@@ -94,11 +138,11 @@ export async function ensureDefaultCloudProject<TSession>(params: {
   await ensureDefaultCloudProjectId(params);
 }
 
-export async function createMappedDaytonaCloudProject<TSession>(params: {
+export async function createMappedCloudProject<TSession>(params: {
   session: TSession;
   name?: string | null;
   description?: string | null;
-}): Promise<DaytonaCloudProjectRecord> {
+}): Promise<CloudProjectRecord> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const row = (await client.mutation("projects:createCloudProjectForOwner" as any, {
     authSubject,
@@ -148,12 +192,12 @@ async function uploadCloudProjectImportZip<TSession>(params: {
   return storageId;
 }
 
-export async function updateMappedDaytonaCloudProject<TSession>(params: {
+export async function updateMappedCloudProject<TSession>(params: {
   session: TSession;
   projectId: string;
   name: string;
   description?: string | null;
-}): Promise<DaytonaCloudProjectRecord> {
+}): Promise<CloudProjectRecord> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const row = (await client.mutation("projects:updateCloudProjectForOwner" as any, {
     authSubject,
@@ -165,7 +209,7 @@ export async function updateMappedDaytonaCloudProject<TSession>(params: {
   return mapConvexProjectRowToRecord(row);
 }
 
-export async function importMappedDaytonaCloudProjectZip<TSession>(params: {
+export async function importMappedCloudProjectZip<TSession>(params: {
   session: TSession;
   projectId: string;
   file: File;
@@ -199,7 +243,7 @@ export async function importMappedDaytonaCloudProjectZip<TSession>(params: {
   };
 }
 
-export async function deleteMappedDaytonaCloudProject<TSession>(params: {
+export async function deleteMappedCloudProject<TSession>(params: {
   session: TSession;
   projectId: string;
 }): Promise<{ ok: true; archivedThreadCount: number }> {

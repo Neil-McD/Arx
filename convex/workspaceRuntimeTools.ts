@@ -1,20 +1,11 @@
 import {
-  editDaytonaWorkspaceFile,
-  globDaytonaWorkspacePaths,
-  grepDaytonaWorkspaceFiles,
-  listDaytonaWorkspaceDirectory,
-  normalizeWorkspacePath,
-  readDaytonaWorkspaceFile,
-  runDaytonaWorkspaceBash,
-  sha256DaytonaWorkspaceFile,
-  writeDaytonaWorkspaceFile,
-} from "./daytonaWorkspaceTools";
-import {
   executeBlaxelWorkspaceCommand,
-  ensureBlaxelWorkspaceComputer,
   readBlaxelWorkspaceFile,
   writeBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
+import {
+  reensureBlaxelWorkspaceComputerForPaidSession,
+} from "./blaxelWorkspaceWake.ts";
 import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 
@@ -39,6 +30,22 @@ export type WorkspaceRuntimeToolResult =
 
 const DEFAULT_READ_LIMIT = 200;
 const MAX_READ_LIMIT = 400;
+
+function normalizeWorkspacePath(raw: unknown): string {
+  const candidate = String(raw ?? "").trim().replaceAll("\\", "/");
+  if (!candidate) throw new Error("tool_path_required");
+  if (candidate.startsWith("/")) throw new Error("path_outside_workspace");
+  const parts = candidate
+    .split("/")
+    .filter((part) => part.length > 0 && part !== ".");
+  if (parts.some((part) => part === "..")) {
+    throw new Error("path_outside_workspace");
+  }
+  const segments =
+    parts[0]?.toLowerCase() === "workspace" ? parts.slice(1) : parts;
+  if (segments.length === 0) return ".";
+  return segments.join("/");
+}
 
 function normalizeOptionalWorkspacePath(value: unknown): string {
   const raw = String(value ?? "").trim();
@@ -144,14 +151,14 @@ function isBlaxelSandboxNotFoundFailure(
 async function reensureBlaxelRuntimeWorkspace(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
 }): Promise<{ ok: true } | WorkspaceRuntimeToolFailure> {
-  const ensured = await ensureBlaxelWorkspaceComputer({
-    sandboxName: params.session.providerSandboxId,
-    volumeName: params.session.projectVolumeId,
+  const ensured = await reensureBlaxelWorkspaceComputerForPaidSession({
+    providerSandboxId: params.session.providerSandboxId,
+    projectVolumeId: params.session.projectVolumeId,
     workspaceRoot: params.session.workspaceRoot,
+    projectId: params.session.projectId,
     lifecycleIntent: "agent_run",
     labels: {
       purpose: "workspace-agent-tools",
-      project_id: String(params.session.projectId),
     },
   });
   return ensured.ok ? { ok: true } : mapBlaxelProviderFailure(ensured);
@@ -568,101 +575,6 @@ async function executeBlaxelRuntimeWorkspaceTool(params: {
   return await executeBlaxelRuntimeWorkspaceToolOnce(params);
 }
 
-async function executeDaytonaRuntimeWorkspaceTool(params: {
-  session: Extract<RuntimeWorkspaceSession, { providerId: "daytona" }>;
-  toolName: RetrievalToolName;
-  normalizedArgs: Record<string, unknown>;
-  signal?: AbortSignal;
-}): Promise<WorkspaceRuntimeToolResult> {
-  return params.toolName === "list_dir"
-    ? await listDaytonaWorkspaceDirectory({
-      config: params.session.config,
-      toolboxProxyUrl: params.session.toolboxProxyUrl,
-      sandboxId: params.session.providerSandboxId,
-      relPath: String(params.normalizedArgs.path ?? ".") || ".",
-      signal: params.signal,
-    })
-    : params.toolName === "read"
-      ? await readDaytonaWorkspaceFile({
-        config: params.session.config,
-        toolboxProxyUrl: params.session.toolboxProxyUrl,
-        sandboxId: params.session.providerSandboxId,
-        relPath: String(params.normalizedArgs.path ?? "").trim(),
-        offset:
-          typeof params.normalizedArgs.offset === "number"
-            ? params.normalizedArgs.offset
-            : undefined,
-        limit:
-          typeof params.normalizedArgs.limit === "number"
-            ? params.normalizedArgs.limit
-            : undefined,
-        signal: params.signal,
-      })
-      : params.toolName === "glob"
-        ? await globDaytonaWorkspacePaths({
-          config: params.session.config,
-          toolboxProxyUrl: params.session.toolboxProxyUrl,
-          sandboxId: params.session.providerSandboxId,
-          pattern: String(params.normalizedArgs.pattern ?? "").trim(),
-          relPath:
-            typeof params.normalizedArgs.path === "string"
-              ? params.normalizedArgs.path
-              : undefined,
-          signal: params.signal,
-        })
-        : params.toolName === "grep"
-          ? await grepDaytonaWorkspaceFiles({
-            config: params.session.config,
-            toolboxProxyUrl: params.session.toolboxProxyUrl,
-            sandboxId: params.session.providerSandboxId,
-            pattern: String(params.normalizedArgs.pattern ?? "").trim(),
-            relPath:
-              typeof params.normalizedArgs.path === "string"
-                ? params.normalizedArgs.path
-                : undefined,
-            signal: params.signal,
-          })
-          : params.toolName === "sha256"
-            ? await sha256DaytonaWorkspaceFile({
-              config: params.session.config,
-              toolboxProxyUrl: params.session.toolboxProxyUrl,
-              sandboxId: params.session.providerSandboxId,
-              relPath: String(params.normalizedArgs.path ?? "").trim(),
-              signal: params.signal,
-            })
-            : params.toolName === "write"
-              ? await writeDaytonaWorkspaceFile({
-                config: params.session.config,
-                toolboxProxyUrl: params.session.toolboxProxyUrl,
-                sandboxId: params.session.providerSandboxId,
-                relPath: String(params.normalizedArgs.path ?? "").trim(),
-                content: String(params.normalizedArgs.content ?? ""),
-                signal: params.signal,
-              })
-              : params.toolName === "edit"
-                ? await editDaytonaWorkspaceFile({
-                  config: params.session.config,
-                  toolboxProxyUrl: params.session.toolboxProxyUrl,
-                  sandboxId: params.session.providerSandboxId,
-                  relPath: String(params.normalizedArgs.path ?? "").trim(),
-                  oldText: String(params.normalizedArgs.old_text ?? ""),
-                  newText: String(params.normalizedArgs.new_text ?? ""),
-                  replaceAll: params.normalizedArgs.replace_all === true,
-                  signal: params.signal,
-                })
-                : await runDaytonaWorkspaceBash({
-                  config: params.session.config,
-                  toolboxProxyUrl: params.session.toolboxProxyUrl,
-                  sandboxId: params.session.providerSandboxId,
-                  command: String(params.normalizedArgs.command ?? ""),
-                  relPath:
-                    typeof params.normalizedArgs.cwd === "string"
-                      ? params.normalizedArgs.cwd
-                      : undefined,
-                  signal: params.signal,
-                });
-}
-
 export async function executeRuntimeWorkspaceTool(params: {
   session: RuntimeWorkspaceSession;
   toolName: RetrievalToolName;
@@ -670,18 +582,10 @@ export async function executeRuntimeWorkspaceTool(params: {
   signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
   try {
-    if (params.session.providerId === "blaxel") {
-      return await executeBlaxelRuntimeWorkspaceTool({
-        session: params.session,
-        toolName: params.toolName,
-        normalizedArgs: params.normalizedArgs,
-      });
-    }
-    return await executeDaytonaRuntimeWorkspaceTool({
+    return await executeBlaxelRuntimeWorkspaceTool({
       session: params.session,
       toolName: params.toolName,
       normalizedArgs: params.normalizedArgs,
-      signal: params.signal,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : String(error ?? "");

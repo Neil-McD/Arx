@@ -6,7 +6,8 @@ import {
   resolveDefaultWorkspaceProjectId,
   resolvePreferredCloudProjectId,
 } from "../../../../shared/threadSidebarSelectors";
-import { fetchMappedDaytonaCloudProjects } from "../../../../shared/daytonaCloudProjects";
+import { fetchMappedCloudProjects } from "../../../../shared/cloudProjectsGateway";
+import { normalizeWorkspaceDraftProjectId } from "../../../../shared/webAppRouteState";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
@@ -26,13 +27,16 @@ type UseWebWorkspaceProjectStateControllerParams<SessionT, ThreadT extends Threa
   setThreads: Dispatch<SetStateAction<ThreadT[]>>;
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
   setWorkspaceWantsNewChatMode: (next: SetStateAction<boolean>) => void;
+  initialActiveProjectId?: string | null;
 };
 
 export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends ThreadLike>(
   params: UseWebWorkspaceProjectStateControllerParams<SessionT, ThreadT>,
 ) {
   const [projects, setProjects] = useState<WebCloudProjectRecord[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() =>
+    normalizeWorkspaceDraftProjectId(params.initialActiveProjectId),
+  );
   const hasObservedInitialProjectSelectionRef = useRef(false);
 
   const resolvedActiveProjectId = useMemo(
@@ -60,6 +64,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
 
   const loadProjects = useCallback(
     async (session: SessionT): Promise<void> => {
+      const requestedActiveProjectId = activeProjectId;
       const usableSession = await params.ensureSession(session);
       if (!usableSession) {
         emitWorkspaceEvent({
@@ -82,12 +87,14 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
         },
       });
       try {
-        const next = (await fetchMappedDaytonaCloudProjects({
+        const next = (await fetchMappedCloudProjects({
           session: usableSession,
         })).map((project) => project satisfies WebCloudProjectRecord);
-        const nextActiveProjectId = resolvePreferredCloudProjectId(next, activeProjectId);
+        const nextActiveProjectId = resolvePreferredCloudProjectId(next, requestedActiveProjectId);
         setProjects(next);
-        setActiveProjectId(nextActiveProjectId);
+        setActiveProjectId((current) =>
+          resolvePreferredCloudProjectId(next, current ?? requestedActiveProjectId),
+        );
         emitWorkspaceEvent({
           scope: "project",
           name: "projects_load",

@@ -10,6 +10,9 @@ import {
   writeBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
+  destroyBlaxelWorkspaceVolume,
+} from "./blaxelWorkspaceClient.ts";
+import {
   resolveWorkspaceComputerProviderFromServerEnv,
 } from "./workspaceComputerProviderPolicy.ts";
 
@@ -188,6 +191,7 @@ function initialEvidence() {
     coldMarkerReadBack: false,
     coldDirectoryListed: false,
     coldSandboxDestroyed: false,
+    volumeDestroyed: false,
   };
 }
 
@@ -366,6 +370,16 @@ export const smokeBlaxelConvexVolume = action({
           errors.push(safeProviderFailure(coldCleanup));
         }
       }
+      if (volumeWasCreatedOrReused && evidence.hotSandboxDestroyed && evidence.coldSandboxDestroyed) {
+        const volumeCleanup = await destroyBlaxelWorkspaceVolume({
+          volumeName,
+        });
+        evidence.volumeDestroyed = volumeCleanup.ok;
+        if (!volumeCleanup.ok) {
+          failures.push("volume_cleanup_failed");
+          errors.push(safeProviderFailure(volumeCleanup));
+        }
+      }
     }
 
     return {
@@ -379,7 +393,8 @@ export const smokeBlaxelConvexVolume = action({
         evidence.coldSandboxEnsured &&
         evidence.coldMarkerReadBack &&
         evidence.coldDirectoryListed &&
-        evidence.coldSandboxDestroyed,
+        evidence.coldSandboxDestroyed &&
+        evidence.volumeDestroyed,
       blocked,
       blockingCode,
       code: "blaxel_convex_volume_smoke",
@@ -389,7 +404,7 @@ export const smokeBlaxelConvexVolume = action({
       hotSandboxName,
       coldSandboxName,
       volumeCleanupMode: volumeWasCreatedOrReused
-        ? "stable_volume_retained_for_reuse"
+        ? "destroyed_after_smoke"
         : "not_created",
       evidence,
       failures,

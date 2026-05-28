@@ -5,7 +5,7 @@ import {
   isConvexCloudThreadsEnabled,
   listConvexCloudThreadMessagesByThreadKey,
   listConvexCloudThreadRows,
-} from "./daytonaCloudThreadsRead";
+} from "./cloudThreadsRead";
 
 type ThreadMessage = {
   id: string;

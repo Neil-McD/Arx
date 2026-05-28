@@ -1,10 +1,10 @@
-export const WORKSPACE_COMPUTER_PROVIDER_IDS = ["daytona", "blaxel"] as const;
+export const WORKSPACE_COMPUTER_PROVIDER_IDS = ["blaxel"] as const;
 
 export type WorkspaceComputerProviderId =
   (typeof WORKSPACE_COMPUTER_PROVIDER_IDS)[number];
 
 export const DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID =
-  "daytona" satisfies WorkspaceComputerProviderId;
+  "blaxel" satisfies WorkspaceComputerProviderId;
 
 export const WORKSPACE_COMPUTER_LIFECYCLE_INTENTS = [
   "file_inspection",
@@ -117,7 +117,7 @@ export function resolveRecordedWorkspaceResourceProviderId(params: {
   if (providerId) return providerId;
   const resourceId = String(params.resourceId ?? "").trim();
   if (!resourceId) return null;
-  return resourceId.startsWith("pn-p-") ? "blaxel" : "daytona";
+  return resourceId.startsWith("pn-p-") ? "blaxel" : null;
 }
 
 export function isWorkspaceComputerLifecycleIntent(

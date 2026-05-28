@@ -58,7 +58,7 @@ type ConvexRuntimeRunEventRow = {
   createdAt?: number | null;
 };
 
-export type DaytonaCloudThreadTransportRow = {
+export type CloudThreadTransportRow = {
   id: string;
   title: string | null;
   model_id: string | null;
@@ -71,7 +71,7 @@ export type DaytonaCloudThreadTransportRow = {
   last_seq: number;
 };
 
-export type DaytonaCloudMessageTransportRow = {
+export type CloudMessageTransportRow = {
   id: string;
   thread_id: string;
   seq: number;
@@ -83,7 +83,7 @@ export type DaytonaCloudMessageTransportRow = {
   created_at: string;
 };
 
-export type DaytonaCloudRuntimeRunTransportRow = {
+export type CloudRuntimeRunTransportRow = {
   id: string;
   run_id: string;
   thread_id: string | null;
@@ -95,7 +95,7 @@ export type DaytonaCloudRuntimeRunTransportRow = {
   last_event_seq: number;
 };
 
-export type DaytonaCloudRuntimeRunEventTransportRow = {
+export type CloudRuntimeRunEventTransportRow = {
   id: string;
   run_id: string;
   seq: number;
@@ -104,26 +104,26 @@ export type DaytonaCloudRuntimeRunEventTransportRow = {
   created_at: string;
 };
 
-export type DaytonaCloudRuntimeComputerUseLiveSession = {
+export type CloudRuntimeComputerUseLiveSession = {
   preview_proxy_token: string;
   expires_at: string;
 };
 
-export type DaytonaCloudRuntimeComputerUseLiveSessionDebug = {
+export type CloudRuntimeComputerUseLiveSessionDebug = {
   [key: string]: unknown;
 };
 
-export type DaytonaCloudRuntimeComputerUseLiveSessionLookup =
+export type CloudRuntimeComputerUseLiveSessionLookup =
   | {
       ok: true;
-      session: DaytonaCloudRuntimeComputerUseLiveSession;
-      debug?: DaytonaCloudRuntimeComputerUseLiveSessionDebug | null;
+      session: CloudRuntimeComputerUseLiveSession;
+      debug?: CloudRuntimeComputerUseLiveSessionDebug | null;
     }
   | {
       ok: false;
       code: string;
       retryable: boolean;
-      debug?: DaytonaCloudRuntimeComputerUseLiveSessionDebug | null;
+      debug?: CloudRuntimeComputerUseLiveSessionDebug | null;
     };
 
 export function isConvexCloudThreadsEnabled(): boolean {
@@ -156,7 +156,7 @@ function toFiniteNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-function mapConvexThreadRow(row: ConvexThreadRow): DaytonaCloudThreadTransportRow | null {
+function mapConvexThreadRow(row: ConvexThreadRow): CloudThreadTransportRow | null {
   if (!row) return null;
   if (typeof row.archivedAt === "number" && Number.isFinite(row.archivedAt)) return null;
   const id = String(row.threadKey ?? "").trim() || String(row._id ?? "").trim();
@@ -181,7 +181,7 @@ function mapConvexThreadRow(row: ConvexThreadRow): DaytonaCloudThreadTransportRo
 function mapConvexMessageRow(
   row: ConvexMessageRow,
   threadKey: string,
-): DaytonaCloudMessageTransportRow | null {
+): CloudMessageTransportRow | null {
   const id = String(row.messageKey ?? "").trim() || String(row._id ?? "").trim();
   if (!id) return null;
   const seq = Math.max(0, Math.floor(toFiniteNumber(row.seq, 0)));
@@ -200,7 +200,7 @@ function mapConvexMessageRow(
   };
 }
 
-function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): DaytonaCloudRuntimeRunTransportRow | null {
+function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): CloudRuntimeRunTransportRow | null {
   if (!row) return null;
   const id = String(row._id ?? "").trim() || String(row.runId ?? "").trim();
   const runId = String(row.runId ?? "").trim();
@@ -220,7 +220,7 @@ function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): DaytonaCloudRuntimeRu
 
 function mapConvexRuntimeRunEventRow(
   row: ConvexRuntimeRunEventRow,
-): DaytonaCloudRuntimeRunEventTransportRow | null {
+): CloudRuntimeRunEventTransportRow | null {
   const id = String(row._id ?? "").trim();
   const runId = String(row.runId ?? "").trim();
   const eventType = String(row.eventType ?? "").trim();
@@ -237,7 +237,7 @@ function mapConvexRuntimeRunEventRow(
 
 export async function listConvexCloudThreadRows(
   session: AuthSessionLike,
-): Promise<DaytonaCloudThreadTransportRow[] | null> {
+): Promise<CloudThreadTransportRow[] | null> {
   const bootstrapped = await bootstrapConvexOwnerId(session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -247,14 +247,14 @@ export async function listConvexCloudThreadRows(
   })) as ConvexThreadRow[];
   return rows
     .map((row) => mapConvexThreadRow(row))
-    .filter((row): row is DaytonaCloudThreadTransportRow => Boolean(row))
+    .filter((row): row is CloudThreadTransportRow => Boolean(row))
     .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
 }
 
 export async function getConvexCloudThreadRowByThreadKey(params: {
   session: AuthSessionLike;
   threadKey: string;
-}): Promise<DaytonaCloudThreadTransportRow | null> {
+}): Promise<CloudThreadTransportRow | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -274,7 +274,7 @@ export async function listConvexCloudThreadMessagesPageByThreadKey(params: {
   pageSize: number;
   beforeSeq?: number;
   maxScan?: number;
-}): Promise<DaytonaCloudMessageTransportRow[] | null> {
+}): Promise<CloudMessageTransportRow[] | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -305,14 +305,14 @@ export async function listConvexCloudThreadMessagesPageByThreadKey(params: {
 
   return page
     .map((row) => mapConvexMessageRow(row, threadKey))
-    .filter((row): row is DaytonaCloudMessageTransportRow => Boolean(row));
+    .filter((row): row is CloudMessageTransportRow => Boolean(row));
 }
 
 export async function listConvexCloudThreadMessagesByThreadKey(params: {
   session: AuthSessionLike;
   threadKey: string;
   limit?: number;
-}): Promise<DaytonaCloudMessageTransportRow[] | null> {
+}): Promise<CloudMessageTransportRow[] | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -327,7 +327,7 @@ export async function listConvexCloudThreadMessagesByThreadKey(params: {
   if (!internalThreadId) return [];
 
   const targetLimit = Math.max(1, Math.min(10_000, Math.floor(params.limit ?? 10_000)));
-  const rows: DaytonaCloudMessageTransportRow[] = [];
+  const rows: CloudMessageTransportRow[] = [];
   let afterSeq: number | undefined;
   while (rows.length < targetLimit) {
     const batchLimit = Math.max(1, Math.min(2_000, targetLimit - rows.length));
@@ -359,7 +359,7 @@ export async function listConvexCloudThreadMessagesByThreadKey(params: {
 export async function getConvexCloudRunningRuntimeRunByThreadKey(params: {
   session: AuthSessionLike;
   threadKey: string;
-}): Promise<DaytonaCloudRuntimeRunTransportRow | null> {
+}): Promise<CloudRuntimeRunTransportRow | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -377,7 +377,7 @@ export async function getConvexCloudRuntimeRunByRunId(params: {
   session: AuthSessionLike;
   runId: string;
   threadId?: string;
-}): Promise<DaytonaCloudRuntimeRunTransportRow | null> {
+}): Promise<CloudRuntimeRunTransportRow | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -400,7 +400,7 @@ export async function listConvexCloudRuntimeRunEvents(params: {
   threadId?: string;
   afterSeq?: number;
   limit?: number;
-}): Promise<DaytonaCloudRuntimeRunEventTransportRow[] | null> {
+}): Promise<CloudRuntimeRunEventTransportRow[] | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) return null;
   const { client, authSubject } = bootstrapped;
@@ -417,13 +417,13 @@ export async function listConvexCloudRuntimeRunEvents(params: {
   })) as ConvexRuntimeRunEventRow[];
   return (rows ?? [])
     .map((row) => mapConvexRuntimeRunEventRow(row))
-    .filter((row): row is DaytonaCloudRuntimeRunEventTransportRow => Boolean(row));
+    .filter((row): row is CloudRuntimeRunEventTransportRow => Boolean(row));
 }
 
 export async function getConvexCloudRuntimeRunComputerUseLiveSession(params: {
   session: AuthSessionLike;
   runId: string;
-}): Promise<DaytonaCloudRuntimeComputerUseLiveSessionLookup> {
+}): Promise<CloudRuntimeComputerUseLiveSessionLookup> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
   if (!bootstrapped) {
     return {
@@ -453,7 +453,7 @@ export async function getConvexCloudRuntimeRunComputerUseLiveSession(params: {
         : code !== "runtime_run_not_found" && code !== "live_desktop_inactive" && code !== "auth_unavailable";
     const debug =
       payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
-        ? (payload.debug as DaytonaCloudRuntimeComputerUseLiveSessionDebug)
+        ? (payload.debug as CloudRuntimeComputerUseLiveSessionDebug)
         : null;
     return {
       ok: false,
@@ -471,7 +471,7 @@ export async function getConvexCloudRuntimeRunComputerUseLiveSession(params: {
       retryable: true,
       debug:
         payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
-          ? (payload.debug as DaytonaCloudRuntimeComputerUseLiveSessionDebug)
+          ? (payload.debug as CloudRuntimeComputerUseLiveSessionDebug)
           : null,
     };
   }
@@ -483,7 +483,7 @@ export async function getConvexCloudRuntimeRunComputerUseLiveSession(params: {
     },
     debug:
       payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
-        ? (payload.debug as DaytonaCloudRuntimeComputerUseLiveSessionDebug)
+        ? (payload.debug as CloudRuntimeComputerUseLiveSessionDebug)
         : null,
   };
 }

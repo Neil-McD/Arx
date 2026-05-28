@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { DaytonaWorkspaceTerminalRecord } from "../../../../shared/daytonaWorkspaceTerminals";
+import type { WorkspaceTerminalRecord } from "../../../../shared/workspaceTerminalsGateway";
 
 function StopGlyph(): JSX.Element {
   return (
@@ -13,8 +13,28 @@ function formatTerminalCount(count: number): string {
   return `${count} background terminal${count === 1 ? "" : "s"} running`;
 }
 
-function isTerminalActive(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
+function isTerminalActive(status: WorkspaceTerminalRecord["status"]): boolean {
   return status === "starting" || status === "running";
+}
+
+function isInternalDiagnosticTerminal(terminal: WorkspaceTerminalRecord): boolean {
+  return terminal.cwd === ".polynet-smoke" || terminal.command.includes(".polynet-smoke");
+}
+
+function isTerminalIssue(terminal: WorkspaceTerminalRecord): boolean {
+  if (isTerminalActive(terminal.status)) return false;
+  if (isInternalDiagnosticTerminal(terminal)) return false;
+  if (terminal.status === "stopped") return false;
+  if (terminal.completion_reason === "stopped") return false;
+  if (terminal.status === "failed") return true;
+  if (terminal.status === "exited") {
+    return (
+      terminal.preview_port !== null ||
+      terminal.preview_status === "server_exited" ||
+      terminal.health_status === "unhealthy"
+    );
+  }
+  return false;
 }
 
 function formatCommandLabel(command: string): string {
@@ -23,7 +43,7 @@ function formatCommandLabel(command: string): string {
   return `${normalized.slice(0, 67).trimEnd()}…`;
 }
 
-function formatTerminalStatus(status: DaytonaWorkspaceTerminalRecord["status"]): string {
+function formatTerminalStatus(status: WorkspaceTerminalRecord["status"]): string {
   if (status === "starting") return "Starting";
   if (status === "running") return "Running";
   if (status === "failed") return "Failed";
@@ -32,7 +52,7 @@ function formatTerminalStatus(status: DaytonaWorkspaceTerminalRecord["status"]):
 }
 
 export function WebBackgroundTerminalRail(props: {
-  terminals: DaytonaWorkspaceTerminalRecord[];
+  terminals: WorkspaceTerminalRecord[];
   busyTerminalIds?: readonly string[];
   isStoppingAll?: boolean;
   onStopTerminal: (terminalSessionId: string) => void;
@@ -43,15 +63,20 @@ export function WebBackgroundTerminalRail(props: {
 
   if (props.terminals.length === 0) return null;
 
-  const activeCount = props.terminals.filter((terminal) => isTerminalActive(terminal.status)).length;
-  const failedCount = props.terminals.length - activeCount;
+  const visibleTerminals = props.terminals.filter(
+    (terminal) => isTerminalActive(terminal.status) || isTerminalIssue(terminal),
+  );
+  if (visibleTerminals.length === 0) return null;
+
+  const activeCount = visibleTerminals.filter((terminal) => isTerminalActive(terminal.status)).length;
+  const issueCount = visibleTerminals.length - activeCount;
   const title =
     activeCount > 0
       ? formatTerminalCount(activeCount)
-      : `${failedCount} recent terminal ${failedCount === 1 ? "issue" : "issues"}`;
+      : `${issueCount} recent terminal ${issueCount === 1 ? "issue" : "issues"}`;
   const subtitle =
     activeCount > 0
-      ? failedCount > 0
+      ? issueCount > 0
         ? "The agent has running terminals and recent terminal issues in this workspace."
         : "The agent still has background terminals running in this workspace."
       : "A background terminal exited before it became ready.";
@@ -95,9 +120,9 @@ export function WebBackgroundTerminalRail(props: {
             <div className="background-terminal-popover-header">
               <div className="background-terminal-popover-title">Background terminals</div>
             </div>
-            {props.terminals.length > 0 ? (
+            {visibleTerminals.length > 0 ? (
               <div className="background-terminal-list">
-                {props.terminals.map((terminal) => {
+                {visibleTerminals.map((terminal) => {
                   const isActive = isTerminalActive(terminal.status);
                   const isBusy = props.isStoppingAll || busySet.has(terminal.id);
                   return (

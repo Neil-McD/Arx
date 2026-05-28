@@ -9,7 +9,7 @@ It exists to prevent drift between:
 - [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/PLATFORM.md)
 - [`SOUL.md`](/Users/neilmcdevitt/code/arx/SOUL.md)
 - [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts)
-- the workspace runtime assembly paths in [`convex/httpDaytona.ts`](/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts), [`convex/runtimeTurnHandlers.ts`](/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts), and the web send flow
+- the workspace runtime assembly paths in [`convex/runtimeAgentLoop.ts`](/Users/neilmcdevitt/code/arx/convex/runtimeAgentLoop.ts), [`convex/runtimeTurnHandlers.ts`](/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts), and the web send flow
 
 ## Source Of Truth
 
@@ -51,7 +51,7 @@ This means:
 - Personal prompts are not part of the context stack.
 - Community intelligence evidence is not the same thing as community doctrine.
 - Community intelligence evidence should be gathered on demand through the active tool harness, not browser-preloaded as prompt text for authenticated turns.
-- Daytona snapshots are not the community lens.
+- workspace snapshots are not the community lens.
 
 ## Lane Notes
 
@@ -83,9 +83,9 @@ For authenticated chat-only turns, the server is the canonical doctrine owner. T
 
 When an authenticated chat turn has an active community lens, that lens is applied through prompt composition in the server-owned chat run. Authenticated cloud chat does not browser-preload community evidence and does not expose a separate community tool harness in the current reduced system.
 
-### Daytona tool lane
+### Workspace tool lane
 
-The Daytona tool lane adds repo/runtime continuity after the doctrine stack:
+The Workspace tool lane adds repo/runtime continuity after the doctrine stack:
 
 1. platform doctrine
 2. agent soul
@@ -97,7 +97,7 @@ The Daytona tool lane adds repo/runtime continuity after the doctrine stack:
 
 Coding handoff belongs to workspace context and operating policy, not to the community lens.
 
-For Daytona tool turns, the server is the canonical doctrine owner. The browser sends conversation and turn metadata; the server resolves the effective community doctrine and assembles the full Daytona doctrine stack.
+For workspace tool turns, the server is the canonical doctrine owner. The browser sends conversation and turn metadata; the server resolves the effective community doctrine and assembles the full workspace doctrine stack.
 
 ## Maintenance Rule
 

@@ -3,39 +3,48 @@ import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
-  DAYTONA_WORKSPACE_ROOT,
-  deleteDaytonaSandbox,
-  listDaytonaSandboxes,
-  loadDaytonaConfig,
-  stopDaytonaSandbox,
-  waitForDaytonaSandboxStopped,
-  type DaytonaConfig,
-  type DaytonaSandboxApiDto,
-} from "./daytonaSandboxClient";
+  BLAXEL_WORKSPACE_ROOT,
+} from "./blaxelWorkspaceClient.ts";
 import {
-  createWorkspaceSandboxSession,
-  cleanupTemporaryWorkspaceSandboxSession,
-  type WorkspaceSandboxSession,
-} from "./daytonaWorkspaceSession";
-import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
+  executeBlaxelWorkspaceCommand,
+} from "./blaxelWorkspaceComputerProvider.ts";
+import {
+  finalizeBillableBlaxelProjectWorkspaceLease,
+  ensureBillableBlaxelWorkspaceComputer,
+} from "./blaxelWorkspaceWake.ts";
+import {
+  buildBlaxelProjectWorkspaceNames,
+} from "./blaxelWorkspaceProjectNames.ts";
 import { buildNextDefaultComputerName, formatDefaultComputerName } from "../shared/projectNaming";
 import {
   resolveRecordedWorkspaceResourceProviderId,
 } from "../shared/workspaceComputerProvider";
 import {
+  DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
+  isWorkspaceProjectDisplayable,
+  isWorkspaceProjectInactiveStatus,
+  normalizeWorkspaceVolumeRetentionState,
+} from "../shared/workspaceProjectResources";
+import {
+  countWorkspaceProjectsForAdmission,
+  countWorkspaceVolumesForAdmission,
+  evaluateWorkspaceProjectCreateAdmission,
+  evaluateWorkspaceVolumeMaterializationAdmission,
+  resolveWorkspaceResourceAccountTier,
+} from "../shared/workspaceResourceAdmission";
+import {
   destroyBlaxelWorkspaceSandbox,
   destroyBlaxelWorkspaceVolume,
 } from "./blaxelWorkspaceClient.ts";
+import {
+  readBlaxelWorkspaceVolumeQuotaAdmissionArgs,
+} from "./blaxelWorkspaceVolumeQuota.ts";
 
-const ACCOUNT_MAX_PROJECTS = 5;
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
 const PROJECT_IMPORT_MAX_FILES = 25_000;
 const PROJECT_IMPORT_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
 const PROJECT_IMPORT_LEASE_MS = 20 * 60 * 1000;
-const workspaceResourceProviderIdValidator = v.union(
-  v.literal("daytona"),
-  v.literal("blaxel"),
-);
+const workspaceResourceProviderIdValidator = v.literal("blaxel");
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -69,7 +78,9 @@ async function ensureDefaultProjectInternal(args: {
     .query("cloudProjects")
     .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))
     .collect();
-  const existing = existingRows.sort((a: any, b: any) => (a.createdAt ?? 0) - (b.createdAt ?? 0))[0] ?? null;
+  const existing = existingRows
+    .filter(isWorkspaceProjectDisplayable)
+    .sort((a: any, b: any) => (a.createdAt ?? 0) - (b.createdAt ?? 0))[0] ?? null;
   if (existing) return existing;
 
   const id = await args.ctx.db.insert("cloudProjects", {
@@ -77,6 +88,7 @@ async function ensureDefaultProjectInternal(args: {
     name: formatDefaultComputerName(1),
     status: "active",
     providerVolumeId: undefined,
+    workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -90,19 +102,10 @@ function normalizeOptionalVolumeValue(raw: unknown): string | undefined {
   return normalized || undefined;
 }
 
-function readSandboxLabel(sandbox: DaytonaSandboxApiDto, key: string): string | null {
-  const labels =
-    sandbox.labels && typeof sandbox.labels === "object" && !Array.isArray(sandbox.labels)
-      ? (sandbox.labels as Record<string, unknown>)
-      : null;
-  const value = String(labels?.[key] ?? "").trim();
-  return value || null;
-}
-
 function buildProjectVolumeName(project: { _id?: unknown }): string {
   const projectId = normalizeIdValue(project._id);
   if (!projectId) throw new Error("project_id_required");
-  return `arx-workspace-${projectId}`;
+  return buildBlaxelProjectWorkspaceNames(projectId).volumeName;
 }
 
 function normalizeOptionalProjectString(raw: unknown): string | undefined {
@@ -112,6 +115,110 @@ function normalizeOptionalProjectString(raw: unknown): string | undefined {
 
 function buildNextProjectName(existingProjects: Array<{ name?: string | null }>): string {
   return buildNextDefaultComputerName(existingProjects.map((project) => project.name ?? null));
+}
+
+async function readWorkspaceCreditBalanceForProjectOwner(args: {
+  ctx: any;
+  ownerId: any;
+}) {
+  const rows = await args.ctx.db
+    .query("workspaceCreditBalances")
+    .withIndex("by_user", (q: any) => q.eq("userId", args.ownerId))
+    .take(2);
+  if (rows.length > 1) throw new Error("workspace_credit_balance_duplicate");
+  return rows[0] ?? null;
+}
+
+async function resolveWorkspaceResourceAccountTierForOwner(args: {
+  ctx: any;
+  ownerId: any;
+}) {
+  const [workspaceCreditBalance, hasCardOnFile] = await Promise.all([
+    readWorkspaceCreditBalanceForProjectOwner({
+      ctx: args.ctx,
+      ownerId: args.ownerId,
+    }),
+    resolveWorkspaceHasCardOnFileForOwner({
+      ctx: args.ctx,
+      ownerId: args.ownerId,
+    }),
+  ]);
+  return resolveWorkspaceResourceAccountTier({
+    hasCardOnFile,
+    workspaceCreditBalance,
+  });
+}
+
+async function resolveWorkspaceHasCardOnFileForOwner(args: {
+  ctx: any;
+  ownerId: any;
+}): Promise<boolean> {
+  const stripeCustomer = await args.ctx.db
+    .query("userStripeCustomers")
+    .withIndex("by_user", (q: any) => q.eq("userId", args.ownerId))
+    .first();
+  return Boolean(
+    stripeCustomer?.paymentMethodStatus === "active" &&
+      String(stripeCustomer.providerDefaultPaymentMethodId ?? "").trim().startsWith("pm_") &&
+      !(Number(stripeCustomer.cardRemovedAt ?? 0) > 0),
+  );
+}
+
+function workspaceResourceAdmissionStatus(code: string): number {
+  if (code === "project_not_found") return 404;
+  if (
+    code === "workspace_volume_funding_required" ||
+    code === "workspace_card_required_for_additional_volume" ||
+    code === "workspace_volume_limit_reached" ||
+    code === "project_limit_reached"
+  ) {
+    return 402;
+  }
+  if (
+    code === "project_volume_provider_mismatch" ||
+    code === "project_volume_resource_mismatch"
+  ) {
+    return 409;
+  }
+  if (code === "workspace_provider_volume_quota_headroom_exhausted") return 429;
+  return 503;
+}
+
+function workspaceResourceAdmissionMessage(code: string): string {
+  if (code === "project_not_found") return "Computer not found.";
+  if (code === "project_volume_provider_mismatch") {
+    return "This computer volume is managed by a different provider.";
+  }
+  if (code === "project_volume_resource_mismatch") {
+    return "This computer volume is bound to a different provider resource.";
+  }
+  if (code === "workspace_volume_funding_required") {
+    return "Add prepaid credits or a card before creating workspace storage.";
+  }
+  if (code === "workspace_card_required_for_additional_volume") {
+    return "Extra workspace computers require a card on file.";
+  }
+  if (code === "workspace_volume_limit_reached") {
+    return "Workspace project volume limit reached.";
+  }
+  if (code === "workspace_provider_volume_quota_headroom_exhausted") {
+    return "Workspace storage provider quota has no safe headroom.";
+  }
+  return "Workspace resource admission failed.";
+}
+
+function workspaceResourceAdmissionFailure(params: {
+  code: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}) {
+  return {
+    ok: false as const,
+    status: workspaceResourceAdmissionStatus(params.code),
+    code: params.code,
+    message: params.message ?? workspaceResourceAdmissionMessage(params.code),
+    ...(params.details ? { details: params.details } : {}),
+  };
 }
 
 function shellQuote(value: string): string {
@@ -124,7 +231,7 @@ function buildProjectImportRunId(projectId: unknown): string {
 
 function buildProjectImportArchivePath(projectId: unknown): string {
   const safeProjectId = normalizeIdValue(projectId).replace(/[^a-zA-Z0-9_-]/g, "_") || "project";
-  return `${DAYTONA_WORKSPACE_ROOT}/.arx-import-${safeProjectId}-${Date.now()}.zip`;
+  return `${BLAXEL_WORKSPACE_ROOT}/.arx-import-${safeProjectId}-${Date.now()}.zip`;
 }
 
 function buildProjectZipImportCommand(params: {
@@ -377,410 +484,6 @@ function parseProjectImportSummary(outputText: string): {
   }
 }
 
-function readDaytonaCommandFailureMessage(details: unknown): string {
-  const record =
-    details && typeof details === "object" && !Array.isArray(details)
-      ? (details as Record<string, unknown>)
-      : null;
-  const outputPreview = String(record?.output_preview ?? "").trim();
-  if (outputPreview) {
-    const line = outputPreview.split("\n").map((value) => value.trim()).find(Boolean);
-    if (line) return line;
-  }
-  const stderrPreview = String(record?.stderr_preview ?? "").trim();
-  if (stderrPreview) {
-    const line = stderrPreview.split("\n").map((value) => value.trim()).find(Boolean);
-    if (line) return line;
-  }
-  return "";
-}
-
-type DaytonaVolumeApiDto = {
-  id?: string | null;
-  name?: string | null;
-  state?: string | null;
-  status?: string | null;
-};
-
-type DaytonaSandboxStatusApiDto = {
-  id?: string | null;
-  state?: string | null;
-  status?: string | null;
-};
-
-function daytonaHeaders(config: DaytonaConfig): Record<string, string> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${config.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  if (config.orgId) headers["X-Daytona-Organization-ID"] = config.orgId;
-  return headers;
-}
-
-async function parseDaytonaResponseBody(response: Response): Promise<{ text: string; json: unknown | null }> {
-  const text = await response.text();
-  if (!text.trim()) return { text, json: null };
-  try {
-    return { text, json: JSON.parse(text) as unknown };
-  } catch {
-    return { text, json: null };
-  }
-}
-
-async function daytonaVolumeRequest<T>(params: {
-  config: DaytonaConfig;
-  path: string;
-  method: "GET" | "POST" | "DELETE";
-  body?: Record<string, unknown> | null;
-}): Promise<
-  | { ok: true; payload: T }
-  | {
-      ok: false;
-      status: number;
-      code: string;
-      message: string;
-      details?: Record<string, unknown>;
-    }
-> {
-  let response: Response;
-  try {
-    response = await fetch(`${params.config.apiBaseUrl}${params.path}`, {
-      method: params.method,
-      headers: daytonaHeaders(params.config),
-      ...(params.body ? { body: JSON.stringify(params.body) } : null),
-    });
-  } catch (error) {
-    return {
-      ok: false,
-      status: 503,
-      code: "runner_unavailable",
-      message: error instanceof Error ? error.message : "Daytona API request failed.",
-    };
-  }
-  const { text, json } = await parseDaytonaResponseBody(response);
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      code: response.status === 404 ? "not_found" : "runner_unavailable",
-      message: `Daytona API ${params.method} ${params.path} failed (${response.status}).`,
-      details: {
-        response_text: text.slice(0, 2000),
-      },
-    };
-  }
-  if (!json || typeof json !== "object") {
-    if (params.method === "DELETE") {
-      return {
-        ok: true,
-        payload: {} as T,
-      };
-    }
-    return {
-      ok: false,
-      status: 503,
-      code: "runner_unavailable",
-      message: `Daytona API ${params.path} returned invalid JSON.`,
-    };
-  }
-  return {
-    ok: true,
-    payload: json as T,
-  };
-}
-
-async function fetchDaytonaVolumeByName(params: {
-  config: DaytonaConfig;
-  volumeName: string;
-}) {
-  return await daytonaVolumeRequest<DaytonaVolumeApiDto>({
-    config: params.config,
-    path: `/volumes/by-name/${encodeURIComponent(params.volumeName)}`,
-    method: "GET",
-  });
-}
-
-async function fetchDaytonaVolumeById(params: {
-  config: DaytonaConfig;
-  volumeId: string;
-}) {
-  return await daytonaVolumeRequest<DaytonaVolumeApiDto>({
-    config: params.config,
-    path: `/volumes/${encodeURIComponent(params.volumeId)}`,
-    method: "GET",
-  });
-}
-
-async function createDaytonaVolume(params: {
-  config: DaytonaConfig;
-  volumeName: string;
-}) {
-  return await daytonaVolumeRequest<DaytonaVolumeApiDto>({
-    config: params.config,
-    path: "/volumes",
-    method: "POST",
-    body: {
-      name: params.volumeName,
-    },
-  });
-}
-
-async function deleteDaytonaVolume(params: {
-  config: DaytonaConfig;
-  volumeId: string;
-}) {
-  return await daytonaVolumeRequest<DaytonaVolumeApiDto>({
-    config: params.config,
-    path: `/volumes/${encodeURIComponent(params.volumeId)}`,
-    method: "DELETE",
-  });
-}
-
-function readDaytonaFailureResponseText(result: {
-  details?: Record<string, unknown>;
-}): string {
-  return String(result.details?.response_text ?? "").trim().slice(0, 1000);
-}
-
-function formatDaytonaFailureMessage(result: {
-  message: string;
-  details?: Record<string, unknown>;
-}): string {
-  const responseText = readDaytonaFailureResponseText(result);
-  return responseText ? `${result.message} ${responseText}` : result.message;
-}
-
-function isDaytonaNotFoundFailure(result: {
-  status: number;
-  details?: Record<string, unknown>;
-}): boolean {
-  if (result.status === 404) return true;
-  return readDaytonaFailureResponseText(result).toLowerCase().includes("not found");
-}
-
-function shouldRetryDaytonaVolumeDelete(result: { status: number }): boolean {
-  return result.status === 400 || result.status === 409 || result.status === 423;
-}
-
-function sandboxMatchesProjectOrVolume(params: {
-  sandbox: DaytonaSandboxApiDto;
-  projectId: string;
-  volumeId?: string | null;
-}): boolean {
-  if (readSandboxLabel(params.sandbox, "arx_project_id") === params.projectId) {
-    return true;
-  }
-  const volumeId = String(params.volumeId ?? "").trim();
-  if (!volumeId) return false;
-  return JSON.stringify(params.sandbox).includes(volumeId);
-}
-
-async function cleanupDaytonaProjectSandboxes(params: {
-  config: DaytonaConfig;
-  projectId: string;
-  volumeId?: string | null;
-}) {
-  const listed = await listDaytonaSandboxes({
-    config: params.config,
-  });
-  if (!listed.ok) return listed;
-
-  for (const sandbox of listed.sandboxes) {
-    const sandboxId = String(sandbox.id ?? "").trim();
-    if (!sandboxId) continue;
-    if (!sandboxMatchesProjectOrVolume({
-      sandbox,
-      projectId: params.projectId,
-      volumeId: params.volumeId,
-    })) {
-      continue;
-    }
-
-    const stopped = await stopDaytonaSandbox({
-      config: params.config,
-      sandboxId,
-    });
-    const deleted =
-      stopped.ok
-        ? await (async () => {
-            const settled = await waitForDaytonaSandboxStopped({
-              config: params.config,
-              sandboxId,
-            });
-            return settled.ok && settled.sandbox === null
-              ? ({ ok: true as const })
-              : await deleteDaytonaSandbox({
-                  config: params.config,
-                  sandboxId,
-                });
-          })()
-        : await deleteDaytonaSandbox({
-            config: params.config,
-            sandboxId,
-          });
-
-    if (!deleted.ok) {
-      return deleted;
-    }
-  }
-
-  return { ok: true as const };
-}
-
-async function fetchDaytonaSandboxById(params: {
-  config: DaytonaConfig;
-  sandboxId: string;
-}) {
-  return await daytonaVolumeRequest<DaytonaSandboxStatusApiDto>({
-    config: params.config,
-    path: `/sandbox/${encodeURIComponent(params.sandboxId)}`,
-    method: "GET",
-  });
-}
-
-function normalizeDaytonaVolumeState(volume: DaytonaVolumeApiDto | null | undefined): string | undefined {
-  const normalized = String(volume?.state ?? volume?.status ?? "").trim().toLowerCase();
-  return normalized || undefined;
-}
-
-function isReadyDaytonaVolumeState(state: string | null | undefined): boolean {
-  const normalized = String(state ?? "").trim().toLowerCase();
-  return !normalized || normalized === "ready" || normalized === "available" || normalized === "created";
-}
-
-function isDeletableDaytonaVolumeState(state: string | null | undefined): boolean {
-  const normalized = String(state ?? "").trim().toLowerCase();
-  return !normalized || normalized === "ready" || normalized === "error" || normalized === "available" || normalized === "created";
-}
-
-function normalizeDaytonaSandboxState(sandbox: DaytonaSandboxStatusApiDto | null | undefined): string | undefined {
-  const normalized = String(sandbox?.state ?? sandbox?.status ?? "").trim().toLowerCase();
-  return normalized || undefined;
-}
-
-async function waitForDaytonaVolumeReady(params: {
-  config: DaytonaConfig;
-  volumeId: string;
-  timeoutMs?: number;
-  intervalMs?: number;
-}): Promise<DaytonaVolumeApiDto> {
-  const timeoutMs = Math.max(1000, Math.floor(params.timeoutMs ?? 15_000));
-  const intervalMs = Math.max(250, Math.floor(params.intervalMs ?? 1000));
-  const startedAt = Date.now();
-  let lastSeen: DaytonaVolumeApiDto = { id: params.volumeId };
-  while (Date.now() - startedAt < timeoutMs) {
-    const lookup = await fetchDaytonaVolumeById({
-      config: params.config,
-      volumeId: params.volumeId,
-    });
-    if (!lookup.ok) {
-      if (lookup.status === 404) break;
-      throw new Error(lookup.message);
-    }
-    lastSeen = lookup.payload;
-    if (isReadyDaytonaVolumeState(normalizeDaytonaVolumeState(lookup.payload))) {
-      return lookup.payload;
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return lastSeen;
-}
-
-async function waitForDaytonaVolumeDeleteReadiness(params: {
-  config: DaytonaConfig;
-  volumeId: string;
-  timeoutMs?: number;
-  intervalMs?: number;
-}): Promise<"deletable" | "missing" | "timeout"> {
-  const timeoutMs = Math.max(1000, Math.floor(params.timeoutMs ?? 60_000));
-  const intervalMs = Math.max(250, Math.floor(params.intervalMs ?? 1000));
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const lookup = await fetchDaytonaVolumeById({
-      config: params.config,
-      volumeId: params.volumeId,
-    });
-    if (!lookup.ok) {
-      if (lookup.status === 404) return "missing";
-      throw new Error(formatDaytonaFailureMessage(lookup));
-    }
-    if (isDeletableDaytonaVolumeState(normalizeDaytonaVolumeState(lookup.payload))) {
-      return "deletable";
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return "timeout";
-}
-
-async function cleanupDaytonaDeletedProjectResources(params: {
-  config: DaytonaConfig;
-  projectId: string;
-  volumeId: string;
-  waitForVolumeMs?: number;
-}): Promise<
-  | { ok: true; volumeDeleted: boolean }
-  | {
-      ok: false;
-      status: number;
-      code: string;
-      message: string;
-      details?: Record<string, unknown>;
-    }
-> {
-  const cleanedSandboxes = await cleanupDaytonaProjectSandboxes({
-    config: params.config,
-    projectId: params.projectId,
-    volumeId: params.volumeId,
-  });
-  if (!cleanedSandboxes.ok) return cleanedSandboxes;
-
-  const readiness = await waitForDaytonaVolumeDeleteReadiness({
-    config: params.config,
-    volumeId: params.volumeId,
-    timeoutMs: params.waitForVolumeMs,
-  });
-  if (readiness === "missing") {
-    return { ok: true, volumeDeleted: true };
-  }
-  if (readiness === "timeout") {
-    return { ok: true, volumeDeleted: false };
-  }
-
-  let deletedVolume = await deleteDaytonaVolume({
-    config: params.config,
-    volumeId: params.volumeId,
-  });
-  if (!deletedVolume.ok && shouldRetryDaytonaVolumeDelete(deletedVolume)) {
-    const retriedSandboxCleanup = await cleanupDaytonaProjectSandboxes({
-      config: params.config,
-      projectId: params.projectId,
-      volumeId: params.volumeId,
-    });
-    if (!retriedSandboxCleanup.ok) return retriedSandboxCleanup;
-
-    const retryReadiness = await waitForDaytonaVolumeDeleteReadiness({
-      config: params.config,
-      volumeId: params.volumeId,
-      timeoutMs: params.waitForVolumeMs,
-    });
-    if (retryReadiness === "missing") {
-      return { ok: true, volumeDeleted: true };
-    }
-    if (retryReadiness === "timeout") {
-      return { ok: true, volumeDeleted: false };
-    }
-
-    deletedVolume = await deleteDaytonaVolume({
-      config: params.config,
-      volumeId: params.volumeId,
-    });
-  }
-  if (!deletedVolume.ok && !isDaytonaNotFoundFailure(deletedVolume)) {
-    return deletedVolume;
-  }
-  return { ok: true, volumeDeleted: true };
-}
-
 async function resolveActionUser(args: {
   ctx: any;
   authSubject?: string | null;
@@ -804,6 +507,83 @@ export const getCloudProjectByIdInternal = internalQuery({
   },
 });
 
+export const listCloudProjectsByOwnerInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect();
+  },
+});
+
+export const listCloudProjectsForWorkspaceResourceInventoryInternal = internalQuery({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(
+      1000,
+      Math.max(1, Math.floor(Number(args.limit ?? 500))),
+    );
+    const ownerId = args.ownerId;
+    if (ownerId) {
+      return await ctx.db
+        .query("cloudProjects")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .take(limit);
+    }
+    return await ctx.db.query("cloudProjects").take(limit);
+  },
+});
+
+export const listExpiredBlaxelProjectWorkspaceLeasesInternal = internalQuery({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.min(
+      100,
+      Math.max(1, Math.floor(Number(args.limit ?? 50))),
+    );
+    const rows = await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_sandboxProvider_creditBudgetExpiresAt", (q) =>
+        q.eq("providerSandboxProviderId", "blaxel").lt("providerSandboxCreditBudgetExpiresAt", nowMs),
+      )
+      .take(limit);
+    return rows.filter((project) =>
+      Boolean(normalizeOptionalProjectString(project.providerSandboxCreditReservationKey)),
+    );
+  },
+});
+
+export const listBlaxelProjectWorkspaceLeasesMissingProjectExpiryInternal = internalQuery({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(
+      100,
+      Math.max(1, Math.floor(Number(args.limit ?? 50))),
+    );
+    const rows = await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_sandboxProvider_creditBudgetExpiresAt", (q) =>
+        q.eq("providerSandboxProviderId", "blaxel").eq("providerSandboxCreditBudgetExpiresAt", undefined),
+      )
+      .take(limit);
+    return rows.filter((project) =>
+      Boolean(normalizeOptionalProjectString(project.providerSandboxCreditReservationKey)),
+    );
+  },
+});
+
 export const attachCloudProjectVolumeInternal = internalMutation({
   args: {
     projectId: v.id("cloudProjects"),
@@ -820,9 +600,224 @@ export const attachCloudProjectVolumeInternal = internalMutation({
     await ctx.db.patch(existing._id, {
       providerVolumeId,
       providerVolumeProviderId: args.providerId,
+      providerVolumeState: "active",
+      providerVolumeLastSeenAt: nowMs,
+      workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
+      workspaceVolumeRetainUntil: undefined,
+      workspaceVolumeDeleteAfter: undefined,
+      workspaceVolumeDeletionWarningSentAt: undefined,
+      workspaceVolumeDeletedAt: undefined,
+      workspaceVolumeDeletionReason: undefined,
       updatedAt: nowMs,
     });
     return await ctx.db.get(existing._id);
+  },
+});
+
+export const prepareCloudProjectVolumeMaterializationInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    nowMs: v.optional(v.number()),
+    providerVolumeCount: v.optional(v.number()),
+    providerVolumeLimit: v.optional(v.number()),
+    providerVolumeSafetyBuffer: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) {
+      return workspaceResourceAdmissionFailure({ code: "project_not_found" });
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const expectedVolumeName = buildProjectVolumeName(project);
+    const existingVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
+    const existingVolumeDeleted =
+      normalizeWorkspaceVolumeRetentionState(project.workspaceVolumeRetentionState) ===
+        "deleted" ||
+      Number(project.workspaceVolumeDeletedAt ?? 0) > 0;
+    const existingVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerVolumeProviderId,
+      resourceId: existingVolumeId,
+    });
+
+    if (existingVolumeId && existingVolumeProviderId !== "blaxel") {
+      return workspaceResourceAdmissionFailure({
+        code: "project_volume_provider_mismatch",
+        details: {
+          project_id: String(args.projectId),
+          provider_volume_id: existingVolumeId,
+          provider_id: existingVolumeProviderId,
+        },
+      });
+    }
+    if (existingVolumeId && existingVolumeId !== expectedVolumeName) {
+      return workspaceResourceAdmissionFailure({
+        code: "project_volume_resource_mismatch",
+        details: {
+          project_id: String(args.projectId),
+          expected_provider_volume_id: expectedVolumeName,
+          actual_provider_volume_id: existingVolumeId,
+        },
+      });
+    }
+    if (existingVolumeId && !existingVolumeDeleted) {
+      return {
+        ok: true as const,
+        projectId: String(args.projectId),
+        ownerId: String(project.ownerId),
+        providerId: "blaxel" as const,
+        providerVolumeId: existingVolumeId,
+        providerVolumeState: String(project.providerVolumeState ?? "active"),
+        alreadyClaimed: true,
+      };
+    }
+
+    const [ownerProjectRows, workspaceCreditBalance, hasCardOnFile] = await Promise.all([
+      ctx.db
+        .query("cloudProjects")
+        .withIndex("by_owner", (q) => q.eq("ownerId", project.ownerId))
+        .collect(),
+      readWorkspaceCreditBalanceForProjectOwner({
+        ctx,
+        ownerId: project.ownerId,
+      }),
+      resolveWorkspaceHasCardOnFileForOwner({
+        ctx,
+        ownerId: project.ownerId,
+      }),
+    ]);
+    const admission = evaluateWorkspaceVolumeMaterializationAdmission({
+      hasCardOnFile,
+      workspaceCreditBalance,
+      existingVolumeCount: countWorkspaceVolumesForAdmission(ownerProjectRows),
+      providerVolumeCount: args.providerVolumeCount ?? null,
+      providerVolumeLimit: args.providerVolumeLimit ?? null,
+      providerVolumeSafetyBuffer: args.providerVolumeSafetyBuffer ?? null,
+    });
+    if (!admission.ok) {
+      return workspaceResourceAdmissionFailure({
+        code: admission.code,
+        message: admission.message,
+        details: {
+          account_tier: admission.accountTier,
+          current_count: admission.currentCount,
+          requested_count: admission.requestedCount,
+          limit: admission.limit,
+        },
+      });
+    }
+
+    await ctx.db.patch(project._id, {
+      providerVolumeId: expectedVolumeName,
+      providerVolumeProviderId: "blaxel",
+      providerVolumeState: "materializing",
+      providerVolumeLastSeenAt: nowMs,
+      workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
+      workspaceVolumeRetainUntil: undefined,
+      workspaceVolumeDeleteAfter: undefined,
+      workspaceVolumeDeletionWarningSentAt: undefined,
+      workspaceVolumeDeletedAt: undefined,
+      workspaceVolumeDeletionReason: undefined,
+      updatedAt: nowMs,
+    });
+
+    return {
+      ok: true as const,
+      projectId: String(args.projectId),
+      ownerId: String(project.ownerId),
+      providerId: "blaxel" as const,
+      providerVolumeId: expectedVolumeName,
+      providerVolumeState: "materializing",
+      alreadyClaimed: false,
+    };
+  },
+});
+
+export const clearInactiveLegacyWorkspaceProjectProviderPointersInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    expectedStatus: v.optional(v.string()),
+    expectedProviderVolumeId: v.optional(v.string()),
+    expectedProviderSandboxId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("project_not_found");
+    if (!isWorkspaceProjectInactiveStatus(project.status)) {
+      throw new Error("active_project_legacy_pointer_cleanup_forbidden");
+    }
+    if (
+      args.expectedStatus &&
+      String(project.status ?? "").trim() !== args.expectedStatus
+    ) {
+      return project;
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const providerVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
+    const providerVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerVolumeProviderId,
+      resourceId: providerVolumeId,
+    });
+    const shouldClearVolume =
+      Boolean(providerVolumeId) &&
+      providerVolumeProviderId !== "blaxel" &&
+      (
+        !args.expectedProviderVolumeId ||
+        args.expectedProviderVolumeId === providerVolumeId
+      );
+
+    const providerSandboxId = normalizeOptionalVolumeValue(project.providerSandboxId);
+    const providerSandboxProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerSandboxProviderId,
+      resourceId: providerSandboxId,
+    });
+    const shouldClearSandbox =
+      Boolean(providerSandboxId) &&
+      providerSandboxProviderId !== "blaxel" &&
+      (
+        !args.expectedProviderSandboxId ||
+        args.expectedProviderSandboxId === providerSandboxId
+      );
+
+    if (!shouldClearVolume && !shouldClearSandbox) {
+      return project;
+    }
+
+    await ctx.db.patch(project._id, {
+      ...(shouldClearVolume
+        ? {
+            providerVolumeId: undefined,
+            providerVolumeProviderId: undefined,
+            providerVolumeName: undefined,
+            providerVolumeState: undefined,
+            providerVolumeLastSeenAt: undefined,
+            workspaceVolumeRetentionState: "deleted" as const,
+            workspaceVolumeRetainUntil: undefined,
+            workspaceVolumeDeleteAfter: undefined,
+            workspaceVolumeDeletionWarningSentAt: undefined,
+            workspaceVolumeDeletedAt: nowMs,
+            workspaceVolumeDeletionReason: "inactive_legacy_provider_pointer_cleanup",
+          }
+        : {}),
+      ...(shouldClearSandbox
+        ? {
+            providerSandboxId: undefined,
+            providerSandboxProviderId: undefined,
+            providerSandboxState: undefined,
+            providerSandboxLastSeenAt: undefined,
+            providerSandboxLastActivityAt: undefined,
+            providerSandboxStartedAt: undefined,
+            providerSandboxIdleExpiresAt: undefined,
+            providerSandboxCreditReservationKey: undefined,
+            providerSandboxCreditBudgetCredits: undefined,
+            providerSandboxCreditBudgetExpiresAt: undefined,
+          }
+        : {}),
+      updatedAt: nowMs,
+    });
+    return await ctx.db.get(project._id);
   },
 });
 
@@ -875,81 +870,27 @@ export const ensureCloudProjectVolumeInternal = internalAction({
     projectId: v.id("cloudProjects"),
   },
   handler: async (ctx, args): Promise<unknown> => {
-    const project = await ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
+    const quotaAdmissionArgs = await readBlaxelWorkspaceVolumeQuotaAdmissionArgs({
+      ctx,
       projectId: args.projectId,
     });
-    if (!project) throw new Error("project_not_found");
-
-    const loadedDaytonaConfig = loadDaytonaConfig();
-    if (!loadedDaytonaConfig.ok) {
-      throw new Error(loadedDaytonaConfig.message);
+    if (!quotaAdmissionArgs.ok) {
+      throw new Error(String(quotaAdmissionArgs.code ?? "blaxel_volume_quota_snapshot_failed"));
     }
-    const config = loadedDaytonaConfig.config;
-    const expectedVolumeName = buildProjectVolumeName(project);
-
-    let volume: DaytonaVolumeApiDto | null = null;
-    const existingVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
-    const existingVolumeProviderId = resolveRecordedWorkspaceResourceProviderId({
-      providerId: project.providerVolumeProviderId,
-      resourceId: existingVolumeId,
-    });
-    if (existingVolumeId && existingVolumeProviderId !== "daytona") {
-      throw new Error("project_volume_provider_mismatch");
+    const prepared: any = await ctx.runMutation(
+      internal.projects.prepareCloudProjectVolumeMaterializationInternal as any,
+      {
+        projectId: args.projectId,
+        nowMs: Date.now(),
+        providerVolumeCount: quotaAdmissionArgs.providerVolumeCount,
+        providerVolumeLimit: quotaAdmissionArgs.providerVolumeLimit,
+        providerVolumeSafetyBuffer: quotaAdmissionArgs.providerVolumeSafetyBuffer,
+      },
+    );
+    if (!prepared?.ok) {
+      throw new Error(String(prepared?.code ?? "workspace_volume_admission_failed"));
     }
-    if (existingVolumeId) {
-      const lookupById = await fetchDaytonaVolumeById({
-        config,
-        volumeId: existingVolumeId,
-      });
-      if (lookupById.ok) {
-        volume = lookupById.payload;
-      } else if (lookupById.status !== 404) {
-        throw new Error(lookupById.message);
-      }
-    }
-
-    if (!volume) {
-      const lookupByName = await fetchDaytonaVolumeByName({
-        config,
-        volumeName: expectedVolumeName,
-      });
-      if (lookupByName.ok) {
-        volume = lookupByName.payload;
-      } else if (lookupByName.status !== 404) {
-        throw new Error(lookupByName.message);
-      }
-    }
-
-    if (!volume) {
-      const createdVolume = await createDaytonaVolume({
-        config,
-        volumeName: expectedVolumeName,
-      });
-      if (!createdVolume.ok) {
-        throw new Error(createdVolume.message);
-      }
-      volume = createdVolume.payload;
-    }
-
-    const volumeId = normalizeOptionalVolumeValue(volume.id);
-    if (!volumeId) throw new Error("daytona_volume_missing_id");
-    const readyVolume = isReadyDaytonaVolumeState(normalizeDaytonaVolumeState(volume))
-      ? volume
-      : await waitForDaytonaVolumeReady({
-          config,
-          volumeId,
-        });
-    const volumeName = normalizeOptionalVolumeValue(readyVolume.name) ?? expectedVolumeName;
-    const volumeState = normalizeDaytonaVolumeState(readyVolume) ?? "ready";
-
-    const updated: unknown = await ctx.runMutation(internal.projects.attachCloudProjectVolumeInternal as any, {
-      projectId: args.projectId,
-      providerVolumeId: volumeId,
-      providerId: "daytona",
-      nowMs: Date.now(),
-    });
-    if (!updated) throw new Error("project_not_found");
-    return updated;
+    return prepared;
   },
 });
 
@@ -989,7 +930,9 @@ export const listCloudProjectsForOwner = query({
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
-    return rows.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+    return rows
+      .filter(isWorkspaceProjectDisplayable)
+      .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
   },
 });
 
@@ -1012,11 +955,20 @@ export const createCloudProjectForOwner = mutation({
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
-    if (existingRows.length >= ACCOUNT_MAX_PROJECTS) {
-      throw new Error("project_limit_reached");
+    const accountTier = await resolveWorkspaceResourceAccountTierForOwner({
+      ctx,
+      ownerId,
+    });
+    const admission = evaluateWorkspaceProjectCreateAdmission({
+      accountTier,
+      existingProjectCount: countWorkspaceProjectsForAdmission(existingRows),
+    });
+    if (!admission.ok) {
+      throw new Error(admission.code);
     }
 
-    const projectName = normalizeOptionalProjectString(args.name) ?? buildNextProjectName(existingRows);
+    const projectName = normalizeOptionalProjectString(args.name) ??
+      buildNextProjectName(existingRows.filter(isWorkspaceProjectDisplayable));
     const description = normalizeOptionalProjectString(args.description);
     const id = await ctx.db.insert("cloudProjects", {
       ownerId,
@@ -1024,6 +976,7 @@ export const createCloudProjectForOwner = mutation({
       description,
       status: "active",
       providerVolumeId: undefined,
+      workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -1119,36 +1072,40 @@ export const importCloudProjectZipForOwner = action({
     }
 
     const runId = buildProjectImportRunId(args.projectId);
-    let session: WorkspaceSandboxSession | null = null;
     try {
       await ctx.runMutation(internal.projects.acquireCloudProjectImportLeaseInternal as any, {
         projectId: args.projectId,
         ownerId,
         nowMs: Date.now(),
       });
-      const sessionResult = await createWorkspaceSandboxSession({
+      const ensured = await ensureBillableBlaxelWorkspaceComputer({
         ctx,
-        userId,
-        authSubject,
         projectId: args.projectId,
+        ownerId,
         runId,
+        lifecycleIntent: "interactive",
+        reservationAction: "project_zip_import",
+        labels: {
+          purpose: "project-zip-import",
+          project_id: String(args.projectId),
+          owner_id: String(ownerId),
+          run_id: runId,
+        },
       });
-      if (!sessionResult.ok) {
-        throw new Error(sessionResult.code || sessionResult.message);
+      if (!ensured.ok) {
+        throw new Error(ensured.code || ensured.message);
       }
 
-      session = sessionResult.session;
       const archivePath = buildProjectImportArchivePath(args.projectId);
-      const imported = await executeDaytonaCommand({
-        config: session.config,
-        toolboxProxyUrl: session.toolboxProxyUrl,
-        sandboxId: session.providerSandboxId,
-        cwd: DAYTONA_WORKSPACE_ROOT,
+      const imported = await executeBlaxelWorkspaceCommand({
+        sandboxName: ensured.providerSandboxId,
+        cwd: BLAXEL_WORKSPACE_ROOT,
         command: buildProjectZipImportCommand({
           archiveUrl: downloadUrl,
           zipPath: archivePath,
-          workspaceRoot: DAYTONA_WORKSPACE_ROOT,
+          workspaceRoot: BLAXEL_WORKSPACE_ROOT,
         }),
+        waitForCompletion: true,
         timeoutSeconds: 120,
       });
       if (!imported.ok || imported.exitCode !== 0) {
@@ -1156,7 +1113,7 @@ export const importCloudProjectZipForOwner = action({
           String(
             imported.ok
               ? imported.stdout ?? ""
-              : readDaytonaCommandFailureMessage(imported.details) || imported.message,
+              : imported.message,
           ).trim() ||
             "project_import_extract_failed",
         );
@@ -1173,15 +1130,6 @@ export const importCloudProjectZipForOwner = action({
         commonRootStripped: importSummary.commonRootStripped,
       };
     } finally {
-      if (session) {
-        await cleanupTemporaryWorkspaceSandboxSession({
-          ctx,
-          userId,
-          session,
-          runId,
-          projectId: args.projectId,
-        });
-      }
       try {
         await ctx.storage.delete(args.storageId);
       } catch {
@@ -1226,51 +1174,6 @@ export const deleteCloudProjectInternal = internalMutation({
       ok: true,
       archivedThreadCount,
     };
-  },
-});
-
-export const cleanupDeletedCloudProjectDaytonaVolumeInternal = internalAction({
-  args: {
-    projectId: v.string(),
-    providerVolumeId: v.string(),
-    attempt: v.optional(v.number()),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    const projectId = normalizeIdValue(args.projectId);
-    const providerVolumeId = normalizeOptionalVolumeValue(args.providerVolumeId);
-    if (!projectId || !providerVolumeId) {
-      return { ok: true, volumeDeleted: true };
-    }
-    const loadedDaytonaConfig = loadDaytonaConfig();
-    if (!loadedDaytonaConfig.ok) {
-      throw new Error(loadedDaytonaConfig.message);
-    }
-
-    const cleanup = await cleanupDaytonaDeletedProjectResources({
-      config: loadedDaytonaConfig.config,
-      projectId,
-      volumeId: providerVolumeId,
-      waitForVolumeMs: 120_000,
-    });
-    if (!cleanup.ok) {
-      throw new Error(formatDaytonaFailureMessage(cleanup));
-    }
-    if (!cleanup.volumeDeleted) {
-      const attempt = Math.max(0, Math.floor(args.attempt ?? 0));
-      if (attempt >= 5) {
-        throw new Error(`Daytona volume ${providerVolumeId} did not become deletable after project deletion.`);
-      }
-      await ctx.scheduler.runAfter(
-        Math.min(5 * 60_000, 30_000 * (attempt + 1)),
-        (internal.projects as any).cleanupDeletedCloudProjectDaytonaVolumeInternal,
-        {
-          projectId,
-          providerVolumeId,
-          attempt: attempt + 1,
-        },
-      );
-    }
-    return cleanup;
   },
 });
 
@@ -1320,6 +1223,27 @@ export const deleteCloudProjectForOwner = action({
       providerId: project.providerSandboxProviderId,
       resourceId: providerSandboxId,
     });
+    const providerSandboxCreditReservationKey = normalizeOptionalVolumeValue(
+      project.providerSandboxCreditReservationKey,
+    );
+    if (providerSandboxCreditReservationKey) {
+      const finalizedLease = await finalizeBillableBlaxelProjectWorkspaceLease({
+        ctx,
+        projectId: args.projectId,
+        ownerId,
+        providerSandboxId,
+        settlementReason: "workspace_project_deleted",
+        releaseReason: "workspace_project_deleted_before_start",
+        nowMs,
+        requireLedgerWrite: true,
+        clearProjectAccounting: false,
+      });
+      if (!finalizedLease.ok) {
+        throw new Error(
+          finalizedLease.errorMessage || "workspace_project_lease_finalization_failed",
+        );
+      }
+    }
     if (providerSandboxId && providerSandboxProviderId === "blaxel") {
       const cleanup = await destroyBlaxelWorkspaceSandbox({
         sandboxName: providerSandboxId,
@@ -1340,30 +1264,6 @@ export const deleteCloudProjectForOwner = action({
       });
       if (!cleanup.ok) {
         throw new Error(cleanup.message);
-      }
-    } else if (providerVolumeId && providerVolumeProviderId === "daytona") {
-      const loadedDaytonaConfig = loadDaytonaConfig();
-      if (!loadedDaytonaConfig.ok) {
-        throw new Error(loadedDaytonaConfig.message);
-      }
-      const cleanup = await cleanupDaytonaDeletedProjectResources({
-        config: loadedDaytonaConfig.config,
-        projectId: normalizeIdValue(args.projectId),
-        volumeId: providerVolumeId,
-        waitForVolumeMs: 1500,
-      });
-      if (!cleanup.ok) {
-        throw new Error(formatDaytonaFailureMessage(cleanup));
-      }
-      if (!cleanup.volumeDeleted) {
-        await ctx.scheduler.runAfter(
-          0,
-          (internal.projects as any).cleanupDeletedCloudProjectDaytonaVolumeInternal,
-          {
-            projectId: normalizeIdValue(args.projectId),
-            providerVolumeId,
-          },
-        );
       }
     }
 

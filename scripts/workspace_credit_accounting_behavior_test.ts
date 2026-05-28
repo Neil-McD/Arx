@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
-  DEFAULT_DAYTONA_SANDBOX_CPU,
-  DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB,
-  estimateDaytonaWorkspaceComputeUsd,
-  estimateDaytonaWorkspaceReservationCredits,
-  priceDaytonaWorkspaceUsageCredits,
+  DEFAULT_WORKSPACE_SANDBOX_CPU,
+  DEFAULT_WORKSPACE_SANDBOX_MEMORY_GIB,
+  estimateWorkspaceComputeUsd,
+  estimateWorkspaceReservationCredits,
+  paidToolKindForLedgerToolName,
+  priceWorkspaceUsageCredits,
+  WORKSPACE_MEMORY_GIB_USD_PER_SECOND,
+  WORKSPACE_VCPU_USD_PER_SECOND,
 } from "../shared/workspaceCredits.ts";
 
 type Balance = {
@@ -329,32 +334,160 @@ function testTargetedRepairAllowsTopupGrantOnce() {
   assert.equal(harness.stripeCheckoutCreates, 1);
 }
 
-function testDaytonaRawElapsedSettlementRefundsHoldRemainder() {
-  const reservationCredits = estimateDaytonaWorkspaceReservationCredits({
-    sandboxCpu: DEFAULT_DAYTONA_SANDBOX_CPU,
-    sandboxMemoryGiB: DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB,
+function testWorkspaceRawElapsedSettlementRefundsHoldRemainder() {
+  const reservationCredits = estimateWorkspaceReservationCredits({
+    sandboxCpu: DEFAULT_WORKSPACE_SANDBOX_CPU,
+    sandboxMemoryGiB: DEFAULT_WORKSPACE_SANDBOX_MEMORY_GIB,
   });
-  const actualCostUsd = estimateDaytonaWorkspaceComputeUsd({
+  const actualCostUsd = estimateWorkspaceComputeUsd({
     durationSeconds: 12,
-    sandboxCpu: DEFAULT_DAYTONA_SANDBOX_CPU,
-    sandboxMemoryGiB: DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB,
+    sandboxCpu: DEFAULT_WORKSPACE_SANDBOX_CPU,
+    sandboxMemoryGiB: DEFAULT_WORKSPACE_SANDBOX_MEMORY_GIB,
   });
-  const actualCredits = priceDaytonaWorkspaceUsageCredits({ computeCostUsd: actualCostUsd });
+  const actualCredits = priceWorkspaceUsageCredits({ computeCostUsd: actualCostUsd });
   assert.ok(actualCredits < reservationCredits, "short raw elapsed computer use should settle below the hold");
 
   const harness = new CreditAccountingHarness([newBalance({ purchased: 100 })]);
-  harness.reserve({ creditKey: "daytona_1", credits: reservationCredits });
+  harness.reserve({ creditKey: "workspace_1", credits: reservationCredits });
   const heldBalance = harness.canonicalBalance()!.purchasedCreditsBalance;
   const entry = harness.settle({
-    creditKey: "daytona_1",
+    creditKey: "workspace_1",
     status: "succeeded",
     creditsSettled: actualCredits,
   });
   assert.equal(entry.creditsSettled, actualCredits);
   assert.ok(
     harness.canonicalBalance()!.purchasedCreditsBalance > heldBalance,
-    "unused computer hold credits should be refunded at settlement",
+    "unused computer hold credits should be released at settlement",
   );
+}
+
+function testBlaxelWorkspacePricingUsesMemorySeconds() {
+  assert.equal(WORKSPACE_VCPU_USD_PER_SECOND, 0);
+  assert.equal(WORKSPACE_MEMORY_GIB_USD_PER_SECOND, 0.0000115);
+  assert.equal(
+    estimateWorkspaceComputeUsd({
+      durationSeconds: 60,
+      sandboxCpu: 0,
+      sandboxMemoryGiB: 4,
+    }),
+    60 * 4 * 0.0000115,
+  );
+}
+
+function testWorkspaceLedgerNameMapsToWorkspaceTools() {
+  assert.equal(paidToolKindForLedgerToolName("workspace_compute"), "workspace_tools");
+}
+
+function testBlaxelRuntimeReservationAndSettlementAreWired() {
+  const blaxelWakeSource = readFileSync(
+    join(process.cwd(), "convex/blaxelWorkspaceWake.ts"),
+    "utf8",
+  );
+  const runtimeSessionSource = readFileSync(
+    join(process.cwd(), "convex/workspaceRuntimeSession.ts"),
+    "utf8",
+  );
+  const runtimeExecutionSource = readFileSync(
+    join(process.cwd(), "convex/runtimeExecutionSession.ts"),
+    "utf8",
+  );
+  assert.match(blaxelWakeSource, /reserveCreditsInternal/);
+  assert.match(blaxelWakeSource, /settleReservedCreditsBestEffort/);
+  assert.match(runtimeSessionSource, /ensureBillableBlaxelWorkspaceComputer/);
+  assert.doesNotMatch(runtimeSessionSource, /reuseExistingLease: true/);
+  assert.match(runtimeSessionSource, /recordWorkspaceComputeChargeInternal/);
+  assert.match(runtimeExecutionSource, /createProjectRuntimeWorkspaceSession\(\{\s*ctx:[\s\S]*runId: params\.runId/);
+  assert.match(runtimeExecutionSource, /settleRuntimeWorkspaceSession/);
+}
+
+function testReusableWorkspaceLeaseRequiresReservedLedgerEntry() {
+  const blaxelWakeSource = readFileSync(
+    join(process.cwd(), "convex/blaxelWorkspaceWake.ts"),
+    "utf8",
+  );
+  const inspectorSource = readFileSync(
+    join(process.cwd(), "convex/workspaceInspector.ts"),
+    "utf8",
+  );
+  const terminalsSource = readFileSync(
+    join(process.cwd(), "convex/workspaceTerminals.ts"),
+    "utf8",
+  );
+  assert.match(blaxelWakeSource, /getCreditLedgerEntryByKeyInternal/);
+  assert.match(blaxelWakeSource, /ledgerEntry\.status !== "reserved"/);
+  assert.match(blaxelWakeSource, /String\(ledgerEntry\.userId \?\? ""\) !== String\(params\.ownerId \?\? ""\)/);
+  assert.match(blaxelWakeSource, /normalizeOptionalString\(ledgerEntry\.projectId\) !== String\(params\.projectId\)/);
+  assert.match(blaxelWakeSource, /canReuseWorkspaceLeaseForIntent[\s\S]*compareWorkspaceComputerLifecycleIntents/);
+  assert.match(blaxelWakeSource, /isRuntimeWorkspaceSessionLeaseLedgerEntry\(ledgerEntry\)[\s\S]*isRunningRuntimeWorkspaceSessionLease/);
+  assert.match(blaxelWakeSource, /projectCreditBudgetExpiresAt <= Date\.now\(\)[\s\S]*ledgerExpiresAt <= Date\.now\(\)/);
+  assert.match(blaxelWakeSource, /Math\.min\(projectCreditBudgetExpiresAt, ledgerExpiresAt\)/);
+  assert.match(blaxelWakeSource, /inspectBlaxelWorkspaceComputer/);
+  assert.match(blaxelWakeSource, /workspace_project_lease_replaced/);
+  assert.match(inspectorSource, /reuseExistingLease: true/);
+  assert.match(terminalsSource, /startProjectWorkspaceComputer[\s\S]*reuseExistingLease: true/);
+}
+
+function testManualWorkspaceStopSettlesReusableLease() {
+  const blaxelWakeSource = readFileSync(
+    join(process.cwd(), "convex/blaxelWorkspaceWake.ts"),
+    "utf8",
+  );
+  const terminalsSource = readFileSync(
+    join(process.cwd(), "convex/workspaceTerminals.ts"),
+    "utf8",
+  );
+  assert.match(blaxelWakeSource, /export async function settleBillableBlaxelWorkspaceLeaseBestEffort/);
+  assert.match(blaxelWakeSource, /settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*getCreditLedgerEntryByKeyInternal[\s\S]*ledgerEntry\.status !== "reserved"/);
+  assert.match(blaxelWakeSource, /settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*String\(ledgerEntry\.userId \?\? ""\) !== String\(params\.ownerId \?\? ""\)/);
+  assert.match(blaxelWakeSource, /settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*normalizeOptionalString\(ledgerEntry\.projectId\) !== String\(params\.projectId\)/);
+  assert.match(blaxelWakeSource, /providerSandboxCreditReservationKey[\s\S]*settleReservedCreditsBestEffort[\s\S]*status: "succeeded"/);
+  assert.match(blaxelWakeSource, /ledgerMetadata[\s\S]*sandbox_memory_gib[\s\S]*loadedConfig\.ok/);
+  assert.match(blaxelWakeSource, /resolveWorkspaceLeaseBillingTiming[\s\S]*WORKSPACE_FILE_INSPECTION_MAX_SECONDS/);
+  assert.match(blaxelWakeSource, /durationSeconds[\s\S]*billingTiming\.maxSeconds[\s\S]*priceWorkspaceUsageCredits/);
+  assert.match(blaxelWakeSource, /settlement_source: "project_workspace_lease"/);
+  assert.match(blaxelWakeSource, /settlement_reason: normalizeOptionalString\(params\.settlementReason\)/);
+  assert.match(terminalsSource, /stopProjectWorkspaceComputer[\s\S]*settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*settlementReason: "workspace_computer_stopped"/);
+  assert.match(terminalsSource, /stopProjectWorkspaceComputer[\s\S]*clearSandboxAccounting: true/);
+}
+
+function testExpiredBlaxelProjectLeaseFinalizationIsProviderAware() {
+  const schemaSource = readFileSync(join(process.cwd(), "convex/schema.ts"), "utf8");
+  const projectsSource = readFileSync(join(process.cwd(), "convex/projects.ts"), "utf8");
+  const creditsSource = readFileSync(join(process.cwd(), "convex/workspaceCredits.ts"), "utf8");
+  const wakeSource = readFileSync(join(process.cwd(), "convex/blaxelWorkspaceWake.ts"), "utf8");
+  const threadsSource = readFileSync(join(process.cwd(), "convex/threads.ts"), "utf8");
+  const cronsSource = readFileSync(join(process.cwd(), "convex/crons.ts"), "utf8");
+
+  assert.match(schemaSource, /by_sandboxProvider_creditBudgetExpiresAt/);
+  assert.match(schemaSource, /by_status_updatedAt/);
+  assert.match(projectsSource, /listExpiredBlaxelProjectWorkspaceLeasesInternal[\s\S]*by_sandboxProvider_creditBudgetExpiresAt/);
+  assert.match(projectsSource, /listBlaxelProjectWorkspaceLeasesMissingProjectExpiryInternal[\s\S]*providerSandboxCreditBudgetExpiresAt", undefined/);
+  assert.match(projectsSource, /deleteCloudProjectForOwner[\s\S]*finalizeBillableBlaxelProjectWorkspaceLease[\s\S]*requireLedgerWrite: true[\s\S]*destroyBlaxelWorkspaceSandbox/);
+  assert.match(creditsSource, /isBlaxelRuntimeWorkspaceReservation[\s\S]*runtime_workspace_session/);
+  assert.match(creditsSource, /isBlaxelProjectWorkspaceLeaseReservation[\s\S]*workspace_file_inspection[\s\S]*interactive_workspace_computer[\s\S]*project_zip_import/);
+  assert.doesNotMatch(
+    creditsSource,
+    /function isBlaxelProjectWorkspaceLeaseReservation[\s\S]*runtime_workspace_session[\s\S]*async function hasRunningRuntimeRunForWorkspaceReservation/,
+  );
+  assert.match(creditsSource, /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*providerSandboxCreditReservationKey/);
+  assert.match(creditsSource, /hasRunningRuntimeRunForWorkspaceReservation[\s\S]*by_owner_runId[\s\S]*status[\s\S]*running[\s\S]*projectId/);
+  assert.match(creditsSource, /shouldSkipExpiredBlaxelWorkspaceReservation[\s\S]*isBlaxelRuntimeWorkspaceReservation\(entry\)[\s\S]*hasRunningRuntimeRunForWorkspaceReservation[\s\S]*hasActiveBlaxelProjectWorkspaceLeasePointer/);
+  assert.match(creditsSource, /reconcileExpiredCreditReservationsInternal[\s\S]*await shouldSkipExpiredBlaxelWorkspaceReservation\(ctx, entry\)[\s\S]*skippedBlaxelWorkspaceReservations/);
+  assert.match(threadsSource, /RUNTIME_RUN_STALE_AFTER_MS = 8 \* 60 \* 1000/);
+  assert.match(threadsSource, /listStaleRunningRuntimeRunsInternal[\s\S]*by_status_updatedAt[\s\S]*status", "running"[\s\S]*lt\("updatedAt"/);
+  assert.match(threadsSource, /finalizeStaleCloudRuntimeRunInternal[\s\S]*isRuntimeRunStale[\s\S]*stale_runtime_workspace_run_reconciled/);
+  assert.match(creditsSource, /listReservedBlaxelRuntimeWorkspaceReservationsByRunInternal[\s\S]*by_run[\s\S]*isBlaxelRuntimeWorkspaceReservation/);
+  assert.match(creditsSource, /reconcileStaleRuntimeWorkspaceRunsInternal[\s\S]*listStaleRunningRuntimeRunsInternal[\s\S]*hasRuntimeWorkspaceEvidence[\s\S]*recordWorkspaceComputeChargeInternal[\s\S]*queueCreditSettlementRetryInternal[\s\S]*finalizeStaleCloudRuntimeRunInternal/);
+  assert.match(wakeSource, /finalizeExpiredBlaxelProjectWorkspaceLeasesInternal[\s\S]*listExpiredBlaxelProjectWorkspaceLeasesInternal/);
+  assert.match(wakeSource, /listBlaxelProjectWorkspaceLeasesMissingProjectExpiryInternal[\s\S]*requireExpiredReservation: true/);
+  assert.match(wakeSource, /finalizeBillableBlaxelProjectWorkspaceLease[\s\S]*getCreditLedgerEntryByKeyInternal[\s\S]*ledgerEntry\.status !== "reserved"[\s\S]*clearProjectWorkspaceLeaseAccounting/);
+  assert.match(wakeSource, /requireExpiredReservation === true[\s\S]*projectExpired[\s\S]*ledgerExpired[\s\S]*disposition: "not_expired"/);
+  assert.match(wakeSource, /ledgerOwnerMatches[\s\S]*ledgerProjectMatches[\s\S]*isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry/);
+  assert.match(wakeSource, /!isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry\(ledgerEntry\)[\s\S]*skipped_unsupported_action/);
+  assert.match(wakeSource, /startedAt !== null[\s\S]*settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*requireLedgerWrite: params\.requireLedgerWrite === true[\s\S]*clearProjectWorkspaceLeaseAccounting/);
+  assert.match(wakeSource, /settleReservedCreditsStrict[\s\S]*status: "refunded"[\s\S]*workspace_project_lease_released_before_start/);
+  assert.match(cronsSource, /reconcile stale runtime workspace runs[\s\S]*minutes: 5[\s\S]*reconcileStaleRuntimeWorkspaceRunsInternal[\s\S]*finalize expired blaxel project workspace leases[\s\S]*blaxelWorkspaceWake\.finalizeExpiredBlaxelProjectWorkspaceLeasesInternal[\s\S]*reconcile expired credit reservations/);
 }
 
 function main() {
@@ -365,7 +498,13 @@ function main() {
   testExpiredReservationRefundsHeldCredits();
   testDuplicateBalanceFailsClosed();
   testTargetedRepairAllowsTopupGrantOnce();
-  testDaytonaRawElapsedSettlementRefundsHoldRemainder();
+  testWorkspaceRawElapsedSettlementRefundsHoldRemainder();
+  testBlaxelWorkspacePricingUsesMemorySeconds();
+  testWorkspaceLedgerNameMapsToWorkspaceTools();
+  testBlaxelRuntimeReservationAndSettlementAreWired();
+  testReusableWorkspaceLeaseRequiresReservedLedgerEntry();
+  testManualWorkspaceStopSettlesReusableLease();
+  testExpiredBlaxelProjectLeaseFinalizationIsProviderAware();
   console.log("workspace_credit_accounting_behavior_test: ok");
 }
 

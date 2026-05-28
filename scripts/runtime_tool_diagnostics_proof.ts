@@ -121,12 +121,12 @@ assert.match(
 for (const field of [
   "reservations",
   "succeeded",
-  "refunded",
+  "released",
   "stillReserved",
   "failures",
   "reservedCredits",
   "settledCredits",
-  "refundedCredits",
+  "releasedCredits",
 ]) {
   assert.match(operatorTypes, new RegExp(`${field}: number`), `paid-tool diagnostics missing ${field}`);
 }
@@ -178,7 +178,7 @@ assert.match(
 );
 assert.match(
   operatorIntelligence,
-  /function buildPaidToolDiagnostics[\s\S]*reservedCredits[\s\S]*settledCredits[\s\S]*refundedCredits[\s\S]*unbilledComputeCharges/,
+  /function buildPaidToolDiagnostics[\s\S]*reservedCredits[\s\S]*settledCredits[\s\S]*releasedCredits[\s\S]*unbilledComputeCharges/,
   "operator tool economics must project safe paid-tool accounting aggregates",
 );
 assert.match(
@@ -248,8 +248,8 @@ assert.match(
 );
 assert.match(
   sharedWorkspaceCredits,
-  /PAID_TOOL_LEDGER_TOOL_NAMES = \["daytona_workspace", "web_research", "voice_transcribe"\]/,
-  "operator tool economics must use the canonical Daytona, web research, and voice paid-tool ledger rows",
+  /PAID_TOOL_LEDGER_TOOL_NAMES = \["workspace_compute", "web_research", "voice_transcribe"\]/,
+  "operator tool economics must use the canonical workspace, web research, and voice paid-tool ledger rows",
 );
 assert.match(
   operatorIntelligence,
@@ -399,7 +399,7 @@ assert.match(
 );
 assert.match(
   toolBalancePanelBlock,
-  /Credits settled[\s\S]*Credits refunded[\s\S]*Credit failures[\s\S]*Paid-tool failures[\s\S]*Unbilled compute[\s\S]*No paid-tool credit activity returned/,
+  /Credits settled[\s\S]*Credits released[\s\S]*Credit failures[\s\S]*Paid-tool failures[\s\S]*Unbilled compute[\s\S]*No paid-tool credit activity returned/,
   "operator panel must render compact paid-tool accounting and usage integrity",
 );
 assert.match(

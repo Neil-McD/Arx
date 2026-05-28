@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
-const EXPECTED_CONVEX_DEPLOYMENT = "quick-porcupine-949";
+const EXPECTED_CONVEX_DEPLOYMENT = "dev:quick-porcupine-949";
 const ACCEPTABLE_BLOCKING_CODE = "blaxel_volume_quota_exceeded";
 
 type ProbeFailure = {
@@ -29,6 +29,7 @@ type BlaxelConvexVolumeSmoke = {
     coldMarkerReadBack?: boolean;
     coldDirectoryListed?: boolean;
     coldSandboxDestroyed?: boolean;
+    volumeDestroyed?: boolean;
   };
   failures?: string[];
   errors?: Array<{ code?: string; message?: string; status?: number }>;
@@ -83,7 +84,7 @@ function validateSuccess(smoke: BlaxelConvexVolumeSmoke): string[] {
   }
   if (!smoke.hotSandboxName) failures.push("hot_sandbox_name_missing");
   if (!smoke.coldSandboxName) failures.push("cold_sandbox_name_missing");
-  if (smoke.volumeCleanupMode !== "stable_volume_retained_for_reuse") {
+  if (smoke.volumeCleanupMode !== "destroyed_after_smoke") {
     failures.push("unexpected_volume_cleanup_mode");
   }
   if (smoke.evidence?.providerPolicySelected !== true) failures.push("provider_policy_not_verified");
@@ -95,6 +96,7 @@ function validateSuccess(smoke: BlaxelConvexVolumeSmoke): string[] {
   if (smoke.evidence?.coldMarkerReadBack !== true) failures.push("cold_marker_not_read_back");
   if (smoke.evidence?.coldDirectoryListed !== true) failures.push("cold_directory_not_listed");
   if (smoke.evidence?.coldSandboxDestroyed !== true) failures.push("cold_cleanup_not_confirmed");
+  if (smoke.evidence?.volumeDestroyed !== true) failures.push("volume_cleanup_not_confirmed");
   if (Array.isArray(smoke.failures) && smoke.failures.length > 0) {
     failures.push(...smoke.failures.map((failure) => `remote_${failure}`));
   }

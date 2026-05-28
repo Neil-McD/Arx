@@ -1,11 +1,12 @@
 import { type AuthSessionLike } from "./authSession";
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
 
-export type DaytonaWorkspaceTerminalRecord = {
+export type WorkspaceTerminalRecord = {
   id: string;
   lifecycle_owner: "project_background";
   started_by_thread_id: string | null;
   started_by_run_id: string | null;
+  provider_sandbox_provider_id: "blaxel" | null;
   status: "starting" | "running" | "exited" | "failed" | "stopped";
   command: string;
   cwd: string | null;
@@ -62,7 +63,7 @@ export type DaytonaWorkspaceTerminalRecord = {
     | null;
 };
 
-export type DaytonaWorkspaceTerminalPreview = {
+export type WorkspaceTerminalPreview = {
   terminal_session_id: string;
   preview_port: number;
   preview_url: string;
@@ -72,15 +73,15 @@ export type DaytonaWorkspaceTerminalPreview = {
   expires_in_seconds: number;
 };
 
-export type DaytonaWorkspaceTerminalPreviewStatus =
-  DaytonaWorkspaceTerminalRecord["preview_status"];
+export type WorkspaceTerminalPreviewStatus =
+  WorkspaceTerminalRecord["preview_status"];
 
-export type DaytonaWorkspaceTerminalSnapshot = {
-  active: DaytonaWorkspaceTerminalRecord[];
-  recent: DaytonaWorkspaceTerminalRecord[];
+export type WorkspaceTerminalSnapshot = {
+  active: WorkspaceTerminalRecord[];
+  recent: WorkspaceTerminalRecord[];
 };
 
-export type DaytonaWorkspaceComputerStartResult =
+export type WorkspaceComputerStartResult =
   | {
       ok: true;
       status: "active";
@@ -96,16 +97,16 @@ export type DaytonaWorkspaceComputerStartResult =
       required_credits: number | null;
     };
 
-export type DaytonaWorkspaceComputerStopResult = {
+export type WorkspaceComputerStopResult = {
   ok: true;
-  status: "inactive";
+  status: "standby";
   stopped_count: number;
   provider_sandbox_id: string | null;
 };
 
 function mapWorkspaceTerminalRow(
   row: Record<string, unknown> | null | undefined,
-): DaytonaWorkspaceTerminalRecord {
+): WorkspaceTerminalRecord {
   return {
     id: String(row?.id ?? "").trim(),
     lifecycle_owner: "project_background",
@@ -117,7 +118,11 @@ function mapWorkspaceTerminalRow(
       typeof row?.started_by_run_id === "string" && row.started_by_run_id.trim()
         ? row.started_by_run_id.trim()
         : null,
-    status: (String(row?.status ?? "stopped").trim() || "stopped") as DaytonaWorkspaceTerminalRecord["status"],
+    provider_sandbox_provider_id:
+      row?.provider_sandbox_provider_id === "blaxel"
+        ? row.provider_sandbox_provider_id
+        : null,
+    status: (String(row?.status ?? "stopped").trim() || "stopped") as WorkspaceTerminalRecord["status"],
     command: String(row?.command ?? "").trim(),
     cwd: typeof row?.cwd === "string" && row.cwd.trim() ? row.cwd.trim() : null,
     preview_port: typeof row?.preview_port === "number" ? Math.floor(row.preview_port) : null,
@@ -133,19 +138,19 @@ function mapWorkspaceTerminalRow(
         : null,
     completion_reason:
       typeof row?.completion_reason === "string" && row.completion_reason.trim()
-        ? (row.completion_reason.trim() as DaytonaWorkspaceTerminalRecord["completion_reason"])
+        ? (row.completion_reason.trim() as WorkspaceTerminalRecord["completion_reason"])
         : null,
     output_tail:
       typeof row?.output_tail === "string" && row.output_tail.trim()
         ? row.output_tail
         : null,
     last_heartbeat_at: typeof row?.last_heartbeat_at === "number" ? row.last_heartbeat_at : null,
-    health_status: (String(row?.health_status ?? "unknown").trim() || "unknown") as DaytonaWorkspaceTerminalRecord["health_status"],
+    health_status: (String(row?.health_status ?? "unknown").trim() || "unknown") as WorkspaceTerminalRecord["health_status"],
     health_summary:
       typeof row?.health_summary === "string" && row.health_summary.trim()
         ? row.health_summary.trim()
         : null,
-    preview_status: (String(row?.preview_status ?? "none").trim() || "none") as DaytonaWorkspaceTerminalRecord["preview_status"],
+    preview_status: (String(row?.preview_status ?? "none").trim() || "none") as WorkspaceTerminalRecord["preview_status"],
     last_preview_probe_at:
       typeof row?.last_preview_probe_at === "number"
         ? row.last_preview_probe_at
@@ -164,20 +169,20 @@ function mapWorkspaceTerminalRow(
         : null,
     preview_transport_status:
       typeof row?.preview_transport_status === "string" && row.preview_transport_status.trim()
-        ? (row.preview_transport_status.trim() as DaytonaWorkspaceTerminalRecord["preview_transport_status"])
+        ? (row.preview_transport_status.trim() as WorkspaceTerminalRecord["preview_transport_status"])
         : null,
     preview_inspection_status:
       typeof row?.preview_inspection_status === "string" && row.preview_inspection_status.trim()
-        ? (row.preview_inspection_status.trim() as DaytonaWorkspaceTerminalRecord["preview_inspection_status"])
+        ? (row.preview_inspection_status.trim() as WorkspaceTerminalRecord["preview_inspection_status"])
         : null,
     preview_render_status:
       typeof row?.preview_render_status === "string" && row.preview_render_status.trim()
-        ? (row.preview_render_status.trim() as DaytonaWorkspaceTerminalRecord["preview_render_status"])
+        ? (row.preview_render_status.trim() as WorkspaceTerminalRecord["preview_render_status"])
         : null,
   };
 }
 
-function normalizeComputerStartResult(value: unknown): DaytonaWorkspaceComputerStartResult {
+function normalizeComputerStartResult(value: unknown): WorkspaceComputerStartResult {
   const row = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
@@ -214,7 +219,7 @@ function normalizeComputerStartResult(value: unknown): DaytonaWorkspaceComputerS
 export async function startProjectWorkspaceComputer<TSession>(params: {
   session: TSession;
   projectId: string;
-}): Promise<DaytonaWorkspaceComputerStartResult> {
+}): Promise<WorkspaceComputerStartResult> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const payload = await client.action("workspaceTerminals:startProjectWorkspaceComputer" as any, {
     authSubject,
@@ -226,7 +231,7 @@ export async function startProjectWorkspaceComputer<TSession>(params: {
 export async function stopProjectWorkspaceComputer<TSession>(params: {
   session: TSession;
   projectId: string;
-}): Promise<DaytonaWorkspaceComputerStopResult> {
+}): Promise<WorkspaceComputerStopResult> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const payload = await client.action("workspaceTerminals:stopProjectWorkspaceComputer" as any, {
     authSubject,
@@ -237,7 +242,7 @@ export async function stopProjectWorkspaceComputer<TSession>(params: {
     : {};
   return {
     ok: true,
-    status: "inactive",
+    status: "standby",
     stopped_count: Number.isFinite(Number(row.stopped_count)) ? Number(row.stopped_count) : 0,
     provider_sandbox_id:
       typeof row.provider_sandbox_id === "string" && row.provider_sandbox_id.trim()
@@ -249,7 +254,7 @@ export async function stopProjectWorkspaceComputer<TSession>(params: {
 export async function listProjectWorkspaceTerminalSnapshot<TSession>(params: {
   session: TSession;
   projectId: string;
-}): Promise<DaytonaWorkspaceTerminalSnapshot> {
+}): Promise<WorkspaceTerminalSnapshot> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const payload = (await client.action("workspaceTerminals:listProjectWorkspaceTerminalSnapshot" as any, {
     authSubject,
@@ -292,7 +297,7 @@ export async function getProjectWorkspaceTerminalPreviewUrl<TSession>(params: {
   session: TSession;
   terminalSessionId: string;
   runId?: string | null;
-}): Promise<DaytonaWorkspaceTerminalPreview | null> {
+}): Promise<WorkspaceTerminalPreview | null> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const payload = (await client.action("workspaceTerminals:getWorkspaceTerminalPreviewUrl" as any, {
     authSubject,
@@ -319,19 +324,19 @@ export async function recordProjectWorkspaceTerminalPreviewObservation<TSession>
   session: TSession;
   terminalSessionId: string;
   runId?: string | null;
-  previewStatus?: DaytonaWorkspaceTerminalPreviewStatus | null;
+  previewStatus?: WorkspaceTerminalPreviewStatus | null;
   previewProbeSummary?: string | null;
   browserObservationSummary?: string | null;
   previewTransportStatus?: Exclude<
-    DaytonaWorkspaceTerminalRecord["preview_transport_status"],
+    WorkspaceTerminalRecord["preview_transport_status"],
     null
   > | null;
   previewInspectionStatus?: Exclude<
-    DaytonaWorkspaceTerminalRecord["preview_inspection_status"],
+    WorkspaceTerminalRecord["preview_inspection_status"],
     null
   > | null;
   previewRenderStatus?: Exclude<
-    DaytonaWorkspaceTerminalRecord["preview_render_status"],
+    WorkspaceTerminalRecord["preview_render_status"],
     null
   > | null;
 }): Promise<void> {

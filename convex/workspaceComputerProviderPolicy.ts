@@ -5,8 +5,7 @@ import {
 } from "../shared/workspaceComputerProvider.ts";
 
 export type WorkspaceComputerProviderPolicySource =
-  | "default_daytona"
-  | "server_configured_daytona"
+  | "default_blaxel"
   | "server_configured_blaxel";
 
 export type WorkspaceComputerProviderPolicyDecision = {
@@ -17,23 +16,7 @@ export type WorkspaceComputerProviderPolicyDecision = {
 
 type WorkspaceComputerProviderPolicyInput = {
   serverConfiguredProviderId?: unknown;
-  blaxelEnabled?: unknown;
-  deploymentKind?: unknown;
 };
-
-function normalizeFlag(value: unknown): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    String(value ?? "").trim().toLowerCase(),
-  );
-}
-
-function normalizeDeploymentKind(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
-}
-
-function isBlaxelAllowedDeployment(value: unknown): boolean {
-  return normalizeDeploymentKind(value) === "staging";
-}
 
 function readServerEnv(name: string): string {
   try {
@@ -54,20 +37,6 @@ export function resolveWorkspaceComputerProviderPolicy(
   );
 
   if (configured === "blaxel") {
-    if (!normalizeFlag(input.blaxelEnabled)) {
-      return {
-        providerId: DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID,
-        source: "default_daytona",
-        reason: "blaxel_provider_not_enabled",
-      };
-    }
-    if (!isBlaxelAllowedDeployment(input.deploymentKind)) {
-      return {
-        providerId: DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID,
-        source: "default_daytona",
-        reason: "blaxel_provider_staging_only",
-      };
-    }
     return {
       providerId: "blaxel",
       source: "server_configured_blaxel",
@@ -78,14 +47,14 @@ export function resolveWorkspaceComputerProviderPolicy(
   if (String(input.serverConfiguredProviderId ?? "").trim()) {
     return {
       providerId: DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID,
-      source: "server_configured_daytona",
-      reason: "server_configured_provider",
+      source: "default_blaxel",
+      reason: "unsupported_provider_ignored",
     };
   }
 
   return {
     providerId: DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID,
-    source: "default_daytona",
+    source: "default_blaxel",
     reason: "default_provider",
   };
 }
@@ -94,7 +63,5 @@ export function resolveWorkspaceComputerProviderFromServerEnv():
   WorkspaceComputerProviderPolicyDecision {
   return resolveWorkspaceComputerProviderPolicy({
     serverConfiguredProviderId: readServerEnv("POLYNET_WORKSPACE_COMPUTER_PROVIDER"),
-    blaxelEnabled: readServerEnv("POLYNET_ENABLE_BLAXEL_WORKSPACE_PROVIDER"),
-    deploymentKind: readServerEnv("POLYNET_DEPLOYMENT_KIND"),
   });
 }

@@ -1,17 +1,11 @@
 import { internal } from "./_generated/api";
 import {
-  DAYTONA_WORKSPACE_ROOT,
-  getDaytonaSignedPreviewUrl,
-  type DaytonaConfig,
-} from "./daytonaSandboxClient";
-import { downloadDaytonaToolboxFileText } from "./daytonaToolboxFileSystem";
-import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
-import {
-  createDaytonaProcessSession,
-  deleteDaytonaProcessSession,
-  executeDaytonaProcessSessionCommand,
-  sendDaytonaProcessSessionCommandInput,
-} from "./daytonaProcessSessions";
+  executeBlaxelWorkspaceCommand,
+  getBlaxelWorkspacePreviewUrl,
+  readBlaxelWorkspaceProcess,
+  stopBlaxelWorkspaceProcess,
+} from "./blaxelWorkspaceComputerProvider.ts";
+import { BLAXEL_WORKSPACE_ROOT } from "./blaxelWorkspaceClient.ts";
 import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
 
 export type WorkspaceTerminalStatus =
@@ -67,9 +61,9 @@ export type WorkspaceTerminalStartArgs = {
 };
 
 export type WorkspaceTerminalProcessContext = {
-  config: DaytonaConfig;
-  toolboxProxyUrl: string;
+  providerId: "blaxel";
   providerSandboxId: string;
+  workspaceRoot?: string | null;
 };
 
 const ACTIVE_TERMINAL_STATUSES = new Set(["starting", "running"]);
@@ -255,33 +249,33 @@ export function normalizeWorkspaceTerminalStartArgs(
 }
 
 export function resolveWorkspaceCwd(cwd: string | null): string {
-  if (!cwd || cwd === ".") return DAYTONA_WORKSPACE_ROOT;
-  return `${DAYTONA_WORKSPACE_ROOT}/${cwd}`;
+  if (!cwd || cwd === ".") return BLAXEL_WORKSPACE_ROOT;
+  return `${BLAXEL_WORKSPACE_ROOT}/${cwd}`;
+}
+
+function resolveBlaxelWorkspaceRoot(session: WorkspaceTerminalProcessContext): string {
+  const normalized = String(session.workspaceRoot ?? "").trim();
+  return normalized || BLAXEL_WORKSPACE_ROOT;
+}
+
+function resolveWorkspaceCwdForSession(
+  session: WorkspaceTerminalProcessContext,
+  cwd: string | null,
+): string {
+  const root = resolveBlaxelWorkspaceRoot(session);
+  if (!cwd || cwd === ".") return root;
+  return `${root}/${cwd}`;
+}
+
+function resolveWorkspaceToolCwdForSession(
+  _session: WorkspaceTerminalProcessContext,
+  cwd: string | null,
+): string {
+  return cwd || ".";
 }
 
 function shellQuote(value: string): string {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
-}
-
-function sanitizeTerminalLogId(value: string): string {
-  return String(value ?? "")
-    .trim()
-    .replace(/[^a-zA-Z0-9_.-]/g, "_")
-    .slice(0, 160);
-}
-
-function buildTerminalOutputLogPath(providerSessionId: string): string {
-  const normalized = sanitizeTerminalLogId(providerSessionId) || "unknown";
-  return `/tmp/polynet-terminal-${normalized}.log`;
-}
-
-function wrapTerminalCommandWithOutputLog(command: string, logPath: string): string {
-  const inner = [
-    "set -o pipefail",
-    `: > ${shellQuote(logPath)}`,
-    `${command} 2>&1 | tee -a ${shellQuote(logPath)}`,
-  ].join("\n");
-  return `bash -lc ${shellQuote(inner)}`;
 }
 
 function parseNpmRunScriptName(command: string): string | null {
@@ -319,6 +313,19 @@ export function normalizeWorkspaceTerminalCommand(
   return `${normalized} --directory ${shellQuote(workspaceCwd)}`;
 }
 
+function normalizeWorkspaceTerminalIdentityCommand(params: {
+  command: string;
+  cwd: string | null;
+  session: WorkspaceTerminalProcessContext;
+}): string {
+  return normalizeWorkspaceTerminalCommand(
+    params.command,
+    resolveWorkspaceCwdForSession(params.session, params.cwd),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function buildWorkspaceTerminalSessionId(prefix: string): string {
   const cryptoObject = (globalThis as { crypto?: { randomUUID?: () => string } })
     .crypto;
@@ -329,26 +336,83 @@ export function buildWorkspaceTerminalSessionId(prefix: string): string {
   return `${prefix}-${randomSuffix}`;
 }
 
+async function findReusableWorkspaceTerminalProcess(params: {
+  ctx: any;
+  ownerId: any;
+  projectId: string;
+  session: WorkspaceTerminalProcessContext;
+  terminal: WorkspaceTerminalStartArgs;
+}): Promise<Record<string, unknown> | null> {
+  const rows = (await params.ctx.runQuery(
+    internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
+    {
+      ownerId: params.ownerId,
+      projectId: params.projectId,
+    },
+  )) as any[];
+  const requestedCommandIdentity = normalizeWorkspaceTerminalIdentityCommand({
+    command: params.terminal.command,
+    cwd: params.terminal.cwd,
+    session: params.session,
+  });
+  const requestedPreviewPath = normalizeOptionalString(params.terminal.previewPath);
+  const newestFirst = [...rows].sort(
+    (left, right) => Number(right?.updatedAt ?? 0) - Number(left?.updatedAt ?? 0),
+  );
+
+  for (const row of newestFirst) {
+    if (!isWorkspaceTerminalActiveStatus(row?.status)) continue;
+    if (
+      String(row?.providerSandboxId ?? "").trim() !==
+      params.session.providerSandboxId
+    ) {
+      continue;
+    }
+    const rowCommandIdentity = normalizeWorkspaceTerminalIdentityCommand({
+      command: String(row?.command ?? ""),
+      cwd: normalizeOptionalString(row?.cwd),
+      session: params.session,
+    });
+    const rowPreviewPort =
+      typeof row?.previewPort === "number" && Number.isFinite(row.previewPort)
+        ? Math.floor(row.previewPort)
+        : null;
+    const rowPreviewPath = normalizeOptionalString(row?.previewPath);
+    if (
+      rowCommandIdentity !== requestedCommandIdentity ||
+      rowPreviewPort !== params.terminal.previewPort ||
+      rowPreviewPath !== requestedPreviewPath
+    ) {
+      continue;
+    }
+
+    const summary = await readWorkspaceTerminalProcess({
+      ctx: params.ctx,
+      row,
+      session: params.session,
+    });
+    if (
+      !isWorkspaceTerminalActiveStatus(
+        (summary as { status?: unknown } | null)?.status,
+      )
+    ) {
+      continue;
+    }
+    return {
+      ok: true,
+      reused_existing: true,
+      provider_session_id: normalizeOptionalString(row?.providerSessionId),
+      ...summary,
+    };
+  }
+
+  return null;
+}
+
 export function truncateTerminalOutputTail(value: string): string {
   const normalized = String(value ?? "");
   if (normalized.length <= TERMINAL_OUTPUT_TAIL_MAX_CHARS) return normalized;
   return normalized.slice(normalized.length - TERMINAL_OUTPUT_TAIL_MAX_CHARS);
-}
-
-async function readTerminalFallbackOutputLog(params: {
-  config: DaytonaConfig;
-  toolboxProxyUrl: string;
-  sandboxId: string;
-  providerSessionId: string;
-}): Promise<string> {
-  const result = await downloadDaytonaToolboxFileText({
-    config: params.config,
-    toolboxProxyUrl: params.toolboxProxyUrl,
-    sandboxId: params.sandboxId,
-    path: buildTerminalOutputLogPath(params.providerSessionId),
-  });
-  if (!result.ok) return "";
-  return String(result.value ?? "");
 }
 
 async function runPreviewStartPreflight(params: {
@@ -386,14 +450,13 @@ if (/\\bvite\\b/.test(launchCommand) || /node_modules\\/vite\\/bin\\/vite\\.js/.
 }
 console.log("preview preflight ok");
 `.trim();
-  const result = await executeDaytonaCommand({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    command: `node -e ${shellQuote(nodeScript)}${scriptName ? ` ${shellQuote(scriptName)}` : ""}`,
+  const command = `node -e ${shellQuote(nodeScript)}${scriptName ? ` ${shellQuote(scriptName)}` : ""}`;
+  const result = await executeBlaxelWorkspaceCommand({
+    sandboxName: params.session.providerSandboxId,
+    command,
     cwd: params.workspaceCwd,
+    waitForCompletion: true,
     timeoutSeconds: 15,
-    allowNonZero: true,
   });
   if (!result.ok) {
     return {
@@ -442,6 +505,7 @@ async function createFailedWorkspaceTerminalStartRow(params: {
         : undefined,
       startedByRunId: params.startedByRunId ?? undefined,
       providerSandboxId: params.session.providerSandboxId,
+      providerSandboxProviderId: "blaxel",
       providerSessionId,
       providerCommandId: "preflight",
       command: params.terminal.command,
@@ -511,6 +575,7 @@ export function summarizeWorkspaceTerminalRow(row: any): Record<string, unknown>
         : null,
     completion_reason: normalizeOptionalString(row?.completionReason),
     lifecycle_owner: normalizeWorkspaceTerminalLifecycleOwner(row?.lifecycleOwner),
+    provider_sandbox_provider_id: normalizeOptionalString(row?.providerSandboxProviderId),
     started_by_thread_id: normalizeOptionalString(
       row?.startedByThreadId ?? row?.threadId,
     ),
@@ -540,6 +605,19 @@ export function summarizeWorkspaceTerminalRow(row: any): Record<string, unknown>
   };
 }
 
+export function resolveWorkspaceTerminalRowProviderId(_row: any): "blaxel" {
+  return "blaxel";
+}
+
+export function buildBlaxelTerminalProcessContextFromRow(
+  row: any,
+): WorkspaceTerminalProcessContext {
+  return {
+    providerId: "blaxel",
+    providerSandboxId: String(row?.providerSandboxId ?? "").trim(),
+  };
+}
+
 export function readWorkspaceToolFailureOutputPreview(details: unknown): string {
   const record =
     details && typeof details === "object" && !Array.isArray(details)
@@ -553,6 +631,138 @@ export function readWorkspaceToolFailureOutputPreview(details: unknown): string 
   return "";
 }
 
+function mapBlaxelProcessStatus(params: {
+  status: string | null;
+  exitCode: number | null;
+  fallbackStatus: unknown;
+}): WorkspaceTerminalStatus {
+  const normalized = String(params.status ?? "").trim().toLowerCase();
+  if (normalized.includes("stop") || normalized.includes("kill")) return "stopped";
+  if (normalized.includes("run") || normalized.includes("start") || normalized.includes("pending")) {
+    return "running";
+  }
+  if (params.exitCode !== null) return params.exitCode === 0 ? "exited" : "failed";
+  if (normalized.includes("success") || normalized.includes("complete") || normalized.includes("exit")) {
+    return "exited";
+  }
+  if (normalized.includes("fail") || normalized.includes("error")) return "failed";
+  const fallback = String(params.fallbackStatus ?? "").trim().toLowerCase();
+  return isWorkspaceTerminalActiveStatus(fallback) ? "running" : "stopped";
+}
+
+export async function readWorkspaceTerminalProcess(params: {
+  ctx: any;
+  row: any;
+  session: WorkspaceTerminalProcessContext | null;
+}): Promise<Record<string, unknown>> {
+  if (!params.session || params.session.providerId !== "blaxel") {
+    return summarizeWorkspaceTerminalRow(params.row);
+  }
+  const processName =
+    normalizeOptionalString(params.row?.providerSessionId) ??
+    normalizeOptionalString(params.row?.providerCommandId);
+  if (!processName) {
+    return {
+      ok: false,
+      status: 404,
+      code: "terminal_not_found",
+      message: "Terminal process id is missing.",
+    };
+  }
+  const read = await readBlaxelWorkspaceProcess({
+    sandboxName: params.session.providerSandboxId,
+    processName,
+  });
+  if (!read.ok) {
+    if (
+      read.code === "blaxel_sandbox_not_found" ||
+      read.code === "blaxel_process_not_found"
+    ) {
+      const nowMs = Date.now();
+      const patched = await params.ctx.runMutation(
+        internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+        {
+          terminalSessionId: params.row._id,
+          status: "stopped",
+          updatedAt: nowMs,
+          finishedAt: nowMs,
+          completionRecordedAt: params.row.completionRecordedAt ?? nowMs,
+          completionReason:
+            read.code === "blaxel_sandbox_not_found"
+              ? "sandbox_missing"
+              : "session_missing",
+          healthStatus: "stale",
+          healthSummary:
+            read.code === "blaxel_sandbox_not_found"
+              ? "Workspace computer is no longer active."
+              : "Workspace process is no longer available.",
+          previewStatus: workspaceTerminalHasPreview(params.row)
+            ? "server_exited"
+            : "none",
+        },
+      );
+      return {
+        ok: true,
+        ...summarizeWorkspaceTerminalRow(patched ?? params.row),
+      };
+    }
+    return {
+      ok: false,
+      status: read.status,
+      code: read.code,
+      message: read.message,
+    };
+  }
+  const nextStatus = mapBlaxelProcessStatus({
+    status: read.status,
+    exitCode: read.exitCode,
+    fallbackStatus: params.row?.status,
+  });
+  const nowMs = Date.now();
+  const outputTail = truncateTerminalOutputTail(
+    [read.logs, read.stdout, read.stderr].filter(Boolean).join("\n"),
+  );
+  const patch: Record<string, unknown> = {
+    terminalSessionId: params.row._id,
+    status: nextStatus,
+    updatedAt: nowMs,
+    lastHeartbeatAt: nowMs,
+    lastOutputTail: outputTail,
+    healthStatus: healthStatusForTerminalStatus(nextStatus),
+    healthSummary:
+      nextStatus === "running"
+        ? "Process is running."
+        : nextStatus === "failed"
+          ? `Process failed${read.exitCode === null ? "" : ` with exit code ${read.exitCode}`}.`
+          : nextStatus === "stopped"
+            ? "Process was stopped."
+            : `Process exited${read.exitCode === null ? "" : ` with code ${read.exitCode}`}.`,
+    previewStatus: previewStatusForTerminalStatus(
+      nextStatus,
+      workspaceTerminalHasPreview(params.row),
+    ),
+  };
+  if (!isWorkspaceTerminalActiveStatus(nextStatus)) {
+    patch.finishedAt = nowMs;
+    patch.completionRecordedAt = params.row.completionRecordedAt ?? nowMs;
+    patch.completionReason =
+      nextStatus === "failed"
+        ? "failed"
+        : nextStatus === "stopped"
+          ? "stopped"
+          : "exited";
+    if (read.exitCode !== null) patch.exitCode = read.exitCode;
+  }
+  const patched = await params.ctx.runMutation(
+    internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+    patch,
+  );
+  return {
+    ok: true,
+    ...summarizeWorkspaceTerminalRow(patched ?? params.row),
+  };
+}
+
 export async function startWorkspaceTerminalProcess(params: {
   ctx: any;
   ownerId: any;
@@ -563,25 +773,22 @@ export async function startWorkspaceTerminalProcess(params: {
   terminal: WorkspaceTerminalStartArgs;
   providerSessionIdPrefix: string;
 }): Promise<Record<string, unknown>> {
+  const reusable = await findReusableWorkspaceTerminalProcess({
+    ctx: params.ctx,
+    ownerId: params.ownerId,
+    projectId: params.projectId,
+    session: params.session,
+    terminal: params.terminal,
+  });
+  if (reusable) return reusable;
+
   const providerSessionId = buildWorkspaceTerminalSessionId(
     params.providerSessionIdPrefix,
   );
-  const processSession = await createDaytonaProcessSession({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    sessionId: providerSessionId,
-  });
-  if (!processSession.ok) {
-    return {
-      ok: false,
-      status: processSession.status,
-      code: processSession.code,
-      message: processSession.message,
-    };
-  }
-
-  const workspaceCwd = resolveWorkspaceCwd(params.terminal.cwd);
+  const workspaceCwd = resolveWorkspaceCwdForSession(
+    params.session,
+    params.terminal.cwd,
+  );
   if (params.terminal.previewPort !== null) {
     const preflight = await runPreviewStartPreflight({
       session: params.session,
@@ -589,12 +796,6 @@ export async function startWorkspaceTerminalProcess(params: {
       workspaceCwd,
     });
     if (!preflight.ok) {
-      await deleteDaytonaProcessSession({
-        config: params.session.config,
-        toolboxProxyUrl: params.session.toolboxProxyUrl,
-        sandboxId: params.session.providerSandboxId,
-        sessionId: processSession.sessionId,
-      });
       return await createFailedWorkspaceTerminalStartRow({
         ctx: params.ctx,
         ownerId: params.ownerId,
@@ -610,28 +811,20 @@ export async function startWorkspaceTerminalProcess(params: {
       });
     }
   }
-  const terminalOutputLogPath = buildTerminalOutputLogPath(
-    processSession.sessionId,
-  );
-  const executed = await executeDaytonaProcessSessionCommand({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    sessionId: processSession.sessionId,
-    command: wrapTerminalCommandWithOutputLog(
-      normalizeWorkspaceTerminalCommand(params.terminal.command, workspaceCwd),
-      terminalOutputLogPath,
+  const executed = await executeBlaxelWorkspaceCommand({
+    sandboxName: params.session.providerSandboxId,
+    processName: providerSessionId,
+    command: normalizeWorkspaceTerminalCommand(
+      params.terminal.command,
+      workspaceCwd,
     ),
-    cwd: workspaceCwd,
-    runAsync: true,
+    cwd: resolveWorkspaceToolCwdForSession(params.session, params.terminal.cwd),
+    waitForCompletion: false,
+    timeoutSeconds: 86_400,
+    waitForPorts:
+      params.terminal.previewPort !== null ? [params.terminal.previewPort] : null,
   });
   if (!executed.ok) {
-    await deleteDaytonaProcessSession({
-      config: params.session.config,
-      toolboxProxyUrl: params.session.toolboxProxyUrl,
-      sandboxId: params.session.providerSandboxId,
-      sessionId: processSession.sessionId,
-    });
     return {
       ok: false,
       status: executed.status,
@@ -653,8 +846,9 @@ export async function startWorkspaceTerminalProcess(params: {
         : undefined,
       startedByRunId: params.startedByRunId ?? undefined,
       providerSandboxId: params.session.providerSandboxId,
-      providerSessionId: processSession.sessionId,
-      providerCommandId: executed.commandId,
+      providerSandboxProviderId: "blaxel",
+      providerSessionId,
+      providerCommandId: executed.providerCommandId ?? providerSessionId,
       command: params.terminal.command,
       cwd: params.terminal.cwd ?? undefined,
       previewPort: params.terminal.previewPort ?? undefined,
@@ -668,14 +862,16 @@ export async function startWorkspaceTerminalProcess(params: {
       healthSummary: "Process is running.",
       previewStatus:
         params.terminal.previewPort !== null ? "running" : "none",
-      lastOutputTail: truncateTerminalOutputTail(executed.outputText || ""),
+      lastOutputTail: truncateTerminalOutputTail(
+        [executed.stdout, executed.stderr].filter(Boolean).join("\n"),
+      ),
     },
   );
   const terminalSessionId = String(createdRow?._id ?? "").trim();
   return {
     ok: true,
     terminal_session_id: terminalSessionId,
-    provider_session_id: processSession.sessionId,
+    provider_session_id: providerSessionId,
     reused_existing: false,
     ...summarizeWorkspaceTerminalRow(createdRow),
   };
@@ -695,33 +891,11 @@ export async function writeWorkspaceTerminalProcessInput(params: {
       message: "Terminal is not running.",
     };
   }
-  const sent = await sendDaytonaProcessSessionCommandInput({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    sessionId: String(params.row.providerSessionId ?? "").trim(),
-    commandId: String(params.row.providerCommandId ?? "").trim(),
-    data: params.input,
-  });
-  if (!sent.ok) {
-    return {
-      ok: false,
-      status: sent.status,
-      code: sent.code,
-      message: sent.message,
-    };
-  }
-  const patched = await params.ctx.runMutation(
-    internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-    {
-      terminalSessionId: params.row._id,
-      updatedAt: Date.now(),
-      lastHeartbeatAt: Date.now(),
-    },
-  );
   return {
-    ok: true,
-    ...summarizeWorkspaceTerminalRow(patched ?? params.row),
+    ok: false,
+    status: 501,
+    code: "terminal_input_not_supported",
+    message: "Interactive terminal input is not available for Blaxel workspace processes yet.",
   };
 }
 
@@ -760,12 +934,15 @@ export async function stopWorkspaceTerminalProcess(params: {
     String(row.providerSandboxId ?? "").trim() ===
       params.session.providerSandboxId
   ) {
-    await deleteDaytonaProcessSession({
-      config: params.session.config,
-      toolboxProxyUrl: params.session.toolboxProxyUrl,
-      sandboxId: params.session.providerSandboxId,
-      sessionId: String(row.providerSessionId ?? "").trim(),
-    });
+    const processName =
+      normalizeOptionalString(row.providerSessionId) ??
+      normalizeOptionalString(row.providerCommandId);
+    if (processName) {
+      await stopBlaxelWorkspaceProcess({
+        sandboxName: params.session.providerSandboxId,
+        processName,
+      });
+    }
   }
   const nowMs = Date.now();
   const patched = await params.ctx.runMutation(
@@ -826,18 +1003,19 @@ export async function resolveWorkspaceTerminalPreview(params: {
     };
   }
 
-  const signed = await getDaytonaSignedPreviewUrl({
-    config: params.session.config,
-    sandboxId: params.session.providerSandboxId,
+  const preview = await getBlaxelWorkspacePreviewUrl({
+    sandboxName: params.session.providerSandboxId,
     port: previewPort,
-    expiresInSeconds: 3600,
+    previewName:
+      normalizeOptionalString(params.row.previewLabel) ?? `port-${previewPort}`,
+    public: true,
   });
-  if (!signed.ok) return signed;
+  if (!preview.ok) return preview;
 
   const previewProxyToken = await mintPreviewProxySessionToken({
     kind: "workspace_preview",
-    previewUrl: signed.url,
-    previewToken: signed.token,
+    previewUrl: preview.url,
+    previewToken: null,
     expiresAtMs: Date.now() + 3600 * 1000,
   });
   if (!previewProxyToken.ok) {
@@ -853,7 +1031,7 @@ export async function resolveWorkspaceTerminalPreview(params: {
     ok: true,
     terminal_session_id: String(params.row._id ?? "").trim(),
     preview_port: previewPort,
-    preview_url: signed.url,
+    preview_url: preview.url,
     preview_proxy_token: previewProxyToken.token,
     preview_path: normalizeOptionalString(params.row.previewPath),
     preview_label: normalizeOptionalString(params.row.previewLabel),

@@ -67,11 +67,11 @@ export function resolveCloudThreadProjectId<
   TProject extends CloudProjectLike,
 >(
   thread: TThread,
-  projectById: Map<string, TProject>,
+  _projectById: Map<string, TProject>,
   defaultWorkspaceProjectId: string | null,
 ): string | null {
   const direct = String(thread.project_id ?? "").trim();
-  if (direct && projectById.has(direct)) return direct;
+  if (direct) return direct;
   return defaultWorkspaceProjectId;
 }
 

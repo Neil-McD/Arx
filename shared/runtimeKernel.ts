@@ -18,6 +18,12 @@ import type {
   RuntimeKernelToolExecutionResult,
   RuntimeKernelToolResultEnvelope,
 } from "./runtimeKernelTypes.ts";
+import {
+  classifyPaidUsageFailure,
+  normalizePaidUsageBillingMode,
+  paidUsageBillingModeForPaidToolFailure,
+} from "./paidUsageBilling.ts";
+import { normalizePaidToolKind } from "./workspaceCredits.ts";
 
 function summarizeLongText(value: string, limit = 512): string {
   if (value.length <= limit) return value;
@@ -132,17 +138,6 @@ function buildToolExecutionExceptionResult(
   };
 }
 
-function normalizeToolBalanceTerminalCode(code: string | null | undefined): string | null {
-  const normalized = String(code ?? "").trim().toLowerCase();
-  if (normalized === "credits_exhausted" || normalized === "workspace_credits_exhausted") {
-    return "workspace_credits_exhausted";
-  }
-  if (normalized === "credits_unavailable" || normalized === "workspace_credits_unavailable") {
-    return "workspace_credits_unavailable";
-  }
-  return null;
-}
-
 function buildToolBalanceTerminalSignal<TToolName extends string>(
   toolResult: RuntimeKernelToolExecutionResult,
 ): {
@@ -152,13 +147,27 @@ function buildToolBalanceTerminalSignal<TToolName extends string>(
   message: string;
   toolKind: string | null;
   requiredCredits: number | null;
+  paidUsageBillingMode: ReturnType<typeof paidUsageBillingModeForPaidToolFailure>;
 } | null {
-  const code = normalizeToolBalanceTerminalCode(toolResult.errorCode);
-  if (!code) return null;
   const details = toolResult.details && typeof toolResult.details === "object"
     ? toolResult.details
     : null;
   const rawRequiredCredits = Number(details?.required_credits ?? details?.requiredCredits ?? 0);
+  const toolKind = typeof details?.tool_kind === "string"
+    ? details.tool_kind
+    : typeof details?.toolKind === "string"
+      ? details.toolKind
+      : null;
+  const paidUsageFailure = classifyPaidUsageFailure({
+    code: toolResult.errorCode,
+    toolKind: normalizePaidToolKind(toolKind),
+    paidUsageBillingMode:
+      details?.paid_usage_billing_mode ??
+      details?.paidUsageBillingMode ??
+      details?.billing_mode,
+  });
+  if (!paidUsageFailure.isPaidUsageFailure) return null;
+  const code = paidUsageFailure.code ?? "workspace_credits_exhausted";
   const fallbackMessage =
     code === "workspace_credits_exhausted"
       ? "Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run."
@@ -168,14 +177,17 @@ function buildToolBalanceTerminalSignal<TToolName extends string>(
     code,
     stopReason: "tool_error_unrecoverable",
     message: String(toolResult.errorMessage ?? "").trim() || fallbackMessage,
-    toolKind: typeof details?.tool_kind === "string"
-      ? details.tool_kind
-      : typeof details?.toolKind === "string"
-        ? details.toolKind
-        : null,
+    toolKind,
     requiredCredits: Number.isFinite(rawRequiredCredits) && rawRequiredCredits > 0
       ? rawRequiredCredits
       : null,
+    paidUsageBillingMode:
+      paidUsageFailure.paidUsageBillingMode ??
+      normalizePaidUsageBillingMode(
+        details?.paid_usage_billing_mode ??
+          details?.paidUsageBillingMode ??
+          details?.billing_mode,
+      ) ?? paidUsageBillingModeForPaidToolFailure(normalizePaidToolKind(toolKind)),
   };
 }
 
@@ -198,6 +210,7 @@ function toKernelFailure<TToolName extends string>(params: {
     message: params.failure.message,
     toolKind: params.failure.toolKind ?? null,
     requiredCredits: params.failure.requiredCredits ?? null,
+    paidUsageBillingMode: params.failure.paidUsageBillingMode ?? null,
     pendingToolCallId: params.failure.pendingToolCallId,
     pendingToolName: params.failure.pendingToolName,
     transcript: [...params.transcript],
@@ -450,6 +463,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     message: string;
     toolKind?: string | null;
     requiredCredits?: number | null;
+    paidUsageBillingMode?: ReturnType<typeof paidUsageBillingModeForPaidToolFailure> | null;
   };
 
   const buildTerminalFailure = (
@@ -462,6 +476,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     message: signal.message,
     toolKind: signal.toolKind ?? null,
     requiredCredits: signal.requiredCredits ?? null,
+    paidUsageBillingMode: signal.paidUsageBillingMode ?? null,
     promptTokens,
     completionTokens,
     transcript: [...transcript],

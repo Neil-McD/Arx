@@ -177,7 +177,7 @@ forbid_match_in_file "$SEND_FLOW_FILE" 'resolveAuthenticatedTurnToolMode' \
   "browser send flow no longer uses heuristic tool mode classification"
 forbid_match_in_file "$SEND_FLOW_FILE" 'TRIVIAL_CHAT_MESSAGE_RE|CHAT_TOOLS_ACTION_RE|WORKSPACE_ACTION_RE' \
   "browser send flow no longer uses regex intent heuristics"
-forbid_match_in_file "$SEND_FLOW_FILE" 'return argsRef\.current\.hasPaidAccess \? "daytona_workspace" : "chat";' \
+forbid_match_in_file "$SEND_FLOW_FILE" 'return argsRef\.current\.hasPaidAccess \? "workspace_compute" : "chat";' \
   "browser send flow no longer routes paid turns to workspace by default"
 forbid_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
   "runtime no longer uses a separate eager workspace executor"

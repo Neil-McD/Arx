@@ -18,14 +18,14 @@ function assertNotContains(haystack: string, needle: string, label: string): voi
   assert.ok(!haystack.includes(needle), `did not expect ${label}`);
 }
 
-const handler = readText("/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts");
+const handler = readText("convex/runtimeTurnHandlers.ts");
 const runtimeTurnContextLoader = readText(
-  "/Users/neilmcdevitt/code/arx/convex/runtimeTurnContext.ts",
+  "convex/runtimeTurnContext.ts",
 );
 const runtimeTurnState = readText(
-  "/Users/neilmcdevitt/code/arx/convex/httpRuntimeTurnState.ts",
+  "convex/httpRuntimeTurnState.ts",
 );
-const finalizer = readText("/Users/neilmcdevitt/code/arx/shared/runtimeFailureFinalizer.ts");
+const finalizer = readText("shared/runtimeFailureFinalizer.ts");
 
 assertContains(
   handler,
@@ -245,7 +245,7 @@ for (const token of [
 const currentRunState = summarizeRuntimeWorkingStateFromEvents({
   latestUserText: "Build an app",
   runStatus: "error",
-  runErrorMessage: "Daytona toolbox command failed (408)",
+  runErrorMessage: "workspace toolbox command failed (408)",
   events: [
     {
       eventType: "tool_call_finished",
@@ -257,7 +257,7 @@ const currentRunState = summarizeRuntimeWorkingStateFromEvents({
         tool_name: "bash",
         status: "error",
         args: { command: "npm run build" },
-        error_message: "Daytona toolbox command failed (408)",
+        error_message: "workspace toolbox command failed (408)",
       },
     },
   ],
@@ -270,20 +270,20 @@ const output = buildRuntimeFailureFinalAnswer({
   status: "error",
   reason: "tool_failed",
   errorCode: "workspace_tool_execute_failed",
-  errorMessage: "Daytona toolbox command failed (408)",
+  errorMessage: "workspace toolbox command failed (408)",
 });
 
 assert.equal(output.usedFallback, true);
 assert.equal(
   output.content,
-  "I hit a runtime stop before I could finish. Runtime note: Daytona toolbox command failed (408)",
+  "I hit a runtime stop before I could finish. Runtime note: workspace toolbox command failed (408)",
 );
 
 const processAwareOutput = buildRuntimeFailureFinalAnswer({
   status: "error",
   reason: "tool_failed",
   errorCode: "workspace_tool_execute_failed",
-  errorMessage: "Daytona command failed with exit code 127.",
+  errorMessage: "workspace command failed with exit code 127.",
   runtimeTurnContext: {
     activeBackgroundTerminals: [
       {

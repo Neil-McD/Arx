@@ -1,26 +1,23 @@
 import { internal } from "./_generated/api";
-import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
-  isWorkspaceTerminalActiveStatus,
-  normalizeWorkspaceTerminalCommand,
+  buildBlaxelTerminalProcessContextFromRow,
   normalizeWorkspaceTerminalStartArgs,
+  readWorkspaceTerminalProcess,
   readWorkspaceToolFailureOutputPreview,
-  resolveWorkspaceCwd,
   startWorkspaceTerminalProcess,
   stopWorkspaceTerminalProcess,
   summarizeWorkspaceTerminalRow,
   writeWorkspaceTerminalProcessInput,
 } from "./workspaceTerminalProcessCore";
 import {
-  ensureProjectBackgroundSandbox,
-  releaseProjectBackgroundSandboxIfIdle,
-  resolveTerminalSandboxContext,
-} from "./workspaceTerminalBackgroundService";
-import {
   createProjectRuntimeWorkspaceSession,
+  settleRuntimeWorkspaceSession,
   type RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
-import { reconcileWorkspaceTerminalRow } from "./workspaceTerminalReconciliation";
+import {
+  buildWorkspaceCreditBudgetSignal,
+  isWorkspaceCreditBudgetExpired,
+} from "./workspaceCreditBudgetSignal.ts";
 import {
   createRuntimeMcpManager,
   type RuntimeMcpConnectionBundle,
@@ -31,10 +28,7 @@ import {
   normalizeResolveMountedToolsArguments,
   RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
 } from "./runtimeMountedToolExposure";
-import type {
-  NativeToolAwareMessage,
-  NativeToolInputContentPart,
-} from "../shared/nativeToolProtocol";
+import type { NativeToolAwareMessage } from "../shared/nativeToolProtocol";
 import type { NativeToolExecutionResult } from "../shared/nativeToolLoop";
 import {
   type RetrievalToolName,
@@ -140,6 +134,7 @@ function buildTerminalToolResultDetails(
     "last_heartbeat_at",
     "last_preview_probe_summary",
     "last_browser_observation_summary",
+    "provider_sandbox_provider_id",
     "exit_code",
     "output_tail",
     "code",
@@ -155,56 +150,13 @@ function buildTerminalToolResultDetails(
   return Object.keys(details).length > 0 ? details : null;
 }
 
-function normalizeRuntimeTerminalIdentityCommand(
-  command: string,
-  cwd: string | null,
-): string {
-  return normalizeWorkspaceTerminalCommand(command, resolveWorkspaceCwd(cwd))
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function isWorkspaceCreditBudgetExpired(
-  session: RuntimeWorkspaceSession | null | undefined,
-): boolean {
-  const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
-  return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
-}
-
-function buildWorkspaceCreditBudgetSignal(
+function buildTerminalProcessContextFromWorkspaceSession(
   session: RuntimeWorkspaceSession,
-  parentSignal?: AbortSignal,
-): { signal?: AbortSignal; cleanup: () => void } {
-  const expiresAt = Number(session.creditBudgetExpiresAt ?? 0);
-  if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
-    return { signal: parentSignal, cleanup: () => {} };
-  }
-  const remainingMs = Math.max(0, expiresAt - Date.now());
-  const controller = new AbortController();
-  let settled = false;
-  const cleanupFns: Array<() => void> = [];
-  const abort = () => {
-    if (settled) return;
-    settled = true;
-    controller.abort();
-  };
-  const timeout = setTimeout(abort, remainingMs);
-  cleanupFns.push(() => clearTimeout(timeout));
-  if (parentSignal) {
-    if (parentSignal.aborted) {
-      abort();
-    } else {
-      const onAbort = () => abort();
-      parentSignal.addEventListener("abort", onAbort, { once: true });
-      cleanupFns.push(() => parentSignal.removeEventListener("abort", onAbort));
-    }
-  }
+) {
   return {
-    signal: controller.signal,
-    cleanup: () => {
-      settled = true;
-      for (const cleanup of cleanupFns) cleanup();
-    },
+    providerId: "blaxel" as const,
+    providerSandboxId: session.providerSandboxId,
+    workspaceRoot: session.workspaceRoot,
   };
 }
 
@@ -240,52 +192,6 @@ async function requireRuntimeAccessibleTerminalRow(params: {
     ok: true,
     row,
   };
-}
-
-function isInlineImageDataUrl(value: unknown): value is string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .startsWith("data:image/");
-}
-
-function dataUrlToBlob(dataUrl: string): { blob: Blob; mimeType: string } {
-  const trimmed = dataUrl.trim();
-  const match = /^data:([^;,]+);base64,(.+)$/i.exec(trimmed);
-  if (!match) throw new Error("invalid_image_data_url");
-  const mimeType = match[1]!.trim() || "application/octet-stream";
-  const binary = atob(match[2]!.trim());
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return {
-    blob: new Blob([bytes], { type: mimeType }),
-    mimeType,
-  };
-}
-
-function extractComputerUseObservation(
-  observationContent: NativeToolInputContentPart[] | null | undefined,
-): { summary: string | null; imageUrl: string | null } {
-  if (!Array.isArray(observationContent) || observationContent.length === 0) {
-    return { summary: null, imageUrl: null };
-  }
-  let summary: string | null = null;
-  let imageUrl: string | null = null;
-  for (const part of observationContent) {
-    if (!part || part.source !== "computer_use_observation") continue;
-    if (part.type === "text" && !summary) {
-      const nextSummary = String(part.text ?? "").trim();
-      if (nextSummary) summary = nextSummary;
-      continue;
-    }
-    if (part.type === "image" && !imageUrl) {
-      const nextUrl = String(part.imageUrl ?? "").trim();
-      if (nextUrl) imageUrl = nextUrl;
-    }
-  }
-  return { summary, imageUrl };
 }
 
 export function createPolyNetExecutionSession(params: {
@@ -381,14 +287,8 @@ export function createPolyNetExecutionSession(params: {
             runId: params.runId,
             state: paramsForPersist.state,
             providerSandboxId: paramsForPersist.session.providerSandboxId,
-            toolboxProxyUrl:
-              paramsForPersist.session.providerId === "daytona"
-                ? paramsForPersist.session.toolboxProxyUrl
-                : undefined,
-            region:
-              paramsForPersist.session.providerId === "daytona"
-                ? paramsForPersist.session.region ?? undefined
-                : undefined,
+            toolboxProxyUrl: undefined,
+            region: undefined,
           },
         );
         return { ok: true };
@@ -419,58 +319,6 @@ export function createPolyNetExecutionSession(params: {
     return {
       ok: false,
       attemptCount,
-    };
-  };
-
-  const enrichComputerUseToolResult = async (paramsForEnrich: {
-    toolName: RetrievalToolName;
-    toolResult: NativeToolExecutionResult;
-  }): Promise<NativeToolExecutionResult> => {
-    if (!isComputerUseToolName(paramsForEnrich.toolName)) {
-      return paramsForEnrich.toolResult;
-    }
-    const existingDetails =
-      paramsForEnrich.toolResult.details &&
-      typeof paramsForEnrich.toolResult.details === "object" &&
-      !Array.isArray(paramsForEnrich.toolResult.details)
-        ? {
-            ...(paramsForEnrich.toolResult.details as Record<string, unknown>),
-          }
-        : {};
-    const existingComputerUseDetails =
-      existingDetails.computer_use &&
-      typeof existingDetails.computer_use === "object" &&
-      !Array.isArray(existingDetails.computer_use)
-        ? { ...(existingDetails.computer_use as Record<string, unknown>) }
-        : {};
-    const { summary, imageUrl } = extractComputerUseObservation(
-      paramsForEnrich.toolResult.observationContent,
-    );
-    const computerUseDetails: Record<string, unknown> = {
-      ...existingComputerUseDetails,
-      action: paramsForEnrich.toolName,
-      summary:
-        summary ||
-        (typeof paramsForEnrich.toolResult.outputText === "string" &&
-        paramsForEnrich.toolResult.outputText.trim()
-          ? paramsForEnrich.toolResult.outputText.trim()
-          : null),
-    };
-    if (isInlineImageDataUrl(imageUrl)) {
-      const { blob, mimeType } = dataUrlToBlob(imageUrl);
-      const storageId = await params.ctx.storage.store(blob);
-      const frameUrl = await params.ctx.storage.getUrl(storageId);
-      computerUseDetails.frame_storage_id =
-        String(storageId ?? "").trim() || null;
-      computerUseDetails.frame_url = frameUrl ?? null;
-      computerUseDetails.frame_mime_type = mimeType;
-    }
-    return {
-      ...paramsForEnrich.toolResult,
-      details: {
-        ...existingDetails,
-        computer_use: computerUseDetails,
-      },
     };
   };
 
@@ -544,6 +392,7 @@ export function createPolyNetExecutionSession(params: {
         authSubject: params.authSubject,
         userId: params.userId,
         projectId,
+        runId: params.runId,
       });
       if (!createdWorkspace.ok) {
         await emitRunEvent(
@@ -586,10 +435,7 @@ export function createPolyNetExecutionSession(params: {
           project_id: projectId,
           source: "project_background",
           provider_id: workspaceSession.providerId,
-          toolbox_proxy_url:
-            workspaceSession.providerId === "daytona"
-              ? workspaceSession.toolboxProxyUrl
-              : null,
+          toolbox_proxy_url: null,
         },
         `${params.runId}:workspace_session_adopted:project_background`,
       );
@@ -623,9 +469,7 @@ export function createPolyNetExecutionSession(params: {
           status: "ok",
           sandbox_id: workspaceSession.providerSandboxId,
           provider_id: workspaceSession.providerId,
-          region: workspaceSession.providerId === "daytona"
-            ? workspaceSession.region
-            : null,
+          region: null,
           source: "project_background",
         },
         `${params.runId}:workspace_session_create_completed:ok`,
@@ -661,6 +505,42 @@ export function createPolyNetExecutionSession(params: {
           });
         } catch {
           // Persistence helper emits explicit runtime evidence for failure paths.
+        }
+        const settlement = await settleRuntimeWorkspaceSession({
+          ctx: params.ctx,
+          userId: params.userId,
+          runId: params.runId,
+          session: workspaceSession,
+        });
+        if (settlement.ok && !settlement.skipped) {
+          await emitRunEvent(
+            "workspace_compute_charge_settled",
+            {
+              run_id: params.runId,
+              sandbox_id: workspaceSession.providerSandboxId,
+              project_id: workspaceSession.projectId,
+              credit_reservation_key: settlement.creditReservationKey ?? null,
+              credits_debited: settlement.creditsDebited ?? null,
+              compute_cost_usd: settlement.computeCostUsd ?? null,
+              duration_seconds: settlement.durationSeconds ?? null,
+            },
+            `${params.runId}:workspace_compute_charge_settled:${settlement.creditReservationKey ?? "none"}`,
+          );
+        } else if (!settlement.ok) {
+          await emitRunEvent(
+            "workspace_compute_charge_settlement_failed",
+            {
+              run_id: params.runId,
+              sandbox_id: workspaceSession.providerSandboxId,
+              project_id: workspaceSession.projectId,
+              credit_reservation_key: settlement.creditReservationKey,
+              credits_debited: settlement.creditsDebited,
+              compute_cost_usd: settlement.computeCostUsd,
+              duration_seconds: settlement.durationSeconds,
+              error_message: settlement.error,
+            },
+            `${params.runId}:workspace_compute_charge_settlement_failed:${settlement.creditReservationKey}`,
+          );
         }
       }
     },
@@ -826,112 +706,32 @@ export function createPolyNetExecutionSession(params: {
             };
           }
           if (!payload && terminalStartArgs) {
-            const backgroundSandbox = await ensureProjectBackgroundSandbox({
-              ctx: params.ctx,
-              authSubject,
-              userId: params.userId,
-              projectId,
+            const workspace = await this.ensureWorkspaceForTool({
+              toolName: paramsForTool.toolName,
             });
-            if (!backgroundSandbox.ok) {
+            if (!workspace.ok) {
               payload = {
                 ok: false,
-                status: backgroundSandbox.status,
-                code: backgroundSandbox.code,
-                message: backgroundSandbox.message,
-                details: (backgroundSandbox as { details?: unknown }).details ?? null,
+                status: workspace.status,
+                code: workspace.code,
+                message: workspace.message,
+                details: (workspace as { details?: unknown }).details ?? null,
               };
             } else {
-              const rows = (await params.ctx.runQuery(
-                internal.workspaceTerminals
-                  .listProjectWorkspaceTerminalSessionsInternal as any,
-                {
-                  ownerId: params.userId,
-                  projectId: projectId as any,
-                },
-              )) as any[];
-              const requestedCommandIdentity =
-                normalizeRuntimeTerminalIdentityCommand(
-                  terminalStartArgs.command,
-                  terminalStartArgs.cwd,
-                );
-              for (const row of rows) {
-                if (
-                  String(row?.providerSandboxId ?? "").trim() !==
-                  backgroundSandbox.providerSandboxId
-                ) {
-                  continue;
-                }
-                const summary = await reconcileWorkspaceTerminalRow({
-                  ctx: params.ctx,
-                  ownerId: params.userId,
-                  row,
-                  lifecycleOwner: "project_background",
-                });
-                if (
-                  !isWorkspaceTerminalActiveStatus(
-                    (summary as { status?: unknown } | null)?.status,
-                  )
-                ) {
-                  continue;
-                }
-                const summaryRecord =
-                  summary &&
-                  typeof summary === "object" &&
-                  !Array.isArray(summary)
-                    ? (summary as Record<string, unknown>)
-                    : null;
-                const summaryCommandIdentity =
-                  normalizeRuntimeTerminalIdentityCommand(
-                    String(summaryRecord?.command ?? ""),
-                    typeof summaryRecord?.cwd === "string"
-                      ? summaryRecord.cwd
-                      : null,
-                  );
-                const summaryPreviewPort =
-                  typeof summaryRecord?.preview_port === "number" &&
-                  Number.isFinite(summaryRecord.preview_port)
-                    ? Math.floor(summaryRecord.preview_port)
-                    : null;
-                const summaryPreviewPath =
-                  typeof summaryRecord?.preview_path === "string" &&
-                  summaryRecord.preview_path.trim()
-                    ? summaryRecord.preview_path.trim()
-                    : null;
-                if (
-                  summaryCommandIdentity !== requestedCommandIdentity ||
-                  summaryPreviewPort !== terminalStartArgs.previewPort ||
-                  summaryPreviewPath !== terminalStartArgs.previewPath
-                ) {
-                  continue;
-                }
-                payload = {
-                  ok: true,
-                  provider_session_id: null,
-                  reused_existing: true,
-                  terminal_session_id: String(
-                    summaryRecord?.terminal_session_id ??
-                      summaryRecord?.id ??
-                      "",
-                  ).trim(),
-                  ...(summaryRecord ?? {}),
-                };
-                break;
-              }
-              if (!payload) {
-                payload = await startWorkspaceTerminalProcess({
-                  ctx: params.ctx,
-                  ownerId: params.userId,
-                  projectId,
-                  threadId: params.threadId as any,
-                  session: {
-                    config: backgroundSandbox.config,
-                    toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
-                    providerSandboxId: backgroundSandbox.providerSandboxId,
-                  },
-                  terminal: terminalStartArgs,
-                  providerSessionIdPrefix: "arx-bg-term",
-                });
-              }
+              const activeWorkspaceSession = workspace.session;
+              payload = await startWorkspaceTerminalProcess({
+                ctx: params.ctx,
+                ownerId: params.userId,
+                projectId,
+                threadId: params.threadId as any,
+                session:
+                  buildTerminalProcessContextFromWorkspaceSession(
+                    activeWorkspaceSession,
+                  ),
+                terminal: terminalStartArgs,
+                providerSessionIdPrefix:
+                  "pn-bg-term",
+              });
             }
           }
         } else {
@@ -956,14 +756,20 @@ export function createPolyNetExecutionSession(params: {
             if (!access.ok) {
               payload = access;
             } else if (paramsForTool.toolName === "terminal_read") {
-              const summary = await reconcileWorkspaceTerminalRow({
+              const summary = await readWorkspaceTerminalProcess({
                 ctx: params.ctx,
-                ownerId: params.userId,
                 row: access.row,
-                lifecycleOwner: "project_background",
+                session: buildBlaxelTerminalProcessContextFromRow(access.row),
               });
+              const summaryOk =
+                !(
+                  summary &&
+                  typeof summary === "object" &&
+                  !Array.isArray(summary) &&
+                  (summary as { ok?: unknown }).ok === false
+                );
               payload = {
-                ok: true,
+                ok: summaryOk,
                 terminal_session_id: String(access.row?._id ?? "").trim(),
                 ...(summary &&
                 typeof summary === "object" &&
@@ -975,62 +781,36 @@ export function createPolyNetExecutionSession(params: {
               const providerSandboxId = String(
                 access.row?.providerSandboxId ?? "",
               ).trim();
-              const sandbox = await resolveTerminalSandboxContext({
+              const wrote = await writeWorkspaceTerminalProcessInput({
                 ctx: params.ctx,
-                projectId,
-                providerSandboxId,
-                touchProjectBackground: true,
+                row: access.row,
+                session: {
+                  providerId: "blaxel",
+                  providerSandboxId,
+                },
+                input: String(paramsForTool.normalizedArgs.input ?? ""),
               });
-              if (!sandbox.ok) {
-                payload = sandbox;
-              } else {
-                const wrote = await writeWorkspaceTerminalProcessInput({
-                  ctx: params.ctx,
-                  row: access.row,
-                  session: {
-                    config: sandbox.config,
-                    toolboxProxyUrl: sandbox.toolboxProxyUrl,
-                    providerSandboxId,
-                  },
-                  input: String(paramsForTool.normalizedArgs.input ?? ""),
-                });
-                payload = {
-                  ok: Boolean((wrote as { ok?: boolean } | null)?.ok),
-                  terminal_session_id: String(access.row?._id ?? "").trim(),
-                  ...(wrote &&
-                  typeof wrote === "object" &&
-                  !Array.isArray(wrote)
-                    ? wrote
-                    : {}),
-                };
-              }
+              payload = {
+                ok: Boolean((wrote as { ok?: boolean } | null)?.ok),
+                terminal_session_id: String(access.row?._id ?? "").trim(),
+                ...(wrote &&
+                typeof wrote === "object" &&
+                !Array.isArray(wrote)
+                  ? wrote
+                  : {}),
+              };
             } else {
               const providerSandboxId = String(
                 access.row?.providerSandboxId ?? "",
               ).trim();
-              const sandbox = await resolveTerminalSandboxContext({
-                ctx: params.ctx,
-                projectId,
-                providerSandboxId,
-                touchProjectBackground: true,
-              });
               const stopped = await stopWorkspaceTerminalProcess({
                 ctx: params.ctx,
                 row: access.row,
-                session: sandbox.ok
-                  ? {
-                      config: sandbox.config,
-                      toolboxProxyUrl: sandbox.toolboxProxyUrl,
-                      providerSandboxId,
-                    }
-                  : null,
+                session: {
+                  providerId: "blaxel",
+                  providerSandboxId,
+                },
                 forceStoppedStatus: true,
-              });
-              await releaseProjectBackgroundSandboxIfIdle({
-                ctx: params.ctx,
-                ownerId: params.userId,
-                projectId,
-                providerSandboxId,
               });
               payload = {
                 ok: true,
@@ -1145,96 +925,26 @@ export function createPolyNetExecutionSession(params: {
         };
       }
       const computerToolName = paramsForComputer.toolName;
-      let activeWorkspaceSession = workspaceSession;
-      if (!activeWorkspaceSession) {
-        const created = await this.ensureWorkspaceForTool({
-          toolName: paramsForComputer.toolName,
-        });
-        if (!created.ok) {
-          return {
-            status: "error",
-            exitCode: null,
-            outputText: readWorkspaceToolFailureOutputPreview(
-              (created as any).details,
-            ),
-            errorCode: created.code,
-            errorMessage: created.message,
-            details: (created as { details?: Record<string, unknown> | null }).details ?? null,
-          };
-        }
-        activeWorkspaceSession = created.session;
-      }
-      if (activeWorkspaceSession.providerId !== "daytona") {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "workspace_computer_provider_unsupported",
-          errorMessage:
-            "Computer-use tools are not available for this workspace provider yet.",
-          details: {
-            provider_id: activeWorkspaceSession.providerId,
-          },
-        };
-      }
-      if (isWorkspaceCreditBudgetExpired(activeWorkspaceSession)) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "workspace_credits_exhausted",
-          errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
-          details: {
-            tool_kind: "workspace_tools",
-          },
-        };
-      }
-      const budgetSignal = buildWorkspaceCreditBudgetSignal(
-        activeWorkspaceSession,
-        paramsForComputer.signal,
-      );
-      const computerResult = await (async () => {
-        try {
-          return await runDaytonaComputerUseTool({
-            config: activeWorkspaceSession.config,
-            toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-            sandboxId: activeWorkspaceSession.providerSandboxId,
-            toolName: computerToolName,
-            args: paramsForComputer.normalizedArgs,
-            signal: budgetSignal.signal,
-          });
-        } finally {
-          budgetSignal.cleanup();
-        }
-      })();
-      if (
-        budgetSignal.signal?.aborted &&
-        isWorkspaceCreditBudgetExpired(activeWorkspaceSession)
-      ) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "workspace_credits_exhausted",
-          errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
-          details: {
-            tool_kind: "workspace_tools",
-          },
-        };
-      }
-      const enriched = await enrichComputerUseToolResult({
-        toolName: computerToolName,
-        toolResult: computerResult,
-      });
       await emitRunEvent("computer_tool_completed", {
         run_id: params.runId,
         tool_name: computerToolName,
         latency_ms: Date.now() - computerStartedAt,
-        status: enriched.status,
+        status: "error",
+        error_code: "computer_use_not_supported",
         used_existing_workspace: hadWorkspaceSession,
-        sandbox_id: activeWorkspaceSession.providerSandboxId,
+        sandbox_id: workspaceSession?.providerSandboxId ?? null,
       });
-      return enriched;
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "computer_use_not_supported",
+        errorMessage:
+          "Computer-use tools are not available on the Blaxel workspace provider yet.",
+        details: {
+          provider_id: "blaxel",
+        },
+      };
     },
   };
 }

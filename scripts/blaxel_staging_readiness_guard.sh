@@ -8,7 +8,9 @@ EXPECTED_BRANCH_PREFIX="codex/blaxel-"
 EXPECTED_VERCEL_PROJECT_NAME="polynet-staging"
 EXPECTED_VERCEL_PROJECT_ID="prj_plXUH12pm9nZ5lWS5wJOt163maFL"
 EXPECTED_VERCEL_ORG_ID="team_TJvbi4UGtg62xteusiC1Cvxy"
-EXPECTED_CONVEX_DEPLOYMENT="quick-porcupine-949"
+EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"
+EXPECTED_PREVIEW_PROXY_ORIGIN="https://polynet-preview-proxy.fly.dev"
+EXPECTED_PREVIEW_PROXY_APP="polynet-preview-proxy"
 
 load_env_if_present() {
   local file="$1"
@@ -60,11 +62,64 @@ if [[ "$org_id" != "$EXPECTED_VERCEL_ORG_ID" ]]; then
 fi
 ok "Vercel is linked to $project_name"
 
+vercel_env="$(npx vercel@latest env ls --scope "$EXPECTED_VERCEL_ORG_ID" 2>/dev/null || true)"
+if ! printf '%s\n' "$vercel_env" | grep -q '^ VITE_WORKSPACE_PREVIEW_ORIGIN[[:space:]]'; then
+  fail "VITE_WORKSPACE_PREVIEW_ORIGIN missing in Vercel staging Production env; previews will fall back to the web app origin"
+fi
+ok "Vercel staging preview proxy origin is configured; expected value: $EXPECTED_PREVIEW_PROXY_ORIGIN"
+
 convex_deployment="${CONVEX_DEPLOYMENT:-}"
 if [[ "$convex_deployment" != "$EXPECTED_CONVEX_DEPLOYMENT" ]]; then
   fail "CONVEX_DEPLOYMENT must be $EXPECTED_CONVEX_DEPLOYMENT, got ${convex_deployment:-missing}"
 fi
 ok "Convex staging target is explicit: $convex_deployment"
+
+if ! CONVEX_DEPLOYMENT="$convex_deployment" npx convex env list 2>/dev/null | grep -q '^ARX_PREVIEW_PROXY_SIGNING_SECRET='; then
+  fail "ARX_PREVIEW_PROXY_SIGNING_SECRET missing in Convex staging env; workspace previews cannot mint proxy tokens"
+fi
+ok "Convex staging preview proxy signing secret is configured"
+
+if ! fly secrets list --app "$EXPECTED_PREVIEW_PROXY_APP" 2>/dev/null | grep -q '^ ARX_PREVIEW_PROXY_SIGNING_SECRET[[:space:]]'; then
+  fail "ARX_PREVIEW_PROXY_SIGNING_SECRET missing in Fly preview proxy env; workspace previews cannot verify tokens"
+fi
+ok "Fly preview proxy signing secret is configured"
+
+preview_proxy_health="$(curl -sS -I --max-time 10 "$EXPECTED_PREVIEW_PROXY_ORIGIN/health" 2>/dev/null || true)"
+if ! printf '%s\n' "$preview_proxy_health" | grep -q '^HTTP/.* 200'; then
+  fail "preview proxy health check failed for $EXPECTED_PREVIEW_PROXY_ORIGIN"
+fi
+ok "Fly preview proxy health check passed"
+
+preview_proxy_secret="$(CONVEX_DEPLOYMENT="$convex_deployment" npx convex env get ARX_PREVIEW_PROXY_SIGNING_SECRET 2>/dev/null || true)"
+if [[ -z "$preview_proxy_secret" ]]; then
+  fail "could not read Convex preview proxy signing secret for proxy compatibility check"
+fi
+preview_probe_token="$(ARX_PREVIEW_PROXY_SIGNING_SECRET="$preview_proxy_secret" node --input-type=module <<'NODE'
+import { mintPreviewProxySessionToken } from "./apps/preview-proxy/previewProxySessionToken.js";
+const result = await mintPreviewProxySessionToken({
+  kind: "workspace_preview",
+  previewUrl: "https://polynet-staging-smoke.preview.bl.run/",
+  previewToken: null,
+  expiresAtMs: Date.now() + 60_000,
+});
+if (!result.ok) {
+  console.error(result.code);
+  process.exit(1);
+}
+process.stdout.write(result.token);
+NODE
+)"
+preview_probe_headers="$(curl -sS -I --max-time 15 "$EXPECTED_PREVIEW_PROXY_ORIGIN/_preview/start/${preview_probe_token}/" 2>/dev/null || true)"
+preview_probe_reason="$(printf '%s\n' "$preview_probe_headers" | awk 'BEGIN{IGNORECASE=1} /^x-arx-proxy-reason:/ {print tolower($2); exit}' | tr -d '\r')"
+case "$preview_probe_reason" in
+  bad_signature_or_payload|host_rejected|missing_token|wrong_kind|missing_preview_token)
+    fail "preview proxy rejected Convex-minted Blaxel preview token: $preview_probe_reason"
+    ;;
+esac
+if ! printf '%s\n' "$preview_probe_headers" | grep -q '^HTTP/'; then
+  fail "preview proxy compatibility check did not return an HTTP response"
+fi
+ok "Fly preview proxy accepts Convex-minted Blaxel preview tokens"
 
 if ! git check-ignore -q .env.blaxel.local; then
   fail ".env.blaxel.local must be ignored"
