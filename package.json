@@ -44,6 +44,7 @@
     "check:operator-intelligence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_intelligence_proof.ts",
     "check:operator-dashboard-gate-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_dashboard_gate_proof.ts",
     "check:ui-stability-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/ui_stability_contract_proof.ts",
+    "check:workspace-composer-focus-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_composer_focus_policy_proof.ts",
     "check:no-builder-plan-infra": "bash scripts/no_builder_plan_infra_guard.sh",
     "check:account-community-limit-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_community_limit_contract_proof.ts",
     "check:builder-partner-program-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_partner_program_contract_proof.ts",

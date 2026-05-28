@@ -162,6 +162,50 @@ function storeWorkspaceRightPanelCommunityLabel(userId: string | null, label: st
   }
 }
 
+function isWorkspaceEditableElement(element: Element | null): boolean {
+  if (!element) return false;
+  const selector = "input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']";
+  return Boolean(element.closest(selector));
+}
+
+function isWorkspaceInteractiveElement(element: Element | null): boolean {
+  if (!element) return false;
+  const selector = [
+    "a[href]",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "summary",
+    "[role='button']",
+    "[role='link']",
+    "[role='menuitem']",
+    "[role='tab']",
+    "[contenteditable='true']",
+    "[contenteditable='plaintext-only']",
+  ].join(",");
+  return Boolean(element.closest(selector));
+}
+
+function shouldFocusWorkspaceComposerFromPointer(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (isWorkspaceInteractiveElement(target)) return false;
+  return !Boolean(
+    target.closest(
+      [
+        ".message-item",
+        ".message-text",
+        ".attachments-preview",
+        ".runtime-live-timeline",
+        ".runtime-computer-use-viewer",
+        ".workspace-app-preview-card",
+        ".web-empty-thread-action",
+        ".workspace-right-panel",
+      ].join(","),
+    ),
+  );
+}
+
 export type WorkspaceComposerDraft = {
   text: string;
   attachments: WorkspaceAttachmentView[];
@@ -1219,16 +1263,50 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     }
   }, []);
 
+  const focusWorkspaceComposerSafely = useCallback((options?: { force?: boolean }) => {
+    if (typeof window === "undefined" || typeof document === "undefined") return false;
+    const input = workspaceAskInputRef.current;
+    if (!input || input.disabled || input.readOnly) return false;
+
+    if (!options?.force) {
+      const activeElement = document.activeElement;
+      if (activeElement instanceof Element) {
+        if (activeElement === input) return true;
+        const isDocumentShell = activeElement === document.body || activeElement === document.documentElement;
+        if (
+          !isDocumentShell &&
+          (isWorkspaceEditableElement(activeElement) ||
+            isWorkspaceInteractiveElement(activeElement) ||
+            Boolean(activeElement.closest(".workspace-right-panel")))
+        ) {
+          return false;
+        }
+      }
+    }
+
+    window.requestAnimationFrame(() => {
+      if (!input.isConnected || input.disabled || input.readOnly) return;
+      input.focus({ preventScroll: true });
+      const end = input.value.length;
+      try {
+        input.setSelectionRange(end, end);
+      } catch {
+        // Selection can fail for platform-managed input states; focus still succeeded.
+      }
+    });
+    return true;
+  }, []);
+
   useEffect(() => {
     props.onRegisterComposerApi({
       focus: () => {
-        workspaceAskInputRef.current?.focus();
+        focusWorkspaceComposerSafely({ force: true });
       },
       clear: clearComposer,
       reset: () => {
         clearComposer();
         window.setTimeout(() => {
-          workspaceAskInputRef.current?.focus();
+          focusWorkspaceComposerSafely({ force: true });
         }, 0);
       },
       appendTranscript: (transcript: string) => {
@@ -1249,7 +1327,41 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     return () => {
       props.onRegisterComposerApi(null);
     };
-  }, [clearComposer, props.onRegisterComposerApi]);
+  }, [clearComposer, focusWorkspaceComposerSafely, props.onRegisterComposerApi]);
+
+  useEffect(() => {
+    if (!isDesktopViewport) return;
+    if (props.isAuthRecoveringSignedIn || props.isAccountGraphHydratingCritical) return;
+    const timeoutId = window.setTimeout(() => {
+      focusWorkspaceComposerSafely();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    focusWorkspaceComposerSafely,
+    isDesktopViewport,
+    props.activeThreadId,
+    props.guestThreadId,
+    props.hasAuthenticatedPresentation,
+    props.isAccountGraphHydratingCritical,
+    props.isActiveWorkspaceThreadBusy,
+    props.isAuthRecoveringSignedIn,
+    props.isEmptyWorkspaceThread,
+    props.isStreamingWorkspaceTurn,
+  ]);
+
+  useEffect(() => {
+    if (!isDesktopViewport || typeof window === "undefined" || typeof document === "undefined") return;
+    const handleFocus = () => {
+      if (document.visibilityState && document.visibilityState !== "visible") return;
+      focusWorkspaceComposerSafely();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [focusWorkspaceComposerSafely, isDesktopViewport]);
 
   useEffect(() => {
     activeProjectIdRef.current = props.activeProjectId;
@@ -1307,6 +1419,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     setIsWorkspaceAtBottom,
     scrollBehavior: "auto",
   });
+
+  const handleWorkspaceInertPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!isDesktopViewport || event.button !== 0) return;
+      if (!shouldFocusWorkspaceComposerFromPointer(event.target)) return;
+      window.setTimeout(() => {
+        focusWorkspaceComposerSafely({ force: true });
+      }, 0);
+    },
+    [focusWorkspaceComposerSafely, isDesktopViewport],
+  );
 
   useWebThreadMessagesLifecycle<unknown, any>({
     session: props.session,
@@ -1926,6 +2049,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             className={`message-list${props.isEmptyWorkspaceThread ? " message-list-empty-thread" : ""}`}
             ref={workspaceMessageListRef}
             onScroll={handleWorkspaceScroll}
+            onPointerDown={handleWorkspaceInertPointerDown}
           >
             <div className="message-list-inner" ref={workspaceMessageListContentRef}>
               <WorkspaceTimelinePane
