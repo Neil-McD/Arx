@@ -45,6 +45,11 @@ function buildEyebrow(resource: CommunityResource): string {
   return role;
 }
 
+function hasStoredBodyContent(resource: CommunityResource): boolean {
+  const bodyChars = Number(resource.body_chars ?? 0);
+  return Number.isFinite(bodyChars) && bodyChars > 0;
+}
+
 function formatCreatedAt(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const parsed = new Date(raw);
@@ -226,6 +231,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const eyebrow = buildEyebrow(resource);
   const trimmedBody = resource.body_md?.trim() ?? "";
   const hasBody = trimmedBody.length > 0;
+  const hasDeferredBody = !hasBody && hasStoredBodyContent(resource);
   const verificationLink: { label: string; href: string } | null = sourceUrl
     ? {
         label: embed
@@ -235,7 +241,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
       }
     : null;
   const showDetailsTrigger = Boolean(actions);
-  const isEmpty = !embed && !hasBody && !verificationLink;
+  const isEmpty = !embed && !hasBody && !hasDeferredBody && !verificationLink;
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   return (
@@ -280,6 +286,10 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
             <div className="resource-viewer-prose">
               {renderMarkdown(trimmedBody, { embedStandaloneMedia: true })}
             </div>
+          ) : null}
+
+          {hasDeferredBody ? (
+            <div className="resource-viewer-empty">Loading page content…</div>
           ) : null}
 
           {verificationLink ? (

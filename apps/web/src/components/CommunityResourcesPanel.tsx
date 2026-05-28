@@ -65,6 +65,12 @@ function getResourceLineageDetail(resource: CommunityResource): string {
   ].filter(Boolean).join(" · ");
 }
 
+function resourceNeedsBodyHydration(resource: CommunityResource | null): boolean {
+  if (!resource) return false;
+  const bodyChars = Number(resource.body_chars ?? 0);
+  return Number.isFinite(bodyChars) && bodyChars > 0 && !(resource.body_md ?? "").trim();
+}
+
 function compareResources(a: CommunityResource, b: CommunityResource): number {
   const aSortOrder = typeof a.sort_order === "number" && Number.isFinite(a.sort_order) ? a.sort_order : null;
   const bSortOrder = typeof b.sort_order === "number" && Number.isFinite(b.sort_order) ? b.sort_order : null;
@@ -349,6 +355,7 @@ function ResourceRailItem(props: {
     isDropTarget,
   } = props;
   const summary = (resource.body_md ?? "").trim();
+  const isEditDisabled = resourceNeedsBodyHydration(resource);
 
   const handleItemKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -395,10 +402,12 @@ function ResourceRailItem(props: {
           <button
             className="resource-card-action"
             type="button"
-            title="Edit knowledge item"
+            title={isEditDisabled ? "Loading page content" : "Edit knowledge item"}
+            disabled={isEditDisabled}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
+              if (isEditDisabled) return;
               onEdit();
             }}
           >
@@ -434,6 +443,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [draggingResourceModuleId, setDraggingResourceModuleId] = useState<string | null>(null);
   const [dropTargetResourceId, setDropTargetResourceId] = useState<string | null>(null);
   const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
+  const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
 
   const pendingDeleteResource = useMemo(
     () => state.resources.find((resource) => resource.id === pendingDeleteResourceId) ?? null,
@@ -544,6 +554,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!selectedResourceId || !displayableResourceIds.has(selectedResourceId)) return null;
     return resourcesById.get(selectedResourceId) ?? null;
   }, [displayableResourceIds, resourcesById, selectedResourceId]);
+  const selectedResourceNeedsBodyHydration = resourceNeedsBodyHydration(selectedResource);
   const selectedResourceCategoryId = selectedResource ? getResourceCategoryId(selectedResource) : null;
   const selectedModule = useMemo(() => {
     const selectedModuleExists = selectedModuleId
@@ -661,6 +672,21 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       setIsDeletingResource(false);
     }
   }, [pendingDeleteResource, pendingDeleteResourceId]);
+
+  useEffect(() => {
+    if (!selectedResource || selectedResourceNeedsBodyHydration) return;
+    pendingBodyHydrationRefreshIdsRef.current.delete(selectedResource.id);
+  }, [selectedResource, selectedResourceNeedsBodyHydration]);
+
+  useEffect(() => {
+    if (!selectedResource || !selectedResourceNeedsBodyHydration) return;
+    if (isRefreshingResources || !actions.reloadResources) return;
+    if (pendingBodyHydrationRefreshIdsRef.current.has(selectedResource.id)) return;
+    pendingBodyHydrationRefreshIdsRef.current.add(selectedResource.id);
+    void Promise.resolve(actions.reloadResources()).catch(() => {
+      pendingBodyHydrationRefreshIdsRef.current.delete(selectedResource.id);
+    });
+  }, [actions, isRefreshingResources, selectedResource, selectedResourceNeedsBodyHydration]);
 
   useEffect(() => {
     if (!pendingOpenResourceId) return;
@@ -972,8 +998,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                         <button
                           className="resource-card-action"
                           type="button"
-                          title="Edit knowledge item"
-                          onClick={() => actions.handleEditResource(selectedResource)}
+                          title={selectedResourceNeedsBodyHydration ? "Loading page content" : "Edit knowledge item"}
+                          disabled={selectedResourceNeedsBodyHydration}
+                          onClick={() => {
+                            if (selectedResourceNeedsBodyHydration) return;
+                            actions.handleEditResource(selectedResource);
+                          }}
                         >
                           <EditIcon />
                         </button>

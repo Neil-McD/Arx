@@ -24,6 +24,7 @@ type ResourceLike = {
   resource_status?: "draft" | "review" | "published" | "processing" | "failed";
   title: string;
   body_md: string | null;
+  body_chars?: number | null;
   url: string | null;
   pinned: boolean;
   sort_order?: number | null;

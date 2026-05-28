@@ -9,6 +9,7 @@ export type CommunityResource = {
   source_resource_id?: string | null;
   title: string;
   body_md: string | null;
+  body_chars?: number | null;
   url: string | null;
   file_key?: string | null;
   source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
@@ -75,4 +76,5 @@ export type CommunityResourcesActions = {
   handleEditResource: (resource: CommunityResource) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
   handleCreatePageDraftFromSource: (resource: CommunityResource) => Promise<CommunityResource | null>;
+  reloadResources?: () => Promise<void> | void;
 };

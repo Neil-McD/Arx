@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const root = process.cwd();
+
+function read(path: string): string {
+  return readFileSync(join(root, path), "utf8");
+}
+
+const packageJson = read("package.json");
+const contracts = read("apps/web/src/components/communityResourcesContracts.ts");
+const app = read("apps/web/src/App.tsx");
+const controller = read("shared/useCommunityResourceController.ts");
+const panel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
+const viewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
+const resources = read("convex/communityResources.ts");
+const core = read("convex/communityCore.ts");
+const content = read("convex/communityResourceContent.ts");
+
+assert.match(
+  packageJson,
+  /"check:community-resource-content-hydration-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_content_hydration_contract_proof\.ts"/,
+  "resource content hydration proof should be wired into package scripts",
+);
+
+for (const source of [contracts, app, controller] as const) {
+  assert.match(
+    source,
+    /body_chars\?: number \| null/,
+    "frontend resource contracts must carry body_chars so stale metadata-only rows are not treated as empty pages",
+  );
+}
+
+assert.match(
+  core,
+  /body_md: row\.bodyMd \?\? null,[\s\S]*body_chars: communityResourceBodyChars\(row\)/,
+  "Convex resource mapper must expose both hydrated body_md and body_chars",
+);
+assert.match(
+  content,
+  /export async function hydrateCommunityResourceBody[\s\S]*getCommunityResourceContentRow[\s\S]*bodyMd: bodyMd \|\| undefined[\s\S]*bodyChars:/,
+  "resource body hydration must read split body storage and return bodyMd/bodyChars together",
+);
+assert.match(
+  resources,
+  /async function mapCommunityResourceRowWithBody[\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*mapCommunityResourceRow\(ctx, hydrated/,
+  "resource list mapper must hydrate split body content before projecting rows to clients",
+);
+assert.match(
+  resources,
+  /export const listCommunityResources = query\([\s\S]*\.map\(\(row\) => mapCommunityResourceRowWithBody\(ctx, row, userIdCache, moduleNameCache\)\)/,
+  "main Resources UI list query must use the hydrated row mapper",
+);
+
+assert.match(
+  viewer,
+  /function hasStoredBodyContent\(resource: CommunityResource\)[\s\S]*resource\.body_chars/,
+  "viewer should detect persisted body content from body_chars",
+);
+assert.match(
+  viewer,
+  /const hasDeferredBody = !hasBody && hasStoredBodyContent\(resource\)/,
+  "viewer should classify body_chars-without-body_md as deferred hydration",
+);
+assert.match(
+  viewer,
+  /const isEmpty = !embed && !hasBody && !hasDeferredBody && !verificationLink/,
+  "viewer must not render empty-page copy when persisted body content exists",
+);
+assert.match(
+  viewer,
+  /hasDeferredBody \? \([\s\S]*Loading page content/,
+  "viewer should show loading copy while persisted body content is being rehydrated",
+);
+
+assert.match(
+  contracts,
+  /reloadResources\?: \(\) => Promise<void> \| void/,
+  "Resources actions should expose a narrow reload hook for impossible hydration states",
+);
+assert.match(
+  panel,
+  /function resourceNeedsBodyHydration\(resource: CommunityResource \| null\)[\s\S]*resource\.body_chars[\s\S]*!\(resource\.body_md \?\? ""\)\.trim\(\)/,
+  "Resources panel should identify metadata rows whose body exists but was not hydrated",
+);
+assert.match(
+  panel,
+  /pendingBodyHydrationRefreshIdsRef[\s\S]*actions\.reloadResources/,
+  "Resources panel should trigger a bounded reload for missing hydrated content",
+);
+assert.match(
+  panel,
+  /const isEditDisabled = resourceNeedsBodyHydration\(resource\)[\s\S]*disabled=\{isEditDisabled\}[\s\S]*if \(isEditDisabled\) return/,
+  "rail edit controls must not open an empty editor while persisted body content is still hydrating",
+);
+assert.match(
+  panel,
+  /disabled=\{selectedResourceNeedsBodyHydration\}[\s\S]*if \(selectedResourceNeedsBodyHydration\) return;[\s\S]*actions\.handleEditResource\(selectedResource\)/,
+  "selected page edit controls must wait for hydrated body content before editing",
+);
+assert.match(
+  app,
+  /reloadResources: async \(\) => \{[\s\S]*ensureUsableAuthSession\(\)[\s\S]*loadCommunityResources\(activeCommunityId, usableSession\)/,
+  "App should wire Resources reload through the existing authenticated list path",
+);
+
+console.log("community resource content hydration contract proof passed");

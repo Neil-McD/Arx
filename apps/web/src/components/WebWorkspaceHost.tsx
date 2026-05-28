@@ -206,6 +206,26 @@ function shouldFocusWorkspaceComposerFromPointer(target: EventTarget | null): bo
   );
 }
 
+function shouldPreserveWorkspaceComposerFocus(activeElement: Element | null, input: HTMLTextAreaElement): boolean {
+  if (!activeElement) return false;
+  if (activeElement === input) return true;
+  const isDocumentShell = activeElement === document.body || activeElement === document.documentElement;
+  if (isDocumentShell) return false;
+  if (isWorkspaceEditableElement(activeElement)) return true;
+  return Boolean(
+    activeElement.closest(
+      [
+        ".workspace-right-panel",
+        ".modal",
+        ".modal-overlay",
+        "[role='dialog']",
+        ".workspace-app-preview-card",
+        ".runtime-computer-use-viewer",
+      ].join(","),
+    ),
+  );
+}
+
 export type WorkspaceComposerDraft = {
   text: string;
   attachments: WorkspaceAttachmentView[];
@@ -1271,16 +1291,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     if (!options?.force) {
       const activeElement = document.activeElement;
       if (activeElement instanceof Element) {
-        if (activeElement === input) return true;
-        const isDocumentShell = activeElement === document.body || activeElement === document.documentElement;
-        if (
-          !isDocumentShell &&
-          (isWorkspaceEditableElement(activeElement) ||
-            isWorkspaceInteractiveElement(activeElement) ||
-            Boolean(activeElement.closest(".workspace-right-panel")))
-        ) {
-          return false;
-        }
+        if (shouldPreserveWorkspaceComposerFocus(activeElement, input)) return activeElement === input;
       }
     }
 
@@ -2010,6 +2021,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       <div
         className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
         style={workspaceRightPanelStyle}
+        onPointerDown={handleWorkspaceInertPointerDown}
         onDrop={handleWorkspaceAttachmentDrop}
         onDragEnter={handleWorkspaceAttachmentDragEnter}
         onDragOver={handleWorkspaceAttachmentDragOver}
@@ -2049,7 +2061,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             className={`message-list${props.isEmptyWorkspaceThread ? " message-list-empty-thread" : ""}`}
             ref={workspaceMessageListRef}
             onScroll={handleWorkspaceScroll}
-            onPointerDown={handleWorkspaceInertPointerDown}
           >
             <div className="message-list-inner" ref={workspaceMessageListContentRef}>
               <WorkspaceTimelinePane
@@ -2140,6 +2151,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         <div
           className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
           style={workspaceRightPanelStyle}
+          onPointerDown={handleWorkspaceInertPointerDown}
           onDrop={handleWorkspaceAttachmentDrop}
           onDragEnter={handleWorkspaceAttachmentDragEnter}
           onDragOver={handleWorkspaceAttachmentDragOver}

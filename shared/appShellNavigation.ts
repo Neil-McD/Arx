@@ -56,6 +56,45 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
   return COMMUNITY_ROUTE_MANAGED_TAB_SET.has(tab);
 }
 
+export type CommunityTabAccess = {
+  canViewMembers: boolean;
+  canViewSettings: boolean;
+  canViewPolynet: boolean;
+  canManageMembers: boolean;
+  canViewAnalytics: boolean;
+};
+
+export function isCommunityTabAllowedForAccess(
+  tab: CommunityTab,
+  access: CommunityTabAccess,
+): boolean {
+  switch (tab) {
+    case "members":
+      return access.canViewMembers;
+    case "settings":
+      return access.canViewSettings;
+    case "polynet":
+      return access.canViewPolynet;
+    case "ai_agent":
+    case "funnel":
+      return access.canManageMembers;
+    case "analytics":
+      return access.canViewAnalytics;
+    case "chat":
+    case "ai_feed":
+    case "resources":
+    case "events":
+      return true;
+  }
+}
+
+export function normalizeCommunityTabForAccess(
+  tab: CommunityTab,
+  access: CommunityTabAccess,
+): CommunityTab {
+  return isCommunityTabAllowedForAccess(tab, access) ? tab : "chat";
+}
+
 export function parseCommunityTab(value: string | null | undefined): CommunityTab {
   switch ((value ?? "").trim()) {
     case "ai-feed":

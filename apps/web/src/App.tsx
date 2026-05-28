@@ -210,6 +210,7 @@ import {
   type CommunityTab,
   type DiscoverTab,
   isCommunityRouteManagedTab,
+  normalizeCommunityTabForAccess,
   type SettingsGroup,
   type SettingsPage,
   settingsGroupLabel,
@@ -924,6 +925,7 @@ type CommunityResource = {
   source_resource_id?: string | null;
   title: string;
   body_md: string | null;
+  body_chars?: number | null;
   url: string | null;
   file_key?: string | null;
   source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
@@ -2376,6 +2378,7 @@ export default function App() {
   });
   const {
     activeCommunityAccess,
+    isLoadingCommunityAccess,
     communityAccessCapabilities,
     communityNavVisibility,
     communityActionGuards,
@@ -2407,6 +2410,36 @@ export default function App() {
     session: session,
     ensureSession: ensureUsableAuthSession,
   });
+
+  useEffect(() => {
+    if (activePage !== "community") return;
+    if (!activeCommunityId) return;
+    if (isLoadingCommunityAccess) return;
+    if (activeCommunityAccess?.community_id !== activeCommunityId) return;
+    const normalizedTab = normalizeCommunityTabForAccess(communityTab, {
+      canViewMembers: canViewMembersActiveCommunity,
+      canViewSettings: canViewActiveCommunitySettings,
+      canViewPolynet: canViewActiveCommunityPolynet,
+      canManageMembers: canManageMembersActiveCommunity,
+      canViewAnalytics: canViewActiveCommunityAnalytics,
+    });
+    if (normalizedTab === communityTab) return;
+    setCommunityResourceModuleId(null);
+    applyCommunityShellState({ communityTab: normalizedTab });
+  }, [
+    activeCommunityAccess,
+    activeCommunityId,
+    activePage,
+    applyCommunityShellState,
+    canManageMembersActiveCommunity,
+    canViewActiveCommunityAnalytics,
+    canViewActiveCommunityPolynet,
+    canViewActiveCommunitySettings,
+    canViewMembersActiveCommunity,
+    communityTab,
+    isLoadingCommunityAccess,
+  ]);
+
   const communityTypingUsers = useCommunityTypingPresence({
     isEnabled: activePage === "community" && communityTab === "chat" && hasResolvedCommunityChat,
     session,
@@ -9269,6 +9302,11 @@ export default function App() {
         handleEditResource,
         handleDeleteResource,
         handleCreatePageDraftFromSource,
+        reloadResources: async () => {
+          const usableSession = await ensureUsableAuthSession();
+          if (!usableSession || !activeCommunityId) return;
+          await loadCommunityResources(activeCommunityId, usableSession);
+        },
       },
       eventsState: {
         events: communityEvents,

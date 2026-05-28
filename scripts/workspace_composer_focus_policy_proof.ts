@@ -29,8 +29,13 @@ assert.match(
 );
 assert.match(
   workspaceHost,
-  /!isDocumentShell[\s\S]*isWorkspaceEditableElement\(activeElement\)[\s\S]*isWorkspaceInteractiveElement\(activeElement\)[\s\S]*activeElement\.closest\("\.workspace-right-panel"\)/,
-  "automatic composer focus must not steal focus from active editable, interactive, or right-panel elements",
+  /function shouldPreserveWorkspaceComposerFocus\(activeElement: Element \| null, input: HTMLTextAreaElement\): boolean[\s\S]*isWorkspaceEditableElement\(activeElement\)[\s\S]*\.workspace-right-panel[\s\S]*\[role='dialog'\][\s\S]*\.workspace-app-preview-card/,
+  "automatic composer focus must preserve active editable, dialog, preview, and right-panel focus",
+);
+assert.match(
+  workspaceHost,
+  /if \(shouldPreserveWorkspaceComposerFocus\(activeElement, input\)\) return activeElement === input;/,
+  "automatic composer focus must not be blocked by unrelated navigation buttons that remain focused after route changes",
 );
 assert.match(
   workspaceHost,
@@ -49,8 +54,13 @@ assert.match(
 );
 assert.match(
   workspaceHost,
-  /onPointerDown=\{handleWorkspaceInertPointerDown\}/,
-  "message list must wire the inert click-to-focus policy",
+  /className=\{`workspace-body[\s\S]*onPointerDown=\{handleWorkspaceInertPointerDown\}/,
+  "workspace body must wire the inert click-to-focus policy",
+);
+assert.match(
+  workspaceHost,
+  /className=\{`workspace-composer-shell[\s\S]*onPointerDown=\{handleWorkspaceInertPointerDown\}/,
+  "workspace composer shell must wire the inert click-to-focus policy",
 );
 assert.match(
   workspaceHost,
