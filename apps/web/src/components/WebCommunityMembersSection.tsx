@@ -594,7 +594,6 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                         zoom={profile?.avatar_zoom ?? 1}
                         alt={displayName}
                         fallback={initials}
-                        fallbackStyle={{ backgroundColor: actions.getAvatarColor(member.user_id) }}
                       />
                       <div className="member-info">
                         <div className="member-name-row">
@@ -737,11 +736,6 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     zoom={selectedMemberAvatarZoom}
                     alt={selectedMemberDisplayName}
                     fallback={selectedMemberInitials}
-                    fallbackStyle={
-                      selectedMemberAvatarUrl
-                        ? undefined
-                        : { backgroundColor: actions.getAvatarColor(selectedMember.user_id) }
-                    }
                   />
                   <div className="member-settings-summary-copy">
                     <div className="member-settings-summary-name">
