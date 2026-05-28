@@ -888,6 +888,29 @@ assert.match(
   "agent workspace-session admission failures must preserve provider/admission code and details into the runtime kernel",
 );
 
+const workspaceCreditBudgetSignal = read("convex/workspaceCreditBudgetSignal.ts");
+assert.match(
+  workspaceCreditBudgetSignal,
+  /WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE[\s\S]*WorkspaceCreditBudgetExpiredError/,
+  "workspace credit budget aborts must carry a typed reason instead of an anonymous abort",
+);
+assert.match(
+  workspaceCreditBudgetSignal,
+  /const onAbort = \(\) => abort\(parentSignal\.reason\)/,
+  "workspace credit budget signal must preserve parent cancellation reasons",
+);
+
+assert.match(
+  workspaceRuntimeTools,
+  /raceWorkspaceToolWithAbort[\s\S]*stopBlaxelWorkspaceProcess/,
+  "workspace runtime tools must stop named Blaxel processes when command execution is aborted",
+);
+assert.match(
+  workspaceRuntimeTools,
+  /WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE[\s\S]*workspaceBudgetExpiredFailure/,
+  "workspace runtime tools must return credit-budget exhaustion as a billing failure instead of a generic crash",
+);
+
 const providerContract = read("docs/workspace-computer-provider-contract.md");
 assert.doesNotMatch(
   providerContract,

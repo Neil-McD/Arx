@@ -1,11 +1,15 @@
 import {
   executeBlaxelWorkspaceCommand,
   readBlaxelWorkspaceFile,
+  stopBlaxelWorkspaceProcess,
   writeBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
   reensureBlaxelWorkspaceComputerForPaidSession,
 } from "./blaxelWorkspaceWake.ts";
+import {
+  WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE,
+} from "./workspaceCreditBudgetSignal.ts";
 import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 
@@ -148,6 +152,100 @@ function isBlaxelSandboxNotFoundFailure(
   return result.ok === false && result.code === "blaxel_sandbox_not_found";
 }
 
+function abortReasonCode(reason: unknown): string | null {
+  const value = reason as { code?: unknown; name?: unknown; message?: unknown } | null;
+  const code = String(value?.code ?? "").trim();
+  if (code) return code;
+  const name = String(value?.name ?? "").trim();
+  if (name === "RuntimeRunCancelledError") return "user_cancelled";
+  if (name === "WorkspaceCreditBudgetExpiredError") {
+    return WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE;
+  }
+  return null;
+}
+
+function workspaceBudgetExpiredFailure(): WorkspaceRuntimeToolFailure {
+  return {
+    ok: false,
+    status: 402,
+    code: WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE,
+    message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+    details: {
+      tool_kind: "workspace_tools",
+      paid_usage_billing_mode: "prepaid_required",
+    },
+  };
+}
+
+function runtimeAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error) return reason;
+  const message = String(reason ?? "").trim();
+  return new Error(message || "Workspace tool was aborted.");
+}
+
+function signalAbortFailureOrThrow(
+  signal?: AbortSignal,
+): WorkspaceRuntimeToolFailure | null {
+  if (!signal?.aborted) return null;
+  const code = abortReasonCode(signal.reason);
+  if (code === WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE) {
+    return workspaceBudgetExpiredFailure();
+  }
+  throw runtimeAbortError(signal);
+}
+
+async function raceWorkspaceToolWithAbort<T extends { ok: boolean }>(params: {
+  signal?: AbortSignal;
+  operation: () => Promise<T>;
+  onAbort?: () => void | Promise<void>;
+}): Promise<T | WorkspaceRuntimeToolFailure> {
+  const initialAbort = signalAbortFailureOrThrow(params.signal);
+  if (initialAbort) return initialAbort;
+  const signal = params.signal;
+  if (!signal) return await params.operation();
+
+  let settled = false;
+  let removeAbortListener: (() => void) | null = null;
+  const operationPromise = params.operation();
+  const abortPromise = new Promise<WorkspaceRuntimeToolFailure | never>(
+    (resolve, reject) => {
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        if (removeAbortListener) removeAbortListener();
+        void Promise.resolve(params.onAbort?.()).catch(() => {});
+        try {
+          const failure = signalAbortFailureOrThrow(signal);
+          if (failure) {
+            resolve(failure);
+            return;
+          }
+          reject(runtimeAbortError(signal));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+    },
+  );
+
+  try {
+    return await Promise.race([
+      operationPromise.then((result) => {
+        if (settled) return result;
+        settled = true;
+        if (removeAbortListener) removeAbortListener();
+        return result;
+      }),
+      abortPromise,
+    ]);
+  } finally {
+    operationPromise.catch(() => {});
+  }
+}
+
 async function reensureBlaxelRuntimeWorkspace(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
 }): Promise<{ ok: true } | WorkspaceRuntimeToolFailure> {
@@ -171,14 +269,29 @@ async function runBlaxelCommand(params: {
   timeoutSeconds?: number;
   commandFailureMessage: string;
   emptyText: string;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
+  const initialAbort = signalAbortFailureOrThrow(params.signal);
+  if (initialAbort) return initialAbort;
   const normalizedPath = normalizeOptionalWorkspacePath(params.relPath);
-  const result = await executeBlaxelWorkspaceCommand({
-    sandboxName: params.session.providerSandboxId,
-    command: params.command,
-    cwd: normalizedPath,
-    waitForCompletion: true,
-    timeoutSeconds: params.timeoutSeconds ?? 60,
+  const processName = `polynet-runtime-${crypto.randomUUID().slice(0, 8)}`;
+  const result = await raceWorkspaceToolWithAbort({
+    signal: params.signal,
+    operation: async () =>
+      await executeBlaxelWorkspaceCommand({
+        sandboxName: params.session.providerSandboxId,
+        command: params.command,
+        cwd: normalizedPath,
+        processName,
+        waitForCompletion: true,
+        timeoutSeconds: params.timeoutSeconds ?? 60,
+      }),
+    onAbort: async () => {
+      await stopBlaxelWorkspaceProcess({
+        sandboxName: params.session.providerSandboxId,
+        processName,
+      });
+    },
   });
   if (!result.ok) return mapBlaxelProviderFailure(result);
   const exitCode = typeof result.exitCode === "number" ? result.exitCode : 0;
@@ -207,6 +320,7 @@ async function runBlaxelCommand(params: {
 async function listBlaxelDirectoryAsTool(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
   relPath: string;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
   const command = [
     "find . -mindepth 1 -maxdepth 2 -print",
@@ -229,6 +343,7 @@ async function listBlaxelDirectoryAsTool(params: {
     timeoutSeconds: 20,
     commandFailureMessage: `Failed to list workspace directory '${params.relPath}'.`,
     emptyText: "(empty directory)",
+    signal: params.signal,
   });
 }
 
@@ -237,7 +352,10 @@ async function readBlaxelFileAsTool(params: {
   relPath: string;
   offset?: number;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
+  const initialAbort = signalAbortFailureOrThrow(params.signal);
+  if (initialAbort) return initialAbort;
   const offset = clampReadOffset(params.offset);
   const limit = clampReadLimit(params.limit);
   const endLine = offset + limit - 1;
@@ -250,6 +368,7 @@ async function readBlaxelFileAsTool(params: {
       const listed = await listBlaxelDirectoryAsTool({
         session: params.session,
         relPath: params.relPath,
+        signal: params.signal,
       });
       if (!listed.ok) return listed;
       const lines = listed.outputText.split("\n");
@@ -275,7 +394,10 @@ async function writeBlaxelFileAsTool(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
   relPath: string;
   content: string;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
+  const initialAbort = signalAbortFailureOrThrow(params.signal);
+  if (initialAbort) return initialAbort;
   if (params.relPath === ".") {
     return {
       ok: false,
@@ -289,6 +411,8 @@ async function writeBlaxelFileAsTool(params: {
     sandboxName: params.session.providerSandboxId,
     path: params.relPath,
   });
+  const abortAfterExistingRead = signalAbortFailureOrThrow(params.signal);
+  if (abortAfterExistingRead) return abortAfterExistingRead;
   if (!existing.ok && existing.code === "workspace_path_not_file") {
     return {
       ok: false,
@@ -311,6 +435,7 @@ async function writeBlaxelFileAsTool(params: {
       timeoutSeconds: 20,
       commandFailureMessage: `Failed to create workspace directory '${parentDir}'.`,
       emptyText: "",
+      signal: params.signal,
     });
     if (!mkdir.ok) return mkdir;
   }
@@ -320,12 +445,16 @@ async function writeBlaxelFileAsTool(params: {
     path: params.relPath,
     content: params.content,
   });
+  const abortAfterWrite = signalAbortFailureOrThrow(params.signal);
+  if (abortAfterWrite) return abortAfterWrite;
   if (!written.ok) return mapBlaxelProviderFailure(written);
 
   const verified = await readBlaxelWorkspaceFile({
     sandboxName: params.session.providerSandboxId,
     path: params.relPath,
   });
+  const abortAfterVerification = signalAbortFailureOrThrow(params.signal);
+  if (abortAfterVerification) return abortAfterVerification;
   if (!verified.ok) {
     return {
       ok: false,
@@ -368,11 +497,16 @@ async function editBlaxelFileAsTool(params: {
   oldText: string;
   newText: string;
   replaceAll?: boolean;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
+  const initialAbort = signalAbortFailureOrThrow(params.signal);
+  if (initialAbort) return initialAbort;
   const current = await readBlaxelWorkspaceFile({
     sandboxName: params.session.providerSandboxId,
     path: params.relPath,
   });
+  const abortAfterRead = signalAbortFailureOrThrow(params.signal);
+  if (abortAfterRead) return abortAfterRead;
   if (!current.ok) return mapBlaxelProviderFailure(current);
 
   const oldText = String(params.oldText ?? "");
@@ -434,6 +568,7 @@ async function editBlaxelFileAsTool(params: {
     session: params.session,
     relPath: params.relPath,
     content: next,
+    signal: params.signal,
   });
   if (!written.ok) return written;
   const matchStrategy = exactMatch ? "exact" : "trimmed";
@@ -449,10 +584,17 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
   toolName: RetrievalToolName;
   normalizedArgs: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
+  const initialAbort = signalAbortFailureOrThrow(params.signal);
+  if (initialAbort) return initialAbort;
   if (params.toolName === "list_dir") {
     const relPath = normalizeOptionalWorkspacePath(params.normalizedArgs.path);
-    return await listBlaxelDirectoryAsTool({ session: params.session, relPath });
+    return await listBlaxelDirectoryAsTool({
+      session: params.session,
+      relPath,
+      signal: params.signal,
+    });
   }
   if (params.toolName === "read") {
     const relPath = normalizeWorkspacePath(String(params.normalizedArgs.path ?? "").trim());
@@ -465,6 +607,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       limit: typeof params.normalizedArgs.limit === "number"
         ? params.normalizedArgs.limit
         : undefined,
+      signal: params.signal,
     });
   }
   if (params.toolName === "glob") {
@@ -482,6 +625,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       timeoutSeconds: 20,
       commandFailureMessage: `Failed to glob workspace path '${relPath}'.`,
       emptyText: "(no matches)",
+      signal: params.signal,
     });
   }
   if (params.toolName === "grep") {
@@ -500,6 +644,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       timeoutSeconds: 20,
       commandFailureMessage: `Failed to grep workspace path '${relPath}'.`,
       emptyText: "(no matches)",
+      signal: params.signal,
     });
     if (!result.ok && result.details?.exit_code === 1) {
       return {
@@ -520,6 +665,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       timeoutSeconds: 20,
       commandFailureMessage: `Failed to hash workspace file '${relPath}'.`,
       emptyText: "",
+      signal: params.signal,
     });
   }
   if (params.toolName === "write") {
@@ -528,6 +674,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       session: params.session,
       relPath,
       content: String(params.normalizedArgs.content ?? ""),
+      signal: params.signal,
     });
   }
   if (params.toolName === "edit") {
@@ -538,6 +685,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       oldText: String(params.normalizedArgs.old_text ?? ""),
       newText: String(params.normalizedArgs.new_text ?? ""),
       replaceAll: params.normalizedArgs.replace_all === true,
+      signal: params.signal,
     });
   }
   if (params.toolName === "bash") {
@@ -549,6 +697,7 @@ async function executeBlaxelRuntimeWorkspaceToolOnce(params: {
       timeoutSeconds: 60,
       commandFailureMessage: "Blaxel command failed.",
       emptyText: "(no output)",
+      signal: params.signal,
     });
   }
   return {
@@ -563,6 +712,7 @@ async function executeBlaxelRuntimeWorkspaceTool(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
   toolName: RetrievalToolName;
   normalizedArgs: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
   const firstAttempt = await executeBlaxelRuntimeWorkspaceToolOnce(params);
   if (!isBlaxelSandboxNotFoundFailure(firstAttempt)) return firstAttempt;
@@ -582,12 +732,19 @@ export async function executeRuntimeWorkspaceTool(params: {
   signal?: AbortSignal;
 }): Promise<WorkspaceRuntimeToolResult> {
   try {
+    const initialAbort = signalAbortFailureOrThrow(params.signal);
+    if (initialAbort) return initialAbort;
     return await executeBlaxelRuntimeWorkspaceTool({
       session: params.session,
       toolName: params.toolName,
       normalizedArgs: params.normalizedArgs,
+      signal: params.signal,
     });
   } catch (error) {
+    if (params.signal?.aborted) {
+      const abortFailure = signalAbortFailureOrThrow(params.signal);
+      if (abortFailure) return abortFailure;
+    }
     const code = error instanceof Error ? error.message : String(error ?? "");
     return {
       ok: false,

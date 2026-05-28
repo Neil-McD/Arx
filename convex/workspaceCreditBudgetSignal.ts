@@ -1,5 +1,16 @@
 import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession.ts";
 
+export const WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE = "workspace_credits_exhausted";
+
+export class WorkspaceCreditBudgetExpiredError extends Error {
+  readonly code = WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE;
+
+  constructor(message = "This workspace tool budget expired.") {
+    super(message);
+    this.name = "WorkspaceCreditBudgetExpiredError";
+  }
+}
+
 export function isWorkspaceCreditBudgetExpired(
   session: RuntimeWorkspaceSession | null | undefined,
 ): boolean {
@@ -19,18 +30,21 @@ export function buildWorkspaceCreditBudgetSignal(
   const controller = new AbortController();
   let settled = false;
   const cleanupFns: Array<() => void> = [];
-  const abort = () => {
+  const abort = (reason?: unknown) => {
     if (settled) return;
     settled = true;
-    controller.abort();
+    controller.abort(reason ?? new WorkspaceCreditBudgetExpiredError());
   };
-  const timeout = setTimeout(abort, remainingMs);
+  const timeout = setTimeout(
+    () => abort(new WorkspaceCreditBudgetExpiredError()),
+    remainingMs,
+  );
   cleanupFns.push(() => clearTimeout(timeout));
   if (parentSignal) {
     if (parentSignal.aborted) {
-      abort();
+      abort(parentSignal.reason);
     } else {
-      const onAbort = () => abort();
+      const onAbort = () => abort(parentSignal.reason);
       parentSignal.addEventListener("abort", onAbort, { once: true });
       cleanupFns.push(() => parentSignal.removeEventListener("abort", onAbort));
     }
