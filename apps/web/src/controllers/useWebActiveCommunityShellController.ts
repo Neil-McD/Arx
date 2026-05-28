@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
   deriveCommunityAccessCapabilities,
   deriveCommunityActionGuards,
@@ -12,14 +11,6 @@ import {
   fetchCloudCommunityPresenceSummary,
   heartbeatCloudCommunityPresence,
 } from "../../../../shared/cloudPublicFunnelGateway";
-
-type CommunityLike = {
-  id: string;
-};
-
-type CommunityMemberLike = {
-  role?: string | null;
-};
 
 type PresenceFace = {
   user_id: string;
@@ -37,16 +28,8 @@ type PresenceSummary = {
   online_faces?: PresenceFace[] | null;
 };
 
-export function useWebActiveCommunityShellController<
-  SessionT,
-  TCommunity extends CommunityLike,
-  TCommunityMember extends CommunityMemberLike,
->(params: {
-  activePage: AppPage;
+export function useWebActiveCommunityShellController<SessionT>(params: {
   activeCommunityId: string | null;
-  activeCommunity: TCommunity | null;
-  communityTab: CommunityTab;
-  communityMembers: TCommunityMember[];
   session: SessionT | null;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
 }) {
@@ -196,38 +179,40 @@ export function useWebActiveCommunityShellController<
   const canManagePayoutsActiveCommunity = communityActionGuards.canManagePayouts;
   const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
 
-  const funnelPreviewAdminCount = useMemo(() => {
-    if (typeof activeCommunityPresenceSummary?.admin_count === "number") {
-      return activeCommunityPresenceSummary.admin_count;
-    }
-    if (!params.activeCommunity) return null;
-    const adminLikeCount = params.communityMembers.filter((member) => {
-      const normalizedRole = String(member.role ?? "").trim().toLowerCase();
-      return normalizedRole === "owner" || normalizedRole === "admin";
-    }).length;
-    return adminLikeCount > 0 ? adminLikeCount : null;
-  }, [params.activeCommunity, activeCommunityPresenceSummary?.admin_count, params.communityMembers]);
-
-  const funnelPreviewOnlineCount = useMemo(() => {
-    if (typeof activeCommunityPresenceSummary?.online_count === "number") {
-      return activeCommunityPresenceSummary.online_count;
-    }
-    return null;
-  }, [activeCommunityPresenceSummary?.online_count]);
-
-  const funnelPreviewOnlineFaces = useMemo(() => {
-    if (activeCommunityPresenceSummary?.online_faces?.length) {
-      return activeCommunityPresenceSummary.online_faces
+  const communitySocialSummary = useMemo(() => {
+    const onlineFaces = activeCommunityPresenceSummary?.online_faces?.length
+      ? activeCommunityPresenceSummary.online_faces
         .filter((face) => Boolean(face?.avatar_url))
-        .slice(0, 4);
-    }
-    return [];
-  }, [activeCommunityPresenceSummary?.online_faces]);
+        .slice(0, 4)
+      : [];
+    return {
+      memberCount: typeof activeCommunityPresenceSummary?.member_count === "number"
+        ? activeCommunityPresenceSummary.member_count
+        : null,
+      adminCount: typeof activeCommunityPresenceSummary?.admin_count === "number"
+        ? activeCommunityPresenceSummary.admin_count
+        : null,
+      onlineCount: typeof activeCommunityPresenceSummary?.online_count === "number"
+        ? activeCommunityPresenceSummary.online_count
+        : null,
+      onlineFaces,
+    };
+  }, [
+    activeCommunityPresenceSummary?.admin_count,
+    activeCommunityPresenceSummary?.member_count,
+    activeCommunityPresenceSummary?.online_count,
+    activeCommunityPresenceSummary?.online_faces,
+  ]);
+
+  const funnelPreviewAdminCount = communitySocialSummary.adminCount;
+  const funnelPreviewOnlineCount = communitySocialSummary.onlineCount;
+  const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
 
   return {
     activeCommunityAccess,
     isLoadingCommunityAccess,
     activeCommunityPresenceSummary,
+    communitySocialSummary,
     reloadActiveCommunityAccess,
     communityAccessCapabilities,
     communityNavVisibility,

@@ -2397,16 +2397,13 @@ export default function App() {
     canManageMembersActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
     canViewActiveCommunityAnalytics,
+    communitySocialSummary,
     funnelPreviewAdminCount,
     funnelPreviewOnlineCount,
     funnelPreviewOnlineFaces,
     reloadActiveCommunityAccess,
-  } = useWebActiveCommunityShellController<AuthSession, CommunityRecord, CommunityMember>({
-    activePage,
+  } = useWebActiveCommunityShellController<AuthSession>({
     activeCommunityId,
-    activeCommunity,
-    communityTab,
-    communityMembers,
     session: session,
     ensureSession: ensureUsableAuthSession,
   });
@@ -5735,7 +5732,6 @@ export default function App() {
     ...sessionArg,
     activeCommunityId,
     loadCommunityMembers,
-    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
   });
 
   const activeCommunityMembersJoinReviewMode = useMemo<CommunityMembersJoinReviewMode | null>(() => {
@@ -7589,12 +7585,8 @@ export default function App() {
   const funnelPreviewAction = deriveCommunityFunnelAction({
     entry_policy: activeCommunity?.entry_policy,
   });
-  const activeCommunityMemberCount = activeCommunity
-    ? typeof communityMemberCount === "number"
-      ? communityMemberCount
-      : hasResolvedCommunityMembers && !communityMembersHasMore
-        ? communityMembers.length
-        : null
+  const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary.memberCount === "number"
+    ? communitySocialSummary.memberCount
     : null;
   const handlePreviewCommunityFunnel = useCallback(() => {
     const slug = String(activeCommunity?.slug ?? "").trim();
@@ -7627,7 +7619,7 @@ export default function App() {
         online_faces: funnelPreviewOnlineFaces,
       },
       visibilityLabel: funnelPreviewVisibilityLabel,
-      memberCount: activeCommunityMemberCount,
+      memberCount: activeCommunitySocialMemberCount,
       funnelAction: funnelPreviewAction,
       one_liner: activeCommunity?.one_liner ?? null,
       funnel: communityFunnelConfig,
@@ -7637,7 +7629,7 @@ export default function App() {
     navigateTo(previewPath, { state: previewState });
   }, [
     activeCommunity,
-    activeCommunityMemberCount,
+    activeCommunitySocialMemberCount,
     communityFunnelConfig,
     funnelPreviewAdminCount,
     funnelPreviewAction,
@@ -9266,7 +9258,7 @@ export default function App() {
           online_faces: funnelPreviewOnlineFaces,
         },
         previewVisibilityLabel: funnelPreviewVisibilityLabel,
-        previewMemberCount: activeCommunityMemberCount,
+        previewMemberCount: activeCommunitySocialMemberCount,
         previewFunnelAction: funnelPreviewAction,
       },
       canViewActiveCommunityAnalytics,
@@ -10077,7 +10069,7 @@ export default function App() {
     activeCommunity,
     activeCommunityAccess,
     fallbackRole: activeCommunity ? communityRoleById[activeCommunity.id] : null,
-    memberCount: activeCommunityMemberCount,
+    memberCount: activeCommunitySocialMemberCount,
     canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
     muted: communityMemberMuted,
     onlineFaces: funnelPreviewOnlineFaces,
