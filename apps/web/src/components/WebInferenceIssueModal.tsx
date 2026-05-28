@@ -103,7 +103,9 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
 
   const paidToolTitle =
     requiresWorkspaceCardSetup
-      ? "Add a card to use workspace tools"
+      ? paidUsageBillingMode === "card_required"
+        ? "Add a card to create another computer"
+        : "Add a card to use workspace tools"
     : isWorkspaceBillingIssue
       ? "Add balance to use premium tools"
       : "Add balance to use premium tools";
