@@ -394,6 +394,11 @@ assert.match(
   "launch create flow must create the community then continue into setup status",
 );
 assert.match(
+  appShell,
+  /handleCreateCommunityFromLaunch[\s\S]*replaceCommunityLaunchSetupRouteState\(launchStep, \{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*\}\)/,
+  "launch create flow must route setup continuation with the newly created community target",
+);
+assert.match(
   shellChromeHostProps,
   /onOpenCommunityCreateCta[\s\S]*openCommunityCreateFlow/,
   "desktop community rail create CTA must route to the launch create flow",
@@ -604,6 +609,25 @@ assert.match(
   /onStepChange\?:[\s\S]*onStepChange,[\s\S]*onStepChange\?\.\(nextStep\)[\s\S]*onStepChange\?\.\(step\)/,
   "launch setup modal step changes must notify the shell so the durable route stays current",
 );
+{
+  const createProfileSubmitBlock =
+    setupModal.match(/if \(isCreateMode\) \{[\s\S]*?return;[\s\S]*?\}[\s\S]*?void runStepSave\(/)?.[0] ?? "";
+  assert.match(
+    createProfileSubmitBlock,
+    /void onCreateCommunity\(profileDraft\)/,
+    "create-mode profile submit must call the create handoff directly",
+  );
+  assert.doesNotMatch(
+    createProfileSubmitBlock,
+    /runStepSave\(\s*"profile"/,
+    "create-mode profile submit must not use generic step-save routing",
+  );
+  assert.match(
+    setupModal,
+    /\? "Next"[\s\S]*: "Save profile"/,
+    "create-mode profile CTA must read as the onboarding next action, not a final create destination",
+  );
+}
 assert.match(
   appShell,
   /setCommunityLaunchLinkSources[\s\S]*setCommunityLaunchFileSources[\s\S]*setCommunityLaunchGoogleDriveSources[\s\S]*setCommunityLaunchGitHubSources[\s\S]*loadCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*source_ingestion_kind === "url"[\s\S]*source_ingestion_kind === "file"[\s\S]*source_external_provider === "google_drive"[\s\S]*source_external_provider === "github"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchKnowledgeSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,

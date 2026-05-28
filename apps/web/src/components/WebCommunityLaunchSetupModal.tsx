@@ -1503,11 +1503,23 @@ export function WebCommunityLaunchSetupModal(
         setStepError("Community creation is unavailable.");
         return;
       }
-      void runStepSave(
-        "profile",
-        () => onCreateCommunity(profileDraft),
-        "Community created.",
-      );
+      if (savingStep) return;
+      setSavingStep("profile");
+      setStepError(null);
+      setStepSuccess(null);
+      void onCreateCommunity(profileDraft)
+        .catch((error) => {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to create community.";
+          setStepError(message);
+        })
+        .finally(() => {
+          setSavingStep(null);
+        });
       return;
     }
     void runStepSave(
@@ -2393,7 +2405,7 @@ export function WebCommunityLaunchSetupModal(
                   ? "Creating..."
                   : "Saving..."
                 : isCreateMode
-                  ? "Create community"
+                  ? "Next"
                   : "Save profile"}
             </button>
           </div>
