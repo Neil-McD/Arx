@@ -38,7 +38,7 @@ The active system is defined by these inputs:
 7. Active project context: absent | present
 8. Community access state: owner, active membership, approved entitlement, pending, blocked, or visitor
 9. Community billing state: open, approval-gated, paid subscription, checkout pending, provider verified, or unavailable
-10. Tool balance state: sufficient, exhausted, unavailable, reserved, settled, or refunded
+10. Tool balance state: sufficient, exhausted, unavailable, reserved, settled, or released
 
 And these outputs:
 
@@ -121,10 +121,10 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 1. Tool balance is non-refundable.
 2. Tool balance top-ups use server-defined Stripe Checkout packs.
 3. Workspace tools reserve balance before workspace infrastructure is created or used.
-4. Workspace tools settle actual compute usage and refund unused reservation credits.
+4. Workspace tools settle actual compute usage and release unused reserved credits back to tool balance.
 5. Web research reserves before the call and strictly settles on success.
 6. Voice input reserves before transcription and strictly settles on success.
-7. Failed tool calls should refund reserved balance when no paid tool result was delivered.
+7. Failed tool calls should release reserved balance when no paid tool result was delivered.
 8. Expired reservations are reconciled by scheduled backend cleanup.
 
 ## 7) Canonical Files
@@ -138,8 +138,8 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 - Stripe webhook handling: `/Users/neilmcdevitt/code/arx/convex/httpBilling.ts`
 - Tool-balance pricing: `/Users/neilmcdevitt/code/arx/shared/workspaceCredits.ts`
 - Tool-balance ledger: `/Users/neilmcdevitt/code/arx/convex/workspaceCredits.ts`
-- Workspace tool charge paths: `/Users/neilmcdevitt/code/arx/convex/daytonaWorkspaceSession.ts`, `/Users/neilmcdevitt/code/arx/convex/workspaceTerminalBackgroundService.ts`
-- Web research charge path: `/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts`
+- Workspace tool charge paths: `/Users/neilmcdevitt/code/arx/convex/workspaceRuntimeSession.ts`, `/Users/neilmcdevitt/code/arx/convex/workspaceTerminals.ts`
+- Web research charge path: `/Users/neilmcdevitt/code/arx/convex/runtimeAgentLoop.ts`
 - Voice charge path: `/Users/neilmcdevitt/code/arx/convex/httpVoice.ts`
 
 ## 8) Drift Policy

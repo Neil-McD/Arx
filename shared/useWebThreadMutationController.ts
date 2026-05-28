@@ -1,10 +1,10 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
-import { ensureDefaultCloudProjectId } from "./daytonaCloudProjects";
+import { ensureDefaultCloudProjectId } from "./cloudProjectsGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import {
   getConvexCloudThreadRowByThreadKey,
   isConvexCloudThreadsEnabled,
-} from "./daytonaCloudThreadsRead";
+} from "./cloudThreadsRead";
 import {
   ensureCloudThreadRecord,
   updateCloudThreadRecord,

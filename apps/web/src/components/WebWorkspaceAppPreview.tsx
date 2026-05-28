@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import {
-  type DaytonaWorkspaceTerminalPreview,
-  type DaytonaWorkspaceTerminalRecord,
-} from "../../../../shared/daytonaWorkspaceTerminals";
-import { buildDaytonaPreviewProxyUrl } from "../lib/daytonaPreviewProxy";
+  type WorkspaceTerminalPreview,
+  type WorkspaceTerminalRecord,
+} from "../../../../shared/workspaceTerminalsGateway";
+import { buildWorkspacePreviewProxyUrl } from "../lib/workspacePreviewProxy";
 
 function StopGlyph(): JSX.Element {
   return (
@@ -84,7 +84,7 @@ function CollapseGlyph(): JSX.Element {
 
 export type WorkspacePreviewLifecycleState = {
   phase: "idle" | "resolving" | "loading" | "ready" | "error";
-  preview: DaytonaWorkspaceTerminalPreview | null;
+  preview: WorkspaceTerminalPreview | null;
   error: string | null;
 };
 
@@ -103,7 +103,7 @@ export type WorkspacePreviewMetricsObservation = {
   probeAccess: "same_origin" | "cross_origin_uninspectable" | "unavailable";
 };
 
-function formatTerminalStatus(status: DaytonaWorkspaceTerminalRecord["status"]): string {
+function formatTerminalStatus(status: WorkspaceTerminalRecord["status"]): string {
   if (status === "starting") return "Starting";
   if (status === "running") return "Running";
   if (status === "failed") return "Failed";
@@ -111,11 +111,20 @@ function formatTerminalStatus(status: DaytonaWorkspaceTerminalRecord["status"]):
   return "Stopped";
 }
 
-export function isRetryablePreviewStatus(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
+export function isRetryablePreviewStatus(status: WorkspaceTerminalRecord["status"]): boolean {
   return status === "starting" || status === "running";
 }
 
-function formatPreviewLabel(terminal: DaytonaWorkspaceTerminalRecord): string {
+function isLivePreviewTerminal(terminal: WorkspaceTerminalRecord): boolean {
+  return (
+    isRetryablePreviewStatus(terminal.status) &&
+    typeof terminal.preview_port === "number" &&
+    Number.isFinite(terminal.preview_port) &&
+    terminal.preview_port >= 3000
+  );
+}
+
+function formatPreviewLabel(terminal: WorkspaceTerminalRecord): string {
   const explicit = String(terminal.preview_label ?? "").trim();
   if (explicit) return explicit;
   const port = terminal.preview_port;
@@ -124,7 +133,7 @@ function formatPreviewLabel(terminal: DaytonaWorkspaceTerminalRecord): string {
 }
 
 function getPreviewLoadingCopy(
-  terminal: DaytonaWorkspaceTerminalRecord,
+  terminal: WorkspaceTerminalRecord,
   state: WorkspacePreviewLifecycleState,
 ): { title: string; body: string } {
   if (terminal.status === "failed") {
@@ -174,10 +183,10 @@ function getPreviewLoadingCopy(
 }
 
 function buildWorkspaceAppPreviewUrl(
-  preview: DaytonaWorkspaceTerminalPreview,
+  preview: WorkspaceTerminalPreview,
   mode: "inline" | "expanded",
 ): string {
-  return buildDaytonaPreviewProxyUrl({
+  return buildWorkspacePreviewProxyUrl({
     previewProxyToken: preview.preview_proxy_token,
     previewPath: preview.preview_path,
     searchParams: {
@@ -399,16 +408,16 @@ function PreviewFrame({
 }
 
 export function WebWorkspaceAppPreview(props: {
-  terminals: DaytonaWorkspaceTerminalRecord[];
+  terminals: WorkspaceTerminalRecord[];
   previewStateByTerminalId: Record<string, WorkspacePreviewLifecycleState>;
   busyTerminalIds?: readonly string[];
   onEnsurePreview: (terminalSessionId: string, opts?: { force?: boolean }) => void;
   onPreviewLifecyclePhaseChange?: (params: {
-    terminal: DaytonaWorkspaceTerminalRecord;
+    terminal: WorkspaceTerminalRecord;
     phase: "loading" | "ready" | "error";
   }) => void;
   onPreviewMetricsObservation?: (params: {
-    terminal: DaytonaWorkspaceTerminalRecord;
+    terminal: WorkspaceTerminalRecord;
     metrics: WorkspacePreviewMetricsObservation;
   }) => void;
   onStopTerminal: (terminalSessionId: string) => void;
@@ -421,10 +430,7 @@ export function WebWorkspaceAppPreview(props: {
   const previewTerminals = useMemo(
     () =>
       props.terminals.filter(
-        (terminal) =>
-          typeof terminal.preview_port === "number" &&
-          Number.isFinite(terminal.preview_port) &&
-          terminal.preview_port >= 3000,
+        (terminal) => isLivePreviewTerminal(terminal),
       ),
     [props.terminals],
   );

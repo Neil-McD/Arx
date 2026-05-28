@@ -83,7 +83,7 @@ Capability is real only when:
 15. Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or network egress guard.
 16. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
 17. Prefer direct API adapters when the product workflow needs token-efficient structured snapshots instead of broad tool discovery.
-18. Prefer existing project-bound Daytona workspace tools for CLI-shaped apps that produce artifacts, renders, builds, or previews.
+18. Prefer existing project-bound workspace tools for CLI-shaped apps that produce artifacts, renders, builds, or previews.
 19. Ready OAuth remote MCP apps use PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state. Notion uses dynamic client registration against its hosted MCP endpoint; Asana is the first static-client OAuth MCP target and remains non-connectable until the deployment has `ASANA_MCP_CLIENT_ID` and `ASANA_MCP_CLIENT_SECRET` configured for `https://mcp.asana.com/v2/mcp`.
 20. GitHub is ready only through its hosted read-only MCP endpoint, `https://api.githubcopilot.com/mcp/readonly`, with a user-owned bearer token and catalog-owned read-only/toolset headers. Do not switch GitHub to the general remote MCP endpoint without a separate write-safety review.
 21. Vercel's hosted MCP endpoint is catalog-known, but it remains non-connectable until Polynet's client approval and operation-safety path are verified.

@@ -19,7 +19,7 @@ function main() {
   const contract = readText(join(root, "docs/mcp-app-architecture-contract.md"));
   const discoverCatalog = readText(join(root, "shared/discoverCatalog.ts"));
   const schema = readText(join(root, "convex/schema.ts"));
-  const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
+  const runtimeAgentLoop = readText(join(root, "convex/runtimeAgentLoop.ts"));
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
   );
@@ -80,7 +80,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, workspace CLI uses the existing project-bound Daytona workspace tools, and catalog-only has no executable surface.",
+    "Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, workspace CLI uses the existing project-bound workspace tools, and catalog-only has no executable surface.",
     "MCP app architecture contract execution surface rule",
   );
   assertIncludes(
@@ -175,7 +175,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Do not expose `communityAppMounts` directly as Daytona runtime tools.",
+    "Do not expose `communityAppMounts` directly as runtime tools.",
     "MCP app architecture contract forbidden runtime pattern",
   );
   assertIncludes(
@@ -194,19 +194,19 @@ function main() {
   assertIncludes(schema, "userPlatformAppMounts: defineTable({", "user app state table");
 
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal",
-    "Daytona runtime user app tool query",
+    "runtime user app tool query",
   );
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal",
-    "Daytona runtime community app tool query",
+    "runtime community app tool query",
   );
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_app_tools_resolved",
-    "Daytona runtime community app evidence event",
+    "runtime community app evidence event",
   );
 
   assertIncludes(
@@ -391,7 +391,7 @@ function main() {
   );
   assertIncludes(
     discoverCatalog,
-    "No separate app credentials are required. Add the HyperFrames skill, then use it in a project-bound thread where workspace tools can run the CLI in Daytona and return artifact references.",
+    "No separate app credentials are required. Add the HyperFrames skill, then use it in a project-bound thread where workspace tools can run the CLI and return artifact references.",
     "Discover catalog routes HyperFrames through skill plus existing project workspace tools",
   );
   assertNotIncludes(

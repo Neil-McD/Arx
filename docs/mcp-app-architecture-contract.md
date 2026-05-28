@@ -41,7 +41,7 @@ Rules:
 - Planned apps must remain disabled at the profile layer until their adapter contract exists.
 - Adapter categories are MCP, connector backplane, direct API, sandboxed CLI, or catalog-only.
 - Context strategy must say whether the harness should use manifest-only context, search-then-fetch, structured snapshots, or artifact references.
-- Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, workspace CLI uses the existing project-bound Daytona workspace tools, and catalog-only has no executable surface.
+- Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, workspace CLI uses the existing project-bound workspace tools, and catalog-only has no executable surface.
 - Result policy declares active tool-count and result-byte bounds; validation caps discovered tool snapshots and runtime truncates oversized tool output to the app profile budget.
 - Tool policy uses the Codex-style irreducible model: default-enabled tools, disabled tools, and a final execution-time deny check. Provider profiles own these rules; UI surfaces only project them.
 - Catalog app connection policy is server-authoritative; the frontend cannot choose a catalog app endpoint, auth mode, or display name as authority.
@@ -50,7 +50,7 @@ Rules:
 - GitHub's ready profile is intentionally read-only and must use `https://api.githubcopilot.com/mcp/readonly` with catalog-owned read-only and toolset headers; the general GitHub MCP endpoint is not part of the ready contract.
 - Stripe's ready profile uses `https://mcp.stripe.com` with a user-owned restricted API key. Secret and publishable Stripe keys are rejected, mutation-shaped Stripe MCP tools are blocked by provider policy, and Stripe MCP must not replace Polynet's server-authoritative billing, entitlement, payout, or webhook flows.
 - Vercel's MCP profile stays planned until Polynet's client approval and operation-safety path are verified.
-- Media-production apps must use an artifact/job contract. HyperFrames is a workspace CLI skill/profile that uses existing Daytona workspace tools when a project workspace is active, not a hosted MCP endpoint or a separate tool family; Higgsfield is skill-first while MCP/CLI execution remains planned; HeyGen stays planned until async media polling, credit controls, and artifact references are part of the runtime path.
+- Media-production apps must use an artifact/job contract. HyperFrames is a workspace CLI skill/profile that uses existing workspace tools when a project workspace is active, not a hosted MCP endpoint or a separate tool family; Higgsfield is skill-first while MCP/CLI execution remains planned; HeyGen stays planned until async media polling, credit controls, and artifact references are part of the runtime path.
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.
@@ -105,7 +105,7 @@ The runtime harness is the executable set of MCP tools available to the model.
 
 Current code:
 - `composeResolvedRuntimeHarness`
-- Daytona HTTP runtime in `httpDaytona.ts`
+- runtime agent loop in `runtimeAgentLoop.ts`
 - `runtimeMcpManager`
 
 Rules:
@@ -158,7 +158,7 @@ Leaving a community revokes community access, not previously installed user-owne
 ## Forbidden patterns
 
 - Do not add "community Linear runtime" beside "personal Linear runtime".
-- Do not expose `communityAppMounts` directly as Daytona runtime tools.
+- Do not expose `communityAppMounts` directly as runtime tools.
 - Do not show community status as setup needed when the user's effective app state is live for the same app identity.
 - Do not infer that a community app record provides a member's bearer token, OAuth token, or secret.
 - Do not treat endpoint string equality alone as canonical when a catalog identity is available.

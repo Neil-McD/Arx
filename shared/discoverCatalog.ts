@@ -2568,7 +2568,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Agent-oriented video authoring framework for composing videos as web documents and rendering them into production media.",
     supportLabel: "Workspace CLI skill",
     supportNote:
-      "HyperFrames uses PolyNet's existing project workspace tools in Daytona when a workspace is active. It is not a hosted remote MCP connector.",
+      "HyperFrames uses PolyNet's existing project workspace tools when a workspace is active. It is not a hosted remote MCP connector.",
     heroNote:
       "Best for builder communities that want agents to generate video from structured HTML scenes.",
     capabilities: [
@@ -2592,7 +2592,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Sandboxed CLI",
       note:
-        "No separate app credentials are required. Add the HyperFrames skill, then use it in a project-bound thread where workspace tools can run the CLI in Daytona and return artifact references.",
+        "No separate app credentials are required. Add the HyperFrames skill, then use it in a project-bound thread where workspace tools can run the CLI and return artifact references.",
     },
   },
   {

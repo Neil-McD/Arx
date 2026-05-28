@@ -479,12 +479,12 @@ export type OperatorPaidToolLane = {
   label: string;
   reservations: number;
   succeeded: number;
-  refunded: number;
+  released: number;
   stillReserved: number;
   failures: number;
   reservedCredits: number;
   settledCredits: number;
-  refundedCredits: number;
+  releasedCredits: number;
   latestAt: number | null;
 };
 
@@ -586,12 +586,12 @@ export type OperatorToolEconomicsSnapshot = {
     totals: {
       reservations: number;
       succeeded: number;
-      refunded: number;
+      released: number;
       stillReserved: number;
       failures: number;
       reservedCredits: number;
       settledCredits: number;
-      refundedCredits: number;
+      releasedCredits: number;
       unbilledComputeCharges: number;
     };
     lanes: OperatorPaidToolLane[];

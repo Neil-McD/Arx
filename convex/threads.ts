@@ -3,15 +3,6 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
-  getDaytonaPreviewUrl,
-  getDaytonaSignedPreviewUrl,
-  loadDaytonaConfig,
-} from "./daytonaSandboxClient";
-import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
-import {
-  getDaytonaComputerUseStatus,
-} from "./daytonaComputerUseTransport";
-import {
   applyRuntimeHarnessTelemetryEvent,
   buildRuntimeHarnessScorecard,
   buildRuntimeHarnessTelemetrySummaryFromEvents,
@@ -23,6 +14,9 @@ import {
   summarizeRuntimeWorkingStateFromEvents,
 } from "../shared/runtimeWorkingStateLedger";
 import { formatDefaultComputerName } from "../shared/projectNaming";
+import {
+  DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
+} from "../shared/workspaceProjectResources";
 import { requireCommunityChatAccess } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 
@@ -238,7 +232,7 @@ type ThreadWorkingStateLike = {
   updatedAt: number;
 };
 
-const RUNTIME_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
+const RUNTIME_RUN_STALE_AFTER_MS = 8 * 60 * 1000;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -786,6 +780,7 @@ async function ensureDefaultProjectId(args: {
     name: formatDefaultComputerName(1),
     status: "active",
     providerVolumeId: undefined,
+    workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -1868,6 +1863,25 @@ export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   },
 });
 
+export const listStaleRunningRuntimeRunsInternal = internalQuery({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const staleBeforeMs = Math.max(0, nowMs - RUNTIME_RUN_STALE_AFTER_MS);
+    const rows = (await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_status_updatedAt", (q: any) =>
+        q.eq("status", "running").lt("updatedAt", staleBeforeMs),
+      )
+      .take(safeLimit)) as RuntimeRunLike[];
+    return rows.filter((run) => isRuntimeRunStale({ run, nowMs }));
+  },
+});
+
 export const getUserByAuthSubjectInternal = internalQuery({
   args: {
     authSubject: v.string(),
@@ -2471,6 +2485,68 @@ export const reconcileOrphanedCloudRuntimeRunInternal = internalMutation({
   },
 });
 
+export const finalizeStaleCloudRuntimeRunInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) {
+      return {
+        finalized: false,
+        status: "missing",
+        stale: false,
+      };
+    }
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") {
+      return {
+        finalized: false,
+        status: run.status,
+        stale: false,
+      };
+    }
+    if (!isRuntimeRunStale({ run, nowMs })) {
+      return {
+        finalized: false,
+        status: "running",
+        stale: false,
+      };
+    }
+    const updated = await finalizeRuntimeRunRecord({
+      ctx,
+      ownerId: args.ownerId,
+      thread,
+      run,
+      status: "error",
+      reason: "stale_runtime_workspace_run_reconciled",
+      errorCode: "stale_runtime_workspace_run_reconciled",
+      errorMessage: "Runtime workspace run stopped heartbeating and was reconciled by the stale-run cleanup wall.",
+      nowMs,
+      finishedAt: nowMs,
+    });
+    return {
+      finalized: true,
+      status: updated.status,
+      stale: true,
+    };
+  },
+});
+
 export const touchCloudRuntimeRunHeartbeatInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -2721,7 +2797,6 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
         owner_id_present: Boolean(ownerId),
         requested_run_id: runId,
       };
-
       const run = (await ctx.runQuery(internal.threads.getRuntimeRunByOwnerRunIdInternal as any, {
         ownerId,
         runId,
@@ -2739,191 +2814,22 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
           },
         };
       }
-      if (run.status !== "running") {
-        return {
-          ok: false,
-          status: 409,
-          code: "live_desktop_inactive",
-          message: "Live desktop is only available while the runtime run is active.",
-          debug: {
-            ...baseDebug,
-            stage: "run_status",
-            run_found: true,
-            run_status: run.status,
-            run_thread_id: run.threadId ?? null,
-          },
-        };
-      }
-
-      const persistedSessionState = String(run.workspaceSessionState ?? "").trim();
-      const hasAuthoritativeSessionState = persistedSessionState.length > 0;
-      const sandboxId = normalizeIdValue(run.workspaceProviderSandboxId);
-      const toolboxProxyUrl = String(
-        run.workspaceToolboxProxyUrl ?? "",
-      ).trim();
-      if (!hasAuthoritativeSessionState || persistedSessionState !== "active") {
-        return {
-          ok: false,
-          status: 409,
-          code: "live_desktop_unavailable",
-          message: "This runtime run does not have an active workspace desktop session.",
-          retryable: true,
-          debug: {
-            ...baseDebug,
-            stage: "workspace_session",
-            run_found: true,
-            run_status: run.status,
-            workspace_session_source: "runtime_run",
-            workspace_session_state: persistedSessionState || null,
-            sandbox_id_present: Boolean(sandboxId),
-            toolbox_proxy_url_present: Boolean(toolboxProxyUrl),
-          },
-        };
-      }
-      const sessionDebug = {
-        ...baseDebug,
-        stage: "workspace_session",
-        run_found: true,
-        run_status: run.status,
-        workspace_session_source: "runtime_run",
-        workspace_session_state: persistedSessionState || null,
-        sandbox_id_present: Boolean(sandboxId),
-        toolbox_proxy_url_present: Boolean(toolboxProxyUrl),
-      };
-      if (!sandboxId) {
-        return {
-          ok: false,
-          status: 409,
-          code: "live_desktop_unavailable",
-          message: "This runtime run does not have an active workspace desktop session.",
-          retryable: true,
-          debug: sessionDebug,
-        };
-      }
-      if (!toolboxProxyUrl) {
-        return {
-          ok: false,
-          status: 409,
-          code: "live_desktop_unavailable",
-          message: "This runtime run is missing the workspace toolbox proxy URL.",
-          retryable: true,
-          debug: sessionDebug,
-        };
-      }
-
-      const loadedConfig = loadDaytonaConfig();
-      if (!loadedConfig.ok) {
-        return {
-          ok: false,
-          status: 503,
-          code: loadedConfig.code,
-          message: loadedConfig.message,
-          retryable: true,
-          debug: {
-            ...sessionDebug,
-            stage: "config",
-          },
-        };
-      }
-
-      const computerUseStatus = await getDaytonaComputerUseStatus({
-        config: loadedConfig.config,
-        toolboxProxyUrl,
-        sandboxId,
-      });
-      if (!computerUseStatus.ok) {
-        return {
-          ok: false,
-          status: computerUseStatus.status,
-          code: computerUseStatus.code,
-          message: computerUseStatus.message,
-          retryable: true,
-          debug: {
-            ...sessionDebug,
-            stage: "computer_use_status",
-            computer_use_status_ok: false,
-          },
-        };
-      }
-      const normalizedComputerUseStatus = computerUseStatus.status;
-      if (!normalizedComputerUseStatus || normalizedComputerUseStatus === "stopped") {
-        return {
-          ok: false,
-          status: 409,
-          code: "computer_use_not_started",
-          message: "Computer use has not started for this runtime run yet.",
-          retryable: true,
-          debug: {
-            ...sessionDebug,
-            stage: "computer_use_status",
-            computer_use_status: normalizedComputerUseStatus || null,
-          },
-        };
-      }
-      if (normalizedComputerUseStatus !== "active" && normalizedComputerUseStatus !== "running") {
-        return {
-          ok: false,
-          status: 409,
-          code: "computer_use_starting",
-          message: "Computer use is starting.",
-          retryable: true,
-          debug: {
-            ...sessionDebug,
-            stage: "computer_use_status",
-            computer_use_status: normalizedComputerUseStatus,
-          },
-        };
-      }
-
-      const preview = await getDaytonaPreviewUrl({
-        config: loadedConfig.config,
-        sandboxId,
-        port: 6080,
-      });
-      if (!preview.ok) {
-        return {
-          ...preview,
-          retryable: true,
-          debug: {
-            ...sessionDebug,
-            stage: "preview_url",
-            computer_use_status: normalizedComputerUseStatus,
-            preview_url_ok: false,
-          },
-        };
-      }
-      const previewProxyToken = await mintPreviewProxySessionToken({
-        kind: "live_desktop",
-        previewUrl: preview.url,
-        previewToken: preview.token,
-        expiresAtMs: Date.now() + 300 * 1000,
-      });
-      if (!previewProxyToken.ok) {
-        return {
-          ok: false,
-          status: 503,
-          code: previewProxyToken.code,
-          message: previewProxyToken.message,
-          retryable: false,
-          debug: {
-            ...sessionDebug,
-            stage: "preview_proxy_token",
-            computer_use_status: normalizedComputerUseStatus,
-          },
-        };
-      }
-
       return {
-        ok: true,
-        run_id: runId,
-        sandbox_id: sandboxId,
-        preview_proxy_token: previewProxyToken.token,
-        expires_at: Date.now() + 300 * 1000,
+        ok: false,
+        status: 501,
+        code: "computer_use_not_supported",
+        message: "Live desktop is not available on the Blaxel workspace provider yet.",
+        retryable: false,
         debug: {
-          ...sessionDebug,
-          stage: "ready",
-          computer_use_status: normalizedComputerUseStatus,
-          preview_url_ok: true,
+          ...baseDebug,
+          stage: "provider_unsupported",
+          run_found: true,
+          run_status: run.status,
+          run_thread_id: run.threadId ?? null,
+          workspace_session_state: run.workspaceSessionState ?? null,
+          workspace_provider_sandbox_id: run.workspaceProviderSandboxId ?? null,
+          workspace_toolbox_proxy_url_present: Boolean(run.workspaceToolboxProxyUrl),
+          provider_id: "blaxel",
         },
       };
     } catch (error) {

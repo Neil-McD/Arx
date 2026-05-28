@@ -5,11 +5,11 @@ import {
   DEFAULT_INCLUDED_TOOL_CREDITS,
   CREDIT_RESERVATION_EXPIRY_MS,
   creditsToUsd,
-  estimateDaytonaWorkspaceComputeUsd,
+  estimateWorkspaceComputeUsd,
   formatWorkspaceToolBalanceUsdFromCredits,
   getSpendableWorkspaceToolBalanceCredits,
   getUncollectedWorkspaceToolBalanceCredits,
-  priceDaytonaWorkspaceUsageCredits,
+  priceWorkspaceUsageCredits,
   resolveWorkspaceToolBalanceTopupPack,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
@@ -41,6 +41,171 @@ function roundCredits(value: number): number {
 function normalizeOptionalString(value: unknown): string | undefined {
   const normalized = String(value ?? "").trim();
   return normalized || undefined;
+}
+
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function isBlaxelWorkspaceComputeReservation(entry: any): boolean {
+  return (
+    normalizeOptionalString(entry?.toolName) === "workspace_compute" &&
+    normalizeOptionalString(entry?.vendor) === "blaxel" &&
+    Boolean(entry?.projectId)
+  );
+}
+
+function isBlaxelRuntimeWorkspaceReservation(entry: any): boolean {
+  return (
+    isBlaxelWorkspaceComputeReservation(entry) &&
+    normalizeOptionalString(entry?.action) === "runtime_workspace_session"
+  );
+}
+
+function isBlaxelProjectWorkspaceLeaseReservation(entry: any): boolean {
+  const action = normalizeOptionalString(entry?.action);
+  return (
+    isBlaxelWorkspaceComputeReservation(entry) &&
+    (action === "workspace_file_inspection" ||
+      action === "interactive_workspace_computer" ||
+      action === "project_zip_import")
+  );
+}
+
+async function hasRunningRuntimeRunForWorkspaceReservation(ctx: any, entry: any): Promise<boolean> {
+  if (!isBlaxelRuntimeWorkspaceReservation(entry)) return false;
+  const runId = normalizeOptionalString(entry?.runId);
+  if (!runId) return false;
+  const projectId = normalizeOptionalString(entry?.projectId);
+  if (!projectId) return false;
+  const run = await ctx.db
+    .query("runtimeRuns")
+    .withIndex("by_owner_runId", (q: any) =>
+      q.eq("ownerId", entry.userId).eq("runId", runId),
+    )
+    .first();
+  return (
+    normalizeOptionalString(run?.status) === "running" &&
+    normalizeOptionalString(run?.projectId) === projectId
+  );
+}
+
+async function hasActiveBlaxelProjectWorkspaceLeasePointer(ctx: any, entry: any): Promise<boolean> {
+  if (!isBlaxelProjectWorkspaceLeaseReservation(entry)) return false;
+  const projectId = entry?.projectId;
+  if (!projectId) return false;
+  const project = await ctx.db.get(projectId);
+  const pointerMatches =
+    normalizeOptionalString(project?.providerSandboxProviderId) === "blaxel" &&
+    normalizeOptionalString(project?.providerSandboxCreditReservationKey) ===
+      normalizeOptionalString(entry?.creditKey);
+  return pointerMatches;
+}
+
+async function shouldSkipExpiredBlaxelWorkspaceReservation(ctx: any, entry: any): Promise<boolean> {
+  if (isBlaxelRuntimeWorkspaceReservation(entry)) {
+    return await hasRunningRuntimeRunForWorkspaceReservation(ctx, entry);
+  }
+  return await hasActiveBlaxelProjectWorkspaceLeasePointer(ctx, entry);
+}
+
+function hasRuntimeWorkspaceEvidence(run: any, reservations: any[]): boolean {
+  const workspaceState = normalizeOptionalString(run?.workspaceSessionState);
+  return (
+    reservations.length > 0 ||
+    Boolean(normalizeOptionalString(run?.workspaceProviderSandboxId)) ||
+    (workspaceState !== undefined && workspaceState !== "none")
+  );
+}
+
+async function resolveStaleRuntimeWorkspaceProviderSandboxId(params: {
+  ctx: any;
+  run: any;
+  reservation: any;
+}): Promise<string | undefined> {
+  const runSandboxId = normalizeOptionalString(params.run?.workspaceProviderSandboxId);
+  if (runSandboxId) return runSandboxId;
+  const projectId = params.reservation?.projectId;
+  if (!projectId) return undefined;
+  try {
+    const project = await params.ctx.runQuery(
+      (internal as any).projects.getCloudProjectByIdInternal,
+      {
+        projectId,
+      },
+    );
+    const projectSandboxId = normalizeOptionalString(project?.providerSandboxId);
+    const reservationKeyMatches =
+      normalizeOptionalString(project?.providerSandboxProviderId) === "blaxel" &&
+      normalizeOptionalString(project?.providerSandboxCreditReservationKey) ===
+        normalizeOptionalString(params.reservation?.creditKey);
+    return reservationKeyMatches ? projectSandboxId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildStaleRuntimeWorkspaceSettlement(params: {
+  run: any;
+  reservation: any;
+  providerSandboxId: string;
+  nowMs: number;
+}): {
+  startedAt: number;
+  endedAt: number;
+  durationSeconds: number;
+  sandboxCpu: number;
+  sandboxMemoryGiB: number;
+  sandboxDiskGiB: number;
+  computeCostUsd: number;
+  creditsDebited: number;
+  metadata: Record<string, unknown>;
+} {
+  const reservationMetadata = normalizeObjectMetadata(params.reservation?.metadata);
+  const startedAt = Math.floor(
+    normalizeOptionalNumber(params.reservation?.createdAt) ??
+      normalizeOptionalNumber(params.run?.startedAt) ??
+      params.nowMs,
+  );
+  const endedAt = Math.floor(params.nowMs);
+  const durationSeconds = Math.max(0, (endedAt - startedAt) / 1000);
+  const sandboxCpu = Math.max(0, normalizeOptionalNumber(reservationMetadata.sandbox_cpu) ?? 0);
+  const sandboxMemoryGiB = Math.max(
+    0,
+    normalizeOptionalNumber(reservationMetadata.sandbox_memory_gib) ?? 0,
+  );
+  const sandboxDiskGiB = Math.max(
+    0,
+    normalizeOptionalNumber(reservationMetadata.sandbox_disk_gib) ?? 0,
+  );
+  const computeCostUsd = estimateWorkspaceComputeUsd({
+    durationSeconds,
+    sandboxCpu,
+    sandboxMemoryGiB,
+  });
+  const creditsDebited = priceWorkspaceUsageCredits({ computeCostUsd });
+  return {
+    startedAt,
+    endedAt,
+    durationSeconds,
+    sandboxCpu,
+    sandboxMemoryGiB,
+    sandboxDiskGiB,
+    computeCostUsd,
+    creditsDebited,
+    metadata: {
+      ...reservationMetadata,
+      provider: "blaxel",
+      provider_sandbox_id: params.providerSandboxId,
+      settlement_source: "stale_runtime_workspace_run_reconciler",
+      settlement_reason: "stale_runtime_workspace_run_reconciled",
+      final_duration_seconds: roundCurrency(durationSeconds),
+      final_compute_cost_usd: roundCurrency(computeCostUsd),
+      final_credits_requested: roundCredits(creditsDebited),
+      stale_run_id: normalizeOptionalString(params.run?.runId) ?? null,
+    },
+  };
 }
 
 function normalizeObjectMetadata(value: unknown): Record<string, unknown> {
@@ -330,6 +495,45 @@ export const getWorkspaceCreditBalanceInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     return await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
+  },
+});
+
+export const getCreditLedgerEntryByKeyInternal = internalQuery({
+  args: {
+    creditKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const creditKey = String(args.creditKey ?? "").trim();
+    if (!creditKey) return null;
+    return await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_creditKey", (q) => q.eq("creditKey", creditKey))
+      .first();
+  },
+});
+
+export const listReservedBlaxelRuntimeWorkspaceReservationsByRunInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    runId: v.string(),
+    projectId: v.optional(v.id("cloudProjects")),
+  },
+  handler: async (ctx, args) => {
+    const runId = normalizeOptionalString(args.runId);
+    if (!runId) return [];
+    const rows = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .collect();
+    return rows.filter((entry) => {
+      if (entry.status !== "reserved") return false;
+      if (!isBlaxelRuntimeWorkspaceReservation(entry)) return false;
+      if (String(entry.userId ?? "") !== String(args.userId ?? "")) return false;
+      if (args.projectId && String(entry.projectId ?? "") !== String(args.projectId)) {
+        return false;
+      }
+      return true;
+    });
   },
 });
 
@@ -1032,7 +1236,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
     const computeCostUsd = roundCurrency(
       typeof args.computeCostUsd === "number"
         ? args.computeCostUsd
-        : estimateDaytonaWorkspaceComputeUsd({
+        : estimateWorkspaceComputeUsd({
             durationSeconds,
             sandboxCpu: args.sandboxCpu,
             sandboxMemoryGiB: args.sandboxMemoryGiB,
@@ -1041,7 +1245,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
     const requestedCredits = roundCredits(
       typeof args.creditsDebited === "number"
         ? args.creditsDebited
-        : priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
+        : priceWorkspaceUsageCredits({ computeCostUsd }),
     );
 
     let debitIncluded = 0;
@@ -1595,6 +1799,175 @@ export const retryPendingCreditSettlementsInternal = internalAction({
   },
 });
 
+export const reconcileStaleRuntimeWorkspaceRunsInternal = internalAction({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const runs = await ctx.runQuery(
+      (internal as any).threads.listStaleRunningRuntimeRunsInternal,
+      {
+        nowMs,
+        limit,
+      },
+    ) as any[];
+
+    let skippedNoWorkspaceEvidence = 0;
+    let settledReservations = 0;
+    let releasedReservations = 0;
+    let requeuedSettlements = 0;
+    let failedClosed = 0;
+    let finalizedRuns = 0;
+    let skippedRace = 0;
+    const failedSamples: Array<Record<string, unknown>> = [];
+
+    for (const run of runs) {
+      const runId = normalizeOptionalString(run?.runId);
+      const ownerId = run?.ownerId;
+      const threadId = run?.threadId;
+      if (!runId || !ownerId || !threadId) {
+        skippedRace += 1;
+        continue;
+      }
+      const reservationQueryArgs: Record<string, unknown> = {
+        userId: ownerId,
+        runId,
+      };
+      if (run?.projectId) reservationQueryArgs.projectId = run.projectId;
+      const reservations = await ctx.runQuery(
+        (internal as any).workspaceCredits.listReservedBlaxelRuntimeWorkspaceReservationsByRunInternal,
+        reservationQueryArgs,
+      ) as any[];
+      if (!hasRuntimeWorkspaceEvidence(run, reservations)) {
+        skippedNoWorkspaceEvidence += 1;
+        continue;
+      }
+
+      let runFailedClosed = false;
+      for (const reservation of reservations) {
+        const creditKey = normalizeOptionalString(reservation?.creditKey);
+        if (!creditKey) continue;
+        const providerSandboxId = await resolveStaleRuntimeWorkspaceProviderSandboxId({
+          ctx,
+          run,
+          reservation,
+        });
+        if (!providerSandboxId) {
+          try {
+            await ctx.runMutation((internal as any).workspaceCredits.settleCreditsInternal, {
+              creditKey,
+              status: "refunded",
+              failureReason: "stale_runtime_workspace_run_released_before_start",
+              metadata: {
+                provider: "blaxel",
+                settlement_source: "stale_runtime_workspace_run_reconciler",
+                settlement_reason: "stale_runtime_workspace_run_released_before_start",
+                stale_run_id: runId,
+              },
+              nowMs,
+            });
+            releasedReservations += 1;
+          } catch (error) {
+            failedClosed += 1;
+            runFailedClosed = true;
+            if (failedSamples.length < 5) {
+              failedSamples.push({
+                run_id: runId,
+                credit_key: creditKey,
+                error_message: error instanceof Error ? error.message : String(error ?? ""),
+              });
+            }
+          }
+          continue;
+        }
+
+        const settlement = buildStaleRuntimeWorkspaceSettlement({
+          run,
+          reservation,
+          providerSandboxId,
+          nowMs,
+        });
+        try {
+          await ctx.runMutation((internal as any).workspaceCredits.recordWorkspaceComputeChargeInternal, {
+            chargeKey: creditKey,
+            userId: ownerId,
+            projectId: reservation.projectId,
+            runId,
+            providerSandboxId,
+            startedAt: settlement.startedAt,
+            endedAt: settlement.endedAt,
+            durationSeconds: settlement.durationSeconds,
+            sandboxCpu: settlement.sandboxCpu,
+            sandboxMemoryGiB: settlement.sandboxMemoryGiB,
+            sandboxDiskGiB: settlement.sandboxDiskGiB,
+            computeCostUsd: settlement.computeCostUsd,
+            creditsDebited: settlement.creditsDebited,
+            creditReservationKey: creditKey,
+            nowMs,
+          });
+          settledReservations += 1;
+        } catch (error) {
+          try {
+            await ctx.runMutation((internal as any).workspaceCredits.queueCreditSettlementRetryInternal, {
+              creditKey,
+              status: "succeeded",
+              creditsSettled: settlement.creditsDebited,
+              rawVendorCostUsd: settlement.computeCostUsd,
+              metadata: settlement.metadata,
+              error: error instanceof Error ? error.message : String(error ?? ""),
+              nowMs,
+            });
+            requeuedSettlements += 1;
+          } catch (queueError) {
+            failedClosed += 1;
+            runFailedClosed = true;
+            if (failedSamples.length < 5) {
+              failedSamples.push({
+                run_id: runId,
+                credit_key: creditKey,
+                error_message: queueError instanceof Error
+                  ? queueError.message
+                  : String(queueError ?? ""),
+              });
+            }
+          }
+        }
+      }
+
+      if (runFailedClosed) continue;
+      const finalized = await ctx.runMutation(
+        (internal as any).threads.finalizeStaleCloudRuntimeRunInternal,
+        {
+          ownerId,
+          threadId,
+          runId,
+          nowMs,
+        },
+      ) as any;
+      if (finalized?.finalized === true) {
+        finalizedRuns += 1;
+      } else {
+        skippedRace += 1;
+      }
+    }
+
+    return {
+      scanned: runs.length,
+      finalizedRuns,
+      settledReservations,
+      releasedReservations,
+      requeuedSettlements,
+      skippedNoWorkspaceEvidence,
+      skippedRace,
+      failedClosed,
+      failedSamples,
+    };
+  },
+});
+
 export const reconcileExpiredCreditReservationsInternal = internalMutation({
   args: {
     nowMs: v.optional(v.number()),
@@ -1610,8 +1983,13 @@ export const reconcileExpiredCreditReservationsInternal = internalMutation({
       )
       .take(limit);
     let refunded = 0;
+    let skippedBlaxelWorkspaceReservations = 0;
     for (const entry of expired) {
       if (entry.pendingSettlementStatus === "succeeded") continue;
+      if (await shouldSkipExpiredBlaxelWorkspaceReservation(ctx, entry)) {
+        skippedBlaxelWorkspaceReservations += 1;
+        continue;
+      }
       const split = splitSettledCredits({
         includedDebited: entry.includedCreditsDebited,
         purchasedDebited: entry.purchasedCreditsDebited,
@@ -1658,7 +2036,12 @@ export const reconcileExpiredCreditReservationsInternal = internalMutation({
       });
       refunded += 1;
     }
-    return { scanned: expired.length, refunded };
+    return {
+      scanned: expired.length,
+      refunded,
+      skippedBlaxelProjectWorkspaceLeases: skippedBlaxelWorkspaceReservations,
+      skippedBlaxelWorkspaceReservations,
+    };
   },
 });
 

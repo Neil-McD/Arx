@@ -119,6 +119,182 @@ function readStripeObjectId(value: unknown): string | null {
   return null;
 }
 
+function readStripePaymentMethodId(value: unknown): string | null {
+  const id = readStripeObjectId(value);
+  return id && id.startsWith("pm_") ? id : null;
+}
+
+function readStripeCustomerId(value: unknown): string | null {
+  const id = readStripeObjectId(value);
+  return id && id.startsWith("cus_") ? id : null;
+}
+
+function readStripeCardPaymentMethod(value: unknown): any | null {
+  if (!value || typeof value !== "object") return null;
+  const paymentMethodId = readStripePaymentMethodId(value);
+  const record = value as { type?: unknown; card?: unknown };
+  const type = String(record.type ?? "").trim();
+  const hasCardPayload = Boolean(record.card && typeof record.card === "object");
+  if (!paymentMethodId || (type !== "card" && !hasCardPayload)) return null;
+  return value;
+}
+
+function readStripePaymentMethodCardMetadata(value: unknown): {
+  cardBrand: string | null;
+  cardLast4: string | null;
+  cardExpMonth: number | null;
+  cardExpYear: number | null;
+} {
+  const paymentMethod = value && typeof value === "object" ? value as any : null;
+  const card = paymentMethod?.card && typeof paymentMethod.card === "object"
+    ? paymentMethod.card
+    : null;
+  const expMonth = Math.floor(Number(card?.exp_month ?? 0));
+  const expYear = Math.floor(Number(card?.exp_year ?? 0));
+  return {
+    cardBrand: String(card?.brand ?? "").trim().slice(0, 80) || null,
+    cardLast4: String(card?.last4 ?? "").trim().slice(0, 8) || null,
+    cardExpMonth: Number.isFinite(expMonth) && expMonth > 0 ? expMonth : null,
+    cardExpYear: Number.isFinite(expYear) && expYear > 0 ? expYear : null,
+  };
+}
+
+async function syncWorkspaceCardTruthForStripeCustomer(args: {
+  ctx: any;
+  providerCustomerId: string;
+  checkedAt: number;
+  preferredPaymentMethod?: unknown;
+  missingStatus?: "missing" | "detached";
+}) {
+  const providerCustomerId = readStripeCustomerId(args.providerCustomerId);
+  if (!providerCustomerId) {
+    return {
+      ok: false,
+      reason: "workspace_card_customer_id_missing",
+    };
+  }
+  const localCustomer = await args.ctx.runQuery(
+    internal.stripeCustomers.getUserStripeCustomerByProviderCustomerIdInternal as any,
+    {
+      providerCustomerId,
+    },
+  );
+  const userId = localCustomer?.userId;
+  if (!userId) {
+    return {
+      ok: true,
+      ignored: true,
+      reason: "workspace_card_customer_not_local",
+      provider_customer_id: providerCustomerId,
+    };
+  }
+
+  const stripe = getStripeClient();
+  let paymentMethod = readStripeCardPaymentMethod(args.preferredPaymentMethod);
+  if (!paymentMethod) {
+    let customer: any;
+    try {
+      customer = await stripe.customers.retrieve(providerCustomerId, {
+        expand: ["invoice_settings.default_payment_method"],
+      });
+    } catch (error) {
+      if (String((error as { code?: unknown; type?: unknown })?.code ?? "").trim() !== "resource_missing") {
+        throw error;
+      }
+      customer = null;
+    }
+    if (!customer || Boolean((customer as { deleted?: unknown })?.deleted)) {
+      await args.ctx.runMutation(
+        internal.stripeCustomers.syncUserStripeCustomerPaymentMethodInternal as any,
+        {
+          userId,
+          providerCustomerId,
+          status: args.missingStatus ?? "missing",
+          providerDefaultPaymentMethodId: null,
+          checkedAt: args.checkedAt,
+        },
+      );
+      return {
+        ok: true,
+        reason: "workspace_card_missing_synced",
+        has_card_on_file: false,
+      };
+    }
+
+    const defaultPaymentMethod = (customer as any)?.invoice_settings?.default_payment_method;
+    paymentMethod = readStripeCardPaymentMethod(defaultPaymentMethod);
+    const defaultPaymentMethodId = readStripePaymentMethodId(defaultPaymentMethod);
+    if (!paymentMethod && defaultPaymentMethodId) {
+      try {
+        paymentMethod = readStripeCardPaymentMethod(
+          await stripe.paymentMethods.retrieve(defaultPaymentMethodId),
+        );
+      } catch (error) {
+        if (String((error as { code?: unknown; type?: unknown })?.code ?? "").trim() !== "resource_missing") {
+          throw error;
+        }
+      }
+    }
+    if (!paymentMethod) {
+      const listed = await stripe.paymentMethods.list({
+        customer: providerCustomerId,
+        type: "card",
+        limit: 1,
+      });
+      paymentMethod = readStripeCardPaymentMethod(listed.data[0]);
+      const paymentMethodId = readStripePaymentMethodId(paymentMethod);
+      if (paymentMethodId) {
+        await stripe.customers.update(providerCustomerId, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
+        });
+      }
+    }
+  }
+
+  const paymentMethodId = readStripePaymentMethodId(paymentMethod);
+  if (!paymentMethodId) {
+    await args.ctx.runMutation(
+      internal.stripeCustomers.syncUserStripeCustomerPaymentMethodInternal as any,
+      {
+        userId,
+        providerCustomerId,
+        status: args.missingStatus ?? "missing",
+        providerDefaultPaymentMethodId: null,
+        checkedAt: args.checkedAt,
+      },
+    );
+    return {
+      ok: true,
+      reason: "workspace_card_missing_synced",
+      has_card_on_file: false,
+    };
+  }
+
+  const cardMetadata = readStripePaymentMethodCardMetadata(paymentMethod);
+  await args.ctx.runMutation(
+    internal.stripeCustomers.syncUserStripeCustomerPaymentMethodInternal as any,
+    {
+      userId,
+      providerCustomerId,
+      status: "active",
+      providerDefaultPaymentMethodId: paymentMethodId,
+      cardBrand: cardMetadata.cardBrand,
+      cardLast4: cardMetadata.cardLast4,
+      cardExpMonth: cardMetadata.cardExpMonth,
+      cardExpYear: cardMetadata.cardExpYear,
+      checkedAt: args.checkedAt,
+    },
+  );
+  return {
+    ok: true,
+    reason: "workspace_card_active_synced",
+    has_card_on_file: true,
+    provider_default_payment_method_id: paymentMethodId,
+  };
+}
+
 function readStripeInvoiceEvidence(invoice: Stripe.Invoice | null | undefined): {
   sourceProviderInvoiceId: string | null;
   sourceProviderPaymentIntentId: string | null;
@@ -527,6 +703,109 @@ export function registerRuntimeBillingRoutes(
           return jsonResponse(req, 200, responsePayload);
         };
 
+        const eventCreatedAt =
+          Number(event.created ?? 0) > 0
+            ? Number(event.created) * 1000
+            : Date.now();
+
+        if (event.type === "setup_intent.succeeded") {
+          const setupIntent = event.data.object as Stripe.SetupIntent;
+          if (readStripeMetadataString(setupIntent.metadata, "checkout_mode") === "workspace_card_setup") {
+            const providerCustomerId = readStripeCustomerId(setupIntent.customer);
+            const paymentMethodId = readStripePaymentMethodId(setupIntent.payment_method);
+            if (!providerCustomerId || !paymentMethodId) {
+              return processedResponse({
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "workspace_card_setup_intent_identity_missing",
+              }, "ignored");
+            }
+            const stripe = getStripeClient();
+            const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+            await stripe.customers.update(providerCustomerId, {
+              invoice_settings: {
+                default_payment_method: paymentMethodId,
+              },
+            });
+            const result = await syncWorkspaceCardTruthForStripeCustomer({
+              ctx,
+              providerCustomerId,
+              checkedAt: eventCreatedAt,
+              preferredPaymentMethod: paymentMethod,
+            });
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              result,
+            });
+          }
+        }
+
+        if (event.type === "payment_method.detached") {
+          const paymentMethod = event.data.object as Stripe.PaymentMethod;
+          const paymentMethodId = readStripePaymentMethodId(paymentMethod);
+          const localCustomerByPaymentMethod = paymentMethodId
+            ? await (ctx as any).runQuery(
+                internal.stripeCustomers
+                  .getUserStripeCustomerByProviderPaymentMethodIdInternal as any,
+                {
+                  providerDefaultPaymentMethodId: paymentMethodId,
+                },
+              )
+            : null;
+          const providerCustomerId =
+            readStripeCustomerId((paymentMethod as any).customer) ??
+            readStripeCustomerId((event.data as any)?.previous_attributes?.customer) ??
+            readStripeCustomerId(localCustomerByPaymentMethod?.providerCustomerId);
+          if (!providerCustomerId) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "workspace_card_detached_customer_missing",
+            }, "ignored");
+          }
+          const result = await syncWorkspaceCardTruthForStripeCustomer({
+            ctx,
+            providerCustomerId,
+            checkedAt: eventCreatedAt,
+            missingStatus: "detached",
+          });
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            result,
+          });
+        }
+
+        if (event.type === "customer.updated") {
+          const customer = event.data.object as Stripe.Customer;
+          const providerCustomerId = readStripeCustomerId(customer);
+          if (!providerCustomerId) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "workspace_card_customer_updated_id_missing",
+            }, "ignored");
+          }
+          const result = await syncWorkspaceCardTruthForStripeCustomer({
+            ctx,
+            providerCustomerId,
+            checkedAt: eventCreatedAt,
+            preferredPaymentMethod: (customer as any)?.invoice_settings?.default_payment_method,
+          });
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            result,
+          });
+        }
+
         if (
           event.type === "checkout.session.completed" ||
           event.type === "checkout.session.async_payment_succeeded"
@@ -565,10 +844,7 @@ export function registerRuntimeBillingRoutes(
                       ? session.customer
                       : null,
                   providerPriceId: topupCheckoutSession.providerPriceId ?? null,
-                  nowMs:
-                    Number(event.created ?? 0) > 0
-                      ? Number(event.created) * 1000
-                      : Date.now(),
+                  nowMs: eventCreatedAt,
                 },
               );
               return processedResponse({
@@ -578,6 +854,55 @@ export function registerRuntimeBillingRoutes(
                 result,
               });
             }
+          }
+        }
+
+        if (event.type === "checkout.session.completed") {
+          const session = event.data.object as Stripe.Checkout.Session;
+          if (readStripeMetadataString(session.metadata, "checkout_mode") === "workspace_card_setup") {
+            const userId = readStripeMetadataString(session.metadata, "user_id");
+            const providerCustomerId = readStripeCustomerId(session.customer);
+            const setupIntentId = readStripeObjectId(session.setup_intent);
+            if (!userId || !providerCustomerId || !setupIntentId) {
+              return processedResponse({
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "workspace_card_setup_identity_missing",
+              }, "ignored");
+            }
+            const stripe = getStripeClient();
+            const setupIntent = await stripe.setupIntents.retrieve(setupIntentId, {
+              expand: ["payment_method"],
+            });
+            const paymentMethod = (setupIntent as any)?.payment_method;
+            const paymentMethodId = readStripePaymentMethodId(paymentMethod);
+            if (!paymentMethodId) {
+              return processedResponse({
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "workspace_card_setup_payment_method_missing",
+              }, "ignored");
+            }
+            await stripe.customers.update(providerCustomerId, {
+              invoice_settings: {
+                default_payment_method: paymentMethodId,
+              },
+            });
+            const result = await syncWorkspaceCardTruthForStripeCustomer({
+              ctx,
+              providerCustomerId,
+              checkedAt: eventCreatedAt,
+              preferredPaymentMethod: paymentMethod,
+            });
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              reason: "workspace_card_setup_synced",
+              result,
+            });
           }
         }
 

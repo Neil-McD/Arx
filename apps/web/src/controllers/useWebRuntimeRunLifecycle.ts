@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "
 import {
   getConvexCloudRunningRuntimeRunByThreadKey,
   listConvexCloudRuntimeRunEvents,
-} from "../../../../shared/daytonaCloudThreadsRead";
+} from "../../../../shared/cloudThreadsRead";
 import type { ThreadStreamingRuntimeEvent, ThreadStreamingState } from "../../../../shared/webTurnRunnerCore";
 
 type ThreadMessageLike = {

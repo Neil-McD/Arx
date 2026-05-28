@@ -546,11 +546,22 @@ export default defineSchema({
     provider: v.literal("stripe"),
     providerCustomerId: v.string(),
     email: v.optional(v.string()),
+    paymentMethodStatus: v.optional(
+      v.union(v.literal("active"), v.literal("missing"), v.literal("detached")),
+    ),
+    providerDefaultPaymentMethodId: v.optional(v.string()),
+    paymentMethodCheckedAt: v.optional(v.number()),
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
+    cardExpMonth: v.optional(v.number()),
+    cardExpYear: v.optional(v.number()),
+    cardRemovedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_providerCustomerId", ["providerCustomerId"]),
+    .index("by_providerCustomerId", ["providerCustomerId"])
+    .index("by_providerDefaultPaymentMethodId", ["providerDefaultPaymentMethodId"]),
 
   purchaseClaims: defineTable({
     claimToken: v.string(),
@@ -779,6 +790,9 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     providerSandboxId: v.optional(v.string()),
+    providerSandboxProviderId: v.optional(
+      v.literal("blaxel"),
+    ),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
     providerSandboxLastActivityAt: v.optional(v.number()),
@@ -788,14 +802,38 @@ export default defineSchema({
     providerSandboxCreditBudgetCredits: v.optional(v.number()),
     providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
     providerVolumeId: v.optional(v.string()),
+    providerVolumeProviderId: v.optional(
+      v.literal("blaxel"),
+    ),
     providerVolumeName: v.optional(v.string()),
     providerVolumeState: v.optional(v.string()),
     providerVolumeLastSeenAt: v.optional(v.number()),
+    workspaceVolumeRetentionState: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("suspended"),
+        v.literal("pending_delete"),
+        v.literal("deleted"),
+      ),
+    ),
+    workspaceVolumeRetainUntil: v.optional(v.number()),
+    workspaceVolumeDeleteAfter: v.optional(v.number()),
+    workspaceVolumeDeletionWarningSentAt: v.optional(v.number()),
+    workspaceVolumeDeletedAt: v.optional(v.number()),
+    workspaceVolumeDeletionReason: v.optional(v.string()),
     importLeaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_owner", ["ownerId"]),
+    .index("by_owner", ["ownerId"])
+    .index("by_sandboxProvider_creditBudgetExpiresAt", [
+      "providerSandboxProviderId",
+      "providerSandboxCreditBudgetExpiresAt",
+    ])
+    .index("by_workspaceVolumeRetentionState_deleteAfter", [
+      "workspaceVolumeRetentionState",
+      "workspaceVolumeDeleteAfter",
+    ]),
 
   workspaceTerminalSessions: defineTable({
     ownerId: v.id("users"),
@@ -811,6 +849,9 @@ export default defineSchema({
     startedByThreadId: v.optional(v.string()),
     startedByRunId: v.optional(v.string()),
     providerSandboxId: v.string(),
+    providerSandboxProviderId: v.optional(
+      v.literal("blaxel"),
+    ),
     providerSessionId: v.string(),
     providerCommandId: v.string(),
     command: v.string(),
@@ -2339,7 +2380,8 @@ export default defineSchema({
     .index("by_thread_status_startedAt", ["threadId", "status", "startedAt"])
     .index("by_thread_startedAt", ["threadId", "startedAt"])
     .index("by_owner_startedAt", ["ownerId", "startedAt"])
-    .index("by_status_startedAt", ["status", "startedAt"]),
+    .index("by_status_startedAt", ["status", "startedAt"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
 
   runtimeRunEvents: defineTable({
     ownerId: v.id("users"),

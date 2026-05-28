@@ -140,6 +140,16 @@ export type WebSettingsPanelsProps = {
       packId?: WorkspaceToolBalanceTopupPackId,
       surface?: WorkspaceCreditTopupSurface,
     ) => Promise<void> | void;
+    workspaceCardOnFileStatus: {
+      has_card_on_file?: unknown;
+      payment_method_status?: unknown;
+      card_brand?: unknown;
+      card_last4?: unknown;
+    } | null;
+    workspaceCardOnFileError: string | null;
+    isStartingWorkspaceCardSetupCheckout: boolean;
+    workspaceCardSetupError: string | null;
+    startWorkspaceCardSetupCheckout: () => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
     billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };
@@ -360,7 +370,12 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     workspaceCreditBalanceError: agent.billingUi.workspaceCreditBalanceError,
     isStartingWorkspaceCreditTopupCheckout: agent.billingUi.isStartingWorkspaceCreditTopupCheckout,
     workspaceCreditTopupError: agent.billingUi.workspaceCreditTopupError,
+    workspaceCardOnFileStatus: agent.workspaceCardOnFileStatus,
+    workspaceCardOnFileError: agent.workspaceCardOnFileError,
+    isStartingWorkspaceCardSetupCheckout: agent.isStartingWorkspaceCardSetupCheckout,
+    workspaceCardSetupError: agent.workspaceCardSetupError,
     startWorkspaceCreditTopupCheckout: agent.startWorkspaceCreditTopupCheckout,
+    startWorkspaceCardSetupCheckout: agent.startWorkspaceCardSetupCheckout,
   };
 
   const appearanceSectionProps = {

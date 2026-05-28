@@ -31,7 +31,7 @@
 
 ## Archived historical evidence
 1. `archive/production-baseline-fingerprint-worksheet.md`
-2. `archive/daytona-alpha-deploy-manifest-2026-03-19.md`
+2. legacy alpha deploy manifest
 3. `archive/release-candidate-freeze-2026-04-02.md`
 4. `archive/alpha-builder-only-posture-2026-03-19.md`
 5. `archive/convex-hardening-plan-v1.md`

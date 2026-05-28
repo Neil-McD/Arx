@@ -1,3 +1,8 @@
+import { useEffect, useState } from "react";
+import {
+  paidUsageBillingModeForPaidToolFailure,
+  type PaidUsageBillingMode,
+} from "../../../../shared/paidUsageBilling";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
   getPaidToolBalancePrimaryMessage,
@@ -23,6 +28,7 @@ type InferenceIssueModalState = {
   message: string | null;
   toolKind?: PaidToolKind | null;
   requiredCredits?: number | null;
+  paidUsageBillingMode?: PaidUsageBillingMode | null;
 } | null;
 
 type WebInferenceIssueModalProps = {
@@ -30,13 +36,16 @@ type WebInferenceIssueModalProps = {
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   isStartingWorkspaceCreditTopupCheckout?: boolean;
+  isStartingWorkspaceCardSetupCheckout?: boolean;
   workspaceCreditTopupError?: string | null;
+  workspaceCardSetupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
   onStartWorkspaceCreditTopupCheckout?: (
     packId?: WorkspaceToolBalanceTopupPackId,
     surface?: WorkspaceCreditTopupSurface,
   ) => Promise<void> | void;
+  onStartWorkspaceCardSetupCheckout?: () => Promise<void> | void;
 };
 
 export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
@@ -45,14 +54,46 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     inferenceIssueModal,
     isInferenceIssueModalRunning,
     isStartingWorkspaceCreditTopupCheckout = false,
+    isStartingWorkspaceCardSetupCheckout = false,
     workspaceCreditTopupError = null,
+    workspaceCardSetupError = null,
     onClose,
     onOpenSettings,
     onStartWorkspaceCreditTopupCheckout,
+    onStartWorkspaceCardSetupCheckout,
   } = props;
+
+  const [showManualBalance, setShowManualBalance] = useState(false);
+  useEffect(() => {
+    setShowManualBalance(false);
+  }, [
+    inferenceIssueModal?.reason,
+    inferenceIssueModal?.threadId,
+    inferenceIssueModal?.paidUsageBillingMode,
+  ]);
 
   if (!hasSession || !inferenceIssueModal) return null;
   const paidToolKind = inferenceIssueModal.toolKind ?? null;
+  const paidUsageBillingMode =
+    inferenceIssueModal.reason === "workspace_credits"
+      ? inferenceIssueModal.paidUsageBillingMode ??
+        paidUsageBillingModeForPaidToolFailure(paidToolKind)
+      : null;
+  const isWorkspaceBillingIssue = inferenceIssueModal.reason === "workspace_credits";
+  const requiresWorkspaceCardSetup =
+    isWorkspaceBillingIssue &&
+    (paidUsageBillingMode === "card_required" ||
+      paidUsageBillingMode === "card_preferred");
+  const manualBalanceAllowed =
+    isWorkspaceBillingIssue && paidUsageBillingMode !== "card_required";
+  const shouldShowToolBalancePacks =
+    isWorkspaceBillingIssue &&
+    (paidUsageBillingMode === "prepaid_required" ||
+      (manualBalanceAllowed && showManualBalance));
+  const checkoutBusy =
+    isInferenceIssueModalRunning ||
+    isStartingWorkspaceCreditTopupCheckout ||
+    isStartingWorkspaceCardSetupCheckout;
   const requiredCredits =
     typeof inferenceIssueModal.requiredCredits === "number" &&
     Number.isFinite(inferenceIssueModal.requiredCredits) &&
@@ -61,19 +102,26 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
       : null;
 
   const paidToolTitle =
-    inferenceIssueModal.reason === "workspace_credits"
-      ? "Add tool balance"
+    requiresWorkspaceCardSetup
+      ? "Add a card to use workspace tools"
+    : isWorkspaceBillingIssue
+      ? "Add balance to use premium tools"
       : "Add balance to use premium tools";
 
   const paidToolPrimaryMessage =
-    paidToolKind
-      ? getPaidToolBalancePrimaryMessage(paidToolKind)
-      : inferenceIssueModal.message || getPaidToolBalancePrimaryMessage(null);
+    requiresWorkspaceCardSetup
+      ? "No charge today."
+    : inferenceIssueModal.message ||
+      (paidToolKind
+        ? getPaidToolBalancePrimaryMessage(paidToolKind)
+        : getPaidToolBalancePrimaryMessage(null));
 
   const paidToolFollowupMessage =
-    requiredCredits !== null
-      ? `Needs ${formatWorkspaceToolBalanceUsdFromCredits(requiredCredits)}. Add balance, then retry.`
-      : "Add balance, then retry.";
+    requiresWorkspaceCardSetup
+      ? "Usage is billed only when workspace tools run."
+    : requiredCredits !== null
+      ? `This needs ${formatWorkspaceToolBalanceUsdFromCredits(requiredCredits)} in prepaid tool balance.`
+      : "Add prepaid balance, then retry the paid tool.";
 
   const title =
     inferenceIssueModal.reason === "provider_connection_required"
@@ -115,6 +163,9 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
         : inferenceIssueModal.reason === "plan"
           ? "To continue, check your connected provider in Account Settings."
           : "To continue, check your provider in Account Settings.";
+  const modalClassName = `modal inference-issue-modal${
+    requiresWorkspaceCardSetup ? " inference-issue-modal--workspace-card" : ""
+  }`;
 
   return (
     <div
@@ -124,7 +175,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
         onClose();
       }}
     >
-      <div className="modal inference-issue-modal" onClick={(event) => event.stopPropagation()}>
+      <div className={modalClassName} onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>
           <button
@@ -138,18 +189,56 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
           </button>
         </div>
         <div className="modal-body">
-          <div className="model-note" style={{ marginBottom: 12 }}>
-            {primaryMessage}
-          </div>
-          <div className="model-note" style={{ marginBottom: 12 }}>
-            {followupMessage}
-          </div>
+          {!requiresWorkspaceCardSetup && (
+            <div className="workspace-billing-modal-copy">
+              <div className="model-note">
+                {primaryMessage}
+              </div>
+              <div className="model-note">
+                {followupMessage}
+              </div>
+            </div>
+          )}
           {inferenceIssueModal.reason === "plan" && (
             <div className="auth-error" style={{ marginBottom: 12 }}>
               This model isn&apos;t available on your current plan.
             </div>
           )}
-          {inferenceIssueModal.reason === "workspace_credits" && (
+          {requiresWorkspaceCardSetup && (
+            <div className="workspace-billing-trust-panel" aria-label="Workspace billing details">
+              <div className="workspace-billing-trust-title">No charge today</div>
+              <div className="workspace-billing-trust-copy">
+                Usage is billed only when workspace tools run.
+              </div>
+            </div>
+          )}
+          {requiresWorkspaceCardSetup && (
+            <div className="workspace-billing-primary-row">
+              <button
+                type="button"
+                className="platform-save-button platform-save-button--compact inference-issue-primary-action workspace-billing-primary-button"
+                onClick={() => void onStartWorkspaceCardSetupCheckout?.()}
+                disabled={checkoutBusy}
+              >
+                {isStartingWorkspaceCardSetupCheckout ? "Opening..." : "Add card"}
+              </button>
+            </div>
+          )}
+          {manualBalanceAllowed && paidUsageBillingMode !== "prepaid_required" ? (
+            <div className="workspace-billing-secondary-action">
+              <button
+                type="button"
+                className="workspace-billing-inline-link"
+                onClick={() => setShowManualBalance((value) => !value)}
+                disabled={checkoutBusy}
+              >
+                {showManualBalance
+                  ? "Use card instead"
+                  : "Prefer prepaid balance? Add balance manually."}
+              </button>
+            </div>
+          ) : null}
+          {inferenceIssueModal.reason === "workspace_credits" && shouldShowToolBalancePacks && (
             <>
               <div className="tool-balance-pack-grid modal-tool-balance-pack-grid">
                 {WORKSPACE_TOOL_BALANCE_TOPUP_PACKS.map((pack) => (
@@ -158,7 +247,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                     type="button"
                     className={`tool-balance-pack-button${pack.recommended ? " recommended" : ""}`}
                     onClick={() => void onStartWorkspaceCreditTopupCheckout?.(pack.id, "tool_balance_modal")}
-                    disabled={isInferenceIssueModalRunning || isStartingWorkspaceCreditTopupCheckout}
+                    disabled={checkoutBusy}
                   >
                     <strong>{pack.label}</strong>
                     {pack.recommended ? <span>Best</span> : null}
@@ -166,39 +255,44 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                 ))}
               </div>
               {workspaceCreditTopupError ? (
-                <div className="auth-error" style={{ marginTop: 12 }}>
+                <div className="auth-error workspace-billing-error">
                   {workspaceCreditTopupError}
                 </div>
               ) : null}
             </>
           )}
+          {workspaceCardSetupError ? (
+            <div className="auth-error workspace-billing-error">
+              {workspaceCardSetupError}
+            </div>
+          ) : null}
         </div>
-        <div className="modal-footer">
-          <div className="auth-actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={onClose}
-              disabled={isInferenceIssueModalRunning}
-            >
-              Cancel
-            </button>
-            {inferenceIssueModal.reason !== "plan" && (
+        {!requiresWorkspaceCardSetup && (
+          <div className="modal-footer">
+            <div className="auth-actions">
               <button
                 type="button"
-                className="platform-save-button platform-save-button--compact inference-issue-primary-action"
-                onClick={() => onOpenSettings(inferenceIssueModal.reason)}
+                className="secondary"
+                onClick={onClose}
                 disabled={isInferenceIssueModalRunning}
               >
-                {inferenceIssueModal.reason === "workspace_credits"
-                  ? "Settings"
-                  : inferenceIssueModal.reason === "provider_connection_required"
-                    ? "Open Account Settings"
-                  : "Open account settings"}
+                Cancel
               </button>
-            )}
+              {inferenceIssueModal.reason !== "plan" && inferenceIssueModal.reason !== "workspace_credits" && (
+                <button
+                  type="button"
+                  className="platform-save-button platform-save-button--compact inference-issue-primary-action"
+                  onClick={() => onOpenSettings(inferenceIssueModal.reason)}
+                  disabled={isInferenceIssueModalRunning}
+                >
+                  {inferenceIssueModal.reason === "provider_connection_required"
+                      ? "Open Account Settings"
+                    : "Open account settings"}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

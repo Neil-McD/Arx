@@ -11,19 +11,19 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function main() {
   const communitySkillAttachments = readText(
-    "/Users/neilmcdevitt/code/arx/convex/communitySkillAttachments.ts",
+    "convex/communitySkillAttachments.ts",
   );
   const runtimeSkillResolution = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
+    "convex/runtimeSkillResolution.ts",
   );
-  const httpDaytona = readText(
-    "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
+  const runtimeAgentLoop = readText(
+    "convex/runtimeAgentLoop.ts",
   );
   const runtimeHarnessComposition = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+    "convex/runtimeHarnessComposition.ts",
   );
   const skillsEditor = readText(
-    "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
+    "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
 
   for (const exportedName of [
@@ -50,7 +50,7 @@ function main() {
     "shared runtime skill resolution query",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_skills_resolved",
     "runtime skill evidence event",
   );
@@ -65,22 +65,22 @@ function main() {
     "selected skill injection prompt suffix wiring",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "composeResolvedRuntimeHarness({",
     "runtime uses shared harness composition",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "resolvedHarness.systemPromptSuffix",
     "runtime consumes composed skill prompt suffix",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_skill_attachment_id",
     "community skill evidence includes attachment identity",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "skill_revision_id",
     "community skill evidence includes revision identity",
   );

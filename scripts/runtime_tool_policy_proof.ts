@@ -224,7 +224,7 @@ function provePolicySurfaceSummary() {
 
 async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
   const executionSessionSource = await readRepoFile("convex/runtimeExecutionSession.ts");
-  const daytonaSource = await readRepoFile("convex/httpDaytona.ts");
+  const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
   assert.match(
     executionSessionSource,
     /buildRuntimeToolPolicySurface/,
@@ -236,17 +236,17 @@ async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
     "expected execution session to return a provider-surface policy summary",
   );
   assert.match(
-    daytonaSource,
+    runtimeAgentLoopSource,
     /tool_policy_summary: initialProviderTools\.activeToolPolicySummary/,
     "expected initial provider tool surface event to include policy summary",
   );
   assert.match(
-    daytonaSource,
+    runtimeAgentLoopSource,
     /tool_policy_enforcement: "full_access_audit"/,
     "expected provider tool surface events to state that full-access execution is audited",
   );
   assert.match(
-    daytonaSource,
+    runtimeAgentLoopSource,
     /tool_policy_summary:\s*providerToolSurface\.activeToolPolicySummary/,
     "expected mounted-tool exposure event to include refreshed policy summary",
   );
@@ -255,14 +255,14 @@ async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
 
 async function proveApprovalBlocksAreRemovedFromRuntimeHarness() {
   const policySource = await readRepoFile("shared/runtimeToolPolicy.ts");
-  const daytonaSource = await readRepoFile("convex/httpDaytona.ts");
+  const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
   const personalMountSource = await readRepoFile("convex/userPlatformAppMounts.ts");
   const promptSource = await readRepoFile("convex/runtimeHarnessShaping.ts");
   const integrationSettingsSource = await readRepoFile(
     "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
   );
   const runtimeSources = [
-    daytonaSource,
+    runtimeAgentLoopSource,
     personalMountSource,
     promptSource,
     integrationSettingsSource,

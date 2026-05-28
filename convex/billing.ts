@@ -3,6 +3,11 @@ export {
 } from "./creatorCommerce";
 
 export {
+  startWorkspaceCardSetupCheckout,
+  refreshWorkspaceCardOnFileStatus,
+} from "./stripeCustomers";
+
+export {
   startWorkspaceCreditTopupCheckout,
 } from "./workspaceCredits";
 

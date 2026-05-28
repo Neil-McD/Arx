@@ -11,25 +11,25 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function main() {
   const userPlatformSkills = readText(
-    "/Users/neilmcdevitt/code/arx/convex/userPlatformSkills.ts",
+    "convex/userPlatformSkills.ts",
   );
   const runtimeSkillResolution = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
+    "convex/runtimeSkillResolution.ts",
   );
   const skillPackages = readText(
-    "/Users/neilmcdevitt/code/arx/convex/skillPackages.ts",
+    "convex/skillPackages.ts",
   );
-  const httpDaytona = readText(
-    "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
+  const runtimeAgentLoop = readText(
+    "convex/runtimeAgentLoop.ts",
   );
   const runtimeHarnessComposition = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+    "convex/runtimeHarnessComposition.ts",
   );
   const personalSkillOverlayRuntime = readText(
-    "/Users/neilmcdevitt/code/arx/shared/personalSkillOverlayRuntime.ts",
+    "shared/personalSkillOverlayRuntime.ts",
   );
   const settingsSection = readText(
-    "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
   );
 
   for (const exportedName of [
@@ -90,22 +90,22 @@ function main() {
     "community workflows are preferred without making personal skills exclusive",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "composeResolvedRuntimeHarness({",
     "personal overlay runtime composer usage",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "personal_skills_resolved",
     "personal runtime skill evidence event",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal",
     "shared runtime skill resolver query",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "ambiguous_skill_mention_tokens",
     "cross-scope ambiguity evidence",
   );

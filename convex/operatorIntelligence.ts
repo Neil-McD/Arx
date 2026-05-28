@@ -730,9 +730,11 @@ function readLedgerSettledCredits(row: any): number {
   return row?.status === "succeeded" ? readLedgerCredits(row?.creditsReserved) : 0;
 }
 
-function readLedgerRefundedCredits(row: any): number {
-  const explicitRefund = readLedgerCredits(row?.includedCreditsRefunded) + readLedgerCredits(row?.purchasedCreditsRefunded);
-  if (explicitRefund > 0) return readLedgerCredits(explicitRefund);
+function readLedgerReleasedCredits(row: any): number {
+  const explicitRelease = readLedgerCredits(row?.includedCreditsRefunded) + readLedgerCredits(row?.purchasedCreditsRefunded);
+  if (explicitRelease > 0) return readLedgerCredits(explicitRelease);
+  // Legacy ledger status name: "refunded" means an unused internal hold was
+  // released back to tool balance, not a cash refund.
   if (row?.status !== "refunded") return 0;
   return readLedgerCredits(readLedgerCredits(row?.creditsReserved) - readLedgerSettledCredits(row));
 }
@@ -1157,12 +1159,12 @@ function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeChar
       label: string;
       reservations: number;
       succeeded: number;
-      refunded: number;
+      released: number;
       stillReserved: number;
       failures: number;
       reservedCredits: number;
       settledCredits: number;
-      refundedCredits: number;
+      releasedCredits: number;
       latestAt: number | null;
     }
   >();
@@ -1172,12 +1174,12 @@ function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeChar
       label: formatPaidToolName(toolName),
       reservations: 0,
       succeeded: 0,
-      refunded: 0,
+      released: 0,
       stillReserved: 0,
       failures: 0,
       reservedCredits: 0,
       settledCredits: 0,
-      refundedCredits: 0,
+      releasedCredits: 0,
       latestAt: null,
     });
   }
@@ -1190,21 +1192,21 @@ function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeChar
         label: formatPaidToolName(toolName),
         reservations: 0,
         succeeded: 0,
-        refunded: 0,
+        released: 0,
         stillReserved: 0,
         failures: 0,
         reservedCredits: 0,
         settledCredits: 0,
-        refundedCredits: 0,
+        releasedCredits: 0,
         latestAt: null,
       };
     const status = String(row?.status ?? "").trim().toLowerCase();
     lane.reservations += 1;
     lane.reservedCredits = readLedgerCredits(lane.reservedCredits + readLedgerCredits(row?.creditsReserved));
     lane.settledCredits = readLedgerCredits(lane.settledCredits + readLedgerSettledCredits(row));
-    lane.refundedCredits = readLedgerCredits(lane.refundedCredits + readLedgerRefundedCredits(row));
+    lane.releasedCredits = readLedgerCredits(lane.releasedCredits + readLedgerReleasedCredits(row));
     if (status === "succeeded") lane.succeeded += 1;
-    if (status === "refunded") lane.refunded += 1;
+    if (status === "refunded") lane.released += 1;
     if (status === "reserved") lane.stillReserved += 1;
     if (status === "refunded" || row?.failureReason) lane.failures += 1;
     const latestAt = readRowCreatedAt(row);
@@ -1221,12 +1223,12 @@ function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeChar
     totals: {
       reservations: orderedLanes.reduce((sum, lane) => sum + lane.reservations, 0),
       succeeded: orderedLanes.reduce((sum, lane) => sum + lane.succeeded, 0),
-      refunded: orderedLanes.reduce((sum, lane) => sum + lane.refunded, 0),
+      released: orderedLanes.reduce((sum, lane) => sum + lane.released, 0),
       stillReserved: orderedLanes.reduce((sum, lane) => sum + lane.stillReserved, 0),
       failures: orderedLanes.reduce((sum, lane) => sum + lane.failures, 0),
       reservedCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.reservedCredits, 0)),
       settledCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.settledCredits, 0)),
-      refundedCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.refundedCredits, 0)),
+      releasedCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.releasedCredits, 0)),
       unbilledComputeCharges: unbilledComputeCharges.length,
     },
     lanes: orderedLanes,

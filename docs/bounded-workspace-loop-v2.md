@@ -40,7 +40,7 @@ The loop should not be:
 - hidden behind UI optimism
 - recursive
 - dependent on perpetual sandbox state
-- forced into Daytona when cheaper classes can unblock the task
+- forced into workspace compute when cheaper classes can unblock the task
 
 ## 3. Routing Levels
 
@@ -160,24 +160,24 @@ At minimum, emit:
 Optional later:
 
 - `tool_policy_resolved`
-- `router_level_escalated`
 - `progress_stalled`
 
 The work log should be human-readable.
 Do not dump raw event noise into the UI.
 
-## 10. Relationship To Daytona
+## 10. Relationship To workspace runtime
 
-The loop should live in the runtime, not inside Daytona.
+The loop should live in the runtime, not inside the workspace runtime.
 
-Daytona’s role is:
+Blaxel’s role is:
 
 - host project-bound execution
 - expose filesystem and shell substrate
 - provide temporary compute
 
-Daytona is not the loop owner.
-Workspace tools call into Daytona only when the router selects the `workspace` level.
+Blaxel is not the loop owner.
+Workspace tools call into Blaxel only when the model calls a workspace-scoped
+tool and PolyNet policy authorizes execution.
 
 ## 11. Relationship To Codex
 

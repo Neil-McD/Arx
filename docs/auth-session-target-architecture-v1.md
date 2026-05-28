@@ -1,4 +1,4 @@
-# Auth Session Target Architecture (Daytona Worktree)
+# Auth Session Target Architecture (Workspace)
 
 Status: active reference architecture  
 Scope: web-native authenticated session posture for Convex + runtime HTTP endpoints  
@@ -362,4 +362,4 @@ The recommended destination is:
 
 **server-owned session continuity + browser-held ephemeral bearer**
 
-That is the cleanest path to a stronger, still-efficient premium auth posture for this Daytona runtime, assuming the Convex bearer feasibility gate is satisfied.
+That is the cleanest path to a stronger, still-efficient premium auth posture for this runtime, assuming the Convex bearer feasibility gate is satisfied.

@@ -194,7 +194,7 @@ const unknownMountedAppFailure = inferRuntimeToolFailureSemantics({
 assert.equal(unknownMountedAppFailure?.kind, "app_tool_failure");
 assert.equal(unknownMountedAppFailure?.appName, "Unknown");
 
-const eventSource = readText("/Users/neilmcdevitt/code/arx/convex/daytonaRuntimeEvents.ts");
+const eventSource = readText("convex/runtimeToolCallEvents.ts");
 assert.ok(
   eventSource.includes('eventType: "runtime_diagnostics_detected"'),
   "runtime diagnostics are emitted as their own runtime event",

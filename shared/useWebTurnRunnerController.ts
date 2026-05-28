@@ -20,11 +20,16 @@ import {
 import {
   getConvexCloudRuntimeRunByRunId,
   listConvexCloudRuntimeRunEvents,
-} from "./daytonaCloudThreadsRead";
+} from "./cloudThreadsRead";
 import {
   getNextSmoothStreamingText,
   shouldDisableStreamingSmoothing,
 } from "./smoothStreamingText";
+import {
+  classifyPaidUsageFailure,
+  normalizePaidUsageBillingMode,
+  paidUsageBillingModeForPaidToolFailure,
+} from "./paidUsageBilling";
 import { normalizePaidToolKind } from "./workspaceCredits";
 import {
   type CreateAssistantMessageParams,
@@ -791,6 +796,11 @@ export function useWebTurnRunnerController<
               failure.category === "disabled" ||
               failure.category === "unavailable"
             ) {
+              const paidUsageFailure = classifyPaidUsageFailure({
+                code: failure.code,
+                paidUsageBillingMode: failure.paidUsageBillingMode,
+                toolKind: failure.toolKind,
+              });
               current.setInferenceIssueModal({
                 reason: mapInferenceIssueReason(failure.category),
                 threadId,
@@ -798,6 +808,10 @@ export function useWebTurnRunnerController<
                 message: failure.message.trim() || null,
                 toolKind: failure.toolKind,
                 requiredCredits: failure.requiredCredits,
+                paidUsageBillingMode:
+                  paidUsageFailure.paidUsageBillingMode ??
+                  failure.paidUsageBillingMode ??
+                  paidUsageBillingModeForPaidToolFailure(failure.toolKind),
               });
               return { cancelled: false, error: null };
             }
@@ -946,6 +960,11 @@ export function useWebTurnRunnerController<
               status: Number.isFinite(status) ? Math.max(0, Math.floor(status)) : 500,
               code,
               message: msg,
+              paidUsageBillingMode: normalizePaidUsageBillingMode(
+                parsed?.paid_usage_billing_mode ??
+                  parsed?.paidUsageBillingMode ??
+                  parsed?.billing_mode,
+              ),
             });
             if (
               category === "quota" ||
@@ -956,17 +975,32 @@ export function useWebTurnRunnerController<
               category === "disabled" ||
               category === "unavailable"
             ) {
+              const toolKind = normalizePaidToolKind(
+                parsed?.tool_kind ?? parsed?.toolKind ?? parsed?.paid_tool_kind,
+              );
+              const explicitBillingMode = normalizePaidUsageBillingMode(
+                parsed?.paid_usage_billing_mode ??
+                  parsed?.paidUsageBillingMode ??
+                  parsed?.billing_mode,
+              );
+              const paidUsageFailure = classifyPaidUsageFailure({
+                code,
+                paidUsageBillingMode: explicitBillingMode,
+                toolKind,
+              });
               current.setInferenceIssueModal({
                 reason: mapInferenceIssueReason(category),
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: msg.trim() || null,
-                toolKind: normalizePaidToolKind(
-                  parsed?.tool_kind ?? parsed?.toolKind ?? parsed?.paid_tool_kind,
-                ),
+                toolKind,
                 requiredCredits: normalizePositiveNumber(
                   parsed?.required_credits ?? parsed?.requiredCredits,
                 ),
+                paidUsageBillingMode:
+                  paidUsageFailure.paidUsageBillingMode ??
+                  explicitBillingMode ??
+                  paidUsageBillingModeForPaidToolFailure(toolKind),
               });
               streamInferenceIssueHandled = true;
               seenDone = true;

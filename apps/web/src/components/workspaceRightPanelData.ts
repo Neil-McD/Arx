@@ -6,7 +6,7 @@ import type {
   CommunityAnalyticsSeries,
   CommunityAnalyticsSummary,
 } from "../../../../shared/communityTypes";
-import type { DaytonaWorkspaceComputerStartResult } from "../../../../shared/daytonaWorkspaceTerminals";
+import type { WorkspaceComputerStartResult } from "../../../../shared/workspaceTerminalsGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { CommunityMembersJoinReviewMode } from "../communityJoinPolicy";
 import type { WorkspaceUserPanelIntegration } from "./WebWorkspaceUserDataPanel";
@@ -410,6 +410,7 @@ export function buildWorkspaceRightPanelUserData(params: {
   workspaceCreditBalanceError: string | null;
   workspaceCreditTopupError: string | null;
   isStartingWorkspaceCreditTopupCheckout: boolean;
+  hasWorkspaceCardOnFile?: boolean | null;
   isStartingWorkspaceComputer: boolean;
   isStoppingWorkspaceComputer: boolean;
   workspaceComputerStartError: string | null;
@@ -422,7 +423,7 @@ export function buildWorkspaceRightPanelUserData(params: {
   isLoadingCommunityMemberSettings: boolean;
   communityMemberSettingsError: string | null;
   onOpenWorkspaceCreditTopup: () => void;
-  onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
+  onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceRightPanelRecentSignalTarget) => void;
   onToggleCommunityMute: (muted: boolean) => Promise<void> | void;

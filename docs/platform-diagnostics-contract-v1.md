@@ -52,7 +52,7 @@ Out of scope for this first contract:
 | Sentry | Execution observability | frontend errors, traces, performance, release correlation, AI/model/tool spans | canonical product state |
 | PostHog | Product behavior analytics | activation, funnels, community/member actions, builder behavior | security or billing truth |
 | Vercel | Web host and release evidence | deployment status, build failures, route/runtime host logs, asset availability | product analytics source |
-| Daytona | Sandbox and workspace execution evidence | sandbox lifecycle, process logs, terminal output, workspace tool failures | product/business analytics |
+| Workspace runtime | Sandbox and workspace execution evidence | sandbox lifecycle, process logs, terminal output, workspace tool failures | product/business analytics |
 | Stripe | Payment and payout truth | checkout, subscription, invoice/payment state, Connect status, disputes/refunds | product engagement analytics |
 | GitHub Actions / proof scripts | Regression prevention and release confidence | failing checks, contract proofs, build/typecheck/audit guards | runtime observability |
 | Fly | Preview proxy evidence, if active | preview proxy logs, live desktop proxy health | main app diagnostics source |
@@ -77,7 +77,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Auth and access | sign-in, auth bootstrap, session refresh, entitlements, community gates, operator gate | Can users get in and only access what they should? | Convex, Sentry, critical audit, PostHog | sign-in/session established, auth bootstrap failures, session refresh failures, entitlement mismatches, denied access, operator access granted/denied | partial |
 | Security and audit | privileged mutations, destructive actions, webhooks, operator access | Are trust boundaries holding? | Convex critical audit, Sentry, Stripe | permission denied events, webhook signature failures, account deletion events, operator role changes, suspicious retries | partial |
 | Runtime and AI | workspace turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
-| Tools, MCP, and Daytona | MCP validation, tool calls, terminal/computer use, sandbox lifecycle | Can tools actually execute? | Daytona, Convex runtime events, Sentry spans, MCP diagnostics | tool success rate, tool failures by app/tool, sandbox create failures, timeout rate, MCP live/not-live reasons | partial |
+| Tools, MCP, and workspace runtime | MCP validation, tool calls, terminal/computer use, sandbox lifecycle | Can tools actually execute? | Blaxel, Convex runtime events, Sentry spans, MCP diagnostics | tool success rate, tool failures by app/tool, sandbox create failures, timeout rate, MCP live/not-live reasons | partial |
 | Discover and harness | Discover apps/skills, add/like, canonical harness projection | Are apps and skills installed and projected correctly? | Convex, PostHog, Sentry | add success rate, duplicate/canonicalization conflicts, setup-needed count, validation failures, click-to-live rate | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
 | Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
@@ -130,7 +130,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Rate-limit failures | Provider or platform rate-limit events | Runtime logs/events | Sentry, Convex | now |
 | Cost per successful turn | Credits/cost divided by successful turns | Convex credits/compute records | Convex | later |
 
-### Tools, MCP, and Daytona
+### Tools, MCP, and workspace runtime
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
@@ -138,9 +138,9 @@ Each diagnostic signal should be classified with one of these statuses:
 | Tool failures by tool | Failed calls grouped by tool/app/MCP | `runtimeRunEvents` and Sentry spans | Convex, Sentry | now |
 | MCP validation failures | App/MCP validation failures by app/reason | MCP validation records | Convex, Sentry | now |
 | MCP not-live reasons | Mounted apps not live by normalized reason | canonical harness projection | Convex | now |
-| Sandbox create failures | Daytona sandbox create/start failures | Daytona client logs and structured errors | Daytona, Convex, Sentry | now |
-| Workspace command failures | Failed terminal/process commands and exit code | Daytona command logs and runtime events | Daytona, Convex | now |
-| Stuck sandbox/process age | Oldest active sandbox/process past expected lifetime | Daytona reconciliation state | Daytona, Convex | later |
+| Sandbox create failures | Blaxel sandbox create/start failures | Blaxel client logs and structured errors | Blaxel, Convex, Sentry | now |
+| Workspace command failures | Failed terminal/process commands and exit code | workspace command logs and runtime events | Blaxel, Convex | now |
+| Stuck sandbox/process age | Oldest active sandbox/process past expected lifetime | workspace reconciliation state | Blaxel, Convex | later |
 
 ### Discover and Harness
 
@@ -282,7 +282,7 @@ The operator panel should project diagnostics in this order:
 2. Attention queue: the highest-leverage issues to inspect now
 3. Subsystem cards: auth, security, runtime, MCP/tools, billing, deploy
 4. Evidence feed: recent critical events with severity, subsystem, actor/context, timestamp, evidence ID
-5. Drill-out links: Sentry issue/trace, Vercel deploy/logs, Stripe object, Convex row/function/log, Daytona process/logs
+5. Drill-out links: Sentry issue/trace, Vercel deploy/logs, Stripe object, Convex row/function/log, workspace process/logs
 
 The panel should not show every metric by default. Metrics should earn a place by answering an operator question.
 
@@ -321,7 +321,7 @@ This contract is ready to implement from when we can answer:
 1. Which tool owns each signal?
 2. Which source is canonical?
 3. Which metrics belong in the operator panel now?
-4. Which details should stay in Sentry/PostHog/Vercel/Stripe/Daytona?
+4. Which details should stay in Sentry/PostHog/Vercel/Stripe/Blaxel?
 5. Which events are missing?
 6. Which first slice can be implemented without widening scope?
 

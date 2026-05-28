@@ -11,7 +11,7 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
         <WebCreateProjectModal
           isOpen={createModal.isOpen}
           title="New computer"
-          subtitle="Create a fresh Daytona computer and optionally import a zipped repo or workspace folder."
+          subtitle="Create a fresh workspace computer and optionally import a zipped repo or workspace folder."
           submitLabel="Create computer"
           projectName={createModal.projectName}
           projectDescription={createModal.projectDescription}

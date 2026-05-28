@@ -1,7 +1,7 @@
 import { api, internal } from "./_generated/api";
 import type { RuntimeTurnContextSnapshotV1 } from "../shared/runtimeTurnContextPacket";
 
-type RuntimeLane = "public" | "platform" | "daytona" | "chatgpt";
+type RuntimeLane = "public" | "platform" | "chatgpt";
 type RuntimeInferenceSource = "free" | "platform" | "user_key" | "chatgpt";
 
 type JsonResponseFn = (req: Request, status: number, payload: unknown) => Response;

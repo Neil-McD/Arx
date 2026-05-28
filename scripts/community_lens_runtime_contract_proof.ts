@@ -16,7 +16,7 @@ function assertNotIncludes(haystack: string, needle: string, label: string) {
 
 function main() {
   const root = process.cwd();
-  const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
+  const runtimeAgentLoop = readText(join(root, "convex/runtimeAgentLoop.ts"));
   const threads = readText(join(root, "convex/threads.ts"));
   const runtimeTurnResolution = readText(
     join(root, "convex/runtimeTurnResolution.ts"),
@@ -37,17 +37,17 @@ function main() {
   );
 
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal",
     "community-lens runtime app query",
   );
   assertNotIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_app_tools_resolved",
     "runtime evidence for community app overlays",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal",
     "community-lens shared skill resolution query",
   );
@@ -62,17 +62,17 @@ function main() {
     "shared overlay runtime composition helper",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "composeResolvedRuntimeHarness({",
     "community-lens effective harness composer",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "mountedToolDiscoveryCatalog: resolvedHarness.discoveryMountedTools",
     "community-lens personal mounted tool discovery projection",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_skills_resolved",
     "runtime evidence for skill overlays",
   );
@@ -92,7 +92,7 @@ function main() {
     "community-lens community skill candidates remain active",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "effective_harness_resolved",
     "community-lens effective harness evidence event",
   );

@@ -63,7 +63,7 @@ The current lens model supports:
 
 The community lens is not a secret prompt injection surface and not a way to bypass community access rules.
 
-The community lens is not a coding workspace, Daytona snapshot, or file-system context.
+The community lens is not a coding workspace, workspace snapshot, or file-system context.
 
 ## Common Mistakes
 

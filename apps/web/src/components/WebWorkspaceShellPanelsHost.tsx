@@ -47,7 +47,6 @@ type WebWorkspaceShellPanelsHostProps<
   projects: TProject[];
   resolveThreadProjectId: (thread: TThread) => string | null;
   getThreadSearchText: (thread: TThread) => string;
-  onProjectToggled?: (projectId: string) => void;
 };
 
 export function WebWorkspaceShellPanelsHost<
@@ -60,7 +59,6 @@ export function WebWorkspaceShellPanelsHost<
       projects={props.projects}
       resolveThreadProjectId={props.resolveThreadProjectId}
       getThreadSearchText={props.getThreadSearchText}
-      onProjectToggled={props.onProjectToggled}
     >
       {(sidebar) => (
         <WebWorkspaceShellPanels<TThread, TProject>

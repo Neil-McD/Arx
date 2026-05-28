@@ -1,6 +1,6 @@
-export const DEFAULT_DAYTONA_SANDBOX_CPU = 1;
-export const DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB = 2;
-export const DEFAULT_DAYTONA_SANDBOX_DISK_GIB = 8;
+export const DEFAULT_WORKSPACE_SANDBOX_CPU = 1;
+export const DEFAULT_WORKSPACE_SANDBOX_MEMORY_GIB = 2;
+export const DEFAULT_WORKSPACE_SANDBOX_DISK_GIB = 8;
 
 export const DEFAULT_INCLUDED_TOOL_CREDITS = 0;
 export const WORKSPACE_CREDITS_PER_USD = 100;
@@ -65,22 +65,26 @@ export const GROQ_VOICE_TRANSCRIPTION_DEFAULT_USD_PER_HOUR =
   GROQ_VOICE_TRANSCRIPTION_USD_PER_HOUR_BY_MODEL["whisper-large-v3-turbo"];
 export const GROQ_VOICE_TRANSCRIPTION_MIN_BILLED_SECONDS = 10;
 export const CREDIT_RESERVATION_EXPIRY_MS = 60 * 60 * 1000;
-export const DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS = 60;
-export const DAYTONA_WORKSPACE_SESSION_MAX_SECONDS = 30 * 60;
-export const DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES = 15;
-export const DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS =
-  (DAYTONA_WORKSPACE_SESSION_MAX_SECONDS + 5 * 60) * 1000;
+export const WORKSPACE_SESSION_HOLD_SECONDS = 60;
+export const WORKSPACE_SESSION_MAX_SECONDS = 30 * 60;
+export const WORKSPACE_FILE_INSPECTION_HOLD_SECONDS = 60;
+export const WORKSPACE_FILE_INSPECTION_MAX_SECONDS = 5 * 60;
+export const WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES = 15;
+export const WORKSPACE_SESSION_RESERVATION_EXPIRY_MS =
+  (WORKSPACE_SESSION_MAX_SECONDS + 5 * 60) * 1000;
+export const WORKSPACE_FILE_INSPECTION_RESERVATION_EXPIRY_MS =
+  (WORKSPACE_FILE_INSPECTION_MAX_SECONDS + 60) * 1000;
 
-export const DAYTONA_VCPU_USD_PER_SECOND = 0.000014;
-export const DAYTONA_MEMORY_GIB_USD_PER_SECOND = 0.0000045;
+export const WORKSPACE_VCPU_USD_PER_SECOND = 0;
+export const WORKSPACE_MEMORY_GIB_USD_PER_SECOND = 0.0000115;
 
 export type PaidToolKind = "workspace_tools" | "web_research" | "voice_input";
-export const PAID_TOOL_LEDGER_TOOL_NAMES = ["daytona_workspace", "web_research", "voice_transcribe"] as const;
+export const PAID_TOOL_LEDGER_TOOL_NAMES = ["workspace_compute", "web_research", "voice_transcribe"] as const;
 export type PaidToolLedgerToolName = (typeof PAID_TOOL_LEDGER_TOOL_NAMES)[number];
 
 export const PAID_TOOL_DEFINITIONS = {
   workspace_tools: {
-    ledgerToolName: "daytona_workspace",
+    ledgerToolName: "workspace_compute",
     primaryMessage: "Workspace tools use paid computer time.",
     operatorLabel: "Workspace runtime",
   },
@@ -136,7 +140,7 @@ export function normalizePositiveInteger(raw: unknown, fallback: number, min = 1
   return Math.max(min, Math.floor(value));
 }
 
-export function estimateDaytonaWorkspaceComputeUsd(params: {
+export function estimateWorkspaceComputeUsd(params: {
   durationSeconds: number;
   sandboxCpu: number;
   sandboxMemoryGiB: number;
@@ -145,8 +149,8 @@ export function estimateDaytonaWorkspaceComputeUsd(params: {
   const sandboxCpu = Math.max(0, Number(params.sandboxCpu) || 0);
   const sandboxMemoryGiB = Math.max(0, Number(params.sandboxMemoryGiB) || 0);
   return durationSeconds * (
-    sandboxCpu * DAYTONA_VCPU_USD_PER_SECOND +
-    sandboxMemoryGiB * DAYTONA_MEMORY_GIB_USD_PER_SECOND
+    sandboxCpu * WORKSPACE_VCPU_USD_PER_SECOND +
+    sandboxMemoryGiB * WORKSPACE_MEMORY_GIB_USD_PER_SECOND
   );
 }
 
@@ -252,33 +256,33 @@ export function priceVoiceTranscriptionCredits(params?: {
   });
 }
 
-export function estimateDaytonaWorkspaceCredits(params: {
+export function estimateWorkspaceCredits(params: {
   durationSeconds: number;
   sandboxCpu: number;
   sandboxMemoryGiB: number;
 }): number {
   return priceVendorCostUsdToWorkspaceCredits({
-    rawVendorCostUsd: estimateDaytonaWorkspaceComputeUsd(params),
+    rawVendorCostUsd: estimateWorkspaceComputeUsd(params),
   });
 }
 
-export function estimateDaytonaWorkspaceReservationCredits(params: {
+export function estimateWorkspaceReservationCredits(params: {
   sandboxCpu: number;
   sandboxMemoryGiB: number;
   durationSeconds?: number;
 }): number {
-  const credits = estimateDaytonaWorkspaceCredits({
+  const credits = estimateWorkspaceCredits({
     durationSeconds:
       typeof params.durationSeconds === "number" && Number.isFinite(params.durationSeconds)
         ? params.durationSeconds
-        : DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+        : WORKSPACE_SESSION_HOLD_SECONDS,
     sandboxCpu: params.sandboxCpu,
     sandboxMemoryGiB: params.sandboxMemoryGiB,
   });
   return ceilCredits(credits);
 }
 
-export function priceDaytonaWorkspaceUsageCredits(params: {
+export function priceWorkspaceUsageCredits(params: {
   computeCostUsd: number;
 }): number {
   return priceVendorCostUsdToWorkspaceCredits({

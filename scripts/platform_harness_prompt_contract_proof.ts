@@ -285,15 +285,13 @@ function provePromptEntrypoints() {
 
 async function proveSourceContract() {
   const runtimePromptSource = await readRepoFile("shared/runtimePrompt.ts");
-  const httpDaytonaSource = await readRepoFile("convex/httpDaytona.ts");
+  const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
   const runtimeTurnHandlersSource = await readRepoFile("convex/runtimeTurnHandlers.ts");
   const runtimeTurnResolutionSource = await readRepoFile("convex/runtimeTurnResolution.ts");
   const canonicalGateEngineSource = await readRepoFile("shared/canonicalGateEngine.ts");
   const schemaSource = await readRepoFile("convex/schema.ts");
   const runtimeHarnessCompositionSource = await readRepoFile("convex/runtimeHarnessComposition.ts");
   const communityAgentSource = await readRepoFile("convex/communityAgent.ts");
-  const daytonaWorkspaceSessionSource = await readRepoFile("convex/daytonaWorkspaceSession.ts");
-  const workspaceTerminalBackgroundServiceSource = await readRepoFile("convex/workspaceTerminalBackgroundService.ts");
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
   const authCoreSource = await readRepoFile("shared/authCore.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
@@ -320,12 +318,12 @@ async function proveSourceContract() {
     "runtime prompt source must not branch on product tiers",
   );
   assert.match(
-    httpDaytonaSource,
+    runtimeAgentLoopSource,
     /buildPlatformHarnessRuntimeSystemPrompt/,
     "agentic runtime path should call the platform harness prompt entrypoint",
   );
   assert.doesNotMatch(
-    httpDaytonaSource,
+    runtimeAgentLoopSource,
     /buildWorkspaceRuntimeSystemPrompt/,
     "agentic runtime path should not call the old workspace prompt entrypoint",
   );
@@ -340,7 +338,7 @@ async function proveSourceContract() {
     "runtime turn handlers must pass the saved agent name into prompt composition",
   );
   assert.match(
-    httpDaytonaSource,
+    runtimeAgentLoopSource,
     /agentName: params\.agentName/,
     "agentic runtime loop must pass the saved agent name into platform harness prompts",
   );
@@ -405,10 +403,8 @@ async function proveSourceContract() {
     "voice controller should not receive unused tier props",
   );
 
-  assert.match(httpDaytonaSource, /tool_kind:\s*"web_research"[\s\S]*required_credits:/);
-  assert.match(httpDaytonaSource, /tool_kind:\s*"workspace_tools"/);
-  assert.match(daytonaWorkspaceSessionSource, /tool_kind:\s*"workspace_tools"[\s\S]*required_credits:\s*creditBudgetCredits/);
-  assert.match(workspaceTerminalBackgroundServiceSource, /tool_kind:\s*"workspace_tools"[\s\S]*required_credits:\s*creditBudgetCredits/);
+  assert.match(runtimeAgentLoopSource, /tool_kind:\s*"web_research"[\s\S]*required_credits:/);
+  assert.match(runtimeAgentLoopSource, /tool_kind:\s*"workspace_tools"/);
   assert.match(httpVoiceSource, /tool_kind:\s*"voice_input"[\s\S]*required_credits:/);
   assert.match(authCoreSource, /class VoiceTranscriptionRequestError[\s\S]*toolKind[\s\S]*requiredCredits/);
   assert.match(

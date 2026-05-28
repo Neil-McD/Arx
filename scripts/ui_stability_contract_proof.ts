@@ -17,6 +17,10 @@ const operatorCommunitiesPanelView = read("apps/web/src/components/OperatorCommu
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
+const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
+const workspaceActiveProjectSelector = read("shared/workspaceActiveProjectSelector.ts");
+const workspaceProjectStateController = read("apps/web/src/controllers/useWebWorkspaceProjectStateController.ts");
+const workspaceSidebarStateHost = read("apps/web/src/components/WebWorkspaceSidebarStateHost.tsx");
 
 assert.match(
   app,
@@ -108,6 +112,56 @@ assert.match(
   app,
   /buildWorkspaceRightPanelUserData\(\{[\s\S]*workspaceCreditBalance[\s\S]*activeCommunity: workspaceUserDataPanelCommunity[\s\S]*onTurnOnComputer: turnOnWorkspaceComputer/,
   "workspace right panel user data props must be assembled through the panel data builder",
+);
+assert.match(
+  app,
+  /const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject\(\{[\s\S]*activeThread,[\s\S]*activeThreadId,[\s\S]*workspaceWantsNewChat,[\s\S]*resolvedActiveProjectId: workspace\.derived\.resolvedActiveProjectId,[\s\S]*resolvedActiveProjectName: workspace\.derived\.resolvedActiveProjectName,[\s\S]*projectById: workspace\.derived\.projectById,[\s\S]*resolveThreadProjectId: workspace\.derived\.resolveThreadProjectId/,
+  "workspace current project authority must be centralized in the active project selector",
+);
+assert.match(
+  workspaceActiveProjectSelector,
+  /const activeThreadProjectId =[\s\S]*params\.activeThread && !params\.workspaceWantsNewChat[\s\S]*params\.resolveThreadProjectId\(params\.activeThread\)[\s\S]*const isPendingThreadProject =[\s\S]*Boolean\(params\.activeThreadId\)[\s\S]*!params\.workspaceWantsNewChat[\s\S]*!params\.activeThread[\s\S]*const currentProjectId = isPendingThreadProject[\s\S]*activeThreadProjectId \?\? params\.resolvedActiveProjectId/,
+  "workspace current project must prefer the active thread project and avoid default-project flash while the thread is loading",
+);
+assert.match(
+  workspaceActiveProjectSelector,
+  /const isFromActiveThread =[\s\S]*currentProjectId === activeThreadProjectId[\s\S]*const currentProjectName =[\s\S]*isFromActiveThread[\s\S]*"Loading computer"[\s\S]*params\.resolvedActiveProjectName/,
+  "right panel computer name must not fall back to the default computer while an active thread project row is still loading",
+);
+assert.match(
+  threadSidebarSelectors,
+  /const direct = String\(thread\.project_id \?\? ""\)\.trim\(\);[\s\S]*if \(direct\) return direct;[\s\S]*return defaultWorkspaceProjectId;/,
+  "thread project ids must be authoritative and must not silently fall back to the default computer while project rows lag",
+);
+assert.match(
+  workspaceProjectStateController,
+  /const requestedActiveProjectId = activeProjectId;[\s\S]*setActiveProjectId\(\(current\) =>[\s\S]*resolvePreferredCloudProjectId\(next, current \?\? requestedActiveProjectId\)/,
+  "project reloads must preserve the newest selected draft computer instead of clobbering it with a stale closure",
+);
+assert.doesNotMatch(
+  app + workspaceSidebarStateHost,
+  /onProjectToggled|props\.onProjectToggled|setActiveProjectId\}\s*$/m,
+  "expanding or collapsing a computer folder must not mutate the active computer",
+);
+assert.match(
+  workspaceSidebarStateHost,
+  /const generalThreads = useMemo\(\(\) => \{[\s\S]*return visibleThreads\.filter\(\(thread\) => \{[\s\S]*const projectId = props\.resolveThreadProjectId\(thread\);[\s\S]*return !projectId;[\s\S]*\}\);/,
+  "threads with explicit but temporarily unloaded project ids must not be recategorized as General",
+);
+assert.match(
+  app,
+  /buildWebWorkspaceSurfaceProjection\(\{[\s\S]*activeProjectId: currentWorkspaceProjectId/,
+  "workspace host files, terminals, and previews must use the current workspace project authority",
+);
+assert.match(
+  app,
+  /buildWorkspaceRightPanelUserData\(\{[\s\S]*activeProjectId: currentWorkspaceProjectId[\s\S]*activeProjectName: currentWorkspaceProjectName/,
+  "right panel computer summary and files must use the same current workspace project authority",
+);
+assert.match(
+  app,
+  /const turnOnWorkspaceComputer = useCallback[\s\S]*const projectId = currentWorkspaceProjectId[\s\S]*startProjectWorkspaceComputer\(\{[\s\S]*projectId/,
+  "turn-on computer action must target the same current workspace project shown in the panel",
 );
 assert.match(
   workspaceRightPanelData,

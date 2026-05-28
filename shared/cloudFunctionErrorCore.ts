@@ -1,3 +1,8 @@
+import {
+  classifyPaidUsageFailure,
+  normalizePaidUsageBillingMode,
+  type PaidUsageBillingMode,
+} from "./paidUsageBilling";
 import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
 
 export type CloudFunctionErrorCategory =
@@ -22,6 +27,7 @@ export type CloudFunctionError = {
   stage: string | null;
   toolKind: PaidToolKind | null;
   requiredCredits: number | null;
+  paidUsageBillingMode: PaidUsageBillingMode | null;
   category: CloudFunctionErrorCategory;
 };
 
@@ -80,6 +86,7 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   status: number;
   code: string | null;
   message: string;
+  paidUsageBillingMode?: PaidUsageBillingMode | null;
 }): CloudFunctionErrorCategory {
   const code = (input.code ?? "").toLowerCase();
   const message = (input.message ?? "").toLowerCase();
@@ -88,12 +95,13 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   if (code === "rate_limited") return "rate_limited";
   if (code === "platform_inference_quota_exceeded" || code === "provider_inference_quota_exceeded") return "quota";
   if (
-    code === "workspace_credits_exhausted" ||
-    code === "workspace_credits_unavailable" ||
-    code === "credits_exhausted" ||
-    code === "credits_unavailable"
-  )
+    classifyPaidUsageFailure({
+      code,
+      paidUsageBillingMode: input.paidUsageBillingMode,
+    }).isPaidUsageFailure
+  ) {
     return "workspace_credits";
+  }
   if (
     code === "platform_inference_not_allowed" ||
     code === "tier_required" ||
@@ -136,6 +144,7 @@ async function readFunctionErrorBody(response: Response): Promise<{
   stage: string | null;
   toolKind: PaidToolKind | null;
   requiredCredits: number | null;
+  paidUsageBillingMode: PaidUsageBillingMode | null;
 }> {
   try {
     const json = (await response.clone().json()) as {
@@ -148,6 +157,9 @@ async function readFunctionErrorBody(response: Response): Promise<{
       paid_tool_kind?: unknown;
       required_credits?: unknown;
       requiredCredits?: unknown;
+      paid_usage_billing_mode?: unknown;
+      paidUsageBillingMode?: unknown;
+      billing_mode?: unknown;
     };
     const code = normalizeCode(json?.code);
     const message =
@@ -157,8 +169,11 @@ async function readFunctionErrorBody(response: Response): Promise<{
     const stage = normalizeCode(json?.stage);
     const toolKind = normalizePaidToolKind(json?.tool_kind ?? json?.toolKind ?? json?.paid_tool_kind);
     const requiredCredits = normalizePositiveNumber(json?.required_credits ?? json?.requiredCredits);
-    if (code || message || stage || toolKind || requiredCredits) {
-      return { code, message, stage, toolKind, requiredCredits };
+    const paidUsageBillingMode = normalizePaidUsageBillingMode(
+      json?.paid_usage_billing_mode ?? json?.paidUsageBillingMode ?? json?.billing_mode,
+    );
+    if (code || message || stage || toolKind || requiredCredits || paidUsageBillingMode) {
+      return { code, message, stage, toolKind, requiredCredits, paidUsageBillingMode };
     }
   } catch {
     // ignore
@@ -173,13 +188,21 @@ async function readFunctionErrorBody(response: Response): Promise<{
         stage: null,
         toolKind: null,
         requiredCredits: null,
+        paidUsageBillingMode: null,
       };
     }
   } catch {
     // ignore
   }
 
-  return { code: null, message: "", stage: null, toolKind: null, requiredCredits: null };
+  return {
+    code: null,
+    message: "",
+    stage: null,
+    toolKind: null,
+    requiredCredits: null,
+    paidUsageBillingMode: null,
+  };
 }
 
 export async function readCloudFunctionErrorCore(response: Response): Promise<CloudFunctionError> {
@@ -192,6 +215,7 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
     status: response.status,
     code: parsed.code,
     message,
+    paidUsageBillingMode: parsed.paidUsageBillingMode,
   });
   return {
     status: response.status,
@@ -201,6 +225,7 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
     stage: parsed.stage ?? stageHeader,
     toolKind: parsed.toolKind,
     requiredCredits: parsed.requiredCredits,
+    paidUsageBillingMode: parsed.paidUsageBillingMode,
     category,
   };
 }

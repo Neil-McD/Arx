@@ -92,7 +92,7 @@ If a cleanup touches any of the above, require explicit human confirmation.
 
 ### Security and Tool Boundaries
 - Web runtime cannot execute local filesystem/shell tools.
-- Daytona cloud tools are workspace-bounded and approval-gated.
+- Workspace cloud tools are provider-bounded and approval-gated.
 - Path traversal and symlink escape must fail closed.
 
 ---
@@ -129,7 +129,7 @@ Classification buckets for every candidate:
 ## 6.5) Canonical Release Workflow
 
 - Active development worktree: `/Users/neilmcdevitt/code/arx`.
-- Legacy Daytona worktree snapshots are historical only and are not canonical or active.
+- Legacy workspace-provider worktree snapshots are historical only and are not canonical or active.
 - Canonical Git release branch: `origin/main`.
 - Canonical production app: Vercel project `polynet`.
 - Legacy Vercel project `arx` is not a production target.

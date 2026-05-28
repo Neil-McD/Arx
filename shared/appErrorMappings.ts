@@ -100,6 +100,18 @@ export function formatProjectOperationErrorMessage(
 
   if (isAuthBootstrapCode(code)) return "Session expired. Please sign in again.";
   if (code === "project_limit_reached") return `Computers are capped at ${options.maxProjects}.`;
+  if (code === "workspace_volume_funding_required") {
+    return "Add prepaid credits or a card before using workspace storage.";
+  }
+  if (code === "workspace_card_required_for_additional_volume") {
+    return "Extra computers require a card on file.";
+  }
+  if (code === "workspace_volume_limit_reached") {
+    return `Project volumes are capped at ${options.maxProjects}.`;
+  }
+  if (code === "workspace_provider_volume_quota_headroom_exhausted") {
+    return "Workspace storage quota is full. Delete an unused computer or try again later.";
+  }
   if (code === "project_name_required") return "Computer name is required.";
   if (code === "project_import_in_progress") {
     return "This computer is already importing in another tab or session.";
@@ -150,6 +162,88 @@ export function formatProviderConnectionErrorMessage(error: unknown, fallback: s
   return text || fallback;
 }
 
+type WorkspaceBillingCheckoutKind = "card_setup" | "manual_balance";
+
+function isRawServerErrorText(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  if (!lower) return false;
+  return (
+    lower.includes("server error: uncaught error") ||
+    lower.includes("uncaught error:") ||
+    lower.includes("[request id:") ||
+    lower.includes("/convex/") ||
+    lower.includes("../convex/") ||
+    lower.includes(" at ") ||
+    lower.includes("stripe_secret_key_missing") ||
+    lower.includes("stripe_webhook_secret_missing")
+  );
+}
+
+function getWorkspaceBillingCheckoutFallback(kind: WorkspaceBillingCheckoutKind): string {
+  return kind === "card_setup"
+    ? "Card setup is temporarily unavailable. Please retry shortly."
+    : "Manual balance checkout is temporarily unavailable. Please retry shortly.";
+}
+
+function readWorkspaceBillingCheckoutCode(text: string): string | null {
+  const directCode = normalizeErrorCode(readErrorCode(text));
+  if (directCode) return directCode;
+  const lower = text.toLowerCase();
+  const knownCodes = [
+    "stripe_secret_key_missing",
+    "stripe_webhook_secret_missing",
+    "stripe_checkout_url_missing",
+    "workspace_card_setup_unavailable",
+    "workspace_credit_topup_unavailable",
+    "workspace_card_setup_success_url_invalid",
+    "workspace_card_setup_cancel_url_invalid",
+    "workspace_credit_topup_success_url_invalid",
+    "workspace_credit_topup_cancel_url_invalid",
+    "workspace_tool_balance_pack_invalid",
+    "user_not_found",
+  ];
+  return knownCodes.find((code) => lower.includes(code)) ?? null;
+}
+
+export function formatWorkspaceBillingCheckoutError(
+  error: unknown,
+  options: { kind: WorkspaceBillingCheckoutKind },
+): string {
+  const fallback = getWorkspaceBillingCheckoutFallback(options.kind);
+  const rawText = readErrorText(error, fallback);
+  const structured = readStructuredErrorParts(rawText);
+  const text = structured.message ?? rawText;
+  const code = structured.code ?? readWorkspaceBillingCheckoutCode(text);
+
+  if (isAuthBootstrapCode(code) || includesAuthFailureText(text)) {
+    return "Session expired. Please sign in again.";
+  }
+  if (
+    code === "stripe_secret_key_missing" ||
+    code === "stripe_webhook_secret_missing" ||
+    code === "stripe_checkout_url_missing" ||
+    code === "workspace_card_setup_unavailable" ||
+    code === "workspace_credit_topup_unavailable"
+  ) {
+    return fallback;
+  }
+  if (
+    code === "workspace_card_setup_success_url_invalid" ||
+    code === "workspace_card_setup_cancel_url_invalid" ||
+    code === "workspace_credit_topup_success_url_invalid" ||
+    code === "workspace_credit_topup_cancel_url_invalid"
+  ) {
+    return fallback;
+  }
+  if (code === "workspace_tool_balance_pack_invalid") {
+    return "That manual balance option is unavailable. Choose another amount.";
+  }
+  if (code === "user_not_found") return "Session expired. Please sign in again.";
+  if (isTransientServerCode(code) || isRawServerErrorText(text)) return fallback;
+  if (code) return fallback;
+  return text || fallback;
+}
+
 export function formatAuthSessionErrorMessage(error: unknown, fallback: string): string {
   const text = readErrorText(error, fallback);
   const code = readErrorCode(text);
@@ -174,6 +268,7 @@ export function formatSendFlowErrorMessage(error: unknown, fallback: string): st
   if (
     code === "workspace_credits_exhausted" ||
     code === "workspace_credits_unavailable" ||
+    code === "workspace_uncollected_usage_blocked" ||
     code === "credits_exhausted" ||
     code === "credits_unavailable"
   ) {

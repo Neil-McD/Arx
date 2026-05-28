@@ -288,19 +288,19 @@ assert.doesNotMatch(
 );
 
 const runtimePromptSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts",
+  "shared/runtimePrompt.ts",
   "utf8",
 );
 const runtimeTurnContextPacketSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/shared/runtimeTurnContextPacket.ts",
+  "shared/runtimeTurnContextPacket.ts",
   "utf8",
 );
-const httpDaytonaSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
+const runtimeAgentLoopSource = readFileSync(
+  "convex/runtimeAgentLoop.ts",
   "utf8",
 );
 const runtimeTurnContextLoaderSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/convex/runtimeTurnContext.ts",
+  "convex/runtimeTurnContext.ts",
   "utf8",
 );
 assert.match(
@@ -379,14 +379,14 @@ assert.match(
   "runtime context packet should normalize recent tool attempts from run events",
 );
 assert.match(
-  httpDaytonaSource,
+  runtimeAgentLoopSource,
   /loadRuntimeTurnContextPacketForRun\(\{/,
-  "normal Daytona runtime prompt path should use the canonical context loader",
+  "normal runtime prompt path should use the canonical context loader",
 );
 assert.doesNotMatch(
-  httpDaytonaSource,
+  runtimeAgentLoopSource,
   /mapRuntimeWorkspaceTerminalPrompt/,
-  "normal Daytona runtime path should not manually map terminal rows for prompt context",
+  "normal runtime path should not manually map terminal rows for prompt context",
 );
 assert.match(
   runtimeTurnContextLoaderSource,

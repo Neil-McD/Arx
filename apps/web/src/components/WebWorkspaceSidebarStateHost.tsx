@@ -37,7 +37,6 @@ type WebWorkspaceSidebarStateHostProps<TThread extends ThreadLike, TProject exte
   projects: TProject[];
   resolveThreadProjectId: (thread: TThread) => string | null;
   getThreadSearchText: (thread: TThread) => string;
-  onProjectToggled?: (projectId: string) => void;
   children: (state: WorkspaceSidebarState<TThread, TProject>) => ReactNode;
 };
 
@@ -77,12 +76,11 @@ export function WebWorkspaceSidebarStateHost<TThread extends ThreadLike, TProjec
     [props.projects, props.resolveThreadProjectId, visibleThreads],
   );
   const generalThreads = useMemo(() => {
-    const projectIds = new Set(props.projects.map((project) => project.id));
     return visibleThreads.filter((thread) => {
       const projectId = props.resolveThreadProjectId(thread);
-      return !projectId || !projectIds.has(projectId);
+      return !projectId;
     });
-  }, [props.projects, props.resolveThreadProjectId, visibleThreads]);
+  }, [props.resolveThreadProjectId, visibleThreads]);
 
   const toggleProjectExpanded = useCallback(
     (projectId: string) => {
@@ -90,9 +88,8 @@ export function WebWorkspaceSidebarStateHost<TThread extends ThreadLike, TProjec
         ...prev,
         [projectId]: !(prev[projectId] ?? true),
       }));
-      props.onProjectToggled?.(projectId);
     },
-    [props.onProjectToggled],
+    [],
   );
 
   return props.children({

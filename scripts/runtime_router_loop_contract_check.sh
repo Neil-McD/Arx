@@ -8,7 +8,7 @@ echo "== Runtime router/loop contract guard =="
 HTTP_FILE="$ROOT/convex/httpRuntimeRoutes.ts"
 HANDLERS_FILE="$ROOT/convex/runtimeTurnHandlers.ts"
 RESOLUTION_FILE="$ROOT/convex/runtimeTurnResolution.ts"
-DAYTONA_FILE="$ROOT/convex/httpDaytona.ts"
+RUNTIME_AGENT_LOOP_FILE="$ROOT/convex/runtimeAgentLoop.ts"
 HARNESS_TELEMETRY_FILE="$ROOT/convex/runtimeHarnessTelemetry.ts"
 HARNESS_SHAPING_FILE="$ROOT/convex/runtimeHarnessShaping.ts"
 TOOL_TYPES_FILE="$ROOT/shared/retrievalTools.ts"
@@ -65,25 +65,25 @@ forbid_match_in_file "$HANDLERS_FILE" 'router_level_selected' \
 forbid_match_in_file "$HANDLERS_FILE" 'debug_force_router_level' \
   "runtime no longer accepts debug_force_router_level"
 
-require_match_in_file "$DAYTONA_FILE" 'function executeRetrievalAgentLoop\(' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'function executeRetrievalAgentLoop\(' \
   "shared loop core still exists"
-require_match_in_file "$DAYTONA_FILE" 'harnessName: "chat_tools"' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'harnessName: "chat_tools"' \
   "runtime uses the unified chat_tools harness name"
-forbid_match_in_file "$DAYTONA_FILE" 'harnessName: "workspace"' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'harnessName: "workspace"' \
   "runtime no longer carries a separate workspace harness name"
 require_match_in_file "$PROMPT_FILE" 'Use native tool calls\. Do not describe tool calls in JSON or markdown\.' \
   "workspace prompt instructs native tool calling"
 require_match_in_file "$PROMPT_FILE" 'Use independent read-only tool calls in parallel when possible\.' \
   "workspace prompt encourages batched read-only tool calls"
-require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'runProviderNativeToolCompletion\(' \
   "workspace loop uses provider-native tool completion"
-require_match_in_file "$DAYTONA_FILE" 'runNativeRuntimeKernel<' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'runNativeRuntimeKernel<' \
   "workspace loop uses explicit runtime kernel state machine"
-require_match_in_file "$DAYTONA_FILE" 'from "./runtimeHarnessTelemetry"' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'from "./runtimeHarnessTelemetry"' \
   "workspace loop imports extracted runtime harness telemetry helpers"
-require_match_in_file "$DAYTONA_FILE" 'from "./runtimeHarnessShaping"' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'from "./runtimeHarnessShaping"' \
   "workspace loop imports extracted runtime harness shaping helpers"
-require_match_in_file "$DAYTONA_FILE" 'tool_batch_telemetry' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'tool_batch_telemetry' \
   "workspace loop emits batch telemetry evidence"
 require_match_in_file "$HARNESS_TELEMETRY_FILE" 'batch_wall_time_ms' \
   "workspace batch telemetry records wall time"
@@ -91,36 +91,36 @@ require_match_in_file "$HARNESS_TELEMETRY_FILE" 'estimated_parallel_savings_ms' 
   "workspace batch telemetry estimates parallel savings"
 require_match_in_file "$HARNESS_TELEMETRY_FILE" 'parallel_blocker_reason_counts' \
   "workspace batch telemetry records blocker reasons"
-require_match_in_file "$DAYTONA_FILE" 'createPolyNetExecutionSession\(' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'createPolyNetExecutionSession\(' \
   "workspace loop creates a unified PolyNet execution session"
-require_match_in_file "$DAYTONA_FILE" 'executionSession\.' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executionSession\.' \
   "workspace loop routes execution through the PolyNet execution session"
-require_match_in_file "$DAYTONA_FILE" 'executionSession\.executeTerminalTool\(' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executionSession\.executeTerminalTool\(' \
   "workspace loop routes terminal tools through the execution session"
-require_match_in_file "$DAYTONA_FILE" 'executionSession\.executeComputerTool\(' \
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executionSession\.executeComputerTool\(' \
   "workspace loop routes computer tools through the execution session"
-forbid_match_in_file "$DAYTONA_FILE" 'executeCommunityAgentLoop' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executeCommunityAgentLoop' \
   "community-specific loop wrapper removed"
-forbid_match_in_file "$DAYTONA_FILE" 'executeExternalAgentLoop' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executeExternalAgentLoop' \
   "external-specific loop wrapper removed"
-forbid_match_in_file "$DAYTONA_FILE" 'parseRetrievalAgentDecision\(' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'parseRetrievalAgentDecision\(' \
   "workspace loop no longer parses JSON tool decisions"
-forbid_match_in_file "$DAYTONA_FILE" 'Your previous response was not strict JSON' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'Your previous response was not strict JSON' \
   "workspace loop no longer retries malformed JSON tool decisions"
-forbid_match_in_file "$DAYTONA_FILE" 'Allowed JSON outputs:' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'Allowed JSON outputs:' \
   "workspace prompt no longer teaches JSON tool wrapper format"
-forbid_match_in_file "$DAYTONA_FILE" 'createRuntimeMcpManager\(' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'createRuntimeMcpManager\(' \
   "workspace loop no longer instantiates MCP managers inline"
-forbid_match_in_file "$DAYTONA_FILE" 'createRuntimeMountedToolExposureState\(' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'createRuntimeMountedToolExposureState\(' \
   "workspace loop no longer instantiates mounted tool exposure state inline"
-forbid_match_in_file "$DAYTONA_FILE" 'function buildToolBatchTelemetryPayload\(' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'function buildToolBatchTelemetryPayload\(' \
   "workspace loop no longer defines batch telemetry shaping inline"
-forbid_match_in_file "$DAYTONA_FILE" 'function normalizeRuntimeMountedCommunityAppTools\(' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'function normalizeRuntimeMountedCommunityAppTools\(' \
   "workspace loop no longer defines mounted tool shaping inline"
-forbid_match_in_file "$DAYTONA_FILE" 'internal\.workspaceTerminals\.(startWorkspaceTerminalInternal|readWorkspaceTerminalInternal|writeWorkspaceTerminalInternal|stopWorkspaceTerminalInternal)' \
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'internal\.workspaceTerminals\.(startWorkspaceTerminalInternal|readWorkspaceTerminalInternal|writeWorkspaceTerminalInternal|stopWorkspaceTerminalInternal)' \
   "workspace loop no longer calls terminal internals inline"
-forbid_match_in_file "$DAYTONA_FILE" 'runDaytonaComputerUseTool\(' \
-  "workspace loop no longer runs Daytona computer use inline"
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'runWorkspaceComputerUseTool\(' \
+  "workspace loop no longer runs workspace computer use inline"
 
 if [[ -e "$ROOT/shared/retrievalAgentDecision.ts" ]]; then
   echo "FAIL: deleted parser file still exists: $ROOT/shared/retrievalAgentDecision.ts"
