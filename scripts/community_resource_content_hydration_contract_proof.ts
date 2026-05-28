@@ -43,6 +43,11 @@ assert.match(
   "resource body hydration must read split body storage and return bodyMd/bodyChars together",
 );
 assert.match(
+  content,
+  /export async function writeCommunityResourceBodyContent[\s\S]*ctx\.db\.insert\("communityResourceContents"[\s\S]*bodyMd,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*await ctx\.db\.patch\(args\.resourceId[\s\S]*bodyMd: undefined,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*bodyMigratedAt:/,
+  "resource body writes must persist markdown in the split content table while leaving body counters on the resource row",
+);
+assert.match(
   resources,
   /async function mapCommunityResourceRowWithBody[\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*mapCommunityResourceRow\(ctx, hydrated/,
   "resource list mapper must hydrate split body content before projecting rows to clients",
@@ -51,6 +56,31 @@ assert.match(
   resources,
   /export const listCommunityResources = query\([\s\S]*\.map\(\(row\) => mapCommunityResourceRowWithBody\(ctx, row, userIdCache, moduleNameCache\)\)/,
   "main Resources UI list query must use the hydrated row mapper",
+);
+assert.match(
+  resources,
+  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const row = await hydrateCommunityResourceBody\(ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
+  "single member-visible resource reads must hydrate split body content before slicing response text",
+);
+assert.match(
+  resources,
+  /async function buildBatchReadResourceResult[\s\S]*const row = await hydrateCommunityResourceBody\(args\.ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
+  "batch resource reads must hydrate split body content before applying context budgets",
+);
+assert.match(
+  resources,
+  /export const searchCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const hydratedResources = await Promise\.all\([\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*resourceSearchScore\(row, query, terms\)/,
+  "resource search must hydrate split body content before scoring and excerpting",
+);
+assert.match(
+  resources,
+  /export const readCommunityResourceBuilderResource = query\([\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(ctx, resolved\.resource\)/,
+  "builder resource reads must hydrate split body content before exposing draft or source rows",
+);
+assert.match(
+  core,
+  /export function communityResourceHasUsableKnowledgeContent[\s\S]*communityResourceBodyChars\(row\) > 0/,
+  "visibility checks must trust body_chars so split-body pages are not treated as empty",
 );
 
 assert.match(
