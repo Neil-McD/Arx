@@ -11,6 +11,7 @@ EXPECTED_VERCEL_ORG_ID="team_TJvbi4UGtg62xteusiC1Cvxy"
 EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"
 EXPECTED_PREVIEW_PROXY_ORIGIN="https://polynet-preview-proxy.fly.dev"
 EXPECTED_PREVIEW_PROXY_APP="polynet-preview-proxy"
+EXPECTED_SOURCE_URL_FETCHER_ENDPOINT="https://polynet-staging.vercel.app/api/source-url-fetch"
 
 load_env_if_present() {
   local file="$1"
@@ -67,6 +68,10 @@ if ! printf '%s\n' "$vercel_env" | grep -q '^ VITE_WORKSPACE_PREVIEW_ORIGIN[[:sp
   fail "VITE_WORKSPACE_PREVIEW_ORIGIN missing in Vercel staging Production env; previews will fall back to the web app origin"
 fi
 ok "Vercel staging preview proxy origin is configured; expected value: $EXPECTED_PREVIEW_PROXY_ORIGIN"
+if ! printf '%s\n' "$vercel_env" | grep -q '^ ARX_SOURCE_URL_FETCHER_SECRET[[:space:]]'; then
+  fail "ARX_SOURCE_URL_FETCHER_SECRET missing in Vercel staging Production env; Knowledge source URL ingestion cannot fetch source material"
+fi
+ok "Vercel staging source URL fetcher secret is configured"
 
 convex_deployment="${CONVEX_DEPLOYMENT:-}"
 if [[ "$convex_deployment" != "$EXPECTED_CONVEX_DEPLOYMENT" ]]; then
@@ -74,10 +79,28 @@ if [[ "$convex_deployment" != "$EXPECTED_CONVEX_DEPLOYMENT" ]]; then
 fi
 ok "Convex staging target is explicit: $convex_deployment"
 
-if ! CONVEX_DEPLOYMENT="$convex_deployment" npx convex env list 2>/dev/null | grep -q '^ARX_PREVIEW_PROXY_SIGNING_SECRET='; then
+convex_env="$(CONVEX_DEPLOYMENT="$convex_deployment" npx convex env list 2>/dev/null || true)"
+if ! printf '%s\n' "$convex_env" | grep -q '^ARX_PREVIEW_PROXY_SIGNING_SECRET='; then
   fail "ARX_PREVIEW_PROXY_SIGNING_SECRET missing in Convex staging env; workspace previews cannot mint proxy tokens"
 fi
 ok "Convex staging preview proxy signing secret is configured"
+if ! printf '%s\n' "$convex_env" | grep -q '^ARX_SOURCE_URL_FETCHER_ENDPOINT='; then
+  fail "ARX_SOURCE_URL_FETCHER_ENDPOINT missing in Convex staging env; Knowledge source URL ingestion cannot reach the broker"
+fi
+if ! printf '%s\n' "$convex_env" | grep -q '^ARX_SOURCE_URL_FETCHER_SECRET='; then
+  fail "ARX_SOURCE_URL_FETCHER_SECRET missing in Convex staging env; Knowledge source URL ingestion cannot authenticate to the broker"
+fi
+source_url_fetcher_endpoint="$(CONVEX_DEPLOYMENT="$convex_deployment" npx convex env get ARX_SOURCE_URL_FETCHER_ENDPOINT 2>/dev/null | tr -d '\r' || true)"
+if [[ "$source_url_fetcher_endpoint" != "$EXPECTED_SOURCE_URL_FETCHER_ENDPOINT" ]]; then
+  fail "ARX_SOURCE_URL_FETCHER_ENDPOINT must be $EXPECTED_SOURCE_URL_FETCHER_ENDPOINT, got ${source_url_fetcher_endpoint:-missing}"
+fi
+ok "Convex staging source URL fetcher endpoint and secret are configured"
+
+source_fetcher_probe_status="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -X POST "$EXPECTED_SOURCE_URL_FETCHER_ENDPOINT" -H 'Content-Type: application/json' --data '{"url":"https://www.iana.org/help/example-domains"}' 2>/dev/null || true)"
+if [[ "$source_fetcher_probe_status" != "401" ]]; then
+  fail "source URL fetcher unauthenticated probe expected HTTP 401, got ${source_fetcher_probe_status:-no response}"
+fi
+ok "Vercel source URL fetcher is deployed and fail-closed"
 
 if ! fly secrets list --app "$EXPECTED_PREVIEW_PROXY_APP" 2>/dev/null | grep -q '^ ARX_PREVIEW_PROXY_SIGNING_SECRET[[:space:]]'; then
   fail "ARX_PREVIEW_PROXY_SIGNING_SECRET missing in Fly preview proxy env; workspace previews cannot verify tokens"
