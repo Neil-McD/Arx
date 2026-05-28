@@ -187,6 +187,7 @@ function main() {
   if (deploymentName !== EXPECTED_CONVEX_DEPLOYMENT) {
     fail(`CONVEX_DEPLOYMENT must be ${EXPECTED_CONVEX_DEPLOYMENT}`);
   }
+  const deploymentCliName = deploymentName.replace(/^dev:/, "");
 
   const payload = {
     projectId: args.projectId,
@@ -200,7 +201,7 @@ function main() {
     "convex",
     "run",
     "--deployment-name",
-    deploymentName,
+    deploymentCliName,
     "--typecheck",
     "disable",
     "--codegen",

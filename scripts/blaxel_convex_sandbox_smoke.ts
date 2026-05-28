@@ -78,13 +78,14 @@ function main() {
   if (deploymentName !== EXPECTED_CONVEX_DEPLOYMENT) {
     fail(`CONVEX_DEPLOYMENT must be ${EXPECTED_CONVEX_DEPLOYMENT}`);
   }
+  const deploymentCliName = deploymentName.replace(/^dev:/, "");
 
   const shouldPush = !new Set(process.argv.slice(2)).has("--no-push");
   const convexArgs = [
     "convex",
     "run",
     "--deployment-name",
-    deploymentName,
+    deploymentCliName,
     "--typecheck",
     "disable",
     "--codegen",
