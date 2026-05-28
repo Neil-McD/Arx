@@ -11171,19 +11171,25 @@ button.chat-reply-quote:hover {
 
 .knowledge-workspace {
   display: grid;
-  grid-template-columns: minmax(180px, 236px) minmax(0, 1fr);
+  grid-template-columns: minmax(176px, 224px) minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  align-items: start;
+  overflow: visible;
 }
 
 .knowledge-resource-rail {
+  position: sticky;
+  top: 4px;
+  align-self: start;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
   min-height: 0;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
   border-right: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   padding-right: 12px;
 }
@@ -12673,10 +12679,13 @@ button.chat-reply-quote:hover {
   }
 
   .knowledge-resource-rail {
+    position: static;
     border-right: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
     padding: 0 0 12px;
     min-height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .knowledge-resource-list {

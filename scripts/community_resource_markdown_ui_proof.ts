@@ -37,8 +37,18 @@ assert.match(
 );
 assert.match(
   css,
-  /grid-template-columns: minmax\(180px, 236px\) minmax\(0, 1fr\)/,
+  /grid-template-columns: minmax\(176px, 224px\) minmax\(0, 1fr\)/,
   "Resources wiki rail should stay compact",
+);
+assert.match(
+  css,
+  /\.knowledge-resource-rail \{[\s\S]*position: sticky;[\s\S]*top: 4px;[\s\S]*max-height: calc\(100dvh - 24px\);[\s\S]*overflow: hidden;/,
+  "Resources wiki rail should stay visible while scrolling desktop resource content",
+);
+assert.match(
+  css,
+  /@media \(max-width: 900px\) \{[\s\S]*\.knowledge-resource-rail \{[\s\S]*position: static;[\s\S]*max-height: none;[\s\S]*overflow: visible;/,
+  "Resources wiki rail should not use sticky side navigation on mobile",
 );
 assert.match(
   css,
