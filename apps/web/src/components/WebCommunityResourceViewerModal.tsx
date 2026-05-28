@@ -277,7 +277,9 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           ) : null}
 
           {hasBody ? (
-            <div className="resource-viewer-prose">{renderMarkdown(trimmedBody)}</div>
+            <div className="resource-viewer-prose">
+              {renderMarkdown(trimmedBody, { embedStandaloneMedia: true })}
+            </div>
           ) : null}
 
           {verificationLink ? (

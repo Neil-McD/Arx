@@ -235,6 +235,21 @@ assert.match(
 );
 assert.match(
   architect,
+  /COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT[\s\S]*Do not reference the configured agent name[\s\S]*Copyable prompt[\s\S]*Try this prompt/,
+  "resource content writer should avoid agent-name-specific prompt headings",
+);
+assert.match(
+  architect,
+  /COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT[\s\S]*put every prompt in a fenced \\`\\`\\`text code block[\s\S]*copy control/,
+  "resource content writer should make prompt text blocks copyable",
+);
+assert.match(
+  architect,
+  /COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT[\s\S]*YouTube, Vimeo, Loom, or Wistia URLs[\s\S]*on its own paragraph[\s\S]*render it as an embed/,
+  "resource content writer should preserve supported media links as standalone embeds",
+);
+assert.match(
+  architect,
   /export const buildCommunityResourceContentWriterRunContextInternal = internalQuery\([\s\S]*COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*neededSourceIds[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hydrateCommunityResourceBody[\s\S]*pages\.slice\(0, limit\)\.map[\s\S]*buildContentWriterSourceFromUnits\(ctx, \{[\s\S]*pageTitle:[\s\S]*pageModule,[\s\S]*pageBody:[\s\S]*source_units: unitContext\.sourceUnits[\s\S]*source_body_md: unitContext\.sourceBodyMd \?\? truncateContentWriterSource\(source\.bodyMd\)/,
   "content writer context should target only bounded scaffold draft pages with hydrated ready source text and prefer source-unit bodies when present",
 );

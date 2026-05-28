@@ -71,6 +71,9 @@ Rules:
 - Keep the page concise, structured, and review-ready.
 - If the source is thin or unclear, say what is known and add a short "Needs review" section.
 - Do not make modules live. This is a human-review draft.
+- Do not reference the configured agent name, your own name, or headings like "Ask Atom", "Ask the agent", or "Ask [name]". Use neutral headings like "Copyable prompt" or "Try this prompt".
+- If you include prompts, put every prompt in a fenced \`\`\`text code block so the Resources UI renders a copy control. Do not leave prompt text as ordinary paragraphs or unlabeled indented blocks.
+- If the source includes YouTube, Vimeo, Loom, or Wistia URLs, preserve each important media URL on its own paragraph so the Resources UI can render it as an embed.
 
 Return ONLY valid JSON:
 {

@@ -1,10 +1,11 @@
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { Children, isValidElement, type ReactNode, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
+import { parseEmbedUrl, type ParsedEmbed } from "./linkEmbedUi";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -74,6 +75,7 @@ const CODE_BLOCK_LANGUAGES = new Set([
 ]);
 
 export type MarkdownRenderOptions = {
+  embedStandaloneMedia?: boolean;
   onCopyCode?: (text: string) => Promise<void> | void;
 };
 
@@ -84,6 +86,14 @@ type CodeBlockProps = {
 };
 
 type CodeBlockVariant = "code" | "artifact" | "terminal" | "diff";
+
+function getEmbedProviderLabel(provider: ParsedEmbed["provider"]): string {
+  if (provider === "youtube") return "YouTube";
+  if (provider === "wistia") return "Wistia";
+  if (provider === "vimeo") return "Vimeo";
+  if (provider === "loom") return "Loom";
+  return "Video";
+}
 
 async function copyCodeToClipboard(text: string, onCopyCode?: (text: string) => Promise<void> | void): Promise<void> {
   if (onCopyCode) {
@@ -267,7 +277,13 @@ function ArtifactBlock({
   );
 }
 
-function PlainTextBlock({ text }: { text: string }) {
+function PlainTextBlock({
+  onCopyText,
+  text,
+}: {
+  onCopyText?: (text: string) => Promise<void> | void;
+  text: string;
+}) {
   const trimmed = text.trim();
   if (!trimmed) return null;
 
@@ -279,10 +295,54 @@ function PlainTextBlock({ text }: { text: string }) {
     );
   }
 
+  return <ArtifactBlock label="text" text={trimmed} extension="txt" onCopyText={onCopyText} />;
+}
+
+function extractSingleChildHref(children: ReactNode): string | null {
+  const nodes = Children.toArray(children).filter((child) => {
+    return typeof child === "string" ? child.trim().length > 0 : true;
+  });
+  if (nodes.length !== 1) return null;
+
+  const [node] = nodes;
+  if (typeof node === "string" || typeof node === "number") {
+    const raw = String(node).trim();
+    return /^\S+$/.test(raw) ? raw : null;
+  }
+  if (!isValidElement(node)) return null;
+
+  const props = node.props as { children?: ReactNode; href?: unknown };
+  if (typeof props.href === "string" && props.href.trim()) return props.href.trim();
+
+  const childText = Children.toArray(props.children).join("").trim();
+  return childText && /^\S+$/.test(childText) ? childText : null;
+}
+
+function standaloneMediaEmbedFromChildren(children: ReactNode): { embed: ParsedEmbed; href: string } | null {
+  const href = extractSingleChildHref(children);
+  if (!href) return null;
+  const embed = parseEmbedUrl(href);
+  return embed ? { embed, href } : null;
+}
+
+function MarkdownMediaEmbed({ embed, href }: { embed: ParsedEmbed; href: string }) {
+  const providerLabel = getEmbedProviderLabel(embed.provider);
   return (
-    <pre className="md-plain-block">
-      <code>{trimmed}</code>
-    </pre>
+    <figure className="md-media-embed">
+      <div className="md-media-embed-frame">
+        <iframe
+          src={embed.src}
+          title={`${providerLabel} embed`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      </div>
+      <figcaption className="md-media-embed-caption">
+        <a className="md-media-embed-link" href={href} target="_blank" rel="noreferrer">
+          Open on {providerLabel}
+        </a>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -551,7 +611,7 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
         );
       }
       if (!shouldRenderCodeCard(raw, language)) {
-        return <PlainTextBlock text={raw} />;
+        return <PlainTextBlock text={raw} onCopyText={options?.onCopyCode} />;
       }
       return (
         <CodeBlock
@@ -586,6 +646,12 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
       return <ol className="md-list">{children}</ol>;
     },
     p({ children }) {
+      if (options?.embedStandaloneMedia) {
+        const standaloneMedia = standaloneMediaEmbedFromChildren(children);
+        if (standaloneMedia) {
+          return <MarkdownMediaEmbed embed={standaloneMedia.embed} href={standaloneMedia.href} />;
+        }
+      }
       return <p className="md-paragraph">{children}</p>;
     },
     pre({ children }) {

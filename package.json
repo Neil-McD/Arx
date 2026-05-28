@@ -65,6 +65,7 @@
     "check:community-chat-attachment-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_attachment_policy_proof.ts",
     "check:community-activity-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_activity_events_contract_proof.ts",
     "check:community-resources-knowledge-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resources_knowledge_contract_proof.ts",
+    "check:community-resource-markdown-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_markdown_ui_proof.ts",
     "check:community-resource-tools-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_tools_contract_proof.ts",
     "check:community-resource-builder-tools-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_builder_tools_contract_proof.ts",
     "check:community-source-ingestion-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_source_ingestion_contract_proof.ts",
