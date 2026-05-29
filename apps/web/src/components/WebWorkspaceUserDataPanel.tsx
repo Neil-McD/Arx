@@ -31,11 +31,6 @@ import {
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
-import {
-  formatWorkspaceToolBalanceUsdFromCredits,
-  getOutstandingWorkspaceToolUsageCredits,
-  getSpendableWorkspaceToolBalanceCredits,
-} from "../../../../shared/workspaceCredits";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
   listWorkspaceDirectoryCanonical,
@@ -674,22 +669,9 @@ function WorkspaceCommunityOperations(props: {
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   filesResetNonce?: number;
 }) {
-  const totalCredits = getSpendableWorkspaceToolBalanceCredits(props.workspaceCreditBalance);
-  const outstandingUsageCredits = getOutstandingWorkspaceToolUsageCredits(props.workspaceCreditBalance);
-  const hasWorkspaceCardOnFile = props.hasWorkspaceCardOnFile === true;
-  const displayedToolBalance =
-    props.isLoadingWorkspaceCreditBalance && !props.workspaceCreditBalance
-      ? "Checking..."
-      : totalCredits > 0
-        ? formatWorkspaceToolBalanceUsdFromCredits(totalCredits)
-        : hasWorkspaceCardOnFile
-          ? "Card on file"
-          : formatWorkspaceToolBalanceUsdFromCredits(totalCredits);
   const workspaceBillingActionLabel = props.isStartingWorkspaceCreditTopupCheckout
     ? "Opening"
-    : hasWorkspaceCardOnFile
-      ? "Billing"
-      : "Add card";
+    : "Billing";
   const [filesExpanded, setFilesExpanded] = useState(() => loadFilesExpanded(props.activeProjectId));
   const [directoryRefreshNonce, setDirectoryRefreshNonce] = useState(0);
   const [directoryPath, setDirectoryPath] = useState(".");
@@ -974,9 +956,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
             <dd>{props.activeModelLabel?.trim() || "Default"}</dd>
           </div>
           <div>
-            <dt>Tool credits</dt>
+            <dt>Billing</dt>
             <dd className="workspace-summary-credit-value">
-              <span>{displayedToolBalance}</span>
               <button
                 type="button"
                 className="workspace-summary-credit-action"
@@ -988,18 +969,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
             </dd>
           </div>
         </dl>
-        {props.workspaceCreditBalanceError ? (
-          <p className="workspace-summary-note">{props.workspaceCreditBalanceError}</p>
-        ) : null}
-        {outstandingUsageCredits > 0 && !hasWorkspaceCardOnFile ? (
-          <p className="workspace-summary-note">
-            {formatWorkspaceToolBalanceUsdFromCredits(outstandingUsageCredits)} prior usage clears from the next top-up before tools can run.
-          </p>
-        ) : outstandingUsageCredits > 0 ? (
-          <p className="workspace-summary-note">
-            Pending workspace usage: {formatWorkspaceToolBalanceUsdFromCredits(outstandingUsageCredits)}.
-          </p>
-        ) : null}
         {props.workspaceCreditTopupError ? (
           <p className="workspace-summary-note">{props.workspaceCreditTopupError}</p>
         ) : null}

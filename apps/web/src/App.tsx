@@ -418,7 +418,12 @@ import {
 } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
-import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
+import {
+  loadWorkspaceBillingOverviewCanonical,
+  loadWorkspaceCreditBalanceCanonical,
+  type WorkspaceBillingOverview,
+  type WorkspaceCreditBalance,
+} from "../../../shared/workspaceCreditsGateway";
 import {
   startProjectWorkspaceComputer,
   stopProjectWorkspaceComputer,
@@ -1447,6 +1452,9 @@ export default function App() {
       setIsOnboardingModalOpen(false);
       setWorkspaceCreditBalance(null);
       setWorkspaceCreditBalanceError(null);
+      setWorkspaceBillingOverview(null);
+      setWorkspaceBillingOverviewError(null);
+      setIsLoadingWorkspaceBillingOverview(false);
       profileUi.setProfileSaveError(null);
       profileUi.setProfileSaveSuccess(false);
       emitWorkspaceEvent({
@@ -1878,6 +1886,7 @@ export default function App() {
   const billingUi = useWebBillingUiController<
     AccountCommerceStatus,
     WorkspaceCreditBalance,
+    WorkspaceBillingOverview,
     PendingPurchaseClaim
   >();
   const {
@@ -1902,6 +1911,9 @@ export default function App() {
     setIsLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError,
     setWorkspaceCreditBalanceError,
+    setWorkspaceBillingOverview,
+    setIsLoadingWorkspaceBillingOverview,
+    setWorkspaceBillingOverviewError,
     isStartingWorkspaceCreditTopupCheckout,
     setIsStartingWorkspaceCreditTopupCheckout,
     workspaceCreditTopupError,
@@ -1941,6 +1953,7 @@ export default function App() {
   const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
+  const workspaceBillingOverviewLoadRequestIdRef = useRef(0);
   const workspaceCardOnFileLoadRequestIdRef = useRef(0);
   const workspaceCreditTopupReturnPollRef = useRef<{ attempts: number; timeoutId: number | null }>({
     attempts: 0,
@@ -4789,6 +4802,48 @@ export default function App() {
     [ensureUsableAuthSession],
   );
 
+  const loadWorkspaceBillingOverview = useCallback(
+    async (session: AuthSession): Promise<WorkspaceBillingOverview | null> => {
+      const requestId = ++workspaceBillingOverviewLoadRequestIdRef.current;
+      setIsLoadingWorkspaceBillingOverview(true);
+      setWorkspaceBillingOverviewError(null);
+      try {
+        const usableSession = await ensureUsableAuthSession(session);
+        if (!usableSession) {
+          if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
+            setWorkspaceBillingOverview(null);
+          }
+          return null;
+        }
+        const overview = await loadWorkspaceBillingOverviewCanonical({
+          session: usableSession,
+        });
+        if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
+          setWorkspaceBillingOverview(overview);
+          setWorkspaceBillingOverviewError(null);
+        }
+        return overview;
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to load workspace billing.";
+        console.warn("Workspace billing overview refresh failed:", error);
+        if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
+          setWorkspaceBillingOverviewError(message);
+        }
+        return null;
+      } finally {
+        if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
+          setIsLoadingWorkspaceBillingOverview(false);
+        }
+      }
+    },
+    [ensureUsableAuthSession],
+  );
+
   const loadWorkspaceCardOnFileStatus = useCallback(
     async (session: AuthSession): Promise<CloudWorkspaceCardOnFileStatus | null> => {
       const requestId = ++workspaceCardOnFileLoadRequestIdRef.current;
@@ -4826,13 +4881,19 @@ export default function App() {
     if (!session) return;
     const shouldLoadWorkspaceCredits =
       activePage === "workspace" || (activeView === "settings" && settingsGroup === "billing");
-    if (!shouldLoadWorkspaceCredits) return;
-    void loadWorkspaceCreditBalance(session);
-    void loadWorkspaceCardOnFileStatus(session);
+    const shouldLoadWorkspaceBillingOverview = activeView === "settings" && settingsGroup === "billing";
+    if (shouldLoadWorkspaceCredits) {
+      void loadWorkspaceCreditBalance(session);
+      void loadWorkspaceCardOnFileStatus(session);
+    }
+    if (shouldLoadWorkspaceBillingOverview) {
+      void loadWorkspaceBillingOverview(session);
+    }
   }, [
     activePage,
     activeView,
     session,
+    loadWorkspaceBillingOverview,
     loadWorkspaceCardOnFileStatus,
     loadWorkspaceCreditBalance,
     settingsGroup,
@@ -4857,6 +4918,9 @@ export default function App() {
         if (hasConfirmedTopup || !pending) {
           clearPendingWorkspaceCreditTopupReturn();
           workspaceCreditTopupReturnPollRef.current.attempts = 0;
+          if (activeView === "settings" && settingsGroup === "billing") {
+            void loadWorkspaceBillingOverview(activeSession);
+          }
           return;
         }
         workspaceCreditTopupReturnPollRef.current.attempts += 1;
@@ -4885,7 +4949,7 @@ export default function App() {
         workspaceCreditTopupReturnPollRef.current.timeoutId = null;
       }
     };
-  }, [loadWorkspaceCreditBalance, session, sessionRef]);
+  }, [activeView, loadWorkspaceBillingOverview, loadWorkspaceCreditBalance, session, sessionRef, settingsGroup]);
 
   useEffect(() => {
     if (!session) return;

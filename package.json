@@ -119,6 +119,7 @@
     "plan:workspace-provider-pointer-clear:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_preflight.ts --mode=plan",
     "check:workspace-included-credit-preflight-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_included_credit_preflight_proof.ts",
     "preflight:workspace-included-credits:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_included_credit_production_preflight.ts --mode=gate",
+    "check:workspace-billing-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_billing_surface_proof.ts",
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
     "check:runtime-preview-probe-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_probe_proof.ts",
     "check:workspace-credit-accounting-behavior": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_behavior_test.ts",

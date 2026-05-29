@@ -268,6 +268,22 @@ function readOutstandingWorkspaceUsageCreditsBalance(balance: any): number {
 const DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR = "workspace_credit_balance_duplicate";
 const WORKSPACE_CREDIT_BALANCE_REPAIR_ROW_LIMIT = 25;
 const CARD_BACKED_PENDING_RESERVATION_SCAN_LIMIT = 1000;
+const WORKSPACE_BILLING_OVERVIEW_MONTHS = 6;
+const WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT = 1000;
+const UTC_BILLING_MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
 
 async function readWorkspaceCreditBalanceRowsByUser(ctx: any, userId: any, limit = 2) {
   return await ctx.db
@@ -388,6 +404,65 @@ function boundedLimit(value: unknown, defaultValue: number, maxValue: number): n
   const parsed = Math.floor(Number(value ?? defaultValue));
   if (!Number.isFinite(parsed)) return defaultValue;
   return Math.max(1, Math.min(maxValue, parsed));
+}
+
+function startOfUtcMonth(ms: number): number {
+  const date = new Date(ms);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+}
+
+function addUtcMonths(monthStartMs: number, deltaMonths: number): number {
+  const date = new Date(monthStartMs);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + deltaMonths, 1);
+}
+
+function formatUtcBillingMonthLabel(monthStartMs: number): string {
+  const date = new Date(monthStartMs);
+  return `${UTC_BILLING_MONTH_NAMES[date.getUTCMonth()] ?? "Month"} ${date.getUTCFullYear()}`;
+}
+
+function formatUtcBillingMonthKey(monthStartMs: number): string {
+  const date = new Date(monthStartMs);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function buildWorkspaceBillingMonthBucket(monthStartMs: number) {
+  const monthEndMs = addUtcMonths(monthStartMs, 1);
+  return {
+    key: formatUtcBillingMonthKey(monthStartMs),
+    label: formatUtcBillingMonthLabel(monthStartMs),
+    startAt: monthStartMs,
+    endAt: monthEndMs,
+    workspaceUsageCredits: 0,
+    paidCredits: 0,
+  };
+}
+
+function findWorkspaceBillingMonthBucket(
+  buckets: Map<string, ReturnType<typeof buildWorkspaceBillingMonthBucket>>,
+  occurredAt: unknown,
+) {
+  const parsed = Number(occurredAt);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  const key = formatUtcBillingMonthKey(startOfUtcMonth(parsed));
+  return buckets.get(key) ?? null;
+}
+
+function workspaceBillingMonthToPublic(bucket: ReturnType<typeof buildWorkspaceBillingMonthBucket>) {
+  const workspaceUsageCredits = roundCredits(bucket.workspaceUsageCredits);
+  const paidCredits = roundCredits(bucket.paidCredits);
+  return {
+    key: bucket.key,
+    label: bucket.label,
+    startAt: bucket.startAt,
+    endAt: bucket.endAt,
+    workspaceUsageCredits,
+    workspaceUsageUsd: formatWorkspaceToolBalanceUsdFromCredits(workspaceUsageCredits),
+    paidCredits,
+    paidUsd: formatWorkspaceToolBalanceUsdFromCredits(paidCredits),
+  };
 }
 
 function effectiveWorkspaceCreditTopupCheckoutExpiresAt(row: any): number {
@@ -1386,6 +1461,132 @@ export const getWorkspaceCreditBalance = query({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => await readWorkspaceToolBalanceProjection(ctx, args),
+});
+
+export const getWorkspaceBillingOverview = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const actor = await resolveAuthenticatedActor({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const balanceRows = await readWorkspaceCreditBalanceRowsByUser(ctx, actor.dbUserId, 2);
+    const balance =
+      balanceRows.length > 1
+        ? null
+        : balanceRows[0] ?? null;
+    const baseBalanceProjection = buildWorkspaceToolBalanceProjection(
+      balance,
+      actor.dbUserId,
+      nowMs,
+    );
+    const balanceProjection =
+      balanceRows.length > 1
+        ? {
+            ...baseBalanceProjection,
+            blocked: true,
+            blockedReason: DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR,
+          }
+        : baseBalanceProjection;
+
+    const currentMonthStart = startOfUtcMonth(nowMs);
+    const buckets = Array.from({ length: WORKSPACE_BILLING_OVERVIEW_MONTHS }, (_, index) =>
+      buildWorkspaceBillingMonthBucket(addUtcMonths(currentMonthStart, -index)),
+    );
+    const bucketsByKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+
+    const workspaceCharges = await ctx.db
+      .query("workspaceComputeCharges")
+      .withIndex("by_user", (q) => q.eq("userId", actor.dbUserId))
+      .order("desc")
+      .take(WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT);
+    for (const charge of workspaceCharges) {
+      const bucket = findWorkspaceBillingMonthBucket(
+        bucketsByKey,
+        charge.endedAt ?? charge.createdAt,
+      );
+      if (!bucket) continue;
+      bucket.workspaceUsageCredits = roundCredits(
+        bucket.workspaceUsageCredits +
+          priceWorkspaceUsageCredits({ computeCostUsd: Number(charge.computeCostUsd ?? 0) || 0 }),
+      );
+    }
+
+    const usageCollections = await ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", actor.dbUserId).eq("status", "succeeded"),
+      )
+      .order("desc")
+      .take(WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT);
+    for (const collection of usageCollections) {
+      const bucket = findWorkspaceBillingMonthBucket(
+        bucketsByKey,
+        collection.completedAt ?? collection.updatedAt ?? collection.createdAt,
+      );
+      if (!bucket) continue;
+      bucket.paidCredits = roundCredits(
+        bucket.paidCredits + Math.max(0, Number(collection.creditsAmount ?? 0) || 0),
+      );
+    }
+
+    const topups = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerUserId", actor.dbUserId).eq("status", "complete"),
+      )
+      .order("desc")
+      .take(WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT);
+    for (const topup of topups) {
+      if (topup.mode !== "workspace_credit_topup") continue;
+      const bucket = findWorkspaceBillingMonthBucket(
+        bucketsByKey,
+        topup.workspaceCreditsGrantedAt ?? topup.updatedAt ?? topup.createdAt,
+      );
+      if (!bucket) continue;
+      bucket.paidCredits = roundCredits(
+        bucket.paidCredits + Math.max(0, Number(topup.workspaceCreditsAmount ?? 0) || 0),
+      );
+    }
+
+    const [currentPeriod, ...history] = buckets.map(workspaceBillingMonthToPublic);
+    const prepaidBalanceCredits = roundCredits(
+      Number(balanceProjection.spendableCreditsBalance ?? 0) || 0,
+    );
+    const currentUsageCredits = roundCredits(
+      Number(balanceProjection.outstandingUsageCreditsBalance ?? 0) || 0,
+    );
+    const pendingCardCollectionCredits = roundCredits(
+      Number(balanceProjection.pendingCardCollectionCreditsBalance ?? 0) || 0,
+    );
+
+    return {
+      userId: actor.dbUserId,
+      generatedAt: nowMs,
+      currentPeriod: {
+        ...currentPeriod,
+        prepaidBalanceCredits,
+        prepaidBalanceUsd: formatWorkspaceToolBalanceUsdFromCredits(prepaidBalanceCredits),
+        currentUsageCredits,
+        currentUsageUsd: formatWorkspaceToolBalanceUsdFromCredits(currentUsageCredits),
+        pendingCardCollectionCredits,
+        pendingCardCollectionUsd:
+          formatWorkspaceToolBalanceUsdFromCredits(pendingCardCollectionCredits),
+      },
+      history,
+      scan: {
+        workspaceChargesTruncated:
+          workspaceCharges.length >= WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT,
+        usageCollectionsTruncated:
+          usageCollections.length >= WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT,
+        topupsTruncated: topups.length >= WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT,
+      },
+    };
+  },
 });
 
 export const upsertWorkspaceCreditBalanceInternal = internalMutation({

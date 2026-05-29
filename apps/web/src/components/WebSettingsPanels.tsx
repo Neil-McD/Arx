@@ -4,7 +4,10 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
-import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
+import type {
+  WorkspaceBillingOverview,
+  WorkspaceCreditBalance,
+} from "../../../../shared/workspaceCreditsGateway";
 import type {
   WorkspaceCreditTopupSurface,
   WorkspaceToolBalanceTopupPackId,
@@ -102,7 +105,12 @@ export type WebSettingsPanelsProps = {
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;
     providerConnectionUi: UseWebProviderConnectionUiControllerResult;
-    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
+    billingUi: UseWebBillingUiControllerResult<
+      AccountCommerceStatus,
+      WorkspaceCreditBalance,
+      WorkspaceBillingOverview,
+      PendingPurchaseClaim
+    >;
   };
   agent: {
     session: SessionLike;
@@ -155,7 +163,12 @@ export type WebSettingsPanelsProps = {
     isStartingWorkspaceCardSetupCheckout: boolean;
     workspaceCardSetupError: string | null;
     startWorkspaceCardSetupCheckout: () => Promise<void> | void;
-    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
+    billingUi: UseWebBillingUiControllerResult<
+      AccountCommerceStatus,
+      WorkspaceCreditBalance,
+      WorkspaceBillingOverview,
+      PendingPurchaseClaim
+    >;
   };
   integrations: {
     session: SessionLike;
@@ -375,6 +388,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     workspaceCreditBalance: billing.billingUi.workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance: billing.billingUi.isLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError: billing.billingUi.workspaceCreditBalanceError,
+    workspaceBillingOverview: billing.billingUi.workspaceBillingOverview,
+    isLoadingWorkspaceBillingOverview: billing.billingUi.isLoadingWorkspaceBillingOverview,
+    workspaceBillingOverviewError: billing.billingUi.workspaceBillingOverviewError,
     isStartingWorkspaceCreditTopupCheckout: billing.billingUi.isStartingWorkspaceCreditTopupCheckout,
     workspaceCreditTopupError: billing.billingUi.workspaceCreditTopupError,
     workspaceCardOnFileStatus: billing.workspaceCardOnFileStatus,

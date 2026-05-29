@@ -22596,6 +22596,73 @@ button.message-citation-chip:hover {
   margin-top: 18px;
 }
 
+.workspace-billing-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+.workspace-billing-summary-card {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 68%, transparent);
+}
+
+.workspace-billing-summary-card span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.workspace-billing-summary-card strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.workspace-billing-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.workspace-billing-history-list {
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-billing-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workspace-billing-history-item:first-child {
+  border-top: 0;
+}
+
+.workspace-billing-history-item strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .workspace-billing-modal-copy {
   display: grid;
   gap: 8px;
@@ -22787,6 +22854,15 @@ button.message-citation-chip:hover {
 @media (max-width: 640px) {
   .tool-balance-pack-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-billing-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-billing-history-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
 
