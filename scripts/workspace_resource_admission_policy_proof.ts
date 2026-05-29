@@ -30,10 +30,10 @@ function read(relativePath: string): string {
 }
 
 assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 1);
-assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 5);
+assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 10);
 assert.equal(WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS, 500);
 assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 1);
-assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 5);
+assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 10);
 assert.equal(
   paidUsageBillingModeForWorkspaceStorageAction("card_required"),
   "card_required",
@@ -209,13 +209,13 @@ assert.equal(blockedFreeProject.limit, 1);
 
 const paidProject = evaluateWorkspaceProjectCreateAdmission({
   accountTier: "paid",
-  existingProjectCount: 4,
+  existingProjectCount: 9,
 });
 assert.equal(paidProject.ok, true);
 assert.equal(
   evaluateWorkspaceProjectCreateAdmission({
     accountTier: "paid",
-    existingProjectCount: 5,
+    existingProjectCount: 10,
   }).code,
   "project_limit_reached",
 );
@@ -225,7 +225,7 @@ assert.equal(
       hasCardOnFile: true,
       workspaceCreditBalance: null,
     }),
-    existingProjectCount: 4,
+    existingProjectCount: 9,
   }).ok,
   true,
 );
@@ -288,7 +288,7 @@ assert.equal(
   evaluateWorkspaceVolumeMaterializationAdmission({
     hasCardOnFile: true,
     workspaceCreditBalance: null,
-    existingVolumeCount: 4,
+    existingVolumeCount: 9,
   }).ok,
   true,
 );
@@ -296,7 +296,7 @@ assert.equal(
   evaluateWorkspaceVolumeMaterializationAdmission({
     hasCardOnFile: true,
     workspaceCreditBalance: null,
-    existingVolumeCount: 5,
+    existingVolumeCount: 10,
   }).code,
   "workspace_volume_limit_reached",
 );
@@ -1031,7 +1031,7 @@ assert.doesNotMatch(
 );
 assert.match(
   providerContract,
-  /card on file: five project volumes/,
+  /card on file: ten project volumes/,
   "workspace provider contract must document card-on-file as the multi-volume tier signal",
 );
 

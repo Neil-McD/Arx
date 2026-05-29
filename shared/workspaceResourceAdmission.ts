@@ -10,7 +10,7 @@ import {
 } from "./workspaceProjectResources.ts";
 
 export const WORKSPACE_FREE_PROJECT_VOLUME_LIMIT = 1;
-export const WORKSPACE_PAID_PROJECT_VOLUME_LIMIT = 5;
+export const WORKSPACE_PAID_PROJECT_VOLUME_LIMIT = 10;
 
 export type WorkspaceResourceAccountTier = "free" | "paid";
 

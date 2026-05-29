@@ -98,7 +98,7 @@ Project and volume admission uses PolyNet-owned truth:
 
 - no card on file: one project volume, and first materialization requires
   purchased/prepaid tool balance
-- card on file: five project volumes
+- card on file: ten project volumes
 - deleted or archived project rows do not count toward the limit
 - rows whose volume retention state is `deleted` do not count toward the limit
 - first volume creation for a project is gated; re-attaching the same existing
