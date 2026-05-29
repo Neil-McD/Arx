@@ -112,6 +112,8 @@
     "check:workspace-resource-truth-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_truth_proof.ts",
     "check:workspace-resource-admission-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_admission_policy_proof.ts",
     "check:workspace-resource-inventory-diagnostic-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_inventory_diagnostic_proof.ts",
+    "check:workspace-provider-pointer-production-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_audit_proof.ts",
+    "audit:workspace-provider-pointers:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_audit.ts",
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
     "check:runtime-preview-probe-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_probe_proof.ts",
     "check:workspace-credit-accounting-behavior": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_behavior_test.ts",
