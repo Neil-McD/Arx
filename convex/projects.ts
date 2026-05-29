@@ -841,7 +841,7 @@ export const clearLegacyWorkspaceProjectProviderPointersForMaintenance = mutatio
     confirm: v.string(),
     projectId: v.id("cloudProjects"),
     expectedStatus: v.optional(v.string()),
-    expectedUpdatedAt: v.optional(v.number()),
+    expectedUpdatedAt: v.number(),
     expectedProviderVolumeId: v.optional(v.string()),
     expectedProviderSandboxId: v.optional(v.string()),
     nowMs: v.optional(v.number()),
@@ -877,11 +877,7 @@ export const clearLegacyWorkspaceProjectProviderPointersForMaintenance = mutatio
         reason: "expected_status_mismatch",
       };
     }
-    if (
-      typeof args.expectedUpdatedAt === "number" &&
-      Number.isFinite(args.expectedUpdatedAt) &&
-      Number(project.updatedAt ?? 0) !== args.expectedUpdatedAt
-    ) {
+    if (Number(project.updatedAt ?? 0) !== args.expectedUpdatedAt) {
       return {
         ok: false as const,
         status: "skipped" as const,
@@ -1051,7 +1047,6 @@ export const clearCloudProjectImportLeaseInternal = internalMutation({
     return await ctx.db.get(project._id);
   },
 });
-
 export const ensureCloudProjectVolumeInternal = internalAction({
   args: {
     projectId: v.id("cloudProjects"),

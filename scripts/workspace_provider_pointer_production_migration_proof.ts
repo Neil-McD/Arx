@@ -38,7 +38,7 @@ assert.match(
 );
 assert.match(
   projects,
-  /expectedStatus: v\.optional\(v\.string\(\)\)[\s\S]*expectedUpdatedAt: v\.optional\(v\.number\(\)\)[\s\S]*expectedProviderVolumeId: v\.optional\(v\.string\(\)\)[\s\S]*expectedProviderSandboxId: v\.optional\(v\.string\(\)\)/,
+  /expectedStatus: v\.optional\(v\.string\(\)\)[\s\S]*expectedUpdatedAt: v\.number\(\)[\s\S]*expectedProviderVolumeId: v\.optional\(v\.string\(\)\)[\s\S]*expectedProviderSandboxId: v\.optional\(v\.string\(\)\)/,
   "maintenance cleanup must require expected-value guard inputs",
 );
 assert.match(
@@ -73,6 +73,21 @@ assert.match(
   "dry-run plan may show inactive candidates as deleted",
 );
 
+assert.match(
+  migration,
+  /workspace_pointer_candidate_missing_updated_at/,
+  "migration script must refuse apply candidates that lack updatedAt",
+);
+assert.match(
+  migration,
+  /expectedUpdatedAt: params\.candidate\.expectedUpdatedAt,/,
+  "migration script must always pass the expected updatedAt guard",
+);
+assert.doesNotMatch(
+  migration,
+  /expectedUpdatedAt: params\.candidate\.expectedUpdatedAt \?\? undefined/,
+  "migration script must not downgrade missing updatedAt into an omitted guard",
+);
 assert.match(
   migration,
   /const CONFIRMATION = "clear-legacy-workspace-pointers"/,
