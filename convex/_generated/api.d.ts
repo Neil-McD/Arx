@@ -167,6 +167,8 @@ import type * as workspaceRuntimeSession from "../workspaceRuntimeSession.js";
 import type * as workspaceRuntimeTools from "../workspaceRuntimeTools.js";
 import type * as workspaceTerminalProcessCore from "../workspaceTerminalProcessCore.js";
 import type * as workspaceTerminals from "../workspaceTerminals.js";
+import type * as workspaceUsageCardBillingSmoke from "../workspaceUsageCardBillingSmoke.js";
+import type * as workspaceUsageCardBillingSmokeRows from "../workspaceUsageCardBillingSmokeRows.js";
 import type * as xAiSearchTransport from "../xAiSearchTransport.js";
 
 import type {
@@ -335,6 +337,8 @@ declare const fullApi: ApiFromModules<{
   workspaceRuntimeTools: typeof workspaceRuntimeTools;
   workspaceTerminalProcessCore: typeof workspaceTerminalProcessCore;
   workspaceTerminals: typeof workspaceTerminals;
+  workspaceUsageCardBillingSmoke: typeof workspaceUsageCardBillingSmoke;
+  workspaceUsageCardBillingSmokeRows: typeof workspaceUsageCardBillingSmokeRows;
   xAiSearchTransport: typeof xAiSearchTransport;
 }>;
 
