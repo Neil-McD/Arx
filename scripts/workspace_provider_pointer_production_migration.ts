@@ -21,7 +21,7 @@ const ENV_FILES = [".env.local", ".env"] as const;
 type ApplyCandidate = {
   projectId: string;
   expectedStatus: string;
-  expectedUpdatedAt: number | null;
+  expectedUpdatedAt: number;
   expectedProviderVolumeId?: string;
   expectedProviderSandboxId?: string;
 };
@@ -74,11 +74,15 @@ function buildApplyCandidate(row: CloudProjectAuditRow): ApplyCandidate | null {
   if (!volume.legacyOrUnknownOwner && !sandbox.legacyOrUnknownOwner) {
     return null;
   }
+  const expectedUpdatedAt = normalizeOptionalNumber(row.updatedAt);
+  if (expectedUpdatedAt === null) {
+    throw new Error(`workspace_pointer_candidate_missing_updated_at_${projectId}`);
+  }
 
   const candidate: ApplyCandidate = {
     projectId,
     expectedStatus: normalizeOptionalString(row.status) ?? "active",
-    expectedUpdatedAt: normalizeOptionalNumber(row.updatedAt),
+    expectedUpdatedAt,
   };
   if (volume.legacyOrUnknownOwner && volume.resourceId) {
     candidate.expectedProviderVolumeId = volume.resourceId;
@@ -106,7 +110,7 @@ function runMaintenanceMutation(params: {
     confirm: CONFIRMATION,
     projectId: params.candidate.projectId,
     expectedStatus: params.candidate.expectedStatus,
-    expectedUpdatedAt: params.candidate.expectedUpdatedAt ?? undefined,
+    expectedUpdatedAt: params.candidate.expectedUpdatedAt,
     expectedProviderVolumeId: params.candidate.expectedProviderVolumeId,
     expectedProviderSandboxId: params.candidate.expectedProviderSandboxId,
   };

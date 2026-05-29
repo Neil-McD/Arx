@@ -878,7 +878,7 @@ export const clearLegacyWorkspaceProjectProviderPointersForMaintenance = mutatio
     confirm: v.string(),
     projectId: v.id("cloudProjects"),
     expectedStatus: v.optional(v.string()),
-    expectedUpdatedAt: v.optional(v.number()),
+    expectedUpdatedAt: v.number(),
     expectedProviderVolumeId: v.optional(v.string()),
     expectedProviderSandboxId: v.optional(v.string()),
   },
@@ -910,7 +910,7 @@ export const clearLegacyWorkspaceProjectProviderPointersForMaintenance = mutatio
         actualStatus: status,
       });
     }
-    if (typeof args.expectedUpdatedAt === "number" && project.updatedAt !== args.expectedUpdatedAt) {
+    if (project.updatedAt !== args.expectedUpdatedAt) {
       return workspacePointerMigrationSkip("expected_updated_at_mismatch", {
         projectId: normalizeIdValue(project._id),
         expectedUpdatedAt: args.expectedUpdatedAt,
