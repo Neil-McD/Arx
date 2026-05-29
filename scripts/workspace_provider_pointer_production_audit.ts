@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 import {
   resolveRecordedWorkspaceResourceProviderId,
@@ -10,20 +11,39 @@ import {
   isWorkspaceProjectCountableForAdmission,
 } from "../shared/workspaceResourceAdmission.ts";
 
-type CloudProjectAuditRow = {
+export type CloudProjectAuditRow = {
   _id?: unknown;
+  ownerId?: unknown;
+  name?: unknown;
   status?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
   providerVolumeId?: unknown;
   providerVolumeProviderId?: unknown;
+  providerVolumeName?: unknown;
+  providerVolumeState?: unknown;
+  providerVolumeLastSeenAt?: unknown;
   providerSandboxId?: unknown;
   providerSandboxProviderId?: unknown;
+  providerSandboxState?: unknown;
+  providerSandboxLastSeenAt?: unknown;
+  providerSandboxLastActivityAt?: unknown;
+  providerSandboxStartedAt?: unknown;
+  providerSandboxIdleExpiresAt?: unknown;
+  providerSandboxCreditReservationKey?: unknown;
+  providerSandboxCreditBudgetCredits?: unknown;
+  providerSandboxCreditBudgetExpiresAt?: unknown;
   workspaceVolumeRetentionState?: unknown;
+  workspaceVolumeRetainUntil?: unknown;
+  workspaceVolumeDeleteAfter?: unknown;
+  workspaceVolumeDeletionWarningSentAt?: unknown;
   workspaceVolumeDeletedAt?: unknown;
+  workspaceVolumeDeletionReason?: unknown;
 };
 
-type PointerKind = "volume" | "sandbox";
+export type PointerKind = "volume" | "sandbox";
 
-type PointerAudit = {
+export type PointerAudit = {
   resourceId: string | null;
   explicitProviderId: string | null;
   resolvedProviderId: string | null;
@@ -36,23 +56,23 @@ type PointerAudit = {
   daytonaHint: boolean;
 };
 
-function readArg(name: string, fallback: string): string {
+export function readArg(name: string, fallback: string): string {
   const prefix = `${name}=`;
   const match = process.argv.slice(2).find((arg) => arg.startsWith(prefix));
   return match ? match.slice(prefix.length) : fallback;
 }
 
-function readLimit(): number {
+export function readLimit(): number {
   const raw = readArg("--limit", process.env.WORKSPACE_PROVIDER_POINTER_AUDIT_LIMIT || "10000");
   const parsed = Math.floor(Number(raw));
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 50000) : 10000;
 }
 
-function normalizeString(value: unknown): string {
+export function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function normalizeOptionalString(value: unknown): string | null {
+export function normalizeOptionalString(value: unknown): string | null {
   const normalized = normalizeString(value);
   return normalized || null;
 }
@@ -66,7 +86,7 @@ function incrementNullable(counts: Record<string, number>, raw: unknown, fallbac
   increment(counts, key);
 }
 
-function previewResourceId(value: string | null): { prefix: string; length: number } | null {
+export function previewResourceId(value: string | null): { prefix: string; length: number } | null {
   if (!value) return null;
   return {
     prefix: value.slice(0, 12),
@@ -74,7 +94,7 @@ function previewResourceId(value: string | null): { prefix: string; length: numb
   };
 }
 
-function parseConvexJsonArray(raw: string): CloudProjectAuditRow[] {
+export function parseConvexJsonArray(raw: string): CloudProjectAuditRow[] {
   const trimmed = raw.trim();
   const start = trimmed.indexOf("[");
   const end = trimmed.lastIndexOf("]");
@@ -86,35 +106,45 @@ function parseConvexJsonArray(raw: string): CloudProjectAuditRow[] {
   return parsed as CloudProjectAuditRow[];
 }
 
-function runConvexProductionCloudProjects(limit: number): CloudProjectAuditRow[] {
-  const result = spawnSync(
-    "npx",
-    [
-      "convex",
-      "data",
-      "--prod",
-      "cloudProjects",
-      "--format",
-      "jsonArray",
-      "--limit",
-      String(limit),
-    ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+export function runConvexProductionCloudProjects(limit: number): CloudProjectAuditRow[] {
+  let lastFailure: unknown = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const result = spawnSync(
+      "npx",
+      [
+        "convex",
+        "data",
+        "--prod",
+        "cloudProjects",
+        "--format",
+        "jsonArray",
+        "--limit",
+        String(limit),
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
 
-  if (result.status !== 0) {
-    const message = String(result.stderr || result.stdout || "convex_data_failed").slice(0, 1000);
-    throw new Error(message);
+    if (result.status !== 0) {
+      const message = String(result.stderr || result.stdout || "convex_data_failed").slice(0, 1000);
+      throw new Error(message);
+    }
+
+    try {
+      return parseConvexJsonArray(String(result.stdout ?? ""));
+    } catch (error) {
+      lastFailure = error;
+      if (attempt >= 2) break;
+    }
   }
 
-  return parseConvexJsonArray(String(result.stdout ?? ""));
+  throw lastFailure instanceof Error ? lastFailure : new Error("convex_data_parse_failed");
 }
 
-function auditPointer(row: CloudProjectAuditRow, kind: PointerKind): PointerAudit {
+export function auditPointer(row: CloudProjectAuditRow, kind: PointerKind): PointerAudit {
   const resourceId = kind === "volume"
     ? normalizeOptionalString(row.providerVolumeId)
     : normalizeOptionalString(row.providerSandboxId);
@@ -152,7 +182,7 @@ function auditPointer(row: CloudProjectAuditRow, kind: PointerKind): PointerAudi
   };
 }
 
-function summarizeRows(rows: CloudProjectAuditRow[], limit: number) {
+export function summarizeRows(rows: CloudProjectAuditRow[], limit: number) {
   const statusCounts: Record<string, number> = {};
   const retentionCounts: Record<string, number> = {};
   const volumeProviderCounts: Record<string, number> = {};
@@ -290,4 +320,7 @@ function main() {
   console.log(JSON.stringify(summarizeRows(rows, limit), null, 2));
 }
 
-main();
+const entrypoint = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+if (entrypoint === import.meta.url) {
+  main();
+}
