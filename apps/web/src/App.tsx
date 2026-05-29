@@ -823,6 +823,7 @@ function clearPendingWorkspaceCardSetupReturn(): void {
 
 function buildWorkspaceCreditTopupReturnUrl(surface: WorkspaceCreditTopupSurface): string {
   if (surface === "settings_agent") return `${window.location.origin}/settings/agent`;
+  if (surface === "settings_billing") return `${window.location.origin}/settings/billing`;
   const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
   return `${window.location.origin}${pathname}`;
 }
@@ -4822,7 +4823,7 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     const shouldLoadWorkspaceCredits =
-      activePage === "workspace" || (activeView === "settings" && settingsGroup === "agent");
+      activePage === "workspace" || (activeView === "settings" && settingsGroup === "billing");
     if (!shouldLoadWorkspaceCredits) return;
     void loadWorkspaceCreditBalance(session);
     void loadWorkspaceCardOnFileStatus(session);
@@ -9895,13 +9896,17 @@ export default function App() {
       handleTogglePersonalMemoryPinned,
       handleDeletePersonalMemoryItem,
       handleCreatePersonalMemoryItem,
+      personalMemoryUi,
+    },
+    billing: {
+      session: session,
+      formatRelativeTime,
       startWorkspaceCreditTopupCheckout,
       workspaceCardOnFileStatus,
       workspaceCardOnFileError,
       isStartingWorkspaceCardSetupCheckout,
       workspaceCardSetupError,
       startWorkspaceCardSetupCheckout,
-      personalMemoryUi,
       billingUi,
     },
     integrations: {
@@ -10380,11 +10385,12 @@ export default function App() {
     activeCommunity: workspaceUserDataPanelCommunity,
     isLoadingCommunityMemberSettings,
     communityMemberSettingsError,
-    onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({
-      toolKind: "workspace_tools",
-      message: "Add a card for automatic workspace billing.",
-      paidUsageBillingMode: "card_preferred",
-    }),
+    onOpenWorkspaceCreditTopup: () => {
+      pushNavSnapshot();
+      setActivePage("workspace");
+      setActiveView("settings");
+      setSettingsPage("billing");
+    },
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,

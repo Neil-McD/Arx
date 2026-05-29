@@ -1,6 +1,7 @@
 export type SettingsPage =
   | "profile"
   | "account"
+  | "billing"
   | "partners"
   | "agent"
   | "integrations"
@@ -9,6 +10,7 @@ export type SettingsPage =
 export type SettingsGroup =
   | "profile"
   | "account"
+  | "billing"
   | "partners"
   | "agent"
   | "integrations"
@@ -157,6 +159,7 @@ export function parseDiscoverTab(value: string | null | undefined): DiscoverTab 
 export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
   if (page === "profile") return "profile";
   if (page === "account") return "account";
+  if (page === "billing") return "billing";
   if (page === "partners") return "partners";
   if (page === "integrations") return "integrations";
   if (page === "appearance") return "appearance";
@@ -169,6 +172,8 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Profile";
     case "account":
       return "Account";
+    case "billing":
+      return "Billing";
     case "partners":
       return "Partners";
     case "agent":

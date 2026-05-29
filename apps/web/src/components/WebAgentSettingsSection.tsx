@@ -1,14 +1,4 @@
 import { useEffect, useState } from "react";
-import {
-  formatWorkspaceToolBalanceUsdFromCredits,
-  getSpendableWorkspaceToolBalanceCredits,
-  getUncollectedWorkspaceToolBalanceCredits,
-  WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
-  WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
-  type WorkspaceCreditTopupSurface,
-  type WorkspaceToolBalanceTopupPackId,
-} from "../../../../shared/workspaceCredits";
-import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 
 type SessionLike = {
   user: {
@@ -26,17 +16,6 @@ type PersonalMemoryItem = {
   created_at: string;
   updated_at: string;
 };
-
-type AccountCommerceStatus = {
-  account_tier: "free" | "architect";
-} | null;
-
-type WorkspaceCardOnFileStatus = {
-  has_card_on_file?: unknown;
-  payment_method_status?: unknown;
-  card_brand?: unknown;
-  card_last4?: unknown;
-} | null;
 
 type WebAgentSettingsSectionProps = {
   session: SessionLike;
@@ -59,7 +38,6 @@ type WebAgentSettingsSectionProps = {
     agent_soul: string;
   }) => Promise<void> | void;
   personalMemoryError: string | null;
-  accountCommerceStatus: AccountCommerceStatus;
   isLoadingPersonalMemory: boolean;
   personalMemoryItems: PersonalMemoryItem[];
   personalMemoryQuery: string;
@@ -74,20 +52,6 @@ type WebAgentSettingsSectionProps = {
   setNewPersonalMemoryContent: (value: string) => void;
   setNewPersonalMemoryPinned: (value: boolean) => void;
   handleCreatePersonalMemoryItem: () => Promise<void> | void;
-  workspaceCreditBalance: WorkspaceCreditBalance | null;
-  isLoadingWorkspaceCreditBalance: boolean;
-  workspaceCreditBalanceError: string | null;
-  isStartingWorkspaceCreditTopupCheckout: boolean;
-  workspaceCreditTopupError: string | null;
-  workspaceCardOnFileStatus: WorkspaceCardOnFileStatus;
-  workspaceCardOnFileError: string | null;
-  isStartingWorkspaceCardSetupCheckout: boolean;
-  workspaceCardSetupError: string | null;
-  startWorkspaceCreditTopupCheckout: (
-    packId?: WorkspaceToolBalanceTopupPackId,
-    surface?: WorkspaceCreditTopupSurface,
-  ) => Promise<void> | void;
-  startWorkspaceCardSetupCheckout: () => Promise<void> | void;
 };
 
 export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
@@ -116,21 +80,9 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     setNewPersonalMemoryContent,
     setNewPersonalMemoryPinned,
     handleCreatePersonalMemoryItem,
-    workspaceCreditBalance,
-    isLoadingWorkspaceCreditBalance,
-    workspaceCreditBalanceError,
-    isStartingWorkspaceCreditTopupCheckout,
-    workspaceCreditTopupError,
-    workspaceCardOnFileStatus,
-    workspaceCardOnFileError,
-    isStartingWorkspaceCardSetupCheckout,
-    workspaceCardSetupError,
-    startWorkspaceCreditTopupCheckout,
-    startWorkspaceCardSetupCheckout,
   } = props;
   const [agentNameDraft, setAgentNameDraft] = useState(userMemorySettings.agent_name);
   const [agentSoulDraft, setAgentSoulDraft] = useState(userMemorySettings.agent_soul);
-  const [showManualWorkspaceBalance, setShowManualWorkspaceBalance] = useState(false);
   useEffect(() => {
     setAgentNameDraft(userMemorySettings.agent_name);
   }, [userMemorySettings.agent_name]);
@@ -228,127 +180,9 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
           </div>
         </div>
 
-        {(() => {
-          if (!session) return null;
-          const totalCredits = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
-          const includedCredits = workspaceCreditBalance?.includedCreditsBalance ?? 0;
-          const purchasedCredits = workspaceCreditBalance?.purchasedCreditsBalance ?? 0;
-          const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(workspaceCreditBalance);
-          const hasUncollectedCredits = uncollectedCredits > 0;
-          const hasCardOnFile = workspaceCardOnFileStatus?.has_card_on_file === true;
-          const cardBrand =
-            typeof workspaceCardOnFileStatus?.card_brand === "string"
-              ? workspaceCardOnFileStatus.card_brand.trim()
-              : "";
-          const cardLast4 =
-            typeof workspaceCardOnFileStatus?.card_last4 === "string"
-              ? workspaceCardOnFileStatus.card_last4.trim()
-              : "";
-          const paymentMethodLabel = hasCardOnFile
-            ? `${cardBrand || "Card"}${cardLast4 ? ` ending ${cardLast4}` : ""}`
-            : "No card on file";
-
-          return (
-            <>
-              <div className="settings-section">
-                <div className="settings-section-title">
-                  <svg viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /><path d="M18 4v16" /></svg>
-                  Workspace billing
-                </div>
-                <div className="settings-section-desc">
-                  Add a card for automatic workspace billing. Prepaid balance is available if you prefer to manage a small manual balance.
-                </div>
-                {isLoadingWorkspaceCreditBalance && !workspaceCreditBalance ? (
-                  <div className="model-note">Checking workspace billing…</div>
-                ) : (
-                  <>
-                    {hasUncollectedCredits ? (
-                      <div className="auth-error" style={{ marginBottom: 12 }}>
-                        {formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior tool usage must be cleared before premium tools can run.
-                      </div>
-                    ) : totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
-                      <div className="auth-error" style={{ marginBottom: 12 }}>
-                        You&apos;re running low on prepaid balance. Add a card or manual balance to keep workspace tools available.
-                      </div>
-                    ) : null}
-                    <div className="account-row">
-                      <div className="account-identity">
-                        <span>Payment method</span>
-                        <strong>{paymentMethodLabel}</strong>
-                      </div>
-                      <button
-                        className="platform-save-button platform-save-button--compact workspace-billing-card-action"
-                        type="button"
-                        onClick={() => void startWorkspaceCardSetupCheckout()}
-                        disabled={isStartingWorkspaceCardSetupCheckout}
-                      >
-                        {isStartingWorkspaceCardSetupCheckout
-                          ? "Opening..."
-                          : hasCardOnFile
-                            ? "Update card"
-                            : "Add card"}
-                      </button>
-                    </div>
-                    <div className="account-row">
-                      <div className="account-identity">
-                        <span>Prepaid balance</span>
-                        <strong>{formatWorkspaceToolBalanceUsdFromCredits(totalCredits)}</strong>
-                      </div>
-                      {includedCredits > 0 ? (
-                        <div className="auth-status">
-                          {formatWorkspaceToolBalanceUsdFromCredits(workspaceCreditBalance?.includedCycleCredits ?? 0)} included this cycle
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="settings-section-desc">
-                      {purchasedCredits > 0
-                        ? `${formatWorkspaceToolBalanceUsdFromCredits(purchasedCredits)} prepaid balance is available. `
-                        : ""}
-                      {hasUncollectedCredits
-                        ? `Your next top-up clears ${formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior usage first. `
-                        : ""}
-                      {includedCredits > 0 && (workspaceCreditBalance?.includedCycleEndsAt ?? 0) > 0
-                        ? `Your included balance resets ${formatRelativeTime(new Date(workspaceCreditBalance?.includedCycleEndsAt ?? 0).toISOString())}.`
-                        : "A card is the default way to keep workspace tools available."} Manual prepaid balance is non-refundable and only works inside Polynet.
-                    </div>
-                    <div className="workspace-billing-secondary-action">
-                      <button
-                        type="button"
-                        className="workspace-billing-inline-link"
-                        onClick={() => setShowManualWorkspaceBalance((value) => !value)}
-                        disabled={isStartingWorkspaceCreditTopupCheckout}
-                      >
-                        {showManualWorkspaceBalance
-                          ? "Hide manual balance"
-                          : "Prefer prepaid balance? Add balance manually."}
-                      </button>
-                    </div>
-                    {showManualWorkspaceBalance ? (
-                      <div className="tool-balance-pack-grid">
-                        {WORKSPACE_TOOL_BALANCE_TOPUP_PACKS.map((pack) => (
-                          <button
-                            key={pack.id}
-                            type="button"
-                            className={`tool-balance-pack-button${pack.recommended ? " recommended" : ""}`}
-                            onClick={() => void startWorkspaceCreditTopupCheckout(pack.id)}
-                            disabled={isStartingWorkspaceCreditTopupCheckout}
-                          >
-                            <strong>{pack.label}</strong>
-                            <span>{pack.recommended ? "Recommended" : "Add balance"}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </>
-                )}
-                {workspaceCreditBalanceError && <div className="auth-error">{workspaceCreditBalanceError}</div>}
-                {workspaceCreditTopupError && <div className="auth-error">{workspaceCreditTopupError}</div>}
-                {workspaceCardOnFileError && <div className="auth-error">{workspaceCardOnFileError}</div>}
-                {workspaceCardSetupError && <div className="auth-error">{workspaceCardSetupError}</div>}
-              </div>
-
-              <>
-              <div className="memory-editor">
+        {session ? (
+          <>
+            <div className="memory-editor">
                 <div className="memory-editor-header">
                   <div className="memory-editor-title">Personal memory</div>
                   <div className="memory-editor-meta">
@@ -457,11 +291,9 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                     Clear
                   </button>
                 </div>
-              </div>
-              </>
-            </>
-          );
-        })()}
+            </div>
+          </>
+        ) : null}
       </div>
     </>
   );

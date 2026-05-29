@@ -28,6 +28,7 @@ import type { UseWebBillingUiControllerResult } from "../controllers/useWebBilli
 import { WebAccountSettingsSection } from "./WebAccountSettingsSection";
 import { WebAgentSettingsSection } from "./WebAgentSettingsSection";
 import { WebAppearanceSettingsSection } from "./WebAppearanceSettingsSection";
+import { WebBillingSettingsSection } from "./WebBillingSettingsSection";
 import { WebBuilderPartnerSettingsSection } from "./WebBuilderPartnerSettingsSection";
 import { WebIntegrationsSettingsSection } from "./WebIntegrationsSettingsSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
@@ -136,6 +137,11 @@ export type WebSettingsPanelsProps = {
     handleDeletePersonalMemoryItem: (id: string) => Promise<void> | void;
     handleCreatePersonalMemoryItem: () => Promise<void> | void;
     loadPersonalMemoryItems: () => Promise<void> | void;
+    personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
+  };
+  billing: {
+    session: SessionLike;
+    formatRelativeTime: (value: string) => string;
     startWorkspaceCreditTopupCheckout: (
       packId?: WorkspaceToolBalanceTopupPackId,
       surface?: WorkspaceCreditTopupSurface,
@@ -150,7 +156,6 @@ export type WebSettingsPanelsProps = {
     isStartingWorkspaceCardSetupCheckout: boolean;
     workspaceCardSetupError: string | null;
     startWorkspaceCardSetupCheckout: () => Promise<void> | void;
-    personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
     billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };
   integrations: {
@@ -236,7 +241,7 @@ export type WebSettingsPanelsProps = {
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
-  const { settingsGroup, profile, account, agent, integrations, appearance } =
+  const { settingsGroup, profile, account, agent, billing, integrations, appearance } =
     props;
 
   const profileSectionProps = {
@@ -350,7 +355,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isLoadingUserMemorySettings: agent.isLoadingUserMemorySettings,
     saveUserMemorySettings: agent.saveUserMemorySettings,
     personalMemoryError: agent.personalMemoryUi.personalMemoryError,
-    accountCommerceStatus: agent.billingUi.accountCommerceStatus,
     isLoadingPersonalMemory: agent.personalMemoryUi.isLoadingPersonalMemory,
     personalMemoryItems: agent.personalMemoryUi.personalMemoryItems,
     personalMemoryQuery: agent.personalMemoryUi.personalMemoryQuery,
@@ -365,17 +369,22 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     setNewPersonalMemoryContent: agent.personalMemoryUi.setNewPersonalMemoryContent,
     setNewPersonalMemoryPinned: agent.personalMemoryUi.setNewPersonalMemoryPinned,
     handleCreatePersonalMemoryItem: agent.handleCreatePersonalMemoryItem,
-    workspaceCreditBalance: agent.billingUi.workspaceCreditBalance,
-    isLoadingWorkspaceCreditBalance: agent.billingUi.isLoadingWorkspaceCreditBalance,
-    workspaceCreditBalanceError: agent.billingUi.workspaceCreditBalanceError,
-    isStartingWorkspaceCreditTopupCheckout: agent.billingUi.isStartingWorkspaceCreditTopupCheckout,
-    workspaceCreditTopupError: agent.billingUi.workspaceCreditTopupError,
-    workspaceCardOnFileStatus: agent.workspaceCardOnFileStatus,
-    workspaceCardOnFileError: agent.workspaceCardOnFileError,
-    isStartingWorkspaceCardSetupCheckout: agent.isStartingWorkspaceCardSetupCheckout,
-    workspaceCardSetupError: agent.workspaceCardSetupError,
-    startWorkspaceCreditTopupCheckout: agent.startWorkspaceCreditTopupCheckout,
-    startWorkspaceCardSetupCheckout: agent.startWorkspaceCardSetupCheckout,
+  };
+
+  const billingSectionProps = {
+    session: billing.session,
+    formatRelativeTime: billing.formatRelativeTime,
+    workspaceCreditBalance: billing.billingUi.workspaceCreditBalance,
+    isLoadingWorkspaceCreditBalance: billing.billingUi.isLoadingWorkspaceCreditBalance,
+    workspaceCreditBalanceError: billing.billingUi.workspaceCreditBalanceError,
+    isStartingWorkspaceCreditTopupCheckout: billing.billingUi.isStartingWorkspaceCreditTopupCheckout,
+    workspaceCreditTopupError: billing.billingUi.workspaceCreditTopupError,
+    workspaceCardOnFileStatus: billing.workspaceCardOnFileStatus,
+    workspaceCardOnFileError: billing.workspaceCardOnFileError,
+    isStartingWorkspaceCardSetupCheckout: billing.isStartingWorkspaceCardSetupCheckout,
+    workspaceCardSetupError: billing.workspaceCardSetupError,
+    startWorkspaceCreditTopupCheckout: billing.startWorkspaceCreditTopupCheckout,
+    startWorkspaceCardSetupCheckout: billing.startWorkspaceCardSetupCheckout,
   };
 
   const appearanceSectionProps = {
@@ -435,6 +444,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     <>
       {settingsGroup === "profile" ? <WebProfileSettingsSection {...profileSectionProps} /> : null}
       {settingsGroup === "account" ? <WebAccountSettingsSection {...accountSectionProps} /> : null}
+      {settingsGroup === "billing" ? <WebBillingSettingsSection {...billingSectionProps} /> : null}
       {settingsGroup === "partners" ? <WebBuilderPartnerSettingsSection {...accountSectionProps} /> : null}
       {settingsGroup === "agent" ? <WebAgentSettingsSection {...agentSectionProps} /> : null}
       {settingsGroup === "integrations" ? (

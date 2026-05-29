@@ -372,6 +372,8 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
       return "profile";
     case "account":
       return "account";
+    case "billing":
+      return "billing";
     case "partner":
     case "partners":
       return "partners";
