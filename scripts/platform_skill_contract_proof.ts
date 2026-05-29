@@ -114,41 +114,41 @@ function main() {
   assert.equal(personalOnly[0]?.can_disable, true);
   assert.equal(personalOnly[0]?.can_edit, true);
 
-  const harnessSkills = readText("/Users/neilmcdevitt/code/arx/convex/harnessSkills.ts");
+  const harnessSkills = readText("convex/harnessSkills.ts");
   const runtimeSkillResolution = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
+    "convex/runtimeSkillResolution.ts",
   );
   const runtimeHarnessComposition = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+    "convex/runtimeHarnessComposition.ts",
   );
-  const httpDaytona = readText("/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts");
+  const runtimeAgentLoop = readText("convex/runtimeAgentLoop.ts");
   const runtimeHarnessShaping = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessShaping.ts",
+    "convex/runtimeHarnessShaping.ts",
   );
   const platformSkillRuntime = readText(
-    "/Users/neilmcdevitt/code/arx/convex/platformSkillRuntime.ts",
+    "convex/platformSkillRuntime.ts",
   );
   const retrievalTools = readText(
-    "/Users/neilmcdevitt/code/arx/shared/retrievalTools.ts",
+    "shared/retrievalTools.ts",
   );
-  const toolRegistry = readText("/Users/neilmcdevitt/code/arx/shared/toolRegistry.ts");
+  const toolRegistry = readText("shared/toolRegistry.ts");
   const runtimeToolPolicy = readText(
-    "/Users/neilmcdevitt/code/arx/shared/runtimeToolPolicy.ts",
+    "shared/runtimeToolPolicy.ts",
   );
-  const runtimePrompt = readText("/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts");
+  const runtimePrompt = readText("shared/runtimePrompt.ts");
   const runtimeTurnResolution = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeTurnResolution.ts",
+    "convex/runtimeTurnResolution.ts",
   );
   const communitySkillAttachments = readText(
-    "/Users/neilmcdevitt/code/arx/convex/communitySkillAttachments.ts",
+    "convex/communitySkillAttachments.ts",
   );
   const skillsEditor = readText(
-    "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
+    "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
   const settingsSection = readText(
-    "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
   );
-  const app = readText("/Users/neilmcdevitt/code/arx/apps/web/src/App.tsx");
+  const app = readText("apps/web/src/App.tsx");
 
   assertIncludes(
     harnessSkills,
@@ -231,12 +231,12 @@ function main() {
     "platform skill prompt injection",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "platform_skills_resolved",
     "platform skill runtime evidence event",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "community_resource_lane",
     "platform skill runtime evidence includes resource lane",
   );
@@ -244,15 +244,15 @@ function main() {
     assertIncludes(retrievalTools, toolName, "Resources Architect retrieval tool");
     assertIncludes(toolRegistry, `${toolName}: {`, "Resources Architect tool registry entry");
     assertIncludes(runtimeToolPolicy, `${toolName}: {`, "Resources Architect tool policy");
-    assertIncludes(httpDaytona, `params.toolName === "${toolName}"`, "Resources Architect tool executor");
+    assertIncludes(runtimeAgentLoop, `params.toolName === "${toolName}"`, "Resources Architect tool executor");
   }
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "buildEffectiveAllowedToolNames",
     "selected platform skill tool exposure",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeAgentLoop,
     "buildPlatformSkillToolNamesForSelection",
     "platform skill tool selection helper",
   );
