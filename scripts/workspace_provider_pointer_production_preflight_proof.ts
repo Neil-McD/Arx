@@ -122,14 +122,20 @@ assert.equal(gate.migrationPlan.activeCandidates[0]?.sandbox.wouldClear, true);
 assert.deepEqual(
   gate.migrationPlan.activeCandidates[0]?.volume.fieldsToSet,
   {
-    workspaceVolumeRetentionState: "deleted",
-    workspaceVolumeDeletionReason: "legacy_or_unknown_workspace_provider_pointer_cleanup",
+    workspaceVolumeRetentionState: "active",
   },
 );
 assert.equal(gate.migrationPlan.activeCandidates[0]?.volume.resourceIdPreview?.prefix, "11111111-111");
 assert.equal(gate.migrationPlan.activeCandidates[0]?.volume.resourceIdPreview?.length, 36);
 assert.equal(gate.migrationPlan.activeCandidates[0]?.sandbox.resourceIdPreview?.prefix, "22222222-222");
 assert.equal(gate.migrationPlan.inactiveCandidates[0]?.projectId, "inactive-legacy");
+assert.deepEqual(
+  gate.migrationPlan.inactiveCandidates[0]?.volume.fieldsToSet,
+  {
+    workspaceVolumeRetentionState: "deleted",
+    workspaceVolumeDeletionReason: "legacy_or_unknown_workspace_provider_pointer_cleanup",
+  },
+);
 
 const clean = buildProductionWorkspacePointerPreflight([rows[2]!], 100, "gate");
 assert.equal(clean.ok, true);

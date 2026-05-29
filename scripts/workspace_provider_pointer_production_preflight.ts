@@ -31,7 +31,11 @@ const VOLUME_FIELDS_TO_CLEAR = [
   "workspaceVolumeDeletionReason",
 ] as const;
 
-const VOLUME_FIELDS_TO_SET_ON_CLEAR = {
+const ACTIVE_VOLUME_FIELDS_TO_SET_ON_CLEAR = {
+  workspaceVolumeRetentionState: "active",
+} as const;
+
+const INACTIVE_VOLUME_FIELDS_TO_SET_ON_CLEAR = {
   workspaceVolumeRetentionState: "deleted",
   workspaceVolumeDeletionReason: "legacy_or_unknown_workspace_provider_pointer_cleanup",
 } as const;
@@ -131,7 +135,9 @@ function buildProjectPointerPlan(row: CloudProjectAuditRow): ProjectPointerPlan 
     volume: pointerPlan({
       pointer: volume,
       fieldsToClear: VOLUME_FIELDS_TO_CLEAR,
-      fieldsToSet: VOLUME_FIELDS_TO_SET_ON_CLEAR,
+      fieldsToSet: active
+        ? ACTIVE_VOLUME_FIELDS_TO_SET_ON_CLEAR
+        : INACTIVE_VOLUME_FIELDS_TO_SET_ON_CLEAR,
     }),
     sandbox: pointerPlan({
       pointer: sandbox,
