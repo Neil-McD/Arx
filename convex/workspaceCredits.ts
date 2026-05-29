@@ -370,56 +370,14 @@ async function recordSettledPaidToolPartnerCommission(ctx: any, args: {
   });
 }
 
-function canRefundIncludedCreditsForEntry(args: {
-  balance: any;
-  entry: any;
-}): boolean {
-  const balanceStartedAt =
-    typeof args.balance?.includedCycleStartedAt === "number"
-      ? args.balance.includedCycleStartedAt
-      : null;
-  const balanceEndsAt =
-    typeof args.balance?.includedCycleEndsAt === "number"
-      ? args.balance.includedCycleEndsAt
-      : null;
-  if (balanceStartedAt === null || balanceEndsAt === null) return false;
-
-  const entryStartedAt =
-    typeof args.entry?.includedCycleStartedAt === "number"
-      ? args.entry.includedCycleStartedAt
-      : null;
-  const entryEndsAt =
-    typeof args.entry?.includedCycleEndsAt === "number"
-      ? args.entry.includedCycleEndsAt
-      : null;
-  if (entryStartedAt !== null && entryEndsAt !== null) {
-    return entryStartedAt === balanceStartedAt && entryEndsAt === balanceEndsAt;
-  }
-
-  const createdAt =
-    typeof args.entry?.createdAt === "number" ? args.entry.createdAt : null;
-  return (
-    createdAt !== null &&
-    createdAt >= balanceStartedAt &&
-    createdAt < balanceEndsAt
-  );
-}
-
-function applyCycleAwareRefund(args: {
+function applySpendableCreditRefund(args: {
   split: ReturnType<typeof splitSettledCredits>;
-  balance: any;
-  entry: any;
 }): {
   includedRefunded: number;
   purchasedRefunded: number;
 } {
   return {
-    includedRefunded: canRefundIncludedCreditsForEntry({
-      balance: args.balance,
-      entry: args.entry,
-    })
-      ? args.split.includedRefunded
-      : 0,
+    includedRefunded: 0,
     purchasedRefunded: args.split.purchasedRefunded,
   };
 }
@@ -438,21 +396,16 @@ async function debitAvailableWorkspaceCredits(params: {
   if (!balance) {
     return { includedDebited: 0, purchasedDebited: 0 };
   }
-  const includedDebited = Math.min(balance.includedCreditsBalance, requestedCredits);
-  const purchasedDebited = Math.min(
-    balance.purchasedCreditsBalance,
-    Math.max(0, requestedCredits - includedDebited),
-  );
-  const debitedCredits = roundCredits(includedDebited + purchasedDebited);
+  const purchasedDebited = Math.min(balance.purchasedCreditsBalance, requestedCredits);
+  const debitedCredits = roundCredits(purchasedDebited);
   if (debitedCredits > 0) {
     await params.ctx.db.patch(balance._id, {
-      includedCreditsBalance: roundCredits(balance.includedCreditsBalance - includedDebited),
       purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - purchasedDebited),
       updatedAt: params.nowMs,
     });
   }
   return {
-    includedDebited: roundCredits(includedDebited),
+    includedDebited: 0,
     purchasedDebited: roundCredits(purchasedDebited),
   };
 }
@@ -1262,24 +1215,22 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           purchasedDebited: reservation.purchasedCreditsDebited,
           creditsSettled: requestedCredits,
         });
-        const hasRefund = split.includedRefunded > 0 || split.purchasedRefunded > 0;
+        const refund = applySpendableCreditRefund({ split });
+        const hasRefund = refund.purchasedRefunded > 0;
         if (hasRefund) {
           const balance = await readCanonicalWorkspaceCreditBalance(ctx, reservation.userId);
           if (balance) {
             await ctx.db.patch(balance._id, {
-              includedCreditsBalance: roundCredits(
-                balance.includedCreditsBalance + split.includedRefunded,
-              ),
               purchasedCreditsBalance: roundCredits(
-                balance.purchasedCreditsBalance + split.purchasedRefunded,
+                balance.purchasedCreditsBalance + refund.purchasedRefunded,
               ),
               updatedAt: nowMs,
             });
           } else {
             await ctx.db.insert("workspaceCreditBalances", {
               userId: reservation.userId,
-              includedCreditsBalance: split.includedRefunded,
-              purchasedCreditsBalance: split.purchasedRefunded,
+              includedCreditsBalance: 0,
+              purchasedCreditsBalance: refund.purchasedRefunded,
               uncollectedCreditsBalance: 0,
               includedCycleCredits: 0,
               includedCycleStartedAt: nowMs,
@@ -1336,8 +1287,8 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           purchasedCreditsDebited: roundCredits(
             Number(reservation.purchasedCreditsDebited ?? 0) + extraPurchasedDebited,
           ),
-          includedCreditsRefunded: split.includedRefunded,
-          purchasedCreditsRefunded: split.purchasedRefunded,
+          includedCreditsRefunded: refund.includedRefunded,
+          purchasedCreditsRefunded: refund.purchasedRefunded,
           rawVendorCostUsd: roundCurrency(computeCostUsd * chargedRatio),
           polynetPriceUsd: creditsToUsd(totalCreditsSettled),
           metadata: {
@@ -1470,25 +1421,19 @@ export const reserveCreditsInternal = internalMutation({
     if (readUncollectedCreditsBalance(balance) > 0) {
       throw new Error("credits_exhausted");
     }
-    const remainingCredits =
-      Number(balance?.includedCreditsBalance ?? 0) +
-      Number(balance?.purchasedCreditsBalance ?? 0);
+    const remainingCredits = getSpendableWorkspaceToolBalanceCredits(balance);
     if (!balance || remainingCredits < requestedCredits) {
       throw new Error("credits_exhausted");
     }
 
-    const debitIncluded = Math.min(balance.includedCreditsBalance, requestedCredits);
-    const debitPurchased = Math.min(
-      balance.purchasedCreditsBalance,
-      Math.max(0, requestedCredits - debitIncluded),
-    );
-    const debitedCredits = roundCredits(debitIncluded + debitPurchased);
+    const debitIncluded = 0;
+    const debitPurchased = Math.min(balance.purchasedCreditsBalance, requestedCredits);
+    const debitedCredits = roundCredits(debitPurchased);
     if (debitedCredits < requestedCredits) {
       throw new Error("credits_exhausted");
     }
 
     await ctx.db.patch(balance._id, {
-      includedCreditsBalance: roundCredits(balance.includedCreditsBalance - debitIncluded),
       purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - debitPurchased),
       updatedAt: nowMs,
     });
@@ -1598,20 +1543,12 @@ export const settleCreditsInternal = internalMutation({
         ? creditsToUsd(creditsSettled)
         : 0;
     const balance = await readCanonicalWorkspaceCreditBalance(ctx, entry.userId);
-    const refund = balance
-      ? applyCycleAwareRefund({ split, balance, entry })
-      : {
-          includedRefunded: 0,
-          purchasedRefunded: split.purchasedRefunded,
-        };
-    const hasRefund = refund.includedRefunded > 0 || refund.purchasedRefunded > 0;
+    const refund = applySpendableCreditRefund({ split });
+    const hasRefund = refund.purchasedRefunded > 0;
 
     if (hasRefund) {
-      if (balance) {
+      if (balance && refund.purchasedRefunded > 0) {
         await ctx.db.patch(balance._id, {
-          includedCreditsBalance: roundCredits(
-            balance.includedCreditsBalance + refund.includedRefunded,
-          ),
           purchasedCreditsBalance: roundCredits(
             balance.purchasedCreditsBalance + refund.purchasedRefunded,
           ),
@@ -1996,17 +1933,9 @@ export const reconcileExpiredCreditReservationsInternal = internalMutation({
         creditsSettled: 0,
       });
       const balance = await readCanonicalWorkspaceCreditBalance(ctx, entry.userId);
-      const refund = balance
-        ? applyCycleAwareRefund({ split, balance, entry })
-        : {
-            includedRefunded: 0,
-            purchasedRefunded: split.purchasedRefunded,
-          };
-      if (balance) {
+      const refund = applySpendableCreditRefund({ split });
+      if (balance && refund.purchasedRefunded > 0) {
         await ctx.db.patch(balance._id, {
-          includedCreditsBalance: roundCredits(
-            balance.includedCreditsBalance + refund.includedRefunded,
-          ),
           purchasedCreditsBalance: roundCredits(
             balance.purchasedCreditsBalance + refund.purchasedRefunded,
           ),

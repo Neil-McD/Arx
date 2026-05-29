@@ -25,6 +25,43 @@ type CommunityLike = {
   updated_at: string;
 };
 
+function readCommunityJoinRequestErrorText(error: unknown): string {
+  if (typeof error === "string") return error.trim();
+  if (error instanceof Error) return String(error.message ?? "").trim();
+  return "";
+}
+
+function formatCommunityJoinRequestError(error: unknown, fallback: string): string {
+  const text = readCommunityJoinRequestErrorText(error);
+  const normalized = text.toLowerCase();
+  if (
+    normalized.includes("community_forbidden") ||
+    normalized.includes("community_entitlement_required") ||
+    normalized.includes("not_entitled")
+  ) {
+    return "Only community moderators, admins, and owners can review join requests.";
+  }
+  if (
+    normalized.includes("not authenticated") ||
+    normalized.includes("authentication") ||
+    normalized.includes("user_not_found") ||
+    normalized.includes("auth subject")
+  ) {
+    return "Sign in again to review join requests.";
+  }
+  if (
+    normalized.includes("[request id:") ||
+    normalized.includes("server error") ||
+    normalized.includes("uncaught error") ||
+    normalized.includes("../convex/") ||
+    normalized.includes("/convex/") ||
+    normalized.includes(" at ")
+  ) {
+    return fallback;
+  }
+  return text || fallback;
+}
+
 type UseCommunityMembersReviewControllerArgs<
   SessionT extends SessionLike,
   JoinRequestT extends JoinRequestLike,
@@ -71,14 +108,10 @@ export function useCommunityMembersReviewController<
       const userIds = Array.from(new Set(normalizedRows.map((row) => row.user_id)));
       await current.loadUserProfiles(userIds, usableSession);
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load join requests.";
       current.setCommunityJoinRequests([]);
-      current.setCommunityJoinRequestsError(message);
+      current.setCommunityJoinRequestsError(
+        formatCommunityJoinRequestError(error, "Failed to load join requests."),
+      );
     } finally {
       current.setIsLoadingCommunityJoinRequests(false);
     }
@@ -105,13 +138,9 @@ export function useCommunityMembersReviewController<
         requestId,
       });
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to approve request.";
-      current.setCommunityJoinRequestsError(message);
+      current.setCommunityJoinRequestsError(
+        formatCommunityJoinRequestError(error, "Failed to approve request."),
+      );
     } finally {
       current.setDecidingCommunityJoinRequestId(null);
     }
@@ -131,13 +160,9 @@ export function useCommunityMembersReviewController<
       });
       await loadCommunityJoinRequests(communityId, session);
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to deny request.";
-      current.setCommunityJoinRequestsError(message);
+      current.setCommunityJoinRequestsError(
+        formatCommunityJoinRequestError(error, "Failed to deny request."),
+      );
     } finally {
       current.setDecidingCommunityJoinRequestId(null);
     }
@@ -185,13 +210,9 @@ export function useCommunityMembersReviewController<
         current.setDecidingCommunityJoinRequestId(null);
       }
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to update join approvals.";
-      current.setCommunityJoinRequestsError(message);
+      current.setCommunityJoinRequestsError(
+        formatCommunityJoinRequestError(error, "Failed to update join approvals."),
+      );
     } finally {
       current.setIsSavingFreeAccessMode(false);
     }

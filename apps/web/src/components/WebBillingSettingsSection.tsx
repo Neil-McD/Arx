@@ -40,7 +40,6 @@ type WebBillingSettingsSectionProps = {
     surface?: WorkspaceCreditTopupSurface,
   ) => Promise<void> | void;
   startWorkspaceCardSetupCheckout: () => Promise<void> | void;
-  formatRelativeTime: (value: string) => string;
 };
 
 export function WebBillingSettingsSection({
@@ -56,11 +55,9 @@ export function WebBillingSettingsSection({
   workspaceCardSetupError,
   startWorkspaceCreditTopupCheckout,
   startWorkspaceCardSetupCheckout,
-  formatRelativeTime,
 }: WebBillingSettingsSectionProps) {
   const [showManualWorkspaceBalance, setShowManualWorkspaceBalance] = useState(false);
   const totalCredits = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
-  const includedCredits = workspaceCreditBalance?.includedCreditsBalance ?? 0;
   const purchasedCredits = workspaceCreditBalance?.purchasedCreditsBalance ?? 0;
   const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(workspaceCreditBalance);
   const hasUncollectedCredits = uncollectedCredits > 0;
@@ -134,11 +131,6 @@ export function WebBillingSettingsSection({
                   <span>Prepaid balance</span>
                   <strong>{formatWorkspaceToolBalanceUsdFromCredits(totalCredits)}</strong>
                 </div>
-                {includedCredits > 0 ? (
-                  <div className="auth-status">
-                    {formatWorkspaceToolBalanceUsdFromCredits(workspaceCreditBalance?.includedCycleCredits ?? 0)} included this cycle
-                  </div>
-                ) : null}
               </div>
 
               <div className="settings-section-desc">
@@ -148,9 +140,7 @@ export function WebBillingSettingsSection({
                 {hasUncollectedCredits
                   ? `Your next top-up clears ${formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior usage first. `
                   : ""}
-                {includedCredits > 0 && (workspaceCreditBalance?.includedCycleEndsAt ?? 0) > 0
-                  ? `Your included balance resets ${formatRelativeTime(new Date(workspaceCreditBalance?.includedCycleEndsAt ?? 0).toISOString())}.`
-                  : "A card is the default way to keep workspace tools available."} Manual prepaid balance is non-refundable and only works inside Polynet.
+                A card is the default way to keep workspace tools available. Manual prepaid balance is non-refundable and only works inside Polynet.
               </div>
 
               <div className="workspace-billing-secondary-action">

@@ -144,9 +144,16 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     };
   }, [params.activeCommunityId, params.session, params.ensureSession]);
 
+  const currentActiveCommunityAccess = useMemo(() => {
+    const communityId = String(params.activeCommunityId ?? "").trim();
+    if (!communityId) return null;
+    if (activeCommunityAccess?.community_id !== communityId) return null;
+    return activeCommunityAccess;
+  }, [activeCommunityAccess, params.activeCommunityId]);
+
   const communityAccessCapabilities = useMemo(
-    () => deriveCommunityAccessCapabilities(activeCommunityAccess),
-    [activeCommunityAccess],
+    () => deriveCommunityAccessCapabilities(currentActiveCommunityAccess),
+    [currentActiveCommunityAccess],
   );
   const communityNavVisibility = useMemo(
     () => deriveCommunityNavVisibility(communityAccessCapabilities),
@@ -159,8 +166,8 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
 
   const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
   const isActiveCommunityAdmin =
-    String(activeCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
-  const communitySettingsLayer = deriveCommunitySettingsLayer(activeCommunityAccess);
+    String(currentActiveCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
+  const communitySettingsLayer = deriveCommunitySettingsLayer(currentActiveCommunityAccess);
   const canManageCommunitySettings =
     communitySettingsLayer === "admin" || communitySettingsLayer === "owner";
   const canDeleteActiveCommunity = communitySettingsLayer === "owner";
@@ -209,7 +216,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
 
   return {
-    activeCommunityAccess,
+    activeCommunityAccess: currentActiveCommunityAccess,
     isLoadingCommunityAccess,
     activeCommunityPresenceSummary,
     communitySocialSummary,

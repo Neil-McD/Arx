@@ -7,6 +7,7 @@ import {
   DEFAULT_WORKSPACE_SANDBOX_MEMORY_GIB,
   estimateWorkspaceComputeUsd,
   estimateWorkspaceReservationCredits,
+  getSpendableWorkspaceToolBalanceCredits,
   paidToolKindForLedgerToolName,
   priceWorkspaceUsageCredits,
   WORKSPACE_MEMORY_GIB_USD_PER_SECOND,
@@ -137,12 +138,11 @@ class CreditAccountingHarness {
     const requestedCredits = roundCredits(input.credits);
     assert.ok(requestedCredits > 0, "reserve requires positive credits");
     if (!balance || balance.uncollectedCreditsBalance > 0) throw new Error("credits_exhausted");
-    const total = roundCredits(balance.includedCreditsBalance + balance.purchasedCreditsBalance);
+    const total = roundCredits(balance.purchasedCreditsBalance);
     if (total < requestedCredits) throw new Error("credits_exhausted");
 
-    const included = Math.min(balance.includedCreditsBalance, requestedCredits);
-    const purchased = Math.min(balance.purchasedCreditsBalance, requestedCredits - included);
-    balance.includedCreditsBalance = roundCredits(balance.includedCreditsBalance - included);
+    const included = 0;
+    const purchased = Math.min(balance.purchasedCreditsBalance, requestedCredits);
     balance.purchasedCreditsBalance = roundCredits(balance.purchasedCreditsBalance - purchased);
     const entry: LedgerEntry = {
       creditKey: input.creditKey,
@@ -174,14 +174,13 @@ class CreditAccountingHarness {
       entry.purchasedCreditsDebited,
       Math.max(0, reservedSettled - includedSettled),
     );
-    const includedRefunded = roundCredits(entry.includedCreditsDebited - includedSettled);
+    const includedRefunded = 0;
     const purchasedRefunded = roundCredits(entry.purchasedCreditsDebited - purchasedSettled);
     let extraSettled = 0;
     if (input.status === "succeeded" && requested > reservedSettled) {
       extraSettled = this.debitAvailable(entry.userId, requested - reservedSettled);
     }
     const balance = this.ensureBalance(entry.userId);
-    balance.includedCreditsBalance = roundCredits(balance.includedCreditsBalance + includedRefunded);
     balance.purchasedCreditsBalance = roundCredits(balance.purchasedCreditsBalance + purchasedRefunded);
     const creditsSettled = roundCredits(reservedSettled + extraSettled);
     const uncollected = roundCredits(Math.max(0, requested - creditsSettled));
@@ -196,11 +195,9 @@ class CreditAccountingHarness {
   debitAvailable(userId: string, credits: number): number {
     const balance = this.canonicalBalance(userId);
     if (!balance) return 0;
-    const included = Math.min(balance.includedCreditsBalance, credits);
-    const purchased = Math.min(balance.purchasedCreditsBalance, credits - included);
-    balance.includedCreditsBalance = roundCredits(balance.includedCreditsBalance - included);
+    const purchased = Math.min(balance.purchasedCreditsBalance, credits);
     balance.purchasedCreditsBalance = roundCredits(balance.purchasedCreditsBalance - purchased);
-    return roundCredits(included + purchased);
+    return roundCredits(purchased);
   }
 
   completeTopup(input: { sessionId: string; userId?: string; credits: number }): CheckoutSession {
@@ -290,6 +287,43 @@ function testExpiredReservationRefundsHeldCredits() {
   assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 20);
 }
 
+function testIncludedCreditsAreLegacyAndNotSpendable() {
+  const includedOnly = new CreditAccountingHarness([newBalance({ included: 500, purchased: 0 })]);
+  assert.equal(getSpendableWorkspaceToolBalanceCredits(includedOnly.canonicalBalance()), 0);
+  assert.throws(
+    () => includedOnly.reserve({ creditKey: "included_only", credits: 1 }),
+    /credits_exhausted/,
+  );
+  assert.equal(includedOnly.canonicalBalance()!.includedCreditsBalance, 500);
+  assert.equal(includedOnly.canonicalBalance()!.purchasedCreditsBalance, 0);
+
+  const mixed = new CreditAccountingHarness([newBalance({ included: 500, purchased: 300 })]);
+  const entry = mixed.reserve({ creditKey: "mixed", credits: 100 });
+  assert.equal(entry.includedCreditsDebited, 0);
+  assert.equal(entry.purchasedCreditsDebited, 100);
+  assert.equal(mixed.canonicalBalance()!.includedCreditsBalance, 500);
+  assert.equal(mixed.canonicalBalance()!.purchasedCreditsBalance, 200);
+}
+
+function testLegacyIncludedRefundDoesNotCreateSpendableBalance() {
+  const harness = new CreditAccountingHarness([newBalance({ included: 0, purchased: 0 })]);
+  harness.ledger.set("legacy_included", {
+    creditKey: "legacy_included",
+    userId: "user_1",
+    status: "reserved",
+    creditsReserved: 10,
+    includedCreditsDebited: 10,
+    purchasedCreditsDebited: 0,
+    expiresAt: 1000,
+  });
+  const entry = harness.settle({ creditKey: "legacy_included", status: "refunded" });
+  assert.equal(entry.includedCreditsRefunded, 0);
+  assert.equal(entry.purchasedCreditsRefunded, 0);
+  assert.equal(harness.canonicalBalance()!.includedCreditsBalance, 0);
+  assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 0);
+  assert.equal(getSpendableWorkspaceToolBalanceCredits(harness.canonicalBalance()), 0);
+}
+
 function testDuplicateBalanceFailsClosed() {
   const harness = new CreditAccountingHarness([
     newBalance({ id: "balance_1", purchased: 10 }),
@@ -377,6 +411,24 @@ function testBlaxelWorkspacePricingUsesMemorySeconds() {
 
 function testWorkspaceLedgerNameMapsToWorkspaceTools() {
   assert.equal(paidToolKindForLedgerToolName("workspace_compute"), "workspace_tools");
+}
+
+function testBillingUiDoesNotSurfaceIncludedCredits() {
+  const billingSettingsSource = readFileSync(
+    join(process.cwd(), "apps/web/src/components/WebBillingSettingsSection.tsx"),
+    "utf8",
+  );
+  const workspaceCreditsGatewaySource = readFileSync(
+    join(process.cwd(), "shared/workspaceCreditsGateway.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(billingSettingsSource, /included this cycle/i);
+  assert.doesNotMatch(billingSettingsSource, /included balance/i);
+  assert.doesNotMatch(billingSettingsSource, /included balance resets/i);
+  assert.doesNotMatch(
+    workspaceCreditsGatewaySource,
+    /normalizeNumber\(value\.includedCreditsBalance\) \+ normalizeNumber\(value\.purchasedCreditsBalance\)/,
+  );
 }
 
 function testBlaxelRuntimeReservationAndSettlementAreWired() {
@@ -496,11 +548,14 @@ function main() {
   testPartialSettlementRefundsUnusedReservation();
   testOverageCreatesDebtAndTopupClearsItFirst();
   testExpiredReservationRefundsHeldCredits();
+  testIncludedCreditsAreLegacyAndNotSpendable();
+  testLegacyIncludedRefundDoesNotCreateSpendableBalance();
   testDuplicateBalanceFailsClosed();
   testTargetedRepairAllowsTopupGrantOnce();
   testWorkspaceRawElapsedSettlementRefundsHoldRemainder();
   testBlaxelWorkspacePricingUsesMemorySeconds();
   testWorkspaceLedgerNameMapsToWorkspaceTools();
+  testBillingUiDoesNotSurfaceIncludedCredits();
   testBlaxelRuntimeReservationAndSettlementAreWired();
   testReusableWorkspaceLeaseRequiresReservedLedgerEntry();
   testManualWorkspaceStopSettlesReusableLease();

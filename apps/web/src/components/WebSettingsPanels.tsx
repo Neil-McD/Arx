@@ -141,7 +141,6 @@ export type WebSettingsPanelsProps = {
   };
   billing: {
     session: SessionLike;
-    formatRelativeTime: (value: string) => string;
     startWorkspaceCreditTopupCheckout: (
       packId?: WorkspaceToolBalanceTopupPackId,
       surface?: WorkspaceCreditTopupSurface,
@@ -373,7 +372,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
 
   const billingSectionProps = {
     session: billing.session,
-    formatRelativeTime: billing.formatRelativeTime,
     workspaceCreditBalance: billing.billingUi.workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance: billing.billingUi.isLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError: billing.billingUi.workspaceCreditBalanceError,

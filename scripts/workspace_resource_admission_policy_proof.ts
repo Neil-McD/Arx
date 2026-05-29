@@ -332,6 +332,17 @@ assert.equal(
   evaluateWorkspaceSandboxStartAdmission({
     accountTier: "paid",
     workspaceCreditBalance: {
+      includedCreditsBalance: 100,
+      purchasedCreditsBalance: 0,
+    },
+    requiredCredits: 1,
+  }).code,
+  "workspace_credits_exhausted",
+);
+assert.equal(
+  evaluateWorkspaceSandboxStartAdmission({
+    accountTier: "paid",
+    workspaceCreditBalance: {
       includedCreditsBalance: 0,
       purchasedCreditsBalance: 2,
     },
@@ -834,8 +845,8 @@ assert.match(
 );
 assert.match(
   app,
-  /onOpenWorkspaceCreditTopup:[\s\S]*paidUsageBillingMode:\s*"card_preferred"/,
-  "right-panel workspace billing action must open the card-first billing path",
+  /onOpenWorkspaceCreditTopup:[\s\S]*setActiveView\("settings"\)[\s\S]*setSettingsPage\("billing"\)/,
+  "right-panel workspace billing action must open the canonical billing settings page",
 );
 
 const paidUsageBilling = read("shared/paidUsageBilling.ts");

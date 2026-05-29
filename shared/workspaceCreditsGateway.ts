@@ -40,7 +40,7 @@ function normalizeWorkspaceCreditBalance(row: unknown): WorkspaceCreditBalance |
     updatedAt: normalizeNumber(value.updatedAt),
     spendableCreditsBalance: normalizeNumber(
       value.spendableCreditsBalance,
-      normalizeNumber(value.includedCreditsBalance) + normalizeNumber(value.purchasedCreditsBalance),
+      normalizeNumber(value.purchasedCreditsBalance),
     ),
     displayBalanceUsd: String(value.displayBalanceUsd ?? "").trim(),
     blocked: value.blocked === true,

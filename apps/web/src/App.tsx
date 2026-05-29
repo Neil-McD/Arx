@@ -8025,10 +8025,9 @@ export default function App() {
     const pending = readPendingAnalyticsReturn("workspace_credit_topup");
     if (!pending || !workspaceCreditBalance) return;
 
-    const currentIncluded = Math.max(0, workspaceCreditBalance.includedCreditsBalance);
     const currentPurchased = Math.max(0, workspaceCreditBalance.purchasedCreditsBalance);
     const currentUncollected = Math.max(0, workspaceCreditBalance.uncollectedCreditsBalance);
-    const currentTotal = currentIncluded + currentPurchased;
+    const currentTotal = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
     const baselinePurchased = Math.max(0, Number(pending.baseline_purchased_credits ?? 0) || 0);
     const baselineTotal = Math.max(0, Number(pending.baseline_total_credits ?? 0) || 0);
     const baselineUncollected = Math.max(0, Number(pending.baseline_uncollected_credits ?? 0) || 0);
@@ -9900,7 +9899,6 @@ export default function App() {
     },
     billing: {
       session: session,
-      formatRelativeTime,
       startWorkspaceCreditTopupCheckout,
       workspaceCardOnFileStatus,
       workspaceCardOnFileError,

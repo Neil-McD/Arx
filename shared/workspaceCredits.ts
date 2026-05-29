@@ -314,8 +314,7 @@ export type WorkspaceCreditBalanceLike = {
 };
 
 export function getSpendableWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
-  return Math.max(0, Number(balance?.includedCreditsBalance ?? 0) || 0) +
-    Math.max(0, Number(balance?.purchasedCreditsBalance ?? 0) || 0);
+  return Math.max(0, Number(balance?.purchasedCreditsBalance ?? 0) || 0);
 }
 
 export function getUncollectedWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
