@@ -25,6 +25,8 @@ const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
 const PROJECT_IMPORT_MAX_FILES = 25_000;
 const PROJECT_IMPORT_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
 const PROJECT_IMPORT_LEASE_MS = 20 * 60 * 1000;
+const WORKSPACE_PROVIDER_POINTER_MIGRATION_CONFIRMATION = "clear-legacy-workspace-pointers";
+const WORKSPACE_PROVIDER_POINTER_MIGRATION_SECRET_ENV = "ARX_WORKSPACE_PROVIDER_POINTER_MIGRATION_SECRET";
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -77,6 +79,19 @@ async function ensureDefaultProjectInternal(args: {
 function normalizeOptionalVolumeValue(raw: unknown): string | undefined {
   const normalized = String(raw ?? "").trim();
   return normalized || undefined;
+}
+
+function isBlaxelWorkspaceResourceId(raw: unknown): boolean {
+  return String(raw ?? "").trim().startsWith("pn-p-");
+}
+
+function workspacePointerMigrationSkip(reason: string, details?: Record<string, unknown>) {
+  return {
+    ok: false,
+    status: "skipped",
+    reason,
+    ...(details ? { details } : {}),
+  };
 }
 
 function readSandboxLabel(sandbox: DaytonaSandboxApiDto, key: string): string | null {
@@ -854,6 +869,123 @@ export const clearCloudProjectImportLeaseInternal = internalMutation({
       updatedAt: args.nowMs ?? Date.now(),
     });
     return await ctx.db.get(project._id);
+  },
+});
+
+export const clearLegacyWorkspaceProjectProviderPointersForMaintenance = mutation({
+  args: {
+    secret: v.string(),
+    confirm: v.string(),
+    projectId: v.id("cloudProjects"),
+    expectedStatus: v.optional(v.string()),
+    expectedUpdatedAt: v.optional(v.number()),
+    expectedProviderVolumeId: v.optional(v.string()),
+    expectedProviderSandboxId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const configuredSecret = String(process.env[WORKSPACE_PROVIDER_POINTER_MIGRATION_SECRET_ENV] ?? "").trim();
+    if (!configuredSecret) {
+      throw new Error("workspace_provider_pointer_migration_secret_not_configured");
+    }
+    if (args.secret !== configuredSecret) {
+      throw new Error("workspace_provider_pointer_migration_secret_mismatch");
+    }
+    if (args.confirm !== WORKSPACE_PROVIDER_POINTER_MIGRATION_CONFIRMATION) {
+      throw new Error("workspace_provider_pointer_migration_confirmation_mismatch");
+    }
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project) {
+      return workspacePointerMigrationSkip("project_not_found", {
+        projectId: normalizeIdValue(args.projectId),
+      });
+    }
+
+    const status = normalizeOptionalVolumeValue(project.status) ?? "active";
+    const expectedStatus = normalizeOptionalVolumeValue(args.expectedStatus) ?? "active";
+    if (status !== expectedStatus) {
+      return workspacePointerMigrationSkip("expected_status_mismatch", {
+        projectId: normalizeIdValue(project._id),
+        expectedStatus,
+        actualStatus: status,
+      });
+    }
+    if (typeof args.expectedUpdatedAt === "number" && project.updatedAt !== args.expectedUpdatedAt) {
+      return workspacePointerMigrationSkip("expected_updated_at_mismatch", {
+        projectId: normalizeIdValue(project._id),
+        expectedUpdatedAt: args.expectedUpdatedAt,
+        actualUpdatedAt: project.updatedAt,
+      });
+    }
+
+    const currentVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
+    const currentSandboxId = normalizeOptionalVolumeValue(project.providerSandboxId);
+    const expectedVolumeId = normalizeOptionalVolumeValue(args.expectedProviderVolumeId);
+    const expectedSandboxId = normalizeOptionalVolumeValue(args.expectedProviderSandboxId);
+    if (currentVolumeId !== expectedVolumeId) {
+      return workspacePointerMigrationSkip("expected_provider_volume_id_mismatch", {
+        projectId: normalizeIdValue(project._id),
+        expectedProviderVolumeId: expectedVolumeId ?? null,
+        actualProviderVolumeId: currentVolumeId ?? null,
+      });
+    }
+    if (currentSandboxId !== expectedSandboxId) {
+      return workspacePointerMigrationSkip("expected_provider_sandbox_id_mismatch", {
+        projectId: normalizeIdValue(project._id),
+        expectedProviderSandboxId: expectedSandboxId ?? null,
+        actualProviderSandboxId: currentSandboxId ?? null,
+      });
+    }
+
+    if (isBlaxelWorkspaceResourceId(currentVolumeId)) {
+      return workspacePointerMigrationSkip("blaxel_volume_pointer_refused", {
+        projectId: normalizeIdValue(project._id),
+      });
+    }
+    if (isBlaxelWorkspaceResourceId(currentSandboxId)) {
+      return workspacePointerMigrationSkip("blaxel_sandbox_pointer_refused", {
+        projectId: normalizeIdValue(project._id),
+      });
+    }
+
+    const hasLegacyVolumePointer = Boolean(currentVolumeId);
+    const hasLegacySandboxPointer = Boolean(currentSandboxId);
+    if (!hasLegacyVolumePointer && !hasLegacySandboxPointer) {
+      return {
+        ok: true,
+        status: "noop",
+        projectId: normalizeIdValue(project._id),
+      };
+    }
+
+    const nowMs = Date.now();
+    await ctx.db.patch(project._id, {
+      providerVolumeId: undefined,
+      providerVolumeName: undefined,
+      providerVolumeState: undefined,
+      providerVolumeLastSeenAt: undefined,
+      providerSandboxId: undefined,
+      providerSandboxState: undefined,
+      providerSandboxLastSeenAt: undefined,
+      providerSandboxLastActivityAt: undefined,
+      providerSandboxStartedAt: undefined,
+      providerSandboxIdleExpiresAt: undefined,
+      providerSandboxCreditReservationKey: undefined,
+      providerSandboxCreditBudgetCredits: undefined,
+      providerSandboxCreditBudgetExpiresAt: undefined,
+      updatedAt: nowMs,
+    });
+
+    return {
+      ok: true,
+      status: "cleared",
+      projectId: normalizeIdValue(project._id),
+      cleared: {
+        volumePointer: hasLegacyVolumePointer,
+        sandboxPointer: hasLegacySandboxPointer,
+      },
+      updatedAt: nowMs,
+    };
   },
 });
 
