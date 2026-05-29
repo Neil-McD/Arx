@@ -8,9 +8,13 @@ import {
   estimateWorkspaceComputeUsd,
   formatWorkspaceToolBalanceUsdFromCredits,
   getSpendableWorkspaceToolBalanceCredits,
+  getOutstandingWorkspaceToolUsageCredits,
+  getPendingCardCollectionWorkspaceToolBalanceCredits,
   getUncollectedWorkspaceToolBalanceCredits,
   priceWorkspaceUsageCredits,
   resolveWorkspaceToolBalanceTopupPack,
+  WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
+  WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   WORKSPACE_TOOL_BALANCE_TOPUP_CHECKOUT_TTL_MS,
@@ -228,6 +232,21 @@ function normalizeStripePriceId(value: unknown): string | undefined {
   return normalized && normalized.startsWith("price_") ? normalized : undefined;
 }
 
+function normalizeStripeCustomerId(value: unknown): string | undefined {
+  const normalized = normalizeOptionalString(value);
+  return normalized && normalized.startsWith("cus_") ? normalized : undefined;
+}
+
+function normalizeStripePaymentMethodId(value: unknown): string | undefined {
+  const normalized = normalizeOptionalString(value);
+  return normalized && normalized.startsWith("pm_") ? normalized : undefined;
+}
+
+function normalizeStripePaymentIntentId(value: unknown): string | undefined {
+  const normalized = normalizeOptionalString(value);
+  return normalized && normalized.startsWith("pi_") ? normalized : undefined;
+}
+
 function clampCredits(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, roundCredits(value)));
 }
@@ -236,8 +255,19 @@ function readUncollectedCreditsBalance(balance: any): number {
   return roundCredits(Math.max(0, Number(balance?.uncollectedCreditsBalance ?? 0)));
 }
 
+function readPendingCardCollectionCreditsBalance(balance: any): number {
+  return roundCredits(Math.max(0, Number(balance?.pendingCardCollectionCreditsBalance ?? 0)));
+}
+
+function readOutstandingWorkspaceUsageCreditsBalance(balance: any): number {
+  return roundCredits(
+    readUncollectedCreditsBalance(balance) + readPendingCardCollectionCreditsBalance(balance),
+  );
+}
+
 const DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR = "workspace_credit_balance_duplicate";
 const WORKSPACE_CREDIT_BALANCE_REPAIR_ROW_LIMIT = 25;
+const CARD_BACKED_PENDING_RESERVATION_SCAN_LIMIT = 1000;
 
 async function readWorkspaceCreditBalanceRowsByUser(ctx: any, userId: any, limit = 2) {
   return await ctx.db
@@ -250,6 +280,52 @@ async function readCanonicalWorkspaceCreditBalance(ctx: any, userId: any) {
   const rows = await readWorkspaceCreditBalanceRowsByUser(ctx, userId, 2);
   if (rows.length > 1) throw new Error(DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR);
   return rows[0] ?? null;
+}
+
+function cardBackedReservationExposureCredits(entry: any, nowMs: number): number {
+  if (normalizeOptionalString(entry?.status) !== "reserved") return 0;
+  const expiresAt = Number(entry?.expiresAt ?? 0);
+  if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= nowMs) return 0;
+  const metadata = normalizeObjectMetadata(entry?.metadata);
+  if (
+    metadata.billing_mode !== "card_backed" &&
+    metadata.funding_source !== "card_on_file"
+  ) {
+    return 0;
+  }
+  return roundCredits(
+    Math.max(
+      0,
+      Number(entry?.creditsReserved ?? 0) -
+        Number(entry?.includedCreditsDebited ?? 0) -
+        Number(entry?.purchasedCreditsDebited ?? 0),
+    ),
+  );
+}
+
+async function readPendingCardBackedReservationExposureCredits(
+  ctx: any,
+  userId: any,
+  nowMs: number,
+): Promise<number> {
+  const rows = await ctx.db
+    .query("creditLedgerEntries")
+    .withIndex("by_status_expiresAt", (q: any) =>
+      q.eq("status", "reserved").gt("expiresAt", nowMs),
+    )
+    .take(CARD_BACKED_PENDING_RESERVATION_SCAN_LIMIT);
+  if (rows.length >= CARD_BACKED_PENDING_RESERVATION_SCAN_LIMIT) {
+    throw new Error("credits_pending_reservation_scan_truncated");
+  }
+  return roundCredits(
+    rows.reduce(
+      (sum: number, row: any) =>
+        String(row?.userId ?? "") === String(userId ?? "")
+          ? sum + cardBackedReservationExposureCredits(row, nowMs)
+          : sum,
+      0,
+    ),
+  );
 }
 
 async function readRecentWorkspaceCreditBalanceRows(ctx: any, limit: number) {
@@ -266,6 +342,7 @@ function buildEmptyWorkspaceCreditBalanceForUser(userId: unknown, nowMs: number)
     includedCreditsBalance: 0,
     purchasedCreditsBalance: 0,
     uncollectedCreditsBalance: 0,
+    pendingCardCollectionCreditsBalance: 0,
     includedCycleCredits: 0,
     includedCycleStartedAt: nowMs,
     includedCycleEndsAt: nowMs,
@@ -282,14 +359,22 @@ function buildWorkspaceToolBalanceProjection(balance: any, userId: unknown, nowM
   const uncollectedCreditsBalance = roundCredits(
     getUncollectedWorkspaceToolBalanceCredits(normalizedBalance),
   );
+  const pendingCardCollectionCreditsBalance = roundCredits(
+    getPendingCardCollectionWorkspaceToolBalanceCredits(normalizedBalance),
+  );
+  const outstandingUsageCreditsBalance = roundCredits(
+    getOutstandingWorkspaceToolUsageCredits(normalizedBalance),
+  );
   return {
     ...normalizedBalance,
     uncollectedCreditsBalance,
+    pendingCardCollectionCreditsBalance,
+    outstandingUsageCreditsBalance,
     spendableCreditsBalance,
     displayBalanceUsd: formatWorkspaceToolBalanceUsdFromCredits(spendableCreditsBalance),
-    blocked: uncollectedCreditsBalance > 0,
-    blockedReason: uncollectedCreditsBalance > 0 ? "uncollected_usage" : null,
-    lowBalance: uncollectedCreditsBalance <= 0 &&
+    blocked: outstandingUsageCreditsBalance > 0,
+    blockedReason: outstandingUsageCreditsBalance > 0 ? "uncollected_usage" : null,
+    lowBalance: outstandingUsageCreditsBalance <= 0 &&
       spendableCreditsBalance <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   };
 }
@@ -425,6 +510,7 @@ async function addUncollectedWorkspaceCredits(params: {
       includedCreditsBalance: 0,
       purchasedCreditsBalance: 0,
       uncollectedCreditsBalance: uncollectedCredits,
+      pendingCardCollectionCreditsBalance: 0,
       includedCycleCredits: 0,
       includedCycleStartedAt: params.nowMs,
       includedCycleEndsAt: params.nowMs,
@@ -441,6 +527,782 @@ async function addUncollectedWorkspaceCredits(params: {
   });
   return uncollectedCredits;
 }
+
+async function readWorkspaceUsageCollectionByKey(ctx: any, collectionKey: string) {
+  const normalizedKey = String(collectionKey ?? "").trim();
+  if (!normalizedKey) return null;
+  return await ctx.db
+    .query("workspaceUsageCollections")
+    .withIndex("by_collectionKey", (q: any) => q.eq("collectionKey", normalizedKey))
+    .first();
+}
+
+function hasActiveWorkspaceCardOnFile(stripeCustomer: any): boolean {
+  return (
+    stripeCustomer?.paymentMethodStatus === "active" &&
+    Boolean(normalizeStripeCustomerId(stripeCustomer.providerCustomerId)) &&
+    Boolean(normalizeStripePaymentMethodId(stripeCustomer.providerDefaultPaymentMethodId)) &&
+    !(Number(stripeCustomer?.cardRemovedAt ?? 0) > 0)
+  );
+}
+
+function workspaceUsageCollectionAmountCents(credits: number): number {
+  return Math.floor(creditsToUsd(roundCredits(credits)) * 100);
+}
+
+function paymentIntentIsSucceeded(status: unknown): boolean {
+  return String(status ?? "").trim() === "succeeded";
+}
+
+function paymentIntentIsTerminalFailure(status: unknown): boolean {
+  return [
+    "canceled",
+    "requires_action",
+    "requires_capture",
+    "requires_confirmation",
+    "requires_payment_method",
+  ].includes(String(status ?? "").trim());
+}
+
+function paymentIntentIsProcessing(status: unknown): boolean {
+  return String(status ?? "").trim() === "processing";
+}
+
+function normalizePaymentIntentFailureReason(intent: any, fallback: string): string {
+  return (
+    normalizeOptionalString(intent?.last_payment_error?.code) ??
+    normalizeOptionalString(intent?.last_payment_error?.message) ??
+    normalizeOptionalString(intent?.cancellation_reason) ??
+    fallback
+  );
+}
+
+function readStripeObjectId(value: unknown, prefix: string): string | undefined {
+  if (typeof value === "string") {
+    const normalized = normalizeOptionalString(value);
+    return normalized && normalized.startsWith(prefix) ? normalized : undefined;
+  }
+  if (value && typeof value === "object") {
+    const id = normalizeOptionalString((value as { id?: unknown }).id);
+    return id && id.startsWith(prefix) ? id : undefined;
+  }
+  return undefined;
+}
+
+function buildWorkspaceUsageCollectionKey(candidate: any): string {
+  const userId = String(candidate?.userId ?? "").trim();
+  const balanceUpdatedAt = Math.floor(Number(candidate?.balanceUpdatedAt ?? 0) || 0);
+  const chargeableCredits = Math.floor(
+    Math.max(0, Number(candidate?.uncollectedCreditsBalance ?? 0) || 0),
+  );
+  return `workspace_usage:${userId}:${balanceUpdatedAt}:${chargeableCredits}`;
+}
+
+function buildWorkspaceUsagePaymentIntentMetadata(params: {
+  collectionKey: string;
+  userId: unknown;
+  creditsAmount: number;
+}) {
+  return {
+    polynet_collection_key: params.collectionKey,
+    polynet_user_id: String(params.userId),
+    workspace_usage_credits: String(roundCredits(params.creditsAmount)),
+    purpose: "workspace_usage_card_collection",
+  };
+}
+
+function readStripeErrorPaymentIntent(error: unknown): any | null {
+  const candidate = error as { payment_intent?: unknown; paymentIntent?: unknown; raw?: unknown };
+  const direct = candidate?.payment_intent ?? candidate?.paymentIntent;
+  if (direct && typeof direct === "object") return direct;
+  const raw = candidate?.raw;
+  if (raw && typeof raw === "object") {
+    const rawIntent = (raw as { payment_intent?: unknown; paymentIntent?: unknown }).payment_intent ??
+      (raw as { paymentIntent?: unknown }).paymentIntent;
+    if (rawIntent && typeof rawIntent === "object") return rawIntent;
+  }
+  return null;
+}
+
+function readStripeErrorCode(error: unknown): string {
+  const candidate = error as { code?: unknown; type?: unknown; message?: unknown };
+  return (
+    normalizeOptionalString(candidate?.code) ??
+    normalizeOptionalString(candidate?.type) ??
+    normalizeOptionalString(candidate?.message) ??
+    "stripe_payment_failed"
+  );
+}
+
+async function listActiveWorkspaceUsageCardCollectionCandidates(params: {
+  ctx: any;
+  minCredits: number;
+  limit: number;
+}) {
+  const minCredits = roundCredits(Math.max(0, Number(params.minCredits) || 0));
+  const limit = Math.max(1, Math.min(50, Math.floor(params.limit)));
+  const scanLimit = Math.min(500, Math.max(limit * 10, limit));
+  const rows = await params.ctx.db
+    .query("workspaceCreditBalances")
+    .withIndex("by_updatedAt")
+    .order("desc")
+    .take(scanLimit);
+  const candidates: any[] = [];
+  for (const balance of rows) {
+    if (readUncollectedCreditsBalance(balance) < minCredits) continue;
+    if (readPendingCardCollectionCreditsBalance(balance) > 0) continue;
+    const stripeCustomer = await params.ctx.db
+      .query("userStripeCustomers")
+      .withIndex("by_user", (q: any) => q.eq("userId", balance.userId))
+      .first();
+    if (!hasActiveWorkspaceCardOnFile(stripeCustomer)) continue;
+    candidates.push({
+      userId: balance.userId,
+      balanceId: balance._id,
+      balanceUpdatedAt: balance.updatedAt,
+      uncollectedCreditsBalance: readUncollectedCreditsBalance(balance),
+      providerCustomerId: normalizeStripeCustomerId(stripeCustomer.providerCustomerId),
+      providerDefaultPaymentMethodId: normalizeStripePaymentMethodId(
+        stripeCustomer.providerDefaultPaymentMethodId,
+      ),
+    });
+    if (candidates.length >= limit) break;
+  }
+  return {
+    candidates,
+    scanned: rows.length,
+    truncated: rows.length >= scanLimit,
+  };
+}
+
+export const listWorkspaceUsageCardCollectionCandidatesInternal = internalQuery({
+  args: {
+    minCredits: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await listActiveWorkspaceUsageCardCollectionCandidates({
+      ctx,
+      minCredits: args.minCredits ?? WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
+      limit: args.limit ?? 10,
+    }),
+});
+
+export const listWorkspaceUsageCardCollectionsByStatusInternal = internalQuery({
+  args: {
+    status: v.union(v.literal("prepared"), v.literal("processing")),
+    olderThanMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 10)));
+    const query = ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_status_updatedAt", (q) => {
+        const scoped = q.eq("status", args.status);
+        return typeof args.olderThanMs === "number"
+          ? scoped.lt("updatedAt", args.olderThanMs)
+          : scoped;
+      });
+    return await query.take(limit);
+  },
+});
+
+export const prepareWorkspaceUsageCardCollectionInternal = internalMutation({
+  args: {
+    collectionKey: v.string(),
+    userId: v.id("users"),
+    requestedCredits: v.optional(v.number()),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    metadata: v.optional(v.any()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const collectionKey = String(args.collectionKey ?? "").trim();
+    if (!collectionKey) throw new Error("workspace_usage_collection_key_required");
+    const existing = await readWorkspaceUsageCollectionByKey(ctx, collectionKey);
+    if (existing) {
+      if (String(existing.userId ?? "") !== String(args.userId ?? "")) {
+        throw new Error("workspace_usage_collection_owner_mismatch");
+      }
+      return {
+        ok: true,
+        alreadyExists: true,
+        collection: existing,
+        collectionKey,
+        creditsAmount: roundCredits(existing.creditsAmount),
+        status: existing.status,
+      };
+    }
+
+    const balance = await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
+    const uncollectedCredits = readUncollectedCreditsBalance(balance);
+    const requestedCredits =
+      typeof args.requestedCredits === "number"
+        ? roundCredits(Math.max(0, args.requestedCredits))
+        : uncollectedCredits;
+    const creditsAmount = roundCredits(Math.min(uncollectedCredits, requestedCredits));
+    if (!(creditsAmount > 0)) {
+      return {
+        ok: false,
+        reason: "no_uncollected_usage",
+        collectionKey,
+        creditsAmount: 0,
+      };
+    }
+    if (!balance) throw new Error("workspace_usage_collection_balance_missing");
+
+    await ctx.db.patch(balance._id, {
+      uncollectedCreditsBalance: roundCredits(uncollectedCredits - creditsAmount),
+      pendingCardCollectionCreditsBalance: roundCredits(
+        readPendingCardCollectionCreditsBalance(balance) + creditsAmount,
+      ),
+      updatedAt: nowMs,
+    });
+
+    const id = await ctx.db.insert("workspaceUsageCollections", {
+      collectionKey,
+      userId: args.userId,
+      status: "prepared",
+      creditsAmount,
+      provider: "stripe",
+      providerCustomerId: normalizeOptionalString(args.providerCustomerId),
+      metadata: args.metadata,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return {
+      ok: true,
+      alreadyExists: false,
+      collection: await ctx.db.get(id),
+      collectionKey,
+      creditsAmount,
+      status: "prepared",
+    };
+  },
+});
+
+export const markWorkspaceUsageCardCollectionProcessingInternal = internalMutation({
+  args: {
+    collectionKey: v.string(),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerPaymentIntentId: v.optional(v.union(v.string(), v.null())),
+    metadata: v.optional(v.any()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const collectionKey = String(args.collectionKey ?? "").trim();
+    if (!collectionKey) throw new Error("workspace_usage_collection_key_required");
+    const collection = await readWorkspaceUsageCollectionByKey(ctx, collectionKey);
+    if (!collection) throw new Error("workspace_usage_collection_not_found");
+    if (
+      collection.status === "succeeded" ||
+      collection.status === "failed" ||
+      collection.status === "released"
+    ) {
+      return {
+        ok: true,
+        alreadyCompleted: true,
+        collection,
+        collectionKey,
+        status: collection.status,
+      };
+    }
+    await ctx.db.patch(collection._id, {
+      status: "processing",
+      provider: "stripe",
+      providerCustomerId:
+        normalizeOptionalString(args.providerCustomerId) ?? collection.providerCustomerId,
+      providerPaymentIntentId:
+        normalizeOptionalString(args.providerPaymentIntentId) ??
+        collection.providerPaymentIntentId,
+      metadata: mergeLedgerMetadata(collection.metadata, normalizeObjectMetadata(args.metadata)),
+      updatedAt: nowMs,
+    });
+    return {
+      ok: true,
+      alreadyCompleted: false,
+      collection: await ctx.db.get(collection._id),
+      collectionKey,
+      status: "processing",
+    };
+  },
+});
+
+export const completeWorkspaceUsageCardCollectionInternal = internalMutation({
+  args: {
+    collectionKey: v.string(),
+    status: v.union(
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("released"),
+    ),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerPaymentIntentId: v.optional(v.union(v.string(), v.null())),
+    failureReason: v.optional(v.union(v.string(), v.null())),
+    metadata: v.optional(v.any()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const collectionKey = String(args.collectionKey ?? "").trim();
+    if (!collectionKey) throw new Error("workspace_usage_collection_key_required");
+    const collection = await readWorkspaceUsageCollectionByKey(ctx, collectionKey);
+    if (!collection) throw new Error("workspace_usage_collection_not_found");
+    if (
+      collection.status === "succeeded" ||
+      collection.status === "failed" ||
+      collection.status === "released"
+    ) {
+      return {
+        ok: true,
+        alreadyCompleted: true,
+        collection,
+        collectionKey,
+        status: collection.status,
+      };
+    }
+    if (collection.status !== "prepared" && collection.status !== "processing") {
+      throw new Error("workspace_usage_collection_status_invalid");
+    }
+
+    const creditsAmount = roundCredits(Math.max(0, Number(collection.creditsAmount ?? 0)));
+    if (!(creditsAmount > 0)) {
+      throw new Error("workspace_usage_collection_amount_invalid");
+    }
+    const balance = await readCanonicalWorkspaceCreditBalance(ctx, collection.userId);
+    if (!balance) throw new Error("workspace_usage_collection_balance_missing");
+    const pendingCredits = readPendingCardCollectionCreditsBalance(balance);
+    if (pendingCredits + 0.000001 < creditsAmount) {
+      throw new Error("workspace_usage_collection_pending_balance_mismatch");
+    }
+
+    const restoreToUncollected = args.status !== "succeeded";
+    await ctx.db.patch(balance._id, {
+      uncollectedCreditsBalance: restoreToUncollected
+        ? roundCredits(readUncollectedCreditsBalance(balance) + creditsAmount)
+        : readUncollectedCreditsBalance(balance),
+      pendingCardCollectionCreditsBalance: roundCredits(pendingCredits - creditsAmount),
+      updatedAt: nowMs,
+    });
+
+    await ctx.db.patch(collection._id, {
+      status: args.status,
+      provider: "stripe",
+      providerCustomerId:
+        normalizeOptionalString(args.providerCustomerId) ?? collection.providerCustomerId,
+      providerPaymentIntentId:
+        normalizeOptionalString(args.providerPaymentIntentId) ?? collection.providerPaymentIntentId,
+      failureReason: normalizeOptionalString(args.failureReason),
+      metadata: mergeLedgerMetadata(collection.metadata, normalizeObjectMetadata(args.metadata)),
+      completedAt: nowMs,
+      updatedAt: nowMs,
+    });
+
+    const updated = await ctx.db.get(collection._id);
+    return {
+      ok: true,
+      alreadyCompleted: false,
+      collection: updated,
+      collectionKey,
+      status: args.status,
+      creditsAmount,
+    };
+  },
+});
+
+async function finalizeWorkspaceUsagePaymentIntent(params: {
+  ctx: any;
+  collection: any;
+  paymentIntent: any;
+  nowMs: number;
+}) {
+  const collectionKey = String(params.collection?.collectionKey ?? "").trim();
+  if (!collectionKey) return { disposition: "skipped", reason: "collection_key_missing" };
+  const paymentIntentId = normalizeStripePaymentIntentId(params.paymentIntent?.id);
+  const providerCustomerId =
+    readStripeObjectId(params.paymentIntent?.customer, "cus_") ??
+    normalizeStripeCustomerId(params.collection?.providerCustomerId);
+  const status = String(params.paymentIntent?.status ?? "").trim();
+  const metadata = {
+    stripe_status: status || null,
+    stripe_amount: Number(params.paymentIntent?.amount ?? 0) || 0,
+    stripe_amount_received: Number(params.paymentIntent?.amount_received ?? 0) || 0,
+  };
+  if (paymentIntentIsSucceeded(status)) {
+    await params.ctx.runMutation(
+      (internal as any).workspaceCredits.completeWorkspaceUsageCardCollectionInternal,
+      {
+        collectionKey,
+        status: "succeeded",
+        providerCustomerId,
+        providerPaymentIntentId: paymentIntentId,
+        metadata,
+        nowMs: params.nowMs,
+      },
+    );
+    return { disposition: "succeeded", providerPaymentIntentId: paymentIntentId };
+  }
+  if (paymentIntentIsProcessing(status)) {
+    await params.ctx.runMutation(
+      (internal as any).workspaceCredits.markWorkspaceUsageCardCollectionProcessingInternal,
+      {
+        collectionKey,
+        providerCustomerId,
+        providerPaymentIntentId: paymentIntentId,
+        metadata,
+        nowMs: params.nowMs,
+      },
+    );
+    return { disposition: "processing", providerPaymentIntentId: paymentIntentId };
+  }
+  if (paymentIntentIsTerminalFailure(status) || status) {
+    await params.ctx.runMutation(
+      (internal as any).workspaceCredits.completeWorkspaceUsageCardCollectionInternal,
+      {
+        collectionKey,
+        status: "failed",
+        providerCustomerId,
+        providerPaymentIntentId: paymentIntentId,
+        failureReason: normalizePaymentIntentFailureReason(
+          params.paymentIntent,
+          status || "stripe_payment_failed",
+        ),
+        metadata,
+        nowMs: params.nowMs,
+      },
+    );
+    return { disposition: "failed", providerPaymentIntentId: paymentIntentId };
+  }
+  return { disposition: "skipped", reason: "payment_intent_status_missing" };
+}
+
+async function attemptWorkspaceUsageStripeCollection(params: {
+  ctx: any;
+  stripe: ReturnType<typeof getStripeClient>;
+  collection: any;
+  providerCustomerId: string;
+  providerPaymentMethodId: string;
+  nowMs: number;
+}) {
+  const collectionKey = String(params.collection?.collectionKey ?? "").trim();
+  const creditsAmount = roundCredits(Math.max(0, Number(params.collection?.creditsAmount ?? 0)));
+  const amountCents = workspaceUsageCollectionAmountCents(creditsAmount);
+  if (!collectionKey) return { disposition: "skipped", reason: "collection_key_missing" };
+  if (amountCents < WORKSPACE_CARD_COLLECTION_MIN_CREDITS) {
+    await params.ctx.runMutation(
+      (internal as any).workspaceCredits.completeWorkspaceUsageCardCollectionInternal,
+      {
+        collectionKey,
+        status: "released",
+        providerCustomerId: params.providerCustomerId,
+        failureReason: "workspace_usage_collection_below_stripe_minimum",
+        metadata: {
+          amount_cents: amountCents,
+          minimum_amount_cents: WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
+        },
+        nowMs: params.nowMs,
+      },
+    );
+    return { disposition: "released_below_minimum" };
+  }
+
+  try {
+    const paymentIntent = await params.stripe.paymentIntents.create(
+      {
+        amount: amountCents,
+        currency: "usd",
+        customer: params.providerCustomerId,
+        payment_method: params.providerPaymentMethodId,
+        confirm: true,
+        off_session: true,
+        description: "Polynet workspace tool usage",
+        metadata: buildWorkspaceUsagePaymentIntentMetadata({
+          collectionKey,
+          userId: params.collection.userId,
+          creditsAmount,
+        }),
+      },
+      {
+        idempotencyKey: `polynet-workspace-usage:${collectionKey}`,
+      },
+    );
+    return await finalizeWorkspaceUsagePaymentIntent({
+      ctx: params.ctx,
+      collection: params.collection,
+      paymentIntent,
+      nowMs: params.nowMs,
+    });
+  } catch (error) {
+    const paymentIntent = readStripeErrorPaymentIntent(error);
+    if (paymentIntent) {
+      return await finalizeWorkspaceUsagePaymentIntent({
+        ctx: params.ctx,
+        collection: params.collection,
+        paymentIntent,
+        nowMs: params.nowMs,
+      });
+    }
+    const errorCode = readStripeErrorCode(error);
+    if (
+      [
+        "card_declined",
+        "expired_card",
+        "incorrect_cvc",
+        "processing_error",
+        "authentication_required",
+      ].includes(errorCode)
+    ) {
+      await params.ctx.runMutation(
+        (internal as any).workspaceCredits.completeWorkspaceUsageCardCollectionInternal,
+        {
+          collectionKey,
+          status: "failed",
+          providerCustomerId: params.providerCustomerId,
+          failureReason: errorCode,
+          metadata: {
+            stripe_error_code: errorCode,
+          },
+          nowMs: params.nowMs,
+        },
+      );
+      return { disposition: "failed", failureReason: errorCode };
+    }
+    return {
+      disposition: "retry_later",
+      failureReason: errorCode,
+    };
+  }
+}
+
+export const collectWorkspaceUsageByCardInternal = internalAction({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.max(1, Math.min(25, Math.floor(args.limit ?? 10)));
+    let stripe: ReturnType<typeof getStripeClient> | null = null;
+    const readStripe = () => {
+      stripe ??= getStripeClient();
+      return stripe;
+    };
+    let succeeded = 0;
+    let processing = 0;
+    let failed = 0;
+    let released = 0;
+    let retriedPrepared = 0;
+    let prepared = 0;
+    let skipped = 0;
+    const failedSamples: Array<Record<string, unknown>> = [];
+    const readStripeForCollection = (collectionKey: unknown) => {
+      try {
+        return readStripe();
+      } catch (error) {
+        skipped += 1;
+        if (failedSamples.length < 5) {
+          failedSamples.push({
+            collectionKey: String(collectionKey ?? ""),
+            failureReason: readStripeErrorCode(error),
+          });
+        }
+        return null;
+      }
+    };
+
+    const processingCollections = await ctx.runQuery(
+      (internal as any).workspaceCredits.listWorkspaceUsageCardCollectionsByStatusInternal,
+      {
+        status: "processing",
+        limit,
+      },
+    ) as any[];
+    for (const collection of processingCollections) {
+      const paymentIntentId = normalizeStripePaymentIntentId(collection?.providerPaymentIntentId);
+      if (!paymentIntentId) {
+        await ctx.runMutation(
+          (internal as any).workspaceCredits.completeWorkspaceUsageCardCollectionInternal,
+          {
+            collectionKey: collection.collectionKey,
+            status: "released",
+            failureReason: "workspace_usage_processing_payment_intent_missing",
+            nowMs,
+          },
+        );
+        released += 1;
+        continue;
+      }
+      try {
+        const paymentIntent = await readStripe().paymentIntents.retrieve(paymentIntentId);
+        const finalized = await finalizeWorkspaceUsagePaymentIntent({
+          ctx,
+          collection,
+          paymentIntent,
+          nowMs,
+        });
+        if (finalized.disposition === "succeeded") succeeded += 1;
+        else if (finalized.disposition === "processing") processing += 1;
+        else if (finalized.disposition === "failed") failed += 1;
+        else skipped += 1;
+      } catch (error) {
+        skipped += 1;
+        if (failedSamples.length < 5) {
+          failedSamples.push({
+            collectionKey: collection.collectionKey,
+            failureReason: readStripeErrorCode(error),
+          });
+        }
+      }
+    }
+
+    const stalePrepared = await ctx.runQuery(
+      (internal as any).workspaceCredits.listWorkspaceUsageCardCollectionsByStatusInternal,
+      {
+        status: "prepared",
+        olderThanMs: nowMs - WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS,
+        limit,
+      },
+    ) as any[];
+    for (const collection of stalePrepared) {
+      const metadata = normalizeObjectMetadata(collection?.metadata);
+      const providerCustomerId =
+        normalizeStripeCustomerId(collection?.providerCustomerId) ??
+        normalizeStripeCustomerId(metadata.provider_customer_id);
+      const providerPaymentMethodId = normalizeStripePaymentMethodId(
+        metadata.provider_payment_method_id,
+      );
+      if (!providerCustomerId || !providerPaymentMethodId) {
+        await ctx.runMutation(
+          (internal as any).workspaceCredits.completeWorkspaceUsageCardCollectionInternal,
+          {
+            collectionKey: collection.collectionKey,
+            status: "released",
+            failureReason: "workspace_usage_prepared_collection_unretryable",
+            nowMs,
+          },
+        );
+        released += 1;
+        continue;
+      }
+      const stripeClient = readStripeForCollection(collection.collectionKey);
+      if (!stripeClient) continue;
+      const attempt = await attemptWorkspaceUsageStripeCollection({
+        ctx,
+        stripe: stripeClient,
+        collection,
+        providerCustomerId,
+        providerPaymentMethodId,
+        nowMs,
+      });
+      retriedPrepared += 1;
+      if (attempt.disposition === "succeeded") succeeded += 1;
+      else if (attempt.disposition === "processing") processing += 1;
+      else if (attempt.disposition === "failed") failed += 1;
+      else if (String(attempt.disposition).startsWith("released")) released += 1;
+      else skipped += 1;
+    }
+
+    const candidateResult = await ctx.runQuery(
+      (internal as any).workspaceCredits.listWorkspaceUsageCardCollectionCandidatesInternal,
+      {
+        minCredits: WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
+        limit,
+      },
+    ) as any;
+    const candidates = Array.isArray(candidateResult?.candidates)
+      ? candidateResult.candidates
+      : [];
+    for (const candidate of candidates) {
+      const providerCustomerId = normalizeStripeCustomerId(candidate.providerCustomerId);
+      const providerPaymentMethodId = normalizeStripePaymentMethodId(
+        candidate.providerDefaultPaymentMethodId,
+      );
+      const requestedCredits = Math.floor(
+        Math.max(0, Number(candidate.uncollectedCreditsBalance ?? 0) || 0),
+      );
+      if (
+        !providerCustomerId ||
+        !providerPaymentMethodId ||
+        requestedCredits < WORKSPACE_CARD_COLLECTION_MIN_CREDITS
+      ) {
+        skipped += 1;
+        continue;
+      }
+      const collectionKey = buildWorkspaceUsageCollectionKey(candidate);
+      const stripeClient = readStripeForCollection(collectionKey);
+      if (!stripeClient) continue;
+      const collectionResult = await ctx.runMutation(
+        (internal as any).workspaceCredits.prepareWorkspaceUsageCardCollectionInternal,
+        {
+          collectionKey,
+          userId: candidate.userId,
+          requestedCredits,
+          providerCustomerId,
+          metadata: {
+            provider_customer_id: providerCustomerId,
+            provider_payment_method_id: providerPaymentMethodId,
+            balance_updated_at: candidate.balanceUpdatedAt,
+          },
+          nowMs,
+        },
+      ) as any;
+      if (!collectionResult?.ok || !collectionResult?.collection) {
+        skipped += 1;
+        continue;
+      }
+      if (
+        collectionResult.collection.status === "succeeded" ||
+        collectionResult.collection.status === "failed" ||
+        collectionResult.collection.status === "released"
+      ) {
+        skipped += 1;
+        continue;
+      }
+      prepared += collectionResult.alreadyExists ? 0 : 1;
+      const attempt = await attemptWorkspaceUsageStripeCollection({
+        ctx,
+        stripe: stripeClient,
+        collection: collectionResult.collection,
+        providerCustomerId,
+        providerPaymentMethodId,
+        nowMs,
+      });
+      if (attempt.disposition === "succeeded") succeeded += 1;
+      else if (attempt.disposition === "processing") processing += 1;
+      else if (attempt.disposition === "failed") {
+        failed += 1;
+        if (failedSamples.length < 5) {
+          failedSamples.push({
+            collectionKey,
+            failureReason: (attempt as any).failureReason ?? "stripe_payment_failed",
+          });
+        }
+      } else if (String(attempt.disposition).startsWith("released")) {
+        released += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    return {
+      scannedCandidates: candidates.length,
+      scannedProcessing: processingCollections.length,
+      scannedStalePrepared: stalePrepared.length,
+      prepared,
+      retriedPrepared,
+      succeeded,
+      processing,
+      failed,
+      released,
+      skipped,
+      candidateScanTruncated: Boolean(candidateResult?.truncated),
+      failedSamples,
+    };
+  },
+});
 
 export const getWorkspaceCreditBalanceInternal = internalQuery({
   args: {
@@ -549,6 +1411,7 @@ export const upsertWorkspaceCreditBalanceInternal = internalMutation({
           ? roundCredits(args.purchasedCreditsBalance)
           : existing?.purchasedCreditsBalance ?? 0,
       uncollectedCreditsBalance: readUncollectedCreditsBalance(existing),
+      pendingCardCollectionCreditsBalance: readPendingCardCollectionCreditsBalance(existing),
       includedCycleCredits:
         typeof args.includedCycleCredits === "number"
           ? roundCredits(args.includedCycleCredits)
@@ -609,6 +1472,9 @@ function mergeWorkspaceCreditBalanceRows(rows: any[], nowMs: number) {
       ),
       uncollectedCreditsBalance: roundCredits(
         rows.reduce((sum, row) => sum + readUncollectedCreditsBalance(row), 0),
+      ),
+      pendingCardCollectionCreditsBalance: roundCredits(
+        rows.reduce((sum, row) => sum + readPendingCardCollectionCreditsBalance(row), 0),
       ),
       includedCycleCredits: roundCredits(
         Math.max(0, normalizeBalanceNumber(cycle?.includedCycleCredits)),
@@ -681,6 +1547,8 @@ function buildWorkspaceCreditBalanceDiagnostics(rows: any[], nowMs: number, samp
   let duplicateRows = 0;
   let balancesWithUncollectedUsage = 0;
   let uncollectedCreditsBalance = 0;
+  let balancesWithPendingCardCollections = 0;
+  let pendingCardCollectionCreditsBalance = 0;
   let negativeBalanceRows = 0;
   const duplicateSamples: Array<{
     userId: string;
@@ -694,12 +1562,19 @@ function buildWorkspaceCreditBalanceDiagnostics(rows: any[], nowMs: number, samp
     uncollectedCreditsBalance: number;
     uncollectedBalanceUsd: string;
   }> = [];
+  const pendingCardCollectionSamples: Array<{
+    userId: string;
+    balanceId: string;
+    pendingCardCollectionCreditsBalance: number;
+    pendingCardCollectionBalanceUsd: string;
+  }> = [];
   const negativeBalanceSamples: Array<{
     userId: string;
     balanceId: string;
     includedCreditsBalance: number;
     purchasedCreditsBalance: number;
     uncollectedCreditsBalance: number;
+    pendingCardCollectionCreditsBalance: number;
   }> = [];
 
   for (const userRows of byUser.values()) {
@@ -722,6 +1597,7 @@ function buildWorkspaceCreditBalanceDiagnostics(rows: any[], nowMs: number, samp
     const includedCreditsBalance = roundCredits(normalizeBalanceNumber(row.includedCreditsBalance));
     const purchasedCreditsBalance = roundCredits(normalizeBalanceNumber(row.purchasedCreditsBalance));
     const rowUncollectedCreditsBalance = readUncollectedCreditsBalance(row);
+    const rowPendingCardCollectionCreditsBalance = readPendingCardCollectionCreditsBalance(row);
     if (rowUncollectedCreditsBalance > 0) {
       balancesWithUncollectedUsage += 1;
       uncollectedCreditsBalance = roundCredits(uncollectedCreditsBalance + rowUncollectedCreditsBalance);
@@ -734,7 +1610,28 @@ function buildWorkspaceCreditBalanceDiagnostics(rows: any[], nowMs: number, samp
         });
       }
     }
-    if (includedCreditsBalance < 0 || purchasedCreditsBalance < 0 || rowUncollectedCreditsBalance < 0) {
+    if (rowPendingCardCollectionCreditsBalance > 0) {
+      balancesWithPendingCardCollections += 1;
+      pendingCardCollectionCreditsBalance = roundCredits(
+        pendingCardCollectionCreditsBalance + rowPendingCardCollectionCreditsBalance,
+      );
+      if (pendingCardCollectionSamples.length < sampleLimit) {
+        pendingCardCollectionSamples.push({
+          userId: String(row.userId),
+          balanceId: String(row._id),
+          pendingCardCollectionCreditsBalance: rowPendingCardCollectionCreditsBalance,
+          pendingCardCollectionBalanceUsd: formatWorkspaceToolBalanceUsdFromCredits(
+            rowPendingCardCollectionCreditsBalance,
+          ),
+        });
+      }
+    }
+    if (
+      includedCreditsBalance < 0 ||
+      purchasedCreditsBalance < 0 ||
+      rowUncollectedCreditsBalance < 0 ||
+      rowPendingCardCollectionCreditsBalance < 0
+    ) {
       negativeBalanceRows += 1;
       if (negativeBalanceSamples.length < sampleLimit) {
         negativeBalanceSamples.push({
@@ -743,6 +1640,7 @@ function buildWorkspaceCreditBalanceDiagnostics(rows: any[], nowMs: number, samp
           includedCreditsBalance,
           purchasedCreditsBalance,
           uncollectedCreditsBalance: rowUncollectedCreditsBalance,
+          pendingCardCollectionCreditsBalance: rowPendingCardCollectionCreditsBalance,
         });
       }
     }
@@ -757,6 +1655,12 @@ function buildWorkspaceCreditBalanceDiagnostics(rows: any[], nowMs: number, samp
     uncollectedCreditsBalance: roundCredits(uncollectedCreditsBalance),
     uncollectedBalanceUsd: formatWorkspaceToolBalanceUsdFromCredits(uncollectedCreditsBalance),
     uncollectedSamples,
+    balancesWithPendingCardCollections,
+    pendingCardCollectionCreditsBalance: roundCredits(pendingCardCollectionCreditsBalance),
+    pendingCardCollectionBalanceUsd: formatWorkspaceToolBalanceUsdFromCredits(
+      pendingCardCollectionCreditsBalance,
+    ),
+    pendingCardCollectionSamples,
     negativeBalanceRows,
     negativeBalanceSamples,
   };
@@ -821,6 +1725,14 @@ export const getWorkspaceToolCreditDiagnosticsForOperator = query({
         uncollectedCreditsBalance: balanceDiagnostics.uncollectedCreditsBalance,
         uncollectedBalanceUsd: balanceDiagnostics.uncollectedBalanceUsd,
         samples: balanceDiagnostics.uncollectedSamples,
+      },
+      pendingCardCollections: {
+        balanceRows: balanceDiagnostics.balancesWithPendingCardCollections,
+        pendingCardCollectionCreditsBalance:
+          balanceDiagnostics.pendingCardCollectionCreditsBalance,
+        pendingCardCollectionBalanceUsd:
+          balanceDiagnostics.pendingCardCollectionBalanceUsd,
+        samples: balanceDiagnostics.pendingCardCollectionSamples,
       },
       staleTopupCheckouts: {
         scannedPendingRows: pendingTopups.length,
@@ -1110,6 +2022,7 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
         includedCreditsBalance: 0,
         purchasedCreditsBalance: grantedCredits,
         uncollectedCreditsBalance: 0,
+        pendingCardCollectionCreditsBalance: 0,
         includedCycleCredits: 0,
         includedCycleStartedAt: nowMs,
         includedCycleEndsAt: nowMs,
@@ -1232,6 +2145,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
               includedCreditsBalance: 0,
               purchasedCreditsBalance: refund.purchasedRefunded,
               uncollectedCreditsBalance: 0,
+              pendingCardCollectionCreditsBalance: 0,
               includedCycleCredits: 0,
               includedCycleStartedAt: nowMs,
               includedCycleEndsAt: nowMs,
@@ -1401,6 +2315,8 @@ export const reserveCreditsInternal = internalMutation({
     rawVendorCostUsd: v.optional(v.number()),
     polynetPriceUsd: v.optional(v.number()),
     metadata: v.optional(v.any()),
+    allowUncollectedReservation: v.optional(v.boolean()),
+    uncollectedReservationLimitCredits: v.optional(v.number()),
     expiresAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -1418,25 +2334,48 @@ export const reserveCreditsInternal = internalMutation({
     if (!(requestedCredits > 0)) throw new Error("credits_amount_invalid");
 
     const balance = await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
-    if (readUncollectedCreditsBalance(balance) > 0) {
+    const allowUncollectedReservation = args.allowUncollectedReservation === true;
+    const currentOutstandingUsageCredits = readOutstandingWorkspaceUsageCreditsBalance(balance);
+    if (!allowUncollectedReservation && currentOutstandingUsageCredits > 0) {
       throw new Error("credits_exhausted");
     }
     const remainingCredits = getSpendableWorkspaceToolBalanceCredits(balance);
-    if (!balance || remainingCredits < requestedCredits) {
+    if (!allowUncollectedReservation && (!balance || remainingCredits < requestedCredits)) {
       throw new Error("credits_exhausted");
     }
 
     const debitIncluded = 0;
-    const debitPurchased = Math.min(balance.purchasedCreditsBalance, requestedCredits);
+    const debitPurchased = Math.min(balance?.purchasedCreditsBalance ?? 0, requestedCredits);
     const debitedCredits = roundCredits(debitPurchased);
-    if (debitedCredits < requestedCredits) {
+    if (!allowUncollectedReservation && debitedCredits < requestedCredits) {
       throw new Error("credits_exhausted");
     }
+    if (allowUncollectedReservation) {
+      const uncollectedReservationLimitCredits = roundCredits(
+        Math.max(0, Number(args.uncollectedReservationLimitCredits ?? 0) || 0),
+      );
+      const pendingUncollectedReservationCredits =
+        await readPendingCardBackedReservationExposureCredits(ctx, args.userId, nowMs);
+      const uncollectedExposureCredits = roundCredits(
+        Math.max(0, requestedCredits - debitedCredits),
+      );
+      if (
+        !(uncollectedReservationLimitCredits > 0) ||
+        currentOutstandingUsageCredits +
+          pendingUncollectedReservationCredits +
+          uncollectedExposureCredits >
+          uncollectedReservationLimitCredits
+      ) {
+        throw new Error("credits_exhausted");
+      }
+    }
 
-    await ctx.db.patch(balance._id, {
-      purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - debitPurchased),
-      updatedAt: nowMs,
-    });
+    if (balance && debitedCredits > 0) {
+      await ctx.db.patch(balance._id, {
+        purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - debitPurchased),
+        updatedAt: nowMs,
+      });
+    }
 
     const id = await ctx.db.insert("creditLedgerEntries", {
       creditKey,
@@ -1452,11 +2391,11 @@ export const reserveCreditsInternal = internalMutation({
       includedCreditsDebited: roundCredits(debitIncluded),
       purchasedCreditsDebited: roundCredits(debitPurchased),
       includedCycleStartedAt:
-        typeof balance.includedCycleStartedAt === "number"
+        typeof balance?.includedCycleStartedAt === "number"
           ? balance.includedCycleStartedAt
           : undefined,
       includedCycleEndsAt:
-        typeof balance.includedCycleEndsAt === "number"
+        typeof balance?.includedCycleEndsAt === "number"
           ? balance.includedCycleEndsAt
           : undefined,
       rawVendorCostUsd:
@@ -1513,6 +2452,9 @@ export const settleCreditsInternal = internalMutation({
       purchasedDebited: entry.purchasedCreditsDebited,
       creditsSettled: reservedCreditsSettled,
     });
+    const reservedCollectedCredits = roundCredits(
+      split.includedSettled + split.purchasedSettled,
+    );
     let extraIncludedDebited = 0;
     let extraPurchasedDebited = 0;
     if (args.status === "succeeded" && requestedCreditsSettled > reservedCreditsSettled) {
@@ -1526,7 +2468,7 @@ export const settleCreditsInternal = internalMutation({
       extraPurchasedDebited = extraDebit.purchasedDebited;
     }
     const creditsSettled = roundCredits(
-      reservedCreditsSettled + extraIncludedDebited + extraPurchasedDebited,
+      reservedCollectedCredits + extraIncludedDebited + extraPurchasedDebited,
     );
     const purchasedCreditsSettled = roundCredits(split.purchasedSettled + extraPurchasedDebited);
     const uncollectedCredits = roundCredits(
@@ -1560,6 +2502,7 @@ export const settleCreditsInternal = internalMutation({
           includedCreditsBalance: 0,
           purchasedCreditsBalance: refund.purchasedRefunded,
           uncollectedCreditsBalance: 0,
+          pendingCardCollectionCreditsBalance: 0,
           includedCycleCredits: 0,
           includedCycleStartedAt: nowMs,
           includedCycleEndsAt: nowMs,
@@ -1947,6 +2890,7 @@ export const reconcileExpiredCreditReservationsInternal = internalMutation({
           includedCreditsBalance: 0,
           purchasedCreditsBalance: refund.purchasedRefunded,
           uncollectedCreditsBalance: 0,
+          pendingCardCollectionCreditsBalance: 0,
           includedCycleCredits: 0,
           includedCycleStartedAt: nowMs,
           includedCycleEndsAt: nowMs,

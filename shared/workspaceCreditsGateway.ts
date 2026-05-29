@@ -6,6 +6,8 @@ export type WorkspaceCreditBalance = {
   includedCreditsBalance: number;
   purchasedCreditsBalance: number;
   uncollectedCreditsBalance: number;
+  pendingCardCollectionCreditsBalance: number;
+  outstandingUsageCreditsBalance: number;
   includedCycleCredits: number;
   includedCycleStartedAt: number;
   includedCycleEndsAt: number;
@@ -33,6 +35,12 @@ function normalizeWorkspaceCreditBalance(row: unknown): WorkspaceCreditBalance |
     includedCreditsBalance: normalizeNumber(value.includedCreditsBalance),
     purchasedCreditsBalance: normalizeNumber(value.purchasedCreditsBalance),
     uncollectedCreditsBalance: normalizeNumber(value.uncollectedCreditsBalance),
+    pendingCardCollectionCreditsBalance: normalizeNumber(value.pendingCardCollectionCreditsBalance),
+    outstandingUsageCreditsBalance: normalizeNumber(
+      value.outstandingUsageCreditsBalance,
+      normalizeNumber(value.uncollectedCreditsBalance) +
+        normalizeNumber(value.pendingCardCollectionCreditsBalance),
+    ),
     includedCycleCredits: normalizeNumber(value.includedCycleCredits),
     includedCycleStartedAt: normalizeNumber(value.includedCycleStartedAt),
     includedCycleEndsAt: normalizeNumber(value.includedCycleEndsAt),

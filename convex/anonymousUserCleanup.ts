@@ -19,6 +19,7 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "userStripeConnectAccounts", index: "by_user", field: "userId" },
   { table: "workspaceCreditBalances", index: "by_user", field: "userId" },
   { table: "workspaceComputeCharges", index: "by_user", field: "userId" },
+  { table: "workspaceUsageCollections", index: "by_user_createdAt", field: "userId" },
   { table: "creditLedgerEntries", index: "by_user_createdAt", field: "userId" },
   { table: "criticalAuditEvents", index: "by_actor_createdAt", field: "actorUserId" },
   { table: "platformDiagnosticEvents", index: "by_user_createdAt", field: "userId" },

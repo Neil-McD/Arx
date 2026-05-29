@@ -69,6 +69,9 @@ export const WORKSPACE_SESSION_HOLD_SECONDS = 60;
 export const WORKSPACE_SESSION_MAX_SECONDS = 30 * 60;
 export const WORKSPACE_FILE_INSPECTION_HOLD_SECONDS = 60;
 export const WORKSPACE_FILE_INSPECTION_MAX_SECONDS = 5 * 60;
+export const WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS = 500;
+export const WORKSPACE_CARD_COLLECTION_MIN_CREDITS = 50;
+export const WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS = 15 * 60 * 1000;
 export const WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES = 15;
 export const WORKSPACE_SESSION_RESERVATION_EXPIRY_MS =
   (WORKSPACE_SESSION_MAX_SECONDS + 5 * 60) * 1000;
@@ -311,6 +314,7 @@ export type WorkspaceCreditBalanceLike = {
   includedCreditsBalance?: number | null;
   purchasedCreditsBalance?: number | null;
   uncollectedCreditsBalance?: number | null;
+  pendingCardCollectionCreditsBalance?: number | null;
 };
 
 export function getSpendableWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
@@ -319,4 +323,16 @@ export function getSpendableWorkspaceToolBalanceCredits(balance: WorkspaceCredit
 
 export function getUncollectedWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
   return Math.max(0, Number(balance?.uncollectedCreditsBalance ?? 0) || 0);
+}
+
+export function getPendingCardCollectionWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
+  return Math.max(0, Number(balance?.pendingCardCollectionCreditsBalance ?? 0) || 0);
+}
+
+export function getOutstandingWorkspaceToolUsageCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
+  return Math.max(
+    0,
+    getUncollectedWorkspaceToolBalanceCredits(balance) +
+      getPendingCardCollectionWorkspaceToolBalanceCredits(balance),
+  );
 }

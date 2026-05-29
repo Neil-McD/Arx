@@ -293,7 +293,7 @@ assert.match(
 );
 assert.match(
   toolEconomicsBuilderBlock,
-  /sourceTables:[\s\S]*"creditLedgerEntries"[\s\S]*"workspaceComputeCharges"[\s\S]*"workspaceCreditBalances"[\s\S]*"checkoutSessions"[\s\S]*scannedCreditLimit[\s\S]*scannedBalanceLimit/,
+  /sourceTables:[\s\S]*"creditLedgerEntries"[\s\S]*"workspaceComputeCharges"[\s\S]*"workspaceCreditBalances"[\s\S]*"workspaceUsageCollections"[\s\S]*"checkoutSessions"[\s\S]*scannedCreditLimit[\s\S]*scannedBalanceLimit/,
   "operator tool economics evidence must name finance and materialized-balance source tables",
 );
 assert.doesNotMatch(

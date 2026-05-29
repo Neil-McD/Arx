@@ -10,6 +10,8 @@ import {
   getSpendableWorkspaceToolBalanceCredits,
   paidToolKindForLedgerToolName,
   priceWorkspaceUsageCredits,
+  WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+  WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
   WORKSPACE_MEMORY_GIB_USD_PER_SECOND,
   WORKSPACE_VCPU_USD_PER_SECOND,
 } from "../shared/workspaceCredits.ts";
@@ -20,6 +22,7 @@ type Balance = {
   includedCreditsBalance: number;
   purchasedCreditsBalance: number;
   uncollectedCreditsBalance: number;
+  pendingCardCollectionCreditsBalance: number;
   includedCycleStartedAt: number;
   includedCycleEndsAt: number;
 };
@@ -35,6 +38,7 @@ type LedgerEntry = {
   includedCreditsRefunded?: number;
   purchasedCreditsRefunded?: number;
   expiresAt: number;
+  metadata?: Record<string, unknown>;
 };
 
 type CheckoutSession = {
@@ -44,6 +48,13 @@ type CheckoutSession = {
   status: "pending" | "complete" | "expired";
   workspaceCreditsGrantedAt?: number;
   workspaceCreditsUncollectedPaid?: number;
+};
+
+type WorkspaceUsageCollection = {
+  collectionKey: string;
+  userId: string;
+  status: "prepared" | "processing" | "succeeded" | "failed" | "released";
+  creditsAmount: number;
 };
 
 function roundCredits(value: number): number {
@@ -56,6 +67,7 @@ function newBalance(input: {
   included?: number;
   purchased?: number;
   uncollected?: number;
+  pendingCollection?: number;
   cycleStart?: number;
   cycleEnd?: number;
 } = {}): Balance {
@@ -65,6 +77,7 @@ function newBalance(input: {
     includedCreditsBalance: roundCredits(input.included ?? 0),
     purchasedCreditsBalance: roundCredits(input.purchased ?? 0),
     uncollectedCreditsBalance: roundCredits(input.uncollected ?? 0),
+    pendingCardCollectionCreditsBalance: roundCredits(input.pendingCollection ?? 0),
     includedCycleStartedAt: input.cycleStart ?? 0,
     includedCycleEndsAt: input.cycleEnd ?? 1000,
   };
@@ -74,6 +87,7 @@ class CreditAccountingHarness {
   balances: Balance[];
   ledger = new Map<string, LedgerEntry>();
   checkouts = new Map<string, CheckoutSession>();
+  collections = new Map<string, WorkspaceUsageCollection>();
   stripeCheckoutCreates = 0;
 
   constructor(balances: Balance[] = [newBalance()]) {
@@ -123,8 +137,34 @@ class CreditAccountingHarness {
     canonical.uncollectedCreditsBalance = roundCredits(
       rows.reduce((sum, row) => sum + Math.max(0, row.uncollectedCreditsBalance), 0),
     );
+    canonical.pendingCardCollectionCreditsBalance = roundCredits(
+      rows.reduce(
+        (sum, row) => sum + Math.max(0, row.pendingCardCollectionCreditsBalance),
+        0,
+      ),
+    );
     this.balances = this.balances.filter((row) => row.userId !== userId || row.id === canonical.id);
     return { rows: rows.length, mergedDuplicateRows: duplicates.length, repaired: true };
+  }
+
+  pendingCardBackedReservationExposure(userId = "user_1"): number {
+    let total = 0;
+    for (const entry of this.ledger.values()) {
+      if (entry.userId !== userId || entry.status !== "reserved") continue;
+      if (
+        entry.metadata?.billing_mode !== "card_backed" &&
+        entry.metadata?.funding_source !== "card_on_file"
+      ) {
+        continue;
+      }
+      total += Math.max(
+        0,
+        entry.creditsReserved -
+          entry.includedCreditsDebited -
+          entry.purchasedCreditsDebited,
+      );
+    }
+    return roundCredits(total);
   }
 
   reserve(input: {
@@ -132,18 +172,43 @@ class CreditAccountingHarness {
     credits: number;
     userId?: string;
     expiresAt?: number;
+    allowUncollectedReservation?: boolean;
+    uncollectedReservationLimitCredits?: number;
+    metadata?: Record<string, unknown>;
   }): LedgerEntry {
     if (this.ledger.has(input.creditKey)) return this.ledger.get(input.creditKey)!;
     const balance = this.canonicalBalance(input.userId ?? "user_1");
     const requestedCredits = roundCredits(input.credits);
     assert.ok(requestedCredits > 0, "reserve requires positive credits");
-    if (!balance || balance.uncollectedCreditsBalance > 0) throw new Error("credits_exhausted");
-    const total = roundCredits(balance.purchasedCreditsBalance);
-    if (total < requestedCredits) throw new Error("credits_exhausted");
+    const allowUncollectedReservation = input.allowUncollectedReservation === true;
+    if (!allowUncollectedReservation && (!balance || balance.uncollectedCreditsBalance > 0)) {
+      throw new Error("credits_exhausted");
+    }
+    const total = roundCredits(balance?.purchasedCreditsBalance ?? 0);
+    if (!allowUncollectedReservation && total < requestedCredits) throw new Error("credits_exhausted");
 
     const included = 0;
-    const purchased = Math.min(balance.purchasedCreditsBalance, requestedCredits);
-    balance.purchasedCreditsBalance = roundCredits(balance.purchasedCreditsBalance - purchased);
+    const purchased = Math.min(balance?.purchasedCreditsBalance ?? 0, requestedCredits);
+    if (allowUncollectedReservation) {
+      const limit = roundCredits(Math.max(0, input.uncollectedReservationLimitCredits ?? 0));
+      const uncollectedExposure = roundCredits(Math.max(0, requestedCredits - purchased));
+      const currentUncollected = roundCredits(
+        (balance?.uncollectedCreditsBalance ?? 0) +
+          (balance?.pendingCardCollectionCreditsBalance ?? 0),
+      );
+      const pendingUncollectedExposure = this.pendingCardBackedReservationExposure(
+        input.userId ?? "user_1",
+      );
+      if (
+        !(limit > 0) ||
+        currentUncollected + pendingUncollectedExposure + uncollectedExposure > limit
+      ) {
+        throw new Error("credits_exhausted");
+      }
+    }
+    if (balance && purchased > 0) {
+      balance.purchasedCreditsBalance = roundCredits(balance.purchasedCreditsBalance - purchased);
+    }
     const entry: LedgerEntry = {
       creditKey: input.creditKey,
       userId: input.userId ?? "user_1",
@@ -152,6 +217,7 @@ class CreditAccountingHarness {
       includedCreditsDebited: roundCredits(included),
       purchasedCreditsDebited: roundCredits(purchased),
       expiresAt: input.expiresAt ?? 1000,
+      metadata: input.metadata,
     };
     this.ledger.set(input.creditKey, entry);
     return entry;
@@ -174,6 +240,7 @@ class CreditAccountingHarness {
       entry.purchasedCreditsDebited,
       Math.max(0, reservedSettled - includedSettled),
     );
+    const reservedCollected = roundCredits(includedSettled + purchasedSettled);
     const includedRefunded = 0;
     const purchasedRefunded = roundCredits(entry.purchasedCreditsDebited - purchasedSettled);
     let extraSettled = 0;
@@ -182,7 +249,7 @@ class CreditAccountingHarness {
     }
     const balance = this.ensureBalance(entry.userId);
     balance.purchasedCreditsBalance = roundCredits(balance.purchasedCreditsBalance + purchasedRefunded);
-    const creditsSettled = roundCredits(reservedSettled + extraSettled);
+    const creditsSettled = roundCredits(reservedCollected + extraSettled);
     const uncollected = roundCredits(Math.max(0, requested - creditsSettled));
     balance.uncollectedCreditsBalance = roundCredits(balance.uncollectedCreditsBalance + uncollected);
     entry.status = input.status;
@@ -220,6 +287,66 @@ class CreditAccountingHarness {
     session.workspaceCreditsUncollectedPaid = roundCredits(paidUncollected);
     this.checkouts.set(session.sessionId, session);
     return session;
+  }
+
+  prepareCardCollection(input: {
+    collectionKey: string;
+    userId?: string;
+    requestedCredits?: number;
+  }): WorkspaceUsageCollection | null {
+    const existing = this.collections.get(input.collectionKey);
+    if (existing) return existing;
+    const balance = this.canonicalBalance(input.userId ?? "user_1");
+    const uncollected = roundCredits(balance?.uncollectedCreditsBalance ?? 0);
+    const requested = roundCredits(input.requestedCredits ?? uncollected);
+    const creditsAmount = roundCredits(Math.min(uncollected, requested));
+    if (!(creditsAmount > 0)) return null;
+    assert.ok(balance, "balance must exist");
+    balance.uncollectedCreditsBalance = roundCredits(balance.uncollectedCreditsBalance - creditsAmount);
+    balance.pendingCardCollectionCreditsBalance = roundCredits(
+      balance.pendingCardCollectionCreditsBalance + creditsAmount,
+    );
+    const collection: WorkspaceUsageCollection = {
+      collectionKey: input.collectionKey,
+      userId: input.userId ?? "user_1",
+      status: "prepared",
+      creditsAmount,
+    };
+    this.collections.set(collection.collectionKey, collection);
+    return collection;
+  }
+
+  markCardCollectionProcessing(collectionKey: string): WorkspaceUsageCollection {
+    const collection = this.collections.get(collectionKey);
+    assert.ok(collection, "collection must exist");
+    if (collection.status === "prepared") {
+      collection.status = "processing";
+    }
+    return collection;
+  }
+
+  completeCardCollection(input: {
+    collectionKey: string;
+    status: "succeeded" | "failed" | "released";
+  }): WorkspaceUsageCollection {
+    const collection = this.collections.get(input.collectionKey);
+    assert.ok(collection, "collection must exist");
+    if (collection.status !== "prepared" && collection.status !== "processing") return collection;
+    const balance = this.ensureBalance(collection.userId);
+    assert.ok(
+      balance.pendingCardCollectionCreditsBalance >= collection.creditsAmount,
+      "pending collection balance must cover collection",
+    );
+    balance.pendingCardCollectionCreditsBalance = roundCredits(
+      balance.pendingCardCollectionCreditsBalance - collection.creditsAmount,
+    );
+    if (input.status !== "succeeded") {
+      balance.uncollectedCreditsBalance = roundCredits(
+        balance.uncollectedCreditsBalance + collection.creditsAmount,
+      );
+    }
+    collection.status = input.status;
+    return collection;
   }
 
   reconcileExpired(nowMs: number): number {
@@ -276,6 +403,188 @@ function testOverageCreatesDebtAndTopupClearsItFirst() {
   assert.equal(session.workspaceCreditsUncollectedPaid, 3);
   assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 0);
   assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 7);
+}
+
+function testCardBackedReservationCreatesUncollectedUsageWithoutPrepaid() {
+  const harness = new CreditAccountingHarness([newBalance({ purchased: 0 })]);
+  const entry = harness.reserve({
+    creditKey: "card_backed_1",
+    credits: 3,
+    allowUncollectedReservation: true,
+    uncollectedReservationLimitCredits: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    metadata: { billing_mode: "card_backed", funding_source: "card_on_file" },
+  });
+  assert.equal(entry.purchasedCreditsDebited, 0);
+  assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 0);
+
+  const settled = harness.settle({
+    creditKey: "card_backed_1",
+    status: "succeeded",
+    creditsSettled: 2,
+  });
+  assert.equal(settled.creditsSettled, 0);
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 2);
+}
+
+function testCardBackedReservationSpendsPrepaidBeforeUncollectedUsage() {
+  const harness = new CreditAccountingHarness([newBalance({ purchased: 1 })]);
+  const entry = harness.reserve({
+    creditKey: "card_backed_2",
+    credits: 3,
+    allowUncollectedReservation: true,
+    uncollectedReservationLimitCredits: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    metadata: { billing_mode: "card_backed", funding_source: "card_on_file" },
+  });
+  assert.equal(entry.purchasedCreditsDebited, 1);
+  assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 0);
+
+  const settled = harness.settle({
+    creditKey: "card_backed_2",
+    status: "succeeded",
+    creditsSettled: 2,
+  });
+  assert.equal(settled.creditsSettled, 1);
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 1);
+}
+
+function testCardBackedProviderFailureDoesNotCreateUncollectedUsage() {
+  const harness = new CreditAccountingHarness([newBalance({ purchased: 1 })]);
+  harness.reserve({
+    creditKey: "card_backed_refund",
+    credits: 3,
+    allowUncollectedReservation: true,
+    uncollectedReservationLimitCredits: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    metadata: { billing_mode: "card_backed", funding_source: "card_on_file" },
+  });
+  const entry = harness.settle({
+    creditKey: "card_backed_refund",
+    status: "refunded",
+  });
+  assert.equal(entry.purchasedCreditsRefunded, 1);
+  assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 1);
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 0);
+}
+
+function testCardBackedReservationFailsClosedAtUncollectedLimit() {
+  const harness = new CreditAccountingHarness([
+    newBalance({
+      purchased: 0,
+      uncollected: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    }),
+  ]);
+  assert.throws(
+    () =>
+      harness.reserve({
+        creditKey: "card_backed_limit",
+        credits: 1,
+        allowUncollectedReservation: true,
+        uncollectedReservationLimitCredits: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+      }),
+    /credits_exhausted/,
+  );
+}
+
+function testCardBackedReservationLimitIncludesPendingExposure() {
+  const harness = new CreditAccountingHarness([newBalance({ purchased: 0 })]);
+  harness.reserve({
+    creditKey: "card_backed_pending",
+    credits: 3,
+    allowUncollectedReservation: true,
+    uncollectedReservationLimitCredits: 3,
+    metadata: { billing_mode: "card_backed", funding_source: "card_on_file" },
+  });
+  assert.throws(
+    () =>
+      harness.reserve({
+        creditKey: "card_backed_pending_over",
+        credits: 1,
+        allowUncollectedReservation: true,
+        uncollectedReservationLimitCredits: 3,
+        metadata: { billing_mode: "card_backed", funding_source: "card_on_file" },
+      }),
+    /credits_exhausted/,
+  );
+}
+
+function testCardBackedReservationLimitIncludesPendingCardCollection() {
+  const harness = new CreditAccountingHarness([
+    newBalance({
+      purchased: 0,
+      pendingCollection: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    }),
+  ]);
+  assert.throws(
+    () =>
+      harness.reserve({
+        creditKey: "card_backed_pending_collection_over",
+        credits: 1,
+        allowUncollectedReservation: true,
+        uncollectedReservationLimitCredits: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+        metadata: { billing_mode: "card_backed", funding_source: "card_on_file" },
+      }),
+    /credits_exhausted/,
+  );
+}
+
+function testCardCollectionPrepareLocksDebtAwayFromManualTopup() {
+  const harness = new CreditAccountingHarness([newBalance({ uncollected: 10 })]);
+  const collection = harness.prepareCardCollection({
+    collectionKey: "usage_collection_1",
+    requestedCredits: 4,
+  });
+  assert.equal(collection?.creditsAmount, 4);
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 6);
+  assert.equal(harness.canonicalBalance()!.pendingCardCollectionCreditsBalance, 4);
+
+  const session = harness.completeTopup({ sessionId: "cs_pending_race", credits: 10 });
+  assert.equal(session.workspaceCreditsUncollectedPaid, 6);
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 0);
+  assert.equal(harness.canonicalBalance()!.pendingCardCollectionCreditsBalance, 4);
+  assert.equal(harness.canonicalBalance()!.purchasedCreditsBalance, 4);
+}
+
+function testCardCollectionSuccessClearsPendingOnly() {
+  const harness = new CreditAccountingHarness([newBalance({ uncollected: 10 })]);
+  harness.prepareCardCollection({ collectionKey: "usage_collection_success", requestedCredits: 4 });
+  const collection = harness.completeCardCollection({
+    collectionKey: "usage_collection_success",
+    status: "succeeded",
+  });
+  assert.equal(collection.status, "succeeded");
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 6);
+  assert.equal(harness.canonicalBalance()!.pendingCardCollectionCreditsBalance, 0);
+  harness.completeCardCollection({
+    collectionKey: "usage_collection_success",
+    status: "succeeded",
+  });
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 6);
+  assert.equal(harness.canonicalBalance()!.pendingCardCollectionCreditsBalance, 0);
+}
+
+function testCardCollectionFailureRestoresUncollectedDebt() {
+  const harness = new CreditAccountingHarness([newBalance({ uncollected: 10 })]);
+  harness.prepareCardCollection({ collectionKey: "usage_collection_failure", requestedCredits: 4 });
+  const collection = harness.completeCardCollection({
+    collectionKey: "usage_collection_failure",
+    status: "failed",
+  });
+  assert.equal(collection.status, "failed");
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 10);
+  assert.equal(harness.canonicalBalance()!.pendingCardCollectionCreditsBalance, 0);
+}
+
+function testProcessingCardCollectionCanFinalize() {
+  const harness = new CreditAccountingHarness([newBalance({ uncollected: 60 })]);
+  harness.prepareCardCollection({ collectionKey: "usage_collection_processing", requestedCredits: 50 });
+  const processing = harness.markCardCollectionProcessing("usage_collection_processing");
+  assert.equal(processing.status, "processing");
+  const collection = harness.completeCardCollection({
+    collectionKey: "usage_collection_processing",
+    status: "succeeded",
+  });
+  assert.equal(collection.status, "succeeded");
+  assert.equal(harness.canonicalBalance()!.uncollectedCreditsBalance, 10);
+  assert.equal(harness.canonicalBalance()!.pendingCardCollectionCreditsBalance, 0);
 }
 
 function testExpiredReservationRefundsHeldCredits() {
@@ -445,6 +754,34 @@ function testBlaxelRuntimeReservationAndSettlementAreWired() {
     "utf8",
   );
   assert.match(blaxelWakeSource, /reserveCreditsInternal/);
+  assert.match(blaxelWakeSource, /billing_mode: workspaceBillingMode/);
+  assert.match(blaxelWakeSource, /allowUncollectedReservation: hasCardOnFile/);
+  assert.match(blaxelWakeSource, /uncollectedReservationLimitCredits: hasCardOnFile[\s\S]*WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS/);
+  const workspaceCreditsSource = readFileSync(
+    join(process.cwd(), "convex/workspaceCredits.ts"),
+    "utf8",
+  );
+  const cronsSource = readFileSync(join(process.cwd(), "convex/crons.ts"), "utf8");
+  assert.equal(WORKSPACE_CARD_COLLECTION_MIN_CREDITS, 50);
+  assert.match(workspaceCreditsSource, /readPendingCardBackedReservationExposureCredits/);
+  assert.match(workspaceCreditsSource, /by_status_expiresAt/);
+  assert.match(workspaceCreditsSource, /currentOutstandingUsageCredits[\s\S]*pendingUncollectedReservationCredits[\s\S]*uncollectedExposureCredits[\s\S]*uncollectedReservationLimitCredits/);
+  assert.match(workspaceCreditsSource, /prepareWorkspaceUsageCardCollectionInternal/);
+  assert.match(workspaceCreditsSource, /markWorkspaceUsageCardCollectionProcessingInternal/);
+  assert.match(workspaceCreditsSource, /pendingCardCollectionCreditsBalance[\s\S]*uncollectedCreditsBalance/);
+  assert.match(workspaceCreditsSource, /completeWorkspaceUsageCardCollectionInternal/);
+  assert.match(workspaceCreditsSource, /collectWorkspaceUsageByCardInternal/);
+  assert.match(workspaceCreditsSource, /readStripeForCollection[\s\S]*const collectionKey = buildWorkspaceUsageCollectionKey\(candidate\)[\s\S]*const stripeClient = readStripeForCollection\(collectionKey\)[\s\S]*prepareWorkspaceUsageCardCollectionInternal/);
+  assert.match(workspaceCreditsSource, /paymentIntents\.create/);
+  assert.match(workspaceCreditsSource, /confirm: true/);
+  assert.match(workspaceCreditsSource, /off_session: true/);
+  assert.match(workspaceCreditsSource, /idempotencyKey: `polynet-workspace-usage:\${collectionKey}`/);
+  assert.match(workspaceCreditsSource, /workspace_usage_collection_pending_balance_mismatch/);
+  assert.match(cronsSource, /collect workspace usage by card[\s\S]*minutes: 15[\s\S]*collectWorkspaceUsageByCardInternal/);
+  const schemaSource = readFileSync(join(process.cwd(), "convex/schema.ts"), "utf8");
+  assert.match(schemaSource, /workspaceUsageCollections: defineTable/);
+  assert.match(schemaSource, /v\.literal\("processing"\)/);
+  assert.match(schemaSource, /pendingCardCollectionCreditsBalance: v\.optional\(v\.number\(\)\)/);
   assert.match(blaxelWakeSource, /settleReservedCreditsBestEffort/);
   assert.match(runtimeSessionSource, /ensureBillableBlaxelWorkspaceComputer/);
   assert.doesNotMatch(runtimeSessionSource, /reuseExistingLease: true/);
@@ -547,6 +884,16 @@ function main() {
   testProviderFailureRefundsReservation();
   testPartialSettlementRefundsUnusedReservation();
   testOverageCreatesDebtAndTopupClearsItFirst();
+  testCardBackedReservationCreatesUncollectedUsageWithoutPrepaid();
+  testCardBackedReservationSpendsPrepaidBeforeUncollectedUsage();
+  testCardBackedProviderFailureDoesNotCreateUncollectedUsage();
+  testCardBackedReservationFailsClosedAtUncollectedLimit();
+  testCardBackedReservationLimitIncludesPendingExposure();
+  testCardBackedReservationLimitIncludesPendingCardCollection();
+  testCardCollectionPrepareLocksDebtAwayFromManualTopup();
+  testCardCollectionSuccessClearsPendingOnly();
+  testCardCollectionFailureRestoresUncollectedDebt();
+  testProcessingCardCollectionCanFinalize();
   testExpiredReservationRefundsHeldCredits();
   testIncludedCreditsAreLegacyAndNotSpendable();
   testLegacyIncludedRefundDoesNotCreateSpendableBalance();

@@ -576,6 +576,14 @@ async function readWorkspaceComputeChargesByUser(ctx: any, userId: any, limit: n
     .take(limit);
 }
 
+async function readWorkspaceUsageCollectionsByUser(ctx: any, userId: any, limit: number) {
+  return await ctx.db
+    .query("workspaceUsageCollections")
+    .withIndex("by_user_createdAt", (q: any) => q.eq("userId", userId))
+    .order("desc")
+    .take(limit);
+}
+
 function readPayloadRecord(row: any): Record<string, unknown> {
   const payload = row?.payload;
   return payload && typeof payload === "object" && !Array.isArray(payload)
@@ -772,9 +780,11 @@ function buildSampledBalanceReconciliation(args: {
   topups: any[];
   ledgerRows: any[];
   computeRows: any[];
+  collectionRows: any[];
   userLedgerLimit: number;
   userTopupLimit: number;
   userComputeLimit: number;
+  userCollectionLimit: number;
 }) {
   const completedTopups = args.topups.filter((row) => row.mode === "workspace_credit_topup");
   const legacyTopupCoverageGaps = completedTopups.filter((row) =>
@@ -788,7 +798,8 @@ function buildSampledBalanceReconciliation(args: {
   const scanTruncated =
     args.ledgerRows.length >= args.userLedgerLimit ||
     args.topups.length >= args.userTopupLimit ||
-    args.computeRows.length >= args.userComputeLimit;
+    args.computeRows.length >= args.userComputeLimit ||
+    args.collectionRows.length >= args.userCollectionLimit;
   const coverageGap =
     legacyTopupCoverageGaps > 0 ||
     unbilledComputeRows.length > 0 ||
@@ -813,26 +824,53 @@ function buildSampledBalanceReconciliation(args: {
   const uncollectedCreatedCredits = readLedgerCredits(
     userPaidToolLedgerRows.reduce((sum, row) => sum + readLedgerMetadataNumber(row, "uncollected_credits"), 0),
   );
+  const preparedCollectionCredits = readLedgerCredits(
+    args.collectionRows.reduce(
+      (sum, row) => sum + (row.status === "prepared" ? readLedgerCredits(row.creditsAmount) : 0),
+      0,
+    ),
+  );
+  const succeededCollectionCredits = readLedgerCredits(
+    args.collectionRows.reduce(
+      (sum, row) => sum + (row.status === "succeeded" ? readLedgerCredits(row.creditsAmount) : 0),
+      0,
+    ),
+  );
 
   const expectedPurchasedCredits = readSignedLedgerUsd(
     topupPurchasedCredits - purchasedLedgerDebits + purchasedLedgerRefunds,
   );
   const expectedUncollectedCredits = readSignedLedgerUsd(
-    uncollectedCreatedCredits - topupUncollectedPaidCredits,
+    uncollectedCreatedCredits -
+      topupUncollectedPaidCredits -
+      preparedCollectionCredits -
+      succeededCollectionCredits,
   );
+  const expectedPendingCollectionCredits = readSignedLedgerUsd(preparedCollectionCredits);
   const actualPurchasedCredits = readLedgerCredits(args.balance?.purchasedCreditsBalance);
   const actualUncollectedCredits = readLedgerCredits(args.balance?.uncollectedCreditsBalance);
+  const actualPendingCollectionCredits = readLedgerCredits(
+    args.balance?.pendingCardCollectionCreditsBalance,
+  );
   const purchasedDelta = readSignedLedgerUsd(actualPurchasedCredits - expectedPurchasedCredits);
   const uncollectedDelta = readSignedLedgerUsd(actualUncollectedCredits - expectedUncollectedCredits);
+  const pendingCollectionDelta = readSignedLedgerUsd(
+    actualPendingCollectionCredits - expectedPendingCollectionCredits,
+  );
   const mismatch =
     !coverageGap &&
-    (Math.abs(purchasedDelta) > 0.01 || Math.abs(uncollectedDelta) > 0.01);
+    (
+      Math.abs(purchasedDelta) > 0.01 ||
+      Math.abs(uncollectedDelta) > 0.01 ||
+      Math.abs(pendingCollectionDelta) > 0.01
+    );
 
   return {
     coverageGap,
     mismatch,
     purchasedDelta,
     uncollectedDelta,
+    pendingCollectionDelta,
     legacyTopupCoverageGaps,
     unbilledComputeRows: unbilledComputeRows.length,
     scanTruncated,
@@ -945,6 +983,7 @@ async function buildToolBalanceAccountingIntegrity(params: {
   userLedgerLimit: number;
   userTopupLimit: number;
   userComputeLimit: number;
+  userCollectionLimit: number;
 }) {
   const issues: ReturnType<typeof buildToolBalanceIssue>[] = [];
   const duplicateUsers = new Set<string>();
@@ -970,7 +1009,8 @@ async function buildToolBalanceAccountingIntegrity(params: {
   const negativeBalanceRows = params.balanceRows.filter((row) =>
     Number(row.includedCreditsBalance ?? 0) < 0 ||
     Number(row.purchasedCreditsBalance ?? 0) < 0 ||
-    Number(row.uncollectedCreditsBalance ?? 0) < 0
+    Number(row.uncollectedCreditsBalance ?? 0) < 0 ||
+    Number(row.pendingCardCollectionCreditsBalance ?? 0) < 0
   );
   for (const row of negativeBalanceRows.slice(0, Math.max(0, 10 - issues.length))) {
     issues.push(buildToolBalanceIssue({
@@ -983,13 +1023,15 @@ async function buildToolBalanceAccountingIntegrity(params: {
           Number(row.includedCreditsBalance ?? 0),
           Number(row.purchasedCreditsBalance ?? 0),
           Number(row.uncollectedCreditsBalance ?? 0),
+          Number(row.pendingCardCollectionCreditsBalance ?? 0),
         ),
       latestAt: row.updatedAt,
     }));
   }
 
   const uncollectedBalanceRows = params.balanceRows.filter((row) =>
-    readLedgerCredits(row.uncollectedCreditsBalance) > 0
+    readLedgerCredits(row.uncollectedCreditsBalance) > 0 ||
+    readLedgerCredits(row.pendingCardCollectionCreditsBalance) > 0
   );
 
   const staleReservedRows = params.staleReservedRows.filter((row) =>
@@ -1067,19 +1109,22 @@ async function buildToolBalanceAccountingIntegrity(params: {
   let reconciliationCoverageGaps = 0;
   const reconciliationRows = params.balanceRows.slice(0, params.balanceSampleLimit);
   for (const balance of reconciliationRows) {
-    const [topups, ledgerRows, computeRows] = await Promise.all([
+    const [topups, ledgerRows, computeRows, collectionRows] = await Promise.all([
       readCompletedWorkspaceCreditTopupsByUser(params.ctx, balance.userId, params.userTopupLimit),
       readCreditLedgerEntriesByUser(params.ctx, balance.userId, params.userLedgerLimit),
       readWorkspaceComputeChargesByUser(params.ctx, balance.userId, params.userComputeLimit),
+      readWorkspaceUsageCollectionsByUser(params.ctx, balance.userId, params.userCollectionLimit),
     ]);
     const reconciliation = buildSampledBalanceReconciliation({
       balance,
       topups,
       ledgerRows,
       computeRows,
+      collectionRows,
       userLedgerLimit: params.userLedgerLimit,
       userTopupLimit: params.userTopupLimit,
       userComputeLimit: params.userComputeLimit,
+      userCollectionLimit: params.userCollectionLimit,
     });
     if (reconciliation.coverageGap) {
       reconciliationCoverageGaps += 1;
@@ -1106,7 +1151,10 @@ async function buildToolBalanceAccountingIntegrity(params: {
           severity: "error",
           label: "Materialized balance differs from replayed paid-tool ledger evidence",
           userId: balance.userId,
-          amountCredits: Math.abs(reconciliation.purchasedDelta) + Math.abs(reconciliation.uncollectedDelta),
+          amountCredits:
+            Math.abs(reconciliation.purchasedDelta) +
+            Math.abs(reconciliation.uncollectedDelta) +
+            Math.abs(reconciliation.pendingCollectionDelta),
           latestAt: balance.updatedAt,
         }));
       }
@@ -1244,6 +1292,7 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
   const userLedgerLimit = 500;
   const userTopupLimit = 250;
   const userComputeLimit = 250;
+  const userCollectionLimit = 250;
   const [
     paidToolCreditGroups,
     unbilledComputeCharges,
@@ -1303,6 +1352,7 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
     userLedgerLimit,
     userTopupLimit,
     userComputeLimit,
+    userCollectionLimit,
   });
 
   return {
@@ -1328,6 +1378,7 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
         "creditLedgerEntries",
         "workspaceComputeCharges",
         "workspaceCreditBalances",
+        "workspaceUsageCollections",
         "checkoutSessions",
       ],
       scannedCreditLimit,

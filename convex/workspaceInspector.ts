@@ -531,12 +531,14 @@ function mapFailure(result: {
   status?: number;
   code?: string;
   message?: string;
+  details?: Record<string, unknown>;
 }): WorkspaceInspectorFailure {
   return {
     ok: false,
     status: Number.isFinite(Number(result.status)) ? Number(result.status) : 503,
     code: String(result.code ?? "workspace_inspector_unavailable"),
     message: String(result.message ?? "Workspace inspector unavailable."),
+    details: result.details,
   };
 }
 

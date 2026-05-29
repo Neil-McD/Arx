@@ -840,6 +840,8 @@ function buildEmptyWorkspaceCreditBalance(session: AuthSession): WorkspaceCredit
     includedCreditsBalance: 0,
     purchasedCreditsBalance: 0,
     uncollectedCreditsBalance: 0,
+    pendingCardCollectionCreditsBalance: 0,
+    outstandingUsageCreditsBalance: 0,
     includedCycleCredits: 0,
     includedCycleStartedAt: nowMs,
     includedCycleEndsAt: nowMs,
@@ -7530,6 +7532,7 @@ export default function App() {
         code: "auth_required",
         message: "Sign in to turn on computer.",
         required_credits: null,
+        paidUsageBillingMode: null,
       };
     }
 
@@ -7541,6 +7544,7 @@ export default function App() {
         code: "project_not_found",
         message: "Select a computer first.",
         required_credits: null,
+        paidUsageBillingMode: null,
       };
     }
 
@@ -7562,6 +7566,7 @@ export default function App() {
             toolKind: "workspace_tools",
             message: result.message,
             requiredCredits: result.required_credits,
+            paidUsageBillingMode: result.paidUsageBillingMode,
           });
         } else if (result.code === "workspace_volume_funding_required") {
           openWorkspaceStorageBillingModal({
@@ -7596,6 +7601,7 @@ export default function App() {
         code: "workspace_computer_start_failed",
         message,
         required_credits: null,
+        paidUsageBillingMode: null,
       };
     } finally {
       setIsStartingWorkspaceComputer(false);

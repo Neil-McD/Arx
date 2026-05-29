@@ -1,5 +1,9 @@
 import type { AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
+import {
+  normalizePaidUsageBillingMode,
+  type PaidUsageBillingMode,
+} from "./paidUsageBilling";
 
 export type WorkspaceInspectorEntryType = "directory" | "file";
 
@@ -68,6 +72,7 @@ export type WorkspaceInspectorFailure = {
   status: number;
   code: string;
   message: string;
+  paidUsageBillingMode: PaidUsageBillingMode | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -76,11 +81,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeFailure(value: unknown, fallback = "Workspace inspector unavailable."): WorkspaceInspectorFailure {
   const row = isRecord(value) ? value : {};
+  const details = isRecord(row.details) ? row.details : {};
   return {
     ok: false,
     status: Number.isFinite(Number(row.status)) ? Number(row.status) : 503,
     code: String(row.code ?? "workspace_inspector_unavailable"),
     message: String(row.message ?? fallback),
+    paidUsageBillingMode: normalizePaidUsageBillingMode(
+      details.paid_usage_billing_mode ?? details.paidUsageBillingMode ?? row.paid_usage_billing_mode,
+    ),
   };
 }
 

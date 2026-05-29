@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
+  getOutstandingWorkspaceToolUsageCredits,
   getSpendableWorkspaceToolBalanceCredits,
-  getUncollectedWorkspaceToolBalanceCredits,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
   type WorkspaceCreditTopupSurface,
@@ -59,8 +59,8 @@ export function WebBillingSettingsSection({
   const [showManualWorkspaceBalance, setShowManualWorkspaceBalance] = useState(false);
   const totalCredits = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
   const purchasedCredits = workspaceCreditBalance?.purchasedCreditsBalance ?? 0;
-  const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(workspaceCreditBalance);
-  const hasUncollectedCredits = uncollectedCredits > 0;
+  const outstandingUsageCredits = getOutstandingWorkspaceToolUsageCredits(workspaceCreditBalance);
+  const hasOutstandingUsageCredits = outstandingUsageCredits > 0;
   const hasCardOnFile = workspaceCardOnFileStatus?.has_card_on_file === true;
   const cardBrand =
     typeof workspaceCardOnFileStatus?.card_brand === "string"
@@ -97,11 +97,15 @@ export function WebBillingSettingsSection({
             <div className="model-note">Checking workspace billing...</div>
           ) : (
             <>
-              {hasUncollectedCredits ? (
+              {hasOutstandingUsageCredits && !hasCardOnFile ? (
                 <div className="auth-error" style={{ marginBottom: 12 }}>
-                  {formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior tool usage must be cleared before premium tools can run.
+                  {formatWorkspaceToolBalanceUsdFromCredits(outstandingUsageCredits)} of prior tool usage must be cleared before premium tools can run.
                 </div>
-              ) : totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
+              ) : hasOutstandingUsageCredits ? (
+                <div className="model-note" style={{ marginBottom: 12 }}>
+                  Pending workspace usage: {formatWorkspaceToolBalanceUsdFromCredits(outstandingUsageCredits)}.
+                </div>
+              ) : !hasCardOnFile && totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
                 <div className="auth-error" style={{ marginBottom: 12 }}>
                   You&apos;re running low on prepaid balance. Add a card or manual balance to keep workspace tools available.
                 </div>
@@ -137,8 +141,8 @@ export function WebBillingSettingsSection({
                 {purchasedCredits > 0
                   ? `${formatWorkspaceToolBalanceUsdFromCredits(purchasedCredits)} prepaid balance is available. `
                   : ""}
-                {hasUncollectedCredits
-                  ? `Your next top-up clears ${formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior usage first. `
+                {hasOutstandingUsageCredits && !hasCardOnFile
+                  ? `Your next top-up clears ${formatWorkspaceToolBalanceUsdFromCredits(outstandingUsageCredits)} of prior usage first. `
                   : ""}
                 A card is the default way to keep workspace tools available. Manual prepaid balance is non-refundable and only works inside Polynet.
               </div>

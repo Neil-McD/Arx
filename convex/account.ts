@@ -397,6 +397,7 @@ export const deleteOwnAccount = mutation({
     await record("userStripeConnectAccounts", await deleteRowsByIndex(ctx, "userStripeConnectAccounts", "by_user", "userId", userId));
     await record("workspaceCreditBalances", await deleteRowsByIndex(ctx, "workspaceCreditBalances", "by_user", "userId", userId));
     await record("workspaceComputeCharges", await deleteRowsByIndex(ctx, "workspaceComputeCharges", "by_user", "userId", userId));
+    await record("workspaceUsageCollections", await deleteRowsByIndex(ctx, "workspaceUsageCollections", "by_user_createdAt", "userId", userId));
     const creditLedgerEntries = await ctx.db
       .query("creditLedgerEntries")
       .withIndex("by_user_createdAt", (q) => q.eq("userId", userId))

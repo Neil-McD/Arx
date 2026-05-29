@@ -21,6 +21,9 @@ import {
   WORKSPACE_FREE_PROJECT_VOLUME_LIMIT,
   WORKSPACE_PAID_PROJECT_VOLUME_LIMIT,
 } from "../shared/workspaceResourceAdmission.ts";
+import {
+  WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+} from "../shared/workspaceCredits.ts";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -28,6 +31,7 @@ function read(relativePath: string): string {
 
 assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 1);
 assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 5);
+assert.equal(WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS, 500);
 assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 1);
 assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 5);
 assert.equal(
@@ -311,6 +315,7 @@ assert.equal(
 assert.equal(
   evaluateWorkspaceSandboxStartAdmission({
     accountTier: "paid",
+    hasCardOnFile: false,
     workspaceCreditBalance: {
       includedCreditsBalance: 0,
       purchasedCreditsBalance: 0,
@@ -323,6 +328,7 @@ assert.equal(
 assert.equal(
   evaluateWorkspaceSandboxStartAdmission({
     accountTier: "free",
+    hasCardOnFile: false,
     workspaceCreditBalance: null,
     requiredCredits: 1,
   }).code,
@@ -331,6 +337,7 @@ assert.equal(
 assert.equal(
   evaluateWorkspaceSandboxStartAdmission({
     accountTier: "paid",
+    hasCardOnFile: false,
     workspaceCreditBalance: {
       includedCreditsBalance: 100,
       purchasedCreditsBalance: 0,
@@ -342,6 +349,55 @@ assert.equal(
 assert.equal(
   evaluateWorkspaceSandboxStartAdmission({
     accountTier: "paid",
+    hasCardOnFile: true,
+    workspaceCreditBalance: null,
+    requiredCredits: 1,
+  }).ok,
+  true,
+);
+assert.equal(
+  evaluateWorkspaceSandboxStartAdmission({
+    accountTier: "paid",
+    hasCardOnFile: true,
+    workspaceCreditBalance: {
+      includedCreditsBalance: 0,
+      purchasedCreditsBalance: 0,
+      uncollectedCreditsBalance: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS - 1,
+    },
+    requiredCredits: 1,
+  }).ok,
+  true,
+);
+assert.equal(
+  evaluateWorkspaceSandboxStartAdmission({
+    accountTier: "paid",
+    hasCardOnFile: true,
+    workspaceCreditBalance: {
+      includedCreditsBalance: 0,
+      purchasedCreditsBalance: 0,
+      uncollectedCreditsBalance: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    },
+    requiredCredits: 1,
+  }).code,
+  "workspace_uncollected_usage_blocked",
+);
+assert.equal(
+  evaluateWorkspaceSandboxStartAdmission({
+    accountTier: "paid",
+    hasCardOnFile: true,
+    workspaceCreditBalance: {
+      includedCreditsBalance: 0,
+      purchasedCreditsBalance: 0,
+      pendingCardCollectionCreditsBalance: WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+    },
+    requiredCredits: 1,
+  }).code,
+  "workspace_uncollected_usage_blocked",
+);
+assert.equal(
+  evaluateWorkspaceSandboxStartAdmission({
+    accountTier: "paid",
+    hasCardOnFile: false,
     workspaceCreditBalance: {
       includedCreditsBalance: 0,
       purchasedCreditsBalance: 2,
@@ -488,6 +544,26 @@ assert.match(
   blaxelWorkspaceWake,
   /evaluateWorkspaceSandboxStartAdmission[\s\S]*reserveCreditsInternal/,
   "central Blaxel wake helper must reserve credits only after sandbox admission",
+);
+assert.match(
+  blaxelWorkspaceWake,
+  /hasPersistedWorkspaceCardOnFile[\s\S]*paymentMethodStatus === "active"[\s\S]*providerDefaultPaymentMethodId[\s\S]*pm_/,
+  "central Blaxel wake helper must read persisted card-on-file truth before workspace admission",
+);
+assert.match(
+  blaxelWorkspaceWake,
+  /evaluateWorkspaceSandboxStartAdmission\(\{[\s\S]*hasCardOnFile,[\s\S]*workspaceCreditBalance,[\s\S]*requiredCredits: creditBudgetCredits/,
+  "central Blaxel wake admission must pass card-on-file truth into sandbox start admission",
+);
+assert.match(
+  blaxelWorkspaceWake,
+  /metadata: reservationMetadata,[\s\S]*allowUncollectedReservation: hasCardOnFile,[\s\S]*uncollectedReservationLimitCredits: hasCardOnFile[\s\S]*WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS/,
+  "central Blaxel wake reservations must allow card-backed settlement only when a card is on file",
+);
+assert.match(
+  blaxelWorkspaceWake,
+  /billing_mode: workspaceBillingMode[\s\S]*funding_source: hasCardOnFile \? "card_on_file" : "prepaid_balance"/,
+  "central Blaxel wake reservation metadata must distinguish card-backed and prepaid funding",
 );
 assert.match(
   blaxelWorkspaceWake,
@@ -745,6 +821,26 @@ assert.match(
   "web gateway must expose card-on-file refresh",
 );
 
+const workspaceTerminalsGateway = read("shared/workspaceTerminalsGateway.ts");
+assert.match(
+  workspaceTerminalsGateway,
+  /normalizePaidUsageBillingMode[\s\S]*details\.paid_usage_billing_mode[\s\S]*details\.paidUsageBillingMode/,
+  "workspace computer start gateway must preserve backend-paid usage billing mode",
+);
+
+const workspaceInspectorGateway = read("shared/workspaceInspectorGateway.ts");
+assert.match(
+  workspaceInspectorGateway,
+  /normalizeFailure[\s\S]*details\.paid_usage_billing_mode[\s\S]*details\.paidUsageBillingMode/,
+  "workspace inspector gateway must preserve backend-paid usage billing mode",
+);
+
+assert.match(
+  workspaceInspector,
+  /function mapFailure\([\s\S]*details\?: Record<string, unknown>[\s\S]*details: result\.details/,
+  "workspace inspector action must not drop Blaxel wake failure details before the gateway sees them",
+);
+
 const app = read("apps/web/src/App.tsx");
 assert.match(
   app,
@@ -755,6 +851,11 @@ assert.match(
   app,
   /workspace_card_required_for_additional_volume[\s\S]*openWorkspaceStorageBillingModal[\s\S]*card_required/,
   "second-volume card-required failures must open the card setup modal path",
+);
+assert.match(
+  app,
+  /workspace_credits_exhausted[\s\S]*openWorkspaceCreditTopupModal\(\{[\s\S]*paidUsageBillingMode: result\.paidUsageBillingMode/,
+  "workspace computer credit failures must pass backend-selected billing mode into the modal",
 );
 assert.match(
   app,

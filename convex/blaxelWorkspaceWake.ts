@@ -26,6 +26,7 @@ import {
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceWorkspaceUsageCredits,
+  WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
   WORKSPACE_FILE_INSPECTION_HOLD_SECONDS,
   WORKSPACE_FILE_INSPECTION_MAX_SECONDS,
   WORKSPACE_FILE_INSPECTION_RESERVATION_EXPIRY_MS,
@@ -85,6 +86,14 @@ type BillableBlaxelWorkspaceWakeParams = {
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
+}
+
+function hasPersistedWorkspaceCardOnFile(stripeCustomer: any): boolean {
+  return Boolean(
+    stripeCustomer?.paymentMethodStatus === "active" &&
+      String(stripeCustomer.providerDefaultPaymentMethodId ?? "").trim().startsWith("pm_") &&
+      !(Number(stripeCustomer.cardRemovedAt ?? 0) > 0),
+  );
 }
 
 function newCreditKey(prefix: string): string {
@@ -248,6 +257,7 @@ function workspaceCreditFailure(params: {
   code: string;
   message: string;
   requiredCredits: number;
+  paidUsageBillingMode?: "card_required" | "card_preferred" | "prepaid_required";
   details?: Record<string, unknown>;
 }): BlaxelWorkspaceWakeFailure {
   return {
@@ -259,7 +269,7 @@ function workspaceCreditFailure(params: {
       ...(params.details ?? {}),
       tool_kind: "workspace_tools",
       required_credits: params.requiredCredits,
-      paid_usage_billing_mode: "prepaid_required",
+      paid_usage_billing_mode: params.paidUsageBillingMode ?? "prepaid_required",
     },
   };
 }
@@ -297,20 +307,6 @@ async function reserveWorkspaceWakeCredits(params: {
   });
   const reservedAt = Date.now();
   const creditBudgetExpiresAt = reservedAt + billingTiming.reservationExpiryMs;
-  const reservationMetadata = {
-    pricing_version: PAID_TOOL_PRICING_VERSION,
-    target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-    provider: "blaxel",
-    pricing_model: "blaxel_memory_gib_seconds_estimate",
-    provider_billing_reconciliation: "pending",
-    provider_billing_evidence: "delayed_billing_api",
-    sandbox_cpu: params.sandboxCpu,
-    sandbox_memory_gib: params.sandboxMemoryGiB,
-    sandbox_disk_gib: params.sandboxDiskGiB,
-    hold_seconds: billingTiming.holdSeconds,
-    max_seconds: billingTiming.maxSeconds,
-  };
-
   let workspaceCreditBalance: any = null;
   try {
     workspaceCreditBalance = await params.ctx.runQuery(
@@ -326,11 +322,45 @@ async function reserveWorkspaceWakeCredits(params: {
       requiredCredits: creditBudgetCredits,
     });
   }
+  let stripeCustomer: any = null;
+  try {
+    stripeCustomer = await params.ctx.runQuery(
+      internal.stripeCustomers.getUserStripeCustomerInternal as any,
+      {
+        userId: params.ownerId,
+      },
+    );
+  } catch {
+    stripeCustomer = null;
+  }
+  const hasCardOnFile = hasPersistedWorkspaceCardOnFile(stripeCustomer);
+  const workspaceBillingMode = hasCardOnFile ? "card_backed" : "prepaid_balance";
+  const paidUsageBillingMode = hasCardOnFile ? "prepaid_required" : "card_preferred";
+  const reservationMetadata = {
+    pricing_version: PAID_TOOL_PRICING_VERSION,
+    target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+    provider: "blaxel",
+    pricing_model: "blaxel_memory_gib_seconds_estimate",
+    provider_billing_reconciliation: "pending",
+    provider_billing_evidence: "delayed_billing_api",
+    billing_mode: workspaceBillingMode,
+    funding_source: hasCardOnFile ? "card_on_file" : "prepaid_balance",
+    card_backed_uncollected_limit_credits: hasCardOnFile
+      ? WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS
+      : null,
+    sandbox_cpu: params.sandboxCpu,
+    sandbox_memory_gib: params.sandboxMemoryGiB,
+    sandbox_disk_gib: params.sandboxDiskGiB,
+    hold_seconds: billingTiming.holdSeconds,
+    max_seconds: billingTiming.maxSeconds,
+  };
 
   const sandboxAdmission = evaluateWorkspaceSandboxStartAdmission({
     accountTier: resolveWorkspaceResourceAccountTier({
+      hasCardOnFile,
       workspaceCreditBalance,
     }),
+    hasCardOnFile,
     workspaceCreditBalance,
     requiredCredits: creditBudgetCredits,
   });
@@ -339,6 +369,7 @@ async function reserveWorkspaceWakeCredits(params: {
       code: sandboxAdmission.code,
       message: sandboxAdmission.message,
       requiredCredits: creditBudgetCredits,
+      paidUsageBillingMode,
       details: {
         account_tier: sandboxAdmission.accountTier,
         current_count: sandboxAdmission.currentCount,
@@ -361,6 +392,10 @@ async function reserveWorkspaceWakeCredits(params: {
       rawVendorCostUsd: creditBudgetVendorCostUsd,
       polynetPriceUsd: creditsToUsd(creditBudgetCredits),
       metadata: reservationMetadata,
+      allowUncollectedReservation: hasCardOnFile,
+      uncollectedReservationLimitCredits: hasCardOnFile
+        ? WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS
+        : undefined,
       expiresAt: creditBudgetExpiresAt,
       nowMs: reservedAt,
     });
@@ -373,6 +408,7 @@ async function reserveWorkspaceWakeCredits(params: {
         ? "Workspace tools use paid computer time, so they need tool balance before they run."
         : "Tool balance is unavailable for workspace tools.",
       requiredCredits: creditBudgetCredits,
+      paidUsageBillingMode: exhausted ? paidUsageBillingMode : undefined,
     });
   }
 

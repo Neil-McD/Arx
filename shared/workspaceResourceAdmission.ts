@@ -1,6 +1,7 @@
 import {
   getSpendableWorkspaceToolBalanceCredits,
-  getUncollectedWorkspaceToolBalanceCredits,
+  getOutstandingWorkspaceToolUsageCredits,
+  WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
   type WorkspaceCreditBalanceLike,
 } from "./workspaceCredits.ts";
 import {
@@ -266,27 +267,54 @@ export function evaluateWorkspaceVolumeMaterializationAdmission(params: {
 
 export function evaluateWorkspaceSandboxStartAdmission(params: {
   accountTier: WorkspaceResourceAccountTier;
+  hasCardOnFile?: boolean | null;
   workspaceCreditBalance?: WorkspaceCreditBalanceLike | null;
   requiredCredits: number;
+  cardBackedUncollectedLimitCredits?: number | null;
 }): WorkspaceResourceAdmissionDecision {
   const requiredCredits = normalizeFiniteAmount(params.requiredCredits);
-  const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(
+  const hasCardOnFile = params.hasCardOnFile === true;
+  const cardBackedUncollectedLimit = normalizeFiniteAmount(
+    params.cardBackedUncollectedLimitCredits ??
+      WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
+  );
+  const outstandingUsageCredits = getOutstandingWorkspaceToolUsageCredits(
     params.workspaceCreditBalance,
   );
-  if (uncollectedCredits > 0) {
+  if (
+    outstandingUsageCredits > 0 &&
+    (
+      !hasCardOnFile ||
+      outstandingUsageCredits + requiredCredits > cardBackedUncollectedLimit
+    )
+  ) {
     return admissionBlocked({
       code: "workspace_uncollected_usage_blocked",
       accountTier: params.accountTier,
-      limit: null,
-      currentCount: uncollectedCredits,
+      limit: hasCardOnFile ? cardBackedUncollectedLimit : null,
+      currentCount: outstandingUsageCredits,
       requestedCount: requiredCredits,
-      message: "Prior workspace usage must be cleared before workspace tools can run.",
+      message: hasCardOnFile
+        ? "Workspace card-backed usage limit reached; settle prior usage before workspace tools can run."
+        : "Prior workspace usage must be cleared before workspace tools can run.",
     });
   }
   const spendableCredits = getSpendableWorkspaceToolBalanceCredits(
     params.workspaceCreditBalance,
   );
   if (requiredCredits > 0 && spendableCredits < requiredCredits) {
+    if (
+      hasCardOnFile &&
+      outstandingUsageCredits + requiredCredits <= cardBackedUncollectedLimit
+    ) {
+      return admissionOk({
+        accountTier: params.accountTier,
+        limit: cardBackedUncollectedLimit,
+        currentCount: outstandingUsageCredits,
+        requestedCount: requiredCredits,
+        message: "Workspace tools can run with card-backed billing.",
+      });
+    }
     return admissionBlocked({
       code: "workspace_credits_exhausted",
       accountTier: params.accountTier,

@@ -1,5 +1,9 @@
 import { type AuthSessionLike } from "./authSession";
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
+import {
+  normalizePaidUsageBillingMode,
+  type PaidUsageBillingMode,
+} from "./paidUsageBilling";
 
 export type WorkspaceTerminalRecord = {
   id: string;
@@ -95,6 +99,7 @@ export type WorkspaceComputerStartResult =
       code: string;
       message: string;
       required_credits: number | null;
+      paidUsageBillingMode: PaidUsageBillingMode | null;
     };
 
 export type WorkspaceComputerStopResult = {
@@ -213,6 +218,9 @@ function normalizeComputerStartResult(value: unknown): WorkspaceComputerStartRes
     required_credits: Number.isFinite(Number(details.required_credits))
       ? Number(details.required_credits)
       : null,
+    paidUsageBillingMode: normalizePaidUsageBillingMode(
+      details.paid_usage_billing_mode ?? details.paidUsageBillingMode ?? row.paid_usage_billing_mode,
+    ),
   };
 }
 

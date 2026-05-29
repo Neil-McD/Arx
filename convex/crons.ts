@@ -73,6 +73,15 @@ crons.interval(
 );
 
 crons.interval(
+  "collect workspace usage by card",
+  { minutes: 15 },
+  (internal as any).workspaceCredits.collectWorkspaceUsageByCardInternal,
+  {
+    limit: 10,
+  },
+);
+
+crons.interval(
   "expire stale tool balance checkouts",
   { minutes: 15 },
   (internal as any).workspaceCredits.expireStaleWorkspaceCreditTopupCheckoutSessionsInternal,

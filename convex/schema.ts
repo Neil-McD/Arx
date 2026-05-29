@@ -338,6 +338,7 @@ export default defineSchema({
     includedCreditsBalance: v.number(),
     purchasedCreditsBalance: v.number(),
     uncollectedCreditsBalance: v.optional(v.number()),
+    pendingCardCollectionCreditsBalance: v.optional(v.number()),
     includedCycleCredits: v.number(),
     includedCycleStartedAt: v.number(),
     includedCycleEndsAt: v.number(),
@@ -375,6 +376,32 @@ export default defineSchema({
     .index("by_run", ["runId"])
     .index("by_providerSandboxId", ["providerSandboxId"])
     .index("by_debitSource_createdAt", ["debitSource", "createdAt"]),
+
+  workspaceUsageCollections: defineTable({
+    collectionKey: v.string(),
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("prepared"),
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("released"),
+    ),
+    creditsAmount: v.number(),
+    provider: v.optional(v.literal("stripe")),
+    providerCustomerId: v.optional(v.string()),
+    providerPaymentIntentId: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_collectionKey", ["collectionKey"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_createdAt", ["userId", "createdAt"])
+    .index("by_status_updatedAt", ["status", "updatedAt"])
+    .index("by_providerPaymentIntent", ["provider", "providerPaymentIntentId"]),
 
   creditLedgerEntries: defineTable({
     creditKey: v.string(),
