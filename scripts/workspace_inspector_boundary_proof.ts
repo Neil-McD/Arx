@@ -34,6 +34,11 @@ assert.match(
   /isBlaxelWorkspaceSandboxTerminalState[\s\S]*inspectBlaxelWorkspaceComputer[\s\S]*isBlaxelWorkspaceSandboxTerminalState\(inspected\.state\)[\s\S]*clearBlaxelInspectorWorkspaceState/,
   "workspace inspector must clear terminal Blaxel sandbox pointers before waking the files computer",
 );
+assert.doesNotMatch(
+  inspector,
+  /const result = await params\.operation\(workspace\);[\s\S]{0,500}clearBlaxelInspectorWorkspaceState/,
+  "workspace inspector must not clear an active billable lease merely because a post-wake file operation is retryable",
+);
 assert.match(
   inspector,
   /listBlaxelWorkspaceDirectory\(\{/,

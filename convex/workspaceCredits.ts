@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
   DEFAULT_INCLUDED_TOOL_CREDITS,
@@ -11,6 +12,7 @@ import {
   getOutstandingWorkspaceToolUsageCredits,
   getPendingCardCollectionWorkspaceToolBalanceCredits,
   getUncollectedWorkspaceToolBalanceCredits,
+  PAID_TOOL_LEDGER_TOOL_NAMES,
   priceWorkspaceUsageCredits,
   resolveWorkspaceToolBalanceTopupPack,
   WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
@@ -33,6 +35,26 @@ import {
 } from "./stripeCustomers";
 import { requireOperatorRole } from "./operatorAccess";
 import { recordPaidToolUsagePartnerCommission } from "./builderPartners";
+import { loadBlaxelWorkspaceConfig } from "./blaxelWorkspaceClient";
+import type {
+  ProviderCostBillingDisposition,
+  ProviderCostCategory,
+  ProviderCostComponent,
+  ProviderCostEvidenceType,
+} from "../shared/providerCostAccounting";
+import {
+  BLAXEL_STANDBY_SNAPSHOT_STORAGE_USD_PER_GB_SECOND,
+  BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND,
+  PROVIDER_COST_COMPONENTS,
+  estimateBlaxelStorageCostUsd,
+  roundProviderCostQuantity,
+  roundProviderCostUsd,
+  resolveProviderCostAccountingHourBucket,
+} from "../shared/providerCostAccounting";
+import {
+  isWorkspaceProjectDisplayable,
+  resolveWorkspaceProjectResourceTruth,
+} from "../shared/workspaceProjectResources";
 
 function roundCurrency(value: number): number {
   return Math.round((Number(value) || 0) * 10000) / 10000;
@@ -50,6 +72,139 @@ function normalizeOptionalString(value: unknown): string | undefined {
 function normalizeOptionalNumber(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function mbToGb(value: unknown): number {
+  const mb = Math.max(0, Number(value) || 0);
+  return mb / 1024;
+}
+
+function normalizeState(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isDeletedProviderState(value: unknown): boolean {
+  const state = normalizeState(value);
+  return state === "deleted" || state === "terminated" || state === "destroyed";
+}
+
+const PROVIDER_COST_STORAGE_ACCOUNTING_DEFAULT_PAGE_SIZE = 100;
+const PROVIDER_COST_STORAGE_ACCOUNTING_MAX_PAGE_SIZE = 500;
+const PROVIDER_COST_STORAGE_ACCOUNTING_MAX_PAGES_PER_RUN = 5;
+const PROVIDER_COST_MARGIN_DIAGNOSTIC_DEFAULT_LIMIT = 1000;
+const PROVIDER_COST_MARGIN_DIAGNOSTIC_MAX_LIMIT = 5000;
+const PROVIDER_COST_MARGIN_DIAGNOSTIC_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const PROVIDER_COST_RECONCILIATION_DEFAULT_LEDGER_LIMIT = 250;
+const PROVIDER_COST_RECONCILIATION_MAX_LEDGER_LIMIT = 1000;
+const PROVIDER_COST_RECONCILIATION_DEFAULT_COMPUTE_LIMIT_PER_DEBIT_SOURCE = 100;
+const PROVIDER_COST_RECONCILIATION_MAX_COMPUTE_LIMIT_PER_DEBIT_SOURCE = 250;
+const PROVIDER_COST_RECONCILIATION_DEFAULT_SAMPLE_LIMIT = 25;
+const PROVIDER_COST_RECONCILIATION_MAX_SAMPLE_LIMIT = 50;
+const WORKSPACE_COMPUTE_DEBIT_SOURCES = [
+  "included",
+  "purchased",
+  "mixed",
+  "unbilled",
+] as const;
+
+function clampProviderCostDiagnosticLimit(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return PROVIDER_COST_MARGIN_DIAGNOSTIC_DEFAULT_LIMIT;
+  return Math.max(
+    1,
+    Math.min(PROVIDER_COST_MARGIN_DIAGNOSTIC_MAX_LIMIT, Math.floor(parsed)),
+  );
+}
+
+function clampProviderCostReconciliationLimit(
+  value: unknown,
+  defaults: { defaultLimit: number; maxLimit: number },
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return defaults.defaultLimit;
+  return Math.max(1, Math.min(defaults.maxLimit, Math.floor(parsed)));
+}
+
+function clampProviderCostReconciliationLedgerLimit(value: unknown): number {
+  return clampProviderCostReconciliationLimit(value, {
+    defaultLimit: PROVIDER_COST_RECONCILIATION_DEFAULT_LEDGER_LIMIT,
+    maxLimit: PROVIDER_COST_RECONCILIATION_MAX_LEDGER_LIMIT,
+  });
+}
+
+function clampProviderCostReconciliationComputeLimitPerDebitSource(
+  value: unknown,
+): number {
+  return clampProviderCostReconciliationLimit(value, {
+    defaultLimit: PROVIDER_COST_RECONCILIATION_DEFAULT_COMPUTE_LIMIT_PER_DEBIT_SOURCE,
+    maxLimit: PROVIDER_COST_RECONCILIATION_MAX_COMPUTE_LIMIT_PER_DEBIT_SOURCE,
+  });
+}
+
+function clampProviderCostReconciliationSampleLimit(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return PROVIDER_COST_RECONCILIATION_DEFAULT_SAMPLE_LIMIT;
+  return Math.max(0, Math.min(PROVIDER_COST_RECONCILIATION_MAX_SAMPLE_LIMIT, Math.floor(parsed)));
+}
+
+function resolveWorkspaceProviderMarginDiagnosticPeriod(args: {
+  periodStart?: number;
+  periodEnd?: number;
+  nowMs?: number;
+}): { periodStart: number; periodEnd: number } {
+  const explicitStart = normalizeOptionalNumber(args.periodStart);
+  const explicitEnd = normalizeOptionalNumber(args.periodEnd);
+  if (explicitStart !== undefined || explicitEnd !== undefined) {
+    const periodStart = Math.max(0, Math.floor(explicitStart ?? 0));
+    const fallbackEnd = periodStart + 31 * 24 * 60 * 60 * 1000;
+    const periodEnd = Math.max(periodStart, Math.floor(explicitEnd ?? fallbackEnd));
+    return { periodStart, periodEnd };
+  }
+
+  const nowMs = normalizeOptionalNumber(args.nowMs) ?? Date.now();
+  const nowDate = new Date(nowMs);
+  const periodStart = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1);
+  const periodEnd = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth() + 1, 1);
+  return { periodStart, periodEnd };
+}
+
+function createDiagnosticMoneyBucket(label: string) {
+  return {
+    label,
+    count: 0,
+    polynetPriceUsd: 0,
+    rawVendorCostUsd: 0,
+  };
+}
+
+function roundDiagnosticUsd(value: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100000000) / 100000000;
+}
+
+function allocateProviderCostToDiagnosticPeriod(args: {
+  row: any;
+  periodStart: number;
+  periodEnd: number;
+}): number {
+  const rawVendorCostUsd = normalizeOptionalNumber(args.row?.rawVendorCostUsd) ?? 0;
+  if (!(rawVendorCostUsd > 0)) return 0;
+  const rowPeriodStart = normalizeOptionalNumber(args.row?.periodStart) ?? args.periodStart;
+  const rowPeriodEnd = Math.max(
+    rowPeriodStart,
+    normalizeOptionalNumber(args.row?.periodEnd) ?? rowPeriodStart,
+  );
+  if (!(rowPeriodEnd > rowPeriodStart)) {
+    return rowPeriodStart >= args.periodStart && rowPeriodStart < args.periodEnd
+      ? rawVendorCostUsd
+      : 0;
+  }
+  const overlapStart = Math.max(rowPeriodStart, args.periodStart);
+  const overlapEnd = Math.min(rowPeriodEnd, args.periodEnd);
+  const overlapMs = Math.max(0, overlapEnd - overlapStart);
+  if (overlapMs <= 0) return 0;
+  return rawVendorCostUsd * (overlapMs / (rowPeriodEnd - rowPeriodStart));
 }
 
 function isBlaxelWorkspaceComputeReservation(entry: any): boolean {
@@ -226,6 +381,1096 @@ function mergeLedgerMetadata(existing: unknown, patch: unknown): unknown {
     ...patchObject,
   };
 }
+
+type ProviderCostEntryInput = {
+  costKey: string;
+  userId?: any;
+  projectId?: any;
+  communityId?: any;
+  runId?: string | null;
+  category: ProviderCostCategory;
+  component: ProviderCostComponent;
+  provider: string;
+  resourceId?: string | null;
+  periodStart: number;
+  periodEnd: number;
+  quantityKind: string;
+  quantity: number;
+  rawVendorCostUsd: number;
+  evidence: ProviderCostEvidenceType;
+  billingDisposition: ProviderCostBillingDisposition;
+  linkedCreditKey?: string | null;
+  metadata?: unknown;
+  nowMs?: number;
+};
+
+const PROVIDER_COST_EVIDENCE_RANK: Record<ProviderCostEvidenceType, number> = {
+  estimated: 1,
+  provider_reported: 2,
+  exact: 3,
+};
+
+function resolveProviderCostEvidenceRank(value: unknown): number {
+  const normalized = normalizeOptionalString(value);
+  if (
+    normalized === "estimated" ||
+    normalized === "provider_reported" ||
+    normalized === "exact"
+  ) {
+    return PROVIDER_COST_EVIDENCE_RANK[normalized];
+  }
+  return 0;
+}
+
+function normalizeProviderCostIdentityValue(value: unknown): string | null {
+  return normalizeOptionalString(value) ?? null;
+}
+
+function createProviderCostEntryRow(
+  args: ProviderCostEntryInput,
+  costKey: string,
+  nowMs: number,
+) {
+  const periodStart = normalizeOptionalNumber(args.periodStart) ?? nowMs;
+  const periodEnd = Math.max(periodStart, normalizeOptionalNumber(args.periodEnd) ?? periodStart);
+  const quantity = roundProviderCostQuantity(Math.max(0, Number(args.quantity) || 0));
+  const rawVendorCostUsd = roundProviderCostUsd(
+    Math.max(0, Number(args.rawVendorCostUsd) || 0),
+  );
+  return {
+    costKey,
+    ...(args.userId ? { userId: args.userId } : {}),
+    ...(args.projectId ? { projectId: args.projectId } : {}),
+    ...(args.communityId ? { communityId: args.communityId } : {}),
+    ...(normalizeOptionalString(args.runId) ? { runId: normalizeOptionalString(args.runId) } : {}),
+    category: args.category,
+    component: args.component,
+    provider: String(args.provider ?? "").trim() || "unknown",
+    ...(normalizeOptionalString(args.resourceId)
+      ? { resourceId: normalizeOptionalString(args.resourceId) }
+      : {}),
+    periodStart,
+    periodEnd,
+    quantityKind: String(args.quantityKind ?? "").trim() || "unit",
+    quantity,
+    rawVendorCostUsd,
+    evidence: args.evidence,
+    billingDisposition: args.billingDisposition,
+    ...(normalizeOptionalString(args.linkedCreditKey)
+      ? { linkedCreditKey: normalizeOptionalString(args.linkedCreditKey) }
+      : {}),
+    ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  };
+}
+
+function resolveProviderCostIdentityMismatch(
+  existing: any,
+  incoming: ReturnType<typeof createProviderCostEntryRow>,
+): { field: string; existing: string | null; incoming: string | null } | null {
+  const identityFields = [
+    "category",
+    "component",
+    "billingDisposition",
+    "userId",
+    "projectId",
+    "communityId",
+    "linkedCreditKey",
+  ] as const;
+  for (const field of identityFields) {
+    const existingValue = normalizeProviderCostIdentityValue(existing?.[field]);
+    const incomingValue = normalizeProviderCostIdentityValue(incoming?.[field]);
+    if (existingValue !== incomingValue) {
+      return { field, existing: existingValue, incoming: incomingValue };
+    }
+  }
+  return null;
+}
+
+function buildProviderCostEvidenceUpgradePatch(
+  existing: any,
+  incoming: ReturnType<typeof createProviderCostEntryRow>,
+  nowMs: number,
+): Record<string, unknown> | null {
+  const existingRank = resolveProviderCostEvidenceRank(existing?.evidence);
+  const incomingRank = resolveProviderCostEvidenceRank(incoming.evidence);
+  if (incomingRank <= existingRank) return null;
+  const previousEvidence = normalizeOptionalString(existing?.evidence);
+  const previousRawVendorCostUsd = normalizeOptionalNumber(existing?.rawVendorCostUsd);
+  return {
+    provider: incoming.provider,
+    ...(normalizeOptionalString(incoming.resourceId)
+      ? { resourceId: normalizeOptionalString(incoming.resourceId) }
+      : {}),
+    periodStart: incoming.periodStart,
+    periodEnd: incoming.periodEnd,
+    quantityKind: incoming.quantityKind,
+    quantity: incoming.quantity,
+    rawVendorCostUsd: incoming.rawVendorCostUsd,
+    evidence: incoming.evidence,
+    metadata: {
+      ...normalizeObjectMetadata(existing?.metadata),
+      ...normalizeObjectMetadata(incoming.metadata),
+      previous_evidence: previousEvidence ?? null,
+      previous_raw_vendor_cost_usd: previousRawVendorCostUsd ?? null,
+      provider_cost_upgraded_at: nowMs,
+    },
+    updatedAt: nowMs,
+  };
+}
+
+async function recordProviderCostEntry(ctx: any, args: ProviderCostEntryInput): Promise<any> {
+  const costKey = normalizeOptionalString(args.costKey);
+  if (!costKey) throw new Error("provider_cost_key_required");
+  const nowMs = args.nowMs ?? Date.now();
+  const row = createProviderCostEntryRow(args, costKey, nowMs);
+  const existing = await ctx.db
+    .query("providerCostEntries")
+    .withIndex("by_costKey", (q: any) => q.eq("costKey", costKey))
+    .first();
+  if (existing) {
+    const mismatch = resolveProviderCostIdentityMismatch(existing, row);
+    if (mismatch) {
+      console.warn("provider_cost_identity_mismatch", {
+        cost_key: costKey,
+        field: mismatch.field,
+        existing: mismatch.existing,
+        incoming: mismatch.incoming,
+      });
+      return existing;
+    }
+    const upgradePatch = buildProviderCostEvidenceUpgradePatch(existing, row, nowMs);
+    if (!upgradePatch) return existing;
+    await ctx.db.patch(existing._id, upgradePatch);
+    return await ctx.db.get(existing._id);
+  }
+
+  const id = await ctx.db.insert("providerCostEntries", row);
+  return await ctx.db.get(id);
+}
+
+async function recordProviderCostEntryBestEffort(
+  ctx: any,
+  args: ProviderCostEntryInput,
+): Promise<any | null> {
+  try {
+    return await recordProviderCostEntry(ctx, args);
+  } catch (error) {
+    console.warn("provider_cost_record_failed", {
+      cost_key: args.costKey,
+      component: args.component,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+    return null;
+  }
+}
+
+async function readProviderCostEntryByCostKey(ctx: any, costKey: string): Promise<any | null> {
+  const normalizedCostKey = normalizeOptionalString(costKey);
+  if (!normalizedCostKey) return null;
+  return await ctx.db
+    .query("providerCostEntries")
+    .withIndex("by_costKey", (q: any) => q.eq("costKey", normalizedCostKey))
+    .first();
+}
+
+function resolveCreditLedgerProviderCostEntry(params: {
+  entry: any;
+  settlementMetadata: unknown;
+  rawVendorCostUsd: number | undefined;
+  nowMs: number;
+}): ProviderCostEntryInput | null {
+  const rawVendorCostUsd =
+    typeof params.rawVendorCostUsd === "number"
+      ? roundProviderCostUsd(params.rawVendorCostUsd)
+      : 0;
+  if (!(rawVendorCostUsd > 0)) return null;
+
+  const toolName = normalizeOptionalString(params.entry?.toolName);
+  const action = normalizeOptionalString(params.entry?.action);
+  const vendor = normalizeOptionalString(params.entry?.vendor);
+  const metadata = normalizeObjectMetadata(params.settlementMetadata);
+  const durationSeconds =
+    normalizeOptionalNumber(metadata.final_duration_seconds) ??
+    normalizeOptionalNumber(metadata.duration_seconds) ??
+    0;
+  const sandboxMemoryGiB =
+    normalizeOptionalNumber(metadata.sandbox_memory_gib) ??
+    normalizeOptionalNumber(metadata.final_sandbox_memory_gib) ??
+    0;
+
+  if (toolName === "workspace_compute" && vendor === "blaxel") {
+    return {
+      costKey: `credit_ledger:${params.entry.creditKey}:provider_cost`,
+      userId: params.entry.userId,
+      projectId: params.entry.projectId,
+      runId: normalizeOptionalString(params.entry.runId),
+      category: "workspace",
+      component: "blaxel_active_runtime",
+      provider: "blaxel",
+      resourceId:
+        normalizeOptionalString(metadata.provider_sandbox_id) ??
+        normalizeOptionalString(metadata.providerSandboxId),
+      periodStart: durationSeconds > 0 ? params.nowMs - durationSeconds * 1000 : params.nowMs,
+      periodEnd: params.nowMs,
+      quantityKind: "memory_gib_seconds",
+      quantity: durationSeconds * sandboxMemoryGiB,
+      rawVendorCostUsd,
+      evidence: "estimated",
+      billingDisposition: "rolled_into_user_usage",
+      linkedCreditKey: params.entry.creditKey,
+      metadata: {
+        ...metadata,
+        provider_cost_source: "credit_ledger_settlement",
+        provider_cost_action: action ?? null,
+      },
+      nowMs: params.nowMs,
+    };
+  }
+
+  if (toolName === "web_research") {
+    return {
+      costKey: `credit_ledger:${params.entry.creditKey}:provider_cost`,
+      userId: params.entry.userId,
+      communityId: params.entry.communityId,
+      projectId: params.entry.projectId,
+      runId: normalizeOptionalString(params.entry.runId),
+      category: "web",
+      component: action === "crawl" ? "web_crawl_provider_call" : "web_research_call",
+      provider: normalizeOptionalString(metadata.final_provider) ?? vendor ?? "web_provider",
+      periodStart: params.nowMs,
+      periodEnd: params.nowMs,
+      quantityKind: "call",
+      quantity: 1,
+      rawVendorCostUsd,
+      evidence:
+        normalizeOptionalString(metadata.final_cost_source) &&
+        normalizeOptionalString(metadata.final_cost_source) !== "estimated"
+          ? "provider_reported"
+          : "estimated",
+      billingDisposition: "rolled_into_user_usage",
+      linkedCreditKey: params.entry.creditKey,
+      metadata: {
+        ...metadata,
+        provider_cost_source: "credit_ledger_settlement",
+        provider_cost_action: action ?? null,
+      },
+      nowMs: params.nowMs,
+    };
+  }
+
+  if (toolName === "voice_transcribe") {
+    return {
+      costKey: `credit_ledger:${params.entry.creditKey}:provider_cost`,
+      userId: params.entry.userId,
+      category: "voice",
+      component: "voice_transcription",
+      provider:
+        normalizeOptionalString(metadata.final_provider) ??
+        normalizeOptionalString(metadata.provider) ??
+        vendor ??
+        "voice_provider",
+      periodStart: params.nowMs,
+      periodEnd: params.nowMs,
+      quantityKind: "audio_seconds",
+      quantity:
+        normalizeOptionalNumber(metadata.duration_seconds) ??
+        normalizeOptionalNumber(metadata.final_duration_seconds) ??
+        0,
+      rawVendorCostUsd,
+      evidence: "estimated",
+      billingDisposition: "rolled_into_user_usage",
+      linkedCreditKey: params.entry.creditKey,
+      metadata: {
+        ...metadata,
+        provider_cost_source: "credit_ledger_settlement",
+      },
+      nowMs: params.nowMs,
+    };
+  }
+
+  return null;
+}
+
+export const recordProviderCostInternal = internalMutation({
+  args: {
+    costKey: v.string(),
+    userId: v.optional(v.union(v.id("users"), v.null())),
+    projectId: v.optional(v.union(v.id("cloudProjects"), v.null())),
+    communityId: v.optional(v.union(v.id("communities"), v.null())),
+    runId: v.optional(v.union(v.string(), v.null())),
+    category: v.union(v.literal("workspace"), v.literal("web"), v.literal("voice")),
+    component: v.union(
+      v.literal("blaxel_active_runtime"),
+      v.literal("blaxel_volume_storage"),
+      v.literal("blaxel_standby_snapshot"),
+      v.literal("web_research_call"),
+      v.literal("web_crawl_provider_call"),
+      v.literal("fly_crawler"),
+      v.literal("voice_transcription"),
+      v.literal("knowledge_model_inference"),
+    ),
+    provider: v.string(),
+    resourceId: v.optional(v.union(v.string(), v.null())),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+    quantityKind: v.string(),
+    quantity: v.number(),
+    rawVendorCostUsd: v.number(),
+    evidence: v.union(
+      v.literal("estimated"),
+      v.literal("provider_reported"),
+      v.literal("exact"),
+    ),
+    billingDisposition: v.union(
+      v.literal("tracked_only"),
+      v.literal("rolled_into_user_usage"),
+    ),
+    linkedCreditKey: v.optional(v.union(v.string(), v.null())),
+    metadata: v.optional(v.any()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await recordProviderCostEntry(ctx, args);
+  },
+});
+
+export const getWorkspaceProviderMarginDiagnosticInternal = internalQuery({
+  args: {
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+    ledgerLimit: v.optional(v.number()),
+    providerCostLimitPerComponent: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const period = resolveWorkspaceProviderMarginDiagnosticPeriod(args);
+    const ledgerLimit = clampProviderCostDiagnosticLimit(args.ledgerLimit);
+    const providerCostLimitPerComponent = clampProviderCostDiagnosticLimit(
+      args.providerCostLimitPerComponent,
+    );
+    const paidToolNames = new Set<string>(PAID_TOOL_LEDGER_TOOL_NAMES);
+
+    const providerCostPeriodStart = Math.max(
+      0,
+      period.periodStart - PROVIDER_COST_MARGIN_DIAGNOSTIC_LOOKBACK_MS,
+    );
+    const byTool = new Map<string, ReturnType<typeof createDiagnosticMoneyBucket>>();
+    let settledPolynetPriceUsd = 0;
+    let settledRawVendorCostUsd = 0;
+    let userUsageScanLimitReached = false;
+
+    const ledgerRows = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_status_settledAt", (q: any) =>
+        q
+          .eq("status", "succeeded")
+          .gte("settledAt", period.periodStart)
+          .lt("settledAt", period.periodEnd),
+      )
+      .take(ledgerLimit);
+    userUsageScanLimitReached = ledgerRows.length >= ledgerLimit;
+
+    for (const row of ledgerRows) {
+      const toolName = normalizeOptionalString(row.toolName) ?? "unknown";
+      if (!paidToolNames.has(toolName)) continue;
+      const polynetPriceUsd =
+        normalizeOptionalNumber(row.polynetPriceUsd) ??
+        creditsToUsd(normalizeOptionalNumber(row.creditsSettled) ?? 0);
+      const rawVendorCostUsd = normalizeOptionalNumber(row.rawVendorCostUsd) ?? 0;
+      let bucket = byTool.get(toolName);
+      if (!bucket) {
+        bucket = createDiagnosticMoneyBucket(toolName);
+        byTool.set(toolName, bucket);
+      }
+      bucket.count += 1;
+      bucket.polynetPriceUsd += polynetPriceUsd;
+      bucket.rawVendorCostUsd += rawVendorCostUsd;
+      settledPolynetPriceUsd += polynetPriceUsd;
+      settledRawVendorCostUsd += rawVendorCostUsd;
+    }
+
+    const overheadByComponent = new Map<string, ReturnType<typeof createDiagnosticMoneyBucket>>();
+    const mirrorByComponent = new Map<string, ReturnType<typeof createDiagnosticMoneyBucket>>();
+    let trackedOnlyRawVendorCostUsd = 0;
+    let rolledIntoUserUsageRawVendorCostUsd = 0;
+    let providerCostScanLimitReached = false;
+
+    for (const component of PROVIDER_COST_COMPONENTS) {
+      const rows = await ctx.db
+        .query("providerCostEntries")
+        .withIndex("by_component_period", (q: any) =>
+          q
+            .eq("component", component)
+            .gte("periodStart", providerCostPeriodStart)
+            .lt("periodStart", period.periodEnd),
+        )
+        .take(providerCostLimitPerComponent);
+      if (rows.length >= providerCostLimitPerComponent) {
+        providerCostScanLimitReached = true;
+      }
+      for (const row of rows) {
+        const allocatedRawVendorCostUsd = allocateProviderCostToDiagnosticPeriod({
+          row,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+        });
+        if (!(allocatedRawVendorCostUsd > 0)) continue;
+        const billingDisposition = normalizeOptionalString(row.billingDisposition);
+        if (
+          billingDisposition !== "tracked_only" &&
+          billingDisposition !== "rolled_into_user_usage"
+        ) {
+          continue;
+        }
+        const targetMap =
+          billingDisposition === "tracked_only" ? overheadByComponent : mirrorByComponent;
+        let bucket = targetMap.get(component);
+        if (!bucket) {
+          bucket = createDiagnosticMoneyBucket(component);
+          targetMap.set(component, bucket);
+        }
+        bucket.count += 1;
+        bucket.rawVendorCostUsd += allocatedRawVendorCostUsd;
+        if (billingDisposition === "tracked_only") {
+          trackedOnlyRawVendorCostUsd += allocatedRawVendorCostUsd;
+        } else if (billingDisposition === "rolled_into_user_usage") {
+          rolledIntoUserUsageRawVendorCostUsd += allocatedRawVendorCostUsd;
+        }
+      }
+    }
+
+    const roundedSettledPolynetPriceUsd = roundDiagnosticUsd(settledPolynetPriceUsd);
+    const roundedSettledRawVendorCostUsd = roundDiagnosticUsd(settledRawVendorCostUsd);
+    const roundedTrackedOnlyRawVendorCostUsd = roundDiagnosticUsd(trackedOnlyRawVendorCostUsd);
+    const roundedRolledIntoUserUsageRawVendorCostUsd = roundDiagnosticUsd(
+      rolledIntoUserUsageRawVendorCostUsd,
+    );
+    const totalProviderExposureUsd = roundDiagnosticUsd(
+      roundedTrackedOnlyRawVendorCostUsd + roundedRolledIntoUserUsageRawVendorCostUsd,
+    );
+    const uncollectedProviderExposureUsd = roundDiagnosticUsd(
+      Math.max(
+        0,
+        roundedRolledIntoUserUsageRawVendorCostUsd - roundedSettledRawVendorCostUsd,
+      ),
+    );
+    const totalMarginRawVendorCostUsd = roundDiagnosticUsd(
+      roundedSettledRawVendorCostUsd + roundedTrackedOnlyRawVendorCostUsd,
+    );
+    const grossProfitUsd = roundDiagnosticUsd(
+      roundedSettledPolynetPriceUsd - totalMarginRawVendorCostUsd,
+    );
+    const grossMarginBps =
+      roundedSettledPolynetPriceUsd > 0
+        ? Math.round((grossProfitUsd / roundedSettledPolynetPriceUsd) * 10000)
+        : null;
+
+    return {
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      userUsage: {
+        settledPolynetPriceUsd: roundedSettledPolynetPriceUsd,
+        settledRawVendorCostUsd: roundedSettledRawVendorCostUsd,
+        byTool: Array.from(byTool.values()).map((bucket) => ({
+          toolName: bucket.label,
+          count: bucket.count,
+          polynetPriceUsd: roundDiagnosticUsd(bucket.polynetPriceUsd),
+          rawVendorCostUsd: roundDiagnosticUsd(bucket.rawVendorCostUsd),
+        })),
+      },
+      providerCosts: {
+        totalRawVendorCostUsd: totalProviderExposureUsd,
+        trackedOnlyRawVendorCostUsd: roundedTrackedOnlyRawVendorCostUsd,
+        rolledIntoUserUsageRawVendorCostUsd: roundedRolledIntoUserUsageRawVendorCostUsd,
+        trackedOnlyByComponent: Array.from(overheadByComponent.values()).map((bucket) => ({
+          component: bucket.label,
+          count: bucket.count,
+          rawVendorCostUsd: roundDiagnosticUsd(bucket.rawVendorCostUsd),
+        })),
+        rolledIntoUserUsageByComponent: Array.from(mirrorByComponent.values()).map((bucket) => ({
+          component: bucket.label,
+          count: bucket.count,
+          rawVendorCostUsd: roundDiagnosticUsd(bucket.rawVendorCostUsd),
+        })),
+      },
+      providerExposure: {
+        ledgerRawVendorCostUsd: roundedSettledRawVendorCostUsd,
+        trackedOnlyProviderCostUsd: roundedTrackedOnlyRawVendorCostUsd,
+        rolledIntoUserUsageProviderCostUsd: roundedRolledIntoUserUsageRawVendorCostUsd,
+        totalProviderCostUsd: totalProviderExposureUsd,
+        uncollectedProviderExposureUsd,
+      },
+      margin: {
+        revenueUsd: roundedSettledPolynetPriceUsd,
+        ledgerRawVendorCostUsd: roundedSettledRawVendorCostUsd,
+        trackedOnlyProviderCostUsd: roundedTrackedOnlyRawVendorCostUsd,
+        totalRawVendorCostUsd: totalMarginRawVendorCostUsd,
+        grossProfitUsd,
+        grossMarginBps,
+      },
+      reconciliation: {
+        ledgerRawVendorCostUsd: roundedSettledRawVendorCostUsd,
+        rolledIntoUserUsageProviderCostUsd: roundedRolledIntoUserUsageRawVendorCostUsd,
+        mirrorDeltaUsd: roundDiagnosticUsd(
+          roundedRolledIntoUserUsageRawVendorCostUsd - roundedSettledRawVendorCostUsd,
+        ),
+      },
+      scanLimitReached: userUsageScanLimitReached || providerCostScanLimitReached,
+      scanLimits: {
+        ledgerLimit,
+        providerCostLimitPerComponent,
+        providerCostLookbackMs: PROVIDER_COST_MARGIN_DIAGNOSTIC_LOOKBACK_MS,
+        userUsageScanLimitReached,
+        providerCostScanLimitReached,
+      },
+    };
+  },
+});
+
+export const getProviderCostReconciliationDiagnosticInternal = internalQuery({
+  args: {
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+    ledgerLimit: v.optional(v.number()),
+    computeChargeLimitPerDebitSource: v.optional(v.number()),
+    sampleLimit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const period = resolveWorkspaceProviderMarginDiagnosticPeriod(args);
+    const ledgerLimit = clampProviderCostReconciliationLedgerLimit(args.ledgerLimit);
+    const computeChargeLimitPerDebitSource = clampProviderCostReconciliationComputeLimitPerDebitSource(
+      args.computeChargeLimitPerDebitSource,
+    );
+    const sampleLimit = clampProviderCostReconciliationSampleLimit(args.sampleLimit);
+    const paidToolNames = new Set<string>(PAID_TOOL_LEDGER_TOOL_NAMES);
+    const missingProviderCostUsdByCostKey = new Map<string, number>();
+
+    const recordMissingProviderCost = (costKey: string, rawVendorCostUsd: number) => {
+      const normalizedCostKey = normalizeOptionalString(costKey);
+      if (!normalizedCostKey) return;
+      const normalizedCostUsd = roundDiagnosticUsd(Math.max(0, Number(rawVendorCostUsd) || 0));
+      const existing = missingProviderCostUsdByCostKey.get(normalizedCostKey) ?? 0;
+      missingProviderCostUsdByCostKey.set(
+        normalizedCostKey,
+        Math.max(existing, normalizedCostUsd),
+      );
+    };
+
+    const ledgerRows = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_status_settledAt", (q: any) =>
+        q
+          .eq("status", "succeeded")
+          .gte("settledAt", period.periodStart)
+          .lt("settledAt", period.periodEnd),
+      )
+      .take(ledgerLimit);
+    let ledgerPaidRowsInspected = 0;
+    let ledgerMissingProviderCostRows = 0;
+    let ledgerMissingRawVendorCostUsd = 0;
+    const ledgerMissingSamples: any[] = [];
+
+    for (const row of ledgerRows) {
+      const toolName = normalizeOptionalString(row.toolName) ?? "unknown";
+      if (!paidToolNames.has(toolName)) continue;
+      const rawVendorCostUsd = normalizeOptionalNumber(row.rawVendorCostUsd) ?? 0;
+      if (!(rawVendorCostUsd > 0)) continue;
+      const creditKey = normalizeOptionalString(row.creditKey);
+      if (!creditKey) continue;
+      ledgerPaidRowsInspected += 1;
+      const expectedProviderCostKey = `credit_ledger:${creditKey}:provider_cost`;
+      const providerCostEntry = await readProviderCostEntryByCostKey(
+        ctx,
+        expectedProviderCostKey,
+      );
+      if (providerCostEntry) continue;
+      ledgerMissingProviderCostRows += 1;
+      ledgerMissingRawVendorCostUsd += rawVendorCostUsd;
+      recordMissingProviderCost(expectedProviderCostKey, rawVendorCostUsd);
+      if (ledgerMissingSamples.length < sampleLimit) {
+        ledgerMissingSamples.push({
+          creditKey,
+          expectedProviderCostKey,
+          toolName,
+          action: normalizeOptionalString(row.action),
+          vendor: normalizeOptionalString(row.vendor),
+          userId: String(row.userId),
+          projectId: row.projectId ? String(row.projectId) : null,
+          communityId: row.communityId ? String(row.communityId) : null,
+          rawVendorCostUsd: roundDiagnosticUsd(rawVendorCostUsd),
+          settledAt: normalizeOptionalNumber(row.settledAt) ?? null,
+        });
+      }
+    }
+
+    let computeChargesScanned = 0;
+    let computeMissingProviderCostRows = 0;
+    let computeMissingRawVendorCostUsd = 0;
+    let computeChargeScanLimitReached = false;
+    const computeMissingSamples: any[] = [];
+
+    for (const debitSource of WORKSPACE_COMPUTE_DEBIT_SOURCES) {
+      const rows = await ctx.db
+        .query("workspaceComputeCharges")
+        .withIndex("by_debitSource_createdAt", (q: any) =>
+          q
+            .eq("debitSource", debitSource)
+            .gte("createdAt", period.periodStart)
+            .lt("createdAt", period.periodEnd),
+        )
+        .take(computeChargeLimitPerDebitSource);
+      if (rows.length >= computeChargeLimitPerDebitSource) {
+        computeChargeScanLimitReached = true;
+      }
+      computeChargesScanned += rows.length;
+      for (const row of rows) {
+        const chargeKey = normalizeOptionalString(row.chargeKey);
+        if (!chargeKey) continue;
+        const creditReservationKey = normalizeOptionalString(row.creditReservationKey);
+        const expectedProviderCostKey = creditReservationKey
+          ? `credit_ledger:${creditReservationKey}:provider_cost`
+          : `workspace_compute_charge:${chargeKey}:provider_cost`;
+        const providerCostEntry = await readProviderCostEntryByCostKey(
+          ctx,
+          expectedProviderCostKey,
+        );
+        if (providerCostEntry) continue;
+        const computeCostUsd = normalizeOptionalNumber(row.computeCostUsd) ?? 0;
+        computeMissingProviderCostRows += 1;
+        computeMissingRawVendorCostUsd += computeCostUsd;
+        recordMissingProviderCost(expectedProviderCostKey, computeCostUsd);
+        if (computeMissingSamples.length < sampleLimit) {
+          computeMissingSamples.push({
+            chargeKey,
+            expectedProviderCostKey,
+            creditReservationKey: creditReservationKey ?? null,
+            debitSource,
+            userId: String(row.userId),
+            projectId: String(row.projectId),
+            runId: normalizeOptionalString(row.runId),
+            providerSandboxId: normalizeOptionalString(row.providerSandboxId),
+            computeCostUsd: roundDiagnosticUsd(computeCostUsd),
+            createdAt: normalizeOptionalNumber(row.createdAt) ?? null,
+          });
+        }
+      }
+    }
+
+    const totalMissingProviderCostUsd = Array.from(
+      missingProviderCostUsdByCostKey.values(),
+    ).reduce((sum, value) => sum + value, 0);
+    const canonicalMissingProviderCostUsd = roundDiagnosticUsd(
+      totalMissingProviderCostUsd,
+    );
+
+    return {
+      scope: "user_usage_provider_cost_mirrors",
+      coverage: {
+        creditLedgerEntries: true,
+        workspaceComputeCharges: true,
+        trackedOnlyStorageCosts: false,
+        providerInvoiceRows: false,
+      },
+      sourceBreakdownCanOverlap: true,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      ledger: {
+        rowsScanned: ledgerRows.length,
+        paidRowsInspected: ledgerPaidRowsInspected,
+        missingProviderCostRows: ledgerMissingProviderCostRows,
+        missingRawVendorCostUsd: roundDiagnosticUsd(ledgerMissingRawVendorCostUsd),
+        samples: ledgerMissingSamples,
+        scanLimitReached: ledgerRows.length >= ledgerLimit,
+      },
+      workspaceComputeCharges: {
+        rowsScanned: computeChargesScanned,
+        missingProviderCostRows: computeMissingProviderCostRows,
+        missingRawVendorCostUsd: roundDiagnosticUsd(computeMissingRawVendorCostUsd),
+        samples: computeMissingSamples,
+        scanLimitReached: computeChargeScanLimitReached,
+      },
+      total: {
+        uniqueMissingProviderCostKeys: missingProviderCostUsdByCostKey.size,
+        missingProviderCostUsd: canonicalMissingProviderCostUsd,
+        canonicalMissingProviderCostUsd,
+      },
+      canonicalMissingProviderCostUsd,
+      scanLimitReached:
+        ledgerRows.length >= ledgerLimit || computeChargeScanLimitReached,
+      scanLimits: {
+        ledgerLimit,
+        computeChargeLimitPerDebitSource,
+        sampleLimit,
+      },
+    };
+  },
+});
+
+export const listBlaxelStorageAccountingProjectIdsInternal = internalQuery({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const pageSize = Math.max(
+      1,
+      Math.min(
+        PROVIDER_COST_STORAGE_ACCOUNTING_MAX_PAGE_SIZE,
+        Math.floor(
+          args.paginationOpts.numItems ??
+            PROVIDER_COST_STORAGE_ACCOUNTING_DEFAULT_PAGE_SIZE,
+        ),
+      ),
+    );
+    const page = await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_providerVolumeProviderId_updatedAt", (q: any) =>
+        q.eq("providerVolumeProviderId", "blaxel"),
+      )
+      .paginate({
+        ...args.paginationOpts,
+        numItems: pageSize,
+        maximumRowsRead: Math.max(
+          args.paginationOpts.maximumRowsRead ?? pageSize,
+          pageSize,
+        ),
+      });
+    return {
+      projectIds: page.page.map((project: any) => project._id),
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+    };
+  },
+});
+
+export const recordBlaxelStorageProviderCostsForProjectsInternal = internalMutation({
+  args: {
+    projectIds: v.array(v.id("cloudProjects")),
+    bucketStart: v.number(),
+    bucketEnd: v.number(),
+    bucketKey: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const bucket = {
+      periodStart: args.bucketStart,
+      periodEnd: args.bucketEnd,
+      bucketKey: args.bucketKey,
+    };
+    if (!(bucket.periodEnd > bucket.periodStart)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "provider_cost_bucket_empty",
+        inspected: 0,
+        recordedVolumeStorage: 0,
+        recordedStandbySnapshot: 0,
+      };
+    }
+    const loadedConfig = loadBlaxelWorkspaceConfig();
+    if (!loadedConfig.ok) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: loadedConfig.code,
+        inspected: 0,
+        recordedVolumeStorage: 0,
+        recordedStandbySnapshot: 0,
+      };
+    }
+
+    const volumeSizeGb = mbToGb(loadedConfig.config.volumeSizeMb);
+    const standbySnapshotSizeGb = mbToGb(loadedConfig.config.memoryMb);
+    let inspected = 0;
+    let skippedInactive = 0;
+    let skippedNoVolume = 0;
+    let skippedDeletedVolume = 0;
+    let recordedVolumeStorage = 0;
+    let recordedStandbySnapshot = 0;
+
+    for (const projectId of args.projectIds) {
+      const project = await ctx.db.get(projectId);
+      if (!project) continue;
+      inspected += 1;
+      if (!isWorkspaceProjectDisplayable(project)) {
+        skippedInactive += 1;
+        continue;
+      }
+      const truth = resolveWorkspaceProjectResourceTruth(project);
+      const volumeId = normalizeOptionalString(truth.volume.resourceId);
+      if (!volumeId || truth.volume.providerId !== "blaxel") {
+        skippedNoVolume += 1;
+        continue;
+      }
+      if (
+        truth.volume.retentionState === "deleted" ||
+        truth.volume.deletedAt ||
+        isDeletedProviderState(truth.volume.providerState)
+      ) {
+        skippedDeletedVolume += 1;
+        continue;
+      }
+
+      const volumeKnownAt =
+        normalizeOptionalNumber(truth.volume.lastSeenAt) ??
+        normalizeOptionalNumber(project.createdAt) ??
+        bucket.periodStart;
+      const volumePeriodStart = Math.max(bucket.periodStart, volumeKnownAt);
+      if (bucket.periodEnd > volumePeriodStart && volumeSizeGb > 0) {
+        const durationSeconds = (bucket.periodEnd - volumePeriodStart) / 1000;
+        await recordProviderCostEntry(ctx, {
+          costKey: `blaxel_volume_storage:${project._id}:${volumeId}:${bucket.bucketKey}`,
+          userId: project.ownerId,
+          projectId: project._id,
+          category: "workspace",
+          component: "blaxel_volume_storage",
+          provider: "blaxel",
+          resourceId: volumeId,
+          periodStart: volumePeriodStart,
+          periodEnd: bucket.periodEnd,
+          quantityKind: "gb_seconds",
+          quantity: volumeSizeGb * durationSeconds,
+          rawVendorCostUsd: estimateBlaxelStorageCostUsd({
+            sizeGb: volumeSizeGb,
+            durationSeconds,
+            usdPerGbSecond: BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND,
+          }),
+          evidence: "estimated",
+          billingDisposition: "tracked_only",
+          metadata: {
+            provider_cost_source: "blaxel_storage_hourly_reconciler",
+            bucket_start: bucket.periodStart,
+            bucket_end: bucket.periodEnd,
+            storage_size_gb: volumeSizeGb,
+            rate_usd_per_gb_second: BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND,
+            provider_volume_state: truth.volume.providerState,
+            volume_retention_state: truth.volume.retentionState,
+          },
+          nowMs,
+        });
+        recordedVolumeStorage += 1;
+      }
+
+      const sandboxId = normalizeOptionalString(truth.sandbox.resourceId);
+      const sandboxState = normalizeState(truth.sandbox.providerState);
+      if (
+        !sandboxId ||
+        truth.sandbox.providerId !== "blaxel" ||
+        sandboxState !== "standby" ||
+        standbySnapshotSizeGb <= 0
+      ) {
+        continue;
+      }
+      const standbyKnownAt =
+        normalizeOptionalNumber(truth.sandbox.lastSeenAt) ??
+        normalizeOptionalNumber(truth.sandbox.lastActivityAt) ??
+        normalizeOptionalNumber(project.updatedAt) ??
+        bucket.periodStart;
+      const standbyPeriodStart = Math.max(bucket.periodStart, standbyKnownAt);
+      if (bucket.periodEnd <= standbyPeriodStart) continue;
+      const standbyDurationSeconds = (bucket.periodEnd - standbyPeriodStart) / 1000;
+      await recordProviderCostEntry(ctx, {
+        costKey: `blaxel_standby_snapshot:${project._id}:${sandboxId}:${bucket.bucketKey}`,
+        userId: project.ownerId,
+        projectId: project._id,
+        category: "workspace",
+        component: "blaxel_standby_snapshot",
+        provider: "blaxel",
+        resourceId: sandboxId,
+        periodStart: standbyPeriodStart,
+        periodEnd: bucket.periodEnd,
+        quantityKind: "gb_seconds",
+        quantity: standbySnapshotSizeGb * standbyDurationSeconds,
+        rawVendorCostUsd: estimateBlaxelStorageCostUsd({
+          sizeGb: standbySnapshotSizeGb,
+          durationSeconds: standbyDurationSeconds,
+          usdPerGbSecond: BLAXEL_STANDBY_SNAPSHOT_STORAGE_USD_PER_GB_SECOND,
+        }),
+        evidence: "estimated",
+        billingDisposition: "tracked_only",
+        metadata: {
+          provider_cost_source: "blaxel_storage_hourly_reconciler",
+          bucket_start: bucket.periodStart,
+          bucket_end: bucket.periodEnd,
+          storage_size_gb: standbySnapshotSizeGb,
+          rate_usd_per_gb_second: BLAXEL_STANDBY_SNAPSHOT_STORAGE_USD_PER_GB_SECOND,
+          provider_sandbox_state: truth.sandbox.providerState,
+        },
+        nowMs,
+      });
+      recordedStandbySnapshot += 1;
+    }
+
+    return {
+      ok: true,
+      bucket,
+      inspected,
+      skippedInactive,
+      skippedNoVolume,
+      skippedDeletedVolume,
+      recordedVolumeStorage,
+      recordedStandbySnapshot,
+      volumeSizeGb,
+      standbySnapshotSizeGb,
+    };
+  },
+});
+
+export const recordBlaxelStorageProviderCostsInternal = internalAction({
+  args: {
+    nowMs: v.optional(v.number()),
+    pageSize: v.optional(v.number()),
+    maxPages: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    bucketStart: v.optional(v.number()),
+    bucketEnd: v.optional(v.number()),
+    bucketKey: v.optional(v.string()),
+    pagesProcessed: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const resolvedBucket = resolveProviderCostAccountingHourBucket(nowMs);
+    const bucket = {
+      periodStart: args.bucketStart ?? resolvedBucket.periodStart,
+      periodEnd: args.bucketEnd ?? resolvedBucket.periodEnd,
+      bucketKey: args.bucketKey ?? resolvedBucket.bucketKey,
+    };
+    if (!(bucket.periodEnd > bucket.periodStart)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "provider_cost_bucket_empty",
+        bucket,
+        pagesScanned: 0,
+        projectsInspected: 0,
+        recordedVolumeStorage: 0,
+        recordedStandbySnapshot: 0,
+        hasMore: false,
+      };
+    }
+    const loadedConfig = loadBlaxelWorkspaceConfig();
+    if (!loadedConfig.ok) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: loadedConfig.code,
+        bucket,
+        pagesScanned: 0,
+        projectsListed: 0,
+        projectsInspected: 0,
+        recordedVolumeStorage: 0,
+        recordedStandbySnapshot: 0,
+        hasMore: false,
+      };
+    }
+
+    const pageSize = Math.max(
+      1,
+      Math.min(
+        PROVIDER_COST_STORAGE_ACCOUNTING_MAX_PAGE_SIZE,
+        Math.floor(args.pageSize ?? PROVIDER_COST_STORAGE_ACCOUNTING_DEFAULT_PAGE_SIZE),
+      ),
+    );
+    const maxPages = Math.max(
+      1,
+      Math.min(
+        20,
+        Math.floor(args.maxPages ?? PROVIDER_COST_STORAGE_ACCOUNTING_MAX_PAGES_PER_RUN),
+      ),
+    );
+
+    let cursor = args.cursor ?? null;
+    let isDone = false;
+    let pagesScanned = 0;
+    let projectsListed = 0;
+    let projectsInspected = 0;
+    let recordedVolumeStorage = 0;
+    let recordedStandbySnapshot = 0;
+    let skippedInactive = 0;
+    let skippedNoVolume = 0;
+    let skippedDeletedVolume = 0;
+
+    while (!isDone && pagesScanned < maxPages) {
+      const page = (await ctx.runQuery(
+        (internal as any).workspaceCredits.listBlaxelStorageAccountingProjectIdsInternal,
+        {
+          paginationOpts: {
+            cursor,
+            numItems: pageSize,
+            maximumRowsRead: pageSize,
+          },
+        },
+      )) as {
+        projectIds?: any[];
+        continueCursor?: string | null;
+        isDone?: boolean;
+      };
+      pagesScanned += 1;
+      const projectIds = Array.isArray(page.projectIds) ? page.projectIds : [];
+      projectsListed += projectIds.length;
+      if (projectIds.length > 0) {
+        const result = (await ctx.runMutation(
+          (internal as any).workspaceCredits.recordBlaxelStorageProviderCostsForProjectsInternal,
+          {
+            projectIds,
+            bucketStart: bucket.periodStart,
+            bucketEnd: bucket.periodEnd,
+            bucketKey: bucket.bucketKey,
+            nowMs,
+          },
+        )) as any;
+        projectsInspected += Number(result?.inspected ?? 0);
+        recordedVolumeStorage += Number(result?.recordedVolumeStorage ?? 0);
+        recordedStandbySnapshot += Number(result?.recordedStandbySnapshot ?? 0);
+        skippedInactive += Number(result?.skippedInactive ?? 0);
+        skippedNoVolume += Number(result?.skippedNoVolume ?? 0);
+        skippedDeletedVolume += Number(result?.skippedDeletedVolume ?? 0);
+      }
+      isDone = Boolean(page.isDone);
+      cursor = typeof page.continueCursor === "string" ? page.continueCursor : null;
+      if (!cursor) isDone = true;
+    }
+
+    const hasMore = !isDone && Boolean(cursor);
+    if (hasMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).workspaceCredits.recordBlaxelStorageProviderCostsInternal,
+        {
+          nowMs,
+          pageSize,
+          maxPages,
+          cursor,
+          bucketStart: bucket.periodStart,
+          bucketEnd: bucket.periodEnd,
+          bucketKey: bucket.bucketKey,
+          pagesProcessed: Number(args.pagesProcessed ?? 0) + pagesScanned,
+        },
+      );
+    }
+
+    return {
+      ok: true,
+      bucket,
+      pageSize,
+      maxPages,
+      pagesScanned,
+      pagesProcessed: Number(args.pagesProcessed ?? 0) + pagesScanned,
+      projectsListed,
+      projectsInspected,
+      skippedInactive,
+      skippedNoVolume,
+      skippedDeletedVolume,
+      recordedVolumeStorage,
+      recordedStandbySnapshot,
+      hasMore,
+      continueCursor: hasMore ? cursor : null,
+    };
+  },
+});
 
 function normalizeStripePriceId(value: unknown): string | undefined {
   const normalized = normalizeOptionalString(value);
@@ -2479,6 +3724,36 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           : debitPurchased > 0
             ? "purchased"
             : "included";
+    await recordProviderCostEntryBestEffort(ctx, {
+      costKey: creditReservationKey
+        ? `credit_ledger:${creditReservationKey}:provider_cost`
+        : `workspace_compute_charge:${args.chargeKey}:provider_cost`,
+      userId: args.userId,
+      projectId: args.projectId,
+      runId: args.runId,
+      category: "workspace",
+      component: "blaxel_active_runtime",
+      provider: "blaxel",
+      resourceId: args.providerSandboxId,
+      periodStart: args.startedAt,
+      periodEnd: args.endedAt,
+      quantityKind: "memory_gib_seconds",
+      quantity: durationSeconds * args.sandboxMemoryGiB,
+      rawVendorCostUsd: computeCostUsd,
+      evidence: "estimated",
+      billingDisposition: "rolled_into_user_usage",
+      linkedCreditKey: creditReservationKey,
+      metadata: {
+        provider_cost_source: "workspace_compute_charge",
+        duration_seconds: roundCurrency(durationSeconds),
+        sandbox_cpu: args.sandboxCpu,
+        sandbox_memory_gib: args.sandboxMemoryGiB,
+        sandbox_disk_gib: args.sandboxDiskGiB,
+        debited_credits: debitedCredits,
+        debit_source: debitSource,
+      },
+      nowMs,
+    });
 
     const id = await ctx.db.insert("workspaceComputeCharges", {
       chargeKey: args.chargeKey,
@@ -2755,6 +4030,15 @@ export const settleCreditsInternal = internalMutation({
       updatedAt: nowMs,
     });
     if (args.status === "succeeded") {
+      const providerCostEntry = resolveCreditLedgerProviderCostEntry({
+        entry,
+        settlementMetadata,
+        rawVendorCostUsd: settledRawVendorCostUsd,
+        nowMs,
+      });
+      if (providerCostEntry) {
+        await recordProviderCostEntryBestEffort(ctx, providerCostEntry);
+      }
       await recordSettledPaidToolPartnerCommission(ctx, {
         creditKey,
         userId: entry.userId,

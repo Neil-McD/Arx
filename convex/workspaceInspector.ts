@@ -507,16 +507,7 @@ async function runWithBlaxelInspectorWorkspace(params: {
       return workspace;
     }
 
-    const result = await params.operation(workspace);
-    if (attempt === 0 && isBlaxelSandboxNotFoundFailure(result)) {
-      await clearBlaxelInspectorWorkspaceState({
-        ctx: params.ctx,
-        projectId: params.projectId,
-        sandboxName: workspace.sandboxName,
-      });
-      continue;
-    }
-    return result;
+    return await params.operation(workspace);
   }
 
   return {

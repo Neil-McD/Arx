@@ -82,6 +82,16 @@ crons.interval(
 );
 
 crons.interval(
+  "record blaxel storage provider costs",
+  { minutes: 60 },
+  (internal as any).workspaceCredits.recordBlaxelStorageProviderCostsInternal,
+  {
+    pageSize: 100,
+    maxPages: 5,
+  },
+);
+
+crons.interval(
   "expire stale tool balance checkouts",
   { minutes: 15 },
   (internal as any).workspaceCredits.expireStaleWorkspaceCreditTopupCheckoutSessionsInternal,

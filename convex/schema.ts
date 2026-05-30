@@ -377,6 +377,56 @@ export default defineSchema({
     .index("by_providerSandboxId", ["providerSandboxId"])
     .index("by_debitSource_createdAt", ["debitSource", "createdAt"]),
 
+  providerCostEntries: defineTable({
+    costKey: v.string(),
+    userId: v.optional(v.id("users")),
+    projectId: v.optional(v.id("cloudProjects")),
+    communityId: v.optional(v.id("communities")),
+    runId: v.optional(v.string()),
+    category: v.union(
+      v.literal("workspace"),
+      v.literal("web"),
+      v.literal("voice"),
+    ),
+    component: v.union(
+      v.literal("blaxel_active_runtime"),
+      v.literal("blaxel_volume_storage"),
+      v.literal("blaxel_standby_snapshot"),
+      v.literal("web_research_call"),
+      v.literal("web_crawl_provider_call"),
+      v.literal("fly_crawler"),
+      v.literal("voice_transcription"),
+      v.literal("knowledge_model_inference"),
+    ),
+    provider: v.string(),
+    resourceId: v.optional(v.string()),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+    quantityKind: v.string(),
+    quantity: v.number(),
+    rawVendorCostUsd: v.number(),
+    evidence: v.union(
+      v.literal("estimated"),
+      v.literal("provider_reported"),
+      v.literal("exact"),
+    ),
+    billingDisposition: v.union(
+      v.literal("tracked_only"),
+      v.literal("rolled_into_user_usage"),
+    ),
+    linkedCreditKey: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_costKey", ["costKey"])
+    .index("by_user_period", ["userId", "periodStart"])
+    .index("by_project_period", ["projectId", "periodStart"])
+    .index("by_community_period", ["communityId", "periodStart"])
+    .index("by_category_period", ["category", "periodStart"])
+    .index("by_component_period", ["component", "periodStart"])
+    .index("by_linkedCreditKey", ["linkedCreditKey"]),
+
   workspaceUsageCollections: defineTable({
     collectionKey: v.string(),
     userId: v.id("users"),
@@ -446,6 +496,7 @@ export default defineSchema({
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_run", ["runId"])
     .index("by_tool_createdAt", ["toolName", "createdAt"])
+    .index("by_status_settledAt", ["status", "settledAt"])
     .index("by_status_expiresAt", ["status", "expiresAt"])
     .index("by_pendingSettlementStatus_nextAttemptAt", ["pendingSettlementStatus", "pendingSettlementNextAttemptAt"]),
 
@@ -853,6 +904,10 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
+    .index("by_providerVolumeProviderId_updatedAt", [
+      "providerVolumeProviderId",
+      "updatedAt",
+    ])
     .index("by_sandboxProvider_creditBudgetExpiresAt", [
       "providerSandboxProviderId",
       "providerSandboxCreditBudgetExpiresAt",
