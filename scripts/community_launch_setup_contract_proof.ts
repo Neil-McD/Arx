@@ -688,6 +688,11 @@ assert.match(
   /knowledgeLinkSources=\{communityLaunchLinkSources\}[\s\S]*knowledgeFileSources=\{communityLaunchFileSources\}[\s\S]*knowledgeGitHubSources=\{communityLaunchGitHubSources\}[\s\S]*onRemoveKnowledgeLinkSource=\{handleRemoveCommunityLaunchKnowledgeSource\}[\s\S]*onRemoveKnowledgeFileSource=\{handleRemoveCommunityLaunchKnowledgeSource\}[\s\S]*onRemoveKnowledgeGitHubSource=\{handleRemoveCommunityLaunchKnowledgeSource\}/,
   "app shell must pass saved link/file/GitHub source rows and provider-agnostic source removal into launch Knowledge",
 );
+assert.match(
+  appShell,
+  /hasWorkspaceCardOnFile=\{[\s\S]*workspaceCardOnFileStatus[\s\S]*has_card_on_file === true[\s\S]*isStartingWorkspaceCardSetupCheckout=\{isStartingWorkspaceCardSetupCheckout\}[\s\S]*workspaceCardSetupError=\{workspaceCardSetupError\}[\s\S]*onStartWorkspaceCardSetupCheckout=\{startWorkspaceCardSetupCheckout\}/,
+  "app shell must pass workspace card truth and setup action into launch Knowledge for paid-link disclosure",
+);
 assert.doesNotMatch(
   setupModal,
   /Drop files here once ingestion is enabled/,
@@ -732,6 +737,16 @@ assert.match(
   setupModal,
   /(?=[\s\S]*type KnowledgeView = "collect" \| "assemble")(?=[\s\S]*KNOWLEDGE_ASSEMBLY_STEPS)(?=[\s\S]*Assembling resources)(?=[\s\S]*Reading source material)(?=[\s\S]*Organizing resource structure)(?=[\s\S]*Creating draft pages)(?=[\s\S]*Writing source-backed content)(?=[\s\S]*Checking organization)(?=[\s\S]*Completing Knowledge setup)(?=[\s\S]*Back to sources)(?=[\s\S]*Try again)/,
   "launch knowledge step must present agent preparation as an assembly progress card",
+);
+assert.match(
+  setupModal,
+  /hasWorkspaceCardOnFile\?: boolean \| null[\s\S]*workspaceCardSetupError\?: string \| null[\s\S]*showKnowledgeLinkPaidToolsPrompt[\s\S]*canPromptForKnowledgeLinkPaidTools[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*setShowKnowledgeLinkPaidToolsPrompt\(true\)[\s\S]*handleStartKnowledgeLinkCardSetup[\s\S]*onStartWorkspaceCardSetupCheckout\?\.\(\)[\s\S]*Link saved[\s\S]*Add a card if you want Polynet to read this link,[\s\S]*extract the useful material,[\s\S]*draft it into your[\s\S]*community Knowledge[\s\S]*Continue without premium tools[\s\S]*workspaceCardSetupError/,
+  "launch Knowledge must disclose paid link-reading capability after saving a link without blocking onboarding",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-paid-tools-prompt[\s\S]*\.community-launch-knowledge-paid-tools-actions/,
+  "launch Knowledge paid-link disclosure must have compact in-modal styling",
 );
 assert.match(
   setupModal,

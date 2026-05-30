@@ -10799,6 +10799,14 @@ export default function App() {
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
+        hasWorkspaceCardOnFile={
+          workspaceCardOnFileStatus === null
+            ? null
+            : workspaceCardOnFileStatus.has_card_on_file === true
+        }
+        isStartingWorkspaceCardSetupCheckout={isStartingWorkspaceCardSetupCheckout}
+        workspaceCardSetupError={workspaceCardSetupError}
+        onStartWorkspaceCardSetupCheckout={startWorkspaceCardSetupCheckout}
         onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
         onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
         onRemoveKnowledgeLinkSource={handleRemoveCommunityLaunchKnowledgeSource}

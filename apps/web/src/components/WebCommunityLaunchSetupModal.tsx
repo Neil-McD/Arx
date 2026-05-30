@@ -494,6 +494,10 @@ type WebCommunityLaunchSetupModalProps = {
   onAddKnowledgeLink: (
     draft: CommunityLaunchKnowledgeLinkSaveDraft,
   ) => Promise<void>;
+  hasWorkspaceCardOnFile?: boolean | null;
+  isStartingWorkspaceCardSetupCheckout?: boolean;
+  workspaceCardSetupError?: string | null;
+  onStartWorkspaceCardSetupCheckout?: () => Promise<void> | void;
   onAddKnowledgeFile?: (
     draft: CommunityLaunchKnowledgeFileSaveDraft,
   ) => Promise<void>;
@@ -837,6 +841,10 @@ export function WebCommunityLaunchSetupModal(
     onSaveProfile,
     onSaveAbout,
     onAddKnowledgeLink,
+    hasWorkspaceCardOnFile = null,
+    isStartingWorkspaceCardSetupCheckout = false,
+    workspaceCardSetupError = null,
+    onStartWorkspaceCardSetupCheckout,
     onAddKnowledgeFile,
     onLoadKnowledgeSources,
     onRemoveKnowledgeLinkSource,
@@ -932,6 +940,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeGitHubFilesLoading, setKnowledgeGitHubFilesLoading] = useState(false);
   const [knowledgeGitHubDisconnecting, setKnowledgeGitHubDisconnecting] = useState(false);
   const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
+  const [showKnowledgeLinkPaidToolsPrompt, setShowKnowledgeLinkPaidToolsPrompt] = useState(false);
   const [knowledgeView, setKnowledgeView] = useState<KnowledgeView>("collect");
   const [knowledgeAssemblyStage, setKnowledgeAssemblyStage] =
     useState<KnowledgeAssemblyStage>("idle");
@@ -940,6 +949,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeCompletedDuringSession, setKnowledgeCompletedDuringSession] =
     useState(false);
   const knowledgeProviderStateCommunityKeyRef = useRef<string | null>(null);
+  const knowledgeLinkPaidToolsDismissedCommunityKeysRef = useRef<Set<string>>(new Set());
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -957,6 +967,11 @@ export function WebCommunityLaunchSetupModal(
   const effectiveKnowledgeGitHubSources = isCreateMode
     ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
     : knowledgeGitHubSources;
+  const communityPromptKey = community?.id ?? community?.slug ?? "new-community";
+  const canPromptForKnowledgeLinkPaidTools =
+    hasWorkspaceCardOnFile === false &&
+    Boolean(onStartWorkspaceCardSetupCheckout) &&
+    !knowledgeLinkPaidToolsDismissedCommunityKeysRef.current.has(communityPromptKey);
   const knowledgeDriveMissingCredentialSources = useMemo(
     () => effectiveKnowledgeGoogleDriveSources.filter(sourceNeedsIntegrationReconnect),
     [effectiveKnowledgeGoogleDriveSources],
@@ -1040,7 +1055,14 @@ export function WebCommunityLaunchSetupModal(
     if (!isOpen) return;
     setStepOverride(requestedInitialStep);
     setActiveStep(requestedInitialStep ?? (isCreateMode ? "profile" : normalizeActiveStep(status)));
+    setShowKnowledgeLinkPaidToolsPrompt(false);
   }, [community?.id, isCreateMode, isOpen, requestedInitialStep]);
+
+  useEffect(() => {
+    if (hasWorkspaceCardOnFile === true) {
+      setShowKnowledgeLinkPaidToolsPrompt(false);
+    }
+  }, [hasWorkspaceCardOnFile]);
 
   useEffect(() => {
     if (!isOpen || stepOverride || requestedInitialStep) return;
@@ -1565,6 +1587,9 @@ export function WebCommunityLaunchSetupModal(
       await onAddKnowledgeLink({ urls });
       setKnowledgeLinkDrafts([""]);
       if (successMessage) setStepSuccess(successMessage);
+      if (canPromptForKnowledgeLinkPaidTools) {
+        setShowKnowledgeLinkPaidToolsPrompt(true);
+      }
       return true;
     } catch (error) {
       const message =
@@ -1584,6 +1609,15 @@ export function WebCommunityLaunchSetupModal(
   const handleAddKnowledgeLink = (event: FormEvent) => {
     event.preventDefault();
     void saveKnowledgeLinkDrafts();
+  };
+
+  const dismissKnowledgeLinkPaidToolsPrompt = () => {
+    knowledgeLinkPaidToolsDismissedCommunityKeysRef.current.add(communityPromptKey);
+    setShowKnowledgeLinkPaidToolsPrompt(false);
+  };
+
+  const handleStartKnowledgeLinkCardSetup = () => {
+    void onStartWorkspaceCardSetupCheckout?.();
   };
 
   const saveKnowledgeFiles = async (files: File[]): Promise<boolean> => {
@@ -2691,6 +2725,46 @@ export function WebCommunityLaunchSetupModal(
                     </button>
                   </div>
                 </form>
+                {showKnowledgeLinkPaidToolsPrompt ? (
+                  <div
+                    className="community-launch-knowledge-paid-tools-prompt"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div>
+                      <strong>Link saved</strong>
+                      <p>
+                        Add a card if you want Polynet to read this link,
+                        extract the useful material, and draft it into your
+                        community Knowledge.
+                      </p>
+                      <span>No charge today.</span>
+                    </div>
+                    <div className="community-launch-knowledge-paid-tools-actions">
+                      <button
+                        type="button"
+                        className="polynet-onboarding-next"
+                        onClick={handleStartKnowledgeLinkCardSetup}
+                        disabled={isStartingWorkspaceCardSetupCheckout}
+                      >
+                        {isStartingWorkspaceCardSetupCheckout ? "Opening..." : "Add card"}
+                      </button>
+                      <button
+                        type="button"
+                        className="polynet-onboarding-back"
+                        onClick={dismissKnowledgeLinkPaidToolsPrompt}
+                        disabled={isStartingWorkspaceCardSetupCheckout}
+                      >
+                        Continue without premium tools
+                      </button>
+                    </div>
+                    {workspaceCardSetupError ? (
+                      <div className="community-launch-knowledge-paid-tools-error">
+                        {workspaceCardSetupError}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <ImportedKnowledgeSourceRows
                   sources={effectiveKnowledgeLinkSources}
                   fallbackTitle="Source link"
