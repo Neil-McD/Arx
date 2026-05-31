@@ -64,6 +64,10 @@ const MAX_DM_MESSAGE_ROWS = 200;
 const MAX_DM_RECIPIENT_ROWS = 25;
 const MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS = 75;
 const MAX_DM_RECIPIENT_SEARCH_PAGES = 8;
+const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
+const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS = 50;
+const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGES = 4;
+const MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS = 150;
 const DIRECT_CONVERSATION_KIND = "direct" as const;
 
 function normalizePublicUserId(raw: unknown): string {
@@ -384,18 +388,58 @@ async function listDirectMessageSourceCommunitiesForViewer(
 async function listDirectMessageCandidateUserIdsForCommunity(args: {
   ctx: any;
   community: CommunityLike;
+  maxUserIds: number;
 }): Promise<any[]> {
-  const rows = (await args.ctx.db
-    .query("communityMemberships" as any)
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.community._id))
-    .order("desc")
-    .collect()) as CommunityMembershipLike[];
-  return [
-    args.community.ownerId,
-    ...rows
-      .filter((row) => communityMembershipRowIsActive(row))
-      .map((row) => row.userId),
-  ];
+  const maxUserIds = Math.max(
+    1,
+    Math.min(MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS, Math.floor(args.maxUserIds)),
+  );
+  const userIds: any[] = [];
+  const seenUserIds = new Set<string>();
+  const addUserId = (userId: any) => {
+    if (userIds.length >= maxUserIds) return;
+    const userKey = normalizeIdValue(userId);
+    if (!userKey || seenUserIds.has(userKey)) return;
+    seenUserIds.add(userKey);
+    userIds.push(userId);
+  };
+
+  addUserId(args.community.ownerId);
+
+  let cursor: string | null = null;
+  let isDone = false;
+  let pagesScanned = 0;
+  while (
+    userIds.length < maxUserIds &&
+    !isDone &&
+    pagesScanned < MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGES
+  ) {
+    const rawPage: {
+      page: CommunityMembershipLike[];
+      continueCursor: string | null;
+      isDone: boolean;
+    } = await args.ctx.db
+      .query("communityMemberships" as any)
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.community._id))
+      .order("desc")
+      .paginate({
+        cursor,
+        numItems: MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS,
+        maximumRowsRead: MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS,
+      });
+    pagesScanned += 1;
+
+    for (const row of rawPage.page) {
+      if (!communityMembershipRowIsActive(row)) continue;
+      addUserId(row.userId);
+      if (userIds.length >= maxUserIds) break;
+    }
+
+    cursor = typeof rawPage.continueCursor === "string" ? rawPage.continueCursor : null;
+    isDone = rawPage.isDone || !cursor;
+  }
+
+  return userIds;
 }
 
 export const ensureDirectConversationFromCommunity = mutation({
@@ -604,11 +648,20 @@ export const listEligibleDirectMessageRecipientsForViewer = query({
     const seenUserIds = new Set<string>();
     const recipients: EligibleDirectMessageRecipient[] = [];
 
-    for (const community of sourceCommunities) {
+    const sourceCommunityLimit = Math.max(
+      1,
+      Math.min(MAX_DM_GLOBAL_SOURCE_COMMUNITIES, sourceCommunities.length),
+    );
+    const maxCandidateUserIdsPerCommunity = search
+      ? MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS
+      : Math.max(safeLimit * 4, safeLimit);
+
+    for (const community of sourceCommunities.slice(0, sourceCommunityLimit)) {
       if (recipients.length >= safeLimit) break;
       const candidateUserIds = await listDirectMessageCandidateUserIdsForCommunity({
         ctx,
         community,
+        maxUserIds: maxCandidateUserIdsPerCommunity,
       });
       for (const userId of candidateUserIds) {
         if (recipients.length >= safeLimit) break;

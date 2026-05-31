@@ -42,6 +42,11 @@ assert.match(directMessages, /listDirectMessageSourceCommunitiesForViewer/, "vie
 assert.match(directMessages, /withIndex\("by_owner"[\s\S]*ownerId/, "viewer-wide DM recipient lookup must include communities the viewer owns");
 assert.match(directMessages, /withIndex\("by_user"[\s\S]*userId/, "viewer-wide DM recipient lookup must include communities the viewer belongs to");
 assert.match(directMessages, /listDirectMessageCandidateUserIdsForCommunity/, "viewer-wide DM recipient lookup must gather owners and members from each source community");
+assert.match(directMessages, /MAX_DM_GLOBAL_SOURCE_COMMUNITIES/, "viewer-wide DM recipient lookup must bound source-community fanout");
+assert.match(directMessages, /MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS/, "viewer-wide DM recipient lookup must bound per-community membership page size");
+assert.match(directMessages, /MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGES/, "viewer-wide DM recipient lookup must bound per-community membership page count");
+assert.match(directMessages, /listDirectMessageCandidateUserIdsForCommunity[\s\S]*\.paginate\(\{[\s\S]*numItems: MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS[\s\S]*maximumRowsRead: MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS/, "viewer-wide DM recipient lookup must page through community candidates with bounded reads");
+assert.doesNotMatch(directMessages, /listDirectMessageCandidateUserIdsForCommunity[\s\S]*?\.collect\(\)[\s\S]*?export const ensureDirectConversationFromCommunity/, "viewer-wide DM recipient lookup must not collect every member in a source community");
 assert.match(directMessages, /paginationOptsValidator/, "DM recipient lookup must use Convex pagination rather than a capped membership scan");
 assert.match(directMessages, /\.paginate\(\{[\s\S]*numItems: memberPageSize/, "DM recipient lookup must page through community memberships");
 assert.doesNotMatch(directMessages, /MAX_DM_RECIPIENT_SCAN_ROWS/, "DM recipient lookup must not hide members behind a fixed scan cap");
