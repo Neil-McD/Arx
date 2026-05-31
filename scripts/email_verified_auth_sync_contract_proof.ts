@@ -118,6 +118,18 @@ assert.match(
 );
 
 assert.match(
+  email,
+  /enqueueEmailJobInternal = internalMutation[\s\S]*recipientUserId: v\.id\("users"\)[\s\S]*const recipientUserId = args\.recipientUserId[\s\S]*getUserEmailDeliveryState\(ctx, recipientUserId\)/,
+  "email enqueue must require a user recipient and resolve delivery through the verified user record",
+);
+
+assert.doesNotMatch(
+  email,
+  /recipientEmail: v\.optional|rawRecipientEmail|email_recipient_ambiguous/,
+  "email enqueue must not keep a direct recipientEmail bypass around the verified-user gate",
+);
+
+assert.match(
   pkg,
   /"check:email-verified-auth-sync-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/email_verified_auth_sync_contract_proof\.ts"/,
   "package scripts must expose the email verified auth sync proof",

@@ -40,14 +40,6 @@ function maybeNormalizeRecipientEmail(value: unknown): string | null {
   return email;
 }
 
-function normalizeRecipientEmail(value: unknown): string {
-  const email = maybeNormalizeRecipientEmail(value);
-  if (!email) {
-    throw new Error("email_recipient_invalid");
-  }
-  return email;
-}
-
 function normalizeStatus(value: unknown): EmailOutboxStatus {
   const normalized = readString(value).toLowerCase();
   if (normalized === "pending") return "pending";
@@ -204,8 +196,7 @@ function buildAccountSetupReminderPayload(target: Record<string, unknown>): Reco
 export const enqueueEmailJobInternal = internalMutation({
   args: {
     kind: v.string(),
-    recipientUserId: v.optional(v.id("users")),
-    recipientEmail: v.optional(v.string()),
+    recipientUserId: v.id("users"),
     templateKey: EMAIL_TEMPLATE_VALIDATOR,
     payload: v.any(),
     dedupeKey: v.optional(v.string()),
@@ -227,35 +218,23 @@ export const enqueueEmailJobInternal = internalMutation({
       }
     }
 
-    const recipientUserId = args.recipientUserId ?? null;
-    const rawRecipientEmail = readString(args.recipientEmail);
-    if (recipientUserId && rawRecipientEmail) {
-      throw new Error("email_recipient_ambiguous");
-    }
-    if (!recipientUserId && !rawRecipientEmail) {
-      throw new Error("email_recipient_missing");
-    }
-
+    const recipientUserId = args.recipientUserId;
     const templateKey = args.templateKey as EmailTemplateKey;
     let recipientEmail: string;
     let suppressionReason: string | null = null;
-    if (recipientUserId) {
-      const deliveryState = await getUserEmailDeliveryState(ctx, recipientUserId);
-      if (deliveryState.verifiedEmail) {
-        recipientEmail = deliveryState.verifiedEmail;
-      } else {
-        suppressionReason = deliveryState.userExists
-          ? "email_recipient_unverified"
-          : "email_recipient_missing";
-        recipientEmail =
-          deliveryState.recordEmail || `suppressed+${String(recipientUserId)}@invalid.local`;
-      }
+    const deliveryState = await getUserEmailDeliveryState(ctx, recipientUserId);
+    if (deliveryState.verifiedEmail) {
+      recipientEmail = deliveryState.verifiedEmail;
     } else {
-      recipientEmail = normalizeRecipientEmail(rawRecipientEmail);
+      suppressionReason = deliveryState.userExists
+        ? "email_recipient_unverified"
+        : "email_recipient_missing";
+      recipientEmail =
+        deliveryState.recordEmail || `suppressed+${String(recipientUserId)}@invalid.local`;
     }
 
     const preferences =
-      !suppressionReason && recipientUserId && isPreferenceControlledTemplate(templateKey)
+      !suppressionReason && isPreferenceControlledTemplate(templateKey)
         ? await getEmailPreferencesByUserId(ctx, recipientUserId)
         : null;
     if (!suppressionReason && preferences && !preferenceAllowsTemplate(preferences, templateKey)) {
@@ -266,7 +245,7 @@ export const enqueueEmailJobInternal = internalMutation({
 
     const outboxId = await ctx.db.insert("emailOutbox", {
       kind: readString(args.kind) || templateKey,
-      recipientUserId: recipientUserId ?? undefined,
+      recipientUserId,
       recipientEmail,
       templateKey,
       payload: args.payload ?? {},
