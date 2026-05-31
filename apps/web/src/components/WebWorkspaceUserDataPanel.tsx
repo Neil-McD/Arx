@@ -1145,7 +1145,11 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                   </button>
                 ))
               ) : (
-                <div className="workspace-files-empty">No files returned.</div>
+                <div className="workspace-files-empty">
+                  This computer has no files yet.
+                  <br />
+                  Upload files or ask your Polynet agent to create something.
+                </div>
               )}
             </div>
           </div>
