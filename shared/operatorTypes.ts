@@ -213,6 +213,11 @@ export type OperatorMonetizationSnapshot = {
 export type OperatorEmailAuthDiagnosticSnapshot = {
   ok: boolean;
   computedAt: number;
+  configuration: {
+    resendApiKeyConfigured: boolean;
+    senderConfigured: boolean;
+    webhookSecretConfigured: boolean;
+  };
   operator: {
     role: "owner" | "operator" | "readonly" | string;
     source: string;
@@ -264,11 +269,41 @@ export type OperatorEmailAuthDiagnosticSnapshot = {
         userId: number;
         directEmail: number;
       };
+      pendingDueNow: number;
+      pendingDueNowTruncated: boolean;
+      staleSending: number;
+      oldestPendingAt: number | null;
+      recentRows: Array<{
+        id: string;
+        status: string;
+        kind: string;
+        templateKey: string;
+        failureReason: string | null;
+        attemptCount: number;
+        scheduledAt: number | null;
+        updatedAt: number | null;
+        createdAt: number | null;
+        ageMs: number | null;
+      }>;
+      recentFailures: Array<{
+        id: string;
+        status: string;
+        kind: string;
+        templateKey: string;
+        failureReason: string | null;
+        attemptCount: number;
+        scheduledAt: number | null;
+        updatedAt: number | null;
+        createdAt: number | null;
+        ageMs: number | null;
+      }>;
     };
     deliveries: {
       sampled: number;
       byEvent: Record<string, number>;
       withOutboxId: number;
+      lastEventType: string | null;
+      lastEventAt: number | null;
     };
     evidence: {
       sourceTables: string[];

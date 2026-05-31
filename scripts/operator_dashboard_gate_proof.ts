@@ -207,13 +207,13 @@ assert.match(
 );
 assert.match(
   workspaceHost,
-  /isOperatorRightPanelTabActive = isOperatorInsightTab\(activeRightPanelTab\)/,
-  "workspace host must know whether the active right-panel tab is an operator insight tab",
+  /isOperatorRightPanelTabActive =[\s\S]*activeRightPanelMode === "operator"[\s\S]*isOperatorInsightTab\(activeRightPanelTab\)/,
+  "workspace host must know whether the active right-panel tab is an operator insight tab inside operator mode",
 );
 assert.match(
   workspaceHost,
-  /useOperatorDashboardData\([\s\S]*enabled: isWorkspaceRightPanelVisible && showOperatorTabs && isOperatorRightPanelTabActive/,
-  "operator data loading must be disabled unless the right panel is visible, operator tabs are authorized, and an operator tab is active",
+  /useOperatorDashboardData\([\s\S]*enabled:[\s\S]*isWorkspaceRightPanelVisible[\s\S]*showOperatorTabs[\s\S]*activeRightPanelMode === "operator"[\s\S]*isOperatorRightPanelTabActive/,
+  "operator data loading must be disabled unless the right panel is visible, operator tabs are authorized, operator mode is active, and an operator tab is active",
 );
 assert.match(
   workspaceRightPanelController,

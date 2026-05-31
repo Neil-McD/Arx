@@ -11,7 +11,9 @@ const gateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
 const businessPanel = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
+const emailPanel = read("apps/web/src/components/OperatorEmailPanelView.tsx");
 const rightPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
+const rightPanelModel = read("apps/web/src/components/workspaceRightPanelModel.ts");
 const pkg = read("package.json");
 
 assert.match(
@@ -46,6 +48,18 @@ assert.match(
 
 assert.match(
   diagnostic,
+  /RESEND_API_KEY_ENV_KEYS[\s\S]*EMAIL_FROM_ENV_KEYS[\s\S]*RESEND_WEBHOOK_SECRET_ENV_KEYS[\s\S]*configuration:[\s\S]*resendApiKeyConfigured[\s\S]*senderConfigured[\s\S]*webhookSecretConfigured/,
+  "email diagnostics must expose redacted Resend/provider configuration health",
+);
+
+assert.match(
+  diagnostic,
+  /pendingDueNow[\s\S]*staleSending[\s\S]*oldestPendingAt[\s\S]*recentRows[\s\S]*recentFailures[\s\S]*lastEventType[\s\S]*lastEventAt/,
+  "email diagnostics must expose read-only queue and webhook health fields",
+);
+
+assert.match(
+  diagnostic,
   /fetchWorkosUserVerification[\s\S]*redactWorkosUserVerificationLookup/,
   "email auth diagnostic must use the shared redacted WorkOS user verification lookup",
 );
@@ -70,8 +84,8 @@ assert.match(
 
 assert.match(
   operatorTypes,
-  /export type OperatorEmailAuthDiagnosticSnapshot = \{[\s\S]*emailVerifiedClaimValue: boolean \| null[\s\S]*workosUser:[\s\S]*emailVerified\?: boolean \| null[\s\S]*aggregate:[\s\S]*currentUser:[\s\S]*emailVerifiedAtPresent: boolean[\s\S]*outbox:[\s\S]*failures: Record<string, number>/,
-  "operator types must expose the redacted email auth diagnostic snapshot",
+  /export type OperatorEmailAuthDiagnosticSnapshot = \{[\s\S]*configuration:[\s\S]*resendApiKeyConfigured: boolean[\s\S]*emailVerifiedClaimValue: boolean \| null[\s\S]*workosUser:[\s\S]*emailVerified\?: boolean \| null[\s\S]*aggregate:[\s\S]*currentUser:[\s\S]*emailVerifiedAtPresent: boolean[\s\S]*outbox:[\s\S]*failures: Record<string, number>[\s\S]*pendingDueNow: number[\s\S]*recentRows: Array[\s\S]*deliveries:[\s\S]*lastEventType: string \| null/,
+  "operator types must expose the redacted email auth and ops diagnostic snapshot",
 );
 
 assert.match(
@@ -88,14 +102,26 @@ assert.match(
 
 assert.match(
   rightPanel,
-  /<OperatorBusinessPanelView[\s\S]*emailAuth=\{props\.state\.emailAuth\}/,
-  "workspace operator right panel must pass email auth diagnostics to Business",
+  /import \{ OperatorEmailPanelView \}[\s\S]*activeInsightTab === "email"[\s\S]*<OperatorEmailPanelView[\s\S]*monetization=\{props\.state\.monetization\}[\s\S]*emailAuth=\{props\.state\.emailAuth\}/,
+  "workspace operator right panel must route email diagnostics to the dedicated Email tab",
 );
 
 assert.match(
+  rightPanelModel,
+  /OperatorInsightTab = "platform" \| "business" \| "email" \| "communities"[\s\S]*\{ id: "email", label: "Email" \}[\s\S]*value === "email"[\s\S]*tab === "email"/,
+  "workspace right panel model must expose Email as an operator-only tab",
+);
+
+assert.match(
+  emailPanel,
+  /Provider health[\s\S]*Resend API key[\s\S]*Email engagement[\s\S]*Email auth[\s\S]*Queue health[\s\S]*Recent outbox/,
+  "operator Email panel must project provider, engagement, auth, and queue diagnostics",
+);
+
+assert.doesNotMatch(
   businessPanel,
-  /Email auth[\s\S]*Current user verified[\s\S]*Identity claim verified[\s\S]*WorkOS user verified[\s\S]*Unverified suppressions/,
-  "operator Business panel must project the email auth diagnostic",
+  /Email engagement|Email auth|emailAuth/,
+  "operator Business panel must not retain the dedicated email diagnostic sections",
 );
 
 assert.doesNotMatch(

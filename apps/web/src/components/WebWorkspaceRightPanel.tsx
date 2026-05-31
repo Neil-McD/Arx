@@ -15,6 +15,7 @@ import {
 } from "./workspaceRightPanelModel";
 import { OperatorBusinessPanelView } from "./OperatorBusinessPanelView";
 import { OperatorCommunitiesPanelView } from "./OperatorCommunitiesPanelView";
+import { OperatorEmailPanelView } from "./OperatorEmailPanelView";
 import { OperatorPlatformPanelView } from "./OperatorPlatformPanelView";
 import {
   WebBuilderPartnerProgramPanel,
@@ -154,7 +155,6 @@ export function WebWorkspaceRightPanel(props: {
           <OperatorBusinessPanelView
             overview={props.state.overview}
             monetization={props.state.monetization}
-            emailAuth={props.state.emailAuth}
             accountSetup={props.state.accountSetup}
             toolEconomics={props.state.toolEconomics}
             partnerPerformance={props.state.partnerPerformance}
@@ -162,6 +162,11 @@ export function WebWorkspaceRightPanel(props: {
             partnerPayoutCycleActions={props.partnerPayoutCycleActions}
             risks={props.state.risks}
             events={props.state.events}
+          />
+        ) : activeInsightTab === "email" ? (
+          <OperatorEmailPanelView
+            monetization={props.state.monetization}
+            emailAuth={props.state.emailAuth}
           />
         ) : (
           <OperatorCommunitiesPanelView overview={props.state.overview} communities={props.topCommunities} />

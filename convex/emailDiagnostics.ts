@@ -14,6 +14,11 @@ const EMAIL_VERIFICATION_CLAIM_KEYS = [
   "verified_email",
   "verifiedEmail",
 ] as const;
+const RESEND_API_KEY_ENV_KEYS = ["ARX_RESEND_API_KEY", "RESEND_API_KEY"] as const;
+const EMAIL_FROM_ENV_KEYS = ["ARX_EMAIL_FROM", "ARX_RESEND_FROM_EMAIL"] as const;
+const EMAIL_FROM_DOMAIN_ENV_KEYS = ["ARX_EMAIL_FROM_DOMAIN", "ARX_RESEND_DOMAIN"] as const;
+const RESEND_WEBHOOK_SECRET_ENV_KEYS = ["ARX_RESEND_WEBHOOK_SECRET", "RESEND_WEBHOOK_SECRET"] as const;
+const STALE_EMAIL_SENDING_MS = 15 * 60 * 1000;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -23,6 +28,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function hasAnyEnv(keys: readonly string[]): boolean {
+  return keys.some((key) => Boolean(readEnv(key)));
 }
 
 function readBoolean(value: unknown): boolean | null {
@@ -37,6 +56,33 @@ function readBoolean(value: unknown): boolean | null {
 function increment(map: Record<string, number>, rawKey: unknown): void {
   const key = readString(rawKey) || "<missing>";
   map[key] = (map[key] ?? 0) + 1;
+}
+
+function readTimestamp(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isStaleSendingRow(row: Record<string, unknown>, nowMs: number): boolean {
+  const lastAttemptAt = readTimestamp(row.lastAttemptAt) ?? readTimestamp(row.updatedAt) ?? 0;
+  return lastAttemptAt > 0 && nowMs - lastAttemptAt >= STALE_EMAIL_SENDING_MS;
+}
+
+function summarizeOutboxRow(row: Record<string, unknown>, nowMs: number) {
+  const updatedAt = readTimestamp(row.updatedAt);
+  const createdAt = readTimestamp(row.createdAt);
+  const scheduledAt = readTimestamp(row.scheduledAt);
+  return {
+    id: String(row._id ?? ""),
+    status: readString(row.status) || "unknown",
+    kind: readString(row.kind) || "unknown",
+    templateKey: readString(row.templateKey) || "unknown",
+    failureReason: readString(row.failureReason) || null,
+    attemptCount: typeof row.attemptCount === "number" ? row.attemptCount : 0,
+    scheduledAt,
+    updatedAt,
+    createdAt,
+    ageMs: createdAt ? Math.max(0, nowMs - createdAt) : null,
+  };
 }
 
 function summarizeIdentity(identity: unknown) {
@@ -82,6 +128,7 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
     deliverySampleLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const nowMs = Date.now();
     const userSampleLimit = Math.max(1, Math.min(500, Math.floor(args.userSampleLimit ?? 200)));
     const outboxPerStatusLimit = Math.max(1, Math.min(250, Math.floor(args.outboxPerStatusLimit ?? 100)));
     const deliverySampleLimit = Math.max(1, Math.min(250, Math.floor(args.deliverySampleLimit ?? 100)));
@@ -103,6 +150,8 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
     const outboxByTemplate: Record<string, number> = {};
     const outboxFailures: Record<string, number> = {};
     const recipientMode = { userId: 0, directEmail: 0 };
+    const sampledOutboxRowsForRecent: Record<string, unknown>[] = [];
+    let staleSending = 0;
     let sampledOutboxRows = 0;
     for (const status of EMAIL_OUTBOX_STATUSES) {
       const rows = await ctx.db
@@ -112,10 +161,12 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
         .take(outboxPerStatusLimit);
       outboxByStatus[status] = rows.length;
       sampledOutboxRows += rows.length;
+      sampledOutboxRowsForRecent.push(...rows);
       for (const row of rows) {
         increment(outboxByKind, row.kind);
         increment(outboxByTemplate, row.templateKey);
         if (row.failureReason) increment(outboxFailures, row.failureReason);
+        if (status === "sending" && isStaleSendingRow(row, nowMs)) staleSending += 1;
         if (row.recipientUserId) {
           recipientMode.userId += 1;
         } else {
@@ -124,14 +175,33 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
       }
     }
 
+    const pendingDueNow = await ctx.db
+      .query("emailOutbox")
+      .withIndex("by_status_scheduledAt", (q: any) => q.eq("status", "pending").lte("scheduledAt", nowMs))
+      .take(250);
+    const oldestPending = await ctx.db
+      .query("emailOutbox")
+      .withIndex("by_status_scheduledAt", (q: any) => q.eq("status", "pending"))
+      .first();
+    const recentOutboxRows = sampledOutboxRowsForRecent
+      .sort((a, b) => Number(b.updatedAt ?? b.createdAt ?? 0) - Number(a.updatedAt ?? a.createdAt ?? 0))
+      .slice(0, 12)
+      .map((row) => summarizeOutboxRow(row, nowMs));
+    const recentFailureRows = sampledOutboxRowsForRecent
+      .filter((row) => readString(row.status) === "failed" || Boolean(readString(row.failureReason)))
+      .sort((a, b) => Number(b.updatedAt ?? b.createdAt ?? 0) - Number(a.updatedAt ?? a.createdAt ?? 0))
+      .slice(0, 8)
+      .map((row) => summarizeOutboxRow(row, nowMs));
+
     const deliveries = await ctx.db.query("emailDeliveries").order("desc").take(deliverySampleLimit);
     const deliveriesByEvent: Record<string, number> = {};
     for (const delivery of deliveries) {
       increment(deliveriesByEvent, delivery.eventType);
     }
+    const lastDelivery = deliveries[0] ?? null;
 
     return {
-      computedAt: Date.now(),
+      computedAt: nowMs,
       currentUser: currentUser
         ? {
             rowPresent: true,
@@ -158,11 +228,19 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
         byTemplate: outboxByTemplate,
         failures: outboxFailures,
         recipientMode,
+        pendingDueNow: pendingDueNow.length,
+        pendingDueNowTruncated: pendingDueNow.length >= 250,
+        staleSending,
+        oldestPendingAt: readTimestamp(oldestPending?.scheduledAt),
+        recentRows: recentOutboxRows,
+        recentFailures: recentFailureRows,
       },
       deliveries: {
         sampled: deliveries.length,
         byEvent: deliveriesByEvent,
         withOutboxId: deliveries.filter((delivery: any) => Boolean(delivery.outboxId)).length,
+        lastEventType: readString(lastDelivery?.eventType) || null,
+        lastEventAt: readTimestamp(lastDelivery?.createdAt),
       },
       evidence: {
         sourceTables: ["users", "emailOutbox", "emailDeliveries"],
@@ -214,6 +292,11 @@ export const getOperatorEmailAuthDiagnostic = action({
     return {
       ok: true,
       computedAt: Date.now(),
+      configuration: {
+        resendApiKeyConfigured: hasAnyEnv(RESEND_API_KEY_ENV_KEYS),
+        senderConfigured: hasAnyEnv(EMAIL_FROM_ENV_KEYS) || hasAnyEnv(EMAIL_FROM_DOMAIN_ENV_KEYS),
+        webhookSecretConfigured: hasAnyEnv(RESEND_WEBHOOK_SECRET_ENV_KEYS),
+      },
       operator: {
         role: operator.role,
         source: operator.source,

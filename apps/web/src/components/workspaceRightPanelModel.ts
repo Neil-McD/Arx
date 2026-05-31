@@ -1,4 +1,4 @@
-export type OperatorInsightTab = "platform" | "business" | "communities";
+export type OperatorInsightTab = "platform" | "business" | "email" | "communities";
 export type WorkspaceRightPanelTab = "workspace" | "community" | "partner" | OperatorInsightTab;
 export type WorkspaceRightPanelMode = "user" | "operator";
 
@@ -20,6 +20,7 @@ export const WORKSPACE_RIGHT_PANEL_MODES: WorkspaceRightPanelModeItem[] = [
 const OPERATOR_INSIGHT_TABS: WorkspaceRightPanelTabItem[] = [
   { id: "platform", label: "Platform" },
   { id: "business", label: "Business" },
+  { id: "email", label: "Email" },
   { id: "communities", label: "Communities" },
 ];
 
@@ -29,6 +30,7 @@ export function parseWorkspaceRightPanelTab(value: string | null): WorkspaceRigh
     value === "partner" ||
     value === "platform" ||
     value === "business" ||
+    value === "email" ||
     value === "communities"
     ? value
     : null;
@@ -80,5 +82,5 @@ export function resolveWorkspaceRightPanelTab(
 }
 
 export function isOperatorInsightTab(tab: WorkspaceRightPanelTab): tab is OperatorInsightTab {
-  return tab === "platform" || tab === "business" || tab === "communities";
+  return tab === "platform" || tab === "business" || tab === "email" || tab === "communities";
 }
