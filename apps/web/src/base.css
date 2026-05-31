@@ -9075,9 +9075,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   position: fixed;
   top: 64px;
   right: 18px;
-  bottom: 18px;
+  bottom: auto;
   z-index: 48;
   width: min(340px, calc(100vw - 36px));
+  max-height: min(560px, calc(100vh - 96px));
   padding: 14px;
   display: flex;
   flex-direction: column;
