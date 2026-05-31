@@ -17,6 +17,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   activePage: AppPage;
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
+  session: WebCommunityChatPanelProps["session"];
   selectedActiveCommunitySlug: string | null;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
@@ -299,6 +300,7 @@ export function buildWebCommunitySurfaceProjection(
           owner_id: params.activeCommunity.owner_id ?? null,
         }
       : null,
+    session: params.session,
     isResolvingSelectedCommunity:
       params.hasAuthenticatedPresentation &&
       params.activePage === "community" &&

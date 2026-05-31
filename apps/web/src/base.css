@@ -9263,6 +9263,53 @@ button.community-launch-knowledge-integration-chip:disabled {
   white-space: nowrap;
 }
 
+.community-profile-panel-community-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 0 3px;
+  scrollbar-width: none;
+}
+
+.community-profile-panel-community-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.community-profile-panel-community-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 78%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.community-profile-panel-community-avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.community-profile-panel-community-avatar-fallback {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+}
+
 @media (max-width: 760px) {
   .community-profile-panel {
     top: auto;

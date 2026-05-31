@@ -9352,6 +9352,7 @@ export default function App() {
       activePage,
       communityTab,
       activeCommunity,
+      session: session,
       selectedActiveCommunitySlug,
       hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,

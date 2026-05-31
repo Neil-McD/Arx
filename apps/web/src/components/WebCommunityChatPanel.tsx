@@ -13,11 +13,13 @@ import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMe
 import type {
   CommunityActivityEvent as SharedCommunityActivityEvent,
   CommunityChatMessage as SharedCommunityChatMessage,
+  ProfileCommunityContext as SharedProfileCommunityContext,
   MessageReaction as SharedMessageReaction,
   CommunityTypingPresenceBundle as SharedCommunityTypingPresenceBundle,
   CommunityTypingPresenceUser as SharedCommunityTypingPresenceUser,
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
+import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
 import { formatDateSeparator } from "../../../../shared/chatUi";
 import {
   type CommunityMessageAttachment,
@@ -34,6 +36,7 @@ type MessageReaction = SharedMessageReaction;
 type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
 type UserProfile = SharedUserProfile;
+type ProfileCommunityContext = SharedProfileCommunityContext;
 
 type CommunityChatMessageViewModel = {
   message: CommunityChatMessage;
@@ -82,9 +85,14 @@ type CommunityChatTimelineDraftItem =
     };
 
 const EMPTY_MESSAGE_REACTIONS: MessageReaction[] = [];
+const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
+  owned_communities: [],
+  mutual_communities: [],
+};
 
 export type WebCommunityChatPanelProps = {
   activeCommunity: { name: string; owner_id?: string | null } | null;
+  session: unknown | null;
   isResolvingSelectedCommunity: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
@@ -270,6 +278,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
   const canUseComposer = canPostMessages && !isProfileSetupGateActive;
   const [profilePanelUserId, setProfilePanelUserId] = useState<string | null>(null);
+  const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
+    Record<string, ProfileCommunityContext>
+  >({});
+  const [loadingProfileCommunityContextUserId, setLoadingProfileCommunityContextUserId] = useState<string | null>(null);
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
@@ -368,10 +380,55 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       displayName(profilePanelUserId)
     : "";
   const profilePanelAvatarColor = profilePanelUserId ? getAvatarColor(profilePanelUserId) : "transparent";
+  const loadedProfilePanelCommunityContext = profilePanelUserId
+    ? profileCommunityContextByUserId[profilePanelUserId] ?? null
+    : null;
+  const profilePanelCommunityContext = loadedProfilePanelCommunityContext ?? EMPTY_PROFILE_COMMUNITY_CONTEXT;
+  const isProfilePanelCommunityContextLoading =
+    Boolean(profilePanelUserId && props.session) &&
+    loadingProfileCommunityContextUserId === profilePanelUserId &&
+    !loadedProfilePanelCommunityContext;
 
   useEffect(() => {
     setProfilePanelUserId(null);
   }, [activeCommunity?.name]);
+
+  useEffect(() => {
+    setProfileCommunityContextByUserId({});
+    setLoadingProfileCommunityContextUserId(null);
+  }, [sessionUserId]);
+
+  useEffect(() => {
+    const targetUserId = profilePanelUserId;
+    if (!targetUserId || !props.session || profileCommunityContextByUserId[targetUserId]) return;
+    let cancelled = false;
+    setLoadingProfileCommunityContextUserId(targetUserId);
+    void fetchCloudProfileCommunityContext({
+      session: props.session,
+      targetUserId,
+    })
+      .then((context) => {
+        if (cancelled) return;
+        setProfileCommunityContextByUserId((previous) => ({
+          ...previous,
+          [targetUserId]: context,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProfileCommunityContextByUserId((previous) => ({
+          ...previous,
+          [targetUserId]: EMPTY_PROFILE_COMMUNITY_CONTEXT,
+        }));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoadingProfileCommunityContextUserId((current) => (current === targetUserId ? null : current));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileCommunityContextByUserId, profilePanelUserId, props.session]);
 
   useEffect(() => {
     if (!profilePanelUserId) return;
@@ -789,8 +846,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           profile={profilePanelProfile}
           displayName={profilePanelDisplayName}
           avatarColor={profilePanelAvatarColor}
-          activeCommunityName={activeCommunity?.name ?? null}
-          isActiveCommunityOwner={Boolean(activeCommunity?.owner_id && activeCommunity.owner_id === profilePanelUserId)}
+          communityContext={profilePanelCommunityContext}
+          isCommunityContextLoading={isProfilePanelCommunityContextLoading}
           getInitials={getInitials}
         />
       ) : null}

@@ -1,6 +1,7 @@
 import { ExternalLink, MessageCircle } from "lucide-react";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { SOCIAL_PROFILE_KINDS, type SocialProfileKind } from "../../../../shared/socialProfileLinks";
-import type { UserProfile } from "../../../../shared/communityTypes";
+import type { CommunityAvatarSummary, ProfileCommunityContext, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { SocialProfileIcon } from "./SocialProfileIcon";
 
@@ -8,8 +9,8 @@ type WebCommunityProfilePanelProps = {
   profile: UserProfile | null;
   displayName: string;
   avatarColor: string;
-  activeCommunityName: string | null;
-  isActiveCommunityOwner: boolean;
+  communityContext: ProfileCommunityContext;
+  isCommunityContextLoading: boolean;
   getInitials: (value: string) => string;
 };
 
@@ -24,13 +25,49 @@ function normalizePanelHandle(handle: string | null | undefined): string {
   return normalized ? `@${normalized}` : "No handle yet";
 }
 
+function WebCommunityProfileCommunityStrip(props: {
+  communities: CommunityAvatarSummary[];
+  emptyLabel: string;
+  isLoading: boolean;
+}) {
+  const visibleCommunities = props.communities.slice(0, 18);
+  if (props.isLoading) {
+    return <div className="community-profile-panel-empty">Loading communities...</div>;
+  }
+  if (visibleCommunities.length === 0) {
+    return <div className="community-profile-panel-empty">{props.emptyLabel}</div>;
+  }
+  return (
+    <div
+      className="community-profile-panel-community-strip"
+      aria-label={visibleCommunities.map((community) => community.name).join(", ")}
+    >
+      {visibleCommunities.map((community) => (
+        <CommunityAvatar
+          key={community.id}
+          className="community-profile-panel-community-avatar"
+          imageClassName="community-profile-panel-community-avatar-image"
+          fallbackClassName="community-profile-panel-community-avatar-fallback"
+          name={community.name}
+          imageUrl={community.avatar_url}
+          focusX={community.avatar_focus_x}
+          focusY={community.avatar_focus_y}
+          zoom={community.avatar_zoom}
+          alt={community.name}
+          title={community.name}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
   const {
     profile,
     displayName,
     avatarColor,
-    activeCommunityName,
-    isActiveCommunityOwner,
+    communityContext,
+    isCommunityContextLoading,
     getInitials,
   } = props;
   const handleLabel = normalizePanelHandle(profile?.handle);
@@ -40,7 +77,6 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
     label: SOCIAL_PROFILE_LABELS[kind],
     url: String(profile?.social_links?.[kind] ?? "").trim(),
   })).filter((item) => item.url);
-  const roleLabel = isActiveCommunityOwner ? "Owner" : "Member";
 
   return (
     <aside
@@ -103,39 +139,21 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
       <div className="community-profile-panel-divider" />
 
       <section className="community-profile-panel-section">
-        <div className="community-profile-panel-section-label">In this community</div>
-        {activeCommunityName ? (
-          <div className="community-profile-panel-context-row">
-            <span>{activeCommunityName}</span>
-            <span>{roleLabel}</span>
-          </div>
-        ) : (
-          <div className="community-profile-panel-empty">No active community context.</div>
-        )}
-      </section>
-
-      <section className="community-profile-panel-section">
         <div className="community-profile-panel-section-label">Owned communities</div>
-        {activeCommunityName && isActiveCommunityOwner ? (
-          <div className="community-profile-panel-context-row">
-            <span>{activeCommunityName}</span>
-            <span>Owner</span>
-          </div>
-        ) : (
-          <div className="community-profile-panel-empty">No visible owned communities yet.</div>
-        )}
+        <WebCommunityProfileCommunityStrip
+          communities={communityContext.owned_communities}
+          emptyLabel="No visible owned communities."
+          isLoading={isCommunityContextLoading}
+        />
       </section>
 
       <section className="community-profile-panel-section">
         <div className="community-profile-panel-section-label">Mutual communities</div>
-        {activeCommunityName ? (
-          <div className="community-profile-panel-context-row">
-            <span>{activeCommunityName}</span>
-            <span>Current</span>
-          </div>
-        ) : (
-          <div className="community-profile-panel-empty">No mutual communities to show yet.</div>
-        )}
+        <WebCommunityProfileCommunityStrip
+          communities={communityContext.mutual_communities}
+          emptyLabel="No mutual communities."
+          isLoading={isCommunityContextLoading}
+        />
       </section>
     </aside>
   );
