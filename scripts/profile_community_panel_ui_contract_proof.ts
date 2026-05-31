@@ -17,6 +17,10 @@ assert.match(panel, /Owned communities/, "profile panel must keep the owned comm
 assert.match(panel, /Mutual communities/, "profile panel must keep the mutual communities section");
 assert.match(panel, /communityContext\.owned_communities/, "owned section must render backend owned community context");
 assert.match(panel, /communityContext\.mutual_communities/, "mutual section must render backend mutual community context");
+assert.match(panel, /hasOwnedCommunities \? \(/, "owned communities section must only render when owned community data exists");
+assert.match(panel, /hasMutualCommunities \? \(/, "mutual communities section must only render when mutual community data exists");
+assert.match(panel, /hasCommunitySections \? <div className="community-profile-panel-divider"/, "profile community divider must only render when a community section exists");
+assert.doesNotMatch(panel, /No visible owned communities|No mutual communities|Loading communities/, "profile panel must not show empty or loading community section labels");
 assert.doesNotMatch(panel, /In this community/, "profile panel must not keep the old active-community text row");
 assert.doesNotMatch(panel, /activeCommunityName|isActiveCommunityOwner/, "profile panel must not synthesize context from current community props");
 
@@ -40,10 +44,10 @@ assert.match(
   /communityContext=\{profilePanelCommunityContext\}/,
   "chat panel must pass loaded community context into the profile panel",
 );
-assert.match(
+assert.doesNotMatch(
   chatPanel,
-  /isCommunityContextLoading=\{isProfilePanelCommunityContextLoading\}/,
-  "chat panel must pass profile community context loading state into the panel",
+  /isCommunityContextLoading|isProfilePanelCommunityContextLoading|loadingProfileCommunityContextUserId/,
+  "profile panel must not receive or render community loading chrome",
 );
 
 assert.match(

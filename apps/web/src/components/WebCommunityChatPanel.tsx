@@ -281,7 +281,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
     Record<string, ProfileCommunityContext>
   >({});
-  const [loadingProfileCommunityContextUserId, setLoadingProfileCommunityContextUserId] = useState<string | null>(null);
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
@@ -384,10 +383,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     ? profileCommunityContextByUserId[profilePanelUserId] ?? null
     : null;
   const profilePanelCommunityContext = loadedProfilePanelCommunityContext ?? EMPTY_PROFILE_COMMUNITY_CONTEXT;
-  const isProfilePanelCommunityContextLoading =
-    Boolean(profilePanelUserId && props.session) &&
-    loadingProfileCommunityContextUserId === profilePanelUserId &&
-    !loadedProfilePanelCommunityContext;
 
   useEffect(() => {
     setProfilePanelUserId(null);
@@ -395,14 +390,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     setProfileCommunityContextByUserId({});
-    setLoadingProfileCommunityContextUserId(null);
   }, [sessionUserId]);
 
   useEffect(() => {
     const targetUserId = profilePanelUserId;
     if (!targetUserId || !props.session || profileCommunityContextByUserId[targetUserId]) return;
     let cancelled = false;
-    setLoadingProfileCommunityContextUserId(targetUserId);
     void fetchCloudProfileCommunityContext({
       session: props.session,
       targetUserId,
@@ -421,10 +414,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           [targetUserId]: EMPTY_PROFILE_COMMUNITY_CONTEXT,
         }));
       })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingProfileCommunityContextUserId((current) => (current === targetUserId ? null : current));
-      });
     return () => {
       cancelled = true;
     };
@@ -847,7 +836,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           displayName={profilePanelDisplayName}
           avatarColor={profilePanelAvatarColor}
           communityContext={profilePanelCommunityContext}
-          isCommunityContextLoading={isProfilePanelCommunityContextLoading}
           getInitials={getInitials}
         />
       ) : null}
