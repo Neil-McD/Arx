@@ -165,8 +165,10 @@ missing provider resources count as already cleaned up.
 
 For Blaxel, `releaseWorkspaceComputerIfIdle` does not delete the sandbox.
 Release is a PolyNet-side acknowledgement that the provider can move the sandbox
-through standby/expiration according to its lifecycle policy. Later inspection
-or user intent reconciles stale project pointers.
+through automatic standby/expiration according to its lifecycle policy. Because
+Blaxel standby is automatic rather than a confirmed manual stop, accounting must
+include the explicit auto-standby grace window before clearing the active project
+lease.
 
 ## Workspace Boundary
 
@@ -194,7 +196,7 @@ Workspace computer creation must carry an explicit lifecycle intent:
   to `ttl-idle: 5m` and `ttl-max-age: 1h`.
 - `interactive`: terminal, preview, or non-agent workspace usage. Blaxel
   defaults to `ttl-idle: 30m` and `ttl-max-age: 1h`.
-- `agent_run`: active agent/Codex work. Blaxel defaults to `ttl-idle: 30m` and
+- `agent_run`: active agent/Codex work. Blaxel defaults to `ttl-idle: 10m` and
   intentionally omits an unconditional provider `ttl-max-age`; an active run
   should be allowed to finish before cleanup policy cools the workspace down.
 
@@ -205,6 +207,7 @@ provider lifecycle policy cools it down.
 Blaxel lifecycle overrides, if needed for staging tests, must be intent-specific:
 
 - `BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER`
+- `BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER`
 - `BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER`
 - `BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER`
 

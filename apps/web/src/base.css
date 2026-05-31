@@ -28592,6 +28592,40 @@ button.message-citation-chip:hover {
   white-space: nowrap;
 }
 
+.workspace-files-cache-note {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-files-refresh {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-secondary);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.workspace-files-refresh:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.085);
+}
+
+.workspace-files-refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .workspace-files-list {
   min-height: 92px;
   max-height: min(280px, 34svh);

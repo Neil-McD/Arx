@@ -7,6 +7,7 @@ import {
   FileText,
   Folder,
   LoaderCircle,
+  RefreshCw,
 } from "lucide-react";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
@@ -685,6 +686,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [directoryErrorCode, setDirectoryErrorCode] = useState<string | null>(null);
+  const [directoryCheckedAt, setDirectoryCheckedAt] = useState<number | null>(null);
+  const [directoryIsCached, setDirectoryIsCached] = useState(false);
+  const [directoryIsStale, setDirectoryIsStale] = useState(false);
   const [isComputerOnForFiles, setIsComputerOnForFiles] = useState(false);
   const [workspaceFilesProviderId, setWorkspaceFilesProviderId] = useState<"blaxel" | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
@@ -695,8 +699,13 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const lastFilesResetNonceRef = useRef(props.filesResetNonce ?? 0);
   const directoryWakeRetryStartedAtRef = useRef<number | null>(null);
   const directoryAutoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const forceDirectoryRefreshRef = useRef(false);
   const [isDirectoryWakeRetrying, setIsDirectoryWakeRetrying] = useState(false);
   const canInspectFiles = Boolean(props.session && props.activeProjectId);
+  const sessionIdentityKey =
+    props.session?.user?.id ??
+    props.session?.user?.email ??
+    (props.session ? "session" : "anonymous");
 
   const clearDirectoryAutoRetryTimer = useCallback(() => {
     if (!directoryAutoRetryTimerRef.current) return;
@@ -714,6 +723,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    setDirectoryCheckedAt(null);
+    setDirectoryIsCached(false);
+    setDirectoryIsStale(false);
     setIsComputerOnForFiles(false);
     setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
@@ -750,6 +762,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    setDirectoryCheckedAt(null);
+    setDirectoryIsCached(false);
+    setDirectoryIsStale(false);
     setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
@@ -761,6 +776,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     let isAlive = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     if (!filesExpanded || !props.session || !props.activeProjectId) return;
+    const forceRefresh = forceDirectoryRefreshRef.current;
+    forceDirectoryRefreshRef.current = false;
     setIsLoadingDirectory(true);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
@@ -768,6 +785,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       session: props.session,
       projectId: props.activeProjectId,
       path: directoryPath,
+      refresh: forceRefresh,
     })
       .then((result) => {
         if (!isAlive) return;
@@ -775,6 +793,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           setDirectoryEntries([]);
           setDirectoryError(formatWorkspaceInspectorFailure(result));
           setDirectoryErrorCode(result.code);
+          setDirectoryCheckedAt(null);
+          setDirectoryIsCached(false);
+          setDirectoryIsStale(false);
           setIsComputerOnForFiles(false);
           setWorkspaceFilesProviderId(null);
           if (isWorkspaceInspectorWakeRetryableCode(result.code)) {
@@ -807,6 +828,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         directoryWakeRetryStartedAtRef.current = null;
         setIsDirectoryWakeRetrying(false);
         setDirectoryEntries(result.entries);
+        setDirectoryCheckedAt(result.checkedAt ?? Date.now());
+        setDirectoryIsCached(result.cached === true);
+        setDirectoryIsStale(result.stale === true);
         setIsComputerOnForFiles(true);
         setWorkspaceFilesProviderId(result.providerId);
       })
@@ -815,6 +839,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         setDirectoryEntries([]);
         setDirectoryError(error instanceof Error ? error.message : "Workspace files unavailable.");
         setDirectoryErrorCode(null);
+        setDirectoryCheckedAt(null);
+        setDirectoryIsCached(false);
+        setDirectoryIsStale(false);
         directoryWakeRetryStartedAtRef.current = null;
         setIsDirectoryWakeRetrying(false);
         setIsComputerOnForFiles(false);
@@ -837,7 +864,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     directoryRefreshNonce,
     filesExpanded,
     props.activeProjectId,
-    props.session,
+    sessionIdentityKey,
   ]);
 
   const handleSelectFile = useCallback(
@@ -917,6 +944,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError("Computer turning on");
     setDirectoryErrorCode("computer_starting");
+    setDirectoryCheckedAt(null);
+    setDirectoryIsCached(false);
+    setDirectoryIsStale(false);
     directoryWakeRetryStartedAtRef.current = null;
     setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(false);
@@ -932,6 +962,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       setDirectoryEntries([]);
       setDirectoryError(error instanceof Error ? error.message : "Computer could not turn on.");
       setDirectoryErrorCode("computer_start_failed");
+      setDirectoryCheckedAt(null);
+      setDirectoryIsCached(false);
+      setDirectoryIsStale(false);
       directoryWakeRetryStartedAtRef.current = null;
       setIsDirectoryWakeRetrying(false);
       setIsComputerOnForFiles(false);
@@ -942,6 +975,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       setDirectoryEntries([]);
       setDirectoryError(formatWorkspaceInspectorFailure(result));
       setDirectoryErrorCode(result.code);
+      setDirectoryCheckedAt(null);
+      setDirectoryIsCached(false);
+      setDirectoryIsStale(false);
       directoryWakeRetryStartedAtRef.current = null;
       setIsDirectoryWakeRetrying(false);
       setWorkspaceFilesProviderId(null);
@@ -952,6 +988,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    setDirectoryCheckedAt(null);
+    setDirectoryIsCached(false);
+    setDirectoryIsStale(false);
     directoryWakeRetryStartedAtRef.current = null;
     setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(true);
@@ -967,6 +1006,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError("Turn on computer to view files.");
     setDirectoryErrorCode("background_sandbox_not_found");
+    setDirectoryCheckedAt(null);
+    setDirectoryIsCached(false);
+    setDirectoryIsStale(false);
     directoryWakeRetryStartedAtRef.current = null;
     setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(false);
@@ -976,6 +1018,23 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setFilePreviewError(null);
     setIsLoadingFilePreview(false);
   }, [canTurnOnComputer, props.onTurnOffComputer]);
+
+  const handleRefreshDirectory = useCallback(() => {
+    if (!filesExpanded || !props.session || !props.activeProjectId || isLoadingDirectory) return;
+    forceDirectoryRefreshRef.current = true;
+    setDirectoryRefreshNonce((value) => value + 1);
+  }, [filesExpanded, isLoadingDirectory, props.activeProjectId, props.session]);
+
+  const directoryFreshnessLabel = useMemo(() => {
+    if (!directoryCheckedAt) return null;
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - directoryCheckedAt) / 1000));
+    const ageLabel = ageSeconds < 60
+      ? "now"
+      : ageSeconds < 3600
+        ? `${Math.floor(ageSeconds / 60)}m ago`
+        : `${Math.floor(ageSeconds / 3600)}h ago`;
+    return `${directoryIsCached ? "Cached" : "Checked"} ${ageLabel}${directoryIsStale ? " · may be stale" : ""}`;
+  }, [directoryCheckedAt, directoryIsCached, directoryIsStale]);
 
   return (
     <div className="workspace-user-data-panel__grid">
@@ -1093,6 +1152,19 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                 </button>
               ) : null}
               <span className="workspace-files-path">{formatWorkspaceBreadcrumb(directoryPath)}</span>
+              {directoryFreshnessLabel ? (
+                <span className="workspace-files-cache-note">{directoryFreshnessLabel}</span>
+              ) : null}
+              <button
+                type="button"
+                className="workspace-files-refresh"
+                onClick={handleRefreshDirectory}
+                disabled={isLoadingDirectory}
+                aria-label="Refresh files"
+                title="Refresh files"
+              >
+                <RefreshCw size={13} strokeWidth={2} aria-hidden="true" />
+              </button>
               {isComputerOnForFiles && workspaceFilesProviderId !== "blaxel" ? (
                 <label
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${

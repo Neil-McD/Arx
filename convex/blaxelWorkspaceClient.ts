@@ -4,6 +4,7 @@ import type {
   WorkspaceComputerProviderSession,
 } from "../shared/workspaceComputerProvider.ts";
 import {
+  BLAXEL_AUTO_STANDBY_GRACE_SECONDS,
   WORKSPACE_COMPUTER_LIFECYCLE_POLICY,
   compareWorkspaceComputerLifecycleIntents,
   isWorkspaceComputerLifecycleIntent,
@@ -24,6 +25,7 @@ export type BlaxelWorkspaceConfig = {
   providerVolumeSafetyBuffer: number;
   workspaceRoot: string;
   fileInspectionIdleDeleteAfter: string;
+  agentRunIdleDeleteAfter: string;
   interactiveIdleDeleteAfter: string;
   nonAgentMaxAgeDeleteAfter: string;
 };
@@ -56,6 +58,7 @@ export type BlaxelWorkspaceLifecyclePolicy = {
 export type BlaxelWorkspaceLifecycleConfig = Pick<
   BlaxelWorkspaceConfig,
   | "fileInspectionIdleDeleteAfter"
+  | "agentRunIdleDeleteAfter"
   | "interactiveIdleDeleteAfter"
   | "nonAgentMaxAgeDeleteAfter"
 >;
@@ -458,6 +461,9 @@ export function loadBlaxelWorkspaceConfig():
       fileInspectionIdleDeleteAfter:
         readEnv("BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER") ||
         WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter,
+      agentRunIdleDeleteAfter:
+        readEnv("BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER") ||
+        WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter,
       interactiveIdleDeleteAfter:
         readEnv("BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER") ||
         WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter,
@@ -988,6 +994,8 @@ export function resolveBlaxelWorkspaceLifecyclePolicy(params: {
   const idleDeleteAfter =
     intent === "file_inspection"
       ? params.config.fileInspectionIdleDeleteAfter
+      : intent === "agent_run"
+        ? params.config.agentRunIdleDeleteAfter
       : params.config.interactiveIdleDeleteAfter;
   const maxAgeDeleteAfter =
     basePolicy.maxAgeDeleteAfter === null
@@ -1437,12 +1445,26 @@ export async function destroyBlaxelWorkspaceVolume(params: {
 
 export async function releaseBlaxelWorkspaceSandboxIfIdle(params: {
   sandboxName: string;
-}): Promise<{ ok: true; providerId: "blaxel"; providerSandboxId: string; mode: "provider_standby" } | WorkspaceComputerProviderFailure> {
+}): Promise<
+  | {
+      ok: true;
+      providerId: "blaxel";
+      providerSandboxId: string;
+      mode: "provider_auto_standby";
+      releaseConfirmed: false;
+      billableGraceSeconds: number;
+      reason: "blaxel_auto_standby_after_connection_idle";
+    }
+  | WorkspaceComputerProviderFailure
+> {
   return {
     ok: true,
     providerId: "blaxel",
     providerSandboxId: normalizeString(params.sandboxName),
-    mode: "provider_standby",
+    mode: "provider_auto_standby",
+    releaseConfirmed: false,
+    billableGraceSeconds: BLAXEL_AUTO_STANDBY_GRACE_SECONDS,
+    reason: "blaxel_auto_standby_after_connection_idle",
   };
 }
 

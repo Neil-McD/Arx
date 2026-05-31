@@ -24,6 +24,10 @@ export type WorkspaceInspectorDirectoryResult =
       path: string;
       entries: WorkspaceInspectorDirectoryEntry[];
       truncated: boolean;
+      cached?: boolean;
+      checkedAt?: number | null;
+      stale?: boolean;
+      staleReason?: string | null;
     }
   | WorkspaceInspectorFailure;
 
@@ -120,6 +124,7 @@ export async function listWorkspaceDirectoryCanonical(params: {
   session: AuthSessionLike;
   projectId: string;
   path?: string | null;
+  refresh?: boolean | null;
 }): Promise<WorkspaceInspectorDirectoryResult> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -127,6 +132,7 @@ export async function listWorkspaceDirectoryCanonical(params: {
     authSubject,
     projectId: params.projectId,
     path: params.path ?? ".",
+    refresh: params.refresh === true,
   });
   if (!isRecord(payload) || payload.ok !== true) return normalizeFailure(payload);
   return {
@@ -144,6 +150,10 @@ export async function listWorkspaceDirectoryCanonical(params: {
         })
       : [],
     truncated: payload.truncated === true,
+    cached: payload.cached === true,
+    checkedAt: Number.isFinite(Number(payload.checkedAt)) ? Number(payload.checkedAt) : null,
+    stale: payload.stale === true,
+    staleReason: typeof payload.staleReason === "string" ? payload.staleReason : null,
   };
 }
 

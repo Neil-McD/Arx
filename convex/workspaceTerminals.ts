@@ -81,6 +81,15 @@ type WorkspaceTerminalSummary = {
   preview_inspection_status: WorkspaceTerminalPreviewInspectionStatus | null;
   preview_render_status: WorkspaceTerminalPreviewRenderStatus | null;
 };
+type ProjectSandboxActiveTerminalStatus = {
+  hasActiveTerminal: boolean;
+  activeCount: number;
+};
+type ProjectSandboxActiveTerminalRefreshStatus =
+  ProjectSandboxActiveTerminalStatus & {
+    checkedCount: number;
+    refreshedCount: number;
+  };
 
 const workspaceTerminalLifecycleOwnerValidator = v.union(
   v.literal("project_background"),
@@ -374,6 +383,94 @@ export const listWorkspaceTerminalSessionsBySandboxInternal = internalQuery({
   },
 });
 
+export const readProjectSandboxActiveTerminalStatusInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    projectId: v.id("cloudProjects"),
+    providerSandboxId: v.string(),
+  },
+  handler: async (ctx, args): Promise<ProjectSandboxActiveTerminalStatus> => {
+    const rows = await ctx.db
+      .query("workspaceTerminalSessions")
+      .withIndex("by_providerSandboxId", (q) =>
+        q.eq("providerSandboxId", args.providerSandboxId),
+      )
+      .collect();
+    const activeRows = rows.filter(
+      (row) =>
+        String(row.ownerId ?? "") === String(args.ownerId) &&
+        String(row.projectId ?? "") === String(args.projectId) &&
+        isTerminalActiveStatus(row.status),
+    );
+    return {
+      hasActiveTerminal: activeRows.length > 0,
+      activeCount: activeRows.length,
+    };
+  },
+});
+
+export const refreshProjectSandboxActiveTerminalStatusInternal = internalAction({
+  args: {
+    ownerId: v.id("users"),
+    projectId: v.id("cloudProjects"),
+    providerSandboxId: v.string(),
+  },
+  handler: async (ctx, args): Promise<ProjectSandboxActiveTerminalRefreshStatus> => {
+    const rows = (await ctx.runQuery(
+      internal.workspaceTerminals.listWorkspaceTerminalSessionsBySandboxInternal as any,
+      {
+        providerSandboxId: args.providerSandboxId,
+      },
+    )) as any[];
+    const activeRows = rows.filter(
+      (row) =>
+        String(row.ownerId ?? "") === String(args.ownerId) &&
+        String(row.projectId ?? "") === String(args.projectId) &&
+        isTerminalActiveStatus(row.status),
+    );
+    let refreshedCount = 0;
+    for (const row of activeRows) {
+      const refreshed = await readWorkspaceTerminalProcess({
+        ctx,
+        row,
+        session: buildBlaxelTerminalProcessContextFromRow(row),
+      });
+      if (
+        refreshed &&
+        typeof refreshed === "object" &&
+        !Array.isArray(refreshed) &&
+        (refreshed as { ok?: unknown }).ok === false
+      ) {
+        const code = normalizeOptionalString(
+          (refreshed as { code?: unknown }).code,
+        );
+        const message =
+          normalizeOptionalString((refreshed as { message?: unknown }).message) ??
+          "Terminal process refresh failed.";
+        throw new Error(code ? `${code}: ${message}` : message);
+      }
+      refreshedCount += 1;
+    }
+    const current: ProjectSandboxActiveTerminalStatus = await ctx.runQuery(
+      internal.workspaceTerminals.readProjectSandboxActiveTerminalStatusInternal as any,
+      {
+        ownerId: args.ownerId,
+        projectId: args.projectId,
+        providerSandboxId: args.providerSandboxId,
+      },
+    );
+    return {
+      hasActiveTerminal: Boolean((current as any)?.hasActiveTerminal),
+      activeCount: Math.max(
+        0,
+        Number((current as any)?.activeCount ?? 0) || 0,
+      ),
+      checkedCount: activeRows.length,
+      refreshedCount,
+    };
+  },
+});
+
 export const createWorkspaceTerminalSessionInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -629,6 +726,59 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
       previousSandboxCreditReservationKey,
       previousSandboxCreditBudgetExpiresAt,
     };
+  },
+});
+
+export const releaseProjectBackgroundSandboxAccountingIfCurrentInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    providerSandboxId: v.string(),
+    providerSandboxProviderId: workspaceResourceProviderIdValidator,
+    providerSandboxCreditReservationKey: v.string(),
+    providerSandboxStartedAt: v.number(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) {
+      return { released: false, reason: "project_not_found" };
+    }
+    const currentProviderId = resolveRecordedWorkspaceResourceProviderId({
+      providerId: project.providerSandboxProviderId,
+      resourceId: project.providerSandboxId,
+    });
+    if (currentProviderId !== args.providerSandboxProviderId) {
+      return { released: false, reason: "provider_mismatch" };
+    }
+    if (
+      normalizeOptionalString(project.providerSandboxId) !==
+      normalizeOptionalString(args.providerSandboxId)
+    ) {
+      return { released: false, reason: "sandbox_mismatch" };
+    }
+    if (
+      normalizeOptionalString(project.providerSandboxCreditReservationKey) !==
+      normalizeOptionalString(args.providerSandboxCreditReservationKey)
+    ) {
+      return { released: false, reason: "reservation_mismatch" };
+    }
+    if (
+      Number(project.providerSandboxStartedAt) !==
+      Number(args.providerSandboxStartedAt)
+    ) {
+      return { released: false, reason: "started_at_mismatch" };
+    }
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.patch(args.projectId, {
+      providerSandboxState: "standby",
+      providerSandboxLastSeenAt: nowMs,
+      providerSandboxStartedAt: undefined,
+      providerSandboxCreditReservationKey: undefined,
+      providerSandboxCreditBudgetCredits: undefined,
+      providerSandboxCreditBudgetExpiresAt: undefined,
+      updatedAt: nowMs,
+    });
+    return { released: true, reason: "released" };
   },
 });
 
@@ -903,18 +1053,42 @@ export const stopProjectWorkspaceComputer = action({
     }
 
     const nowMs = Date.now();
+    const providerRelease = await releaseBlaxelWorkspaceComputerIfIdle({
+      sandboxName: providerSandboxId,
+    });
+    if (!providerRelease.ok) {
+      return {
+        ok: false,
+        status: "release_failed",
+        stopped_count: activeRows.length,
+        provider_sandbox_id: providerSandboxId,
+        provider_id: "blaxel",
+        code: providerRelease.code,
+        message: providerRelease.message,
+      };
+    }
+    const startedAt = Number(
+      project.providerSandboxStartedAt ??
+        project.providerSandboxLastSeenAt ??
+        nowMs,
+    );
+    const measuredDurationSeconds = Math.max(
+      0,
+      (nowMs - (Number.isFinite(startedAt) ? startedAt : nowMs)) / 1000,
+    );
     const settledLease = await settleBillableBlaxelWorkspaceLeaseBestEffort({
       ctx,
       projectId: args.projectId,
       ownerId: actor.dbUserId,
       providerSandboxId,
       settlementReason: "workspace_computer_stopped",
+      billableDurationSeconds: measuredDurationSeconds,
+      providerStandbyGraceSeconds: providerRelease.billableGraceSeconds,
+      providerReleaseReason: providerRelease.reason,
+      providerReleaseConfirmed: providerRelease.releaseConfirmed,
       nowMs,
     });
 
-    await releaseBlaxelWorkspaceComputerIfIdle({
-      sandboxName: providerSandboxId,
-    });
     await ctx.runMutation(
       internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
       {
@@ -934,6 +1108,9 @@ export const stopProjectWorkspaceComputer = action({
       provider_sandbox_id: providerSandboxId,
       provider_id: "blaxel",
       settled_credit_reservation_key: settledLease.creditReservationKey,
+      provider_release_reason: providerRelease.reason,
+      provider_release_confirmed: providerRelease.releaseConfirmed,
+      provider_standby_grace_seconds: providerRelease.billableGraceSeconds,
     };
   },
 });

@@ -222,16 +222,6 @@ function isBlaxelRuntimeWorkspaceReservation(entry: any): boolean {
   );
 }
 
-function isBlaxelProjectWorkspaceLeaseReservation(entry: any): boolean {
-  const action = normalizeOptionalString(entry?.action);
-  return (
-    isBlaxelWorkspaceComputeReservation(entry) &&
-    (action === "workspace_file_inspection" ||
-      action === "interactive_workspace_computer" ||
-      action === "project_zip_import")
-  );
-}
-
 async function hasRunningRuntimeRunForWorkspaceReservation(ctx: any, entry: any): Promise<boolean> {
   if (!isBlaxelRuntimeWorkspaceReservation(entry)) return false;
   const runId = normalizeOptionalString(entry?.runId);
@@ -251,7 +241,7 @@ async function hasRunningRuntimeRunForWorkspaceReservation(ctx: any, entry: any)
 }
 
 async function hasActiveBlaxelProjectWorkspaceLeasePointer(ctx: any, entry: any): Promise<boolean> {
-  if (!isBlaxelProjectWorkspaceLeaseReservation(entry)) return false;
+  if (!isBlaxelWorkspaceComputeReservation(entry)) return false;
   const projectId = entry?.projectId;
   if (!projectId) return false;
   const project = await ctx.db.get(projectId);
@@ -263,10 +253,13 @@ async function hasActiveBlaxelProjectWorkspaceLeasePointer(ctx: any, entry: any)
 }
 
 async function shouldSkipExpiredBlaxelWorkspaceReservation(ctx: any, entry: any): Promise<boolean> {
+  if (await hasActiveBlaxelProjectWorkspaceLeasePointer(ctx, entry)) {
+    return true;
+  }
   if (isBlaxelRuntimeWorkspaceReservation(entry)) {
     return await hasRunningRuntimeRunForWorkspaceReservation(ctx, entry);
   }
-  return await hasActiveBlaxelProjectWorkspaceLeasePointer(ctx, entry);
+  return false;
 }
 
 function hasRuntimeWorkspaceEvidence(run: any, reservations: any[]): boolean {
@@ -3523,6 +3516,10 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
     startedAt: v.number(),
     endedAt: v.number(),
     durationSeconds: v.optional(v.number()),
+    measuredDurationSeconds: v.optional(v.number()),
+    providerStandbyGraceSeconds: v.optional(v.number()),
+    providerReleaseReason: v.optional(v.union(v.string(), v.null())),
+    providerReleaseConfirmed: v.optional(v.union(v.boolean(), v.null())),
     sandboxCpu: v.number(),
     sandboxMemoryGiB: v.number(),
     sandboxDiskGiB: v.number(),
@@ -3544,6 +3541,26 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
       typeof args.durationSeconds === "number"
         ? args.durationSeconds
         : (args.endedAt - args.startedAt) / 1000,
+    );
+    const measuredDurationSeconds = Math.max(
+      0,
+      typeof args.measuredDurationSeconds === "number" &&
+        Number.isFinite(args.measuredDurationSeconds)
+        ? args.measuredDurationSeconds
+        : (args.endedAt - args.startedAt) / 1000,
+    );
+    const providerStandbyGraceSeconds = Math.max(
+      0,
+      typeof args.providerStandbyGraceSeconds === "number" &&
+        Number.isFinite(args.providerStandbyGraceSeconds)
+        ? args.providerStandbyGraceSeconds
+        : Math.max(0, durationSeconds - measuredDurationSeconds),
+    );
+    const providerReleaseReason = normalizeOptionalString(args.providerReleaseReason);
+    const providerReleaseConfirmed = args.providerReleaseConfirmed === true;
+    const providerCostPeriodEnd = Math.max(
+      args.endedAt,
+      args.startedAt + durationSeconds * 1000,
     );
     const computeCostUsd = roundCurrency(
       typeof args.computeCostUsd === "number"
@@ -3654,6 +3671,10 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           metadata: {
             ...existingMetadata,
             final_duration_seconds: roundCurrency(durationSeconds),
+            measured_duration_seconds: roundCurrency(measuredDurationSeconds),
+            provider_standby_grace_seconds: roundCurrency(providerStandbyGraceSeconds),
+            provider_release_reason: providerReleaseReason ?? null,
+            provider_release_confirmed: providerReleaseConfirmed,
             final_compute_cost_usd: computeCostUsd,
             final_credits_requested: requestedCredits,
             final_credits_settled: totalCreditsSettled,
@@ -3736,7 +3757,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
       provider: "blaxel",
       resourceId: args.providerSandboxId,
       periodStart: args.startedAt,
-      periodEnd: args.endedAt,
+      periodEnd: providerCostPeriodEnd,
       quantityKind: "memory_gib_seconds",
       quantity: durationSeconds * args.sandboxMemoryGiB,
       rawVendorCostUsd: computeCostUsd,
@@ -3746,6 +3767,10 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
       metadata: {
         provider_cost_source: "workspace_compute_charge",
         duration_seconds: roundCurrency(durationSeconds),
+        measured_duration_seconds: roundCurrency(measuredDurationSeconds),
+        provider_standby_grace_seconds: roundCurrency(providerStandbyGraceSeconds),
+        provider_release_reason: providerReleaseReason ?? null,
+        provider_release_confirmed: providerReleaseConfirmed,
         sandbox_cpu: args.sandboxCpu,
         sandbox_memory_gib: args.sandboxMemoryGiB,
         sandbox_disk_gib: args.sandboxDiskGiB,

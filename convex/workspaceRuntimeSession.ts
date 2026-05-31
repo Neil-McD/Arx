@@ -245,6 +245,9 @@ export async function settleRuntimeWorkspaceSession(params: {
   runId: string;
   session: RuntimeWorkspaceSession;
   endedAt?: number;
+  providerStandbyGraceSeconds?: number | null;
+  providerReleaseReason?: string | null;
+  providerReleaseConfirmed?: boolean | null;
 }): Promise<
   | {
       ok: true;
@@ -253,6 +256,8 @@ export async function settleRuntimeWorkspaceSession(params: {
       creditsDebited?: number;
       computeCostUsd?: number;
       durationSeconds?: number;
+      measuredDurationSeconds?: number;
+      providerStandbyGraceSeconds?: number;
     }
   | {
       ok: false;
@@ -272,7 +277,16 @@ export async function settleRuntimeWorkspaceSession(params: {
     };
   }
   const endedAt = params.endedAt ?? Date.now();
-  const durationSeconds = Math.max(0, (endedAt - params.session.startedAt) / 1000);
+  const measuredDurationSeconds = Math.max(
+    0,
+    (endedAt - params.session.startedAt) / 1000,
+  );
+  const providerStandbyGraceSeconds =
+    typeof params.providerStandbyGraceSeconds === "number" &&
+      Number.isFinite(params.providerStandbyGraceSeconds)
+      ? Math.max(0, params.providerStandbyGraceSeconds)
+      : 0;
+  const durationSeconds = measuredDurationSeconds + providerStandbyGraceSeconds;
   const computeCostUsd = estimateWorkspaceComputeUsd({
     durationSeconds,
     sandboxCpu: params.session.sandboxCpu,
@@ -288,6 +302,10 @@ export async function settleRuntimeWorkspaceSession(params: {
     provider_billing_evidence: "delayed_billing_api",
     provider_sandbox_id: params.session.providerSandboxId,
     duration_seconds: durationSeconds,
+    measured_duration_seconds: measuredDurationSeconds,
+    provider_standby_grace_seconds: providerStandbyGraceSeconds,
+    provider_release_reason: normalizeOptionalString(params.providerReleaseReason),
+    provider_release_confirmed: params.providerReleaseConfirmed === true,
     sandbox_cpu: params.session.sandboxCpu,
     sandbox_memory_gib: params.session.sandboxMemoryGiB,
     sandbox_disk_gib: params.session.sandboxDiskGiB,
@@ -304,6 +322,10 @@ export async function settleRuntimeWorkspaceSession(params: {
         startedAt: params.session.startedAt,
         endedAt,
         durationSeconds,
+        measuredDurationSeconds,
+        providerStandbyGraceSeconds,
+        providerReleaseReason: normalizeOptionalString(params.providerReleaseReason),
+        providerReleaseConfirmed: params.providerReleaseConfirmed === true,
         sandboxCpu: params.session.sandboxCpu,
         sandboxMemoryGiB: params.session.sandboxMemoryGiB,
         sandboxDiskGiB: params.session.sandboxDiskGiB,
@@ -319,6 +341,8 @@ export async function settleRuntimeWorkspaceSession(params: {
       creditsDebited,
       computeCostUsd,
       durationSeconds,
+      measuredDurationSeconds,
+      providerStandbyGraceSeconds,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? "");
@@ -348,6 +372,40 @@ export async function settleRuntimeWorkspaceSession(params: {
       computeCostUsd,
       durationSeconds,
       error: message || "workspace_compute_charge_recording_failed",
+    };
+  }
+}
+
+export async function releaseRuntimeWorkspaceSessionAccountingIfCurrent(params: {
+  ctx: any;
+  session: RuntimeWorkspaceSession;
+  endedAt?: number;
+}): Promise<{ ok: true; released: boolean; reason: string } | { ok: false; error: string }> {
+  const creditReservationKey = normalizeOptionalString(params.session.creditReservationKey);
+  if (!creditReservationKey) {
+    return { ok: true, released: false, reason: "missing_credit_reservation_key" };
+  }
+  try {
+    const result = await params.ctx.runMutation(
+      internal.workspaceTerminals.releaseProjectBackgroundSandboxAccountingIfCurrentInternal as any,
+      {
+        projectId: params.session.projectId,
+        providerSandboxId: params.session.providerSandboxId,
+        providerSandboxProviderId: params.session.providerId,
+        providerSandboxCreditReservationKey: creditReservationKey,
+        providerSandboxStartedAt: params.session.startedAt,
+        nowMs: params.endedAt ?? Date.now(),
+      },
+    ) as { released?: boolean; reason?: string } | null;
+    return {
+      ok: true,
+      released: result?.released === true,
+      reason: normalizeOptionalString(result?.reason) ?? "unknown",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error ?? ""),
     };
   }
 }

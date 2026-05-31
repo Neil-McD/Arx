@@ -28,6 +28,7 @@ import {
   priceWorkspaceUsageCredits,
   WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
   WORKSPACE_FILE_INSPECTION_HOLD_SECONDS,
+  WORKSPACE_FILE_INSPECTION_MIN_BILLABLE_SECONDS,
   WORKSPACE_FILE_INSPECTION_MAX_SECONDS,
   WORKSPACE_FILE_INSPECTION_RESERVATION_EXPIRY_MS,
   WORKSPACE_SESSION_HOLD_SECONDS,
@@ -125,17 +126,20 @@ function resolveWorkspaceLeaseBillingTiming(action: unknown): {
   holdSeconds: number;
   maxSeconds: number;
   reservationExpiryMs: number;
+  minBillableSeconds: number;
 } {
   return normalizeOptionalString(action) === "workspace_file_inspection"
     ? {
         holdSeconds: WORKSPACE_FILE_INSPECTION_HOLD_SECONDS,
         maxSeconds: WORKSPACE_FILE_INSPECTION_MAX_SECONDS,
         reservationExpiryMs: WORKSPACE_FILE_INSPECTION_RESERVATION_EXPIRY_MS,
+        minBillableSeconds: WORKSPACE_FILE_INSPECTION_MIN_BILLABLE_SECONDS,
       }
     : {
         holdSeconds: WORKSPACE_SESSION_HOLD_SECONDS,
         maxSeconds: WORKSPACE_SESSION_MAX_SECONDS,
         reservationExpiryMs: WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
+        minBillableSeconds: 0,
       };
 }
 
@@ -162,20 +166,6 @@ function isBlaxelWorkspaceLeaseLedgerEntry(entry: any): boolean {
   );
 }
 
-function isRuntimeWorkspaceSessionLeaseLedgerEntry(entry: any): boolean {
-  return (
-    isBlaxelWorkspaceLeaseLedgerEntry(entry) &&
-    normalizeOptionalString(entry?.action) === "runtime_workspace_session"
-  );
-}
-
-function isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry(entry: any): boolean {
-  return (
-    isBlaxelWorkspaceLeaseLedgerEntry(entry) &&
-    !isRuntimeWorkspaceSessionLeaseLedgerEntry(entry)
-  );
-}
-
 function canReuseWorkspaceLeaseForIntent(params: {
   ledgerEntry: any;
   requestedLifecycleIntent: WorkspaceComputerLifecycleIntent;
@@ -190,27 +180,6 @@ function canReuseWorkspaceLeaseForIntent(params: {
       params.requestedLifecycleIntent,
     ) >= 0
   );
-}
-
-async function isRunningRuntimeWorkspaceSessionLease(params: {
-  ctx: any;
-  ownerId: any;
-  runId: unknown;
-}): Promise<boolean> {
-  const runId = normalizeOptionalString(params.runId);
-  if (!runId) return false;
-  try {
-    const run = await params.ctx.runQuery(
-      internal.threads.getRuntimeRunByOwnerRunIdInternal as any,
-      {
-        ownerId: params.ownerId,
-        runId,
-      },
-    );
-    return normalizeOptionalString(run?.status) === "running";
-  } catch {
-    return false;
-  }
 }
 
 function statusForWakeFailureCode(code: string): number {
@@ -444,6 +413,10 @@ export async function settleBillableBlaxelWorkspaceLeaseBestEffort(params: {
   ownerId: any;
   providerSandboxId?: string | null;
   settlementReason?: string | null;
+  billableDurationSeconds?: number | null;
+  providerStandbyGraceSeconds?: number | null;
+  providerReleaseReason?: string | null;
+  providerReleaseConfirmed?: boolean | null;
   nowMs?: number;
   requireLedgerWrite?: boolean;
 }): Promise<{
@@ -496,9 +469,22 @@ export async function settleBillableBlaxelWorkspaceLeaseBestEffort(params: {
     normalizeOptionalNumber(project.providerSandboxStartedAt) ??
     normalizeOptionalNumber(project.providerSandboxLastSeenAt) ??
     nowMs;
+  const measuredDurationSeconds =
+    typeof params.billableDurationSeconds === "number" &&
+      Number.isFinite(params.billableDurationSeconds)
+      ? Math.max(0, params.billableDurationSeconds)
+      : Math.max(0, (nowMs - startedAt) / 1000);
+  const providerStandbyGraceSeconds =
+    typeof params.providerStandbyGraceSeconds === "number" &&
+      Number.isFinite(params.providerStandbyGraceSeconds)
+      ? Math.max(0, params.providerStandbyGraceSeconds)
+      : 0;
   const durationSeconds = Math.min(
     billingTiming.maxSeconds,
-    Math.max(0, (nowMs - startedAt) / 1000),
+    Math.max(
+      billingTiming.minBillableSeconds,
+      measuredDurationSeconds + providerStandbyGraceSeconds,
+    ),
   );
   const loadedConfig = loadBlaxelWorkspaceConfig();
   const ledgerMetadata = readRecord(ledgerEntry.metadata);
@@ -534,6 +520,11 @@ export async function settleBillableBlaxelWorkspaceLeaseBestEffort(params: {
       provider_billing_evidence: "delayed_billing_api",
       provider_sandbox_id: providerSandboxId,
       duration_seconds: durationSeconds,
+      measured_duration_seconds: measuredDurationSeconds,
+      min_billable_seconds: billingTiming.minBillableSeconds,
+      provider_standby_grace_seconds: providerStandbyGraceSeconds,
+      provider_release_reason: normalizeOptionalString(params.providerReleaseReason),
+      provider_release_confirmed: params.providerReleaseConfirmed === true,
       max_seconds: billingTiming.maxSeconds,
       sandbox_cpu: sandboxCpu,
       sandbox_memory_gib: sandboxMemoryGiB,
@@ -583,12 +574,218 @@ async function clearProjectWorkspaceLeaseAccounting(params: {
   );
 }
 
+async function recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort(params: {
+  ctx: any;
+  project: any;
+  ledgerEntry: any;
+  creditReservationKey: string;
+  providerSandboxId: string | null;
+  releaseReason?: string | null;
+  metadata?: Record<string, unknown>;
+  billableDurationSeconds?: number | null;
+  providerStandbyGraceSeconds?: number | null;
+  providerReleaseReason?: string | null;
+  providerReleaseConfirmed?: boolean | null;
+  nowMs: number;
+}) {
+  try {
+    const ledgerMetadata = readRecord(params.ledgerEntry?.metadata);
+    const releaseMetadata = readRecord(params.metadata);
+    const loadedConfig = loadBlaxelWorkspaceConfig();
+    const sandboxMemoryGiB =
+      normalizeOptionalPositiveNumber(ledgerMetadata.sandbox_memory_gib) ??
+      (loadedConfig.ok ? mbToGiB(loadedConfig.config.memoryMb) : 0);
+    const sandboxDiskGiB =
+      normalizeOptionalPositiveNumber(ledgerMetadata.sandbox_disk_gib) ??
+      (loadedConfig.ok ? mbToGiB(loadedConfig.config.volumeSizeMb) : 0);
+    const sandboxCpu = normalizeOptionalNumber(ledgerMetadata.sandbox_cpu) ?? 0;
+    const startedAt =
+      normalizeOptionalNumber(params.project.providerSandboxStartedAt) ??
+      normalizeOptionalNumber(params.project.providerSandboxLastSeenAt) ??
+      normalizeOptionalNumber(params.ledgerEntry.createdAt) ??
+      params.nowMs;
+    const measuredDurationSeconds =
+      typeof params.billableDurationSeconds === "number" &&
+        Number.isFinite(params.billableDurationSeconds)
+        ? Math.max(0, params.billableDurationSeconds)
+        : Math.max(0, (params.nowMs - startedAt) / 1000);
+    const providerStandbyGraceSeconds =
+      typeof params.providerStandbyGraceSeconds === "number" &&
+        Number.isFinite(params.providerStandbyGraceSeconds)
+        ? Math.max(0, params.providerStandbyGraceSeconds)
+        : Math.max(
+            0,
+            normalizeOptionalNumber(releaseMetadata.provider_standby_grace_seconds) ?? 0,
+          );
+    const billingTiming = resolveWorkspaceLeaseBillingTiming(params.ledgerEntry.action);
+    const durationSeconds = Math.min(
+      billingTiming.maxSeconds,
+      measuredDurationSeconds + providerStandbyGraceSeconds,
+    );
+    const computeCostUsd = estimateWorkspaceComputeUsd({
+      durationSeconds,
+      sandboxCpu,
+      sandboxMemoryGiB,
+    });
+    await params.ctx.runMutation(
+      internal.workspaceCredits.recordProviderCostInternal as any,
+      {
+        costKey: `workspace_lease_release:${params.creditReservationKey}:provider_cost`,
+        userId: params.ledgerEntry.userId ?? params.project.ownerId,
+        projectId: params.project._id,
+        runId: normalizeOptionalString(params.ledgerEntry.runId),
+        category: "workspace",
+        component: "blaxel_active_runtime",
+        provider: "blaxel",
+        resourceId: params.providerSandboxId,
+        periodStart: startedAt,
+        periodEnd: startedAt + durationSeconds * 1000,
+        quantityKind: "memory_gib_seconds",
+        quantity: durationSeconds * sandboxMemoryGiB,
+        rawVendorCostUsd: computeCostUsd,
+        evidence: "estimated",
+        billingDisposition: "tracked_only",
+        linkedCreditKey: params.creditReservationKey,
+        metadata: {
+          ...releaseMetadata,
+          provider_cost_source: "workspace_lease_release_without_user_charge",
+          provider_cost_user_charge_disposition: "refunded",
+          release_reason: normalizeOptionalString(params.releaseReason),
+          duration_seconds: durationSeconds,
+          measured_duration_seconds: measuredDurationSeconds,
+          provider_standby_grace_seconds: providerStandbyGraceSeconds,
+          provider_release_reason:
+            normalizeOptionalString(params.providerReleaseReason) ??
+            normalizeOptionalString(releaseMetadata.provider_release_reason),
+          provider_release_confirmed:
+            params.providerReleaseConfirmed === true ||
+            releaseMetadata.provider_release_confirmed === true,
+          max_seconds: billingTiming.maxSeconds,
+          sandbox_cpu: sandboxCpu,
+          sandbox_memory_gib: sandboxMemoryGiB,
+          sandbox_disk_gib: sandboxDiskGiB,
+        },
+        nowMs: params.nowMs,
+      },
+    );
+  } catch (error) {
+    console.warn("tracked_blaxel_workspace_lease_provider_cost_failed", {
+      credit_reservation_key: params.creditReservationKey,
+      project_id: String(params.project?._id ?? ""),
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+}
+
+export async function releaseBillableBlaxelProjectWorkspaceLeaseBestEffort(params: {
+  ctx: any;
+  projectId: any;
+  ownerId: any;
+  providerSandboxId?: string | null;
+  releaseReason?: string | null;
+  metadata?: Record<string, unknown>;
+  billableDurationSeconds?: number | null;
+  providerStandbyGraceSeconds?: number | null;
+  providerReleaseReason?: string | null;
+  providerReleaseConfirmed?: boolean | null;
+  nowMs?: number;
+  clearProjectAccounting?: boolean;
+}): Promise<{
+  ok: boolean;
+  creditReservationKey: string | null;
+}> {
+  const nowMs = params.nowMs ?? Date.now();
+  const project = await params.ctx.runQuery(
+    internal.projects.getCloudProjectByIdInternal as any,
+    {
+      projectId: params.projectId,
+    },
+  );
+  if (!project || String(project.ownerId ?? "") !== String(params.ownerId ?? "")) {
+    return { ok: false, creditReservationKey: null };
+  }
+  if (normalizeOptionalString(project.providerSandboxProviderId) !== "blaxel") {
+    return { ok: false, creditReservationKey: null };
+  }
+  const providerSandboxId = normalizeOptionalString(project.providerSandboxId);
+  const expectedSandboxId = normalizeOptionalString(params.providerSandboxId);
+  if (expectedSandboxId && providerSandboxId !== expectedSandboxId) {
+    return { ok: false, creditReservationKey: null };
+  }
+  const creditReservationKey = normalizeOptionalString(
+    project.providerSandboxCreditReservationKey,
+  );
+  if (!creditReservationKey) {
+    if (params.clearProjectAccounting === true) {
+      await clearProjectWorkspaceLeaseAccounting({ ctx: params.ctx, project, nowMs });
+    }
+    return { ok: true, creditReservationKey: null };
+  }
+  const ledgerEntry = await params.ctx.runQuery(
+    internal.workspaceCredits.getCreditLedgerEntryByKeyInternal as any,
+    {
+      creditKey: creditReservationKey,
+    },
+  );
+  if (!ledgerEntry || ledgerEntry.status !== "reserved") {
+    return { ok: true, creditReservationKey };
+  }
+  if (String(ledgerEntry.userId ?? "") !== String(params.ownerId ?? "")) {
+    return { ok: false, creditReservationKey };
+  }
+  if (normalizeOptionalString(ledgerEntry.projectId) !== String(params.projectId)) {
+    return { ok: false, creditReservationKey };
+  }
+
+  try {
+    await recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort({
+      ctx: params.ctx,
+      project,
+      ledgerEntry,
+      creditReservationKey,
+      providerSandboxId,
+      releaseReason: params.releaseReason,
+      metadata: params.metadata,
+      billableDurationSeconds: params.billableDurationSeconds,
+      providerStandbyGraceSeconds: params.providerStandbyGraceSeconds,
+      providerReleaseReason: params.providerReleaseReason,
+      providerReleaseConfirmed: params.providerReleaseConfirmed,
+      nowMs,
+    });
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: params.releaseReason ?? "workspace_project_lease_released",
+      metadata: {
+        provider: "blaxel",
+        settlement_source: "project_workspace_lease_releaser",
+        settlement_reason: params.releaseReason ?? "workspace_project_lease_released",
+        project_id: String(params.projectId),
+        provider_sandbox_id: providerSandboxId,
+        ...(params.metadata ?? {}),
+      },
+      nowMs,
+    });
+    if (params.clearProjectAccounting === true) {
+      await clearProjectWorkspaceLeaseAccounting({ ctx: params.ctx, project, nowMs });
+    }
+    return { ok: true, creditReservationKey };
+  } catch {
+    return { ok: false, creditReservationKey };
+  }
+}
+
 export async function finalizeBillableBlaxelProjectWorkspaceLease(params: {
   ctx: any;
   projectId: any;
   ownerId: any;
   providerSandboxId?: string | null;
   settlementReason?: string | null;
+  billableDurationSeconds?: number | null;
+  providerStandbyGraceSeconds?: number | null;
+  providerReleaseReason?: string | null;
+  providerReleaseConfirmed?: boolean | null;
   releaseReason?: string | null;
   nowMs?: number;
   requireLedgerWrite?: boolean;
@@ -698,7 +895,7 @@ export async function finalizeBillableBlaxelProjectWorkspaceLease(params: {
     }
   }
 
-  if (!isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry(ledgerEntry)) {
+  if (!isBlaxelWorkspaceLeaseLedgerEntry(ledgerEntry)) {
     return {
       ok: true,
       disposition: "skipped_unsupported_action",
@@ -717,6 +914,10 @@ export async function finalizeBillableBlaxelProjectWorkspaceLease(params: {
         ownerId: params.ownerId,
         providerSandboxId,
         settlementReason: params.settlementReason ?? "workspace_project_lease_finalized",
+        billableDurationSeconds: params.billableDurationSeconds,
+        providerStandbyGraceSeconds: params.providerStandbyGraceSeconds,
+        providerReleaseReason: params.providerReleaseReason,
+        providerReleaseConfirmed: params.providerReleaseConfirmed,
         nowMs,
         requireLedgerWrite: params.requireLedgerWrite === true,
       });
@@ -944,17 +1145,6 @@ async function resolveReusableProjectWorkspaceLease(params: {
   ) {
     return null;
   }
-  if (
-    isRuntimeWorkspaceSessionLeaseLedgerEntry(ledgerEntry) &&
-    !(await isRunningRuntimeWorkspaceSessionLease({
-      ctx: params.ctx,
-      ownerId: params.ownerId,
-      runId: ledgerEntry.runId,
-    }))
-  ) {
-    return null;
-  }
-
   const ledgerExpiresAt = normalizeOptionalNumber(ledgerEntry.expiresAt);
   if (
     projectCreditBudgetExpiresAt === null ||
