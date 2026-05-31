@@ -154,7 +154,7 @@ function CommunityChatMessageRowComponent({
 
   const profileHandleLabel = useMemo(() => {
     const normalizedHandle = String(senderHandle ?? "").trim().replace(/^@+/, "");
-    return normalizedHandle ? `@${normalizedHandle}` : "No handle yet";
+    return normalizedHandle ? `@${normalizedHandle}` : null;
   }, [senderHandle]);
   const profileBio = String(senderBio ?? "").trim();
   const profileHoverCardId = `chat-profile-hover-${message.id}`;
@@ -289,11 +289,11 @@ function CommunityChatMessageRowComponent({
             </div>
             <div className="chat-profile-hover-identity">
               <div className="chat-profile-hover-name">{senderLabel}</div>
-              <div className="chat-profile-hover-handle">{profileHandleLabel}</div>
+              {profileHandleLabel ? (
+                <div className="chat-profile-hover-handle">{profileHandleLabel}</div>
+              ) : null}
             </div>
-            <div className={`chat-profile-hover-bio${profileBio ? "" : " is-empty"}`}>
-              {profileBio || "No bio yet."}
-            </div>
+            {profileBio ? <div className="chat-profile-hover-bio">{profileBio}</div> : null}
           </div>
         ) : null}
         <div className="chat-content">

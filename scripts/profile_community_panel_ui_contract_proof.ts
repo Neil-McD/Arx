@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const panel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const messageRow = read("shared/CommunityChatMessageRow.tsx");
 const projection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const app = read("apps/web/src/App.tsx");
 const css = read("apps/web/src/base.css");
@@ -26,8 +27,15 @@ assert.match(panel, /secondaryCommunityLabel = isSelfProfile \? "My communities"
 assert.match(panel, /hasSecondaryCommunities \? \(/, "secondary community section must only render when data exists");
 assert.match(panel, /hasCommunitySections \? <div className="community-profile-panel-divider"/, "profile community divider must only render when a community section exists");
 assert.doesNotMatch(panel, /No visible owned communities|No mutual communities|Loading communities/, "profile panel must not show empty or loading community section labels");
+assert.doesNotMatch(panel, /No handle yet|No bio yet|community-profile-panel-bio\\$|community-profile-panel-bio\$\{/, "profile panel must not show placeholder handle or bio rows");
+assert.match(panel, /handleLabel \? <div className="community-profile-panel-handle">\{handleLabel\}<\/div> : null/, "profile panel handle row must render only when a handle exists");
+assert.match(panel, /bio \? <div className="community-profile-panel-bio">\{bio\}<\/div> : null/, "profile panel bio row must render only when a bio exists");
 assert.doesNotMatch(panel, /In this community/, "profile panel must not keep the old active-community text row");
 assert.doesNotMatch(panel, /activeCommunityName|isActiveCommunityOwner/, "profile panel must not synthesize context from current community props");
+
+assert.doesNotMatch(messageRow, /No handle yet|No bio yet|chat-profile-hover-bio\\$|chat-profile-hover-bio\$\{/, "profile hover card must not show placeholder handle or bio rows");
+assert.match(messageRow, /profileHandleLabel \? \([\s\S]*chat-profile-hover-handle[\s\S]*\) : null/, "profile hover handle row must render only when a handle exists");
+assert.match(messageRow, /profileBio \? <div className="chat-profile-hover-bio">\{profileBio\}<\/div> : null/, "profile hover bio row must render only when a bio exists");
 
 assert.match(
   chatPanel,

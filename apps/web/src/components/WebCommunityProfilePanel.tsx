@@ -20,9 +20,9 @@ const SOCIAL_PROFILE_LABELS: Record<SocialProfileKind, string> = {
   instagram: "Instagram",
 };
 
-function normalizePanelHandle(handle: string | null | undefined): string {
+function normalizePanelHandle(handle: string | null | undefined): string | null {
   const normalized = String(handle ?? "").trim().replace(/^@+/, "");
-  return normalized ? `@${normalized}` : "No handle yet";
+  return normalized ? `@${normalized}` : null;
 }
 
 function WebCommunityProfileCommunityStrip(props: {
@@ -113,12 +113,10 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
 
       <div className="community-profile-panel-identity">
         <div className="community-profile-panel-name">{displayName}</div>
-        <div className="community-profile-panel-handle">{handleLabel}</div>
+        {handleLabel ? <div className="community-profile-panel-handle">{handleLabel}</div> : null}
       </div>
 
-      <div className={`community-profile-panel-bio${bio ? "" : " is-empty"}`}>
-        {bio || "No bio yet."}
-      </div>
+      {bio ? <div className="community-profile-panel-bio">{bio}</div> : null}
 
       {socialLinks.length > 0 ? (
         <div className="community-profile-panel-links" aria-label="Profile links">
