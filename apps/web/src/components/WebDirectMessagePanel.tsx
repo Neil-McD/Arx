@@ -1,5 +1,6 @@
 import { MessageCircle } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { DirectMessage, DirectMessageConversation, DirectMessageParticipant } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 
@@ -17,6 +18,8 @@ type WebDirectMessagePanelProps = {
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
 };
+
+const DM_AUTO_SCROLL_THRESHOLD_PX = 96;
 
 function getMessageText(message: DirectMessage): string {
   const content = message.content_json;
@@ -43,15 +46,49 @@ function resolveDirectMessagePeer(
 }
 
 export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const shouldFollowMessagesRef = useRef(true);
+  const previousConversationIdRef = useRef<string | null>(null);
+  const previousLastMessageIdRef = useRef<string | null>(null);
   const peer = resolveDirectMessagePeer(props.conversation, props.sessionUserId);
   const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
   const peerAvatarSeed = peer?.user_id ?? peerLabel;
   const communityName = props.conversation.created_from_community?.name ?? "shared community";
+  const lastMessage = props.messages[props.messages.length - 1] ?? null;
+  const lastMessageId = lastMessage?.id ?? null;
+  const lastMessageIsOwn = Boolean(lastMessage?.sender_user_id && lastMessage.sender_user_id === props.sessionUserId);
+
+  const scrollMessagesToBottom = useCallback(() => {
+    const messagesElement = messagesRef.current;
+    if (!messagesElement) return;
+    messagesElement.scrollTop = messagesElement.scrollHeight;
+  }, []);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void props.onSend();
   };
+
+  useEffect(() => {
+    const conversationChanged = previousConversationIdRef.current !== props.conversation.id;
+    const messageChanged = previousLastMessageIdRef.current !== lastMessageId;
+    previousConversationIdRef.current = props.conversation.id;
+    previousLastMessageIdRef.current = lastMessageId;
+
+    if (conversationChanged) {
+      shouldFollowMessagesRef.current = true;
+    }
+    if (!messageChanged && !conversationChanged) return;
+
+    const shouldScroll =
+      conversationChanged ||
+      props.isLoading ||
+      shouldFollowMessagesRef.current ||
+      lastMessageIsOwn;
+    if (!shouldScroll) return;
+
+    requestAnimationFrame(scrollMessagesToBottom);
+  }, [props.conversation.id, props.isLoading, lastMessageId, lastMessageIsOwn, scrollMessagesToBottom]);
 
   return (
     <aside className="community-dm-panel" role="dialog" aria-label={`${peerLabel} direct message`}>
@@ -74,7 +111,16 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         </div>
       </div>
 
-      <div className="community-dm-panel-messages" aria-live="polite">
+      <div
+        ref={messagesRef}
+        className="community-dm-panel-messages"
+        aria-live="polite"
+        onScroll={(event) => {
+          const target = event.currentTarget;
+          const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+          shouldFollowMessagesRef.current = distanceFromBottom <= DM_AUTO_SCROLL_THRESHOLD_PX;
+        }}
+      >
         {props.isLoading ? (
           <div className="community-dm-panel-empty">Loading messages...</div>
         ) : props.messages.length === 0 ? (
