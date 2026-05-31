@@ -9025,7 +9025,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .chat-profile-hover-bio {
   display: -webkit-box;
-  min-height: 34px;
   overflow: hidden;
   color: color-mix(in srgb, var(--text-primary) 84%, var(--text-muted) 16%);
   font-size: 13px;
