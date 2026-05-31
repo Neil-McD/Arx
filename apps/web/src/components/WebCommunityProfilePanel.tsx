@@ -10,6 +10,7 @@ type WebCommunityProfilePanelProps = {
   displayName: string;
   avatarColor: string;
   communityContext: ProfileCommunityContext;
+  isSelfProfile: boolean;
   getInitials: (value: string) => string;
 };
 
@@ -58,6 +59,7 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
     displayName,
     avatarColor,
     communityContext,
+    isSelfProfile,
     getInitials,
   } = props;
   const handleLabel = normalizePanelHandle(profile?.handle);
@@ -69,9 +71,14 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
   })).filter((item) => item.url);
   const ownedCommunities = communityContext.owned_communities;
   const mutualCommunities = communityContext.mutual_communities;
+  const ownedCommunityIds = new Set(ownedCommunities.map((community) => community.id));
+  const secondaryCommunities = isSelfProfile
+    ? mutualCommunities.filter((community) => !ownedCommunityIds.has(community.id))
+    : mutualCommunities;
+  const secondaryCommunityLabel = isSelfProfile ? "My communities" : "Mutual communities";
   const hasOwnedCommunities = ownedCommunities.length > 0;
-  const hasMutualCommunities = mutualCommunities.length > 0;
-  const hasCommunitySections = hasOwnedCommunities || hasMutualCommunities;
+  const hasSecondaryCommunities = secondaryCommunities.length > 0;
+  const hasCommunitySections = hasOwnedCommunities || hasSecondaryCommunities;
 
   return (
     <aside
@@ -140,10 +147,10 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
         </section>
       ) : null}
 
-      {hasMutualCommunities ? (
+      {hasSecondaryCommunities ? (
         <section className="community-profile-panel-section">
-          <div className="community-profile-panel-section-label">Mutual communities</div>
-          <WebCommunityProfileCommunityStrip communities={mutualCommunities} />
+          <div className="community-profile-panel-section-label">{secondaryCommunityLabel}</div>
+          <WebCommunityProfileCommunityStrip communities={secondaryCommunities} />
         </section>
       ) : null}
     </aside>

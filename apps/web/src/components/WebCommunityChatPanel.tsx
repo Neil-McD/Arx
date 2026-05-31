@@ -836,6 +836,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           displayName={profilePanelDisplayName}
           avatarColor={profilePanelAvatarColor}
           communityContext={profilePanelCommunityContext}
+          isSelfProfile={Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
           getInitials={getInitials}
         />
       ) : null}
