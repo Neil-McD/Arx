@@ -373,6 +373,23 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     setProfilePanelUserId(null);
   }, [activeCommunity?.name]);
 
+  useEffect(() => {
+    if (!profilePanelUserId) return;
+
+    const handleProfilePanelPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const panel = document.querySelector(".community-profile-panel");
+      if (panel?.contains(target)) return;
+      setProfilePanelUserId(null);
+    };
+
+    document.addEventListener("pointerdown", handleProfilePanelPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleProfilePanelPointerDown, true);
+    };
+  }, [profilePanelUserId]);
+
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
     (isAuthRecoveringSignedIn ||
