@@ -111,6 +111,28 @@ export async function listCloudDirectConversations<SessionT>(
   return coerceRows<DirectMessageConversation>(payload);
 }
 
+export function subscribeCloudDirectConversations<TRow = DirectMessageConversation>(
+  params: {
+    liveClient: CloudDirectMessagesLiveClient;
+    limit?: number;
+    onUpdate: (rows: TRow[]) => void;
+    onError?: (error: unknown) => void;
+  },
+): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    "directMessages:listMyDirectConversations" as any,
+    {
+      authSubject: params.liveClient.authSubject,
+      limit: params.limit ?? 30,
+    } as any,
+  );
+  const publish = () => {
+    emitLiveRows<TRow>(watch as any, params.onUpdate, params.onError);
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
 export function subscribeCloudDirectMessages<TRow = DirectMessage>(
   params: {
     liveClient: CloudDirectMessagesLiveClient;

@@ -5,6 +5,7 @@ import {
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
   listCloudDirectConversations,
+  subscribeCloudDirectConversations,
   sendCloudDirectMessage,
   subscribeCloudDirectMessages,
 } from "../../../../shared/cloudDirectMessagesGateway";
@@ -59,6 +60,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [directMessagePanel, setDirectMessagePanel] = useState<DirectMessagePanelState | null>(null);
   const inboxLoadRequestRef = useRef(0);
+  const hasInboxLiveSubscriptionRef = useRef(false);
   const directMessageOpenRequestRef = useRef(0);
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
@@ -89,6 +91,52 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setIsLoadingInbox(false);
     }
   }, [session]);
+
+  useEffect(() => {
+    hasInboxLiveSubscriptionRef.current = false;
+    if (!isOpen || !session) {
+      setIsLoadingInbox(false);
+      return;
+    }
+
+    let isDisposed = false;
+    let unsubscribe = () => {};
+    let liveClient: ReturnType<typeof createCloudDirectMessagesLiveClient> | null = null;
+    hasInboxLiveSubscriptionRef.current = true;
+    setIsLoadingInbox(true);
+    setInboxError(null);
+
+    try {
+      liveClient = createCloudDirectMessagesLiveClient({ session });
+      unsubscribe = subscribeCloudDirectConversations<DirectMessageConversation>({
+        liveClient,
+        limit: 30,
+        onUpdate: (rows) => {
+          if (isDisposed) return;
+          setConversations(rows);
+          setIsLoadingInbox(false);
+          setInboxError(null);
+        },
+        onError: (error) => {
+          if (isDisposed) return;
+          setIsLoadingInbox(false);
+          setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+        },
+      });
+    } catch (error) {
+      hasInboxLiveSubscriptionRef.current = false;
+      setIsLoadingInbox(false);
+      setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+      void loadInbox();
+    }
+
+    return () => {
+      isDisposed = true;
+      hasInboxLiveSubscriptionRef.current = false;
+      unsubscribe();
+      liveClient?.close();
+    };
+  }, [isOpen, loadInbox, session]);
 
   useEffect(() => {
     if (!isOpen || !openRequest) return;
@@ -145,6 +193,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       return;
     }
     if (activeConversationId) return;
+    if (hasInboxLiveSubscriptionRef.current) return;
     void loadInbox();
   }, [activeConversationId, isOpen, loadInbox]);
 

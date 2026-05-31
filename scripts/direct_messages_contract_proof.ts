@@ -41,6 +41,8 @@ assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slic
 assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway must open or create direct conversations");
 assert.match(gateway, /listCloudDirectConversations/, "web gateway must expose the current user's direct conversation list");
 assert.match(gateway, /listCloudDirectMessages/, "web gateway must list direct messages");
+assert.match(gateway, /subscribeCloudDirectConversations/, "web gateway must expose live direct conversation subscriptions");
+assert.match(gateway, /subscribeCloudDirectConversations[\s\S]*watchQuery\([\s\S]*directMessages:listMyDirectConversations/, "live DM inbox subscription must watch the canonical inbox query");
 assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose live direct message subscriptions");
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
 
@@ -71,6 +73,8 @@ assert.match(dmPanel, /scrollMessagesToBottom/, "DM panel must scroll opened or 
 assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether the viewer is reading older messages before auto-following");
 assert.match(dmPanel, /onBackToInbox\?: \(\) => void/, "DM conversation panel must support returning to the inbox when opened globally");
 assert.match(dmHost, /listCloudDirectConversations/, "global DM host must load the current user's inbox");
+assert.match(dmHost, /subscribeCloudDirectConversations<DirectMessageConversation>/, "global DM host must keep inbox rows live while open");
+assert.match(dmHost, /hasInboxLiveSubscriptionRef/, "global DM host must avoid duplicate snapshot loads when the live inbox subscription is active");
 assert.match(dmHost, /ensureCloudDirectConversationFromCommunity/, "global DM host must create DMs from profile launch requests");
 assert.match(dmHost, /openRequest: DirectMessageOpenRequest/, "global DM host must accept canonical open requests from profile actions");
 assert.match(dmHost, /subscribeCloudDirectMessages<DirectMessage>/, "global DM host must own live direct message subscriptions");
