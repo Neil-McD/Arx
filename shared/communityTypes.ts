@@ -262,6 +262,7 @@ export type UserProfile = {
   display_name: string | null;
   handle?: string | null;
   normalized_handle?: string | null;
+  bio?: string | null;
   avatar_url: string | null;
   avatar_storage_id?: string | null;
   avatar_focus_x?: number | null;

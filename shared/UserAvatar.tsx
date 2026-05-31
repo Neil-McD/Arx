@@ -1,4 +1,4 @@
-import type { CSSProperties, DragEventHandler, ReactNode } from "react";
+import type { CSSProperties, DragEventHandler, MouseEventHandler, ReactNode } from "react";
 import { StableAvatar } from "./StableAvatar";
 
 type UserAvatarProps = {
@@ -14,6 +14,8 @@ type UserAvatarProps = {
   style?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  onMouseEnter?: MouseEventHandler<HTMLDivElement>;
+  onMouseLeave?: MouseEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
   onDrop?: DragEventHandler<HTMLDivElement>;
@@ -51,6 +53,8 @@ export function UserAvatar(props: UserAvatarProps) {
       style={props.style}
       fallbackStyle={props.fallbackStyle}
       title={props.title}
+      onMouseEnter={props.onMouseEnter}
+      onMouseLeave={props.onMouseLeave}
       onDragOver={props.onDragOver}
       onDragLeave={props.onDragLeave}
       onDrop={props.onDrop}

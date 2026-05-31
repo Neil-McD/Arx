@@ -216,6 +216,7 @@ export const listProfilesByUserIds = query({
       display_name: string | null;
       handle: string | null;
       normalized_handle: string | null;
+      bio: string | null;
       avatar_url: string | null;
       avatar_storage_id: string | null;
       avatar_focus_x: number;
@@ -225,11 +226,13 @@ export const listProfilesByUserIds = query({
     for (const userId of normalizedUserIds) {
       const user = await findUserBySubject(ctx, userId);
       if (!user) continue;
+      const detail = await findProfileDetailByUserId(ctx, user._id);
       rows.push({
         user_id: user.authSubject,
         handle: user.handle ?? null,
         normalized_handle: user.normalizedHandle ?? null,
-        ...(await resolveUserProfileDisplayProjectionForUser(ctx, user)),
+        bio: detail?.bio ?? null,
+        ...(await resolveUserProfileDisplayProjectionForUser(ctx, user, detail)),
       });
     }
     return rows;

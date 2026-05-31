@@ -1,4 +1,5 @@
-import { Fragment, memo, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { MessageCircle } from "lucide-react";
 import { AttachmentChipButton } from "./AttachmentChipButton";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
 import { UserAvatar } from "./UserAvatar";
@@ -42,6 +43,8 @@ type CommunityChatMessageRowProps = {
   isOwn: boolean;
   canModerateContent: boolean;
   senderLabel: string;
+  senderHandle?: string | null;
+  senderBio?: string | null;
   avatarUrl: string | null;
   avatarFocusX?: number | null;
   avatarFocusY?: number | null;
@@ -84,6 +87,8 @@ function CommunityChatMessageRowComponent({
   isOwn,
   canModerateContent,
   senderLabel,
+  senderHandle,
+  senderBio,
   avatarUrl,
   avatarFocusX,
   avatarFocusY,
@@ -120,6 +125,8 @@ function CommunityChatMessageRowComponent({
     () => partitionCommunityAttachments(message.attachments),
     [message.attachments],
   );
+  const [isProfileHoverOpen, setIsProfileHoverOpen] = useState(false);
+  const profileHoverCloseTimerRef = useRef<number | null>(null);
   const lightboxImages: CommunityChatMediaImage[] = useMemo(
     () => imageAttachments.map((item) => ({
       id: item.attachment.id,
@@ -139,6 +146,40 @@ function CommunityChatMessageRowComponent({
     }
     return groups;
   }, [messageReactions]);
+
+  const profileHandleLabel = useMemo(() => {
+    const normalizedHandle = String(senderHandle ?? "").trim().replace(/^@+/, "");
+    return normalizedHandle ? `@${normalizedHandle}` : "No handle yet";
+  }, [senderHandle]);
+  const profileBio = String(senderBio ?? "").trim();
+  const profileHoverCardId = `chat-profile-hover-${message.id}`;
+
+  const clearProfileHoverCloseTimer = useCallback(() => {
+    if (profileHoverCloseTimerRef.current === null) return;
+    window.clearTimeout(profileHoverCloseTimerRef.current);
+    profileHoverCloseTimerRef.current = null;
+  }, []);
+
+  const openProfileHover = useCallback(() => {
+    if (!showMeta) return;
+    clearProfileHoverCloseTimer();
+    setIsProfileHoverOpen(true);
+  }, [clearProfileHoverCloseTimer, showMeta]);
+
+  const scheduleProfileHoverClose = useCallback(() => {
+    clearProfileHoverCloseTimer();
+    profileHoverCloseTimerRef.current = window.setTimeout(() => {
+      setIsProfileHoverOpen(false);
+      profileHoverCloseTimerRef.current = null;
+    }, 140);
+  }, [clearProfileHoverCloseTimer]);
+
+  const closeProfileHover = useCallback(() => {
+    clearProfileHoverCloseTimer();
+    setIsProfileHoverOpen(false);
+  }, [clearProfileHoverCloseTimer]);
+
+  useEffect(() => clearProfileHoverCloseTimer, [clearProfileHoverCloseTimer]);
 
   return (
     <Fragment>
@@ -164,10 +205,69 @@ function CommunityChatMessageRowComponent({
           fallback={<span>{getInitials(senderLabel)}</span>}
           fallbackStyle={{ backgroundColor: avatarColor }}
           title={senderLabel}
+          onMouseEnter={openProfileHover}
+          onMouseLeave={scheduleProfileHoverClose}
         />
+        {showMeta ? (
+          <div
+            id={profileHoverCardId}
+            className={`chat-profile-hover-card${isProfileHoverOpen ? " is-open" : ""}`}
+            role="group"
+            aria-label={`${senderLabel} profile preview`}
+            onMouseEnter={openProfileHover}
+            onMouseLeave={scheduleProfileHoverClose}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeProfileHover();
+            }}
+          >
+            <div className="chat-profile-hover-main">
+              <UserAvatar
+                className="chat-profile-hover-avatar"
+                readyClassName="has-image"
+                name={senderLabel}
+                imageUrl={avatarUrl}
+                focusX={avatarFocusX}
+                focusY={avatarFocusY}
+                zoom={avatarZoom}
+                alt={senderLabel}
+                fallback={<span>{getInitials(senderLabel)}</span>}
+                fallbackStyle={{ backgroundColor: avatarColor }}
+              />
+              <div className="chat-profile-hover-identity">
+                <div className="chat-profile-hover-name">{senderLabel}</div>
+                <div className="chat-profile-hover-handle">{profileHandleLabel}</div>
+              </div>
+            </div>
+            <div className={`chat-profile-hover-bio${profileBio ? "" : " is-empty"}`}>
+              {profileBio || "No bio yet."}
+            </div>
+            <button
+              type="button"
+              className="chat-profile-message-button"
+              disabled
+              title="Direct messages are coming soon"
+            >
+              <MessageCircle aria-hidden="true" />
+              <span>Message</span>
+            </button>
+          </div>
+        ) : null}
         <div className="chat-content">
           <div className="chat-header">
-            <span className="chat-sender">{senderLabel}</span>
+            <button
+              type="button"
+              className="chat-sender chat-profile-name-trigger"
+              aria-describedby={isProfileHoverOpen ? profileHoverCardId : undefined}
+              onMouseEnter={openProfileHover}
+              onMouseLeave={scheduleProfileHoverClose}
+              onFocus={openProfileHover}
+              onBlur={scheduleProfileHoverClose}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeProfileHover();
+              }}
+            >
+              {senderLabel}
+            </button>
             <span className="chat-time">{formattedTime}</span>
           </div>
           {isEditing ? (

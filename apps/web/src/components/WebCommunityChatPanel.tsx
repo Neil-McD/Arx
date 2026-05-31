@@ -515,6 +515,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                         isOwn={viewModel.isOwn}
                         canModerateContent={canModerateMessages}
                         senderLabel={viewModel.senderLabel}
+                        senderHandle={senderProfile?.handle ?? null}
+                        senderBio={senderProfile?.bio ?? null}
                         avatarUrl={viewModel.avatarUrl}
                         avatarFocusX={senderProfile?.avatar_focus_x ?? 0.5}
                         avatarFocusY={senderProfile?.avatar_focus_y ?? 0.5}

@@ -43,11 +43,15 @@ async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<str
 export async function resolveUserProfileDisplayProjectionForUser(
   ctx: any,
   user: UserProfileProjectionUserRow,
+  detail?: UserProfileProjectionDetailRow | null,
 ) {
-  const profile = (await ctx.db
-    .query("userProfileDetails")
-    .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-    .first()) as UserProfileProjectionDetailRow | null;
+  const profile =
+    detail === undefined
+      ? ((await ctx.db
+          .query("userProfileDetails")
+          .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+          .first()) as UserProfileProjectionDetailRow | null)
+      : detail;
   const storageAvatarUrl = await maybeResolveStorageUrl(ctx, profile?.avatarStorageId);
   const profileAvatarUrl = normalizeOptionalText(profile?.avatarUrl);
   const accountAvatarUrl = normalizeOptionalText(user.avatarUrl);

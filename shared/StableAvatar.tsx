@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
   type DragEventHandler,
+  type MouseEventHandler,
   type ReactNode,
 } from "react";
 import { computeAvatarLayout, getAvatarLayoutImageStyle, type AvatarFrame } from "./avatarUi";
@@ -23,6 +24,8 @@ type StableAvatarProps = {
   imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  onMouseEnter?: MouseEventHandler<HTMLDivElement>;
+  onMouseLeave?: MouseEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
   onDrop?: DragEventHandler<HTMLDivElement>;
@@ -43,6 +46,8 @@ export function StableAvatar(props: StableAvatarProps) {
     imageStyle,
     fallbackStyle,
     title,
+    onMouseEnter,
+    onMouseLeave,
     onDragOver,
     onDragLeave,
     onDrop,
@@ -124,6 +129,8 @@ export function StableAvatar(props: StableAvatarProps) {
       className={combinedClassName}
       style={rootStyle}
       title={title}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}

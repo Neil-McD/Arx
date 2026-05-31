@@ -5413,6 +5413,7 @@ export default function App() {
         display_name: cloudProfile.display_name ?? existingDisplayProfile?.display_name ?? null,
         handle: cloudProfile.handle ?? null,
         normalized_handle: cloudProfile.normalized_handle ?? null,
+        bio: cloudProfile.bio ?? existingDisplayProfile?.bio ?? null,
         avatar_url: cloudProfile.avatar_url ?? existingDisplayProfile?.avatar_url ?? null,
         avatar_storage_id: cloudProfile.avatar_storage_id ?? existingDisplayProfile?.avatar_storage_id ?? null,
         avatar_focus_x: cloudHasProfileAvatar
