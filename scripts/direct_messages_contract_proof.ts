@@ -34,11 +34,14 @@ assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slic
 
 assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway must open or create direct conversations");
 assert.match(gateway, /listCloudDirectMessages/, "web gateway must list direct messages");
+assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose live direct message subscriptions");
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
 
 assert.match(projection, /activeCommunity:[\s\S]*id: params\.activeCommunity\.id/, "chat panel must receive active community id for DM source context");
 assert.match(chatPanel, /ensureCloudDirectConversationFromCommunity/, "community chat panel must create DMs from profile actions");
 assert.match(chatPanel, /communityId: activeCommunity\.id/, "DM creation must use the active community as source context");
+assert.match(chatPanel, /subscribeCloudDirectMessages<DirectMessage>/, "open DM panels must subscribe to live message rows");
+assert.doesNotMatch(chatPanel, /messages: \[\.\.\.previous\.messages, message\]/, "DM sends must not use local append as the source of truth");
 assert.match(chatPanel, /onMessageSender=\{openDirectMessage\}/, "profile hover message button must open the DM flow");
 assert.match(chatPanel, /<WebDirectMessagePanel/, "community chat panel must render the right-side DM panel");
 assert.match(chatPanel, /setDirectMessagePanel\(null\)/, "DM panel must close without route changes");

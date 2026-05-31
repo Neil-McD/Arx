@@ -22,9 +22,10 @@ import type {
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
 import {
+  createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
-  listCloudDirectMessages,
   sendCloudDirectMessage,
+  subscribeCloudDirectMessages,
 } from "../../../../shared/cloudDirectMessagesGateway";
 import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
 import { formatDateSeparator } from "../../../../shared/chatUi";
@@ -484,6 +485,66 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     };
   }, [directMessagePanel]);
 
+  const activeDirectMessageConversationId = directMessagePanel?.conversation.id ?? null;
+
+  useEffect(() => {
+    if (!activeDirectMessageConversationId || !session) return;
+
+    let isDisposed = false;
+    let unsubscribe = () => {};
+    let liveClient: ReturnType<typeof createCloudDirectMessagesLiveClient> | null = null;
+
+    try {
+      liveClient = createCloudDirectMessagesLiveClient({ session });
+      unsubscribe = subscribeCloudDirectMessages<DirectMessage>({
+        liveClient,
+        conversationId: activeDirectMessageConversationId,
+        limit: 100,
+        onUpdate: (messages) => {
+          if (isDisposed) return;
+          setDirectMessagePanel((previous) =>
+            previous?.conversation.id === activeDirectMessageConversationId
+              ? {
+                  ...previous,
+                  messages,
+                  isLoading: false,
+                  error: null,
+                }
+              : previous,
+          );
+        },
+        onError: (error) => {
+          if (isDisposed) return;
+          setDirectMessagePanel((previous) =>
+            previous?.conversation.id === activeDirectMessageConversationId
+              ? {
+                  ...previous,
+                  isLoading: false,
+                  error: toErrorMessage(error, "Failed to load direct messages."),
+                }
+              : previous,
+          );
+        },
+      });
+    } catch (error) {
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === activeDirectMessageConversationId
+          ? {
+              ...previous,
+              isLoading: false,
+              error: toErrorMessage(error, "Failed to load direct messages."),
+            }
+          : previous,
+      );
+    }
+
+    return () => {
+      isDisposed = true;
+      unsubscribe();
+      liveClient?.close();
+    };
+  }, [activeDirectMessageConversationId, session]);
+
   const openDirectMessage = useCallback(async (targetUserId: string) => {
     const normalizedTargetUserId = String(targetUserId ?? "").trim();
     if (!normalizedTargetUserId || !session || !activeCommunity?.id) return;
@@ -505,20 +566,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         isSending: false,
         error: null,
       });
-      const messages = await listCloudDirectMessages({
-        session,
-        conversationId: conversation.id,
-        limit: 100,
-      });
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === conversation.id
-          ? {
-              ...previous,
-              messages,
-              isLoading: false,
-            }
-          : previous,
-      );
     } catch (error) {
       setDirectMessagePanel(null);
       setDirectMessageLaunchError(toErrorMessage(error, "Failed to open direct message."));
@@ -533,13 +580,17 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     const current = directMessagePanel;
     const text = String(current?.input ?? "").trim();
     if (!current || !text || !session) return;
-    setDirectMessagePanel({
-      ...current,
-      isSending: true,
-      error: null,
-    });
+    setDirectMessagePanel((previous) =>
+      previous?.conversation.id === current.conversation.id
+        ? {
+            ...previous,
+            isSending: true,
+            error: null,
+          }
+        : previous,
+    );
     try {
-      const message = await sendCloudDirectMessage({
+      await sendCloudDirectMessage({
         session,
         conversationId: current.conversation.id,
         text,
@@ -548,7 +599,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         previous?.conversation.id === current.conversation.id
           ? {
               ...previous,
-              messages: [...previous.messages, message],
               input: "",
               isSending: false,
               error: null,
