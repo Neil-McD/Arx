@@ -65,6 +65,7 @@ assert.match(messageRow, /disabled=\{!canMessageSender\}/, "hover profile messag
 assert.match(dmPanel, /From \{communityName\}/, "DM panel must surface source community context");
 assert.match(dmPanel, /participant_type === "user"/, "DM panel must resolve the human peer from participants");
 assert.match(dmPanel, /Start a direct message from this shared community/, "empty DM state must explain the community-origin model");
+assert.match(dmPanel, /import \{ ArrowLeft, MessageCircle \} from "lucide-react"/, "DM conversation back control must use the flat back-arrow icon");
 assert.match(dmPanel, /DM_AUTO_SCROLL_THRESHOLD_PX/, "DM panel must keep chat-like auto-scroll constrained by a bottom threshold");
 assert.match(dmPanel, /scrollMessagesToBottom/, "DM panel must scroll opened or followed conversations to the newest message");
 assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether the viewer is reading older messages before auto-following");
@@ -85,6 +86,7 @@ assert.match(app, /handleOpenDirectMessageFromCommunity/, "app shell must own th
 assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pass canonical open requests to the global DM host");
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
+assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*background: transparent/, "DM conversation back control must stay flat, not circular");
 assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
 assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox must size to content instead of forcing full conversation-panel height");
 assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");

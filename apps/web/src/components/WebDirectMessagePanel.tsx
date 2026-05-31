@@ -1,4 +1,4 @@
-import { ChevronLeft, MessageCircle } from "lucide-react";
+import { ArrowLeft, MessageCircle } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import type { DirectMessage, DirectMessageConversation, DirectMessageParticipant } from "../../../../shared/communityTypes";
@@ -102,7 +102,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             aria-label="Back to direct messages"
             title="Direct messages"
           >
-            <ChevronLeft aria-hidden="true" />
+            <ArrowLeft aria-hidden="true" />
           </button>
         ) : null}
         <UserAvatar

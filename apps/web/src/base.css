@@ -9341,26 +9341,27 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-panel-back {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 72%, transparent);
-  border-radius: 999px;
+  width: 24px;
+  height: 28px;
+  flex: 0 0 24px;
+  border: 0;
+  border-radius: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding: 0;
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-card) 38%, transparent);
+  background: transparent;
 }
 
 .community-dm-panel-back:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-card-hover) 58%, transparent);
+  background: transparent;
 }
 
 .community-dm-panel-back svg {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
 }
 
 .community-dm-panel-avatar {
