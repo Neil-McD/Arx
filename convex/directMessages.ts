@@ -65,6 +65,8 @@ const MAX_DM_RECIPIENT_ROWS = 25;
 const MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS = 75;
 const MAX_DM_RECIPIENT_SEARCH_PAGES = 8;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
+const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
+const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
 const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS = 50;
 const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGES = 4;
 const MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS = 150;
@@ -333,14 +335,15 @@ async function listDirectMessageSourceCommunitiesForViewer(
 ): Promise<CommunityLike[]> {
   const ownedCommunities = (await ctx.db
     .query("communities" as any)
-    .withIndex("by_owner", (q: any) => q.eq("ownerId", viewerUserId))
-    .collect()) as CommunityLike[];
+    .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", viewerUserId))
+    .order("desc")
+    .take(MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS)) as CommunityLike[];
   const membershipRows = ((await ctx.db
     .query("communityMemberships" as any)
-    .withIndex("by_user", (q: any) => q.eq("userId", viewerUserId))
-    .collect()) as CommunityMembershipLike[])
-    .filter((row) => communityMembershipRowIsActive(row))
-    .sort((left, right) => right.createdAt - left.createdAt);
+    .withIndex("by_user_createdAt", (q: any) => q.eq("userId", viewerUserId))
+    .order("desc")
+    .take(MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS)) as CommunityMembershipLike[])
+    .filter((row) => communityMembershipRowIsActive(row));
 
   const sourceRows: Array<{
     community: CommunityLike;
@@ -371,6 +374,7 @@ async function listDirectMessageSourceCommunitiesForViewer(
 
   const accessibleCommunities: CommunityLike[] = [];
   for (const row of sourceRows) {
+    if (accessibleCommunities.length >= MAX_DM_GLOBAL_SOURCE_COMMUNITIES) break;
     try {
       await requireCommunityChatAccess({
         ctx,
@@ -648,15 +652,11 @@ export const listEligibleDirectMessageRecipientsForViewer = query({
     const seenUserIds = new Set<string>();
     const recipients: EligibleDirectMessageRecipient[] = [];
 
-    const sourceCommunityLimit = Math.max(
-      1,
-      Math.min(MAX_DM_GLOBAL_SOURCE_COMMUNITIES, sourceCommunities.length),
-    );
     const maxCandidateUserIdsPerCommunity = search
       ? MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS
       : Math.max(safeLimit * 4, safeLimit);
 
-    for (const community of sourceCommunities.slice(0, sourceCommunityLimit)) {
+    for (const community of sourceCommunities) {
       if (recipients.length >= safeLimit) break;
       const candidateUserIds = await listDirectMessageCandidateUserIdsForCommunity({
         ctx,

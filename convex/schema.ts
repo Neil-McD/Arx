@@ -1065,6 +1065,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
+    .index("by_owner_createdAt", ["ownerId", "createdAt"])
     .index("by_slug", ["slug"])
     .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
 
@@ -1087,6 +1088,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
+    .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
