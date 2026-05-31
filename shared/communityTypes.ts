@@ -79,6 +79,9 @@ export type DirectMessageConversation = {
     name: string;
   } | null;
   last_seq: number;
+  viewer_last_read_seq: number;
+  unread_count: number;
+  has_unread: boolean;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;

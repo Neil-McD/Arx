@@ -186,9 +186,24 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
   };
 }
 
-async function mapDirectConversation(ctx: any, row: DirectMessageConversationLike) {
+async function mapDirectConversation(
+  ctx: any,
+  row: DirectMessageConversationLike,
+  opts?: { viewerUserId?: any | null },
+) {
   const community = (await ctx.db.get(row.createdFromCommunityId)) as CommunityLike | null;
   const participants = await listConversationParticipants(ctx, row._id);
+  const lastSeq = Math.max(0, Math.floor(row.lastSeq ?? 0));
+  const viewerUserKey = normalizeIdValue(opts?.viewerUserId);
+  const viewerParticipant = viewerUserKey
+    ? participants.find(
+        (participant) =>
+          participant.status === "active" &&
+          normalizeIdValue(participant.userId) === viewerUserKey,
+      ) ?? null
+    : null;
+  const viewerLastReadSeq = Math.max(0, Math.floor(viewerParticipant?.lastReadSeq ?? 0));
+  const unreadCount = viewerParticipant ? Math.max(0, lastSeq - viewerLastReadSeq) : 0;
   return {
     id: String(row._id),
     kind: row.kind,
@@ -199,7 +214,10 @@ async function mapDirectConversation(ctx: any, row: DirectMessageConversationLik
           name: community.name,
         }
       : null,
-    last_seq: Math.max(0, Math.floor(row.lastSeq ?? 0)),
+    last_seq: lastSeq,
+    viewer_last_read_seq: viewerLastReadSeq,
+    unread_count: unreadCount,
+    has_unread: unreadCount > 0,
     last_message_at:
       typeof row.lastMessageAt === "number" && Number.isFinite(row.lastMessageAt)
         ? toIsoString(row.lastMessageAt)
@@ -289,7 +307,7 @@ export const ensureDirectConversationFromCommunity = mutation({
       nowMs,
     });
 
-    return await mapDirectConversation(ctx, conversation);
+    return await mapDirectConversation(ctx, conversation, { viewerUserId });
   },
 });
 
@@ -314,7 +332,38 @@ export const listMyDirectConversations = query({
       if (conversation) conversations.push(conversation);
     }
     conversations.sort((left, right) => right.updatedAt - left.updatedAt);
-    return await Promise.all(conversations.slice(0, safeLimit).map((row) => mapDirectConversation(ctx, row)));
+    return await Promise.all(
+      conversations.slice(0, safeLimit).map((row) =>
+        mapDirectConversation(ctx, row, { viewerUserId }),
+      ),
+    );
+  },
+});
+
+export const markDirectConversationRead = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    conversationId: v.id("dmConversations"),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const { conversation, participant } = await requireActiveUserParticipant({
+      ctx,
+      conversationId: args.conversationId,
+      userId: viewerUserId,
+    });
+    const lastSeq = Math.max(0, Math.floor(conversation.lastSeq ?? 0));
+    const currentLastReadSeq = Math.max(0, Math.floor(participant.lastReadSeq ?? 0));
+    if (lastSeq > currentLastReadSeq) {
+      await ctx.db.patch(participant._id, {
+        lastReadSeq: lastSeq,
+        updatedAt: Date.now(),
+      });
+    }
+    return await mapDirectConversation(ctx, conversation, { viewerUserId });
   },
 });
 
@@ -364,7 +413,7 @@ export const sendDirectMessage = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const { conversation } = await requireActiveUserParticipant({
+    const { conversation, participant } = await requireActiveUserParticipant({
       ctx,
       conversationId: args.conversationId,
       userId: viewerUserId,
@@ -388,6 +437,12 @@ export const sendDirectMessage = mutation({
       lastMessageAt: nowMs,
       updatedAt: nowMs,
     });
+    if (seq > Math.max(0, Math.floor(participant.lastReadSeq ?? 0))) {
+      await ctx.db.patch(participant._id, {
+        lastReadSeq: seq,
+        updatedAt: nowMs,
+      });
+    }
     const message = (await ctx.db.get(messageId)) as DirectMessageLike | null;
     if (!message) throw new Error("dm_message_create_failed");
     return await mapDirectMessage(ctx, message);

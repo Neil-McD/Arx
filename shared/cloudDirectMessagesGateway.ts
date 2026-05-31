@@ -111,6 +111,20 @@ export async function listCloudDirectConversations<SessionT>(
   return coerceRows<DirectMessageConversation>(payload);
 }
 
+export async function markCloudDirectConversationRead<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+  },
+): Promise<DirectMessageConversation> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.mutation("directMessages:markDirectConversationRead" as any, {
+    authSubject,
+    conversationId: params.conversationId,
+  })) as DirectMessageConversation | null;
+  if (!payload?.id) throw new Error("Failed to mark direct message as read.");
+  return payload;
+}
+
 export function subscribeCloudDirectConversations<TRow = DirectMessageConversation>(
   params: {
     liveClient: CloudDirectMessagesLiveClient;

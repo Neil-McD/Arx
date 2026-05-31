@@ -9577,6 +9577,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: color-mix(in srgb, var(--bg-card) 42%, transparent);
 }
 
+.community-dm-inbox-row.is-unread .community-dm-inbox-row-name {
+  font-weight: 820;
+}
+
 .community-dm-inbox-avatar {
   position: relative;
   width: 38px;
@@ -9620,6 +9624,14 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 10px;
 }
 
+.community-dm-inbox-row-meta-group {
+  min-width: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .community-dm-inbox-row-name,
 .community-dm-inbox-row-meta {
   overflow: hidden;
@@ -9628,6 +9640,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-inbox-row-name {
+  min-width: 0;
+  flex: 1 1 auto;
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 740;
@@ -9638,6 +9652,22 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-faint);
   font-size: 11px;
   line-height: 1.2;
+}
+
+.community-dm-inbox-row-unread {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 820;
+  line-height: 1;
+  background: var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 38%, transparent);
 }
 
 .community-dm-inbox-row-meta {
@@ -10749,6 +10779,10 @@ button.chat-reply-quote:hover {
 
 /* Unread badge on community button */
 .community-btn {
+  position: relative;
+}
+
+.direct-messages-topbar-button {
   position: relative;
 }
 

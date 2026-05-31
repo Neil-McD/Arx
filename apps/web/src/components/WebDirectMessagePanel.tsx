@@ -17,6 +17,7 @@ type WebDirectMessagePanelProps = {
   renderTextWithLinks: (text: string) => ReactNode;
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
+  onReadThroughSeq?: (seq: number) => void | Promise<void>;
   onBackToInbox?: () => void;
 };
 
@@ -57,6 +58,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const communityName = props.conversation.created_from_community?.name ?? "shared community";
   const lastMessage = props.messages[props.messages.length - 1] ?? null;
   const lastMessageId = lastMessage?.id ?? null;
+  const lastMessageSeq = Math.max(0, Math.floor(Number(lastMessage?.seq ?? 0)));
   const lastMessageIsOwn = Boolean(lastMessage?.sender_user_id && lastMessage.sender_user_id === props.sessionUserId);
 
   const scrollMessagesToBottom = useCallback(() => {
@@ -88,8 +90,19 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       lastMessageIsOwn;
     if (!shouldScroll) return;
 
+    if (lastMessageSeq > 0) {
+      void props.onReadThroughSeq?.(lastMessageSeq);
+    }
     requestAnimationFrame(scrollMessagesToBottom);
-  }, [props.conversation.id, props.isLoading, lastMessageId, lastMessageIsOwn, scrollMessagesToBottom]);
+  }, [
+    props.conversation.id,
+    props.isLoading,
+    props.onReadThroughSeq,
+    lastMessageId,
+    lastMessageIsOwn,
+    lastMessageSeq,
+    scrollMessagesToBottom,
+  ]);
 
   return (
     <aside className="community-dm-panel" role="dialog" aria-label={`${peerLabel} direct message`}>
@@ -130,7 +143,11 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         onScroll={(event) => {
           const target = event.currentTarget;
           const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
-          shouldFollowMessagesRef.current = distanceFromBottom <= DM_AUTO_SCROLL_THRESHOLD_PX;
+          const isNearBottom = distanceFromBottom <= DM_AUTO_SCROLL_THRESHOLD_PX;
+          shouldFollowMessagesRef.current = isNearBottom;
+          if (isNearBottom && lastMessageSeq > 0) {
+            void props.onReadThroughSeq?.(lastMessageSeq);
+          }
         }}
       >
         {props.isLoading ? (

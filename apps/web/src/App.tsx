@@ -1210,6 +1210,7 @@ export default function App() {
   const [isDirectMessagesOpen, setIsDirectMessagesOpen] = useState(false);
   const [directMessageOpenRequest, setDirectMessageOpenRequest] =
     useState<DirectMessageOpenRequest>(null);
+  const [directMessagesUnreadCount, setDirectMessagesUnreadCount] = useState(0);
   const accountGraphHydrationRunIdRef = useRef(0);
   const directMessageOpenRequestIdRef = useRef(0);
   const handleToggleDirectMessages = useCallback(() => {
@@ -10097,16 +10098,35 @@ export default function App() {
       ) : null}
     </button>
   ) : null;
+  const directMessagesUnreadLabel =
+    directMessagesUnreadCount > 0 ? `${directMessagesUnreadCount} unread` : null;
   const directMessagesButton = session ? (
     <button
       className={`icon-button direct-messages-topbar-button${isDirectMessagesOpen ? " active" : ""}`}
       onClick={handleToggleDirectMessages}
       aria-expanded={isDirectMessagesOpen}
-      aria-label={isDirectMessagesOpen ? "Close direct messages" : "Open direct messages"}
-      title={isDirectMessagesOpen ? "Close direct messages" : "Direct messages"}
+      aria-label={
+        isDirectMessagesOpen
+          ? "Close direct messages"
+          : directMessagesUnreadLabel
+            ? `Open direct messages, ${directMessagesUnreadLabel}`
+            : "Open direct messages"
+      }
+      title={
+        isDirectMessagesOpen
+          ? "Close direct messages"
+          : directMessagesUnreadLabel
+            ? `Direct messages (${directMessagesUnreadLabel})`
+            : "Direct messages"
+      }
       type="button"
     >
       <MessageCircle aria-hidden="true" />
+      {directMessagesUnreadCount > 0 ? (
+        <span className="unread-badge">
+          {directMessagesUnreadCount > 99 ? "99+" : directMessagesUnreadCount}
+        </span>
+      ) : null}
     </button>
   ) : null;
   const handleSelectCommunityTab = useCallback((tab: CommunityTab) => {
@@ -10799,6 +10819,7 @@ export default function App() {
         getInitials={getInitials}
         getAvatarColor={getAvatarColor}
         renderTextWithLinks={renderTextWithLinks}
+        onUnreadCountChange={setDirectMessagesUnreadCount}
         onClose={handleCloseDirectMessages}
       />
       <WebCommunityLaunchSetupModal

@@ -61,11 +61,13 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
             const peerAvatarSeed = peer?.user_id ?? peerLabel;
             const communityName = conversation.created_from_community?.name ?? "shared community";
             const timeLabel = formatInboxTime(conversation.last_message_at ?? conversation.updated_at);
+            const unreadCount = Math.max(0, Math.floor(Number(conversation.unread_count ?? 0)));
+            const hasUnread = Boolean(conversation.has_unread || unreadCount > 0);
             return (
               <button
                 key={conversation.id}
                 type="button"
-                className="community-dm-inbox-row"
+                className={`community-dm-inbox-row${hasUnread ? " is-unread" : ""}`}
                 onClick={() => props.onSelectConversation(conversation)}
               >
                 <UserAvatar
@@ -83,7 +85,21 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                 <span className="community-dm-inbox-row-body">
                   <span className="community-dm-inbox-row-top">
                     <span className="community-dm-inbox-row-name">{peerLabel}</span>
-                    {timeLabel ? <span className="community-dm-inbox-row-time">{timeLabel}</span> : null}
+                    <span className="community-dm-inbox-row-meta-group">
+                      {timeLabel ? <span className="community-dm-inbox-row-time">{timeLabel}</span> : null}
+                      {hasUnread ? (
+                        <span
+                          className="community-dm-inbox-row-unread"
+                          aria-label={
+                            unreadCount > 0
+                              ? `${unreadCount} unread direct messages`
+                              : "Unread direct messages"
+                          }
+                        >
+                          {unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : ""}
+                        </span>
+                      ) : null}
+                    </span>
                   </span>
                   <span className="community-dm-inbox-row-meta">Started in {communityName}</span>
                 </span>

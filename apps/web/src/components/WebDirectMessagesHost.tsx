@@ -5,6 +5,7 @@ import {
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
   listCloudDirectConversations,
+  markCloudDirectConversationRead,
   subscribeCloudDirectConversations,
   sendCloudDirectMessage,
   subscribeCloudDirectMessages,
@@ -35,6 +36,7 @@ type WebDirectMessagesHostProps<SessionT> = {
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
+  onUnreadCountChange?: (count: number) => void;
   onClose: () => void;
 };
 
@@ -53,6 +55,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     getInitials,
     getAvatarColor,
     renderTextWithLinks,
+    onUnreadCountChange,
     onClose,
   } = props;
   const [conversations, setConversations] = useState<DirectMessageConversation[]>([]);
@@ -62,6 +65,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const inboxLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
   const directMessageOpenRequestRef = useRef(0);
+  const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
 
@@ -93,8 +97,60 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [session]);
 
   useEffect(() => {
+    readMarkSeqByConversationRef.current = {};
+  }, [sessionUserId]);
+
+  useEffect(() => {
+    const unreadCount = conversations.reduce((total, conversation) => {
+      const count = Number(conversation.unread_count ?? 0);
+      if (!Number.isFinite(count)) return total;
+      return total + Math.max(0, Math.floor(count));
+    }, 0);
+    onUnreadCountChange?.(unreadCount);
+  }, [conversations, onUnreadCountChange]);
+
+  const markConversationRead = useCallback(
+    async (conversationId: string, throughSeq: number) => {
+      const normalizedConversationId = String(conversationId ?? "").trim();
+      const seq = Math.max(0, Math.floor(Number(throughSeq ?? 0)));
+      if (!session || !normalizedConversationId || seq <= 0) return;
+      const previousSeq = readMarkSeqByConversationRef.current[normalizedConversationId] ?? 0;
+      if (seq <= previousSeq) return;
+      readMarkSeqByConversationRef.current[normalizedConversationId] = seq;
+
+      try {
+        const updatedConversation = await markCloudDirectConversationRead({
+          session,
+          conversationId: normalizedConversationId,
+        });
+        readMarkSeqByConversationRef.current[normalizedConversationId] = Math.max(
+          seq,
+          Math.max(0, Math.floor(Number(updatedConversation.viewer_last_read_seq ?? 0))),
+        );
+        setConversations((previous) =>
+          previous.map((conversation) =>
+            conversation.id === updatedConversation.id ? updatedConversation : conversation,
+          ),
+        );
+        setDirectMessagePanel((previous) =>
+          previous?.conversation.id === updatedConversation.id
+            ? {
+                ...previous,
+                conversation: updatedConversation,
+              }
+            : previous,
+        );
+      } catch {
+        readMarkSeqByConversationRef.current[normalizedConversationId] = previousSeq;
+      }
+    },
+    [session],
+  );
+
+  useEffect(() => {
     hasInboxLiveSubscriptionRef.current = false;
-    if (!isOpen || !session) {
+    if (!session) {
+      setConversations([]);
       setIsLoadingInbox(false);
       return;
     }
@@ -136,7 +192,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       unsubscribe();
       liveClient?.close();
     };
-  }, [isOpen, loadInbox, session]);
+  }, [loadInbox, session]);
 
   useEffect(() => {
     if (!isOpen || !openRequest) return;
@@ -174,6 +230,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           isSending: false,
           error: null,
         });
+        void markConversationRead(conversation.id, conversation.last_seq);
       })
       .catch((error) => {
         if (isDisposed || directMessageOpenRequestRef.current !== requestId) return;
@@ -185,7 +242,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     return () => {
       isDisposed = true;
     };
-  }, [isOpen, openRequest, session]);
+  }, [isOpen, markConversationRead, openRequest, session]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -278,16 +335,20 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     };
   }, [isOpen, onClose]);
 
-  const openConversation = useCallback((conversation: DirectMessageConversation) => {
-    setDirectMessagePanel({
-      conversation,
-      messages: [],
-      input: "",
-      isLoading: true,
-      isSending: false,
-      error: null,
-    });
-  }, []);
+  const openConversation = useCallback(
+    (conversation: DirectMessageConversation) => {
+      setDirectMessagePanel({
+        conversation,
+        messages: [],
+        input: "",
+        isLoading: true,
+        isSending: false,
+        error: null,
+      });
+      void markConversationRead(conversation.id, conversation.last_seq);
+    },
+    [markConversationRead],
+  );
 
   const sendDirectMessage = useCallback(async () => {
     const current = directMessagePanel;
@@ -358,6 +419,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             );
           }}
           onSend={sendDirectMessage}
+          onReadThroughSeq={(seq) => {
+            void markConversationRead(directMessagePanel.conversation.id, seq);
+          }}
           onBackToInbox={() => {
             setDirectMessagePanel(null);
           }}
