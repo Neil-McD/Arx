@@ -55,6 +55,15 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
   const activeCommunityName = String(props.activeCommunityName ?? "").trim() || "current community";
   if (props.isNewMessageMode) {
     const isInitialRecipientLoad = props.isLoadingRecipients && props.recipients.length === 0;
+    const hasRecipientSearch = props.recipientSearch.trim().length > 0;
+    const emptyRecipientLabel =
+      props.recipientsHasMore && hasRecipientSearch
+        ? "No matches loaded yet."
+        : "No members found.";
+    const loadMoreLabel =
+      props.recipientsHasMore && hasRecipientSearch
+        ? "Search more"
+        : "Show more";
     return (
       <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="New direct message">
         <div className="community-dm-inbox-header">
@@ -93,7 +102,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           ) : props.recipients.length === 0 ? (
             <div className="community-dm-panel-empty">
               <MessageCircle aria-hidden="true" />
-              <span>No members found.</span>
+              <span>{emptyRecipientLabel}</span>
             </div>
           ) : (
             props.recipients.map((recipient) => {
@@ -138,7 +147,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
               onClick={props.onLoadMoreRecipients}
               disabled={props.isLoadingRecipients}
             >
-              {props.isLoadingRecipients ? "Loading..." : "Show more"}
+              {props.isLoadingRecipients ? "Loading..." : loadMoreLabel}
             </button>
           ) : null}
         </div>

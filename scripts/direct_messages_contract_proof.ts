@@ -40,6 +40,8 @@ assert.match(directMessages, /listEligibleDirectMessageRecipients = query/, "bac
 assert.match(directMessages, /paginationOptsValidator/, "DM recipient lookup must use Convex pagination rather than a capped membership scan");
 assert.match(directMessages, /\.paginate\(\{[\s\S]*numItems: memberPageSize/, "DM recipient lookup must page through community memberships");
 assert.doesNotMatch(directMessages, /MAX_DM_RECIPIENT_SCAN_ROWS/, "DM recipient lookup must not hide members behind a fixed scan cap");
+assert.match(directMessages, /MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS/, "DM recipient search must scan more than one visible page when needed");
+assert.match(directMessages, /while \([\s\S]*pagesScanned < MAX_DM_RECIPIENT_SEARCH_PAGES/, "DM recipient search must walk bounded membership pages to find matches");
 assert.match(directMessages, /communityMembershipRowIsActive/, "DM recipient lookup must use active community memberships");
 assert.match(directMessages, /userKey === normalizeIdValue\(viewerUserId\)/, "DM recipient lookup must exclude the viewer");
 assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId,[\s\S]*userId,[\s\S]*\}\)/, "DM recipient lookup must verify recipient community access");
@@ -124,6 +126,8 @@ assert.match(dmInboxPanel, /Search members/, "DM recipient picker must be search
 assert.match(dmInboxPanel, /onSelectRecipient/, "DM recipient picker must select an eligible recipient");
 assert.match(dmInboxPanel, /recipientsHasMore/, "DM recipient picker must know when more eligible recipients are available");
 assert.match(dmInboxPanel, /Show more/, "DM recipient picker must expose a bounded way to load more members");
+assert.match(dmInboxPanel, /Search more/, "DM recipient picker must make partial search pagination explicit");
+assert.match(dmInboxPanel, /No matches loaded yet/, "DM recipient picker must not falsely say a paged search has no members");
 assert.match(dmInboxPanel, /conversation\.unread_count/, "DM inbox rows must consume unread count");
 assert.match(dmInboxPanel, /is-unread/, "DM inbox rows must expose unread state for styling");
 assert.match(dmInboxPanel, /community-dm-inbox-row-unread/, "DM inbox rows must render an unread badge");

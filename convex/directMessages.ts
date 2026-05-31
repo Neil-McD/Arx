@@ -62,6 +62,8 @@ type DirectMessageLike = {
 const MAX_DM_TEXT_CHARS = 4000;
 const MAX_DM_MESSAGE_ROWS = 200;
 const MAX_DM_RECIPIENT_ROWS = 25;
+const MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS = 75;
+const MAX_DM_RECIPIENT_SEARCH_PAGES = 8;
 const DIRECT_CONVERSATION_KIND = "direct" as const;
 
 function normalizePublicUserId(raw: unknown): string {
@@ -317,6 +319,10 @@ async function mapEligibleDirectMessageRecipient(args: {
   };
 }
 
+type EligibleDirectMessageRecipient = NonNullable<
+  Awaited<ReturnType<typeof mapEligibleDirectMessageRecipient>>
+>;
+
 export const ensureDirectConversationFromCommunity = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -408,6 +414,75 @@ export const listEligibleDirectMessageRecipients = query({
     const isFirstPage = args.paginationOpts.cursor === null;
     const memberPageSize = Math.max(1, isFirstPage ? safeLimit - 1 : safeLimit);
     const search = normalizeRecipientSearch(args.search);
+    const seenUserIds = new Set<string>();
+    const recipients: EligibleDirectMessageRecipient[] = [];
+    const addRecipient = async (userId: any) => {
+      if (recipients.length >= safeLimit) return;
+      const userKey = normalizeIdValue(userId);
+      if (!userKey || userKey === normalizeIdValue(viewerUserId) || seenUserIds.has(userKey)) {
+        return;
+      }
+      seenUserIds.add(userKey);
+      const recipient = await mapEligibleDirectMessageRecipient({
+        ctx,
+        community,
+        viewerUserId,
+        userId,
+        search,
+      });
+      if (recipient) recipients.push(recipient);
+    };
+
+    if (search) {
+      let cursor = args.paginationOpts.cursor ?? null;
+      let isDone = false;
+      let pagesScanned = 0;
+      const searchPageSize = Math.max(
+        safeLimit,
+        Math.min(MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS, safeLimit * 4),
+      );
+
+      if (cursor === null) {
+        await addRecipient(community.ownerId);
+      }
+
+      while (
+        recipients.length < safeLimit &&
+        !isDone &&
+        pagesScanned < MAX_DM_RECIPIENT_SEARCH_PAGES
+      ) {
+        const rawPage = await ctx.db
+          .query("communityMemberships" as any)
+          .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+          .order("desc")
+          .paginate({
+            ...args.paginationOpts,
+            cursor,
+            numItems: searchPageSize,
+            maximumRowsRead: Math.max(
+              args.paginationOpts.maximumRowsRead ?? searchPageSize,
+              searchPageSize,
+            ),
+          });
+        pagesScanned += 1;
+
+        for (const row of rawPage.page as CommunityMembershipLike[]) {
+          if (!communityMembershipRowIsActive(row)) continue;
+          await addRecipient(row.userId);
+          if (recipients.length >= safeLimit) break;
+        }
+
+        cursor = typeof rawPage.continueCursor === "string" ? rawPage.continueCursor : null;
+        isDone = rawPage.isDone || !cursor;
+      }
+
+      return {
+        rows: recipients,
+        continueCursor: !isDone && cursor ? cursor : null,
+        isDone: isDone || !cursor,
+      };
+    }
+
     const rawPage = await ctx.db
       .query("communityMemberships" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
@@ -421,32 +496,10 @@ export const listEligibleDirectMessageRecipients = query({
         ),
       });
 
-    const candidateUserIds: any[] = [];
-    const seenUserIds = new Set<string>();
-    const addCandidate = (userId: any) => {
-      const userKey = normalizeIdValue(userId);
-      if (!userKey || userKey === normalizeIdValue(viewerUserId) || seenUserIds.has(userKey)) return;
-      seenUserIds.add(userKey);
-      candidateUserIds.push(userId);
-    };
-
-    if (isFirstPage) addCandidate(community.ownerId);
+    if (isFirstPage) await addRecipient(community.ownerId);
     for (const row of rawPage.page as CommunityMembershipLike[]) {
       if (!communityMembershipRowIsActive(row)) continue;
-      addCandidate(row.userId);
-    }
-
-    const recipients = [];
-    for (const userId of candidateUserIds) {
-      if (recipients.length >= safeLimit) break;
-      const recipient = await mapEligibleDirectMessageRecipient({
-        ctx,
-        community,
-        viewerUserId,
-        userId,
-        search,
-      });
-      if (recipient) recipients.push(recipient);
+      await addRecipient(row.userId);
     }
 
     return {
