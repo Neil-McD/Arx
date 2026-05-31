@@ -41,6 +41,7 @@
     "check:web-deploy-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/web_deploy_diagnostics_proof.ts",
     "check:sentry-frontend-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/sentry_frontend_diagnostics_proof.ts",
     "check:platform-diagnostics-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_diagnostics_contract_proof.ts",
+    "check:email-auth-diagnostic-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/email_auth_diagnostic_contract_proof.ts",
     "check:operator-intelligence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_intelligence_proof.ts",
     "check:operator-dashboard-gate-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_dashboard_gate_proof.ts",
     "check:ui-stability-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/ui_stability_contract_proof.ts",

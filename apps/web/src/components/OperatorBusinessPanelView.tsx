@@ -2,6 +2,7 @@ import { useState } from "react";
 import type {
   OperatorAccountSetupSnapshot,
   OperatorAccountSetupUserRecord,
+  OperatorEmailAuthDiagnosticSnapshot,
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
@@ -52,9 +53,22 @@ function formatKnownOperatorCount(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "--";
 }
 
+function formatDiagnosticBoolean(value: boolean | null | undefined): string {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "--";
+}
+
+function formatDiagnosticStatus(value: string | null | undefined): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return "--";
+  return normalized.replace(/_/g, " ");
+}
+
 export function OperatorBusinessPanelView(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
+  emailAuth: OperatorEmailAuthDiagnosticSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
   toolEconomics: OperatorToolEconomicsSnapshot | null;
   partnerPerformance: OperatorPartnerPerformanceSnapshot | null;
@@ -81,6 +95,13 @@ export function OperatorBusinessPanelView(props: {
   const runtimeUsage = props.toolEconomics?.usageIntegrity ?? null;
   const toolEconomics = props.toolEconomics?.paidToolEconomics ?? null;
   const accountingIntegrity = props.toolEconomics?.accountingIntegrity ?? null;
+  const emailAuth = props.emailAuth;
+  const sampledUsersWithEmail = emailAuth?.aggregate.users.withEmail ?? 0;
+  const sampledVerifiedEmailUsers = emailAuth?.aggregate.users.withEmailVerifiedAt ?? 0;
+  const sampledEmailVerificationRate =
+    sampledUsersWithEmail > 0 ? sampledVerifiedEmailUsers / sampledUsersWithEmail : null;
+  const sampledSuppressedEmails = emailAuth?.aggregate.outbox.byStatus.suppressed ?? 0;
+  const sampledUnverifiedSuppressions = emailAuth?.aggregate.outbox.failures.email_recipient_unverified ?? 0;
   const platformRevenueMetric =
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? businessKpis.revenue.platformNetRevenueInRange
@@ -217,6 +238,47 @@ export function OperatorBusinessPanelView(props: {
           </div>
           {businessKpis?.email.conversionAvailability !== "available" ? (
             <div className="operator-dashboard__empty">Resend delivery events exist, but checkout/signup attribution is not wired yet.</div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Email auth</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Current user verified</span>
+            <strong>{formatDiagnosticBoolean(emailAuth?.aggregate.currentUser.emailVerifiedAtPresent)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Identity claim verified</span>
+            <strong>{formatDiagnosticBoolean(emailAuth?.identity.emailVerifiedClaimValue)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>WorkOS user verified</span>
+            <strong>{formatDiagnosticBoolean(emailAuth?.workosUser.emailVerified)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>WorkOS lookup</span>
+            <strong>{formatDiagnosticStatus(emailAuth?.workosUser.status)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Verified email coverage</span>
+            <strong>{formatPercent(sampledEmailVerificationRate)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Suppressed outbox sample</span>
+            <strong>{sampledSuppressedEmails}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Unverified suppressions</span>
+            <strong>{sampledUnverifiedSuppressions}</strong>
+          </div>
+          {!emailAuth ? (
+            <div className="operator-dashboard__empty">Email auth diagnostics unavailable.</div>
+          ) : emailAuth.workosUser.status === "skipped" ? (
+            <div className="operator-dashboard__empty">WorkOS lookup skipped: {formatDiagnosticStatus(emailAuth.workosUser.reason)}.</div>
+          ) : emailAuth.evidence.redacted ? (
+            <div className="operator-dashboard__empty">Email auth diagnostics are redacted and read-only.</div>
           ) : null}
         </div>
       </section>

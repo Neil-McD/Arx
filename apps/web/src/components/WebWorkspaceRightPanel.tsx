@@ -122,6 +122,7 @@ export function WebWorkspaceRightPanel(props: {
           <OperatorBusinessPanelView
             overview={props.state.overview}
             monetization={props.state.monetization}
+            emailAuth={props.state.emailAuth}
             accountSetup={props.state.accountSetup}
             toolEconomics={props.state.toolEconomics}
             partnerPerformance={props.state.partnerPerformance}

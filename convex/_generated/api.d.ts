@@ -84,6 +84,7 @@ import type * as developerApps from "../developerApps.js";
 import type * as discoverMarketplace from "../discoverMarketplace.js";
 import type * as email from "../email.js";
 import type * as emailCore from "../emailCore.js";
+import type * as emailDiagnostics from "../emailDiagnostics.js";
 import type * as emailDigests from "../emailDigests.js";
 import type * as emailEvents from "../emailEvents.js";
 import type * as emailPreferences from "../emailPreferences.js";
@@ -254,6 +255,7 @@ declare const fullApi: ApiFromModules<{
   discoverMarketplace: typeof discoverMarketplace;
   email: typeof email;
   emailCore: typeof emailCore;
+  emailDiagnostics: typeof emailDiagnostics;
   emailDigests: typeof emailDigests;
   emailEvents: typeof emailEvents;
   emailPreferences: typeof emailPreferences;

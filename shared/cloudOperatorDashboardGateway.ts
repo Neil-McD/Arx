@@ -6,6 +6,7 @@ import type {
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorCommunityRecord,
   OperatorEventRecord,
+  OperatorEmailAuthDiagnosticSnapshot,
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
@@ -581,6 +582,20 @@ export async function loadOperatorFrontendErrorDiagnosticsCanonical(params: {
     currentBuildId: build.buildId ?? undefined,
     frontendSentryRelease: build.sentryRelease ?? undefined,
   })) as OperatorFrontendErrorDiagnosticsSnapshot;
+}
+
+export async function loadOperatorEmailAuthDiagnosticCanonical(params: {
+  session: AuthSessionLike;
+  includeWorkosUserLookup?: boolean;
+}): Promise<OperatorEmailAuthDiagnosticSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.action("emailDiagnostics:getOperatorEmailAuthDiagnostic" as any, {
+    authSubject,
+    includeWorkosUserLookup: params.includeWorkosUserLookup ?? true,
+    userSampleLimit: 200,
+    outboxPerStatusLimit: 100,
+    deliverySampleLimit: 100,
+  })) as OperatorEmailAuthDiagnosticSnapshot;
 }
 
 export async function loadOperatorRisksCanonical(params: {

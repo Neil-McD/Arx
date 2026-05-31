@@ -6,6 +6,7 @@ import {
   loadOperatorAccountSetupSnapshotCanonical,
   loadOperatorAuthAccessDiagnosticsCanonical,
   loadOperatorCommunitiesCanonical,
+  loadOperatorEmailAuthDiagnosticCanonical,
   loadOperatorEventsCanonical,
   loadOperatorFrontendErrorDiagnosticsCanonical,
   loadOperatorMonetizationCanonical,
@@ -25,6 +26,7 @@ import type {
   OperatorAccountSetupSnapshot,
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorCommunityRecord,
+  OperatorEmailAuthDiagnosticSnapshot,
   OperatorEventRecord,
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
@@ -47,6 +49,7 @@ export type OperatorDashboardState = {
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   toolEconomics: OperatorToolEconomicsSnapshot | null;
+  emailAuth: OperatorEmailAuthDiagnosticSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
   partnerPerformance: OperatorPartnerPerformanceSnapshot | null;
@@ -65,6 +68,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     securityAudit: null,
     runtimeTools: null,
     toolEconomics: null,
+    emailAuth: null,
     frontendErrors: null,
     accountSetup: null,
     partnerPerformance: null,
@@ -180,6 +184,7 @@ export function useOperatorDashboardData(params: {
           loadOperatorSecurityAuditDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorToolEconomicsCanonical({ session, range: "30d" }),
+          loadOperatorEmailAuthDiagnosticCanonical({ session, includeWorkosUserLookup: true }),
           loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorAccountSetupSnapshotCanonical({ session, completed: false, limit: 24 }),
           loadOperatorPartnerPerformanceCanonical({ session, range: "30d", limit: 12 }),
@@ -196,6 +201,7 @@ export function useOperatorDashboardData(params: {
           securityAudit,
           runtimeTools,
           toolEconomics,
+          emailAuth,
           frontendErrors,
           accountSetup,
           partnerPerformance,
@@ -212,6 +218,7 @@ export function useOperatorDashboardData(params: {
           ["security_audit", securityAudit],
           ["runtime_tools", runtimeTools],
           ["tool_economics", toolEconomics],
+          ["email_auth", emailAuth],
           ["frontend_errors", frontendErrors],
           ["account_setup", accountSetup],
           ["partner_performance", partnerPerformance],
@@ -228,6 +235,7 @@ export function useOperatorDashboardData(params: {
           securityAudit: fulfilledValue(securityAudit),
           runtimeTools: fulfilledValue(runtimeTools),
           toolEconomics: fulfilledValue(toolEconomics),
+          emailAuth: fulfilledValue(emailAuth),
           frontendErrors: fulfilledValue(frontendErrors),
           accountSetup: fulfilledValue(accountSetup),
           partnerPerformance: fulfilledValue(partnerPerformance),
@@ -248,6 +256,7 @@ export function useOperatorDashboardData(params: {
             securityAudit: nextState.securityAudit ?? prev.securityAudit,
             runtimeTools: nextState.runtimeTools ?? prev.runtimeTools,
             toolEconomics: nextState.toolEconomics ?? prev.toolEconomics,
+            emailAuth: nextState.emailAuth ?? prev.emailAuth,
             frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
             accountSetup: nextState.accountSetup ?? prev.accountSetup,
             partnerPerformance: nextState.partnerPerformance ?? prev.partnerPerformance,

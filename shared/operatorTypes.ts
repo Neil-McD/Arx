@@ -210,6 +210,84 @@ export type OperatorMonetizationSnapshot = {
   };
 };
 
+export type OperatorEmailAuthDiagnosticSnapshot = {
+  ok: boolean;
+  computedAt: number;
+  operator: {
+    role: "owner" | "operator" | "readonly" | string;
+    source: string;
+  };
+  identity: {
+    present: boolean;
+    keyCount: number;
+    keys: string[];
+    hasSubject: boolean;
+    hasIssuer: boolean;
+    hasTokenIdentifier: boolean;
+    hasEmail: boolean;
+    emailVerificationClaimKeysPresent: string[];
+    emailVerifiedClaimValue: boolean | null;
+  };
+  workosUser: {
+    status: "ok" | "skipped" | "not_found" | "error" | string;
+    reason?: string;
+    apiKeyConfigured: boolean;
+    httpStatus?: number;
+    timeoutMs?: number;
+    subjectMatchedResponseId?: boolean | null;
+    hasEmail?: boolean;
+    emailVerified?: boolean | null;
+    profilePicturePresent?: boolean;
+    updatedAtPresent?: boolean;
+  };
+  aggregate: {
+    computedAt: number;
+    currentUser: {
+      rowPresent: boolean;
+      hasEmail: boolean;
+      emailVerifiedAtPresent: boolean;
+      emailVerificationSource: string | null;
+    };
+    users: {
+      sampled: number;
+      withEmail: number;
+      withEmailVerifiedAt: number;
+      byEmailVerificationSource: Record<string, number>;
+    };
+    outbox: {
+      sampled: number;
+      byStatus: Record<string, number>;
+      byKind: Record<string, number>;
+      byTemplate: Record<string, number>;
+      failures: Record<string, number>;
+      recipientMode: {
+        userId: number;
+        directEmail: number;
+      };
+    };
+    deliveries: {
+      sampled: number;
+      byEvent: Record<string, number>;
+      withOutboxId: number;
+    };
+    evidence: {
+      sourceTables: string[];
+      userSampleLimit: number;
+      outboxPerStatusLimit: number;
+      deliverySampleLimit: number;
+      redacted: boolean;
+      readOnly: boolean;
+    };
+  };
+  evidence: {
+    redacted: boolean;
+    readOnly: boolean;
+    mutatesUsers: boolean;
+    mutatesEmailOutbox: boolean;
+    workosLookupRequested: boolean;
+  };
+};
+
 export type OperatorPartnerPayoutCycleStatus =
   | "pending_approval"
   | "approved"
