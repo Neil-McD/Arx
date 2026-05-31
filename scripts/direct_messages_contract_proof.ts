@@ -86,6 +86,8 @@ assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pa
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
+assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox must size to content instead of forcing full conversation-panel height");
+assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");
 
 console.log("PASS: direct messages are community-origin, participant-based, and follow-free.");

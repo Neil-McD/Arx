@@ -9512,6 +9512,9 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-inbox-panel {
+  height: auto;
+  min-height: 0;
+  max-height: min(420px, calc(100vh - 96px));
   gap: 14px;
 }
 
@@ -9538,13 +9541,18 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-inbox-list {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
+  max-height: min(300px, calc(100vh - 190px));
   display: flex;
   flex-direction: column;
   gap: 4px;
   overflow: auto;
   padding: 2px;
+}
+
+.community-dm-inbox-panel .community-dm-panel-empty {
+  min-height: 118px;
 }
 
 .community-dm-inbox-row {
@@ -9569,6 +9577,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-inbox-avatar {
+  position: relative;
   width: 38px;
   height: 38px;
   flex: 0 0 38px;
