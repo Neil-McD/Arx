@@ -259,6 +259,11 @@ assert.match(
   "workspace compute settlement must mirror active Blaxel runtime cost into provider cost accounting",
 );
 assert.match(
+  readFileSync(new URL("../convex/blaxelWorkspaceWake.ts", import.meta.url), "utf8"),
+  /recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort[\s\S]*recordProviderCostInternal[\s\S]*component: "blaxel_active_runtime"[\s\S]*billingDisposition: "tracked_only"[\s\S]*provider_cost_source: "workspace_lease_release_without_user_charge"/,
+  "released/refunded Blaxel workspace leases must still track absorbed provider runtime cost",
+);
+assert.match(
   workspaceCredits,
   /resolveCreditLedgerProviderCostEntry[\s\S]*toolName === "web_research"[\s\S]*component: action === "crawl" \? "web_crawl_provider_call" : "web_research_call"/,
   "web research and crawl settlements must map into internal provider cost accounting",

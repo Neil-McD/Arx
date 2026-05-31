@@ -12,6 +12,9 @@ import {
   priceWorkspaceUsageCredits,
   WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
   WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
+  WORKSPACE_FILE_INSPECTION_HOLD_SECONDS,
+  WORKSPACE_FILE_INSPECTION_MAX_SECONDS,
+  WORKSPACE_FILE_INSPECTION_MIN_BILLABLE_SECONDS,
   WORKSPACE_MEMORY_GIB_USD_PER_SECOND,
   WORKSPACE_VCPU_USD_PER_SECOND,
 } from "../shared/workspaceCredits.ts";
@@ -790,6 +793,88 @@ function testBlaxelRuntimeReservationAndSettlementAreWired() {
   assert.match(runtimeExecutionSource, /settleRuntimeWorkspaceSession/);
 }
 
+function testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth() {
+  const runtimeExecutionSource = readFileSync(
+    join(process.cwd(), "convex/runtimeExecutionSession.ts"),
+    "utf8",
+  );
+  const workspaceTerminalsSource = readFileSync(
+    join(process.cwd(), "convex/workspaceTerminals.ts"),
+    "utf8",
+  );
+  const workspaceRuntimeSessionSource = readFileSync(
+    join(process.cwd(), "convex/workspaceRuntimeSession.ts"),
+    "utf8",
+  );
+
+  assert.doesNotMatch(runtimeExecutionSource, /workspaceSessionStartedPersistentTerminal/);
+  assert.doesNotMatch(runtimeExecutionSource, /no_terminal_started/);
+  assert.match(
+    runtimeExecutionSource,
+    /terminal_read[\s\S]*readWorkspaceTerminalProcess/,
+    "later turns can read an existing terminal without starting one",
+  );
+  assert.match(
+    runtimeExecutionSource,
+    /terminal_write[\s\S]*writeWorkspaceTerminalProcessInput/,
+    "later turns can write to an existing terminal without starting one",
+  );
+
+  const decisionStart = runtimeExecutionSource.indexOf(
+    "const resolveWorkspaceSessionAccountingReleaseDecision",
+  );
+  assert.ok(decisionStart >= 0, "runtime release decision helper must exist");
+  const decisionEnd = runtimeExecutionSource.indexOf("\n  return {", decisionStart);
+  assert.ok(decisionEnd > decisionStart, "runtime release decision helper must be bounded");
+  const decisionSource = runtimeExecutionSource.slice(decisionStart, decisionEnd);
+  assert.match(decisionSource, /refreshProjectSandboxActiveTerminalStatusInternal/);
+  assert.match(decisionSource, /active_terminal_still_running/);
+  assert.match(decisionSource, /no_active_terminal_remaining/);
+  assert.match(decisionSource, /active_terminal_refresh_failed/);
+  assert.doesNotMatch(
+    decisionSource,
+    /terminal_start|workspaceSessionStartedPersistentTerminal/,
+    "release decision must not depend on whether this turn started a terminal",
+  );
+
+  const settlementIndex = runtimeExecutionSource.indexOf("settleRuntimeWorkspaceSession({");
+  const releaseDecisionIndex = runtimeExecutionSource.indexOf(
+    "await resolveWorkspaceSessionAccountingReleaseDecision(workspaceSession)",
+  );
+  const keptAliveIndex = runtimeExecutionSource.indexOf(
+    "workspace_session_accounting_kept_alive",
+    releaseDecisionIndex,
+  );
+  const releaseIndex = runtimeExecutionSource.indexOf(
+    "releaseRuntimeWorkspaceSessionAccountingIfCurrent({",
+    settlementIndex,
+  );
+  assert.ok(settlementIndex >= 0, "runtime dispose must settle workspace usage");
+  assert.ok(
+    releaseDecisionIndex >= 0 && releaseDecisionIndex < settlementIndex,
+    "runtime dispose must decide release before settlement",
+  );
+  assert.ok(
+    keptAliveIndex > releaseDecisionIndex && keptAliveIndex < settlementIndex,
+    "active terminals must keep the reservation alive before any settlement happens",
+  );
+  assert.ok(
+    releaseIndex > settlementIndex,
+    "no-active-terminal path must settle before releasing accounting",
+  );
+
+  assert.match(
+    workspaceTerminalsSource,
+    /refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*listWorkspaceTerminalSessionsBySandboxInternal[\s\S]*isTerminalActiveStatus[\s\S]*readWorkspaceTerminalProcess[\s\S]*readProjectSandboxActiveTerminalStatusInternal/,
+    "terminal truth refresh must reconcile active terminal rows against Blaxel before release",
+  );
+  assert.match(
+    workspaceRuntimeSessionSource,
+    /releaseRuntimeWorkspaceSessionAccountingIfCurrent[\s\S]*releaseProjectBackgroundSandboxAccountingIfCurrentInternal[\s\S]*providerSandboxCreditReservationKey[\s\S]*providerSandboxStartedAt/,
+    "runtime accounting release must remain expected-value guarded",
+  );
+}
+
 function testReusableWorkspaceLeaseRequiresReservedLedgerEntry() {
   const blaxelWakeSource = readFileSync(
     join(process.cwd(), "convex/blaxelWorkspaceWake.ts"),
@@ -808,7 +893,14 @@ function testReusableWorkspaceLeaseRequiresReservedLedgerEntry() {
   assert.match(blaxelWakeSource, /String\(ledgerEntry\.userId \?\? ""\) !== String\(params\.ownerId \?\? ""\)/);
   assert.match(blaxelWakeSource, /normalizeOptionalString\(ledgerEntry\.projectId\) !== String\(params\.projectId\)/);
   assert.match(blaxelWakeSource, /canReuseWorkspaceLeaseForIntent[\s\S]*compareWorkspaceComputerLifecycleIntents/);
-  assert.match(blaxelWakeSource, /isRuntimeWorkspaceSessionLeaseLedgerEntry\(ledgerEntry\)[\s\S]*isRunningRuntimeWorkspaceSessionLease/);
+  assert.doesNotMatch(
+    blaxelWakeSource,
+    /isRuntimeWorkspaceSessionLeaseLedgerEntry\(ledgerEntry\)[\s\S]*isRunningRuntimeWorkspaceSessionLease/,
+  );
+  assert.match(
+    blaxelWakeSource,
+    /resolveReusableProjectWorkspaceLease[\s\S]*providerSandboxCreditReservationKey[\s\S]*ledgerEntry\.status !== "reserved"[\s\S]*canReuseWorkspaceLeaseForIntent[\s\S]*inspectBlaxelWorkspaceComputer/,
+  );
   assert.match(blaxelWakeSource, /projectCreditBudgetExpiresAt <= Date\.now\(\)[\s\S]*ledgerExpiresAt <= Date\.now\(\)/);
   assert.match(blaxelWakeSource, /Math\.min\(projectCreditBudgetExpiresAt, ledgerExpiresAt\)/);
   assert.match(blaxelWakeSource, /inspectBlaxelWorkspaceComputer/);
@@ -832,8 +924,16 @@ function testManualWorkspaceStopSettlesReusableLease() {
   assert.match(blaxelWakeSource, /settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*normalizeOptionalString\(ledgerEntry\.projectId\) !== String\(params\.projectId\)/);
   assert.match(blaxelWakeSource, /providerSandboxCreditReservationKey[\s\S]*settleReservedCreditsBestEffort[\s\S]*status: "succeeded"/);
   assert.match(blaxelWakeSource, /ledgerMetadata[\s\S]*sandbox_memory_gib[\s\S]*loadedConfig\.ok/);
+  assert.equal(WORKSPACE_FILE_INSPECTION_HOLD_SECONDS, 10);
+  assert.equal(WORKSPACE_FILE_INSPECTION_MIN_BILLABLE_SECONDS, 10);
+  assert.equal(WORKSPACE_FILE_INSPECTION_MAX_SECONDS, 30);
   assert.match(blaxelWakeSource, /resolveWorkspaceLeaseBillingTiming[\s\S]*WORKSPACE_FILE_INSPECTION_MAX_SECONDS/);
+  assert.match(blaxelWakeSource, /minBillableSeconds[\s\S]*WORKSPACE_FILE_INSPECTION_MIN_BILLABLE_SECONDS/);
+  assert.match(blaxelWakeSource, /billableDurationSeconds[\s\S]*measuredDurationSeconds[\s\S]*billingTiming\.minBillableSeconds/);
+  assert.match(blaxelWakeSource, /measured_duration_seconds[\s\S]*min_billable_seconds/);
   assert.match(blaxelWakeSource, /durationSeconds[\s\S]*billingTiming\.maxSeconds[\s\S]*priceWorkspaceUsageCredits/);
+  assert.match(blaxelWakeSource, /releaseBillableBlaxelProjectWorkspaceLeaseBestEffort[\s\S]*status: "refunded"/);
+  assert.match(blaxelWakeSource, /recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort[\s\S]*recordProviderCostInternal[\s\S]*billingDisposition: "tracked_only"/);
   assert.match(blaxelWakeSource, /settlement_source: "project_workspace_lease"/);
   assert.match(blaxelWakeSource, /settlement_reason: normalizeOptionalString\(params\.settlementReason\)/);
   assert.match(terminalsSource, /stopProjectWorkspaceComputer[\s\S]*settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*settlementReason: "workspace_computer_stopped"/);
@@ -854,14 +954,16 @@ function testExpiredBlaxelProjectLeaseFinalizationIsProviderAware() {
   assert.match(projectsSource, /listBlaxelProjectWorkspaceLeasesMissingProjectExpiryInternal[\s\S]*providerSandboxCreditBudgetExpiresAt", undefined/);
   assert.match(projectsSource, /deleteCloudProjectForOwner[\s\S]*finalizeBillableBlaxelProjectWorkspaceLease[\s\S]*requireLedgerWrite: true[\s\S]*destroyBlaxelWorkspaceSandbox/);
   assert.match(creditsSource, /isBlaxelRuntimeWorkspaceReservation[\s\S]*runtime_workspace_session/);
-  assert.match(creditsSource, /isBlaxelProjectWorkspaceLeaseReservation[\s\S]*workspace_file_inspection[\s\S]*interactive_workspace_computer[\s\S]*project_zip_import/);
+  assert.match(creditsSource, /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*isBlaxelWorkspaceComputeReservation\(entry\)[\s\S]*providerSandboxCreditReservationKey/);
   assert.doesNotMatch(
     creditsSource,
-    /function isBlaxelProjectWorkspaceLeaseReservation[\s\S]*runtime_workspace_session[\s\S]*async function hasRunningRuntimeRunForWorkspaceReservation/,
+    /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*isBlaxelProjectWorkspaceLeaseReservation/,
   );
-  assert.match(creditsSource, /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*providerSandboxCreditReservationKey/);
   assert.match(creditsSource, /hasRunningRuntimeRunForWorkspaceReservation[\s\S]*by_owner_runId[\s\S]*status[\s\S]*running[\s\S]*projectId/);
-  assert.match(creditsSource, /shouldSkipExpiredBlaxelWorkspaceReservation[\s\S]*isBlaxelRuntimeWorkspaceReservation\(entry\)[\s\S]*hasRunningRuntimeRunForWorkspaceReservation[\s\S]*hasActiveBlaxelProjectWorkspaceLeasePointer/);
+  assert.match(
+    creditsSource,
+    /shouldSkipExpiredBlaxelWorkspaceReservation[\s\S]*await hasActiveBlaxelProjectWorkspaceLeasePointer\(ctx, entry\)[\s\S]*isBlaxelRuntimeWorkspaceReservation\(entry\)[\s\S]*hasRunningRuntimeRunForWorkspaceReservation/,
+  );
   assert.match(creditsSource, /reconcileExpiredCreditReservationsInternal[\s\S]*await shouldSkipExpiredBlaxelWorkspaceReservation\(ctx, entry\)[\s\S]*skippedBlaxelWorkspaceReservations/);
   assert.match(threadsSource, /RUNTIME_RUN_STALE_AFTER_MS = 8 \* 60 \* 1000/);
   assert.match(threadsSource, /listStaleRunningRuntimeRunsInternal[\s\S]*by_status_updatedAt[\s\S]*status", "running"[\s\S]*lt\("updatedAt"/);
@@ -872,8 +974,9 @@ function testExpiredBlaxelProjectLeaseFinalizationIsProviderAware() {
   assert.match(wakeSource, /listBlaxelProjectWorkspaceLeasesMissingProjectExpiryInternal[\s\S]*requireExpiredReservation: true/);
   assert.match(wakeSource, /finalizeBillableBlaxelProjectWorkspaceLease[\s\S]*getCreditLedgerEntryByKeyInternal[\s\S]*ledgerEntry\.status !== "reserved"[\s\S]*clearProjectWorkspaceLeaseAccounting/);
   assert.match(wakeSource, /requireExpiredReservation === true[\s\S]*projectExpired[\s\S]*ledgerExpired[\s\S]*disposition: "not_expired"/);
-  assert.match(wakeSource, /ledgerOwnerMatches[\s\S]*ledgerProjectMatches[\s\S]*isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry/);
-  assert.match(wakeSource, /!isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry\(ledgerEntry\)[\s\S]*skipped_unsupported_action/);
+  assert.match(wakeSource, /ledgerOwnerMatches[\s\S]*ledgerProjectMatches[\s\S]*!isBlaxelWorkspaceLeaseLedgerEntry\(ledgerEntry\)/);
+  assert.doesNotMatch(wakeSource, /isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry/);
+  assert.match(wakeSource, /!isBlaxelWorkspaceLeaseLedgerEntry\(ledgerEntry\)[\s\S]*skipped_unsupported_action/);
   assert.match(wakeSource, /startedAt !== null[\s\S]*settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*requireLedgerWrite: params\.requireLedgerWrite === true[\s\S]*clearProjectWorkspaceLeaseAccounting/);
   assert.match(wakeSource, /settleReservedCreditsStrict[\s\S]*status: "refunded"[\s\S]*workspace_project_lease_released_before_start/);
   assert.match(cronsSource, /reconcile stale runtime workspace runs[\s\S]*minutes: 5[\s\S]*reconcileStaleRuntimeWorkspaceRunsInternal[\s\S]*finalize expired blaxel project workspace leases[\s\S]*blaxelWorkspaceWake\.finalizeExpiredBlaxelProjectWorkspaceLeasesInternal[\s\S]*reconcile expired credit reservations/);
@@ -904,6 +1007,7 @@ function main() {
   testWorkspaceLedgerNameMapsToWorkspaceTools();
   testBillingUiDoesNotSurfaceIncludedCredits();
   testBlaxelRuntimeReservationAndSettlementAreWired();
+  testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth();
   testReusableWorkspaceLeaseRequiresReservedLedgerEntry();
   testManualWorkspaceStopSettlesReusableLease();
   testExpiredBlaxelProjectLeaseFinalizationIsProviderAware();

@@ -10,7 +10,11 @@ import {
   writeWorkspaceTerminalProcessInput,
 } from "./workspaceTerminalProcessCore";
 import {
+  releaseBlaxelWorkspaceComputerIfIdle,
+} from "./blaxelWorkspaceComputerProvider.ts";
+import {
   createProjectRuntimeWorkspaceSession,
+  releaseRuntimeWorkspaceSessionAccountingIfCurrent,
   settleRuntimeWorkspaceSession,
   type RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
@@ -322,6 +326,66 @@ export function createPolyNetExecutionSession(params: {
     };
   };
 
+  const resolveWorkspaceSessionAccountingReleaseDecision = async (
+    session: RuntimeWorkspaceSession,
+  ): Promise<{
+    ok: boolean;
+    shouldRelease: boolean;
+    reason: string;
+    activeTerminalCount?: number;
+    checkedTerminalCount?: number;
+    refreshedTerminalCount?: number;
+    errorMessage?: string | null;
+  }> => {
+    try {
+      const activeTerminalStatus = await params.ctx.runAction(
+        internal.workspaceTerminals.refreshProjectSandboxActiveTerminalStatusInternal as any,
+        {
+          ownerId: params.userId,
+          projectId: session.projectId,
+          providerSandboxId: session.providerSandboxId,
+        },
+      ) as {
+        hasActiveTerminal?: boolean;
+        activeCount?: number;
+        checkedCount?: number;
+        refreshedCount?: number;
+      } | null;
+      const activeTerminalCount = Math.max(
+        0,
+        Number(activeTerminalStatus?.activeCount ?? 0) || 0,
+      );
+      const hasActiveTerminal =
+        activeTerminalStatus?.hasActiveTerminal === true ||
+        activeTerminalCount > 0;
+      return {
+        ok: true,
+        shouldRelease: !hasActiveTerminal,
+        reason: hasActiveTerminal
+          ? "active_terminal_still_running"
+          : "no_active_terminal_remaining",
+        activeTerminalCount,
+        checkedTerminalCount: Math.max(
+          0,
+          Number(activeTerminalStatus?.checkedCount ?? 0) || 0,
+        ),
+        refreshedTerminalCount: Math.max(
+          0,
+          Number(activeTerminalStatus?.refreshedCount ?? 0) || 0,
+        ),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error ?? "");
+      return {
+        ok: false,
+        shouldRelease: false,
+        reason: "active_terminal_refresh_failed",
+        errorMessage,
+      };
+    }
+  };
+
   return {
     buildPromptSuffix(): string {
       return String(params.mountedPromptSuffix ?? "");
@@ -506,11 +570,52 @@ export function createPolyNetExecutionSession(params: {
         } catch {
           // Persistence helper emits explicit runtime evidence for failure paths.
         }
+        const releaseDecision =
+          await resolveWorkspaceSessionAccountingReleaseDecision(workspaceSession);
+        if (!releaseDecision.shouldRelease) {
+          await emitRunEvent(
+            "workspace_session_accounting_kept_alive",
+            {
+              run_id: params.runId,
+              sandbox_id: workspaceSession.providerSandboxId,
+              project_id: workspaceSession.projectId,
+              credit_reservation_key: workspaceSession.creditReservationKey ?? null,
+              reason: releaseDecision.reason,
+              active_terminal_count: releaseDecision.activeTerminalCount ?? null,
+              checked_terminal_count: releaseDecision.checkedTerminalCount ?? null,
+              refreshed_terminal_count: releaseDecision.refreshedTerminalCount ?? null,
+              error_message: releaseDecision.errorMessage ?? null,
+            },
+            `${params.runId}:workspace_session_accounting_kept_alive:${workspaceSession.creditReservationKey ?? "none"}`,
+          );
+          return;
+        }
+        const providerRelease = await releaseBlaxelWorkspaceComputerIfIdle({
+          sandboxName: workspaceSession.providerSandboxId,
+        });
+        if (!providerRelease.ok) {
+          await emitRunEvent(
+            "workspace_session_provider_release_failed",
+            {
+              run_id: params.runId,
+              sandbox_id: workspaceSession.providerSandboxId,
+              project_id: workspaceSession.projectId,
+              credit_reservation_key: workspaceSession.creditReservationKey ?? null,
+              code: providerRelease.code,
+              message: providerRelease.message,
+            },
+            `${params.runId}:workspace_session_provider_release_failed:${workspaceSession.creditReservationKey ?? "none"}`,
+          );
+          return;
+        }
         const settlement = await settleRuntimeWorkspaceSession({
           ctx: params.ctx,
           userId: params.userId,
           runId: params.runId,
           session: workspaceSession,
+          providerStandbyGraceSeconds: providerRelease.billableGraceSeconds,
+          providerReleaseReason: providerRelease.reason,
+          providerReleaseConfirmed: providerRelease.releaseConfirmed,
         });
         if (settlement.ok && !settlement.skipped) {
           await emitRunEvent(
@@ -523,8 +628,43 @@ export function createPolyNetExecutionSession(params: {
               credits_debited: settlement.creditsDebited ?? null,
               compute_cost_usd: settlement.computeCostUsd ?? null,
               duration_seconds: settlement.durationSeconds ?? null,
+              measured_duration_seconds: settlement.measuredDurationSeconds ?? null,
+              provider_standby_grace_seconds:
+                settlement.providerStandbyGraceSeconds ?? null,
+              provider_release_reason: providerRelease.reason,
+              provider_release_confirmed: providerRelease.releaseConfirmed,
             },
             `${params.runId}:workspace_compute_charge_settled:${settlement.creditReservationKey ?? "none"}`,
+          );
+          const released = await releaseRuntimeWorkspaceSessionAccountingIfCurrent({
+            ctx: params.ctx,
+            session: workspaceSession,
+          });
+          await emitRunEvent(
+            released.ok
+              ? "workspace_session_accounting_release_checked"
+              : "workspace_session_accounting_release_failed",
+            released.ok
+              ? {
+                  run_id: params.runId,
+                  sandbox_id: workspaceSession.providerSandboxId,
+                  project_id: workspaceSession.projectId,
+                  credit_reservation_key: settlement.creditReservationKey ?? null,
+                  released: released.released,
+                  reason: released.reason,
+                  release_decision_reason: releaseDecision.reason,
+                  active_terminal_count: releaseDecision.activeTerminalCount ?? null,
+                  checked_terminal_count: releaseDecision.checkedTerminalCount ?? null,
+                  refreshed_terminal_count: releaseDecision.refreshedTerminalCount ?? null,
+                }
+              : {
+                  run_id: params.runId,
+                  sandbox_id: workspaceSession.providerSandboxId,
+                  project_id: workspaceSession.projectId,
+                  credit_reservation_key: settlement.creditReservationKey ?? null,
+                  error_message: released.error,
+                },
+            `${params.runId}:workspace_session_accounting_release:${settlement.creditReservationKey ?? "none"}`,
           );
         } else if (!settlement.ok) {
           await emitRunEvent(
@@ -679,6 +819,21 @@ export function createPolyNetExecutionSession(params: {
       }
 
       const terminalStartedAt = Date.now();
+      async function markWorkspaceDirectorySnapshotsStaleBestEffort(reason: string) {
+        if (!projectId) return;
+        try {
+          await params.ctx.runMutation(
+            (internal as any).workspaceInspector.markWorkspaceDirectorySnapshotsStaleInternal,
+            {
+              projectId,
+              ownerId: params.userId,
+              reason,
+            },
+          );
+        } catch {
+          // Cache invalidation should not make an otherwise successful terminal operation fail.
+        }
+      }
       try {
         let payload: Record<string, unknown> | null = null;
         if (paramsForTool.toolName === "terminal_start") {
@@ -868,6 +1023,14 @@ export function createPolyNetExecutionSession(params: {
           payload && typeof payload === "object" && !Array.isArray(payload)
             ? (payload as Record<string, unknown>)
             : null;
+        if (
+          paramsForTool.toolName === "terminal_start" ||
+          paramsForTool.toolName === "terminal_write"
+        ) {
+          await markWorkspaceDirectorySnapshotsStaleBestEffort(
+            `runtime_tool_${paramsForTool.toolName}`,
+          );
+        }
         await emitRunEvent("terminal_tool_completed", {
           run_id: params.runId,
           tool_name: paramsForTool.toolName,

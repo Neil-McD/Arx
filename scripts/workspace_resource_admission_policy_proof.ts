@@ -24,6 +24,9 @@ import {
 import {
   WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
 } from "../shared/workspaceCredits.ts";
+import {
+  WORKSPACE_COMPUTER_LIFECYCLE_POLICY,
+} from "../shared/workspaceComputerProvider.ts";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -32,6 +35,9 @@ function read(relativePath: string): string {
 assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 1);
 assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 10);
 assert.equal(WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS, 500);
+assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter, "5m");
+assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter, "10m");
+assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter, "30m");
 assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 1);
 assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 10);
 assert.equal(
@@ -489,6 +495,7 @@ assert.match(
 );
 
 const workspaceRuntimeSession = read("convex/workspaceRuntimeSession.ts");
+const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
 assert.match(
   workspaceRuntimeSession,
   /createBlaxelRuntimeWorkspaceSession[\s\S]*ensureBillableBlaxelWorkspaceComputer/,
@@ -498,6 +505,51 @@ assert.doesNotMatch(
   workspaceRuntimeSession,
   /reuseExistingLease: true/,
   "runtime workspace sessions must not reuse an interactive/file lease because each run needs a settleable reservation",
+);
+assert.match(
+  workspaceRuntimeSession,
+  /releaseRuntimeWorkspaceSessionAccountingIfCurrent[\s\S]*releaseProjectBackgroundSandboxAccountingIfCurrentInternal[\s\S]*providerSandboxCreditReservationKey[\s\S]*providerSandboxStartedAt/,
+  "runtime workspace session release must clear project accounting through an expected-value guarded mutation",
+);
+assert.match(
+  workspaceTerminals,
+  /releaseProjectBackgroundSandboxAccountingIfCurrentInternal[\s\S]*providerSandboxId[\s\S]*providerSandboxCreditReservationKey[\s\S]*providerSandboxStartedAt[\s\S]*providerSandboxState: "standby"[\s\S]*providerSandboxCreditReservationKey: undefined/,
+  "guarded runtime release must only mark standby and clear accounting when sandbox, reservation, and started-at values still match",
+);
+assert.match(
+  workspaceTerminals,
+  /readProjectSandboxActiveTerminalStatusInternal[\s\S]*by_providerSandboxId[\s\S]*ownerId[\s\S]*projectId[\s\S]*isTerminalActiveStatus/,
+  "terminal-backed runtime release decisions must read current active terminal truth for the project sandbox",
+);
+assert.match(
+  workspaceTerminals,
+  /refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*listWorkspaceTerminalSessionsBySandboxInternal[\s\S]*isTerminalActiveStatus[\s\S]*readWorkspaceTerminalProcess[\s\S]*readProjectSandboxActiveTerminalStatusInternal/,
+  "terminal-backed runtime release decisions must refresh active terminal rows against Blaxel before reading terminal truth",
+);
+assert.match(
+  runtimeExecutionSession,
+  /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*active_terminal_still_running[\s\S]*no_active_terminal_remaining[\s\S]*active_terminal_refresh_failed/,
+  "runtime dispose must always refresh terminal truth before deciding whether to release workspace accounting",
+);
+assert.doesNotMatch(
+  runtimeExecutionSession,
+  /no_terminal_started/,
+  "runtime release decisions must not assume no active terminal just because this turn did not start one",
+);
+assert.match(
+  runtimeExecutionSession,
+  /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*if \(!releaseDecision\.shouldRelease\)[\s\S]*workspace_session_accounting_kept_alive[\s\S]*return;[\s\S]*settleRuntimeWorkspaceSession[\s\S]*releaseRuntimeWorkspaceSessionAccountingIfCurrent[\s\S]*workspace_session_accounting_release_checked/,
+  "runtime dispose must keep active-terminal reservations alive before settlement, and only settle/release after terminal truth says release is safe",
+);
+assert.match(
+  runtimeExecutionSession,
+  /workspace_session_accounting_kept_alive[\s\S]*active_terminal_count[\s\S]*checked_terminal_count[\s\S]*refreshed_terminal_count[\s\S]*error_message/,
+  "runtime dispose must keep workspace accounting alive only with refreshed active-terminal evidence or failed terminal-truth refresh",
+);
+assert.doesNotMatch(
+  runtimeExecutionSession,
+  /workspaceSessionStartedPersistentTerminal|persistent_terminal_started/,
+  "terminal_start alone must not be the reason to skip one-shot project accounting release",
 );
 
 const workspaceRuntimeTools = read("convex/workspaceRuntimeTools.ts");
@@ -522,6 +574,16 @@ assert.match(
 );
 assert.match(
   blaxelWorkspaceClient,
+  /agentRunIdleDeleteAfter:[\s\S]*readEnv\("BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER"\)[\s\S]*WORKSPACE_COMPUTER_LIFECYCLE_POLICY\.agent_run\.idleDeleteAfter/,
+  "Blaxel workspace config must expose an explicit agent-run idle lifecycle override",
+);
+assert.match(
+  blaxelWorkspaceClient,
+  /intent === "file_inspection"[\s\S]*fileInspectionIdleDeleteAfter[\s\S]*intent === "agent_run"[\s\S]*agentRunIdleDeleteAfter[\s\S]*interactiveIdleDeleteAfter/,
+  "Blaxel lifecycle resolver must keep file inspection, agent-run, and interactive idle policies separate",
+);
+assert.match(
+  blaxelWorkspaceClient,
   /readBlaxelWorkspaceVolumeQuotaSnapshot[\s\S]*listBlaxelWorkspaceVolumes\(\)[\s\S]*providerVolumeCount: volumes\.rawCount[\s\S]*providerVolumeLimit[\s\S]*providerVolumeSafetyBuffer/,
   "Blaxel provider quota snapshots must use live provider inventory counts",
 );
@@ -532,13 +594,13 @@ assert.match(
 );
 assert.match(
   blaxelEnvExample,
-  /BLAXEL_WORKSPACE_VOLUME_LIMIT=""[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER="1"/,
-  "local Blaxel staging env example must document the provider quota guard",
+  /BLAXEL_WORKSPACE_VOLUME_LIMIT=""[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER="1"[\s\S]*BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER="5m"[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER="10m"[\s\S]*BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER="30m"[\s\S]*BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER="1h"/,
+  "local Blaxel staging env example must document provider quota and intent-specific lifecycle guards",
 );
 assert.match(
   workspaceProviderContract,
-  /Provider quota is also admission evidence[\s\S]*BLAXEL_WORKSPACE_VOLUME_LIMIT[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER[\s\S]*Existing undeleted project volumes skip the provider inventory check/,
-  "workspace provider contract must document provider quota admission evidence",
+  /Provider quota is also admission evidence[\s\S]*BLAXEL_WORKSPACE_VOLUME_LIMIT[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER[\s\S]*Existing undeleted project volumes skip the provider inventory check[\s\S]*agent_run[\s\S]*ttl-idle: 10m[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER/,
+  "workspace provider contract must document provider quota admission evidence and agent-run lifecycle policy",
 );
 assert.match(
   blaxelWorkspaceWake,
@@ -620,10 +682,15 @@ assert.match(
   /canReuseWorkspaceLeaseForIntent[\s\S]*compareWorkspaceComputerLifecycleIntents[\s\S]*requestedLifecycleIntent[\s\S]*resolveReusableProjectWorkspaceLease[\s\S]*canReuseWorkspaceLeaseForIntent/,
   "reusable Blaxel workspace leases must reject weaker lifecycle reservations instead of downgrading the requested lease",
 );
-assert.match(
+assert.doesNotMatch(
   blaxelWorkspaceWake,
   /isRuntimeWorkspaceSessionLeaseLedgerEntry\(ledgerEntry\)[\s\S]*isRunningRuntimeWorkspaceSessionLease/,
-  "runtime workspace leases may be reused by weaker requests only while their owning run is still running",
+  "project-attached runtime workspace leases must be reusable by project pointer truth after the original run ends",
+);
+assert.match(
+  blaxelWorkspaceWake,
+  /resolveReusableProjectWorkspaceLease[\s\S]*providerSandboxCreditReservationKey[\s\S]*ledgerEntry\.status !== "reserved"[\s\S]*canReuseWorkspaceLeaseForIntent[\s\S]*inspectBlaxelWorkspaceComputer/,
+  "reusable Blaxel workspace leases must trust the matched active project pointer instead of the original runtime-run status",
 );
 assert.match(
   blaxelWorkspaceWake,
@@ -656,14 +723,24 @@ assert.match(
   "expired reusable Blaxel project leases must settle through a provider-aware finalizer instead of generic release expiry",
 );
 assert.match(
+  blaxelWorkspaceWake,
+  /ledgerOwnerMatches[\s\S]*ledgerProjectMatches[\s\S]*!isBlaxelWorkspaceLeaseLedgerEntry\(ledgerEntry\)[\s\S]*skipped_unsupported_action/,
+  "project finalization must accept any Blaxel workspace lease action owned by the project pointer, including runtime workspace sessions",
+);
+assert.doesNotMatch(
+  blaxelWorkspaceWake,
+  /isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry/,
+  "project finalization must not keep an action-type exclusion wrapper",
+);
+assert.match(
   workspaceCredits,
-  /isBlaxelRuntimeWorkspaceReservation[\s\S]*runtime_workspace_session[\s\S]*isBlaxelProjectWorkspaceLeaseReservation[\s\S]*workspace_file_inspection[\s\S]*interactive_workspace_computer[\s\S]*project_zip_import/,
-  "workspace reservation cleanup must separate per-run runtime leases from project-pointer leases",
+  /isBlaxelRuntimeWorkspaceReservation[\s\S]*runtime_workspace_session[\s\S]*hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*isBlaxelWorkspaceComputeReservation\(entry\)[\s\S]*providerSandboxCreditReservationKey/,
+  "workspace reservation cleanup must let the active project pointer protect any current Blaxel workspace lease action",
 );
 assert.doesNotMatch(
   workspaceCredits,
-  /function isBlaxelProjectWorkspaceLeaseReservation[\s\S]*runtime_workspace_session[\s\S]*async function hasRunningRuntimeRunForWorkspaceReservation/,
-  "project workspace lease detection must not include runtime workspace sessions",
+  /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*isBlaxelProjectWorkspaceLeaseReservation/,
+  "project-pointer lease protection must not exclude runtime workspace sessions by action type",
 );
 assert.match(
   workspaceCredits,
@@ -672,8 +749,8 @@ assert.match(
 );
 assert.match(
   workspaceCredits,
-  /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*providerSandboxCreditReservationKey[\s\S]*shouldSkipExpiredBlaxelWorkspaceReservation[\s\S]*isBlaxelRuntimeWorkspaceReservation\(entry\)[\s\S]*hasRunningRuntimeRunForWorkspaceReservation[\s\S]*hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*reconcileExpiredCreditReservationsInternal[\s\S]*await shouldSkipExpiredBlaxelWorkspaceReservation\(ctx, entry\)/,
-  "generic expired reservation cleanup must protect runtime leases by active run truth and project leases by active project pointer truth",
+  /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*providerSandboxCreditReservationKey[\s\S]*shouldSkipExpiredBlaxelWorkspaceReservation[\s\S]*await hasActiveBlaxelProjectWorkspaceLeasePointer\(ctx, entry\)[\s\S]*isBlaxelRuntimeWorkspaceReservation\(entry\)[\s\S]*hasRunningRuntimeRunForWorkspaceReservation[\s\S]*reconcileExpiredCreditReservationsInternal[\s\S]*await shouldSkipExpiredBlaxelWorkspaceReservation\(ctx, entry\)/,
+  "generic expired reservation cleanup must protect the active project pointer first, then fall back to active runtime-run truth",
 );
 assert.match(
   threads,
@@ -744,6 +821,7 @@ assert.match(
 );
 
 const stripeCustomers = read("convex/stripeCustomers.ts");
+const stripeCustomerIdempotency = read("shared/stripeCustomerIdempotency.ts");
 assert.match(
   stripeCustomers,
   /startWorkspaceCardSetupCheckout[\s\S]*mode: "setup"[\s\S]*payment_method_types: \["card"\]/,
@@ -766,17 +844,22 @@ assert.match(
 );
 assert.match(
   stripeCustomers,
+  /buildSyncStripeCustomerPaymentMethodPatch/,
+  "card-on-file sync must delegate idempotent field normalization to the shared helper",
+);
+assert.match(
+  stripeCustomers,
   /getUserStripeCustomerByProviderPaymentMethodIdInternal[\s\S]*by_providerDefaultPaymentMethodId/,
   "card detach reconciliation must resolve local customers by payment method id",
 );
 assert.match(
-  stripeCustomers,
-  /paymentMethodStatus = active[\s\S]*args\.status === "active"[\s\S]*"missing"/,
+  stripeCustomerIdempotency,
+  /const active = args\.status === "active" && Boolean\(desiredPaymentMethodId\)[\s\S]*paymentMethodStatus[\s\S]*args\.status === "active"[\s\S]*"missing"/,
   "card-on-file sync must fail closed when active status lacks a valid Stripe payment method id",
 );
 assert.match(
-  stripeCustomers,
-  /cardRemovedAt: active \? undefined : nowMs/,
+  stripeCustomerIdempotency,
+  /cardRemovedAt: active \? undefined : args\.nowMs[\s\S]*else if \(hadCardMaterial && !hasRemovedAt\)[\s\S]*patch\.cardRemovedAt = args\.nowMs/,
   "missing or detached card sync must clear active card truth",
 );
 

@@ -6,6 +6,8 @@ export type WorkspaceComputerProviderId =
 export const DEFAULT_WORKSPACE_COMPUTER_PROVIDER_ID =
   "blaxel" satisfies WorkspaceComputerProviderId;
 
+export const BLAXEL_AUTO_STANDBY_GRACE_SECONDS = 15;
+
 export const WORKSPACE_COMPUTER_LIFECYCLE_INTENTS = [
   "file_inspection",
   "interactive",
@@ -30,7 +32,7 @@ export const WORKSPACE_COMPUTER_LIFECYCLE_POLICY = {
     allowActiveRunPastMaxAge: false,
   },
   agent_run: {
-    idleDeleteAfter: "30m",
+    idleDeleteAfter: "10m",
     maxAgeDeleteAfter: null,
     allowActiveRunPastMaxAge: true,
   },

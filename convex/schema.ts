@@ -500,6 +500,30 @@ export default defineSchema({
     .index("by_status_expiresAt", ["status", "expiresAt"])
     .index("by_pendingSettlementStatus_nextAttemptAt", ["pendingSettlementStatus", "pendingSettlementNextAttemptAt"]),
 
+  workspaceDirectorySnapshots: defineTable({
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    path: v.string(),
+    providerId: v.optional(v.literal("blaxel")),
+    providerSandboxId: v.optional(v.string()),
+    entries: v.array(v.object({
+      name: v.string(),
+      path: v.string(),
+      type: v.union(v.literal("directory"), v.literal("file")),
+      extension: v.union(v.string(), v.null()),
+      heavy: v.boolean(),
+      previewable: v.boolean(),
+    })),
+    truncated: v.boolean(),
+    checkedAt: v.number(),
+    staleAt: v.optional(v.number()),
+    staleReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project_path", ["projectId", "path"])
+    .index("by_project_updatedAt", ["projectId", "updatedAt"]),
+
   criticalAuditEvents: defineTable({
     eventKey: v.string(),
     eventType: v.string(),
@@ -899,6 +923,8 @@ export default defineSchema({
     workspaceVolumeDeletionWarningSentAt: v.optional(v.number()),
     workspaceVolumeDeletedAt: v.optional(v.number()),
     workspaceVolumeDeletionReason: v.optional(v.string()),
+    workspaceDirectorySnapshotInvalidatedAt: v.optional(v.number()),
+    workspaceDirectorySnapshotInvalidationReason: v.optional(v.string()),
     importLeaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

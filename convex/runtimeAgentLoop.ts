@@ -1129,6 +1129,31 @@ async function executeRetrievalHarnessTool(params: {
     };
   }
 
+  async function markWorkspaceDirectorySnapshotsStaleBestEffort(
+    activeProjectId: string,
+    reason: string,
+  ) {
+    const ownerId = String(params.userId ?? "").trim();
+    if (!ownerId || !activeProjectId) return;
+    try {
+      await params.ctx.runMutation(
+        (internal as any).workspaceInspector.markWorkspaceDirectorySnapshotsStaleInternal,
+        {
+          projectId: activeProjectId,
+          ownerId,
+          reason,
+        },
+      );
+    } catch (error) {
+      logStructuredError("workspace_directory_snapshot_invalidation_failed", {
+        error,
+        runId: params.runId,
+        toolName: params.toolName,
+        projectId: activeProjectId,
+      });
+    }
+  }
+
   if (
     params.toolName === "list_dir" ||
     params.toolName === "read" ||
@@ -1212,6 +1237,16 @@ async function executeRetrievalHarnessTool(params: {
         errorCode: result.code,
         errorMessage: result.message,
       };
+    }
+    if (
+      params.toolName === "write" ||
+      params.toolName === "edit" ||
+      params.toolName === "bash"
+    ) {
+      await markWorkspaceDirectorySnapshotsStaleBestEffort(
+        projectId,
+        `runtime_tool_${params.toolName}`,
+      );
     }
     return {
       status: "ok",
