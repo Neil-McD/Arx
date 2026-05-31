@@ -1,7 +1,7 @@
 import { ConvexReactClient } from "convex/react";
 import { resolveAuthIdentityToken, resolveAuthSubject } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
-import type { DirectMessage, DirectMessageConversation } from "./communityTypes";
+import type { DirectMessage, DirectMessageConversation, DirectMessageRecipient } from "./communityTypes";
 
 type CloudDirectMessagesGatewayParams<SessionT> = {
   session: SessionT;
@@ -109,6 +109,23 @@ export async function listCloudDirectConversations<SessionT>(
     limit: params.limit ?? 30,
   });
   return coerceRows<DirectMessageConversation>(payload);
+}
+
+export async function listCloudEligibleDirectMessageRecipients<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    communityId: string;
+    search?: string;
+    limit?: number;
+  },
+): Promise<DirectMessageRecipient[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("directMessages:listEligibleDirectMessageRecipients" as any, {
+    authSubject,
+    communityId: params.communityId,
+    search: params.search ?? "",
+    limit: params.limit ?? 20,
+  });
+  return coerceRows<DirectMessageRecipient>(payload);
 }
 
 export async function markCloudDirectConversationRead<SessionT>(

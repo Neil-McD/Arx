@@ -36,6 +36,11 @@ assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: 
 assert.match(directMessages, /throw new Error\("dm_target_self"\)/, "users must not open self-DMs");
 assert.match(directMessages, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM writes must require profile setup");
 assert.match(directMessages, /listMyDirectConversations = query/, "backend must expose current-user DM inbox query even if UI inbox is deferred");
+assert.match(directMessages, /listEligibleDirectMessageRecipients = query/, "backend must expose community-scoped DM recipient lookup");
+assert.match(directMessages, /communityMembershipRowIsActive/, "DM recipient lookup must use active community memberships");
+assert.match(directMessages, /userKey === normalizeIdValue\(viewerUserId\)/, "DM recipient lookup must exclude the viewer");
+assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId,[\s\S]*userId,[\s\S]*\}\)/, "DM recipient lookup must verify recipient community access");
+assert.match(directMessages, /existing_conversation_id/, "DM recipient lookup must surface existing canonical conversation ids");
 assert.match(directMessages, /viewer_last_read_seq/, "conversation projection must expose the viewer read cursor");
 assert.match(directMessages, /unread_count/, "conversation projection must expose unread count");
 assert.match(directMessages, /has_unread/, "conversation projection must expose unread state");
@@ -47,6 +52,8 @@ assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slic
 
 assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway must open or create direct conversations");
 assert.match(gateway, /listCloudDirectConversations/, "web gateway must expose the current user's direct conversation list");
+assert.match(gateway, /listCloudEligibleDirectMessageRecipients/, "web gateway must expose eligible community recipient lookup");
+assert.match(gateway, /directMessages:listEligibleDirectMessageRecipients/, "web gateway recipient lookup must use the canonical backend query");
 assert.match(gateway, /listCloudDirectMessages/, "web gateway must list direct messages");
 assert.match(gateway, /subscribeCloudDirectConversations/, "web gateway must expose live direct conversation subscriptions");
 assert.match(gateway, /subscribeCloudDirectConversations[\s\S]*watchQuery\([\s\S]*directMessages:listMyDirectConversations/, "live DM inbox subscription must watch the canonical inbox query");
@@ -87,6 +94,10 @@ assert.match(dmHost, /listCloudDirectConversations/, "global DM host must load t
 assert.match(dmHost, /subscribeCloudDirectConversations<DirectMessageConversation>/, "global DM host must keep inbox rows live");
 assert.match(dmHost, /hasInboxLiveSubscriptionRef/, "global DM host must avoid duplicate snapshot loads when the live inbox subscription is active");
 assert.match(dmHost, /onUnreadCountChange/, "global DM host must project unread count to the app shell");
+assert.match(dmHost, /activeCommunityId: string \| null/, "global DM host must receive current community context for new DM creation");
+assert.match(dmHost, /listCloudEligibleDirectMessageRecipients/, "global DM host must load eligible community recipients");
+assert.match(dmHost, /isNewMessageMode/, "global DM host must own the new-message picker mode");
+assert.match(dmHost, /ensureCloudDirectConversationFromCommunity\(\{[\s\S]*targetUserId,[\s\S]*communityId/, "new-message picker must open through canonical community-origin DM creation");
 assert.match(dmHost, /markCloudDirectConversationRead/, "global DM host must own read-state mutations");
 assert.match(dmHost, /onReadThroughSeq=\{\(seq\) =>/, "global DM host must connect visible messages to read-state mutations");
 assert.match(dmHost, /ensureCloudDirectConversationFromCommunity/, "global DM host must create DMs from profile launch requests");
@@ -96,6 +107,9 @@ assert.match(dmHost, /WebDirectMessageInboxPanel/, "global DM host must render t
 assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing conversations into the live DM panel");
 assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");
 assert.match(dmInboxPanel, /Started in \{communityName\}/, "DM inbox rows must preserve community-origin provenance");
+assert.match(dmInboxPanel, /New message/, "DM inbox must expose a new-message picker view");
+assert.match(dmInboxPanel, /Search members/, "DM recipient picker must be search-oriented");
+assert.match(dmInboxPanel, /onSelectRecipient/, "DM recipient picker must select an eligible recipient");
 assert.match(dmInboxPanel, /conversation\.unread_count/, "DM inbox rows must consume unread count");
 assert.match(dmInboxPanel, /is-unread/, "DM inbox rows must expose unread state for styling");
 assert.match(dmInboxPanel, /community-dm-inbox-row-unread/, "DM inbox rows must render an unread badge");
@@ -105,6 +119,8 @@ assert.match(desktopHeader, /workspaceRightPanelToggle\}[\s\S]*directMessagesBut
 assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
 assert.match(app, /handleOpenDirectMessageFromCommunity/, "app shell must own the profile-to-DM launch handler");
 assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pass canonical open requests to the global DM host");
+assert.match(app, /activeCommunityId=\{activeCommunity\?\.id \?\? null\}/, "app shell must pass active community id to the global DM host");
+assert.match(app, /activeCommunityName=\{activeCommunity\?\.name \?\? null\}/, "app shell must pass active community name to the global DM host");
 assert.match(app, /directMessagesUnreadCount/, "app shell must own top-bar DM unread count");
 assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "global DM host must feed top-bar unread state");
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
@@ -113,6 +129,9 @@ assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*backgroun
 assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
 assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox must size to content instead of forcing full conversation-panel height");
 assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");
+assert.match(css, /\.community-dm-inbox-icon-button/, "DM inbox must style the new-message icon button");
+assert.match(css, /\.community-dm-recipient-search/, "DM recipient picker must style member search");
+assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must style recipient rows");
 assert.match(css, /\.direct-messages-topbar-button \{[\s\S]*position: relative/, "top-right DM button must anchor the unread badge");
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");

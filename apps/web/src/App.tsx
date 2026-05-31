@@ -10816,6 +10816,8 @@ export default function App() {
         openRequest={directMessageOpenRequest}
         session={session}
         sessionUserId={canonicalSessionUserId}
+        activeCommunityId={activeCommunity?.id ?? null}
+        activeCommunityName={activeCommunity?.name ?? null}
         getInitials={getInitials}
         getAvatarColor={getAvatarColor}
         renderTextWithLinks={renderTextWithLinks}

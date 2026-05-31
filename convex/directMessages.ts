@@ -1,11 +1,13 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  communityMembershipRowIsActive,
   normalizeIdValue,
   requireCommunityChatAccess,
   resolvePublicUserId,
   toIsoString,
   type CommunityLike,
+  type CommunityMembershipLike,
 } from "./communityCore";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
@@ -58,6 +60,8 @@ type DirectMessageLike = {
 
 const MAX_DM_TEXT_CHARS = 4000;
 const MAX_DM_MESSAGE_ROWS = 200;
+const MAX_DM_RECIPIENT_ROWS = 25;
+const MAX_DM_RECIPIENT_SCAN_ROWS = 200;
 const DIRECT_CONVERSATION_KIND = "direct" as const;
 
 function normalizePublicUserId(raw: unknown): string {
@@ -76,6 +80,14 @@ function buildDirectConversationCanonicalKey(leftUserId: any, rightUserId: any):
   return `dm:direct:v1:${left}:${right}`;
 }
 
+function normalizeRecipientSearch(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .slice(0, 80);
+}
+
 async function findUserByPublicId(ctx: any, publicUserId: string): Promise<UserRow | null> {
   const normalized = normalizePublicUserId(publicUserId);
   if (!normalized) return null;
@@ -83,6 +95,18 @@ async function findUserByPublicId(ctx: any, publicUserId: string): Promise<UserR
     .query("users")
     .withIndex("by_authSubject", (q: any) => q.eq("authSubject", normalized))
     .first()) as UserRow | null;
+}
+
+async function findDirectConversationByUsers(
+  ctx: any,
+  leftUserId: any,
+  rightUserId: any,
+): Promise<DirectMessageConversationLike | null> {
+  const canonicalKey = buildDirectConversationCanonicalKey(leftUserId, rightUserId);
+  return (await ctx.db
+    .query("dmConversations" as any)
+    .withIndex("by_canonicalKey", (q: any) => q.eq("canonicalKey", canonicalKey))
+    .first()) as DirectMessageConversationLike | null;
 }
 
 async function listConversationParticipants(
@@ -272,10 +296,7 @@ export const ensureDirectConversationFromCommunity = mutation({
 
     const nowMs = Date.now();
     const canonicalKey = buildDirectConversationCanonicalKey(viewerUserId, targetUser._id);
-    let conversation = (await ctx.db
-      .query("dmConversations" as any)
-      .withIndex("by_canonicalKey", (q: any) => q.eq("canonicalKey", canonicalKey))
-      .first()) as DirectMessageConversationLike | null;
+    let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
 
     if (!conversation) {
       const conversationId = await ctx.db.insert("dmConversations" as any, {
@@ -308,6 +329,92 @@ export const ensureDirectConversationFromCommunity = mutation({
     });
 
     return await mapDirectConversation(ctx, conversation, { viewerUserId });
+  },
+});
+
+export const listEligibleDirectMessageRecipients = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: viewerUserId,
+    });
+    const safeLimit = Math.max(1, Math.min(MAX_DM_RECIPIENT_ROWS, Math.floor(args.limit ?? 20)));
+    const search = normalizeRecipientSearch(args.search);
+    const rows = (await ctx.db
+      .query("communityMemberships" as any)
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+      .order("desc")
+      .take(MAX_DM_RECIPIENT_SCAN_ROWS)) as CommunityMembershipLike[];
+
+    const candidateUserIds: any[] = [];
+    const seenUserIds = new Set<string>();
+    const addCandidate = (userId: any) => {
+      const userKey = normalizeIdValue(userId);
+      if (!userKey || userKey === normalizeIdValue(viewerUserId) || seenUserIds.has(userKey)) return;
+      seenUserIds.add(userKey);
+      candidateUserIds.push(userId);
+    };
+
+    addCandidate(community.ownerId);
+    for (const row of rows) {
+      if (!communityMembershipRowIsActive(row)) continue;
+      addCandidate(row.userId);
+    }
+
+    const recipients = [];
+    for (const userId of candidateUserIds) {
+      if (recipients.length >= safeLimit) break;
+      const user = (await ctx.db.get(userId)) as UserRow | null;
+      if (!user) continue;
+      const profile = await resolveUserProfileDisplayProjectionForUser(ctx, user);
+      const publicUserId = await resolvePublicUserId(ctx, userId);
+      const handle = String(user.normalizedHandle ?? user.handle ?? "").trim().replace(/^@+/, "") || null;
+      const searchable = [
+        profile.display_name,
+        user.displayName,
+        handle,
+        publicUserId,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (search && !searchable.includes(search)) continue;
+      try {
+        await requireCommunityChatAccess({
+          ctx,
+          communityId: args.communityId,
+          userId,
+        });
+      } catch {
+        continue;
+      }
+      const existingConversation = await findDirectConversationByUsers(ctx, viewerUserId, userId);
+      recipients.push({
+        user_id: publicUserId ?? String(userId),
+        display_name: profile.display_name ?? user.displayName ?? null,
+        handle,
+        avatar_url: profile.avatar_url ?? null,
+        avatar_focus_x: profile.avatar_focus_x ?? 0.5,
+        avatar_focus_y: profile.avatar_focus_y ?? 0.5,
+        avatar_zoom: profile.avatar_zoom ?? 1,
+        community_id: String(community._id),
+        community_name: community.name,
+        existing_conversation_id: existingConversation ? String(existingConversation._id) : null,
+      });
+    }
+
+    return recipients;
   },
 });
 

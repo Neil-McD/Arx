@@ -88,6 +88,19 @@ export type DirectMessageConversation = {
   participants: DirectMessageParticipant[];
 };
 
+export type DirectMessageRecipient = {
+  user_id: string;
+  display_name: string | null;
+  handle: string | null;
+  avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+  community_id: string;
+  community_name: string;
+  existing_conversation_id: string | null;
+};
+
 export type DirectMessage = {
   id: string;
   conversation_id: string;

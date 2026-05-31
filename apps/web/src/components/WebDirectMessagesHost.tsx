@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DirectMessage, DirectMessageConversation } from "../../../../shared/communityTypes";
+import type { DirectMessage, DirectMessageConversation, DirectMessageRecipient } from "../../../../shared/communityTypes";
 import {
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
+  listCloudEligibleDirectMessageRecipients,
   listCloudDirectConversations,
   markCloudDirectConversationRead,
   subscribeCloudDirectConversations,
@@ -33,6 +34,8 @@ type WebDirectMessagesHostProps<SessionT> = {
   openRequest: DirectMessageOpenRequest;
   session: SessionT | null;
   sessionUserId: string | null;
+  activeCommunityId: string | null;
+  activeCommunityName: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
@@ -52,6 +55,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     openRequest,
     session,
     sessionUserId,
+    activeCommunityId,
+    activeCommunityName,
     getInitials,
     getAvatarColor,
     renderTextWithLinks,
@@ -62,12 +67,19 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [isLoadingInbox, setIsLoadingInbox] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [directMessagePanel, setDirectMessagePanel] = useState<DirectMessagePanelState | null>(null);
+  const [isNewMessageMode, setIsNewMessageMode] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipients, setRecipients] = useState<DirectMessageRecipient[]>([]);
+  const [isLoadingRecipients, setIsLoadingRecipients] = useState(false);
+  const [recipientError, setRecipientError] = useState<string | null>(null);
   const inboxLoadRequestRef = useRef(0);
+  const recipientLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
   const directMessageOpenRequestRef = useRef(0);
   const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
+  const normalizedActiveCommunityId = String(activeCommunityId ?? "").trim();
 
   const loadInbox = useCallback(async () => {
     const requestId = inboxLoadRequestRef.current + 1;
@@ -96,9 +108,52 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     }
   }, [session]);
 
+  const loadRecipients = useCallback(
+    async (searchValue: string) => {
+      const requestId = recipientLoadRequestRef.current + 1;
+      recipientLoadRequestRef.current = requestId;
+      if (!session || !normalizedActiveCommunityId) {
+        setRecipients([]);
+        setRecipientError(normalizedActiveCommunityId ? null : "Open a community to start a direct message.");
+        setIsLoadingRecipients(false);
+        return;
+      }
+      setIsLoadingRecipients(true);
+      setRecipientError(null);
+      try {
+        const rows = await listCloudEligibleDirectMessageRecipients({
+          session,
+          communityId: normalizedActiveCommunityId,
+          search: searchValue,
+          limit: 20,
+        });
+        if (recipientLoadRequestRef.current !== requestId) return;
+        setRecipients(rows);
+      } catch (error) {
+        if (recipientLoadRequestRef.current !== requestId) return;
+        setRecipients([]);
+        setRecipientError(toErrorMessage(error, "Failed to load community members."));
+      } finally {
+        if (recipientLoadRequestRef.current !== requestId) return;
+        setIsLoadingRecipients(false);
+      }
+    },
+    [normalizedActiveCommunityId, session],
+  );
+
   useEffect(() => {
     readMarkSeqByConversationRef.current = {};
   }, [sessionUserId]);
+
+  useEffect(() => {
+    if (!isOpen || !isNewMessageMode) return;
+    const timeoutId = window.setTimeout(() => {
+      void loadRecipients(recipientSearch);
+    }, 160);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isNewMessageMode, isOpen, loadRecipients, recipientSearch]);
 
   useEffect(() => {
     const unreadCount = conversations.reduce((total, conversation) => {
@@ -209,6 +264,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     }
 
     let isDisposed = false;
+    setIsNewMessageMode(false);
     setDirectMessagePanel(null);
     setInboxError(null);
     setIsLoadingInbox(true);
@@ -247,6 +303,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   useEffect(() => {
     if (!isOpen) {
       setDirectMessagePanel(null);
+      setIsNewMessageMode(false);
+      setRecipientSearch("");
+      setRecipients([]);
+      setRecipientError(null);
+      setIsLoadingRecipients(false);
       return;
     }
     if (activeConversationId) return;
@@ -337,6 +398,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
 
   const openConversation = useCallback(
     (conversation: DirectMessageConversation) => {
+      setIsNewMessageMode(false);
       setDirectMessagePanel({
         conversation,
         messages: [],
@@ -348,6 +410,56 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       void markConversationRead(conversation.id, conversation.last_seq);
     },
     [markConversationRead],
+  );
+
+  const openNewMessageMode = useCallback(() => {
+    if (!normalizedActiveCommunityId) return;
+    setDirectMessagePanel(null);
+    setRecipientSearch("");
+    setRecipientError(null);
+    setIsNewMessageMode(true);
+  }, [normalizedActiveCommunityId]);
+
+  const closeNewMessageMode = useCallback(() => {
+    setIsNewMessageMode(false);
+    setRecipientSearch("");
+    setRecipientError(null);
+  }, []);
+
+  const startConversationWithRecipient = useCallback(
+    async (recipient: DirectMessageRecipient) => {
+      const targetUserId = String(recipient.user_id ?? "").trim();
+      const communityId = String(recipient.community_id ?? normalizedActiveCommunityId).trim();
+      if (!session || !targetUserId || !communityId) return;
+      setRecipientError(null);
+      setIsLoadingRecipients(true);
+      try {
+        const conversation = await ensureCloudDirectConversationFromCommunity({
+          session,
+          targetUserId,
+          communityId,
+        });
+        setConversations((previous) => [
+          conversation,
+          ...previous.filter((row) => row.id !== conversation.id),
+        ]);
+        setIsNewMessageMode(false);
+        setDirectMessagePanel({
+          conversation,
+          messages: [],
+          input: "",
+          isLoading: true,
+          isSending: false,
+          error: null,
+        });
+        void markConversationRead(conversation.id, conversation.last_seq);
+      } catch (error) {
+        setRecipientError(toErrorMessage(error, "Failed to open direct message."));
+      } finally {
+        setIsLoadingRecipients(false);
+      }
+    },
+    [markConversationRead, normalizedActiveCommunityId, session],
   );
 
   const sendDirectMessage = useCallback(async () => {
@@ -431,10 +543,21 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           conversations={conversations}
           isLoading={isLoadingInbox}
           error={inboxError}
+          isNewMessageMode={isNewMessageMode}
+          canStartConversation={Boolean(normalizedActiveCommunityId)}
+          activeCommunityName={activeCommunityName}
+          recipients={recipients}
+          recipientSearch={recipientSearch}
+          isLoadingRecipients={isLoadingRecipients}
+          recipientError={recipientError}
           sessionUserId={sessionUserId}
           getInitials={getInitials}
           getAvatarColor={getAvatarColor}
           onSelectConversation={openConversation}
+          onOpenNewMessage={openNewMessageMode}
+          onCloseNewMessage={closeNewMessageMode}
+          onRecipientSearchChange={setRecipientSearch}
+          onSelectRecipient={startConversationWithRecipient}
         />
       )}
     </div>
