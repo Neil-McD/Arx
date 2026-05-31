@@ -1955,6 +1955,7 @@ export default function App() {
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const workspaceBillingOverviewLoadRequestIdRef = useRef(0);
   const workspaceCardOnFileLoadRequestIdRef = useRef(0);
+  const workspaceCardSetupReturnRefreshInFlightRef = useRef(false);
   const workspaceCreditTopupReturnPollRef = useRef<{ attempts: number; timeoutId: number | null }>({
     attempts: 0,
     timeoutId: null,
@@ -4956,6 +4957,8 @@ export default function App() {
 
     const refreshPendingWorkspaceCardSetup = () => {
       if (!hasPendingWorkspaceCardSetupReturn()) return;
+      if (workspaceCardSetupReturnRefreshInFlightRef.current) return;
+      workspaceCardSetupReturnRefreshInFlightRef.current = true;
       const activeSession = sessionRef.current ?? session;
       void refreshCloudWorkspaceCardOnFileStatus({
         session: activeSession,
@@ -4976,6 +4979,8 @@ export default function App() {
         const message = formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" });
         setWorkspaceCardSetupError(message);
         setWorkspaceCardOnFileError(message);
+      }).finally(() => {
+        workspaceCardSetupReturnRefreshInFlightRef.current = false;
       });
     };
 

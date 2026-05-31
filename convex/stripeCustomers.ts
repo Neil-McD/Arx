@@ -7,6 +7,10 @@ import {
   requireCanonicalCheckoutReturnUrl,
 } from "./billingCore";
 import { resolveAuthenticatedActor } from "./authActor";
+import {
+  buildAttachStripeCustomerPatchForExisting,
+  buildSyncStripeCustomerPaymentMethodPatch,
+} from "../shared/stripeCustomerIdempotency";
 
 type WorkspacePaymentMethodStatus = "active" | "missing" | "detached";
 
@@ -166,24 +170,14 @@ export async function attachStripeCustomerToUser(args: {
     ) {
       return existingByUser;
     }
-    const customerChanged = Boolean(existingCustomerId && existingCustomerId !== providerCustomerId);
-    await args.ctx.db.patch(existingByUser._id, {
+    const patch = buildAttachStripeCustomerPatchForExisting({
+      existing: existingByUser,
       providerCustomerId,
-      email: email ?? existingByUser.email,
-      ...(customerChanged
-        ? {
-            paymentMethodStatus: "missing" as const,
-            providerDefaultPaymentMethodId: undefined,
-            paymentMethodCheckedAt: nowMs,
-            cardBrand: undefined,
-            cardLast4: undefined,
-            cardExpMonth: undefined,
-            cardExpYear: undefined,
-            cardRemovedAt: nowMs,
-          }
-        : {}),
-      updatedAt: nowMs,
+      email,
+      nowMs,
     });
+    if (!patch) return existingByUser;
+    await args.ctx.db.patch(existingByUser._id, patch);
     return await args.ctx.db.get(existingByUser._id);
   }
 
@@ -400,41 +394,32 @@ export const syncUserStripeCustomerPaymentMethodInternal = internalMutation({
     const providerCustomerId = normalizeStripeCustomerId(args.providerCustomerId);
     if (!providerCustomerId) throw new Error("stripe_customer_id_missing");
     const nowMs = args.checkedAt ?? Date.now();
-    const providerDefaultPaymentMethodId =
-      normalizeStripePaymentMethodId(args.providerDefaultPaymentMethodId) ?? null;
-    const active = args.status === "active" && Boolean(providerDefaultPaymentMethodId);
     const existing = await ctx.db
       .query("userStripeCustomers")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .first();
-    const paymentMethodStatus = active
-      ? "active" as const
-      : args.status === "active"
-        ? "missing" as const
-        : args.status;
-    const patch = {
-      provider: "stripe" as const,
+    const patch = buildSyncStripeCustomerPaymentMethodPatch({
+      existing,
       providerCustomerId,
-      paymentMethodStatus,
-      providerDefaultPaymentMethodId:
-        active && providerDefaultPaymentMethodId ? providerDefaultPaymentMethodId : undefined,
-      paymentMethodCheckedAt: nowMs,
-      cardBrand: active ? (args.cardBrand ?? undefined) : undefined,
-      cardLast4: active ? (args.cardLast4 ?? undefined) : undefined,
-      cardExpMonth: active ? (args.cardExpMonth ?? undefined) : undefined,
-      cardExpYear: active ? (args.cardExpYear ?? undefined) : undefined,
-      cardRemovedAt: active ? undefined : nowMs,
-      updatedAt: nowMs,
-    };
+      status: args.status,
+      providerDefaultPaymentMethodId: args.providerDefaultPaymentMethodId,
+      cardBrand: args.cardBrand,
+      cardLast4: args.cardLast4,
+      cardExpMonth: args.cardExpMonth,
+      cardExpYear: args.cardExpYear,
+      nowMs,
+    });
     if (existing) {
+      if (!patch) return existing;
       await ctx.db.patch(existing._id, patch);
       return await ctx.db.get(existing._id);
     }
+    if (!patch) throw new Error("stripe_customer_payment_method_patch_missing");
     const id = await ctx.db.insert("userStripeCustomers", {
       userId: args.userId,
       email: undefined,
       createdAt: nowMs,
-      ...patch,
+      ...(patch as any),
     });
     return await ctx.db.get(id);
   },
