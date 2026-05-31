@@ -296,6 +296,7 @@ export function buildWebCommunitySurfaceProjection(
   const communityChatPanelProps: WebCommunityChatPanelProps = {
     activeCommunity: params.activeCommunity
       ? {
+          id: params.activeCommunity.id,
           name: params.activeCommunity.name,
           owner_id: params.activeCommunity.owner_id ?? null,
         }

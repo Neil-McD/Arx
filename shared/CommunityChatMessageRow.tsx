@@ -77,6 +77,7 @@ type CommunityChatMessageRowProps = {
   onSaveEdit: () => void | Promise<void>;
   onCancelEdit: () => void;
   onOpenSenderProfile?: (userId: string) => void;
+  onMessageSender?: (userId: string) => void | Promise<void>;
 };
 
 function CommunityChatMessageRowComponent({
@@ -122,6 +123,7 @@ function CommunityChatMessageRowComponent({
   onSaveEdit,
   onCancelEdit,
   onOpenSenderProfile,
+  onMessageSender,
 }: CommunityChatMessageRowProps) {
   const { imageAttachments, fileAttachments } = useMemo(
     () => partitionCommunityAttachments(message.attachments),
@@ -161,6 +163,11 @@ function CommunityChatMessageRowComponent({
   const openSenderProfile = useCallback(() => {
     onOpenSenderProfile?.(message.sender_id);
   }, [message.sender_id, onOpenSenderProfile]);
+  const canMessageSender = Boolean(onMessageSender) && message.sender_id !== sessionUserId;
+  const openSenderDirectMessage = useCallback(() => {
+    if (!canMessageSender) return;
+    void onMessageSender?.(message.sender_id);
+  }, [canMessageSender, message.sender_id, onMessageSender]);
   const resolveProfileHoverPlacement = useCallback((): "top" | "bottom" => {
     const root = messageRootRef.current;
     if (!root) return "top";
@@ -281,7 +288,8 @@ function CommunityChatMessageRowComponent({
               <button
                 type="button"
                 className="chat-profile-message-button"
-                disabled
+                disabled={!canMessageSender}
+                onClick={openSenderDirectMessage}
               >
                 <MessageCircle aria-hidden="true" />
                 <span>Message</span>

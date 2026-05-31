@@ -7,18 +7,25 @@ import type {
   ReactNode,
   UIEventHandler,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommunityChatMessageRow } from "../../../../shared/CommunityChatMessageRow";
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
   CommunityActivityEvent as SharedCommunityActivityEvent,
   CommunityChatMessage as SharedCommunityChatMessage,
+  DirectMessage as SharedDirectMessage,
+  DirectMessageConversation as SharedDirectMessageConversation,
   ProfileCommunityContext as SharedProfileCommunityContext,
   MessageReaction as SharedMessageReaction,
   CommunityTypingPresenceBundle as SharedCommunityTypingPresenceBundle,
   CommunityTypingPresenceUser as SharedCommunityTypingPresenceUser,
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
+import {
+  ensureCloudDirectConversationFromCommunity,
+  listCloudDirectMessages,
+  sendCloudDirectMessage,
+} from "../../../../shared/cloudDirectMessagesGateway";
 import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
 import { formatDateSeparator } from "../../../../shared/chatUi";
 import {
@@ -27,6 +34,7 @@ import {
 } from "../../../../shared/communityMessageParsing";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
+import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 
@@ -37,6 +45,8 @@ type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
 type UserProfile = SharedUserProfile;
 type ProfileCommunityContext = SharedProfileCommunityContext;
+type DirectMessageConversation = SharedDirectMessageConversation;
+type DirectMessage = SharedDirectMessage;
 
 type CommunityChatMessageViewModel = {
   message: CommunityChatMessage;
@@ -90,8 +100,23 @@ const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
   mutual_communities: [],
 };
 
+type DirectMessagePanelState = {
+  conversation: DirectMessageConversation;
+  messages: DirectMessage[];
+  input: string;
+  isLoading: boolean;
+  isSending: boolean;
+  error: string | null;
+};
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return fallback;
+}
+
 export type WebCommunityChatPanelProps = {
-  activeCommunity: { name: string; owner_id?: string | null } | null;
+  activeCommunity: { id: string; name: string; owner_id?: string | null } | null;
   session: unknown | null;
   isResolvingSelectedCommunity: boolean;
   hasAuthenticatedPresentation: boolean;
@@ -205,6 +230,7 @@ function formatCommunityActivityLabel(
 export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const {
     activeCommunity,
+    session,
     isResolvingSelectedCommunity,
     hasAuthenticatedPresentation,
     isAuthRecoveringSignedIn,
@@ -281,6 +307,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
     Record<string, ProfileCommunityContext>
   >({});
+  const [openingDirectMessageUserId, setOpeningDirectMessageUserId] = useState<string | null>(null);
+  const [directMessagePanel, setDirectMessagePanel] = useState<DirectMessagePanelState | null>(null);
+  const [directMessageLaunchError, setDirectMessageLaunchError] = useState<string | null>(null);
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
@@ -386,7 +415,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     setProfilePanelUserId(null);
-  }, [activeCommunity?.name]);
+    setDirectMessagePanel(null);
+    setDirectMessageLaunchError(null);
+  }, [activeCommunity?.id]);
 
   useEffect(() => {
     setProfileCommunityContextByUserId({});
@@ -394,10 +425,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     const targetUserId = profilePanelUserId;
-    if (!targetUserId || !props.session || profileCommunityContextByUserId[targetUserId]) return;
+    if (!targetUserId || !session || profileCommunityContextByUserId[targetUserId]) return;
     let cancelled = false;
     void fetchCloudProfileCommunityContext({
-      session: props.session,
+      session,
       targetUserId,
     })
       .then((context) => {
@@ -417,7 +448,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [profileCommunityContextByUserId, profilePanelUserId, props.session]);
+  }, [profileCommunityContextByUserId, profilePanelUserId, session]);
 
   useEffect(() => {
     if (!profilePanelUserId) return;
@@ -435,6 +466,107 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       document.removeEventListener("pointerdown", handleProfilePanelPointerDown, true);
     };
   }, [profilePanelUserId]);
+
+  useEffect(() => {
+    if (!directMessagePanel) return;
+
+    const handleDirectMessagePanelPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const panel = document.querySelector(".community-dm-panel");
+      if (panel?.contains(target)) return;
+      setDirectMessagePanel(null);
+    };
+
+    document.addEventListener("pointerdown", handleDirectMessagePanelPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleDirectMessagePanelPointerDown, true);
+    };
+  }, [directMessagePanel]);
+
+  const openDirectMessage = useCallback(async (targetUserId: string) => {
+    const normalizedTargetUserId = String(targetUserId ?? "").trim();
+    if (!normalizedTargetUserId || !session || !activeCommunity?.id) return;
+    if (normalizedTargetUserId === sessionUserId) return;
+    setOpeningDirectMessageUserId(normalizedTargetUserId);
+    setDirectMessageLaunchError(null);
+    try {
+      const conversation = await ensureCloudDirectConversationFromCommunity({
+        session,
+        targetUserId: normalizedTargetUserId,
+        communityId: activeCommunity.id,
+      });
+      setProfilePanelUserId(null);
+      setDirectMessagePanel({
+        conversation,
+        messages: [],
+        input: "",
+        isLoading: true,
+        isSending: false,
+        error: null,
+      });
+      const messages = await listCloudDirectMessages({
+        session,
+        conversationId: conversation.id,
+        limit: 100,
+      });
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === conversation.id
+          ? {
+              ...previous,
+              messages,
+              isLoading: false,
+            }
+          : previous,
+      );
+    } catch (error) {
+      setDirectMessagePanel(null);
+      setDirectMessageLaunchError(toErrorMessage(error, "Failed to open direct message."));
+    } finally {
+      setOpeningDirectMessageUserId((current) =>
+        current === normalizedTargetUserId ? null : current,
+      );
+    }
+  }, [activeCommunity?.id, session, sessionUserId]);
+
+  const sendDirectMessage = useCallback(async () => {
+    const current = directMessagePanel;
+    const text = String(current?.input ?? "").trim();
+    if (!current || !text || !session) return;
+    setDirectMessagePanel({
+      ...current,
+      isSending: true,
+      error: null,
+    });
+    try {
+      const message = await sendCloudDirectMessage({
+        session,
+        conversationId: current.conversation.id,
+        text,
+      });
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === current.conversation.id
+          ? {
+              ...previous,
+              messages: [...previous.messages, message],
+              input: "",
+              isSending: false,
+              error: null,
+            }
+          : previous,
+      );
+    } catch (error) {
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === current.conversation.id
+          ? {
+              ...previous,
+              isSending: false,
+              error: toErrorMessage(error, "Failed to send direct message."),
+            }
+          : previous,
+      );
+    }
+  }, [directMessagePanel, session]);
 
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
@@ -624,6 +756,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                         onSaveEdit={onSaveEdit}
                         onCancelEdit={onCancelEdit}
                         onOpenSenderProfile={setProfilePanelUserId}
+                        onMessageSender={openDirectMessage}
                       />
                     </div>
                   );
@@ -828,6 +961,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         ) : null}
 
         {communityChatError && <div className="auth-error">{communityChatError}</div>}
+        {directMessageLaunchError && <div className="auth-error">{directMessageLaunchError}</div>}
       </div>
 
       {profilePanelUserId ? (
@@ -837,7 +971,39 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           avatarColor={profilePanelAvatarColor}
           communityContext={profilePanelCommunityContext}
           isSelfProfile={Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
+          isMessageDisabled={openingDirectMessageUserId === profilePanelUserId || !activeCommunity?.id}
+          onMessage={
+            profilePanelUserId && profilePanelUserId !== sessionUserId
+              ? () => openDirectMessage(profilePanelUserId)
+              : undefined
+          }
           getInitials={getInitials}
+        />
+      ) : null}
+
+      {directMessagePanel ? (
+        <WebDirectMessagePanel
+          conversation={directMessagePanel.conversation}
+          messages={directMessagePanel.messages}
+          input={directMessagePanel.input}
+          isLoading={directMessagePanel.isLoading}
+          isSending={directMessagePanel.isSending}
+          error={directMessagePanel.error}
+          sessionUserId={sessionUserId}
+          getInitials={getInitials}
+          getAvatarColor={getAvatarColor}
+          renderTextWithLinks={renderTextWithLinks}
+          onInputChange={(value) => {
+            setDirectMessagePanel((previous) =>
+              previous
+                ? {
+                    ...previous,
+                    input: value,
+                  }
+                : previous,
+            );
+          }}
+          onSend={sendDirectMessage}
         />
       ) : null}
 

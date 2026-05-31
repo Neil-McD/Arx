@@ -11,6 +11,8 @@ type WebCommunityProfilePanelProps = {
   avatarColor: string;
   communityContext: ProfileCommunityContext;
   isSelfProfile: boolean;
+  isMessageDisabled?: boolean;
+  onMessage?: () => void | Promise<void>;
   getInitials: (value: string) => string;
 };
 
@@ -60,6 +62,8 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
     avatarColor,
     communityContext,
     isSelfProfile,
+    isMessageDisabled,
+    onMessage,
     getInitials,
   } = props;
   const handleLabel = normalizePanelHandle(profile?.handle);
@@ -103,7 +107,10 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
           <button
             type="button"
             className="chat-profile-message-button community-profile-panel-message"
-            disabled
+            disabled={isSelfProfile || isMessageDisabled || !onMessage}
+            onClick={() => {
+              void onMessage?.();
+            }}
           >
             <MessageCircle aria-hidden="true" />
             <span>Message</span>

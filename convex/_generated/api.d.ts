@@ -81,6 +81,7 @@ import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
 import type * as developerApps from "../developerApps.js";
+import type * as directMessages from "../directMessages.js";
 import type * as discoverMarketplace from "../discoverMarketplace.js";
 import type * as email from "../email.js";
 import type * as emailCore from "../emailCore.js";
@@ -254,6 +255,7 @@ declare const fullApi: ApiFromModules<{
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;
   developerApps: typeof developerApps;
+  directMessages: typeof directMessages;
   discoverMarketplace: typeof discoverMarketplace;
   email: typeof email;
   emailCore: typeof emailCore;

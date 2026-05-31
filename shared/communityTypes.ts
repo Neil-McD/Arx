@@ -57,6 +57,45 @@ export type ProfileCommunityContext = {
   mutual_communities: CommunityAvatarSummary[];
 };
 
+export type DirectMessageParticipant = {
+  id: string;
+  participant_type: "user" | "agent";
+  user_id: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+  status: "active" | "left";
+  last_read_seq: number;
+};
+
+export type DirectMessageConversation = {
+  id: string;
+  kind: "direct";
+  created_from_community: {
+    id: string;
+    slug: string;
+    name: string;
+  } | null;
+  last_seq: number;
+  last_message_at: string | null;
+  created_at: string;
+  updated_at: string;
+  participants: DirectMessageParticipant[];
+};
+
+export type DirectMessage = {
+  id: string;
+  conversation_id: string;
+  seq: number;
+  sender_type: "user" | "agent" | "system";
+  sender_user_id: string | null;
+  content_json: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CommunityChatMessage<TAttachment = unknown> = {
   id: string;
   community_id: string;

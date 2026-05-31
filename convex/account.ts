@@ -548,6 +548,49 @@ export const deleteOwnAccount = mutation({
     }
     await record("threads", threads.length);
 
+    const dmParticipantRows = [
+      ...(await ctx.db
+        .query("dmParticipants")
+        .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "active"))
+        .collect()),
+      ...(await ctx.db
+        .query("dmParticipants")
+        .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "left"))
+        .collect()),
+    ];
+    const dmConversationIds = Array.from(new Set(dmParticipantRows.map((row) => String(row.conversationId))));
+    let deletedDmMessages = 0;
+    let deletedDmParticipants = 0;
+    let deletedDmConversations = 0;
+    for (const conversationId of dmConversationIds) {
+      const messages = await ctx.db
+        .query("dmMessages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId as any))
+        .collect();
+      for (const row of messages) {
+        await ctx.db.delete(row._id);
+      }
+      deletedDmMessages += messages.length;
+
+      const participants = await ctx.db
+        .query("dmParticipants")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId as any))
+        .collect();
+      for (const row of participants) {
+        await ctx.db.delete(row._id);
+      }
+      deletedDmParticipants += participants.length;
+
+      const conversation = await ctx.db.get(conversationId as any);
+      if (conversation) {
+        await ctx.db.delete(conversation._id);
+        deletedDmConversations += 1;
+      }
+    }
+    await record("dmMessages", deletedDmMessages);
+    await record("dmParticipants", deletedDmParticipants);
+    await record("dmConversations", deletedDmConversations);
+
     await record("cloudProjects", await deleteRowsByIndex(ctx, "cloudProjects", "by_owner", "ownerId", userId));
 
     const communityMessages = await ctx.db

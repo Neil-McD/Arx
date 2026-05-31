@@ -1293,6 +1293,49 @@ export default defineSchema({
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_displayUntil", ["communityId", "displayUntil"]),
 
+  dmConversations: defineTable({
+    kind: v.literal("direct"),
+    canonicalKey: v.string(),
+    createdByUserId: v.id("users"),
+    createdFromCommunityId: v.id("communities"),
+    lastSeq: v.number(),
+    lastMessageAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_canonicalKey", ["canonicalKey"])
+    .index("by_createdBy", ["createdByUserId"])
+    .index("by_createdFromCommunity", ["createdFromCommunityId"])
+    .index("by_updatedAt", ["updatedAt"]),
+
+  dmParticipants: defineTable({
+    conversationId: v.id("dmConversations"),
+    participantType: v.union(v.literal("user"), v.literal("agent")),
+    userId: v.optional(v.id("users")),
+    agentKind: v.optional(v.string()),
+    status: v.union(v.literal("active"), v.literal("left")),
+    lastReadSeq: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_conversation_user", ["conversationId", "userId"])
+    .index("by_user_status", ["userId", "status"]),
+
+  dmMessages: defineTable({
+    conversationId: v.id("dmConversations"),
+    seq: v.number(),
+    senderType: v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    senderUserId: v.optional(v.id("users")),
+    senderAgentParticipantId: v.optional(v.id("dmParticipants")),
+    contentJson: v.any(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_conversation_seq", ["conversationId", "seq"])
+    .index("by_senderUser", ["senderUserId"]),
+
   communityAgentConfigs: defineTable({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
