@@ -81,9 +81,13 @@ export function OperatorEmailPanelView(props: {
   const sampledVerifiedEmailUsers = emailAuth?.aggregate.users.withEmailVerifiedAt ?? 0;
   const sampledEmailVerificationRate =
     sampledUsersWithEmail > 0 ? sampledVerifiedEmailUsers / sampledUsersWithEmail : null;
-  const sampledSuppressedEmails = emailAuth?.aggregate.outbox.byStatus.suppressed ?? 0;
-  const sampledUnverifiedSuppressions = emailAuth?.aggregate.outbox.failures.email_recipient_unverified ?? 0;
   const outbox = emailAuth?.aggregate.outbox ?? null;
+  const outboxTotals = outbox?.totals ?? null;
+  const failedEmails = outboxTotals?.byStatus.failed ?? outbox?.byStatus.failed ?? 0;
+  const suppressedEmails = outboxTotals?.byStatus.suppressed ?? outbox?.byStatus.suppressed ?? 0;
+  const unverifiedSuppressions =
+    outboxTotals?.failures.email_recipient_unverified ?? outbox?.failures.email_recipient_unverified ?? 0;
+  const failureEntries = topEntries(outboxTotals?.failures ?? outbox?.failures);
   const deliveries = emailAuth?.aggregate.deliveries ?? null;
   const configuration = emailAuth?.configuration ?? null;
 
@@ -103,13 +107,13 @@ export function OperatorEmailPanelView(props: {
         </div>
         <div>
           <span>Failed</span>
-          <strong>{outbox?.byStatus.failed ?? 0}</strong>
+          <strong>{failedEmails}</strong>
           <span className="operator-dashboard__metric-note">{outbox?.staleSending ?? 0} stale sending rows.</span>
         </div>
         <div>
           <span>Suppressed</span>
-          <strong>{sampledSuppressedEmails}</strong>
-          <span className="operator-dashboard__metric-note">{sampledUnverifiedSuppressions} unverified recipient suppressions.</span>
+          <strong>{suppressedEmails}</strong>
+          <span className="operator-dashboard__metric-note">{unverifiedSuppressions} unverified recipient suppressions total.</span>
         </div>
         <div>
           <span>Delivered</span>
@@ -210,12 +214,12 @@ export function OperatorEmailPanelView(props: {
             <strong>{formatPercent(sampledEmailVerificationRate)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Suppressed outbox sample</span>
-            <strong>{sampledSuppressedEmails}</strong>
+            <span>Suppressed outbox total</span>
+            <strong>{suppressedEmails}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Unverified suppressions</span>
-            <strong>{sampledUnverifiedSuppressions}</strong>
+            <strong>{unverifiedSuppressions}</strong>
           </div>
         </div>
       </section>
@@ -226,7 +230,7 @@ export function OperatorEmailPanelView(props: {
           {["pending", "sending", "sent", "failed", "suppressed"].map((status) => (
             <div className="operator-dashboard__row" key={status}>
               <span>{formatDiagnosticStatus(status)}</span>
-              <strong>{outbox?.byStatus[status] ?? 0}</strong>
+              <strong>{outboxTotals?.byStatus[status] ?? outbox?.byStatus[status] ?? 0}</strong>
             </div>
           ))}
           <div className="operator-dashboard__row">
@@ -243,15 +247,15 @@ export function OperatorEmailPanelView(props: {
       <section className="operator-dashboard__panel">
         <h2>Failure reasons</h2>
         <div className="operator-dashboard__table">
-          {topEntries(outbox?.failures).length > 0 ? (
-            topEntries(outbox?.failures).map(([reason, count]) => (
+          {failureEntries.length > 0 ? (
+            failureEntries.map(([reason, count]) => (
               <div className="operator-dashboard__row" key={reason}>
                 <span>{formatDiagnosticStatus(reason)}</span>
                 <strong>{count}</strong>
               </div>
             ))
           ) : (
-            <div className="operator-dashboard__empty">No sampled email failures.</div>
+            <div className="operator-dashboard__empty">No email failures.</div>
           )}
         </div>
       </section>

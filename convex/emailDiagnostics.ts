@@ -150,9 +150,27 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
     const outboxByTemplate: Record<string, number> = {};
     const outboxFailures: Record<string, number> = {};
     const recipientMode = { userId: 0, directEmail: 0 };
+    const totalOutboxByStatus: Record<string, number> = {};
+    const totalOutboxByKind: Record<string, number> = {};
+    const totalOutboxByTemplate: Record<string, number> = {};
+    const totalOutboxFailures: Record<string, number> = {};
+    const totalRecipientMode = { userId: 0, directEmail: 0 };
     const sampledOutboxRowsForRecent: Record<string, unknown>[] = [];
-    let staleSending = 0;
     let sampledOutboxRows = 0;
+    let totalStaleSending = 0;
+    const totalOutboxRows = await ctx.db.query("emailOutbox").collect();
+    for (const row of totalOutboxRows) {
+      increment(totalOutboxByStatus, row.status);
+      increment(totalOutboxByKind, row.kind);
+      increment(totalOutboxByTemplate, row.templateKey);
+      if (row.failureReason) increment(totalOutboxFailures, row.failureReason);
+      if (readString(row.status) === "sending" && isStaleSendingRow(row, nowMs)) totalStaleSending += 1;
+      if (row.recipientUserId) {
+        totalRecipientMode.userId += 1;
+      } else {
+        totalRecipientMode.directEmail += 1;
+      }
+    }
     for (const status of EMAIL_OUTBOX_STATUSES) {
       const rows = await ctx.db
         .query("emailOutbox")
@@ -166,7 +184,6 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
         increment(outboxByKind, row.kind);
         increment(outboxByTemplate, row.templateKey);
         if (row.failureReason) increment(outboxFailures, row.failureReason);
-        if (status === "sending" && isStaleSendingRow(row, nowMs)) staleSending += 1;
         if (row.recipientUserId) {
           recipientMode.userId += 1;
         } else {
@@ -223,6 +240,14 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
       },
       outbox: {
         sampled: sampledOutboxRows,
+        totals: {
+          rows: totalOutboxRows.length,
+          byStatus: totalOutboxByStatus,
+          byKind: totalOutboxByKind,
+          byTemplate: totalOutboxByTemplate,
+          failures: totalOutboxFailures,
+          recipientMode: totalRecipientMode,
+        },
         byStatus: outboxByStatus,
         byKind: outboxByKind,
         byTemplate: outboxByTemplate,
@@ -230,7 +255,7 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
         recipientMode,
         pendingDueNow: pendingDueNow.length,
         pendingDueNowTruncated: pendingDueNow.length >= 250,
-        staleSending,
+        staleSending: totalStaleSending,
         oldestPendingAt: readTimestamp(oldestPending?.scheduledAt),
         recentRows: recentOutboxRows,
         recentFailures: recentFailureRows,
@@ -246,6 +271,8 @@ export const getOperatorEmailAuthDiagnosticAggregateInternal = internalQuery({
         sourceTables: ["users", "emailOutbox", "emailDeliveries"],
         userSampleLimit,
         outboxPerStatusLimit,
+        outboxTotalMode: "exact_collect",
+        outboxTotalRows: totalOutboxRows.length,
         deliverySampleLimit,
         redacted: true,
         readOnly: true,

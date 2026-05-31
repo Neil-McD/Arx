@@ -261,6 +261,17 @@ export type OperatorEmailAuthDiagnosticSnapshot = {
     };
     outbox: {
       sampled: number;
+      totals: {
+        rows: number;
+        byStatus: Record<string, number>;
+        byKind: Record<string, number>;
+        byTemplate: Record<string, number>;
+        failures: Record<string, number>;
+        recipientMode: {
+          userId: number;
+          directEmail: number;
+        };
+      };
       byStatus: Record<string, number>;
       byKind: Record<string, number>;
       byTemplate: Record<string, number>;
@@ -309,6 +320,8 @@ export type OperatorEmailAuthDiagnosticSnapshot = {
       sourceTables: string[];
       userSampleLimit: number;
       outboxPerStatusLimit: number;
+      outboxTotalMode: "exact_collect" | string;
+      outboxTotalRows: number;
       deliverySampleLimit: number;
       redacted: boolean;
       readOnly: boolean;

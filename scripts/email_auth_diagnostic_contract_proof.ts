@@ -60,6 +60,12 @@ assert.match(
 
 assert.match(
   diagnostic,
+  /totalOutboxRows = await ctx\.db\.query\("emailOutbox"\)\.collect\(\)[\s\S]*totals:[\s\S]*rows: totalOutboxRows\.length[\s\S]*byStatus: totalOutboxByStatus[\s\S]*failures: totalOutboxFailures[\s\S]*outboxTotalMode: "exact_collect"[\s\S]*outboxTotalRows: totalOutboxRows\.length/,
+  "email diagnostics must expose exact outbox totals separately from capped samples",
+);
+
+assert.match(
+  diagnostic,
   /fetchWorkosUserVerification[\s\S]*redactWorkosUserVerificationLookup/,
   "email auth diagnostic must use the shared redacted WorkOS user verification lookup",
 );
@@ -86,6 +92,12 @@ assert.match(
   operatorTypes,
   /export type OperatorEmailAuthDiagnosticSnapshot = \{[\s\S]*configuration:[\s\S]*resendApiKeyConfigured: boolean[\s\S]*emailVerifiedClaimValue: boolean \| null[\s\S]*workosUser:[\s\S]*emailVerified\?: boolean \| null[\s\S]*aggregate:[\s\S]*currentUser:[\s\S]*emailVerifiedAtPresent: boolean[\s\S]*outbox:[\s\S]*failures: Record<string, number>[\s\S]*pendingDueNow: number[\s\S]*recentRows: Array[\s\S]*deliveries:[\s\S]*lastEventType: string \| null/,
   "operator types must expose the redacted email auth and ops diagnostic snapshot",
+);
+
+assert.match(
+  operatorTypes,
+  /outbox:[\s\S]*totals:[\s\S]*rows: number[\s\S]*byStatus: Record<string, number>[\s\S]*failures: Record<string, number>[\s\S]*outboxTotalMode: "exact_collect" \| string[\s\S]*outboxTotalRows: number/,
+  "operator types must expose exact outbox totals and their evidence metadata",
 );
 
 assert.match(
@@ -116,6 +128,12 @@ assert.match(
   emailPanel,
   /Provider health[\s\S]*Resend API key[\s\S]*Email engagement[\s\S]*Email auth[\s\S]*Queue health[\s\S]*Recent outbox/,
   "operator Email panel must project provider, engagement, auth, and queue diagnostics",
+);
+
+assert.match(
+  emailPanel,
+  /outboxTotals = outbox\?\.totals[\s\S]*suppressedEmails = outboxTotals\?\.byStatus\.suppressed[\s\S]*failureEntries = topEntries\(outboxTotals\?\.failures[\s\S]*Suppressed outbox total[\s\S]*outboxTotals\?\.byStatus\[status\]/,
+  "operator Email panel must prefer exact outbox totals over capped sample counts",
 );
 
 assert.doesNotMatch(
