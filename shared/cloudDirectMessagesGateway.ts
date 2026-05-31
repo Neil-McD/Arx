@@ -1,7 +1,12 @@
 import { ConvexReactClient } from "convex/react";
 import { resolveAuthIdentityToken, resolveAuthSubject } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
-import type { DirectMessage, DirectMessageConversation, DirectMessageRecipient } from "./communityTypes";
+import type {
+  DirectMessage,
+  DirectMessageConversation,
+  DirectMessageRecipient,
+  DirectMessageRecipientPage,
+} from "./communityTypes";
 
 type CloudDirectMessagesGatewayParams<SessionT> = {
   session: SessionT;
@@ -115,17 +120,33 @@ export async function listCloudEligibleDirectMessageRecipients<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     communityId: string;
     search?: string;
+    cursor?: string | null;
     limit?: number;
   },
-): Promise<DirectMessageRecipient[]> {
+): Promise<DirectMessageRecipientPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("directMessages:listEligibleDirectMessageRecipients" as any, {
     authSubject,
     communityId: params.communityId,
     search: params.search ?? "",
-    limit: params.limit ?? 20,
-  });
-  return coerceRows<DirectMessageRecipient>(payload);
+    paginationOpts: {
+      cursor: params.cursor ?? null,
+      numItems: params.limit ?? 20,
+    },
+  }) as {
+    rows?: unknown;
+    page?: unknown;
+    continueCursor?: unknown;
+    isDone?: unknown;
+  } | null;
+  return {
+    rows: coerceRows<DirectMessageRecipient>(payload?.rows ?? payload?.page ?? []),
+    continueCursor:
+      typeof payload?.continueCursor === "string"
+        ? payload.continueCursor
+        : null,
+    isDone: payload?.isDone === true,
+  };
 }
 
 export async function markCloudDirectConversationRead<SessionT>(

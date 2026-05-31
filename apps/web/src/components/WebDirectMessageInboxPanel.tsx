@@ -16,6 +16,7 @@ type WebDirectMessageInboxPanelProps = {
   activeCommunityName: string | null;
   recipients: DirectMessageRecipient[];
   recipientSearch: string;
+  recipientsHasMore: boolean;
   isLoadingRecipients: boolean;
   recipientError: string | null;
   sessionUserId: string | null;
@@ -25,6 +26,7 @@ type WebDirectMessageInboxPanelProps = {
   onOpenNewMessage: () => void;
   onCloseNewMessage: () => void;
   onRecipientSearchChange: (value: string) => void;
+  onLoadMoreRecipients: () => void;
   onSelectRecipient: (recipient: DirectMessageRecipient) => void | Promise<void>;
 };
 
@@ -52,6 +54,7 @@ function formatInboxTime(value: string | null): string | null {
 export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProps) {
   const activeCommunityName = String(props.activeCommunityName ?? "").trim() || "current community";
   if (props.isNewMessageMode) {
+    const isInitialRecipientLoad = props.isLoadingRecipients && props.recipients.length === 0;
     return (
       <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="New direct message">
         <div className="community-dm-inbox-header">
@@ -85,7 +88,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
         {props.recipientError ? <div className="community-dm-panel-error">{props.recipientError}</div> : null}
 
         <div className="community-dm-recipient-list">
-          {props.isLoadingRecipients ? (
+          {isInitialRecipientLoad ? (
             <div className="community-dm-panel-empty">Loading members...</div>
           ) : props.recipients.length === 0 ? (
             <div className="community-dm-panel-empty">
@@ -128,6 +131,16 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
               );
             })
           )}
+          {props.recipientsHasMore ? (
+            <button
+              type="button"
+              className="community-dm-recipient-more"
+              onClick={props.onLoadMoreRecipients}
+              disabled={props.isLoadingRecipients}
+            >
+              {props.isLoadingRecipients ? "Loading..." : "Show more"}
+            </button>
+          ) : null}
         </div>
       </aside>
     );

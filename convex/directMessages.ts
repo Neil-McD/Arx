@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
   communityMembershipRowIsActive,
@@ -61,7 +62,6 @@ type DirectMessageLike = {
 const MAX_DM_TEXT_CHARS = 4000;
 const MAX_DM_MESSAGE_ROWS = 200;
 const MAX_DM_RECIPIENT_ROWS = 25;
-const MAX_DM_RECIPIENT_SCAN_ROWS = 200;
 const DIRECT_CONVERSATION_KIND = "direct" as const;
 
 function normalizePublicUserId(raw: unknown): string {
@@ -265,6 +265,58 @@ async function mapDirectMessage(ctx: any, row: DirectMessageLike) {
   };
 }
 
+async function mapEligibleDirectMessageRecipient(args: {
+  ctx: any;
+  community: CommunityLike;
+  viewerUserId: any;
+  userId: any;
+  search: string;
+}) {
+  const user = (await args.ctx.db.get(args.userId)) as UserRow | null;
+  if (!user) return null;
+  const profile = await resolveUserProfileDisplayProjectionForUser(args.ctx, user);
+  const publicUserId = await resolvePublicUserId(args.ctx, args.userId);
+  const handle = String(user.normalizedHandle ?? user.handle ?? "").trim().replace(/^@+/, "") || null;
+  const searchable = [
+    profile.display_name,
+    user.displayName,
+    handle,
+    publicUserId,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (args.search && !searchable.includes(args.search)) return null;
+
+  try {
+    await requireCommunityChatAccess({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
+  } catch {
+    return null;
+  }
+
+  const existingConversation = await findDirectConversationByUsers(
+    args.ctx,
+    args.viewerUserId,
+    args.userId,
+  );
+  return {
+    user_id: publicUserId ?? String(args.userId),
+    display_name: profile.display_name ?? user.displayName ?? null,
+    handle,
+    avatar_url: profile.avatar_url ?? null,
+    avatar_focus_x: profile.avatar_focus_x ?? 0.5,
+    avatar_focus_y: profile.avatar_focus_y ?? 0.5,
+    avatar_zoom: profile.avatar_zoom ?? 1,
+    community_id: String(args.community._id),
+    community_name: args.community.name,
+    existing_conversation_id: existingConversation ? String(existingConversation._id) : null,
+  };
+}
+
 export const ensureDirectConversationFromCommunity = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -337,7 +389,7 @@ export const listEligibleDirectMessageRecipients = query({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     search: v.optional(v.string()),
-    limit: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const viewerUserId = await resolveUserIdForAuthenticatedRequest({
@@ -349,13 +401,25 @@ export const listEligibleDirectMessageRecipients = query({
       communityId: args.communityId,
       userId: viewerUserId,
     });
-    const safeLimit = Math.max(1, Math.min(MAX_DM_RECIPIENT_ROWS, Math.floor(args.limit ?? 20)));
+    const safeLimit = Math.max(
+      1,
+      Math.min(MAX_DM_RECIPIENT_ROWS, Math.floor(args.paginationOpts.numItems ?? 20)),
+    );
+    const isFirstPage = args.paginationOpts.cursor === null;
+    const memberPageSize = Math.max(1, isFirstPage ? safeLimit - 1 : safeLimit);
     const search = normalizeRecipientSearch(args.search);
-    const rows = (await ctx.db
+    const rawPage = await ctx.db
       .query("communityMemberships" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
       .order("desc")
-      .take(MAX_DM_RECIPIENT_SCAN_ROWS)) as CommunityMembershipLike[];
+      .paginate({
+        ...args.paginationOpts,
+        numItems: memberPageSize,
+        maximumRowsRead: Math.max(
+          args.paginationOpts.maximumRowsRead ?? memberPageSize * 4,
+          memberPageSize,
+        ),
+      });
 
     const candidateUserIds: any[] = [];
     const seenUserIds = new Set<string>();
@@ -366,8 +430,8 @@ export const listEligibleDirectMessageRecipients = query({
       candidateUserIds.push(userId);
     };
 
-    addCandidate(community.ownerId);
-    for (const row of rows) {
+    if (isFirstPage) addCandidate(community.ownerId);
+    for (const row of rawPage.page as CommunityMembershipLike[]) {
       if (!communityMembershipRowIsActive(row)) continue;
       addCandidate(row.userId);
     }
@@ -375,46 +439,21 @@ export const listEligibleDirectMessageRecipients = query({
     const recipients = [];
     for (const userId of candidateUserIds) {
       if (recipients.length >= safeLimit) break;
-      const user = (await ctx.db.get(userId)) as UserRow | null;
-      if (!user) continue;
-      const profile = await resolveUserProfileDisplayProjectionForUser(ctx, user);
-      const publicUserId = await resolvePublicUserId(ctx, userId);
-      const handle = String(user.normalizedHandle ?? user.handle ?? "").trim().replace(/^@+/, "") || null;
-      const searchable = [
-        profile.display_name,
-        user.displayName,
-        handle,
-        publicUserId,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (search && !searchable.includes(search)) continue;
-      try {
-        await requireCommunityChatAccess({
-          ctx,
-          communityId: args.communityId,
-          userId,
-        });
-      } catch {
-        continue;
-      }
-      const existingConversation = await findDirectConversationByUsers(ctx, viewerUserId, userId);
-      recipients.push({
-        user_id: publicUserId ?? String(userId),
-        display_name: profile.display_name ?? user.displayName ?? null,
-        handle,
-        avatar_url: profile.avatar_url ?? null,
-        avatar_focus_x: profile.avatar_focus_x ?? 0.5,
-        avatar_focus_y: profile.avatar_focus_y ?? 0.5,
-        avatar_zoom: profile.avatar_zoom ?? 1,
-        community_id: String(community._id),
-        community_name: community.name,
-        existing_conversation_id: existingConversation ? String(existingConversation._id) : null,
+      const recipient = await mapEligibleDirectMessageRecipient({
+        ctx,
+        community,
+        viewerUserId,
+        userId,
+        search,
       });
+      if (recipient) recipients.push(recipient);
     }
 
-    return recipients;
+    return {
+      rows: recipients,
+      continueCursor: typeof rawPage.continueCursor === "string" ? rawPage.continueCursor : null,
+      isDone: rawPage.isDone,
+    };
   },
 });
 

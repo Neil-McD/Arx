@@ -101,6 +101,12 @@ export type DirectMessageRecipient = {
   existing_conversation_id: string | null;
 };
 
+export type DirectMessageRecipientPage = {
+  rows: DirectMessageRecipient[];
+  continueCursor: string | null;
+  isDone: boolean;
+};
+
 export type DirectMessage = {
   id: string;
   conversation_id: string;
