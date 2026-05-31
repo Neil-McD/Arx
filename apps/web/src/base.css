@@ -8909,7 +8909,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 .chat-profile-hover-card {
   position: absolute;
   z-index: 40;
-  top: 48px;
+  top: auto;
+  bottom: calc(100% + 8px);
   left: 14px;
   width: min(320px, calc(100vw - 48px));
   max-height: 188px;
@@ -8928,7 +8929,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   opacity: 0;
   pointer-events: none;
   transform: translateY(4px) scale(0.985);
-  transform-origin: 22px top;
+  transform-origin: 22px bottom;
   visibility: hidden;
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
@@ -8936,6 +8937,18 @@ button.community-launch-knowledge-integration-chip:disabled {
     opacity 130ms ease,
     transform 130ms ease,
     visibility 0s linear 130ms;
+}
+
+.chat-profile-hover-card[data-placement="bottom"] {
+  top: 48px;
+  bottom: auto;
+  transform-origin: 22px top;
+}
+
+.chat-profile-hover-card[data-placement="top"] {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: 22px bottom;
 }
 
 .chat-profile-hover-card.is-open {
@@ -8958,8 +8971,10 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .chat-profile-hover-avatar {
+  position: relative;
   width: 52px;
   height: 52px;
+  flex: 0 0 52px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -8968,6 +8983,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: #fff;
   font-size: 16px;
   font-weight: 700;
+  background: color-mix(in srgb, var(--bg-card-alt) 82%, var(--border-default));
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.28),
     0 0 0 1px rgba(255, 255, 255, 0.08);

@@ -125,7 +125,10 @@ function CommunityChatMessageRowComponent({
     () => partitionCommunityAttachments(message.attachments),
     [message.attachments],
   );
+  const messageRootRef = useRef<HTMLDivElement | null>(null);
+  const profileHoverCardRef = useRef<HTMLDivElement | null>(null);
   const [isProfileHoverOpen, setIsProfileHoverOpen] = useState(false);
+  const [profileHoverPlacement, setProfileHoverPlacement] = useState<"top" | "bottom">("top");
   const profileHoverCloseTimerRef = useRef<number | null>(null);
   const lightboxImages: CommunityChatMediaImage[] = useMemo(
     () => imageAttachments.map((item) => ({
@@ -153,6 +156,24 @@ function CommunityChatMessageRowComponent({
   }, [senderHandle]);
   const profileBio = String(senderBio ?? "").trim();
   const profileHoverCardId = `chat-profile-hover-${message.id}`;
+  const resolveProfileHoverPlacement = useCallback((): "top" | "bottom" => {
+    const root = messageRootRef.current;
+    if (!root) return "top";
+    const rootRect = root.getBoundingClientRect();
+    const chatViewport = root.closest(".chat-messages");
+    const chatViewportRect =
+      chatViewport instanceof HTMLElement ? chatViewport.getBoundingClientRect() : null;
+    const viewportTop = Math.max(0, chatViewportRect?.top ?? 0);
+    const viewportBottom = Math.min(window.innerHeight, chatViewportRect?.bottom ?? window.innerHeight);
+    const cardHeight = Math.min(
+      profileHoverCardRef.current?.getBoundingClientRect().height || 188,
+      188,
+    );
+    const requiredSpace = cardHeight + 10;
+    const spaceAbove = rootRect.top - viewportTop;
+    const spaceBelow = viewportBottom - rootRect.bottom;
+    return spaceAbove < requiredSpace && spaceBelow > spaceAbove ? "bottom" : "top";
+  }, []);
 
   const clearProfileHoverCloseTimer = useCallback(() => {
     if (profileHoverCloseTimerRef.current === null) return;
@@ -163,8 +184,9 @@ function CommunityChatMessageRowComponent({
   const openProfileHover = useCallback(() => {
     if (!showMeta) return;
     clearProfileHoverCloseTimer();
+    setProfileHoverPlacement(resolveProfileHoverPlacement());
     setIsProfileHoverOpen(true);
-  }, [clearProfileHoverCloseTimer, showMeta]);
+  }, [clearProfileHoverCloseTimer, resolveProfileHoverPlacement, showMeta]);
 
   const scheduleProfileHoverClose = useCallback(() => {
     clearProfileHoverCloseTimer();
@@ -181,6 +203,20 @@ function CommunityChatMessageRowComponent({
 
   useEffect(() => clearProfileHoverCloseTimer, [clearProfileHoverCloseTimer]);
 
+  useEffect(() => {
+    if (!isProfileHoverOpen) return;
+    const syncPlacement = () => {
+      setProfileHoverPlacement(resolveProfileHoverPlacement());
+    };
+    syncPlacement();
+    window.addEventListener("resize", syncPlacement);
+    window.addEventListener("scroll", syncPlacement, true);
+    return () => {
+      window.removeEventListener("resize", syncPlacement);
+      window.removeEventListener("scroll", syncPlacement, true);
+    };
+  }, [isProfileHoverOpen, resolveProfileHoverPlacement]);
+
   return (
     <Fragment>
       {dateSeparator && (
@@ -189,6 +225,7 @@ function CommunityChatMessageRowComponent({
         </div>
       )}
       <div
+        ref={messageRootRef}
         id={`msg-${message.id}`}
         className={`chat-message${isPending ? " pending" : ""}${!showMeta ? " grouped" : ""}`}
         data-time={shortTime}
@@ -210,8 +247,10 @@ function CommunityChatMessageRowComponent({
         />
         {showMeta ? (
           <div
+            ref={profileHoverCardRef}
             id={profileHoverCardId}
             className={`chat-profile-hover-card${isProfileHoverOpen ? " is-open" : ""}`}
+            data-placement={profileHoverPlacement}
             role="group"
             aria-label={`${senderLabel} profile preview`}
             onMouseEnter={openProfileHover}
