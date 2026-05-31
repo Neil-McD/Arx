@@ -171,6 +171,8 @@ type CommunityPanelContentProps = WorkspaceUserDataPanelDataProps & {
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
 const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 8;
 const WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS = 10;
+const WORKSPACE_INSPECTOR_WAKE_RETRY_WINDOW_MS = 60_000;
+const WORKSPACE_INSPECTOR_WAKE_RETRY_DEFAULT_DELAY_MS = 1500;
 const WORKSPACE_IMAGE_EXTENSIONS = new Set(["gif", "jpeg", "jpg", "png", "svg", "webp"]);
 const WORKSPACE_CODE_EXTENSION_LANGUAGE: Record<string, string> = {
   bash: "bash",
@@ -436,6 +438,10 @@ function isWorkspaceInspectorWakeRetryableCode(code: string | null | undefined):
   );
 }
 
+function workspaceInspectorRetryDelayMs(result: WorkspaceInspectorFailure): number {
+  return result.retryAfterMs ?? WORKSPACE_INSPECTOR_WAKE_RETRY_DEFAULT_DELAY_MS;
+}
+
 function WorkspaceCommunityAnalyticsPreview(props: {
   analytics: WorkspaceUserPanelCommunityAnalytics;
   onSetRange: (value: AnalyticsRange) => void;
@@ -687,8 +693,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const [filePreviewError, setFilePreviewError] = useState<string | null>(null);
   const filePreviewRequestId = useRef(0);
   const lastFilesResetNonceRef = useRef(props.filesResetNonce ?? 0);
-  const directoryAutoRetryCountRef = useRef(0);
+  const directoryWakeRetryStartedAtRef = useRef<number | null>(null);
   const directoryAutoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDirectoryWakeRetrying, setIsDirectoryWakeRetrying] = useState(false);
   const canInspectFiles = Boolean(props.session && props.activeProjectId);
 
   const clearDirectoryAutoRetryTimer = useCallback(() => {
@@ -699,7 +706,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
 
   useEffect(() => {
     clearDirectoryAutoRetryTimer();
-    directoryAutoRetryCountRef.current = 0;
+    directoryWakeRetryStartedAtRef.current = null;
+    setIsDirectoryWakeRetrying(false);
     filePreviewRequestId.current += 1;
     setFilesExpanded(loadFilesExpanded(props.activeProjectId));
     setDirectoryPath(".");
@@ -719,7 +727,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     (next: boolean) => {
       if (!next) {
         clearDirectoryAutoRetryTimer();
-        directoryAutoRetryCountRef.current = 0;
+        directoryWakeRetryStartedAtRef.current = null;
+        setIsDirectoryWakeRetrying(false);
       }
       setFilesExpanded(next);
       storeFilesExpanded(props.activeProjectId, next);
@@ -732,7 +741,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     if (lastFilesResetNonceRef.current === nonce) return;
     lastFilesResetNonceRef.current = nonce;
     clearDirectoryAutoRetryTimer();
-    directoryAutoRetryCountRef.current = 0;
+    directoryWakeRetryStartedAtRef.current = null;
+    setIsDirectoryWakeRetrying(false);
     filePreviewRequestId.current += 1;
     setFilesExpanded(false);
     storeFilesExpanded(props.activeProjectId, false);
@@ -767,21 +777,35 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           setDirectoryErrorCode(result.code);
           setIsComputerOnForFiles(false);
           setWorkspaceFilesProviderId(null);
-          if (
-            isWorkspaceInspectorWakeRetryableCode(result.code) &&
-            directoryAutoRetryCountRef.current < 5
-          ) {
-            directoryAutoRetryCountRef.current += 1;
-            const retryDelayMs = directoryAutoRetryCountRef.current === 1 ? 750 : 1500;
-            retryTimer = setTimeout(() => {
-              if (isAlive) setDirectoryRefreshNonce((value) => value + 1);
-            }, retryDelayMs);
-            directoryAutoRetryTimerRef.current = retryTimer;
+          if (isWorkspaceInspectorWakeRetryableCode(result.code)) {
+            const now = Date.now();
+            const startedAt = directoryWakeRetryStartedAtRef.current ?? now;
+            directoryWakeRetryStartedAtRef.current = startedAt;
+            const elapsedMs = Math.max(0, now - startedAt);
+            if (elapsedMs < WORKSPACE_INSPECTOR_WAKE_RETRY_WINDOW_MS) {
+              setIsDirectoryWakeRetrying(true);
+              const remainingMs = Math.max(
+                250,
+                WORKSPACE_INSPECTOR_WAKE_RETRY_WINDOW_MS - elapsedMs,
+              );
+              const retryDelayMs = Math.min(
+                workspaceInspectorRetryDelayMs(result),
+                remainingMs,
+              );
+              retryTimer = setTimeout(() => {
+                if (isAlive) setDirectoryRefreshNonce((value) => value + 1);
+              }, retryDelayMs);
+              directoryAutoRetryTimerRef.current = retryTimer;
+              return;
+            }
           }
+          setIsDirectoryWakeRetrying(false);
+          directoryWakeRetryStartedAtRef.current = null;
           return;
         }
         clearDirectoryAutoRetryTimer();
-        directoryAutoRetryCountRef.current = 0;
+        directoryWakeRetryStartedAtRef.current = null;
+        setIsDirectoryWakeRetrying(false);
         setDirectoryEntries(result.entries);
         setIsComputerOnForFiles(true);
         setWorkspaceFilesProviderId(result.providerId);
@@ -791,6 +815,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         setDirectoryEntries([]);
         setDirectoryError(error instanceof Error ? error.message : "Workspace files unavailable.");
         setDirectoryErrorCode(null);
+        directoryWakeRetryStartedAtRef.current = null;
+        setIsDirectoryWakeRetrying(false);
         setIsComputerOnForFiles(false);
         setWorkspaceFilesProviderId(null);
       })
@@ -860,7 +886,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const hasFilePreviewContent = Boolean(isLoadingFilePreview || filePreviewError || filePreview?.ok);
   const canTurnOnComputer = Boolean(props.session && props.activeProjectId);
   const isStartingComputerForFiles =
-    props.isStartingWorkspaceComputer || directoryErrorCode === "computer_starting";
+    props.isStartingWorkspaceComputer ||
+    directoryErrorCode === "computer_starting" ||
+    isDirectoryWakeRetrying;
   const shouldShowTurnOnComputerAction =
     canTurnOnComputer &&
     (
@@ -889,6 +917,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError("Computer turning on");
     setDirectoryErrorCode("computer_starting");
+    directoryWakeRetryStartedAtRef.current = null;
+    setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(false);
     setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
@@ -902,6 +932,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       setDirectoryEntries([]);
       setDirectoryError(error instanceof Error ? error.message : "Computer could not turn on.");
       setDirectoryErrorCode("computer_start_failed");
+      directoryWakeRetryStartedAtRef.current = null;
+      setIsDirectoryWakeRetrying(false);
       setIsComputerOnForFiles(false);
       setWorkspaceFilesProviderId(null);
       return;
@@ -910,6 +942,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       setDirectoryEntries([]);
       setDirectoryError(formatWorkspaceInspectorFailure(result));
       setDirectoryErrorCode(result.code);
+      directoryWakeRetryStartedAtRef.current = null;
+      setIsDirectoryWakeRetrying(false);
       setWorkspaceFilesProviderId(null);
       return;
     }
@@ -918,6 +952,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    directoryWakeRetryStartedAtRef.current = null;
+    setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(true);
     setWorkspaceFilesProviderId("blaxel");
     setDirectoryRefreshNonce((value) => value + 1);
@@ -931,6 +967,8 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryEntries([]);
     setDirectoryError("Turn on computer to view files.");
     setDirectoryErrorCode("background_sandbox_not_found");
+    directoryWakeRetryStartedAtRef.current = null;
+    setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(false);
     setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);

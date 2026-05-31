@@ -71,8 +71,13 @@ assert.match(
 );
 assert.match(
   userDataPanel,
-  /directoryAutoRetryCountRef[\s\S]*< 5[\s\S]*setDirectoryRefreshNonce/,
-  "Files panel wake retry must be bounded and drive a canonical directory refresh",
+  /WORKSPACE_INSPECTOR_WAKE_RETRY_WINDOW_MS = 60_000[\s\S]*workspaceInspectorRetryDelayMs[\s\S]*setDirectoryRefreshNonce/,
+  "Files panel wake retry must be time-bounded, provider-hint aware, and drive a canonical directory refresh",
+);
+assert.match(
+  inspector,
+  /code: "blaxel_workspace_recreate_failed"[\s\S]*details:\s*\{[\s\S]*retryAfterMs: WORKSPACE_INSPECTOR_WAKE_RETRY_AFTER_MS/,
+  "workspace inspector must return a bounded retry hint for transient Blaxel wake failures",
 );
 
 console.log("workspace_inspector_boundary_proof: ok");

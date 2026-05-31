@@ -23,6 +23,7 @@ import {
 const DIRECTORY_ENTRY_LIMIT = 200;
 const TEXT_PREVIEW_MAX_BYTES = 64 * 1024;
 const IMAGE_PREVIEW_MAX_BYTES = 512 * 1024;
+const WORKSPACE_INSPECTOR_WAKE_RETRY_AFTER_MS = 1500;
 
 const HEAVY_DIRECTORY_NAMES = new Set([
   ".git",
@@ -515,6 +516,9 @@ async function runWithBlaxelInspectorWorkspace(params: {
     status: 503,
     code: "blaxel_workspace_recreate_failed",
     message: "Workspace is still waking up. Try again in a moment.",
+    details: {
+      retryAfterMs: WORKSPACE_INSPECTOR_WAKE_RETRY_AFTER_MS,
+    },
   };
 }
 

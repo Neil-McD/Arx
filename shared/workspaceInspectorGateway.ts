@@ -73,6 +73,7 @@ export type WorkspaceInspectorFailure = {
   code: string;
   message: string;
   paidUsageBillingMode: PaidUsageBillingMode | null;
+  retryAfterMs?: number | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -82,6 +83,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeFailure(value: unknown, fallback = "Workspace inspector unavailable."): WorkspaceInspectorFailure {
   const row = isRecord(value) ? value : {};
   const details = isRecord(row.details) ? row.details : {};
+  const rawRetryAfterMs = details.retryAfterMs ?? details.retry_after_ms ?? row.retryAfterMs;
+  const retryAfterMs = Number(rawRetryAfterMs);
   return {
     ok: false,
     status: Number.isFinite(Number(row.status)) ? Number(row.status) : 503,
@@ -90,6 +93,10 @@ function normalizeFailure(value: unknown, fallback = "Workspace inspector unavai
     paidUsageBillingMode: normalizePaidUsageBillingMode(
       details.paid_usage_billing_mode ?? details.paidUsageBillingMode ?? row.paid_usage_billing_mode,
     ),
+    retryAfterMs:
+      Number.isFinite(retryAfterMs) && retryAfterMs > 0
+        ? Math.min(30_000, Math.max(250, Math.floor(retryAfterMs)))
+        : null,
   };
 }
 
