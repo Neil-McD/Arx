@@ -105,6 +105,15 @@ async function findUserByPublicId(ctx: any, publicUserId: string): Promise<UserR
     .first()) as UserRow | null;
 }
 
+async function findUserByNormalizedHandle(ctx: any, normalizedHandle: string): Promise<UserRow | null> {
+  const normalized = normalizeRecipientSearch(normalizedHandle);
+  if (!normalized) return null;
+  return (await ctx.db
+    .query("users")
+    .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", normalized))
+    .first()) as UserRow | null;
+}
+
 async function findDirectConversationByUsers(
   ctx: any,
   leftUserId: any,
@@ -651,6 +660,26 @@ export const listEligibleDirectMessageRecipientsForViewer = query({
     const sourceCommunities = await listDirectMessageSourceCommunitiesForViewer(ctx, viewerUserId);
     const seenUserIds = new Set<string>();
     const recipients: EligibleDirectMessageRecipient[] = [];
+
+    if (search) {
+      const exactHandleUser = await findUserByNormalizedHandle(ctx, search);
+      const exactHandleUserKey = exactHandleUser ? normalizeIdValue(exactHandleUser._id) : "";
+      if (exactHandleUser && exactHandleUserKey && exactHandleUserKey !== normalizeIdValue(viewerUserId)) {
+        for (const community of sourceCommunities) {
+          const recipient = await mapEligibleDirectMessageRecipient({
+            ctx,
+            community,
+            viewerUserId,
+            userId: exactHandleUser._id,
+            search,
+          });
+          if (!recipient) continue;
+          seenUserIds.add(exactHandleUserKey);
+          recipients.push(recipient);
+          break;
+        }
+      }
+    }
 
     const maxCandidateUserIdsPerCommunity = search
       ? MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS

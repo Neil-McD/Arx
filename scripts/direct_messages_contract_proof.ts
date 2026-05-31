@@ -41,8 +41,11 @@ assert.match(directMessages, /listEligibleDirectMessageRecipientsForViewer = que
 assert.match(directMessages, /listDirectMessageSourceCommunitiesForViewer/, "viewer-wide DM recipient lookup must compile the viewer's communities");
 assert.match(schema, /\.index\("by_owner_createdAt", \["ownerId", "createdAt"\]\)/, "communities must support bounded recent owner-community discovery");
 assert.match(schema, /\.index\("by_user_createdAt", \["userId", "createdAt"\]\)/, "community memberships must support bounded recent viewer-community discovery");
+assert.match(schema, /\.index\("by_normalizedHandle", \["normalizedHandle"\]\)/, "users must support exact normalized-handle recipient lookup");
 assert.match(directMessages, /withIndex\("by_owner_createdAt"[\s\S]*ownerId/, "viewer-wide DM recipient lookup must include recent communities the viewer owns");
 assert.match(directMessages, /withIndex\("by_user_createdAt"[\s\S]*userId/, "viewer-wide DM recipient lookup must include recent communities the viewer belongs to");
+assert.match(directMessages, /findUserByNormalizedHandle[\s\S]*withIndex\("by_normalizedHandle"[\s\S]*normalizedHandle/, "viewer-wide DM recipient lookup must use indexed exact-handle search");
+assert.match(directMessages, /exactHandleUser[\s\S]*mapEligibleDirectMessageRecipient\(\{[\s\S]*community,[\s\S]*viewerUserId,[\s\S]*userId: exactHandleUser\._id,[\s\S]*search/, "exact-handle DM recipient result must still pass shared-community recipient mapping and access checks");
 assert.match(directMessages, /MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS/, "viewer-wide DM source discovery must bound owned-community reads");
 assert.match(directMessages, /MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS/, "viewer-wide DM source discovery must bound viewer-membership reads");
 assert.match(directMessages, /listDirectMessageSourceCommunitiesForViewer[\s\S]*\.take\(MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS\)[\s\S]*\.take\(MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS\)/, "viewer-wide DM source discovery must use bounded indexed reads");
