@@ -22,6 +22,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
   hasSession: boolean;
+  onOpenDirectMessageFromCommunity: WebCommunityChatPanelProps["onOpenDirectMessageFromCommunity"];
   hasResolvedCommunities: boolean;
   isLoadingCommunities: boolean;
   sessionUserId: WebCommunityChatPanelProps["sessionUserId"];
@@ -311,6 +312,7 @@ export function buildWebCommunitySurfaceProjection(
     hasAuthenticatedPresentation: params.hasAuthenticatedPresentation,
     isAuthRecoveringSignedIn: params.isAuthRecoveringSignedIn,
     hasSession: params.hasSession,
+    onOpenDirectMessageFromCommunity: params.onOpenDirectMessageFromCommunity,
     sessionUserId: params.sessionUserId,
     canPostMessages: params.canPostMessagesActiveCommunity,
     isProfileSetupComplete: params.isProfileSetupComplete,

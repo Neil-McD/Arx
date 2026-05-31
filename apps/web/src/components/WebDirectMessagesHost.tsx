@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DirectMessage, DirectMessageConversation } from "../../../../shared/communityTypes";
 import {
   createCloudDirectMessagesLiveClient,
+  ensureCloudDirectConversationFromCommunity,
   listCloudDirectConversations,
   sendCloudDirectMessage,
   subscribeCloudDirectMessages,
@@ -19,8 +20,15 @@ type DirectMessagePanelState = {
   error: string | null;
 };
 
+export type DirectMessageOpenRequest = {
+  requestId: number;
+  targetUserId: string;
+  communityId: string;
+} | null;
+
 type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
+  openRequest: DirectMessageOpenRequest;
   session: SessionT | null;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
@@ -38,6 +46,7 @@ function toErrorMessage(error: unknown, fallback: string): string {
 export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProps<SessionT>) {
   const {
     isOpen,
+    openRequest,
     session,
     sessionUserId,
     getInitials,
@@ -50,6 +59,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [directMessagePanel, setDirectMessagePanel] = useState<DirectMessagePanelState | null>(null);
   const inboxLoadRequestRef = useRef(0);
+  const directMessageOpenRequestRef = useRef(0);
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
 
@@ -79,6 +89,55 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setIsLoadingInbox(false);
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!isOpen || !openRequest) return;
+    const requestId = openRequest.requestId;
+    directMessageOpenRequestRef.current = requestId;
+
+    const targetUserId = String(openRequest.targetUserId ?? "").trim();
+    const communityId = String(openRequest.communityId ?? "").trim();
+    if (!session || !targetUserId || !communityId) {
+      setDirectMessagePanel(null);
+      setInboxError("Failed to open direct message.");
+      setIsLoadingInbox(false);
+      return;
+    }
+
+    let isDisposed = false;
+    setDirectMessagePanel(null);
+    setInboxError(null);
+    setIsLoadingInbox(true);
+
+    void ensureCloudDirectConversationFromCommunity({
+      session,
+      targetUserId,
+      communityId,
+    })
+      .then((conversation) => {
+        if (isDisposed || directMessageOpenRequestRef.current !== requestId) return;
+        setInboxError(null);
+        setIsLoadingInbox(false);
+        setDirectMessagePanel({
+          conversation,
+          messages: [],
+          input: "",
+          isLoading: true,
+          isSending: false,
+          error: null,
+        });
+      })
+      .catch((error) => {
+        if (isDisposed || directMessageOpenRequestRef.current !== requestId) return;
+        setDirectMessagePanel(null);
+        setInboxError(toErrorMessage(error, "Failed to open direct message."));
+        setIsLoadingInbox(false);
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [isOpen, openRequest, session]);
 
   useEffect(() => {
     if (!isOpen) {

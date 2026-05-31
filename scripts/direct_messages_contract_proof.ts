@@ -45,13 +45,16 @@ assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose l
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
 
 assert.match(projection, /activeCommunity:[\s\S]*id: params\.activeCommunity\.id/, "chat panel must receive active community id for DM source context");
-assert.match(chatPanel, /ensureCloudDirectConversationFromCommunity/, "community chat panel must create DMs from profile actions");
-assert.match(chatPanel, /communityId: activeCommunity\.id/, "DM creation must use the active community as source context");
-assert.match(chatPanel, /subscribeCloudDirectMessages<DirectMessage>/, "open DM panels must subscribe to live message rows");
+assert.match(projection, /onOpenDirectMessageFromCommunity: params\.onOpenDirectMessageFromCommunity/, "community projection must pass profile DM launch requests to the app shell");
+assert.match(chatPanel, /onOpenDirectMessageFromCommunity\?: \(targetUserId: string, communityId: string\) => void/, "community chat panel must expose profile DM launch requests");
+assert.match(chatPanel, /onOpenDirectMessageFromCommunity\(normalizedTargetUserId, sourceCommunityId\)/, "profile message actions must route to the global DM host with community context");
+assert.doesNotMatch(chatPanel, /ensureCloudDirectConversationFromCommunity/, "community chat panel must not create DMs directly");
+assert.doesNotMatch(chatPanel, /subscribeCloudDirectMessages/, "community chat panel must not own DM live subscriptions");
+assert.doesNotMatch(chatPanel, /sendCloudDirectMessage/, "community chat panel must not own DM sends");
+assert.doesNotMatch(chatPanel, /cloudDirectMessagesGateway/, "community chat panel must not import the DM gateway directly");
 assert.doesNotMatch(chatPanel, /messages: \[\.\.\.previous\.messages, message\]/, "DM sends must not use local append as the source of truth");
-assert.match(chatPanel, /onMessageSender=\{openDirectMessage\}/, "profile hover message button must open the DM flow");
-assert.match(chatPanel, /<WebDirectMessagePanel/, "community chat panel must render the right-side DM panel");
-assert.match(chatPanel, /setDirectMessagePanel\(null\)/, "DM panel must close without route changes");
+assert.match(chatPanel, /onMessageSender=\{canOpenDirectMessageFromCommunity \? openDirectMessage : undefined\}/, "profile hover message button must open the DM flow only when community context is available");
+assert.doesNotMatch(chatPanel, /<WebDirectMessagePanel/, "community chat panel must not render a duplicate right-side DM panel");
 assert.doesNotMatch(chatPanel, /follow|follower|following/i, "DM UI slice must not add follow controls");
 
 assert.match(profilePanel, /onMessage\?: \(\) => void \| Promise<void>/, "right profile card must expose a message action");
@@ -67,6 +70,9 @@ assert.match(dmPanel, /scrollMessagesToBottom/, "DM panel must scroll opened or 
 assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether the viewer is reading older messages before auto-following");
 assert.match(dmPanel, /onBackToInbox\?: \(\) => void/, "DM conversation panel must support returning to the inbox when opened globally");
 assert.match(dmHost, /listCloudDirectConversations/, "global DM host must load the current user's inbox");
+assert.match(dmHost, /ensureCloudDirectConversationFromCommunity/, "global DM host must create DMs from profile launch requests");
+assert.match(dmHost, /openRequest: DirectMessageOpenRequest/, "global DM host must accept canonical open requests from profile actions");
+assert.match(dmHost, /subscribeCloudDirectMessages<DirectMessage>/, "global DM host must own live direct message subscriptions");
 assert.match(dmHost, /WebDirectMessageInboxPanel/, "global DM host must render the inbox panel");
 assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing conversations into the live DM panel");
 assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");
@@ -75,6 +81,8 @@ assert.match(shellChromeShared, /directMessagesButton: ReactNode/, "desktop shel
 assert.match(shellChromeProps, /directMessagesButton: params\.directMessagesButton/, "shell prop builder must pass the global DM button through");
 assert.match(desktopHeader, /workspaceRightPanelToggle\}[\s\S]*directMessagesButton\}[\s\S]*communityHomeButton\}/, "desktop header order must be panel, DM, community");
 assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
+assert.match(app, /handleOpenDirectMessageFromCommunity/, "app shell must own the profile-to-DM launch handler");
+assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pass canonical open requests to the global DM host");
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");

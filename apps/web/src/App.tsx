@@ -517,7 +517,10 @@ import {
   type CommunityLaunchProfileSaveDraft,
 } from "./components/WebCommunityLaunchSetupModal";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
-import { WebDirectMessagesHost } from "./components/WebDirectMessagesHost";
+import {
+  WebDirectMessagesHost,
+  type DirectMessageOpenRequest,
+} from "./components/WebDirectMessagesHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -1205,12 +1208,29 @@ export default function App() {
   const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
     useState<AccountGraphHydrationPhase>("idle");
   const [isDirectMessagesOpen, setIsDirectMessagesOpen] = useState(false);
+  const [directMessageOpenRequest, setDirectMessageOpenRequest] =
+    useState<DirectMessageOpenRequest>(null);
   const accountGraphHydrationRunIdRef = useRef(0);
+  const directMessageOpenRequestIdRef = useRef(0);
   const handleToggleDirectMessages = useCallback(() => {
+    setDirectMessageOpenRequest(null);
     setIsDirectMessagesOpen((current) => !current);
   }, []);
   const handleCloseDirectMessages = useCallback(() => {
+    setDirectMessageOpenRequest(null);
     setIsDirectMessagesOpen(false);
+  }, []);
+  const handleOpenDirectMessageFromCommunity = useCallback((targetUserId: string, communityId: string) => {
+    const normalizedTargetUserId = String(targetUserId ?? "").trim();
+    const normalizedCommunityId = String(communityId ?? "").trim();
+    if (!normalizedTargetUserId || !normalizedCommunityId) return;
+    directMessageOpenRequestIdRef.current += 1;
+    setDirectMessageOpenRequest({
+      requestId: directMessageOpenRequestIdRef.current,
+      targetUserId: normalizedTargetUserId,
+      communityId: normalizedCommunityId,
+    });
+    setIsDirectMessagesOpen(true);
   }, []);
 
   async function runCommunitiesHydration(session: AuthSession, phase: string): Promise<void> {
@@ -9366,6 +9386,7 @@ export default function App() {
       hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       hasSession: Boolean(session),
+      onOpenDirectMessageFromCommunity: handleOpenDirectMessageFromCommunity,
       hasResolvedCommunities,
       isLoadingCommunities,
       sessionUserId: canonicalSessionUserId,
@@ -10772,6 +10793,7 @@ export default function App() {
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
       <WebDirectMessagesHost
         isOpen={isDirectMessagesOpen}
+        openRequest={directMessageOpenRequest}
         session={session}
         sessionUserId={canonicalSessionUserId}
         getInitials={getInitials}
