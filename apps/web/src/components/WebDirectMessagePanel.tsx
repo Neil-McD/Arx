@@ -1,4 +1,4 @@
-import { MessageCircle } from "lucide-react";
+import { ChevronLeft, MessageCircle } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import type { DirectMessage, DirectMessageConversation, DirectMessageParticipant } from "../../../../shared/communityTypes";
@@ -17,6 +17,7 @@ type WebDirectMessagePanelProps = {
   renderTextWithLinks: (text: string) => ReactNode;
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
+  onBackToInbox?: () => void;
 };
 
 const DM_AUTO_SCROLL_THRESHOLD_PX = 96;
@@ -93,6 +94,17 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   return (
     <aside className="community-dm-panel" role="dialog" aria-label={`${peerLabel} direct message`}>
       <div className="community-dm-panel-header">
+        {props.onBackToInbox ? (
+          <button
+            className="community-dm-panel-back"
+            type="button"
+            onClick={props.onBackToInbox}
+            aria-label="Back to direct messages"
+            title="Direct messages"
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+        ) : null}
         <UserAvatar
           className="community-dm-panel-avatar"
           readyClassName="has-image"

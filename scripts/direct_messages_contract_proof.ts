@@ -13,6 +13,12 @@ const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx"
 const messageRow = read("shared/CommunityChatMessageRow.tsx");
 const projection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const dmPanel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
+const dmHost = read("apps/web/src/components/WebDirectMessagesHost.tsx");
+const dmInboxPanel = read("apps/web/src/components/WebDirectMessageInboxPanel.tsx");
+const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
+const shellChromeShared = read("apps/web/src/components/webShellChromeShared.ts");
+const shellChromeProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
+const app = read("apps/web/src/App.tsx");
 const css = read("apps/web/src/base.css");
 const packageJson = read("package.json");
 
@@ -33,6 +39,7 @@ assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expos
 assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slice must not introduce follow graph semantics");
 
 assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway must open or create direct conversations");
+assert.match(gateway, /listCloudDirectConversations/, "web gateway must expose the current user's direct conversation list");
 assert.match(gateway, /listCloudDirectMessages/, "web gateway must list direct messages");
 assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose live direct message subscriptions");
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
@@ -58,7 +65,19 @@ assert.match(dmPanel, /Start a direct message from this shared community/, "empt
 assert.match(dmPanel, /DM_AUTO_SCROLL_THRESHOLD_PX/, "DM panel must keep chat-like auto-scroll constrained by a bottom threshold");
 assert.match(dmPanel, /scrollMessagesToBottom/, "DM panel must scroll opened or followed conversations to the newest message");
 assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether the viewer is reading older messages before auto-following");
+assert.match(dmPanel, /onBackToInbox\?: \(\) => void/, "DM conversation panel must support returning to the inbox when opened globally");
+assert.match(dmHost, /listCloudDirectConversations/, "global DM host must load the current user's inbox");
+assert.match(dmHost, /WebDirectMessageInboxPanel/, "global DM host must render the inbox panel");
+assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing conversations into the live DM panel");
+assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");
+assert.match(dmInboxPanel, /Started in \{communityName\}/, "DM inbox rows must preserve community-origin provenance");
+assert.match(shellChromeShared, /directMessagesButton: ReactNode/, "desktop shell props must expose the global DM button");
+assert.match(shellChromeProps, /directMessagesButton: params\.directMessagesButton/, "shell prop builder must pass the global DM button through");
+assert.match(desktopHeader, /workspaceRightPanelToggle\}[\s\S]*directMessagesButton\}[\s\S]*communityHomeButton\}/, "desktop header order must be panel, DM, community");
+assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
+assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
+assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");
 
 console.log("PASS: direct messages are community-origin, participant-based, and follow-free.");

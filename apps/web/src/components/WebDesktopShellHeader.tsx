@@ -94,6 +94,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
         {props.isPublicCommunityFunnel ? null : (
           <>
             {props.workspaceRightPanelToggle}
+            {props.directMessagesButton}
             {props.communityHomeButton}
           </>
         )}

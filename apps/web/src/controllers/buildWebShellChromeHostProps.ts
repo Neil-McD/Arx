@@ -49,6 +49,7 @@ export function buildWebShellChromeHostProps(params: {
   userWantsSessions: boolean;
   hasWorkspaceRightPanelControl: boolean;
   workspaceRightPanelToggle: ReactNode;
+  directMessagesButton: ReactNode;
   communityHomeButton: ReactNode;
   handleExitPublicFunnelPreview: () => void;
   handleTopbarBackFromPublicFunnel: () => void;
@@ -150,6 +151,7 @@ export function buildWebShellChromeHostProps(params: {
       userWantsSessions: params.userWantsSessions,
       hasWorkspaceRightPanelControl: params.hasWorkspaceRightPanelControl,
       workspaceRightPanelToggle: params.workspaceRightPanelToggle,
+      directMessagesButton: params.directMessagesButton,
       communityHomeButton: params.communityHomeButton,
       onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,

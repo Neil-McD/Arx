@@ -98,6 +98,19 @@ export async function listCloudDirectMessages<SessionT>(
   return coerceRows<DirectMessage>(payload);
 }
 
+export async function listCloudDirectConversations<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    limit?: number;
+  },
+): Promise<DirectMessageConversation[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("directMessages:listMyDirectConversations" as any, {
+    authSubject,
+    limit: params.limit ?? 30,
+  });
+  return coerceRows<DirectMessageConversation>(payload);
+}
+
 export function subscribeCloudDirectMessages<TRow = DirectMessage>(
   params: {
     liveClient: CloudDirectMessagesLiveClient;

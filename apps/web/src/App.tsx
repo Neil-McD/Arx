@@ -11,6 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { MessageCircle } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 import {
   beginBrowserSignedOutState,
@@ -516,6 +517,7 @@ import {
   type CommunityLaunchProfileSaveDraft,
 } from "./components/WebCommunityLaunchSetupModal";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
+import { WebDirectMessagesHost } from "./components/WebDirectMessagesHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -1202,7 +1204,14 @@ export default function App() {
   const lastIdentifiedBusinessVisitorSubjectRef = useRef<string | null>(null);
   const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
     useState<AccountGraphHydrationPhase>("idle");
+  const [isDirectMessagesOpen, setIsDirectMessagesOpen] = useState(false);
   const accountGraphHydrationRunIdRef = useRef(0);
+  const handleToggleDirectMessages = useCallback(() => {
+    setIsDirectMessagesOpen((current) => !current);
+  }, []);
+  const handleCloseDirectMessages = useCallback(() => {
+    setIsDirectMessagesOpen(false);
+  }, []);
 
   async function runCommunitiesHydration(session: AuthSession, phase: string): Promise<void> {
     emitWorkspaceEvent({
@@ -10067,6 +10076,18 @@ export default function App() {
       ) : null}
     </button>
   ) : null;
+  const directMessagesButton = session ? (
+    <button
+      className={`icon-button direct-messages-topbar-button${isDirectMessagesOpen ? " active" : ""}`}
+      onClick={handleToggleDirectMessages}
+      aria-expanded={isDirectMessagesOpen}
+      aria-label={isDirectMessagesOpen ? "Close direct messages" : "Open direct messages"}
+      title={isDirectMessagesOpen ? "Close direct messages" : "Direct messages"}
+      type="button"
+    >
+      <MessageCircle aria-hidden="true" />
+    </button>
+  ) : null;
   const handleSelectCommunityTab = useCallback((tab: CommunityTab) => {
     setCommunityResourceModuleId(null);
     if (tab === "chat") {
@@ -10749,6 +10770,15 @@ export default function App() {
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
+      <WebDirectMessagesHost
+        isOpen={isDirectMessagesOpen}
+        session={session}
+        sessionUserId={canonicalSessionUserId}
+        getInitials={getInitials}
+        getAvatarColor={getAvatarColor}
+        renderTextWithLinks={renderTextWithLinks}
+        onClose={handleCloseDirectMessages}
+      />
       <WebCommunityLaunchSetupModal
         isOpen={isCommunityLaunchSetupModalOpen}
         mode={isCommunityLaunchCreateMode ? "create" : "setup"}
@@ -10910,6 +10940,7 @@ export default function App() {
     userWantsSessions,
     hasWorkspaceRightPanelControl: showWorkspaceRightPanelControl,
     workspaceRightPanelToggle,
+    directMessagesButton,
     communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
