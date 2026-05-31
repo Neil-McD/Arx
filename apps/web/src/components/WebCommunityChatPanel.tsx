@@ -775,7 +775,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           activeCommunityName={activeCommunity?.name ?? null}
           isActiveCommunityOwner={Boolean(activeCommunity?.owner_id && activeCommunity.owner_id === profilePanelUserId)}
           getInitials={getInitials}
-          onClose={() => setProfilePanelUserId(null)}
         />
       ) : null}
 

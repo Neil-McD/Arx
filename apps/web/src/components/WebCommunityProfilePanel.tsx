@@ -1,4 +1,4 @@
-import { ExternalLink, MessageCircle, X as CloseIcon } from "lucide-react";
+import { ExternalLink, MessageCircle } from "lucide-react";
 import { SOCIAL_PROFILE_KINDS, type SocialProfileKind } from "../../../../shared/socialProfileLinks";
 import type { UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -11,7 +11,6 @@ type WebCommunityProfilePanelProps = {
   activeCommunityName: string | null;
   isActiveCommunityOwner: boolean;
   getInitials: (value: string) => string;
-  onClose: () => void;
 };
 
 const SOCIAL_PROFILE_LABELS: Record<SocialProfileKind, string> = {
@@ -33,7 +32,6 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
     activeCommunityName,
     isActiveCommunityOwner,
     getInitials,
-    onClose,
   } = props;
   const handleLabel = normalizePanelHandle(profile?.handle);
   const bio = String(profile?.bio ?? "").trim();
@@ -71,14 +69,6 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
           >
             <MessageCircle aria-hidden="true" />
             <span>Message</span>
-          </button>
-          <button
-            type="button"
-            className="community-profile-panel-close"
-            onClick={onClose}
-            aria-label="Close profile"
-          >
-            <CloseIcon aria-hidden="true" />
           </button>
         </div>
       </div>

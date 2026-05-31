@@ -9141,29 +9141,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 32px;
 }
 
-.community-profile-panel-close {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 84%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 42%, transparent);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.community-profile-panel-close:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
-}
-
-.community-profile-panel-close svg {
-  width: 15px;
-  height: 15px;
-  stroke-width: 2;
-}
-
 .community-profile-panel-identity {
   min-width: 0;
 }
