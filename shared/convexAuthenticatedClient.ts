@@ -113,14 +113,24 @@ export async function bootstrapConvexAuthenticatedClient(
     }
 
     let actor: Record<string, unknown> | null = null;
+    const sessionEmail = resolveAuthSessionEmail(session);
     try {
       actor = (await client.mutation("auth:bootstrapActor" as any, {
         authState: "authenticated",
         authSubject,
-        email: resolveAuthSessionEmail(session),
+        email: sessionEmail,
       })) as Record<string, unknown>;
     } catch (error) {
       rethrowBootstrapActorError(error);
+    }
+
+    try {
+      await client.action("auth:syncAuthenticatedEmailVerification" as any, {
+        authSubject,
+        ...(sessionEmail ? { email: sessionEmail } : null),
+      });
+    } catch (error) {
+      console.warn("convex_email_verification_sync_failed", error);
     }
 
     const actorAuthSubject = String(actor?.authSubject ?? "").trim();

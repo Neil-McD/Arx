@@ -1,33 +1,19 @@
 import { api, internal } from "./_generated/api";
 import { action, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  fetchWorkosUserVerification,
+  isWorkosApiKeyConfigured,
+  redactWorkosUserVerificationLookup,
+} from "./workosEmailVerification";
 
 const EMAIL_OUTBOX_STATUSES = ["pending", "sending", "sent", "failed", "suppressed"] as const;
-const WORKOS_USER_LOOKUP_TIMEOUT_MS = 4000;
 const EMAIL_VERIFICATION_CLAIM_KEYS = [
   "email_verified",
   "emailVerified",
   "verified_email",
   "verifiedEmail",
 ] as const;
-
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // Convex environments may not expose process.env in every runtime.
-  }
-  return "";
-}
-
-function readFirstEnv(keys: readonly string[]): string {
-  for (const key of keys) {
-    const value = readEnv(key);
-    if (value) return value;
-  }
-  return "";
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -85,87 +71,6 @@ function summarizeIdentity(identity: unknown) {
     hasEmail: Boolean(readString(record.email)),
     emailVerificationClaimKeysPresent,
     emailVerifiedClaimValue: firstVerificationClaim ?? null,
-  };
-}
-
-async function fetchWorkosUserVerification(authSubject: string | null) {
-  const apiKey = readFirstEnv(["ARX_WORKOS_API_KEY", "WORKOS_API_KEY"]);
-  if (!authSubject) {
-    return {
-      status: "skipped" as const,
-      reason: "auth_subject_missing",
-      apiKeyConfigured: Boolean(apiKey),
-    };
-  }
-  if (!apiKey) {
-    return {
-      status: "skipped" as const,
-      reason: "workos_api_key_missing",
-      apiKeyConfigured: false,
-    };
-  }
-
-  let response: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), WORKOS_USER_LOOKUP_TIMEOUT_MS);
-  try {
-    response = await fetch(
-      `https://api.workos.com/user_management/users/${encodeURIComponent(authSubject)}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        signal: controller.signal,
-      },
-    );
-  } catch (error) {
-    return {
-      status: "error" as const,
-      reason:
-        error instanceof Error && error.name === "AbortError"
-          ? "workos_user_fetch_timeout"
-          : "workos_user_fetch_failed",
-      apiKeyConfigured: true,
-      timeoutMs: WORKOS_USER_LOOKUP_TIMEOUT_MS,
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  if (!response.ok) {
-    return {
-      status: response.status === 404 ? ("not_found" as const) : ("error" as const),
-      reason: `workos_user_fetch_http_${response.status}`,
-      apiKeyConfigured: true,
-      httpStatus: response.status,
-    };
-  }
-
-  const payload = asRecord(await response.json().catch(() => null));
-  if (!payload) {
-    return {
-      status: "error" as const,
-      reason: "workos_user_response_invalid",
-      apiKeyConfigured: true,
-      httpStatus: response.status,
-    };
-  }
-
-  const responseUserId = readString(payload.id);
-  const emailVerified = readBoolean(payload.email_verified) ?? readBoolean(payload.emailVerified);
-  return {
-    status: "ok" as const,
-    apiKeyConfigured: true,
-    httpStatus: response.status,
-    subjectMatchedResponseId: responseUserId ? responseUserId === authSubject : null,
-    hasEmail: Boolean(readString(payload.email)),
-    emailVerified,
-    profilePicturePresent: Boolean(
-      readString(payload.profile_picture_url) || readString(payload.profilePictureUrl),
-    ),
-    updatedAtPresent: Boolean(readString(payload.updated_at) || readString(payload.updatedAt)),
   };
 }
 
@@ -299,11 +204,11 @@ export const getOperatorEmailAuthDiagnostic = action({
     );
 
     const workosUser = args.includeWorkosUserLookup
-      ? await fetchWorkosUserVerification(authSubject)
+      ? redactWorkosUserVerificationLookup(await fetchWorkosUserVerification(authSubject))
       : {
           status: "skipped" as const,
           reason: "not_requested",
-          apiKeyConfigured: Boolean(readFirstEnv(["ARX_WORKOS_API_KEY", "WORKOS_API_KEY"])),
+          apiKeyConfigured: isWorkosApiKeyConfigured(),
         };
 
     return {

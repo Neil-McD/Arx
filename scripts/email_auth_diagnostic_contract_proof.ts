@@ -6,6 +6,7 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const diagnostic = read("convex/emailDiagnostics.ts");
+const workosEmailVerification = read("convex/workosEmailVerification.ts");
 const gateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
@@ -45,12 +46,18 @@ assert.match(
 
 assert.match(
   diagnostic,
-  /ARX_WORKOS_API_KEY[\s\S]*WORKOS_API_KEY[\s\S]*\/user_management\/users\//,
+  /fetchWorkosUserVerification[\s\S]*redactWorkosUserVerificationLookup/,
+  "email auth diagnostic must use the shared redacted WorkOS user verification lookup",
+);
+
+assert.match(
+  workosEmailVerification,
+  /ARX_WORKOS_API_KEY[\s\S]*WORKOS_API_KEY[\s\S]*\/user_management\/users\/\$\{encodeURIComponent\(authSubject\)\}/,
   "email auth diagnostic must support a best-effort WorkOS user verification lookup",
 );
 
 assert.match(
-  diagnostic,
+  workosEmailVerification,
   /WORKOS_USER_LOOKUP_TIMEOUT_MS[\s\S]*new AbortController\(\)[\s\S]*setTimeout\(\(\) => controller\.abort\(\), WORKOS_USER_LOOKUP_TIMEOUT_MS\)[\s\S]*signal: controller\.signal[\s\S]*workos_user_fetch_timeout[\s\S]*clearTimeout\(timeout\)/,
   "email auth diagnostic WorkOS lookup must be timeout-bound",
 );

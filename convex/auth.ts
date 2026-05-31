@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { action, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   ensureAuthenticatedActorDetailed,
@@ -7,6 +7,11 @@ import {
   resolveAuthenticatedActor,
 } from "./authActor";
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
+import {
+  normalizeEmailForVerification,
+  redactWorkosUserVerificationLookup,
+  resolveTrustedEmailVerification,
+} from "./workosEmailVerification";
 import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
@@ -102,10 +107,16 @@ function seedAuthenticatedProfile(args: {
   avatarUrl: string | null;
 } {
   const hintedEmail = normalizeOptionalString(args.email);
+  const email = args.identity.email ?? hintedEmail;
+  const identityVerifiedForEmail = Boolean(
+    args.identity.emailVerified &&
+    args.identity.email &&
+    normalizeEmailForVerification(args.identity.email) === normalizeEmailForVerification(email),
+  );
   return {
-    email: args.identity.email ?? hintedEmail,
-    emailVerified: args.identity.emailVerified,
-    emailVerificationSource: args.identity.emailVerified ? args.identity.emailVerificationSource : null,
+    email,
+    emailVerified: identityVerifiedForEmail,
+    emailVerificationSource: identityVerifiedForEmail ? args.identity.emailVerificationSource : null,
     displayName: null,
     avatarUrl: null,
   };
@@ -189,6 +200,91 @@ export const bootstrapActor = mutation({
       avatarUrl: null,
       createdAt: nowMs,
       updatedAt: nowMs,
+    };
+  },
+});
+
+export const syncAuthenticatedEmailVerification = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    email: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const identity = await resolveAuthenticatedIdentityProfile({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const email = identity.email ?? normalizeOptionalString(args.email);
+    const normalizedEmail = normalizeEmailForVerification(email);
+    if (!normalizedEmail) {
+      return {
+        ok: true,
+        synced: false,
+        reason: "email_missing",
+      };
+    }
+
+    const existingActor = await ctx
+      .runQuery((internal as any).authActor.resolveAuthenticatedActorInternal, {
+        authSubject: identity.authSubject,
+      })
+      .catch(() => null);
+    if (
+      typeof existingActor?.emailVerifiedAt === "number" &&
+      normalizeEmailForVerification(existingActor?.email) === normalizedEmail
+    ) {
+      return {
+        ok: true,
+        synced: false,
+        reason: "already_verified",
+        emailVerifiedAtPresent: true,
+      };
+    }
+
+    const verification = await resolveTrustedEmailVerification({
+      authSubject: identity.authSubject,
+      email,
+      identityEmail: identity.email,
+      identityEmailVerified:
+        identity.email && normalizeEmailForVerification(identity.email) === normalizedEmail
+          ? identity.emailVerified
+          : false,
+      identityEmailVerificationSource:
+        identity.email && normalizeEmailForVerification(identity.email) === normalizedEmail
+          ? identity.emailVerificationSource
+          : null,
+    });
+    if (!verification.emailVerified) {
+      return {
+        ok: true,
+        synced: false,
+        reason: verification.reason ?? "email_not_verified",
+        emailVerifiedAtPresent: false,
+        ...(verification.workosLookup
+          ? { workosUser: redactWorkosUserVerificationLookup(verification.workosLookup) }
+          : null),
+      };
+    }
+
+    const actor = await ctx.runMutation((internal as any).authActor.ensureAuthenticatedActorByExplicitSubjectInternal, {
+      authSubject: identity.authSubject,
+      email,
+      emailVerified: true,
+      emailVerificationSource: verification.emailVerificationSource ?? "oauth_provider",
+      ...(identity.displayName ? { displayName: identity.displayName } : null),
+      ...(identity.avatarUrl ? { avatarUrl: identity.avatarUrl } : null),
+      nowMs: args.nowMs ?? Date.now(),
+    });
+
+    return {
+      ok: true,
+      synced: typeof actor?.emailVerifiedAt === "number",
+      reason: null,
+      emailVerifiedAtPresent: typeof actor?.emailVerifiedAt === "number",
+      ...(verification.workosLookup
+        ? { workosUser: redactWorkosUserVerificationLookup(verification.workosLookup) }
+        : null),
     };
   },
 });

@@ -1,6 +1,7 @@
 import { internal } from "./_generated/api";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeStoredState } from "./authSessions";
+import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -270,13 +271,26 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
           avatarUrl: verified.identity.avatarUrl ?? stored.user.avatarUrl ?? null,
         },
       };
+      const normalizedStoredEmail = normalizeEmailForVerification(normalizedStored.user.email);
+      const identityEmailMatchesStored =
+        Boolean(verified.identity.email) &&
+        normalizeEmailForVerification(verified.identity.email) === normalizedStoredEmail;
+      const emailVerification = await resolveTrustedEmailVerification({
+        authSubject,
+        email: normalizedStored.user.email,
+        identityEmail: verified.identity.email,
+        identityEmailVerified: identityEmailMatchesStored ? verified.identity.emailVerified : false,
+        identityEmailVerificationSource: identityEmailMatchesStored
+          ? verified.identity.emailVerificationSource
+          : null,
+      });
 
       const actor = await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
         authSubject,
         ...(normalizedStored.user.email ? { email: normalizedStored.user.email } : null),
-        emailVerified: verified.identity.emailVerified,
-        ...(verified.identity.emailVerificationSource
-          ? { emailVerificationSource: verified.identity.emailVerificationSource }
+        emailVerified: emailVerification.emailVerified,
+        ...(emailVerification.emailVerificationSource
+          ? { emailVerificationSource: emailVerification.emailVerificationSource }
           : null),
         ...(normalizedStored.user.displayName ? { displayName: normalizedStored.user.displayName } : null),
         ...(normalizedStored.user.avatarUrl ? { avatarUrl: normalizedStored.user.avatarUrl } : null),

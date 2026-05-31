@@ -14,6 +14,7 @@ import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
+import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
 
 function readEnv(name: string): string {
   try {
@@ -225,11 +226,31 @@ const requireAuthenticatedActor: RequireAuthenticatedActor = async (
     displayName,
     avatarUrl,
   } = authIdentity.identity;
+  const normalizedIdentityEmail = normalizeEmailForVerification(email);
+  const existingActor = await ctx
+    .runQuery((internal as any).authActor.resolveAuthenticatedActorInternal, { authSubject })
+    .catch(() => null);
+  const trustedEmailVerification =
+    typeof existingActor?.emailVerifiedAt === "number" &&
+    normalizeEmailForVerification(existingActor?.email) === normalizedIdentityEmail
+      ? {
+          emailVerified: true,
+          emailVerificationSource: existingActor?.emailVerificationSource ?? "oauth_provider",
+        }
+      : await resolveTrustedEmailVerification({
+          authSubject,
+          email,
+          identityEmail: email,
+          identityEmailVerified: emailVerified,
+          identityEmailVerificationSource: emailVerificationSource,
+        });
   const actor = (await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
     authSubject,
     ...(email ? { email } : null),
-    ...(email ? { emailVerified } : null),
-    ...(emailVerificationSource ? { emailVerificationSource } : null),
+    ...(email ? { emailVerified: trustedEmailVerification.emailVerified } : null),
+    ...(trustedEmailVerification.emailVerificationSource
+      ? { emailVerificationSource: trustedEmailVerification.emailVerificationSource }
+      : null),
     ...(displayName ? { displayName } : null),
     ...(avatarUrl ? { avatarUrl } : null),
   })) as { authSubject?: string | null; dbUserId?: any };
