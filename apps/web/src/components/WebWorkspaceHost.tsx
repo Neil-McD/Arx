@@ -59,9 +59,14 @@ import type { WebBuilderPartnerProgramPanelProps } from "./WebBuilderPartnerProg
 import { useOperatorDashboardData } from "./useOperatorDashboardData";
 import {
   buildWorkspaceRightPanelTabs,
+  defaultWorkspaceRightPanelTabForMode,
+  getWorkspaceRightPanelTabMode,
   isOperatorInsightTab,
+  parseWorkspaceRightPanelMode,
   parseWorkspaceRightPanelTab,
+  resolveWorkspaceRightPanelMode,
   resolveWorkspaceRightPanelTab,
+  type WorkspaceRightPanelMode,
   type WorkspaceRightPanelTab,
 } from "./workspaceRightPanelModel";
 import {
@@ -97,13 +102,34 @@ type LandingActionButton = {
 };
 
 const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
-const WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-tab:v2";
+const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-tab:v2";
+const WORKSPACE_RIGHT_PANEL_MODE_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-mode:v1";
+const WORKSPACE_RIGHT_PANEL_MODE_TAB_STORAGE_KEY_PREFIX =
+  "polynet-workspace-right-panel-tab-by-mode:v1";
 const WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL_STORAGE_KEY_PREFIX =
   "polynet-workspace-right-panel-community-label:v1";
 const DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL = "Polynet";
 
-function buildWorkspaceRightPanelTabStorageKey(userId: string): string {
-  return `${WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX}:${userId}`;
+function buildLegacyWorkspaceRightPanelTabStorageKey(userId: string): string {
+  return `${LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX}:${userId}`;
+}
+
+function buildWorkspaceRightPanelModeStorageKey(userId: string): string {
+  return `${WORKSPACE_RIGHT_PANEL_MODE_STORAGE_KEY_PREFIX}:${userId}`;
+}
+
+function buildWorkspaceRightPanelModeTabStorageKey(
+  userId: string,
+  mode: WorkspaceRightPanelMode,
+): string {
+  return `${WORKSPACE_RIGHT_PANEL_MODE_TAB_STORAGE_KEY_PREFIX}:${userId}:${mode}`;
+}
+
+function buildWorkspaceRightPanelPreferenceLoadKey(
+  userId: string | null,
+  showOperatorTabs: boolean,
+): string | null {
+  return userId ? `${userId}:${showOperatorTabs ? "operator-enabled" : "user-only"}` : null;
 }
 
 function buildWorkspaceRightPanelCommunityLabelStorageKey(userId: string): string {
@@ -114,20 +140,55 @@ function normalizeWorkspaceRightPanelCommunityLabel(value: string | null | undef
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-function loadWorkspaceRightPanelTab(userId: string | null): WorkspaceRightPanelTab {
+function readLegacyWorkspaceRightPanelTab(userId: string | null): WorkspaceRightPanelTab | null {
+  if (typeof window === "undefined") return null;
+  if (userId) {
+    const scopedTab = parseWorkspaceRightPanelTab(
+      window.localStorage.getItem(buildLegacyWorkspaceRightPanelTabStorageKey(userId)),
+    );
+    if (scopedTab) return scopedTab;
+  }
+  return parseWorkspaceRightPanelTab(
+    window.localStorage.getItem(LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY),
+  );
+}
+
+function loadWorkspaceRightPanelMode(
+  userId: string | null,
+  showOperatorTabs: boolean,
+): WorkspaceRightPanelMode {
   try {
-    if (typeof window === "undefined") return "workspace";
+    if (!showOperatorTabs || typeof window === "undefined") return "user";
     if (userId) {
-      const scopedTab = parseWorkspaceRightPanelTab(
-        window.localStorage.getItem(buildWorkspaceRightPanelTabStorageKey(userId)),
+      const savedMode = parseWorkspaceRightPanelMode(
+        window.localStorage.getItem(buildWorkspaceRightPanelModeStorageKey(userId)),
       );
-      if (scopedTab) return scopedTab;
+      if (savedMode) return resolveWorkspaceRightPanelMode(savedMode, showOperatorTabs);
     }
-    return parseWorkspaceRightPanelTab(
-      window.localStorage.getItem(LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY),
-    ) ?? "workspace";
+    const legacyTab = readLegacyWorkspaceRightPanelTab(userId);
+    return legacyTab && getWorkspaceRightPanelTabMode(legacyTab) === "operator" ? "operator" : "user";
   } catch {
-    return "workspace";
+    return "user";
+  }
+}
+
+function loadWorkspaceRightPanelTab(
+  userId: string | null,
+  mode: WorkspaceRightPanelMode,
+): WorkspaceRightPanelTab {
+  try {
+    if (typeof window === "undefined") return defaultWorkspaceRightPanelTabForMode(mode);
+    if (userId) {
+      const savedModeTab = parseWorkspaceRightPanelTab(
+        window.localStorage.getItem(buildWorkspaceRightPanelModeTabStorageKey(userId, mode)),
+      );
+      if (savedModeTab && getWorkspaceRightPanelTabMode(savedModeTab) === mode) return savedModeTab;
+    }
+    const legacyTab = readLegacyWorkspaceRightPanelTab(userId);
+    if (legacyTab && getWorkspaceRightPanelTabMode(legacyTab) === mode) return legacyTab;
+    return defaultWorkspaceRightPanelTabForMode(mode);
+  } catch {
+    return defaultWorkspaceRightPanelTabForMode(mode);
   }
 }
 
@@ -142,10 +203,24 @@ function loadWorkspaceRightPanelCommunityLabel(userId: string | null): string {
   }
 }
 
-function storeWorkspaceRightPanelTab(userId: string | null, tab: WorkspaceRightPanelTab): void {
+function storeWorkspaceRightPanelMode(userId: string | null, mode: WorkspaceRightPanelMode): void {
   try {
     if (typeof window === "undefined" || !userId) return;
-    window.localStorage.setItem(buildWorkspaceRightPanelTabStorageKey(userId), tab);
+    window.localStorage.setItem(buildWorkspaceRightPanelModeStorageKey(userId), mode);
+  } catch {
+    // Right-panel mode selection is a local display preference only.
+  }
+}
+
+function storeWorkspaceRightPanelTab(
+  userId: string | null,
+  mode: WorkspaceRightPanelMode,
+  tab: WorkspaceRightPanelTab,
+): void {
+  if (getWorkspaceRightPanelTabMode(tab) !== mode) return;
+  try {
+    if (typeof window === "undefined" || !userId) return;
+    window.localStorage.setItem(buildWorkspaceRightPanelModeTabStorageKey(userId, mode), tab);
   } catch {
     // Right-panel tab selection is a local display preference only.
   }
@@ -1111,6 +1186,10 @@ function WorkspaceComposer(props: {
 
 export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const initialRightPanelStorageUserId = resolveAuthSubject(props.session);
+  const initialRightPanelMode = loadWorkspaceRightPanelMode(
+    initialRightPanelStorageUserId,
+    Boolean(props.operatorRightPanelSession),
+  );
   const initialRightPanelCommunityLabel =
     normalizeWorkspaceRightPanelCommunityLabel(props.workspaceUserDataPanel?.activeCommunity?.name) ||
     loadWorkspaceRightPanelCommunityLabel(initialRightPanelStorageUserId);
@@ -1137,14 +1216,21 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
+  const [requestedRightPanelMode, setRequestedRightPanelMode] =
+    useState<WorkspaceRightPanelMode>(initialRightPanelMode);
   const [requestedRightPanelTab, setRequestedRightPanelTab] =
-    useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(initialRightPanelStorageUserId));
+    useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(initialRightPanelStorageUserId, initialRightPanelMode));
   const [workspaceRightPanelCommunityLabel, setWorkspaceRightPanelCommunityLabel] =
     useState<string>(initialRightPanelCommunityLabel);
   const [isCommunityRecentSignalsExpanded, setIsCommunityRecentSignalsExpanded] = useState(false);
   const [workspaceFilesResetNonce, setWorkspaceFilesResetNonce] = useState(0);
   const [workspaceRightPanelWidth, setWorkspaceRightPanelWidth] = useState(WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH);
-  const loadedRightPanelTabUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
+  const loadedRightPanelPreferencesKeyRef = useRef<string | null>(
+    buildWorkspaceRightPanelPreferenceLoadKey(
+      initialRightPanelStorageUserId,
+      Boolean(props.operatorRightPanelSession),
+    ),
+  );
   const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const wasWorkspaceRightPanelVisibleRef = useRef(false);
   const savedThreadScrollTopRef = useRef<number | null>(null);
@@ -1196,6 +1282,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const showPartnerTab = Boolean(props.builderPartnerProgramPanel?.builderPartnerProgram?.partner);
   const showOperatorTabs = Boolean(props.operatorRightPanelSession);
   const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
+  const activeRightPanelMode = resolveWorkspaceRightPanelMode(requestedRightPanelMode, showOperatorTabs);
+  const rightPanelPreferenceLoadKey = buildWorkspaceRightPanelPreferenceLoadKey(
+    rightPanelStorageUserId,
+    showOperatorTabs,
+  );
   const activeRightPanelCommunityName = normalizeWorkspaceRightPanelCommunityLabel(
     props.workspaceUserDataPanel?.activeCommunity?.name,
   );
@@ -1206,17 +1297,28 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         showPartnerTab,
         showOperatorTabs,
         communityLabel: workspaceRightPanelCommunityLabel,
+        mode: activeRightPanelMode,
       }),
-    [showOperatorTabs, showPartnerTab, workspaceRightPanelCommunityLabel],
+    [activeRightPanelMode, showOperatorTabs, showPartnerTab, workspaceRightPanelCommunityLabel],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
-  const isOperatorRightPanelTabActive = isOperatorInsightTab(activeRightPanelTab);
+  const isOperatorRightPanelTabActive =
+    activeRightPanelMode === "operator" && isOperatorInsightTab(activeRightPanelTab);
+  const handleWorkspaceRightPanelModeChange = useCallback(
+    (mode: WorkspaceRightPanelMode) => {
+      const nextMode = resolveWorkspaceRightPanelMode(mode, showOperatorTabs);
+      setRequestedRightPanelMode(nextMode);
+      storeWorkspaceRightPanelMode(rightPanelStorageUserId, nextMode);
+      setRequestedRightPanelTab(loadWorkspaceRightPanelTab(rightPanelStorageUserId, nextMode));
+    },
+    [rightPanelStorageUserId, showOperatorTabs],
+  );
   const handleWorkspaceRightPanelTabChange = useCallback(
     (tab: WorkspaceRightPanelTab) => {
       setRequestedRightPanelTab(tab);
-      storeWorkspaceRightPanelTab(rightPanelStorageUserId, tab);
+      storeWorkspaceRightPanelTab(rightPanelStorageUserId, activeRightPanelMode, tab);
     },
-    [rightPanelStorageUserId],
+    [activeRightPanelMode, rightPanelStorageUserId],
   );
   const workspaceRightPanelStyle = {
     "--workspace-right-panel-width": `${workspaceRightPanelWidth}px`,
@@ -1224,7 +1326,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   } as CSSProperties;
   const operatorData = useOperatorDashboardData({
     session: props.operatorRightPanelSession ?? null,
-    enabled: isWorkspaceRightPanelVisible && showOperatorTabs && isOperatorRightPanelTabActive,
+    enabled:
+      isWorkspaceRightPanelVisible &&
+      showOperatorTabs &&
+      activeRightPanelMode === "operator" &&
+      isOperatorRightPanelTabActive,
     surface: "workspace_operator_data_panel",
   });
 
@@ -1237,10 +1343,13 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   }, [isWorkspaceRightPanelVisible, workspaceRightPanelWidth, props.onWorkspaceRightPanelLayoutChange]);
 
   useEffect(() => {
-    if (!rightPanelStorageUserId || loadedRightPanelTabUserIdRef.current === rightPanelStorageUserId) return;
-    loadedRightPanelTabUserIdRef.current = rightPanelStorageUserId;
-    setRequestedRightPanelTab(loadWorkspaceRightPanelTab(rightPanelStorageUserId));
-  }, [rightPanelStorageUserId]);
+    if (!rightPanelStorageUserId || !rightPanelPreferenceLoadKey) return;
+    if (loadedRightPanelPreferencesKeyRef.current === rightPanelPreferenceLoadKey) return;
+    loadedRightPanelPreferencesKeyRef.current = rightPanelPreferenceLoadKey;
+    const nextMode = loadWorkspaceRightPanelMode(rightPanelStorageUserId, showOperatorTabs);
+    setRequestedRightPanelMode(nextMode);
+    setRequestedRightPanelTab(loadWorkspaceRightPanelTab(rightPanelStorageUserId, nextMode));
+  }, [rightPanelPreferenceLoadKey, rightPanelStorageUserId, showOperatorTabs]);
 
   useEffect(() => {
     if (
@@ -2246,7 +2355,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           id="workspace-right-panel"
           className={`workspace-right-panel${isWorkspaceRightPanelVisible ? " open" : ""}`}
           style={workspaceRightPanelStyle}
-          aria-label={showOperatorTabs ? "Workspace and operator data" : "Workspace data"}
+          aria-label={activeRightPanelMode === "operator" ? "Operator data" : "Workspace data"}
           aria-hidden={!isWorkspaceRightPanelVisible}
         >
           <WebWorkspaceRightPanel
@@ -2260,7 +2369,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             isLoading={operatorData.isLoading}
             error={operatorData.error}
             insightTabs={workspaceRightPanelTabs}
+            showModeSwitch={showOperatorTabs}
+            activeMode={activeRightPanelMode}
             activeInsightTab={activeRightPanelTab}
+            onActiveModeChange={handleWorkspaceRightPanelModeChange}
             onActiveInsightTabChange={handleWorkspaceRightPanelTabChange}
             onCommunityRecentSignalsExpandedChange={setIsCommunityRecentSignalsExpanded}
             onResizePointerDown={handleWorkspaceRightPanelResizePointerDown}

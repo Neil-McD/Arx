@@ -7,7 +7,9 @@ import {
   type WorkspaceUserDataPanelDataProps,
 } from "./WebWorkspaceUserDataPanel";
 import {
+  WORKSPACE_RIGHT_PANEL_MODES,
   isOperatorInsightTab,
+  type WorkspaceRightPanelMode,
   type WorkspaceRightPanelTab,
   type WorkspaceRightPanelTabItem,
 } from "./workspaceRightPanelModel";
@@ -43,7 +45,10 @@ export function WebWorkspaceRightPanel(props: {
   builderPartnerProgramPanel: WebBuilderPartnerProgramPanelProps | null;
   isLoading: boolean;
   error: string | null;
+  showModeSwitch: boolean;
+  activeMode: WorkspaceRightPanelMode;
   activeInsightTab: WorkspaceRightPanelTab;
+  onActiveModeChange: (mode: WorkspaceRightPanelMode) => void;
   onActiveInsightTabChange: (tab: WorkspaceRightPanelTab) => void;
   onCommunityRecentSignalsExpandedChange: (expanded: boolean) => void;
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>) => void;
@@ -52,7 +57,12 @@ export function WebWorkspaceRightPanel(props: {
   onResizeKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
 }) {
   const activeInsightTab = props.activeInsightTab;
+  const activeModeIndex = Math.max(
+    0,
+    WORKSPACE_RIGHT_PANEL_MODES.findIndex((mode) => mode.id === props.activeMode),
+  );
   const activeInsightTabIndex = Math.max(0, props.insightTabs.findIndex((tab) => tab.id === activeInsightTab));
+  const modeSwitcherStyle = buildPlatformSwitcherStyle(WORKSPACE_RIGHT_PANEL_MODES.length, activeModeIndex);
   const insightTabSwitcherStyle = buildPlatformSwitcherStyle(props.insightTabs.length, activeInsightTabIndex);
   const isOperatorTabActive = isOperatorInsightTab(activeInsightTab);
 
@@ -69,24 +79,46 @@ export function WebWorkspaceRightPanel(props: {
         onDoubleClick={props.onResizeDoubleClick}
         onKeyDown={props.onResizeKeyDown}
       />
-      <div
-        className="platform-switcher platform-switcher-compact workspace-right-panel__tabs workspace-right-panel__tabs--instant"
-        role="tablist"
-        aria-label="Workspace data tabs"
-        style={insightTabSwitcherStyle as CSSProperties}
-      >
-        {props.insightTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            className={`platform-switcher-btn${activeInsightTab === tab.id ? " is-active" : ""}`}
-            aria-selected={activeInsightTab === tab.id}
-            onClick={() => props.onActiveInsightTabChange(tab.id)}
+      <div className="workspace-right-panel__nav">
+        {props.showModeSwitch ? (
+          <div
+            className="platform-switcher platform-switcher-compact workspace-right-panel__mode-switch workspace-right-panel__tabs--instant"
+            role="group"
+            aria-label="Workspace right panel mode"
+            style={modeSwitcherStyle as CSSProperties}
           >
-            {tab.label}
-          </button>
-        ))}
+            {WORKSPACE_RIGHT_PANEL_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                className={`platform-switcher-btn${props.activeMode === mode.id ? " is-active" : ""}`}
+                aria-pressed={props.activeMode === mode.id}
+                onClick={() => props.onActiveModeChange(mode.id)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          className="platform-switcher platform-switcher-compact workspace-right-panel__tabs workspace-right-panel__tabs--instant"
+          role="tablist"
+          aria-label={props.activeMode === "operator" ? "Operator data tabs" : "Workspace data tabs"}
+          style={insightTabSwitcherStyle as CSSProperties}
+        >
+          {props.insightTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              className={`platform-switcher-btn${activeInsightTab === tab.id ? " is-active" : ""}`}
+              aria-selected={activeInsightTab === tab.id}
+              onClick={() => props.onActiveInsightTabChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="workspace-right-panel__content">

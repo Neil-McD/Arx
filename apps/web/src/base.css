@@ -27601,9 +27601,31 @@ button.message-citation-chip:hover {
   background: color-mix(in srgb, var(--accent) 45%, var(--border-default));
 }
 
+.workspace-right-panel__nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 18px;
+}
+
+.workspace-right-panel__mode-switch {
+  width: 176px;
+  min-width: 176px;
+}
+
+.workspace-right-panel__mode-switch .platform-switcher-btn {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .workspace-right-panel__tabs {
   width: fit-content;
   min-width: 208px;
+  max-width: 100%;
 }
 
 .workspace-right-panel__tabs--instant::before {
