@@ -115,10 +115,10 @@ assert.doesNotMatch(dmHost, /activeCommunityId: string \| null/, "global DM host
 assert.doesNotMatch(dmHost, /normalizedActiveCommunityId/, "global DM host recipient loading must not depend on active community scope");
 assert.match(dmHost, /listCloudEligibleDirectMessageRecipientsForViewer/, "global DM host must load eligible recipients across the viewer's communities");
 assert.match(dmHost, /canStartConversation=\{Boolean\(session\)\}/, "global DM host must allow new-message picker from any signed-in page");
-assert.match(dmHost, /recipientCursor/, "global DM host must track the recipient pagination cursor");
-assert.match(dmHost, /recipientsHasMore/, "global DM host must track whether more eligible recipients exist");
-assert.match(dmHost, /mergeDirectMessageRecipients/, "global DM host must append paged recipients without duplicates");
-assert.match(dmHost, /onLoadMoreRecipients=\{loadMoreRecipients\}/, "global DM host must wire recipient pagination to the inbox picker");
+assert.doesNotMatch(dmHost, /recipientCursor/, "global DM host must not project fake recipient pagination cursor state");
+assert.doesNotMatch(dmHost, /recipientsHasMore/, "global DM host must not project fake recipient pagination availability");
+assert.doesNotMatch(dmHost, /mergeDirectMessageRecipients/, "global DM host must not append fake-paged global recipient results");
+assert.doesNotMatch(dmHost, /onLoadMoreRecipients|loadMoreRecipients/, "global DM host must not wire fake recipient pagination to the inbox picker");
 assert.match(dmHost, /isNewMessageMode/, "global DM host must own the new-message picker mode");
 assert.match(dmHost, /ensureCloudDirectConversationFromCommunity\(\{[\s\S]*targetUserId,[\s\S]*communityId/, "new-message picker must open through canonical community-origin DM creation");
 assert.match(dmHost, /markCloudDirectConversationRead/, "global DM host must own read-state mutations");
@@ -135,10 +135,10 @@ assert.match(dmInboxPanel, /Your communities/, "DM recipient picker must be glob
 assert.match(dmInboxPanel, /Shared in \$\{communityName\}/, "DM recipient rows must show chosen shared community provenance");
 assert.match(dmInboxPanel, /Search members/, "DM recipient picker must be search-oriented");
 assert.match(dmInboxPanel, /onSelectRecipient/, "DM recipient picker must select an eligible recipient");
-assert.match(dmInboxPanel, /recipientsHasMore/, "DM recipient picker must know when more eligible recipients are available");
-assert.match(dmInboxPanel, /Show more/, "DM recipient picker must expose a bounded way to load more members");
-assert.match(dmInboxPanel, /Search more/, "DM recipient picker must make partial search pagination explicit");
-assert.match(dmInboxPanel, /No matches loaded yet/, "DM recipient picker must not falsely say a paged search has no members");
+assert.doesNotMatch(dmInboxPanel, /recipientsHasMore/, "DM recipient picker must not render fake global pagination state");
+assert.doesNotMatch(dmInboxPanel, /Show more|Search more/, "DM recipient picker must not render fake global pagination controls");
+assert.doesNotMatch(dmInboxPanel, /No matches loaded yet/, "DM recipient picker must not expose partial-search copy for an unpaged global list");
+assert.match(dmInboxPanel, /No matches\./, "DM recipient search empty state must honestly say no loaded matches");
 assert.match(dmInboxPanel, /conversation\.unread_count/, "DM inbox rows must consume unread count");
 assert.match(dmInboxPanel, /is-unread/, "DM inbox rows must expose unread state for styling");
 assert.match(dmInboxPanel, /community-dm-inbox-row-unread/, "DM inbox rows must render an unread badge");
@@ -161,7 +161,7 @@ assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM
 assert.match(css, /\.community-dm-inbox-icon-button/, "DM inbox must style the new-message icon button");
 assert.match(css, /\.community-dm-recipient-search/, "DM recipient picker must style member search");
 assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must style recipient rows");
-assert.match(css, /\.community-dm-recipient-more/, "DM recipient picker must style the pagination control");
+assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker must not keep CSS for deleted fake pagination control");
 assert.match(css, /\.direct-messages-topbar-button \{[\s\S]*position: relative/, "top-right DM button must anchor the unread badge");
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");

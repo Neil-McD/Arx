@@ -9658,29 +9658,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: color-mix(in srgb, var(--bg-card) 42%, transparent);
 }
 
-.community-dm-recipient-more {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 66%, transparent);
-  border-radius: 12px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-card) 30%, transparent);
-  font-size: 12px;
-  font-weight: 720;
-}
-
-.community-dm-recipient-more:hover,
-.community-dm-recipient-more:focus-visible {
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-primary) 42%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
-}
-
-.community-dm-recipient-more:disabled {
-  cursor: default;
-  opacity: 0.68;
-}
-
 .community-dm-inbox-row.is-unread .community-dm-inbox-row-name {
   font-weight: 820;
 }

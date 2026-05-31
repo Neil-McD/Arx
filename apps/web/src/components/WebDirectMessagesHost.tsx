@@ -47,25 +47,6 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function recipientKey(recipient: DirectMessageRecipient): string {
-  return `${recipient.community_id}:${recipient.user_id}`;
-}
-
-function mergeDirectMessageRecipients(
-  previous: DirectMessageRecipient[],
-  next: DirectMessageRecipient[],
-): DirectMessageRecipient[] {
-  const seen = new Set(previous.map((recipient) => recipientKey(recipient)));
-  const merged = [...previous];
-  for (const recipient of next) {
-    const key = recipientKey(recipient);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(recipient);
-  }
-  return merged;
-}
-
 export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProps<SessionT>) {
   const {
     isOpen,
@@ -85,8 +66,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [isNewMessageMode, setIsNewMessageMode] = useState(false);
   const [recipientSearch, setRecipientSearch] = useState("");
   const [recipients, setRecipients] = useState<DirectMessageRecipient[]>([]);
-  const [recipientCursor, setRecipientCursor] = useState<string | null>(null);
-  const [recipientsHasMore, setRecipientsHasMore] = useState(false);
   const [isLoadingRecipients, setIsLoadingRecipients] = useState(false);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const inboxLoadRequestRef = useRef(0);
@@ -125,44 +104,29 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [session]);
 
   const loadRecipients = useCallback(
-    async (searchValue: string, cursor: string | null = null) => {
+    async (searchValue: string) => {
       const requestId = recipientLoadRequestRef.current + 1;
       recipientLoadRequestRef.current = requestId;
-      const isContinuation = Boolean(cursor);
       if (!session) {
         setRecipients([]);
-        setRecipientCursor(null);
-        setRecipientsHasMore(false);
         setRecipientError("Sign in to start a direct message.");
         setIsLoadingRecipients(false);
         return;
       }
-      if (!isContinuation) {
-        setRecipients([]);
-        setRecipientCursor(null);
-        setRecipientsHasMore(false);
-      }
+      setRecipients([]);
       setIsLoadingRecipients(true);
       setRecipientError(null);
       try {
-        const page = await listCloudEligibleDirectMessageRecipientsForViewer({
+        const rows = await listCloudEligibleDirectMessageRecipientsForViewer({
           session,
           search: searchValue,
           limit: 20,
         });
         if (recipientLoadRequestRef.current !== requestId) return;
-        setRecipients((previous) =>
-          isContinuation
-            ? mergeDirectMessageRecipients(previous, page.rows)
-            : page.rows,
-        );
-        setRecipientCursor(page.continueCursor);
-        setRecipientsHasMore(!page.isDone && Boolean(page.continueCursor));
+        setRecipients(rows);
       } catch (error) {
         if (recipientLoadRequestRef.current !== requestId) return;
-        if (!isContinuation) setRecipients([]);
-        setRecipientCursor(null);
-        setRecipientsHasMore(false);
+        setRecipients([]);
         setRecipientError(toErrorMessage(error, "Failed to load community members."));
       } finally {
         if (recipientLoadRequestRef.current !== requestId) return;
@@ -338,8 +302,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setIsNewMessageMode(false);
       setRecipientSearch("");
       setRecipients([]);
-      setRecipientCursor(null);
-      setRecipientsHasMore(false);
       setRecipientError(null);
       setIsLoadingRecipients(false);
       return;
@@ -452,8 +414,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     setDirectMessagePanel(null);
     setRecipientSearch("");
     setRecipients([]);
-    setRecipientCursor(null);
-    setRecipientsHasMore(false);
     setRecipientError(null);
     setIsLoadingRecipients(false);
     setIsNewMessageMode(true);
@@ -464,16 +424,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     setIsNewMessageMode(false);
     setRecipientSearch("");
     setRecipients([]);
-    setRecipientCursor(null);
-    setRecipientsHasMore(false);
     setRecipientError(null);
     setIsLoadingRecipients(false);
   }, []);
-
-  const loadMoreRecipients = useCallback(() => {
-    if (isLoadingRecipients || !recipientCursor) return;
-    void loadRecipients(recipientSearch, recipientCursor);
-  }, [isLoadingRecipients, loadRecipients, recipientCursor, recipientSearch]);
 
   const startConversationWithRecipient = useCallback(
     async (recipient: DirectMessageRecipient) => {
@@ -596,7 +549,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           canStartConversation={Boolean(session)}
           recipients={recipients}
           recipientSearch={recipientSearch}
-          recipientsHasMore={recipientsHasMore}
           isLoadingRecipients={isLoadingRecipients}
           recipientError={recipientError}
           sessionUserId={sessionUserId}
@@ -606,7 +558,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           onOpenNewMessage={openNewMessageMode}
           onCloseNewMessage={closeNewMessageMode}
           onRecipientSearchChange={setRecipientSearch}
-          onLoadMoreRecipients={loadMoreRecipients}
           onSelectRecipient={startConversationWithRecipient}
         />
       )}

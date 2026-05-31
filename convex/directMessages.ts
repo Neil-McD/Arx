@@ -629,11 +629,7 @@ export const listEligibleDirectMessageRecipientsForViewer = query({
       }
     }
 
-    return {
-      rows: recipients,
-      continueCursor: null,
-      isDone: true,
-    };
+    return recipients;
   },
 });
 

@@ -15,7 +15,6 @@ type WebDirectMessageInboxPanelProps = {
   canStartConversation: boolean;
   recipients: DirectMessageRecipient[];
   recipientSearch: string;
-  recipientsHasMore: boolean;
   isLoadingRecipients: boolean;
   recipientError: string | null;
   sessionUserId: string | null;
@@ -25,7 +24,6 @@ type WebDirectMessageInboxPanelProps = {
   onOpenNewMessage: () => void;
   onCloseNewMessage: () => void;
   onRecipientSearchChange: (value: string) => void;
-  onLoadMoreRecipients: () => void;
   onSelectRecipient: (recipient: DirectMessageRecipient) => void | Promise<void>;
 };
 
@@ -54,14 +52,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
   if (props.isNewMessageMode) {
     const isInitialRecipientLoad = props.isLoadingRecipients && props.recipients.length === 0;
     const hasRecipientSearch = props.recipientSearch.trim().length > 0;
-    const emptyRecipientLabel =
-      props.recipientsHasMore && hasRecipientSearch
-        ? "No matches loaded yet."
-        : "No members found.";
-    const loadMoreLabel =
-      props.recipientsHasMore && hasRecipientSearch
-        ? "Search more"
-        : "Show more";
+    const emptyRecipientLabel = hasRecipientSearch ? "No matches." : "No members found.";
     return (
       <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="New direct message">
         <div className="community-dm-inbox-header">
@@ -143,16 +134,6 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
               );
             })
           )}
-          {props.recipientsHasMore ? (
-            <button
-              type="button"
-              className="community-dm-recipient-more"
-              onClick={props.onLoadMoreRecipients}
-              disabled={props.isLoadingRecipients}
-            >
-              {props.isLoadingRecipients ? "Loading..." : loadMoreLabel}
-            </button>
-          ) : null}
         </div>
       </aside>
     );
