@@ -30,6 +30,7 @@
     "check:account-delete-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_delete_error_contract_proof.ts",
     "check:avatar-framing-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/avatar_framing_contract_proof.ts",
     "check:profile-display-fallback-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_display_fallback_contract_proof.ts",
+    "check:profile-community-context-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_community_context_contract_proof.ts",
     "check:profile-legal-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_legal_acceptance_error_contract_proof.ts",
     "check:social-profile-links-save-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/social_profile_links_save_contract_proof.ts",
     "check:account-setup-operator-visibility": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_operator_visibility_proof.ts",

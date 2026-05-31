@@ -2,7 +2,13 @@ import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { validateProfileHandle } from "../shared/profileHandle";
-import { maybeDeleteStorageAsset } from "./communityCore";
+import {
+  communityMembershipRowIsActive,
+  maybeDeleteStorageAsset,
+  resolveCommunityBrandingFields,
+  type CommunityLike,
+  type CommunityMembershipLike,
+} from "./communityCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import {
@@ -133,6 +139,30 @@ async function mapProfileBase(ctx: any, user: UserRow, detail?: ProfileDetailRow
   };
 }
 
+async function listActiveCommunityMembershipsByUserId(
+  ctx: any,
+  userId: any,
+): Promise<CommunityMembershipLike[]> {
+  const rows = (await ctx.db
+    .query("communityMemberships")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect()) as CommunityMembershipLike[];
+  return rows.filter((row) => communityMembershipRowIsActive(row));
+}
+
+async function mapCommunityAvatarSummary(ctx: any, community: CommunityLike) {
+  const branding = await resolveCommunityBrandingFields(ctx, community);
+  return {
+    id: String(community._id),
+    slug: community.slug,
+    name: community.name,
+    avatar_url: branding.avatar_url,
+    avatar_focus_x: branding.avatar_focus_x,
+    avatar_focus_y: branding.avatar_focus_y,
+    avatar_zoom: branding.avatar_zoom,
+  };
+}
+
 async function mapProfileDetail(ctx: any, user: UserRow, detail: ProfileDetailRow | null) {
   return {
     ...(await mapProfileBase(ctx, user, detail)),
@@ -238,6 +268,70 @@ export const listProfilesByUserIds = query({
       });
     }
     return rows;
+  },
+});
+
+export const getProfileCommunityContext = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    targetUserId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject,
+    });
+    const targetUser = await findUserBySubject(ctx, args.targetUserId);
+    if (!targetUser) {
+      return {
+        owned_communities: [],
+        mutual_communities: [],
+      };
+    }
+
+    const [ownedCommunities, viewerMemberships, targetMemberships] = await Promise.all([
+      ctx.db
+        .query("communities")
+        .withIndex("by_owner", (q: any) => q.eq("ownerId", targetUser._id))
+        .collect() as Promise<CommunityLike[]>,
+      listActiveCommunityMembershipsByUserId(ctx, viewerUserId),
+      listActiveCommunityMembershipsByUserId(ctx, targetUser._id),
+    ]);
+
+    const viewerCommunityIds = new Set(viewerMemberships.map((row) => String(row.communityId)));
+    const ownedCommunityIds = new Set(ownedCommunities.map((community) => String(community._id)));
+    const viewerIsTarget = String(viewerUserId) === String(targetUser._id);
+    const visibleOwnedCommunities = ownedCommunities
+      .filter((community) => {
+        if (community.visibility === "published") return true;
+        if (viewerIsTarget) return true;
+        return viewerCommunityIds.has(String(community._id));
+      })
+      .sort((left, right) => right.createdAt - left.createdAt);
+
+    const mutualCommunityIds = Array.from(
+      new Map(
+        targetMemberships
+          .filter((row) => viewerCommunityIds.has(String(row.communityId)))
+          .filter((row) => !ownedCommunityIds.has(String(row.communityId)))
+          .map((row) => [String(row.communityId), row.communityId]),
+      ).values(),
+    );
+    const mutualCommunities: CommunityLike[] = [];
+    for (const communityId of mutualCommunityIds) {
+      const community = (await ctx.db.get(communityId)) as CommunityLike | null;
+      if (community) mutualCommunities.push(community);
+    }
+    mutualCommunities.sort((left, right) => left.name.localeCompare(right.name));
+
+    return {
+      owned_communities: await Promise.all(
+        visibleOwnedCommunities.map((community) => mapCommunityAvatarSummary(ctx, community)),
+      ),
+      mutual_communities: await Promise.all(
+        mutualCommunities.map((community) => mapCommunityAvatarSummary(ctx, community)),
+      ),
+    };
   },
 });
 

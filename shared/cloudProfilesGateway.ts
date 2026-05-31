@@ -1,6 +1,7 @@
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow } from "./cloudGateway";
 import type { AccountSetupStatus } from "./accountSetup";
+import type { CommunityAvatarSummary, ProfileCommunityContext } from "./communityTypes";
 import type { SocialProfileLinks } from "./socialProfileLinks";
 
 type CloudProfilesGatewayParams<SessionT> = {
@@ -39,6 +40,13 @@ export type CloudProfileHandleAvailability = {
   handle: string | null;
   normalized_handle: string | null;
 };
+
+function emptyProfileCommunityContext(): ProfileCommunityContext {
+  return {
+    owned_communities: [],
+    mutual_communities: [],
+  };
+}
 
 async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
   client: ConvexClient;
@@ -154,6 +162,24 @@ export async function listCloudProfileRowsByUserIds<SessionT, TProfile extends C
     userIds: uniqueIds,
   });
   return coerceGatewayRows<TProfile>(payload);
+}
+
+export async function fetchCloudProfileCommunityContext<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & {
+    targetUserId: string;
+  },
+): Promise<ProfileCommunityContext> {
+  const targetUserId = String(params.targetUserId ?? "").trim();
+  if (!targetUserId) return emptyProfileCommunityContext();
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const payload = (await client.query("profiles:getProfileCommunityContext" as any, {
+    authSubject,
+    targetUserId,
+  })) as Partial<ProfileCommunityContext> | null;
+  return {
+    owned_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.owned_communities ?? []),
+    mutual_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.mutual_communities ?? []),
+  };
 }
 
 export async function fetchCloudProfileDetailByUserId<SessionT, TProfile extends CloudProfileDetailRow = CloudProfileDetailRow>(

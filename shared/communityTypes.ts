@@ -42,6 +42,21 @@ export type DiscoverCommunitySnapshot = {
   member_count?: number | null;
 };
 
+export type CommunityAvatarSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  avatar_url: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
+};
+
+export type ProfileCommunityContext = {
+  owned_communities: CommunityAvatarSummary[];
+  mutual_communities: CommunityAvatarSummary[];
+};
+
 export type CommunityChatMessage<TAttachment = unknown> = {
   id: string;
   community_id: string;
