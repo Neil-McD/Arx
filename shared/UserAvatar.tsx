@@ -14,6 +14,7 @@ type UserAvatarProps = {
   style?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  onClick?: MouseEventHandler<HTMLDivElement>;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
@@ -53,6 +54,7 @@ export function UserAvatar(props: UserAvatarProps) {
       style={props.style}
       fallbackStyle={props.fallbackStyle}
       title={props.title}
+      onClick={props.onClick}
       onMouseEnter={props.onMouseEnter}
       onMouseLeave={props.onMouseLeave}
       onDragOver={props.onDragOver}

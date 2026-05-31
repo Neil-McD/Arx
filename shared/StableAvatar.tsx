@@ -24,6 +24,7 @@ type StableAvatarProps = {
   imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  onClick?: MouseEventHandler<HTMLDivElement>;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
@@ -46,6 +47,7 @@ export function StableAvatar(props: StableAvatarProps) {
     imageStyle,
     fallbackStyle,
     title,
+    onClick,
     onMouseEnter,
     onMouseLeave,
     onDragOver,
@@ -129,6 +131,7 @@ export function StableAvatar(props: StableAvatarProps) {
       className={combinedClassName}
       style={rootStyle}
       title={title}
+      onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDragOver={onDragOver}

@@ -293,7 +293,12 @@ export function buildWebCommunitySurfaceProjection(
   };
 
   const communityChatPanelProps: WebCommunityChatPanelProps = {
-    activeCommunity: params.activeCommunity ? { name: params.activeCommunity.name } : null,
+    activeCommunity: params.activeCommunity
+      ? {
+          name: params.activeCommunity.name,
+          owner_id: params.activeCommunity.owner_id ?? null,
+        }
+      : null,
     isResolvingSelectedCommunity:
       params.hasAuthenticatedPresentation &&
       params.activePage === "community" &&

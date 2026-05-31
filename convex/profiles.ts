@@ -217,6 +217,7 @@ export const listProfilesByUserIds = query({
       handle: string | null;
       normalized_handle: string | null;
       bio: string | null;
+      social_links: SocialProfileLinks;
       avatar_url: string | null;
       avatar_storage_id: string | null;
       avatar_focus_x: number;
@@ -232,6 +233,7 @@ export const listProfilesByUserIds = query({
         handle: user.handle ?? null,
         normalized_handle: user.normalizedHandle ?? null,
         bio: detail?.bio ?? null,
+        social_links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
         ...(await resolveUserProfileDisplayProjectionForUser(ctx, user, detail)),
       });
     }

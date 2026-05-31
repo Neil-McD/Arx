@@ -76,6 +76,7 @@ type CommunityChatMessageRowProps = {
   onEditingMessageTextChange: (value: string) => void;
   onSaveEdit: () => void | Promise<void>;
   onCancelEdit: () => void;
+  onOpenSenderProfile?: (userId: string) => void;
 };
 
 function CommunityChatMessageRowComponent({
@@ -120,6 +121,7 @@ function CommunityChatMessageRowComponent({
   onEditingMessageTextChange,
   onSaveEdit,
   onCancelEdit,
+  onOpenSenderProfile,
 }: CommunityChatMessageRowProps) {
   const { imageAttachments, fileAttachments } = useMemo(
     () => partitionCommunityAttachments(message.attachments),
@@ -156,6 +158,9 @@ function CommunityChatMessageRowComponent({
   }, [senderHandle]);
   const profileBio = String(senderBio ?? "").trim();
   const profileHoverCardId = `chat-profile-hover-${message.id}`;
+  const openSenderProfile = useCallback(() => {
+    onOpenSenderProfile?.(message.sender_id);
+  }, [message.sender_id, onOpenSenderProfile]);
   const resolveProfileHoverPlacement = useCallback((): "top" | "bottom" => {
     const root = messageRootRef.current;
     if (!root) return "top";
@@ -242,6 +247,7 @@ function CommunityChatMessageRowComponent({
           fallback={<span>{getInitials(senderLabel)}</span>}
           fallbackStyle={{ backgroundColor: avatarColor }}
           title={senderLabel}
+          onClick={openSenderProfile}
           onMouseEnter={openProfileHover}
           onMouseLeave={scheduleProfileHoverClose}
         />
@@ -303,6 +309,7 @@ function CommunityChatMessageRowComponent({
               onKeyDown={(event) => {
                 if (event.key === "Escape") closeProfileHover();
               }}
+              onClick={openSenderProfile}
             >
               {senderLabel}
             </button>

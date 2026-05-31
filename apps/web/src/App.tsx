@@ -5414,6 +5414,7 @@ export default function App() {
         handle: cloudProfile.handle ?? null,
         normalized_handle: cloudProfile.normalized_handle ?? null,
         bio: cloudProfile.bio ?? existingDisplayProfile?.bio ?? null,
+        social_links: cloudProfile.social_links ?? existingDisplayProfile?.social_links ?? null,
         avatar_url: cloudProfile.avatar_url ?? existingDisplayProfile?.avatar_url ?? null,
         avatar_storage_id: cloudProfile.avatar_storage_id ?? existingDisplayProfile?.avatar_storage_id ?? null,
         avatar_focus_x: cloudHasProfileAvatar

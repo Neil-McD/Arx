@@ -7,7 +7,7 @@ import type {
   ReactNode,
   UIEventHandler,
 } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CommunityChatMessageRow } from "../../../../shared/CommunityChatMessageRow";
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
@@ -26,6 +26,7 @@ import {
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
+import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 
 type CommunityChatMessage = SharedCommunityChatMessage<CommunityMessageAttachment>;
 type CommunityActivityEvent = SharedCommunityActivityEvent;
@@ -83,7 +84,7 @@ type CommunityChatTimelineDraftItem =
 const EMPTY_MESSAGE_REACTIONS: MessageReaction[] = [];
 
 export type WebCommunityChatPanelProps = {
-  activeCommunity: { name: string } | null;
+  activeCommunity: { name: string; owner_id?: string | null } | null;
   isResolvingSelectedCommunity: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
@@ -268,6 +269,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   } = props;
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
   const canUseComposer = canPostMessages && !isProfileSetupGateActive;
+  const [profilePanelUserId, setProfilePanelUserId] = useState<string | null>(null);
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
@@ -360,6 +362,16 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   }, [communityActivityEvents, messageViewModels]);
 
   const hasCommunityTimelineItems = communityMessages.length > 0 || communityActivityEvents.length > 0;
+  const profilePanelProfile = profilePanelUserId ? profilesByUserId[profilePanelUserId] ?? null : null;
+  const profilePanelDisplayName = profilePanelUserId
+    ? String(profilePanelProfile?.display_name ?? displayName(profilePanelUserId) ?? "").trim() ||
+      displayName(profilePanelUserId)
+    : "";
+  const profilePanelAvatarColor = profilePanelUserId ? getAvatarColor(profilePanelUserId) : "transparent";
+
+  useEffect(() => {
+    setProfilePanelUserId(null);
+  }, [activeCommunity?.name]);
 
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
@@ -548,6 +560,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                         onEditingMessageTextChange={onEditingMessageTextChange}
                         onSaveEdit={onSaveEdit}
                         onCancelEdit={onCancelEdit}
+                        onOpenSenderProfile={setProfilePanelUserId}
                       />
                     </div>
                   );
@@ -753,6 +766,18 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
         {communityChatError && <div className="auth-error">{communityChatError}</div>}
       </div>
+
+      {profilePanelUserId ? (
+        <WebCommunityProfilePanel
+          profile={profilePanelProfile}
+          displayName={profilePanelDisplayName}
+          avatarColor={profilePanelAvatarColor}
+          activeCommunityName={activeCommunity?.name ?? null}
+          isActiveCommunityOwner={Boolean(activeCommunity?.owner_id && activeCommunity.owner_id === profilePanelUserId)}
+          getInitials={getInitials}
+          onClose={() => setProfilePanelUserId(null)}
+        />
+      ) : null}
 
       <WebCommunityChatLightboxModal {...lightboxModalProps} />
     </>
