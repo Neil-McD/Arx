@@ -67,8 +67,7 @@ const MAX_DM_RECIPIENT_SEARCH_PAGES = 8;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
 const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
 const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
-const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS = 50;
-const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGES = 4;
+const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_ROWS = 150;
 const MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS = 150;
 const DIRECT_CONVERSATION_KIND = "direct" as const;
 
@@ -419,37 +418,16 @@ async function listDirectMessageCandidateUserIdsForCommunity(args: {
 
   addUserId(args.community.ownerId);
 
-  let cursor: string | null = null;
-  let isDone = false;
-  let pagesScanned = 0;
-  while (
-    userIds.length < maxUserIds &&
-    !isDone &&
-    pagesScanned < MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGES
-  ) {
-    const rawPage: {
-      page: CommunityMembershipLike[];
-      continueCursor: string | null;
-      isDone: boolean;
-    } = await args.ctx.db
-      .query("communityMemberships" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.community._id))
-      .order("desc")
-      .paginate({
-        cursor,
-        numItems: MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS,
-        maximumRowsRead: MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_PAGE_ROWS,
-      });
-    pagesScanned += 1;
+  const membershipRows = (await args.ctx.db
+    .query("communityMemberships" as any)
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.community._id))
+    .order("desc")
+    .take(Math.min(maxUserIds, MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_ROWS))) as CommunityMembershipLike[];
 
-    for (const row of rawPage.page) {
-      if (!communityMembershipRowIsActive(row)) continue;
-      addUserId(row.userId);
-      if (userIds.length >= maxUserIds) break;
-    }
-
-    cursor = typeof rawPage.continueCursor === "string" ? rawPage.continueCursor : null;
-    isDone = rawPage.isDone || !cursor;
+  for (const row of membershipRows) {
+    if (!communityMembershipRowIsActive(row)) continue;
+    addUserId(row.userId);
+    if (userIds.length >= maxUserIds) break;
   }
 
   return userIds;
