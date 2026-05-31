@@ -8912,12 +8912,12 @@ button.community-launch-knowledge-integration-chip:disabled {
   top: auto;
   bottom: calc(100% + 8px);
   left: 14px;
-  width: min(320px, calc(100vw - 48px));
+  width: min(300px, calc(100vw - 48px));
   max-height: 188px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   overflow: hidden;
   border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
   border-radius: 16px;
@@ -8962,19 +8962,19 @@ button.community-launch-knowledge-integration-chip:disabled {
     visibility 0s linear 0s;
 }
 
-.chat-profile-hover-main {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 11px;
-  align-items: center;
+.chat-profile-hover-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
 }
 
 .chat-profile-hover-avatar {
   position: relative;
-  width: 52px;
-  height: 52px;
-  flex: 0 0 52px;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -9006,7 +9006,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .chat-profile-hover-name {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -9017,7 +9017,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow: hidden;
   margin-top: 3px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9041,15 +9041,17 @@ button.community-launch-knowledge-integration-chip:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 34px;
+  gap: 6px;
+  width: auto;
+  min-height: 32px;
+  padding: 0 13px;
   border: 1px solid color-mix(in srgb, var(--accent-pink) 34%, var(--web-floating-chrome-border, transparent) 66%);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent-pink) 18%, transparent);
-  color: color-mix(in srgb, var(--accent-pink) 58%, var(--text-primary) 42%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-pink) 14%, transparent);
+  color: color-mix(in srgb, var(--accent-pink) 50%, var(--text-primary) 50%);
   font-size: 13px;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .chat-profile-message-button svg {

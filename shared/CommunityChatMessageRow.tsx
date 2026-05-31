@@ -259,7 +259,7 @@ function CommunityChatMessageRowComponent({
               if (event.key === "Escape") closeProfileHover();
             }}
           >
-            <div className="chat-profile-hover-main">
+            <div className="chat-profile-hover-top">
               <UserAvatar
                 className="chat-profile-hover-avatar"
                 readyClassName="has-image"
@@ -272,23 +272,22 @@ function CommunityChatMessageRowComponent({
                 fallback={<span>{getInitials(senderLabel)}</span>}
                 fallbackStyle={{ backgroundColor: avatarColor }}
               />
-              <div className="chat-profile-hover-identity">
-                <div className="chat-profile-hover-name">{senderLabel}</div>
-                <div className="chat-profile-hover-handle">{profileHandleLabel}</div>
-              </div>
+              <button
+                type="button"
+                className="chat-profile-message-button"
+                disabled
+              >
+                <MessageCircle aria-hidden="true" />
+                <span>Message</span>
+              </button>
+            </div>
+            <div className="chat-profile-hover-identity">
+              <div className="chat-profile-hover-name">{senderLabel}</div>
+              <div className="chat-profile-hover-handle">{profileHandleLabel}</div>
             </div>
             <div className={`chat-profile-hover-bio${profileBio ? "" : " is-empty"}`}>
               {profileBio || "No bio yet."}
             </div>
-            <button
-              type="button"
-              className="chat-profile-message-button"
-              disabled
-              title="Direct messages are coming soon"
-            >
-              <MessageCircle aria-hidden="true" />
-              <span>Message</span>
-            </button>
           </div>
         ) : null}
         <div className="chat-content">
