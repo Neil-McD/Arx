@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 
 export const EMAIL_TEMPLATE_KEYS = [
+  "account_setup_reminder",
   "community_access_granted",
   "billing_issue",
   "weekly_member_digest",
@@ -79,6 +80,10 @@ function readArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function readNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function normalizeTemplateKey(value: unknown): EmailTemplateKey {
   const normalized = String(value ?? "").trim();
   if ((EMAIL_TEMPLATE_KEYS as readonly string[]).includes(normalized)) {
@@ -153,33 +158,41 @@ function buildEmailShell(params: {
   if (ctaLabel && ctaUrl) textParts.push(`${ctaLabel}: ${ctaUrl}`);
   if (footerNote) textParts.push(footerNote);
   return {
-    html: `
-      <div style="margin:0;padding:24px;background:#0f1116;color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="max-width:640px;margin:0 auto;padding:24px 28px 28px;border:1px solid #1f2430;border-radius:20px;background:#12151c;">
-          <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:14px;">
-            <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:800;color:#f3f4f6;">
-              <img
-                src="${escapeHtml(logoUrl)}"
-                alt=""
-                width="34"
-                height="34"
-                style="display:block;width:34px;height:34px;border-radius:10px;"
-              />
-              <span>Polynet</span>
+    html: `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </head>
+        <body style="margin:0;padding:0;background:#0f1116;">
+          <div style="margin:0;padding:24px;background:#0f1116;color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            <div style="max-width:640px;margin:0 auto;padding:24px 28px 28px;border:1px solid #1f2430;border-radius:20px;background:#12151c;">
+              <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:14px;">
+                <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:800;color:#f3f4f6;">
+                  <img
+                    src="${escapeHtml(logoUrl)}"
+                    alt=""
+                    width="34"
+                    height="34"
+                    style="display:block;width:34px;height:34px;border-radius:10px;"
+                  />
+                  <span>Polynet</span>
+                </div>
+              </div>
+              <div style="font-size:28px;line-height:1.15;font-weight:800;color:#f3f4f6;">${escapeHtml(params.title)}</div>
+              ${subtitle ? `<div style="margin-top:10px;font-size:14px;color:#98a1b3;">${escapeHtml(subtitle)}</div>` : ""}
+              ${intro ? `<div style="margin-top:18px;font-size:15px;line-height:1.6;color:#d0d6e0;">${escapeHtml(intro)}</div>` : ""}
+              ${bodyHtml ? `<div style="margin-top:20px;">${bodyHtml}</div>` : ""}
+              ${renderButton(ctaLabel, ctaUrl)}
+              ${
+                footerNote
+                  ? `<div style="margin-top:24px;font-size:12px;line-height:1.5;color:#7e8698;">${escapeHtml(footerNote)}</div>`
+                  : ""
+              }
             </div>
           </div>
-          <div style="font-size:28px;line-height:1.15;font-weight:800;color:#f3f4f6;">${escapeHtml(params.title)}</div>
-          ${subtitle ? `<div style="margin-top:10px;font-size:14px;color:#98a1b3;">${escapeHtml(subtitle)}</div>` : ""}
-          ${intro ? `<div style="margin-top:18px;font-size:15px;line-height:1.6;color:#d0d6e0;">${escapeHtml(intro)}</div>` : ""}
-          ${bodyHtml ? `<div style="margin-top:20px;">${bodyHtml}</div>` : ""}
-          ${renderButton(ctaLabel, ctaUrl)}
-          ${
-            footerNote
-              ? `<div style="margin-top:24px;font-size:12px;line-height:1.5;color:#7e8698;">${escapeHtml(footerNote)}</div>`
-              : ""
-          }
-        </div>
-      </div>
+        </body>
+      </html>
     `,
     text: textParts.join("\n\n"),
   };
@@ -208,6 +221,92 @@ function renderTransactionalTemplate(
   return { subject, html: shell.html, text: shell.text };
 }
 
+function formatAccountSetupMissingLabel(value: unknown): string | null {
+  switch (readString(value)) {
+    case "display_name":
+      return "Display name";
+    case "handle":
+      return "Profile handle";
+    case "avatar":
+      return "Profile photo";
+    case "platform_legal":
+      return "Terms and privacy acknowledgement";
+    case "inference_provider":
+      return "AI provider connection";
+    case "agent_name":
+      return "Agent name";
+    default:
+      return null;
+  }
+}
+
+function readAccountSetupReminderSubject(payload: Record<string, unknown>): string {
+  const currentStep = readString(payload.currentStep);
+  const missing = readArray(payload.missing).map((item) => readString(item));
+  if (currentStep === "identity") {
+    if (missing.length === 1 && missing[0] === "platform_legal") {
+      return "Review Polynet terms to finish setup";
+    }
+    return "Finish your Polynet profile";
+  }
+  if (currentStep === "inference") {
+    return "Connect your AI provider to finish Polynet setup";
+  }
+  if (currentStep === "agent") {
+    return "Name your Polynet agent";
+  }
+  if (missing.length === 1 && missing[0] === "platform_legal") {
+    return "Review Polynet terms to finish setup";
+  }
+  if (missing.length === 1 && missing[0] === "inference_provider") {
+    return "Connect your AI provider to finish Polynet setup";
+  }
+  if (missing.length === 1 && missing[0] === "agent_name") {
+    return "Name your Polynet agent";
+  }
+  return "Finish your Polynet account setup";
+}
+
+function renderAccountSetupReminderTemplate(payload: Record<string, unknown>): RenderedEmail {
+  const subject = readAccountSetupReminderSubject(payload);
+  const percent = readNumber(payload.percent);
+  const guidance =
+    readString(payload.guidance) ||
+    "Finish your account setup to unlock the full Polynet workspace.";
+  const missingLabels = readArray(payload.missing)
+    .map((item) => formatAccountSetupMissingLabel(item))
+    .filter((item): item is string => Boolean(item));
+  const bodyHtml = missingLabels.length
+    ? `
+      <div style="padding:16px;border:1px solid #2a2d36;border-radius:14px;background:#171920;">
+        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#98a1b3;">Remaining setup</div>
+        <ul style="margin:12px 0 0;padding-left:20px;color:#d0d6e0;font-size:14px;line-height:1.55;">
+          ${missingLabels.map((label) => `<li>${escapeHtml(label)}</li>`).join("")}
+        </ul>
+      </div>
+    `
+    : "";
+  const shell = buildEmailShell({
+    title: subject,
+    subtitle: percent === null ? "Account setup" : `${Math.max(0, Math.min(100, percent))}% complete`,
+    intro: guidance,
+    ctaLabel: readString(payload.ctaLabel) || "Finish setup",
+    ctaUrl: readString(payload.actionUrl) || `${readPublicAppBaseUrl()}/onboarding`,
+    bodyHtml,
+    footerNote:
+      readString(payload.footerNote) ||
+      "You're receiving this because your Polynet account setup is not complete.",
+  });
+  const missingText = missingLabels.length
+    ? `Remaining setup:\n${missingLabels.map((label) => `- ${label}`).join("\n")}`
+    : "";
+  return {
+    subject,
+    html: shell.html,
+    text: [shell.text, missingText].filter(Boolean).join("\n\n"),
+  };
+}
+
 export function renderEmailTemplate(params: {
   templateKey: unknown;
   payload: unknown;
@@ -228,6 +327,8 @@ export function renderEmailTemplate(params: {
     }));
 
   switch (templateKey) {
+    case "account_setup_reminder":
+      return renderAccountSetupReminderTemplate(payload);
     case "community_access_granted":
       return renderTransactionalTemplate(
         `Your access to ${communityName} is ready`,

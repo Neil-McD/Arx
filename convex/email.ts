@@ -1,6 +1,8 @@
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { formatAccountSetupMissingGuidance } from "../shared/accountSetup";
+import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import {
   EMAIL_TEMPLATE_KEYS,
   type EmailTemplateKey,
@@ -21,6 +23,12 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => readString(item)).filter(Boolean)
+    : [];
 }
 
 function maybeNormalizeRecipientEmail(value: unknown): string | null {
@@ -140,6 +148,59 @@ async function findExistingDedupeRow(ctx: any, dedupeKey: string) {
     .first();
 }
 
+function buildAccountSetupReminderDedupeKey(params: {
+  recipientUserId: any;
+  currentStep: string;
+  completedItems: number;
+  missing: string[];
+}): string {
+  const missingSignature = params.missing.length ? params.missing.join(",") : "none";
+  return [
+    "account_setup_reminder",
+    String(params.recipientUserId),
+    params.currentStep || "unknown",
+    String(params.completedItems),
+    missingSignature,
+  ].join(":");
+}
+
+function buildAccountSetupReminderSignature(target: Record<string, unknown>, missing: string[]): string {
+  const currentStep = readString(target.currentStep) || "unknown";
+  const completedItems =
+    typeof target.completedItems === "number" && Number.isFinite(target.completedItems)
+      ? target.completedItems
+      : 0;
+  const totalItems =
+    typeof target.totalItems === "number" && Number.isFinite(target.totalItems)
+      ? target.totalItems
+      : 0;
+  return [
+    currentStep,
+    `${completedItems}/${totalItems}`,
+    missing.length ? missing.join(",") : "none",
+  ].join("|");
+}
+
+function buildAccountSetupReminderPayload(target: Record<string, unknown>): Record<string, unknown> {
+  const missing = readStringArray(target.missing);
+  const currentStep = readString(target.currentStep);
+  const completedItems =
+    typeof target.completedItems === "number" && Number.isFinite(target.completedItems)
+      ? target.completedItems
+      : 0;
+  const payload = {
+    currentStep,
+    completedItems,
+    totalItems: target.totalItems,
+    percent: target.percent,
+    missing,
+    guidance: readString(target.guidance),
+    ctaLabel: "Finish setup",
+    setupSignature: buildAccountSetupReminderSignature(target, missing),
+  };
+  return payload;
+}
+
 export const enqueueEmailJobInternal = internalMutation({
   args: {
     kind: v.string(),
@@ -222,6 +283,101 @@ export const enqueueEmailJobInternal = internalMutation({
   },
 });
 
+export const refreshEmailJobPayloadInternal = internalMutation({
+  args: {
+    outboxId: v.id("emailOutbox"),
+    payload: v.any(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.patch(args.outboxId, {
+      payload: args.payload ?? {},
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const loadAccountSetupReminderTargetInternal = internalQuery({
+  args: {
+    recipientUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const status = await loadAccountSetupStatusForUserId(ctx, args.recipientUserId);
+      return {
+        ok: true,
+        completed: status.completed,
+        currentStep: status.current_step,
+        completedItems: status.completed_items,
+        totalItems: status.total_items,
+        percent: status.percent,
+        missing: status.missing,
+        guidance: formatAccountSetupMissingGuidance(status),
+      };
+    } catch (error) {
+      const reason =
+        error instanceof Error && error.message.trim() ? error.message.trim() : "account_setup_lookup_failed";
+      return {
+        ok: false,
+        skipped: true,
+        reason,
+      };
+    }
+  },
+});
+
+export const enqueueAccountSetupReminderEmailInternal = internalAction({
+  args: {
+    recipientUserId: v.id("users"),
+    scheduledAt: v.optional(v.number()),
+    dedupeKey: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const target = (await ctx.runQuery(
+      (internal as any).email.loadAccountSetupReminderTargetInternal,
+      {
+        recipientUserId: args.recipientUserId,
+      },
+    )) as Record<string, unknown>;
+
+    if (target.ok !== true) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: readString(target.reason) || "account_setup_lookup_failed",
+      };
+    }
+    if (target.completed === true) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "account_setup_complete",
+      };
+    }
+
+    const payload = buildAccountSetupReminderPayload(target);
+    return await ctx.runMutation((internal as any).email.enqueueEmailJobInternal, {
+      kind: "account_setup_reminder",
+      recipientUserId: args.recipientUserId,
+      templateKey: "account_setup_reminder",
+      payload,
+      dedupeKey:
+        readString(args.dedupeKey) ||
+        buildAccountSetupReminderDedupeKey({
+          recipientUserId: args.recipientUserId,
+          currentStep: readString(payload.currentStep),
+          completedItems: Number(payload.completedItems ?? 0),
+          missing: readStringArray(payload.missing),
+        }),
+      scheduledAt: args.scheduledAt,
+      nowMs,
+    });
+  },
+});
+
 export const claimDueEmailOutboxBatchInternal = internalMutation({
   args: {
     limit: v.optional(v.number()),
@@ -254,12 +410,29 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
     return rows.map((row) => ({
       _id: row._id,
       kind: row.kind,
+      recipientUserId: row.recipientUserId ?? null,
       recipientEmail: row.recipientEmail,
       templateKey: row.templateKey,
       payload: row.payload,
       dedupeKey: row.dedupeKey ?? null,
       attemptCount: Number(row.attemptCount ?? 0) + 1,
     }));
+  },
+});
+
+export const suppressEmailJobInternal = internalMutation({
+  args: {
+    outboxId: v.id("emailOutbox"),
+    reason: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.patch(args.outboxId, {
+      status: "suppressed",
+      failureReason: readString(args.reason) || "email_suppressed",
+      updatedAt: nowMs,
+    });
   },
 });
 
@@ -357,6 +530,7 @@ export const processPendingEmailOutboxInternal = internalAction({
       nowMs,
     })) as Array<{
       _id: any;
+      recipientUserId?: any | null;
       recipientEmail: string;
       templateKey: EmailTemplateKey;
       payload: unknown;
@@ -365,12 +539,54 @@ export const processPendingEmailOutboxInternal = internalAction({
 
     let sent = 0;
     let failed = 0;
+    let suppressed = 0;
     for (const job of claimed) {
       try {
+        let payload = job.payload;
+        if (job.templateKey === "account_setup_reminder") {
+          if (!job.recipientUserId) {
+            await ctx.runMutation((internal as any).email.suppressEmailJobInternal, {
+              outboxId: job._id,
+              reason: "account_setup_recipient_missing_before_send",
+              nowMs: Date.now(),
+            });
+            suppressed += 1;
+            continue;
+          }
+          const target = (await ctx.runQuery(
+            (internal as any).email.loadAccountSetupReminderTargetInternal,
+            {
+              recipientUserId: job.recipientUserId,
+            },
+          )) as Record<string, unknown>;
+          if (target.ok !== true || target.completed === true) {
+            await ctx.runMutation((internal as any).email.suppressEmailJobInternal, {
+              outboxId: job._id,
+              reason:
+                target.completed === true
+                  ? "account_setup_complete_before_send"
+                  : readString(target.reason) || "account_setup_status_unavailable_before_send",
+              nowMs: Date.now(),
+            });
+            suppressed += 1;
+            continue;
+          }
+          const refreshedPayload = buildAccountSetupReminderPayload(target);
+          const previousSignature = readString(asRecord(job.payload).setupSignature);
+          const nextSignature = readString(refreshedPayload.setupSignature);
+          payload = refreshedPayload;
+          if (nextSignature && previousSignature !== nextSignature) {
+            await ctx.runMutation((internal as any).email.refreshEmailJobPayloadInternal, {
+              outboxId: job._id,
+              payload: refreshedPayload,
+              nowMs: Date.now(),
+            });
+          }
+        }
         const response = await sendRenderedEmail({
           to: job.recipientEmail,
           templateKey: job.templateKey,
-          payload: job.payload,
+          payload,
           idempotencyKey: readString(job.dedupeKey) || String(job._id),
         });
         await ctx.runMutation((internal as any).email.markEmailJobSentInternal, {
@@ -395,6 +611,7 @@ export const processPendingEmailOutboxInternal = internalAction({
       claimed: claimed.length,
       sent,
       failed,
+      suppressed,
     };
   },
 });
