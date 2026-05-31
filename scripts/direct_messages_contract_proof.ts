@@ -37,6 +37,11 @@ assert.match(directMessages, /throw new Error\("dm_target_self"\)/, "users must 
 assert.match(directMessages, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM writes must require profile setup");
 assert.match(directMessages, /listMyDirectConversations = query/, "backend must expose current-user DM inbox query even if UI inbox is deferred");
 assert.match(directMessages, /listEligibleDirectMessageRecipients = query/, "backend must expose community-scoped DM recipient lookup");
+assert.match(directMessages, /listEligibleDirectMessageRecipientsForViewer = query/, "backend must expose viewer-wide DM recipient lookup for the global inbox picker");
+assert.match(directMessages, /listDirectMessageSourceCommunitiesForViewer/, "viewer-wide DM recipient lookup must compile the viewer's communities");
+assert.match(directMessages, /withIndex\("by_owner"[\s\S]*ownerId/, "viewer-wide DM recipient lookup must include communities the viewer owns");
+assert.match(directMessages, /withIndex\("by_user"[\s\S]*userId/, "viewer-wide DM recipient lookup must include communities the viewer belongs to");
+assert.match(directMessages, /listDirectMessageCandidateUserIdsForCommunity/, "viewer-wide DM recipient lookup must gather owners and members from each source community");
 assert.match(directMessages, /paginationOptsValidator/, "DM recipient lookup must use Convex pagination rather than a capped membership scan");
 assert.match(directMessages, /\.paginate\(\{[\s\S]*numItems: memberPageSize/, "DM recipient lookup must page through community memberships");
 assert.doesNotMatch(directMessages, /MAX_DM_RECIPIENT_SCAN_ROWS/, "DM recipient lookup must not hide members behind a fixed scan cap");
@@ -61,6 +66,8 @@ assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway
 assert.match(gateway, /listCloudDirectConversations/, "web gateway must expose the current user's direct conversation list");
 assert.match(gateway, /listCloudEligibleDirectMessageRecipients/, "web gateway must expose eligible community recipient lookup");
 assert.match(gateway, /directMessages:listEligibleDirectMessageRecipients/, "web gateway recipient lookup must use the canonical backend query");
+assert.match(gateway, /listCloudEligibleDirectMessageRecipientsForViewer/, "web gateway must expose global viewer-wide recipient lookup");
+assert.match(gateway, /directMessages:listEligibleDirectMessageRecipientsForViewer/, "web gateway global recipient lookup must use the canonical backend query");
 assert.match(gateway, /DirectMessageRecipientPage/, "web gateway recipient lookup must expose rows with pagination metadata");
 assert.match(gateway, /paginationOpts:[\s\S]*cursor: params\.cursor \?\? null,[\s\S]*numItems: params\.limit \?\? 20/, "web gateway recipient lookup must pass cursor-based pagination");
 assert.match(gateway, /continueCursor/, "web gateway recipient lookup must preserve the backend continuation cursor");
@@ -104,8 +111,10 @@ assert.match(dmHost, /listCloudDirectConversations/, "global DM host must load t
 assert.match(dmHost, /subscribeCloudDirectConversations<DirectMessageConversation>/, "global DM host must keep inbox rows live");
 assert.match(dmHost, /hasInboxLiveSubscriptionRef/, "global DM host must avoid duplicate snapshot loads when the live inbox subscription is active");
 assert.match(dmHost, /onUnreadCountChange/, "global DM host must project unread count to the app shell");
-assert.match(dmHost, /activeCommunityId: string \| null/, "global DM host must receive current community context for new DM creation");
-assert.match(dmHost, /listCloudEligibleDirectMessageRecipients/, "global DM host must load eligible community recipients");
+assert.doesNotMatch(dmHost, /activeCommunityId: string \| null/, "global DM host new-message picker must not depend on active community scope");
+assert.doesNotMatch(dmHost, /normalizedActiveCommunityId/, "global DM host recipient loading must not depend on active community scope");
+assert.match(dmHost, /listCloudEligibleDirectMessageRecipientsForViewer/, "global DM host must load eligible recipients across the viewer's communities");
+assert.match(dmHost, /canStartConversation=\{Boolean\(session\)\}/, "global DM host must allow new-message picker from any signed-in page");
 assert.match(dmHost, /recipientCursor/, "global DM host must track the recipient pagination cursor");
 assert.match(dmHost, /recipientsHasMore/, "global DM host must track whether more eligible recipients exist");
 assert.match(dmHost, /mergeDirectMessageRecipients/, "global DM host must append paged recipients without duplicates");
@@ -122,6 +131,8 @@ assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing
 assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");
 assert.match(dmInboxPanel, /Started in \{communityName\}/, "DM inbox rows must preserve community-origin provenance");
 assert.match(dmInboxPanel, /New message/, "DM inbox must expose a new-message picker view");
+assert.match(dmInboxPanel, /Your communities/, "DM recipient picker must be global across viewer communities");
+assert.match(dmInboxPanel, /Shared in \$\{communityName\}/, "DM recipient rows must show chosen shared community provenance");
 assert.match(dmInboxPanel, /Search members/, "DM recipient picker must be search-oriented");
 assert.match(dmInboxPanel, /onSelectRecipient/, "DM recipient picker must select an eligible recipient");
 assert.match(dmInboxPanel, /recipientsHasMore/, "DM recipient picker must know when more eligible recipients are available");
@@ -137,8 +148,8 @@ assert.match(desktopHeader, /workspaceRightPanelToggle\}[\s\S]*directMessagesBut
 assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
 assert.match(app, /handleOpenDirectMessageFromCommunity/, "app shell must own the profile-to-DM launch handler");
 assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pass canonical open requests to the global DM host");
-assert.match(app, /activeCommunityId=\{activeCommunity\?\.id \?\? null\}/, "app shell must pass active community id to the global DM host");
-assert.match(app, /activeCommunityName=\{activeCommunity\?\.name \?\? null\}/, "app shell must pass active community name to the global DM host");
+assert.doesNotMatch(app, /activeCommunityId=\{activeCommunity\?\.id \?\? null\}/, "app shell must not scope the global DM picker to the active community");
+assert.doesNotMatch(app, /activeCommunityName=\{activeCommunity\?\.name \?\? null\}/, "app shell must not label the global DM picker as the active community");
 assert.match(app, /directMessagesUnreadCount/, "app shell must own top-bar DM unread count");
 assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "global DM host must feed top-bar unread state");
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");

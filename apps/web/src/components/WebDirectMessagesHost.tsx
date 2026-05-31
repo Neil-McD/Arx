@@ -4,7 +4,7 @@ import type { DirectMessage, DirectMessageConversation, DirectMessageRecipient }
 import {
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
-  listCloudEligibleDirectMessageRecipients,
+  listCloudEligibleDirectMessageRecipientsForViewer,
   listCloudDirectConversations,
   markCloudDirectConversationRead,
   subscribeCloudDirectConversations,
@@ -34,8 +34,6 @@ type WebDirectMessagesHostProps<SessionT> = {
   openRequest: DirectMessageOpenRequest;
   session: SessionT | null;
   sessionUserId: string | null;
-  activeCommunityId: string | null;
-  activeCommunityName: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
@@ -74,8 +72,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     openRequest,
     session,
     sessionUserId,
-    activeCommunityId,
-    activeCommunityName,
     getInitials,
     getAvatarColor,
     renderTextWithLinks,
@@ -100,7 +96,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
-  const normalizedActiveCommunityId = String(activeCommunityId ?? "").trim();
 
   const loadInbox = useCallback(async () => {
     const requestId = inboxLoadRequestRef.current + 1;
@@ -134,11 +129,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       const requestId = recipientLoadRequestRef.current + 1;
       recipientLoadRequestRef.current = requestId;
       const isContinuation = Boolean(cursor);
-      if (!session || !normalizedActiveCommunityId) {
+      if (!session) {
         setRecipients([]);
         setRecipientCursor(null);
         setRecipientsHasMore(false);
-        setRecipientError(normalizedActiveCommunityId ? null : "Open a community to start a direct message.");
+        setRecipientError("Sign in to start a direct message.");
         setIsLoadingRecipients(false);
         return;
       }
@@ -150,11 +145,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setIsLoadingRecipients(true);
       setRecipientError(null);
       try {
-        const page = await listCloudEligibleDirectMessageRecipients({
+        const page = await listCloudEligibleDirectMessageRecipientsForViewer({
           session,
-          communityId: normalizedActiveCommunityId,
           search: searchValue,
-          cursor,
           limit: 20,
         });
         if (recipientLoadRequestRef.current !== requestId) return;
@@ -176,7 +169,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         setIsLoadingRecipients(false);
       }
     },
-    [normalizedActiveCommunityId, session],
+    [session],
   );
 
   useEffect(() => {
@@ -454,7 +447,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   );
 
   const openNewMessageMode = useCallback(() => {
-    if (!normalizedActiveCommunityId) return;
+    if (!session) return;
     recipientLoadRequestRef.current += 1;
     setDirectMessagePanel(null);
     setRecipientSearch("");
@@ -464,7 +457,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     setRecipientError(null);
     setIsLoadingRecipients(false);
     setIsNewMessageMode(true);
-  }, [normalizedActiveCommunityId]);
+  }, [session]);
 
   const closeNewMessageMode = useCallback(() => {
     recipientLoadRequestRef.current += 1;
@@ -485,7 +478,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const startConversationWithRecipient = useCallback(
     async (recipient: DirectMessageRecipient) => {
       const targetUserId = String(recipient.user_id ?? "").trim();
-      const communityId = String(recipient.community_id ?? normalizedActiveCommunityId).trim();
+      const communityId = String(recipient.community_id ?? "").trim();
       if (!session || !targetUserId || !communityId) return;
       setRecipientError(null);
       setIsLoadingRecipients(true);
@@ -515,7 +508,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         setIsLoadingRecipients(false);
       }
     },
-    [markConversationRead, normalizedActiveCommunityId, session],
+    [markConversationRead, session],
   );
 
   const sendDirectMessage = useCallback(async () => {
@@ -600,8 +593,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           isLoading={isLoadingInbox}
           error={inboxError}
           isNewMessageMode={isNewMessageMode}
-          canStartConversation={Boolean(normalizedActiveCommunityId)}
-          activeCommunityName={activeCommunityName}
+          canStartConversation={Boolean(session)}
           recipients={recipients}
           recipientSearch={recipientSearch}
           recipientsHasMore={recipientsHasMore}

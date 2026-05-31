@@ -13,7 +13,6 @@ type WebDirectMessageInboxPanelProps = {
   error: string | null;
   isNewMessageMode: boolean;
   canStartConversation: boolean;
-  activeCommunityName: string | null;
   recipients: DirectMessageRecipient[];
   recipientSearch: string;
   recipientsHasMore: boolean;
@@ -52,7 +51,6 @@ function formatInboxTime(value: string | null): string | null {
 }
 
 export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProps) {
-  const activeCommunityName = String(props.activeCommunityName ?? "").trim() || "current community";
   if (props.isNewMessageMode) {
     const isInitialRecipientLoad = props.isLoadingRecipients && props.recipients.length === 0;
     const hasRecipientSearch = props.recipientSearch.trim().length > 0;
@@ -79,7 +77,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
             </button>
             <div>
               <div className="community-dm-inbox-title">New message</div>
-              <div className="community-dm-inbox-subtitle">{activeCommunityName}</div>
+              <div className="community-dm-inbox-subtitle">Your communities</div>
             </div>
           </div>
         </div>
@@ -111,6 +109,11 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                 "Member";
               const handle = String(recipient.handle ?? "").trim().replace(/^@+/, "");
               const avatarSeed = recipient.user_id ?? displayName;
+              const communityName = String(recipient.community_name ?? "").trim() || "a shared community";
+              const metaLabel = [
+                handle ? `@${handle}` : null,
+                `Shared in ${communityName}`,
+              ].filter(Boolean).join(" · ");
               return (
                 <button
                   key={`${recipient.community_id}:${recipient.user_id}`}
@@ -134,7 +137,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                   />
                   <span className="community-dm-inbox-row-body">
                     <span className="community-dm-inbox-row-name">{displayName}</span>
-                    {handle ? <span className="community-dm-inbox-row-meta">@{handle}</span> : null}
+                    <span className="community-dm-inbox-row-meta">{metaLabel}</span>
                   </span>
                 </button>
               );

@@ -149,6 +149,32 @@ export async function listCloudEligibleDirectMessageRecipients<SessionT>(
   };
 }
 
+export async function listCloudEligibleDirectMessageRecipientsForViewer<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    search?: string;
+    limit?: number;
+  },
+): Promise<DirectMessageRecipientPage> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("directMessages:listEligibleDirectMessageRecipientsForViewer" as any, {
+    authSubject,
+    search: params.search ?? "",
+    limit: params.limit ?? 20,
+  }) as {
+    rows?: unknown;
+    continueCursor?: unknown;
+    isDone?: unknown;
+  } | null;
+  return {
+    rows: coerceRows<DirectMessageRecipient>(payload?.rows ?? []),
+    continueCursor:
+      typeof payload?.continueCursor === "string"
+        ? payload.continueCursor
+        : null,
+    isDone: payload?.isDone === true,
+  };
+}
+
 export async function markCloudDirectConversationRead<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     conversationId: string;
