@@ -150,6 +150,16 @@ async function listActiveCommunityMembershipsByUserId(
   return rows.filter((row) => communityMembershipRowIsActive(row));
 }
 
+async function listOwnedCommunitiesByOwnerId(
+  ctx: any,
+  ownerId: any,
+): Promise<CommunityLike[]> {
+  return (await ctx.db
+    .query("communities")
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", ownerId))
+    .collect()) as CommunityLike[];
+}
+
 async function mapCommunityAvatarSummary(ctx: any, community: CommunityLike) {
   const branding = await resolveCommunityBrandingFields(ctx, community);
   return {
@@ -289,17 +299,17 @@ export const getProfileCommunityContext = query({
       };
     }
 
-    const [ownedCommunities, viewerMemberships, targetMemberships] = await Promise.all([
-      ctx.db
-        .query("communities")
-        .withIndex("by_owner", (q: any) => q.eq("ownerId", targetUser._id))
-        .collect() as Promise<CommunityLike[]>,
+    const [ownedCommunities, viewerOwnedCommunities, viewerMemberships, targetMemberships] = await Promise.all([
+      listOwnedCommunitiesByOwnerId(ctx, targetUser._id),
+      listOwnedCommunitiesByOwnerId(ctx, viewerUserId),
       listActiveCommunityMembershipsByUserId(ctx, viewerUserId),
       listActiveCommunityMembershipsByUserId(ctx, targetUser._id),
     ]);
 
-    const viewerCommunityIds = new Set(viewerMemberships.map((row) => String(row.communityId)));
-    const ownedCommunityIds = new Set(ownedCommunities.map((community) => String(community._id)));
+    const viewerCommunityIds = new Set([
+      ...viewerMemberships.map((row) => String(row.communityId)),
+      ...viewerOwnedCommunities.map((community) => String(community._id)),
+    ]);
     const viewerIsTarget = String(viewerUserId) === String(targetUser._id);
     const visibleOwnedCommunities = ownedCommunities
       .filter((community) => {
@@ -311,10 +321,12 @@ export const getProfileCommunityContext = query({
 
     const mutualCommunityIds = Array.from(
       new Map(
-        targetMemberships
-          .filter((row) => viewerCommunityIds.has(String(row.communityId)))
-          .filter((row) => !ownedCommunityIds.has(String(row.communityId)))
-          .map((row) => [String(row.communityId), row.communityId]),
+        [
+          ...targetMemberships.map((row) => row.communityId),
+          ...ownedCommunities.map((community) => community._id),
+        ]
+          .filter((communityId) => viewerCommunityIds.has(String(communityId)))
+          .map((communityId) => [String(communityId), communityId]),
       ).values(),
     );
     const mutualCommunities: CommunityLike[] = [];

@@ -49,11 +49,15 @@ assert.match(
   /function listActiveCommunityMembershipsByUserId[\s\S]*withIndex\("by_user"/,
   "profile community context must read memberships through the user index",
 );
-assert.match(querySlice, /withIndex\("by_owner"/, "owned communities must read through the owner index");
+assert.match(
+  profiles,
+  /function listOwnedCommunitiesByOwnerId[\s\S]*withIndex\("by_owner"/,
+  "owned communities must read through the owner index",
+);
 assert.match(
   querySlice,
-  /listActiveCommunityMembershipsByUserId\(ctx, viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(ctx, targetUser\._id\)/,
-  "mutual communities must be derived from active viewer and target membership sets",
+  /listOwnedCommunitiesByOwnerId\(ctx, targetUser\._id\)[\s\S]*listOwnedCommunitiesByOwnerId\(ctx, viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(ctx, viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(ctx, targetUser\._id\)/,
+  "mutual communities must be derived from effective participation: owned communities plus active membership sets",
 );
 assert.match(
   querySlice,
@@ -77,13 +81,23 @@ assert.match(
 );
 assert.match(
   querySlice,
-  /viewerCommunityIds\.has\(String\(row\.communityId\)\)/,
-  "mutual communities must be active membership intersections",
+  /viewerMemberships\.map\(\(row\) => String\(row\.communityId\)\)/,
+  "viewer membership rows must count toward mutual community intersections",
 );
 assert.match(
   querySlice,
-  /!ownedCommunityIds\.has\(String\(row\.communityId\)\)/,
-  "owned communities must not be duplicated in the mutual bucket",
+  /viewerOwnedCommunities\.map\(\(community\) => String\(community\._id\)\)/,
+  "viewer-owned communities must count toward mutual community intersections even without membership rows",
+);
+assert.match(
+  querySlice,
+  /ownedCommunities\.map\(\(community\) => community\._id\)/,
+  "target-owned communities must count toward mutual community intersections even without membership rows",
+);
+assert.doesNotMatch(
+  querySlice,
+  /!ownedCommunityIds\.has/,
+  "ownership must not remove a community from mutuals because ownership and mutual participation are separate facts",
 );
 assert.match(
   querySlice,
