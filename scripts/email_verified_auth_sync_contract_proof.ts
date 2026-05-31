@@ -9,6 +9,7 @@ const workos = read("convex/workosEmailVerification.ts");
 const auth = read("convex/auth.ts");
 const httpAuthBridge = read("convex/httpAuthBridge.ts");
 const http = read("convex/http.ts");
+const operatorAccess = read("convex/operatorAccess.ts");
 const repair = read("convex/emailVerificationRepair.ts");
 const convexClient = read("shared/convexAuthenticatedClient.ts");
 const email = read("convex/email.ts");
@@ -88,8 +89,14 @@ assert.match(
 
 assert.match(
   repair,
-  /export const backfillEmailVerifiedAtFromWorkos = action[\s\S]*operatorDashboard\.getOperatorAccess[\s\S]*const dryRun = args\.dryRun !== false/,
-  "WorkOS email verification backfill must be operator-gated and default to dry-run",
+  /export const backfillEmailVerifiedAtFromWorkos = action[\s\S]*operatorAccess\.getOperatorWriteAccessInternal[\s\S]*const dryRun = args\.dryRun !== false/,
+  "WorkOS email verification backfill must be write-operator-gated and default to dry-run",
+);
+
+assert.match(
+  operatorAccess,
+  /getOperatorWriteAccessInternal = internalQuery[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "operator"\)/,
+  "email verification backfill must have an internal write-operator access gate",
 );
 
 assert.match(

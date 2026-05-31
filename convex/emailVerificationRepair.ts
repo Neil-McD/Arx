@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -96,10 +96,9 @@ export const backfillEmailVerifiedAtFromWorkos = action({
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<any> => {
-    const operator = await ctx.runQuery((api as any).operatorDashboard.getOperatorAccess, {
+    const operator = await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal, {
       authSubject: args.authSubject,
     });
-    if (!operator) throw new Error("operator_access_forbidden");
 
     const dryRun = args.dryRun !== false;
     const startedAt = Date.now();
