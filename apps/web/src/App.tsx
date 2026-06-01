@@ -2565,7 +2565,7 @@ export default function App() {
     handleReorderResources,
     openNewResourceModal,
     openNewSourceModal,
-    handleEditResource,
+    resourceEditor,
     handleDeleteResource,
     handleCreatePageDraftFromSource,
     setShowResourceModal,
@@ -9657,7 +9657,7 @@ export default function App() {
         handleReorderResources,
         openNewResourceModal,
         openNewSourceModal,
-        handleEditResource,
+        resourceEditor,
         handleDeleteResource,
         handleCreatePageDraftFromSource,
         reloadResources: async () => {

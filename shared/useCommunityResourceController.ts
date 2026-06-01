@@ -213,26 +213,26 @@ export function useCommunityResourceController<
   const handleSaveCommunityResource = useCallback(async () => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !current.activeCommunityId) return;
+    if (!session || !current.activeCommunityId) return false;
 
     const title = current.resourceTitleInput.trim();
     if (!title) {
       current.setResourceError("Title is required.");
-      return;
+      return false;
     }
 
     const rawUrl = current.resourceUrlInput.trim();
     const description = current.resourceBodyInput.trim();
     if (!description && !rawUrl) {
       current.setResourceError("Add content or a source URL.");
-      return;
+      return false;
     }
 
     if (current.beforeSaveValidate) {
       const validationError = await current.beforeSaveValidate({ title, description, rawUrl });
       if (validationError) {
         current.setResourceError(validationError);
-        return;
+        return false;
       }
     }
 
@@ -281,6 +281,7 @@ export function useCommunityResourceController<
       current.setShowResourceModal(false);
       resetResourceEditor(true);
       await loadCommunityResources(current.activeCommunityId, session);
+      return true;
     } catch (error) {
       const message = typeof error === "string"
         ? error
@@ -288,6 +289,7 @@ export function useCommunityResourceController<
           ? error.message
           : current.saveFailureMessage;
       current.setResourceError(message);
+      return false;
     } finally {
       current.setIsSavingResource(false);
     }

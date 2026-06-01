@@ -77,7 +77,23 @@ export type UseWebCommunityResourceUiControllerResult<
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean>;
   openNewResourceModal: (moduleId?: string | null) => void;
   openNewSourceModal: (moduleId?: string | null) => void;
-  handleEditResource: (resource: ResourceT) => void;
+  resourceEditor: {
+    editingResourceId: string | null;
+    titleInput: string;
+    urlInput: string;
+    bodyInput: string;
+    pinnedInput: boolean;
+    roleInput: "page" | "source";
+    error: string | null;
+    isSaving: boolean;
+    beginInlineEditResource: (resource: ResourceT) => void;
+    cancelInlineEditResource: () => void;
+    saveInlineEditResource: () => Promise<boolean>;
+    onChangeTitle: (value: string) => void;
+    onChangeUrl: (value: string) => void;
+    onChangeBody: (value: string) => void;
+    onChangePinned: (value: boolean) => void;
+  };
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
   handleCreatePageDraftFromSource: (resource: ResourceT) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
@@ -226,6 +242,21 @@ export function useWebCommunityResourceUiController<
     setResourceModuleIdInput(moduleId ?? null);
   };
 
+  const beginInlineEditResource = (resource: ResourceT) => {
+    handleEditResource(resource);
+    setShowResourceModal(false);
+  };
+
+  const cancelInlineEditResource = () => {
+    resetResourceForm();
+    setShowResourceModal(false);
+  };
+
+  const saveInlineEditResource = async () => {
+    const didSave = await handleSaveCommunityResource();
+    return didSave === true;
+  };
+
   const handleChangeResourceRole = (role: "page" | "source") => {
     setResourceRoleInput(role);
     if (!editingResourceId) {
@@ -361,7 +392,23 @@ export function useWebCommunityResourceUiController<
     handleReorderResources: handleReorderCommunityResources,
     openNewResourceModal,
     openNewSourceModal,
-    handleEditResource,
+    resourceEditor: {
+      editingResourceId,
+      titleInput: resourceTitleInput,
+      urlInput: resourceUrlInput,
+      bodyInput: resourceBodyInput,
+      pinnedInput: resourcePinnedInput,
+      roleInput: resourceRoleInput,
+      error: resourceError,
+      isSaving: isSavingResource,
+      beginInlineEditResource,
+      cancelInlineEditResource,
+      saveInlineEditResource,
+      onChangeTitle: setResourceTitleInput,
+      onChangeUrl: setResourceUrlInput,
+      onChangeBody: setResourceBodyInput,
+      onChangePinned: setResourcePinnedInput,
+    },
     handleDeleteResource,
     handleCreatePageDraftFromSource,
     resourceModuleModalProps: {

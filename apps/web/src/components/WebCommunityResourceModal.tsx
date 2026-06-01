@@ -13,7 +13,7 @@ type WebCommunityResourceModalProps = {
   isSavingResource: boolean;
   onClose: () => void;
   onCancel: () => void;
-  onSave: () => Promise<void> | void;
+  onSave: () => Promise<boolean | void> | boolean | void;
   onChangeTitle: (value: string) => void;
   onChangeUrl: (value: string) => void;
   onChangeBody: (value: string) => void;
@@ -58,7 +58,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
   const {
     isOpen,
     hasActiveCommunity,
-    editingResourceId,
     resourceTitleInput,
     resourceUrlInput,
     resourceBodyInput,
@@ -93,7 +92,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
       <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">{editingResourceId ? "Edit resource" : "Add resource"}</div>
+            <div className="modal-title">Add resource</div>
             <div className="resource-modal-subtitle">
               Save a durable page or source for the community knowledge base.
             </div>
@@ -241,7 +240,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                 (resourceBodyInput.trim().length === 0 && resourceUrlInput.trim().length === 0)
               }
             >
-              {isSavingResource ? "Saving..." : editingResourceId ? "Save changes" : "Save knowledge"}
+              {isSavingResource ? "Saving..." : "Save knowledge"}
             </button>
             <button className="secondary" onClick={onCancel}>
               Cancel

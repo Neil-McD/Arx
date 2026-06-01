@@ -73,7 +73,23 @@ export type CommunityResourcesActions = {
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean> | boolean;
   openNewResourceModal: (moduleId?: string | null) => void;
   openNewSourceModal: (moduleId?: string | null) => void;
-  handleEditResource: (resource: CommunityResource) => void;
+  resourceEditor: {
+    editingResourceId: string | null;
+    titleInput: string;
+    urlInput: string;
+    bodyInput: string;
+    pinnedInput: boolean;
+    roleInput: "page" | "source";
+    error: string | null;
+    isSaving: boolean;
+    beginInlineEditResource: (resource: CommunityResource) => void;
+    cancelInlineEditResource: () => void;
+    saveInlineEditResource: () => Promise<boolean>;
+    onChangeTitle: (value: string) => void;
+    onChangeUrl: (value: string) => void;
+    onChangeBody: (value: string) => void;
+    onChangePinned: (value: boolean) => void;
+  };
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
   handleCreatePageDraftFromSource: (resource: CommunityResource) => Promise<CommunityResource | null>;
   reloadResources?: () => Promise<void> | void;
