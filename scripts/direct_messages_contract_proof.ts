@@ -248,7 +248,7 @@ assert.match(messageRow, /disabled=\{!canMessageSender\}/, "hover profile messag
 assert.match(dmPanel, /From \{communityName\}/, "DM panel must surface source community context");
 assert.match(dmPanel, /participant_type === "user"/, "DM panel must resolve the human peer from participants");
 assert.match(dmPanel, /Start a direct message from this shared community/, "empty DM state must explain the community-origin model");
-assert.match(dmPanel, /import \{ ArrowLeft, MessageCircle, Paperclip \} from "lucide-react"/, "DM conversation panel must use lucide icons for back, empty, and attachment actions");
+assert.match(dmPanel, /import \{ ArrowLeft, MessageCircle, Paperclip, RotateCcw \} from "lucide-react"/, "DM conversation panel must use lucide icons for back, empty, attachment, and retry actions");
 assert.match(dmPanel, /DM_AUTO_SCROLL_THRESHOLD_PX/, "DM panel must keep chat-like auto-scroll constrained by a bottom threshold");
 assert.match(dmPanel, /scrollMessagesToBottom/, "DM panel must scroll opened or followed conversations to the newest message");
 assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether the viewer is reading older messages before auto-following");
@@ -262,6 +262,11 @@ assert.match(dmPanel, /AttachmentChipButton/, "DM panel must reuse the canonical
 assert.match(dmPanel, /CommunityChatMediaGrid/, "DM panel must reuse the canonical image grid");
 assert.match(dmPanel, /type DirectMessageAttachmentFileInput = FileList \| readonly File\[\]/, "DM panel must accept file picker and drag-drop attachment file inputs");
 assert.match(dmPanel, /onAttachmentFilesSelected\?: \(files: DirectMessageAttachmentFileInput\) => void \| Promise<void>/, "DM panel must expose attachment selection");
+assert.match(dmPanel, /uploadStatus\?: "queued" \| "uploading" \| "ready" \| "failed"/, "DM composer attachment views must understand upload lifecycle state");
+assert.match(dmPanel, /onRetryAttachment\?: \(id: string\) => void/, "DM composer must expose attachment retry actions");
+assert.match(dmPanel, /getComposerAttachmentUploadStatus/, "DM composer must resolve upload state before rendering attachment previews");
+assert.match(dmPanel, /canSendDirectMessage = !props\.isSending && hasComposerPayload && !hasAttachmentBlockers/, "DM composer send button must block while attachments are not ready");
+assert.match(dmPanel, /community-dm-attachment-state-overlay/, "DM image composer previews must surface queued, uploading, and failed states");
 assert.match(dmPanel, /hasDragFiles[\s\S]*getDragFiles/, "DM panel must detect dropped files without depending only on populated FileList during dragenter");
 assert.match(dmPanel, /onDrop=\{canAcceptAttachmentDrop \? onAttachmentDrop : undefined\}/, "DM panel must accept file drops across the panel");
 assert.match(dmPanel, /community-dm-attachment-drop-surface[\s\S]*community-dm-drop-overlay/, "DM panel must expose a scoped drag-over surface and overlay");
@@ -299,10 +304,17 @@ assert.match(dmHost, /MAX_DM_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/, "global DM 
 assert.match(dmHost, /MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 \* 1024 \* 1024/, "global DM host must enforce the 25MB total attachment limit");
 assert.match(dmHost, /isAllowedDirectAttachmentFile/, "global DM host must filter unsupported DM attachment types before upload");
 assert.match(dmHost, /uploadCloudDirectMessageAttachmentFile/, "global DM host must upload DM attachments through the DM gateway");
+assert.match(dmHost, /uploadStatus\?: "queued" \| "uploading" \| "ready" \| "failed"/, "global DM host must model attachment upload lifecycle state");
+assert.match(dmHost, /uploadStatus: "queued"/, "new DM attachment drafts must start queued");
+assert.match(dmHost, /uploadDirectAttachmentDraft/, "global DM host must upload attachment drafts before send");
+assert.match(dmHost, /hasUnreadyDirectAttachments/, "global DM host must block sends while attachments are queued, uploading, or failed");
+assert.match(dmHostSerializeAttachments, /getDirectAttachmentUploadStatus\(attachment\) !== "ready"[\s\S]*continue/, "global DM host must serialize only ready uploaded attachments");
 assert.match(dmHostSerializeAttachments, /storageId/, "global DM host must serialize uploaded storage ids for DM attachment sends");
 assert.doesNotMatch(dmHostSerializeAttachments, /data_url|text:/, "global DM host must not serialize inline attachment payloads for DMs");
+assert.doesNotMatch(dmHost, /prepareDirectAttachmentsForSend/, "DM send path must not upload implicitly during send");
 assert.match(dmHost, /attachments=\{directMessagePanel\.attachments\}/, "global DM host must pass composer attachments into the DM panel");
 assert.match(dmHost, /onAttachmentFilesSelected=\{handleDirectAttachmentFilesSelected\}/, "global DM host must wire file selection to the DM panel");
+assert.match(dmHost, /onRetryAttachment=\{retryDirectAttachmentUpload\}/, "global DM host must wire failed attachment retry to the DM panel");
 assert.match(dmHost, /onRemoveAttachment=\{removeDirectAttachment\}/, "global DM host must wire attachment removal to the DM panel");
 assert.match(dmHost, /await clearDirectTypingForConversation\(current\.conversation\.id\)/, "global DM host must clear typing presence after a successful send");
 assert.match(dmHost, /onComposerBlur=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence on composer blur");
@@ -340,6 +352,9 @@ assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel s
 assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*background: transparent/, "DM conversation back control must stay flat, not circular");
 assert.match(css, /\.community-dm-panel-typing/, "DM conversation panel must style typing presence");
 assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*visibility: hidden/, "DM typing row must reserve space when empty");
+assert.match(css, /\.community-dm-attachment-state-overlay/, "DM composer images must style attachment upload state overlays");
+assert.match(css, /\.community-dm-attachment-retry/, "DM composer must style failed attachment retry controls");
+assert.match(css, /\.community-dm-attachment-item\.is-failed/, "DM composer file chips must style failed attachment state");
 assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
 assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox must size to content instead of forcing full conversation-panel height");
 assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");

@@ -25,6 +25,8 @@ import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   data_url?: string | null;
   file?: File | null;
+  uploadStatus?: "queued" | "uploading" | "ready" | "failed";
+  uploadError?: string | null;
 };
 
 type DirectMessageAttachmentFileInput = FileList | readonly File[];
@@ -152,6 +154,17 @@ function isAllowedDirectAttachmentFile(file: File): boolean {
   ].some((extension) => name.endsWith(extension));
 }
 
+function getDirectAttachmentUploadStatus(attachment: DirectMessageAttachmentDraft): "queued" | "uploading" | "ready" | "failed" {
+  if (String(attachment.storage_id ?? "").trim()) return "ready";
+  if (attachment.uploadStatus) return attachment.uploadStatus;
+  if (attachment.file instanceof File) return "queued";
+  return "failed";
+}
+
+function hasUnreadyDirectAttachments(attachments: DirectMessageAttachmentDraft[]): boolean {
+  return attachments.some((attachment) => getDirectAttachmentUploadStatus(attachment) !== "ready");
+}
+
 async function ingestDirectMessageAttachmentsFromFileList(
   files: DirectMessageAttachmentFileInput,
   existing: DirectMessageAttachmentDraft[],
@@ -193,6 +206,8 @@ async function ingestDirectMessageAttachmentsFromFileList(
       mime: String(file.type ?? "").trim() || null,
       size: file.size,
       file,
+      uploadStatus: "queued",
+      uploadError: null,
     };
     if (isImage) {
       try {
@@ -210,34 +225,10 @@ async function ingestDirectMessageAttachmentsFromFileList(
   };
 }
 
-async function prepareDirectAttachmentsForSend<SessionT>(
-  attachments: DirectMessageAttachmentDraft[],
-  session: SessionT,
-  conversationId: string,
-): Promise<DirectMessageAttachmentDraft[]> {
-  const prepared: DirectMessageAttachmentDraft[] = [];
-  for (const attachment of attachments) {
-    const currentStorageId = String(attachment.storage_id ?? "").trim();
-    let nextStorageId = currentStorageId || null;
-    if (!nextStorageId && attachment.file instanceof File) {
-      nextStorageId = await uploadCloudDirectMessageAttachmentFile({
-        session,
-        conversationId,
-        file: attachment.file,
-      });
-    }
-    prepared.push({
-      ...attachment,
-      storage_id: nextStorageId,
-      file: null,
-    });
-  }
-  return prepared;
-}
-
 function serializeDirectAttachmentsForWrite(attachments: DirectMessageAttachmentDraft[]): unknown[] {
   const out: unknown[] = [];
   for (const attachment of attachments) {
+    if (getDirectAttachmentUploadStatus(attachment) !== "ready") continue;
     const storageId = String(attachment.storage_id ?? "").trim();
     if (!storageId) continue;
     out.push({
@@ -708,11 +699,135 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [markConversationRead, session],
   );
 
+  const uploadDirectAttachmentDraft = useCallback(
+    async (conversationId: string, attachment: DirectMessageAttachmentDraft) => {
+      const attachmentId = String(attachment.id ?? "").trim();
+      if (!attachmentId) return;
+      if (!session) {
+        setDirectMessagePanel((previous) =>
+          previous?.conversation.id === conversationId
+            ? {
+                ...previous,
+                attachments: previous.attachments.map((item) =>
+                  item.id === attachmentId
+                    ? {
+                        ...item,
+                        uploadStatus: "failed",
+                        uploadError: "Sign in to upload attachments.",
+                      }
+                    : item,
+                ),
+                error: "Sign in to upload attachments.",
+              }
+            : previous,
+        );
+        return;
+      }
+      if (!(attachment.file instanceof File)) {
+        setDirectMessagePanel((previous) =>
+          previous?.conversation.id === conversationId
+            ? {
+                ...previous,
+                attachments: previous.attachments.map((item) =>
+                  item.id === attachmentId && getDirectAttachmentUploadStatus(item) !== "ready"
+                    ? {
+                        ...item,
+                        uploadStatus: "failed",
+                        uploadError: "Attachment file is no longer available.",
+                      }
+                    : item,
+                ),
+                error: "Attachment file is no longer available.",
+              }
+            : previous,
+        );
+        return;
+      }
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === conversationId
+          ? {
+              ...previous,
+              attachments: previous.attachments.map((item) =>
+                item.id === attachmentId
+                  ? {
+                      ...item,
+                      uploadStatus: "uploading",
+                      uploadError: null,
+                    }
+                  : item,
+              ),
+              error: null,
+            }
+          : previous,
+      );
+      try {
+        const storageId = await uploadCloudDirectMessageAttachmentFile({
+          session,
+          conversationId,
+          file: attachment.file,
+        });
+        setDirectMessagePanel((previous) => {
+          if (previous?.conversation.id !== conversationId) return previous;
+          const nextAttachments = previous.attachments.map((item) =>
+            item.id === attachmentId
+              ? {
+                  ...item,
+                  storage_id: storageId,
+                  file: null,
+                  uploadStatus: "ready" as const,
+                  uploadError: null,
+                }
+              : item,
+          );
+          const nextHasFailedAttachment = nextAttachments.some(
+            (item) => getDirectAttachmentUploadStatus(item) === "failed",
+          );
+          return {
+            ...previous,
+            attachments: nextAttachments,
+            error: nextHasFailedAttachment ? previous.error : null,
+          };
+        });
+      } catch (error) {
+        const message = toErrorMessage(error, "Failed to upload attachment.");
+        setDirectMessagePanel((previous) =>
+          previous?.conversation.id === conversationId
+            ? {
+                ...previous,
+                attachments: previous.attachments.map((item) =>
+                  item.id === attachmentId
+                    ? {
+                        ...item,
+                        uploadStatus: "failed",
+                        uploadError: message,
+                      }
+                    : item,
+                ),
+                error: message,
+              }
+            : previous,
+        );
+      }
+    },
+    [session],
+  );
+
   const sendDirectMessage = useCallback(async () => {
     const current = directMessagePanel;
     const text = String(current?.input ?? "").trim();
     const attachmentsToSend = [...(current?.attachments ?? [])];
     if (!current || (!text && attachmentsToSend.length === 0) || !session) return;
+    if (hasUnreadyDirectAttachments(attachmentsToSend)) {
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === current.conversation.id
+          ? {
+              ...previous,
+              error: "Wait for attachments to finish uploading, or remove failed attachments.",
+            }
+          : previous,
+      );
+      return;
+    }
     setDirectMessagePanel((previous) =>
       previous?.conversation.id === current.conversation.id
         ? {
@@ -723,12 +838,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         : previous,
     );
     try {
-      const preparedAttachments = await prepareDirectAttachmentsForSend(
-        attachmentsToSend,
-        session,
-        current.conversation.id,
-      );
-      const serializedAttachments = serializeDirectAttachmentsForWrite(preparedAttachments);
+      const serializedAttachments = serializeDirectAttachmentsForWrite(attachmentsToSend);
       await sendCloudDirectMessage({
         session,
         conversationId: current.conversation.id,
@@ -766,6 +876,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       const current = directMessagePanel;
       if (!current || files.length === 0) return;
       const result = await ingestDirectMessageAttachmentsFromFileList(files, current.attachments);
+      const queuedAttachments = result.attachments.slice(current.attachments.length).filter(
+        (attachment) => getDirectAttachmentUploadStatus(attachment) === "queued",
+      );
       setDirectMessagePanel((previous) =>
         previous?.conversation.id === current.conversation.id
           ? {
@@ -775,9 +888,21 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             }
           : previous,
       );
+      for (const attachment of queuedAttachments) {
+        void uploadDirectAttachmentDraft(current.conversation.id, attachment);
+      }
     },
-    [directMessagePanel],
+    [directMessagePanel, uploadDirectAttachmentDraft],
   );
+
+  const retryDirectAttachmentUpload = useCallback((id: string) => {
+    const attachmentId = String(id ?? "").trim();
+    const current = directMessagePanel;
+    if (!attachmentId || !current) return;
+    const attachment = current.attachments.find((item) => item.id === attachmentId);
+    if (!attachment || getDirectAttachmentUploadStatus(attachment) === "ready") return;
+    void uploadDirectAttachmentDraft(current.conversation.id, attachment);
+  }, [directMessagePanel, uploadDirectAttachmentDraft]);
 
   const removeDirectAttachment = useCallback((id: string) => {
     const attachmentId = String(id ?? "").trim();
@@ -828,6 +953,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           }}
           onSend={sendDirectMessage}
           onAttachmentFilesSelected={handleDirectAttachmentFilesSelected}
+          onRetryAttachment={retryDirectAttachmentUpload}
           onRemoveAttachment={removeDirectAttachment}
           onComposerBlur={() => {
             typingInputHadTextRef.current = false;

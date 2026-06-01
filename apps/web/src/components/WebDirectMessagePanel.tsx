@@ -1,4 +1,4 @@
-import { ArrowLeft, MessageCircle, Paperclip } from "lucide-react";
+import { ArrowLeft, MessageCircle, Paperclip, RotateCcw } from "lucide-react";
 import type { ChangeEvent, DragEvent, FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -16,6 +16,8 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
+  uploadStatus?: "queued" | "uploading" | "ready" | "failed";
+  uploadError?: string | null;
 };
 
 type DirectMessageAttachmentFileInput = FileList | readonly File[];
@@ -36,6 +38,7 @@ type WebDirectMessagePanelProps = {
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
   onAttachmentFilesSelected?: (files: DirectMessageAttachmentFileInput) => void | Promise<void>;
+  onRetryAttachment?: (id: string) => void;
   onRemoveAttachment?: (id: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
@@ -90,9 +93,25 @@ function getDragFiles(event: DragEvent<HTMLElement>): File[] {
     .filter((file): file is File => file instanceof File);
 }
 
+function getComposerAttachmentUploadStatus(
+  attachment: DirectMessageComposerAttachment,
+): "queued" | "uploading" | "ready" | "failed" {
+  if (String(attachment.storage_id ?? "").trim()) return "ready";
+  if (attachment.uploadStatus) return attachment.uploadStatus;
+  return "ready";
+}
+
+function getComposerAttachmentUploadLabel(status: "queued" | "uploading" | "ready" | "failed"): string {
+  if (status === "queued") return "Queued";
+  if (status === "uploading") return "Uploading";
+  if (status === "failed") return "Upload failed";
+  return "";
+}
+
 function DirectMessageAttachmentViews(props: {
   attachments: DirectMessageComposerAttachment[];
   isComposer?: boolean;
+  onRetryAttachment?: (id: string) => void;
   onRemoveAttachment?: (id: string) => void;
 }) {
   const { imageAttachments, fileAttachments } = partitionCommunityAttachments(props.attachments);
@@ -109,20 +128,43 @@ function DirectMessageAttachmentViews(props: {
       {imageViews.length > 0 ? (
         props.isComposer ? (
           <div className={`chat-media-grid count-${Math.min(Math.max(imageViews.length, 1), 4)} chat-media-grid-composer community-dm-media-grid`}>
-            {imageAttachments.map((item) => (
-              <div key={item.attachment.id} className="chat-media-item chat-media-item-static">
-                <img src={item.previewUrl} alt={item.name} />
-                <button
-                  type="button"
-                  className="chat-media-remove"
-                  onClick={() => props.onRemoveAttachment?.(item.attachment.id)}
-                  title="Remove"
-                  aria-label={`Remove ${item.name}`}
+            {imageAttachments.map((item) => {
+              const uploadStatus = getComposerAttachmentUploadStatus(item.attachment);
+              const uploadLabel = getComposerAttachmentUploadLabel(uploadStatus);
+              return (
+                <div
+                  key={item.attachment.id}
+                  className={`chat-media-item chat-media-item-static community-dm-composer-media-item is-${uploadStatus}`}
                 >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <img src={item.previewUrl} alt={item.name} />
+                  {uploadStatus !== "ready" ? (
+                    <div className="community-dm-attachment-state-overlay" aria-live="polite">
+                      <span>{uploadLabel}</span>
+                      {uploadStatus === "failed" ? (
+                        <button
+                          type="button"
+                          className="community-dm-attachment-retry"
+                          onClick={() => props.onRetryAttachment?.(item.attachment.id)}
+                          title={item.attachment.uploadError ?? "Retry upload"}
+                          aria-label={`Retry upload for ${item.name}`}
+                        >
+                          <RotateCcw aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="chat-media-remove"
+                    onClick={() => props.onRemoveAttachment?.(item.attachment.id)}
+                    title="Remove"
+                    aria-label={`Remove ${item.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <CommunityChatMediaGrid
@@ -136,32 +178,55 @@ function DirectMessageAttachmentViews(props: {
       ) : null}
       {fileAttachments.length > 0 ? (
         <div className="attachments-preview community-dm-attachments-preview">
-          {fileAttachments.map((attachment) =>
-            props.isComposer ? (
-              <div key={attachment.id} className="attachment-item" title={attachment.name}>
-                <div className="attachment-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <path d="M14 2v6h6" />
-                    <path d="M16 13H8" />
-                    <path d="M16 17H8" />
-                    <path d="M10 9H8" />
-                  </svg>
-                </div>
-                <span className="attachment-name">{attachment.name}</span>
-                <button
-                  className="attachment-remove"
-                  type="button"
-                  onClick={() => props.onRemoveAttachment?.(attachment.id)}
-                  title="Remove"
-                  aria-label={`Remove ${attachment.name}`}
+          {fileAttachments.map((attachment) => {
+            if (props.isComposer) {
+              const uploadStatus = getComposerAttachmentUploadStatus(attachment);
+              const uploadLabel = getComposerAttachmentUploadLabel(uploadStatus);
+              return (
+                <div
+                  key={attachment.id}
+                  className={`attachment-item community-dm-attachment-item is-${uploadStatus}`}
+                  title={attachment.uploadError ?? attachment.name}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
+                  <div className="attachment-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6" />
+                      <path d="M16 13H8" />
+                      <path d="M16 17H8" />
+                      <path d="M10 9H8" />
+                    </svg>
+                  </div>
+                  <span className="attachment-name">{attachment.name}</span>
+                  {uploadStatus !== "ready" ? (
+                    <span className="community-dm-attachment-state">{uploadLabel}</span>
+                  ) : null}
+                  {uploadStatus === "failed" ? (
+                    <button
+                      className="community-dm-attachment-retry"
+                      type="button"
+                      onClick={() => props.onRetryAttachment?.(attachment.id)}
+                      title={attachment.uploadError ?? "Retry upload"}
+                      aria-label={`Retry upload for ${attachment.name}`}
+                    >
+                      <RotateCcw aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  <button
+                    className="attachment-remove"
+                    type="button"
+                    onClick={() => props.onRemoveAttachment?.(attachment.id)}
+                    title="Remove"
+                    aria-label={`Remove ${attachment.name}`}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            }
+            return (
               <AttachmentChipButton
                 key={attachment.id}
                 name={attachment.name}
@@ -172,8 +237,8 @@ function DirectMessageAttachmentViews(props: {
                 }
                 disabled={!(typeof attachment.url === "string" && attachment.url.trim().length > 0)}
               />
-            ),
-          )}
+            );
+          })}
         </div>
       ) : null}
     </>
@@ -226,6 +291,11 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const lastMessageSeq = Math.max(0, Math.floor(Number(lastMessage?.seq ?? 0)));
   const lastMessageIsOwn = Boolean(lastMessage?.sender_user_id && lastMessage.sender_user_id === props.sessionUserId);
   const typingLabel = formatDirectTypingLabel(props.typingPresence, peerLabel);
+  const hasAttachmentBlockers = props.attachments.some(
+    (attachment) => getComposerAttachmentUploadStatus(attachment) !== "ready",
+  );
+  const hasComposerPayload = props.input.trim().length > 0 || props.attachments.length > 0;
+  const canSendDirectMessage = !props.isSending && hasComposerPayload && !hasAttachmentBlockers;
 
   const scrollMessagesToBottom = useCallback(() => {
     const messagesElement = messagesRef.current;
@@ -235,6 +305,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canSendDirectMessage) return;
     void props.onSend();
   };
 
@@ -437,6 +508,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           <DirectMessageAttachmentViews
             attachments={props.attachments}
             isComposer={true}
+            onRetryAttachment={props.onRetryAttachment}
             onRemoveAttachment={props.onRemoveAttachment}
           />
         </div>
@@ -471,6 +543,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
+              if (!canSendDirectMessage) return;
               void props.onSend();
             }
           }}
@@ -481,7 +554,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         <button
           className="community-dm-panel-send chat-send ask-send-btn ask-send-btn-v2"
           type="submit"
-          disabled={props.isSending || (props.input.trim().length === 0 && props.attachments.length === 0)}
+          disabled={!canSendDirectMessage}
           aria-label="Send direct message"
           title="Send"
         >

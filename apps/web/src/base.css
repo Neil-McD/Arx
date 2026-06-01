@@ -9560,7 +9560,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-panel-typing.is-empty {
-  display: none;
+  visibility: hidden;
 }
 
 .community-dm-panel-error {
@@ -9586,6 +9586,92 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-dm-composer-attachments .attachments-preview {
   max-width: 100%;
+}
+
+.community-dm-composer-attachments .community-dm-attachment-item {
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 64%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card) 34%, transparent);
+}
+
+.community-dm-composer-media-item.is-queued img,
+.community-dm-composer-media-item.is-uploading img,
+.community-dm-composer-media-item.is-failed img {
+  opacity: 0.58;
+}
+
+.community-dm-composer-media-item.is-failed {
+  outline: 1px solid color-mix(in srgb, #ff5f6d 62%, transparent);
+  outline-offset: -1px;
+}
+
+.community-dm-attachment-state-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.2;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.44);
+  pointer-events: none;
+}
+
+.community-dm-attachment-state {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.community-dm-attachment-item.is-queued .attachment-name,
+.community-dm-attachment-item.is-uploading .attachment-name {
+  color: var(--text-muted);
+}
+
+.community-dm-attachment-item.is-failed {
+  border-color: color-mix(in srgb, #ff5f6d 52%, transparent);
+  background: color-mix(in srgb, #ff5f6d 8%, transparent);
+}
+
+.community-dm-attachment-item.is-failed .community-dm-attachment-state {
+  color: color-mix(in srgb, #ff7a84 78%, var(--text-primary) 22%);
+}
+
+.community-dm-attachment-retry {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-card) 52%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.community-dm-attachment-retry:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-primary, #ff3b93) 46%, transparent);
+}
+
+.community-dm-attachment-retry svg {
+  width: 12px;
+  height: 12px;
 }
 
 .community-dm-panel-composer {
