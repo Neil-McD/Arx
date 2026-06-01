@@ -1,6 +1,6 @@
 import { ArrowLeft, MessageCircle, Paperclip } from "lucide-react";
-import type { ChangeEvent, FormEvent, ReactNode } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import type { ChangeEvent, DragEvent, FormEvent, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DirectMessage,
   DirectMessageAttachment,
@@ -18,6 +18,8 @@ type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
 };
 
+type DirectMessageAttachmentFileInput = FileList | readonly File[];
+
 type WebDirectMessagePanelProps = {
   conversation: DirectMessageConversation;
   messages: DirectMessage[];
@@ -33,7 +35,7 @@ type WebDirectMessagePanelProps = {
   renderTextWithLinks: (text: string) => ReactNode;
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
-  onAttachmentFilesSelected?: (files: FileList) => void | Promise<void>;
+  onAttachmentFilesSelected?: (files: DirectMessageAttachmentFileInput) => void | Promise<void>;
   onRemoveAttachment?: (id: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
@@ -67,6 +69,25 @@ function openAttachmentUrl(url: string | null | undefined) {
   const normalizedUrl = String(url ?? "").trim();
   if (!normalizedUrl) return;
   window.open(normalizedUrl, "_blank", "noopener,noreferrer");
+}
+
+function hasDragFiles(event: DragEvent<HTMLElement>): boolean {
+  const transfer = event.dataTransfer;
+  if (!transfer) return false;
+  if (transfer.files && transfer.files.length > 0) return true;
+  if (Array.from(transfer.types ?? []).includes("Files")) return true;
+  return Array.from(transfer.items ?? []).some((item) => item.kind === "file");
+}
+
+function getDragFiles(event: DragEvent<HTMLElement>): File[] {
+  const transfer = event.dataTransfer;
+  if (!transfer) return [];
+  const files = Array.from(transfer.files ?? []).filter((file): file is File => file instanceof File);
+  if (files.length > 0) return files;
+  return Array.from(transfer.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file instanceof File);
 }
 
 function DirectMessageAttachmentViews(props: {
@@ -191,9 +212,11 @@ function formatDirectTypingLabel(
 export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
   const shouldFollowMessagesRef = useRef(true);
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
+  const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
   const peer = resolveDirectMessagePeer(props.conversation, props.sessionUserId);
   const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
   const peerAvatarSeed = peer?.user_id ?? peerLabel;
@@ -222,6 +245,43 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       void props.onAttachmentFilesSelected?.(files);
     }
     input.value = "";
+  };
+
+  const canAcceptAttachmentDrop = Boolean(props.onAttachmentFilesSelected) && !props.isSending;
+
+  const onAttachmentDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (!canAcceptAttachmentDrop || !hasDragFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    dragDepthRef.current += 1;
+    setIsAttachmentDragOver(true);
+  };
+
+  const onAttachmentDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!canAcceptAttachmentDrop || !hasDragFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsAttachmentDragOver(true);
+  };
+
+  const onAttachmentDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!hasDragFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsAttachmentDragOver(false);
+    }
+  };
+
+  const onAttachmentDrop = (event: DragEvent<HTMLElement>) => {
+    if (!canAcceptAttachmentDrop || !hasDragFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsAttachmentDragOver(false);
+    const files = getDragFiles(event);
+    if (files.length > 0) {
+      void props.onAttachmentFilesSelected?.(files);
+    }
   };
 
   useEffect(() => {
@@ -257,7 +317,21 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   ]);
 
   return (
-    <aside className="community-dm-panel" role="dialog" aria-label={`${peerLabel} direct message`}>
+    <aside
+      className={`community-dm-panel community-dm-attachment-drop-surface${isAttachmentDragOver ? " drag-over" : ""}`}
+      role="dialog"
+      aria-label={`${peerLabel} direct message`}
+      onDrop={canAcceptAttachmentDrop ? onAttachmentDrop : undefined}
+      onDragEnter={canAcceptAttachmentDrop ? onAttachmentDragEnter : undefined}
+      onDragOver={canAcceptAttachmentDrop ? onAttachmentDragOver : undefined}
+      onDragLeave={canAcceptAttachmentDrop ? onAttachmentDragLeave : undefined}
+    >
+      {isAttachmentDragOver ? (
+        <div className="drop-overlay community-dm-drop-overlay" aria-hidden="true">
+          <Paperclip aria-hidden="true" />
+          <span>Drop files to attach</span>
+        </div>
+      ) : null}
       <div className="community-dm-panel-header">
         {props.onBackToInbox ? (
           <button

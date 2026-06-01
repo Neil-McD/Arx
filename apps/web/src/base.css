@@ -9333,6 +9333,23 @@ button.community-launch-knowledge-integration-chip:disabled {
   -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
+.community-dm-attachment-drop-surface.drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--accent-primary, #ff3b93) 68%, transparent);
+  outline-offset: -8px;
+}
+
+.community-dm-drop-overlay {
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent-primary, #ff3b93) 12%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.community-dm-drop-overlay svg {
+  width: 28px;
+  height: 28px;
+}
+
 .community-dm-panel-header {
   display: flex;
   align-items: center;

@@ -260,7 +260,11 @@ assert.match(dmPanel, /parseMessageAttachments/, "DM panel must reuse the canoni
 assert.match(dmPanel, /partitionCommunityAttachments/, "DM panel must reuse the canonical attachment partitioning helper");
 assert.match(dmPanel, /AttachmentChipButton/, "DM panel must reuse the canonical file attachment chip");
 assert.match(dmPanel, /CommunityChatMediaGrid/, "DM panel must reuse the canonical image grid");
-assert.match(dmPanel, /onAttachmentFilesSelected\?: \(files: FileList\) => void \| Promise<void>/, "DM panel must expose file-picker attachment selection");
+assert.match(dmPanel, /type DirectMessageAttachmentFileInput = FileList \| readonly File\[\]/, "DM panel must accept file picker and drag-drop attachment file inputs");
+assert.match(dmPanel, /onAttachmentFilesSelected\?: \(files: DirectMessageAttachmentFileInput\) => void \| Promise<void>/, "DM panel must expose attachment selection");
+assert.match(dmPanel, /hasDragFiles[\s\S]*getDragFiles/, "DM panel must detect dropped files without depending only on populated FileList during dragenter");
+assert.match(dmPanel, /onDrop=\{canAcceptAttachmentDrop \? onAttachmentDrop : undefined\}/, "DM panel must accept file drops across the panel");
+assert.match(dmPanel, /community-dm-attachment-drop-surface[\s\S]*community-dm-drop-overlay/, "DM panel must expose a scoped drag-over surface and overlay");
 assert.match(dmPanel, /community-dm-panel-file-input[\s\S]*type="file"[\s\S]*multiple/, "DM composer must use a real multi-file input");
 assert.match(dmPanel, /Paperclip/, "DM composer must expose an attachment button");
 assert.match(dmPanel, /onComposerBlur\?: \(\) => void \| Promise<void>/, "DM panel must let the host clear typing presence on composer blur");

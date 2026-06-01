@@ -27,6 +27,8 @@ type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   file?: File | null;
 };
 
+type DirectMessageAttachmentFileInput = FileList | readonly File[];
+
 type DirectMessagePanelState = {
   conversation: DirectMessageConversation;
   messages: DirectMessage[];
@@ -151,7 +153,7 @@ function isAllowedDirectAttachmentFile(file: File): boolean {
 }
 
 async function ingestDirectMessageAttachmentsFromFileList(
-  files: FileList,
+  files: DirectMessageAttachmentFileInput,
   existing: DirectMessageAttachmentDraft[],
 ): Promise<{ attachments: DirectMessageAttachmentDraft[]; error: string | null }> {
   if (files.length === 0) return { attachments: existing, error: null };
@@ -760,7 +762,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [clearDirectTypingForConversation, directMessagePanel, session]);
 
   const handleDirectAttachmentFilesSelected = useCallback(
-    async (files: FileList) => {
+    async (files: DirectMessageAttachmentFileInput) => {
       const current = directMessagePanel;
       if (!current || files.length === 0) return;
       const result = await ingestDirectMessageAttachmentsFromFileList(files, current.attachments);
