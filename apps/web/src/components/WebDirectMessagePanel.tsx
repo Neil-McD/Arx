@@ -391,6 +391,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             const hasText = text.length > 0;
             const hasAttachments = attachments.length > 0;
             const isMediaOnly = !hasText && attachments.some((attachment) => attachment.type === "image");
+            const shouldSeparateAttachments = hasText && hasAttachments;
             if (!hasText && !hasAttachments) return null;
             return (
               <div
@@ -400,6 +401,15 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                 {isMediaOnly ? (
                   <div className="community-dm-panel-media-only">
                     <DirectMessageAttachmentViews attachments={attachments} />
+                  </div>
+                ) : shouldSeparateAttachments ? (
+                  <div className="community-dm-panel-message-stack">
+                    <div className="community-dm-panel-message-bubble">
+                      <div className="community-dm-panel-message-text">{props.renderTextWithLinks(text)}</div>
+                    </div>
+                    <div className="community-dm-panel-media-only">
+                      <DirectMessageAttachmentViews attachments={attachments} />
+                    </div>
                   </div>
                 ) : (
                   <div className="community-dm-panel-message-bubble">

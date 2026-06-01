@@ -9474,6 +9474,22 @@ button.community-launch-knowledge-integration-chip:disabled {
   align-items: flex-end;
 }
 
+.community-dm-panel-message-stack {
+  max-width: min(260px, 82%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.community-dm-panel-message.is-own .community-dm-panel-message-stack {
+  align-items: flex-end;
+}
+
+.community-dm-panel-message-stack .community-dm-panel-message-bubble {
+  max-width: 100%;
+}
+
 .community-dm-panel-media-only {
   max-width: min(260px, 72vw);
   display: flex;
