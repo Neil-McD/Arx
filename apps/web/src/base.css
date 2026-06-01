@@ -12439,15 +12439,6 @@ button.chat-reply-quote:hover {
   padding: 0 4px 2px;
 }
 
-.knowledge-resource-empty-line {
-  border: 1px dashed color-mix(in srgb, var(--border-default) 70%, transparent);
-  border-radius: 8px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-  padding: 7px 8px;
-}
-
 .knowledge-resource-inline-add {
   width: 100%;
   min-height: 30px;

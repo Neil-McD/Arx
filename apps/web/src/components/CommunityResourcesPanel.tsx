@@ -1070,11 +1070,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     onDrop={(event) => handleModuleDrop(event, section.module)}
                     onDragEnd={handleModuleDragEnd}
                   >
-                    {section.pageResources.length > 0 ? (
-                      section.pageResources.map(renderResourceRailItem)
-                    ) : (
-                      <div className="knowledge-resource-empty-line">No pages yet</div>
-                    )}
+                    {section.pageResources.map(renderResourceRailItem)}
                   </ResourceCategorySection>
                 ))}
                 {shouldShowSourceInbox ? (

@@ -496,6 +496,11 @@ assert.match(
   /onAddPage=\{\(\) => actions\.openNewResourceModal\(section\.module\.id\)\}/,
   "inline page creation must target the category that owns the add-page row",
 );
+assert.doesNotMatch(
+  resourcesPanel,
+  />\s*No pages yet\s*</,
+  "empty categories should collapse to the inline add-page action instead of rendering a duplicate empty-state row",
+);
 assert.match(
   webResourceController,
   /openNewSourceModal[\s\S]*setResourceRoleInput\("source"\)[\s\S]*setResourceStatusInput\("review"\)/,
