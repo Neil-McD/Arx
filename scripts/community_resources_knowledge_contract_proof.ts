@@ -446,15 +446,10 @@ assert.match(
   /Open source/,
   "resource viewer must expose a clear open-source action for resolved lineage",
 );
-assert.match(
-  resourceViewer,
-  /resource\.directory_path/,
-  "resource viewer must show the readable directory path",
-);
-assert.match(
+assert.doesNotMatch(
   resourceViewer,
   /resource\.directory_uri/,
-  "resource viewer must keep the stable directory URI visible",
+  "resource viewer must not expose stable internal directory URIs in the reader UI",
 );
 assert.match(
   resourcesPanel,

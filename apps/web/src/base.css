@@ -13875,8 +13875,7 @@ button.chat-reply-quote:hover {
   color: var(--text-primary);
 }
 
-.resource-viewer-lineage,
-.resource-viewer-reference {
+.resource-viewer-lineage {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -13907,25 +13906,6 @@ button.chat-reply-quote:hover {
 .resource-viewer-lineage strong {
   color: var(--text-secondary);
   font-weight: 700;
-}
-
-.resource-viewer-reference {
-  padding-top: 2px;
-}
-
-.resource-viewer-reference span,
-.resource-viewer-reference code {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.resource-viewer-reference code {
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 55%, transparent);
-  color: var(--text-faint);
-  font: 11px/1.35 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
 }
 
 .resource-reader-inline-actions {

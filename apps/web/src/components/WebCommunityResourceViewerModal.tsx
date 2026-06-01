@@ -411,11 +411,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           ) : null}
 
           {renderSourceLineage()}
-
-          <div className="resource-viewer-reference">
-            <span>{resource.directory_path}</span>
-            <code>{resource.directory_uri}</code>
-          </div>
         </div>
       </div>
     </div>
