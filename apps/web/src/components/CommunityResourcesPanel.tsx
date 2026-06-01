@@ -164,6 +164,7 @@ function ResourceCategorySection(props: {
   onEdit: () => void;
   onSetStatus: (status: "draft" | "live") => void;
   onDelete: () => void;
+  onAddPage: () => void;
   onSelectCategory: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
@@ -184,6 +185,7 @@ function ResourceCategorySection(props: {
     onEdit,
     onSetStatus,
     onDelete,
+    onAddPage,
     onSelectCategory,
     onDragStart,
     onDragOver,
@@ -310,7 +312,22 @@ function ResourceCategorySection(props: {
           ) : null}
         </div>
       </div>
-      <div className="knowledge-category-pages">{children}</div>
+      <div className="knowledge-category-pages">
+        {children}
+        {canManage && !module.is_virtual ? (
+          <button
+            className="knowledge-resource-inline-add"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddPage();
+            }}
+          >
+            <span aria-hidden="true">+</span>
+            <span>Add page</span>
+          </button>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -613,8 +630,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const selectedCategorySection = selectedModule
     ? categorySections.find((section) => section.module.id === selectedModule.id) ?? null
     : null;
-  const selectedModuleResourceTargetId =
-    selectedModule && selectedModule.id !== LEGACY_RESOURCE_MODULE_ID ? selectedModule.id : null;
   const reorderableResourceIdsByModule = useMemo(() => {
     const map = new Map<string, string[]>();
     categorySections.forEach((section) => {
@@ -979,24 +994,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 <button
                   className="resources-add-choice"
                   type="button"
-                  onClick={() => actions.openNewResourceModal(selectedModuleResourceTargetId)}
-                  title="Add page"
-                >
-                  <span aria-hidden="true">+</span>
-                  <span>Page</span>
-                </button>
-                <button
-                  className="resources-add-choice"
-                  type="button"
-                  onClick={() => actions.openNewSourceModal(selectedModuleResourceTargetId)}
-                  title="Add source"
-                >
-                  <span aria-hidden="true">+</span>
-                  <span>Source</span>
-                </button>
-                <button
-                  className="resources-add-choice"
-                  type="button"
                   onClick={() => actions.openNewModuleModal()}
                   title="Add category"
                 >
@@ -1060,6 +1057,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     onEdit={() => actions.handleEditModule(section.module)}
                     onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
                     onDelete={() => void actions.handleDeleteModule(section.module.id)}
+                    onAddPage={() => actions.openNewResourceModal(section.module.id)}
                     canManage={capabilities.canOperateResources && !section.module.is_virtual}
                     canReorder={canReorderModules && !section.module.is_virtual}
                     isDragging={draggingModuleId === section.module.id}

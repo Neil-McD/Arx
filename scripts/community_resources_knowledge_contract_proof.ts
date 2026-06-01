@@ -488,18 +488,23 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /selectedModule && !selectedModule\.is_virtual/,
-  "resource creation controls must not add new resources directly into the virtual cleanup bucket",
+  /canManage && !module\.is_virtual \? \([\s\S]*knowledge-resource-inline-add/,
+  "page creation controls must live inside real category sections and never inside the virtual cleanup bucket",
+);
+assert.match(
+  resourcesPanel,
+  /onAddPage=\{\(\) => actions\.openNewResourceModal\(section\.module\.id\)\}/,
+  "inline page creation must target the category that owns the add-page row",
 );
 assert.match(
   webResourceController,
   /openNewSourceModal[\s\S]*setResourceRoleInput\("source"\)[\s\S]*setResourceStatusInput\("review"\)/,
   "web resources controller must make new source intake land in review status",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
   /actions\.openNewSourceModal/,
-  "resources panel must expose source intake from a selected module",
+  "resources panel must not expose a separate source intake button in the reader header",
 );
 assert.doesNotMatch(
   resourcesPanel,
