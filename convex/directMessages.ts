@@ -60,9 +60,21 @@ type DirectMessageLike = {
   updatedAt: number;
 };
 
+type DirectMessageTypingPresenceLike = {
+  _id: any;
+  conversationId: any;
+  userId: any;
+  displayUntil: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 const MAX_DM_TEXT_CHARS = 4000;
 const MAX_DM_PREVIEW_CHARS = 120;
 const MAX_DM_MESSAGE_ROWS = 200;
+const DM_TYPING_DISPLAY_WINDOW_MS = 5000;
+const MAX_DM_TYPING_PRESENCE_SCAN_ROWS = 12;
+const MAX_DM_TYPING_PRESENCE_VISIBLE_ROWS = 4;
 const MAX_DM_RECIPIENT_ROWS = 25;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
 const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
@@ -414,6 +426,30 @@ async function mapDirectMessage(ctx: any, row: DirectMessageLike) {
     sender_user_id: row.senderUserId ? await resolvePublicUserId(ctx, row.senderUserId) : null,
     content_json: row.contentJson,
     created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+async function mapDirectTypingPresence(ctx: any, row: DirectMessageTypingPresenceLike) {
+  const user = row.userId ? ((await ctx.db.get(row.userId)) as UserRow | null) : null;
+  const publicUserId = row.userId ? await resolvePublicUserId(ctx, row.userId) : null;
+  const profile = user
+    ? await resolveUserProfileDisplayProjectionForUser(ctx, user)
+    : {
+        display_name: null,
+        avatar_url: null,
+        avatar_focus_x: 0.5,
+        avatar_focus_y: 0.5,
+        avatar_zoom: 1,
+      };
+  return {
+    user_id: publicUserId ?? normalizeIdValue(row.userId),
+    display_name: profile.display_name ?? user?.displayName ?? null,
+    avatar_url: profile.avatar_url ?? null,
+    avatar_focus_x: profile.avatar_focus_x ?? 0.5,
+    avatar_focus_y: profile.avatar_focus_y ?? 0.5,
+    avatar_zoom: profile.avatar_zoom ?? 1,
+    display_until_ms: row.displayUntil,
     updated_at: toIsoString(row.updatedAt),
   };
 }
@@ -777,6 +813,125 @@ export const markDirectConversationRead = mutation({
       });
     }
     return await mapDirectConversation(ctx, conversation, { viewerUserId });
+  },
+});
+
+export const setDirectTyping = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    conversationId: v.id("dmConversations"),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const { conversation } = await requireActiveUserParticipant({
+      ctx,
+      conversationId: args.conversationId,
+      userId: viewerUserId,
+    });
+    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
+    await requireDirectConversationSendAccess({
+      ctx,
+      conversation,
+      viewerUserId,
+    });
+
+    const nowMs = Date.now();
+    const displayUntil = nowMs + DM_TYPING_DISPLAY_WINDOW_MS;
+    const existing = (await ctx.db
+      .query("dmTypingPresence" as any)
+      .withIndex("by_conversation_user", (q: any) =>
+        q.eq("conversationId", args.conversationId).eq("userId", viewerUserId),
+      )
+      .unique()) as DirectMessageTypingPresenceLike | null;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        displayUntil,
+        updatedAt: nowMs,
+      });
+      return { ok: true, display_until_ms: displayUntil };
+    }
+
+    await ctx.db.insert("dmTypingPresence" as any, {
+      conversationId: args.conversationId,
+      userId: viewerUserId,
+      displayUntil,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true, display_until_ms: displayUntil };
+  },
+});
+
+export const clearDirectTyping = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    conversationId: v.id("dmConversations"),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireActiveUserParticipant({
+      ctx,
+      conversationId: args.conversationId,
+      userId: viewerUserId,
+    });
+
+    const existing = (await ctx.db
+      .query("dmTypingPresence" as any)
+      .withIndex("by_conversation_user", (q: any) =>
+        q.eq("conversationId", args.conversationId).eq("userId", viewerUserId),
+      )
+      .unique()) as DirectMessageTypingPresenceLike | null;
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+    return { ok: true };
+  },
+});
+
+export const listDirectTyping = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    conversationId: v.id("dmConversations"),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireActiveUserParticipant({
+      ctx,
+      conversationId: args.conversationId,
+      userId: viewerUserId,
+    });
+
+    const nowMs = Date.now();
+    const rows = (await ctx.db
+      .query("dmTypingPresence" as any)
+      .withIndex("by_conversation_displayUntil", (q: any) =>
+        q.eq("conversationId", args.conversationId).gt("displayUntil", nowMs),
+      )
+      .order("desc")
+      .take(MAX_DM_TYPING_PRESENCE_SCAN_ROWS)) as DirectMessageTypingPresenceLike[];
+    const activeRows = rows.filter(
+      (row) => normalizeIdValue(row.userId) !== normalizeIdValue(viewerUserId),
+    );
+    const users = await Promise.all(
+      activeRows
+        .slice(0, MAX_DM_TYPING_PRESENCE_VISIBLE_ROWS)
+        .map((row) => mapDirectTypingPresence(ctx, row)),
+    );
+    return {
+      users,
+      total_count: activeRows.length,
+    };
   },
 });
 

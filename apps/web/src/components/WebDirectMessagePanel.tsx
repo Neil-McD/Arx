@@ -1,7 +1,12 @@
 import { ArrowLeft, MessageCircle } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import type { DirectMessage, DirectMessageConversation, DirectMessageParticipant } from "../../../../shared/communityTypes";
+import type {
+  DirectMessage,
+  DirectMessageConversation,
+  DirectMessageParticipant,
+  DirectMessageTypingPresenceBundle,
+} from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 
 type WebDirectMessagePanelProps = {
@@ -11,12 +16,14 @@ type WebDirectMessagePanelProps = {
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
+  typingPresence: DirectMessageTypingPresenceBundle;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
+  onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
   onBackToInbox?: () => void;
 };
@@ -47,6 +54,20 @@ function resolveDirectMessagePeer(
   );
 }
 
+function formatDirectTypingLabel(
+  typingPresence: DirectMessageTypingPresenceBundle,
+  fallbackName: string,
+): string | null {
+  const users = typingPresence.users;
+  const totalCount = Math.max(users.length, Math.floor(Number(typingPresence.total_count ?? 0)));
+  if (totalCount <= 0) return null;
+  if (totalCount === 1) {
+    const label = String(users[0]?.display_name ?? fallbackName ?? "Someone").trim() || "Someone";
+    return `${label} is typing...`;
+  }
+  return `${totalCount} people are typing...`;
+}
+
 export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowMessagesRef = useRef(true);
@@ -60,6 +81,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const lastMessageId = lastMessage?.id ?? null;
   const lastMessageSeq = Math.max(0, Math.floor(Number(lastMessage?.seq ?? 0)));
   const lastMessageIsOwn = Boolean(lastMessage?.sender_user_id && lastMessage.sender_user_id === props.sessionUserId);
+  const typingLabel = formatDirectTypingLabel(props.typingPresence, peerLabel);
 
   const scrollMessagesToBottom = useCallback(() => {
     const messagesElement = messagesRef.current;
@@ -175,6 +197,13 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         )}
       </div>
 
+      <div
+        className={`community-dm-panel-typing${typingLabel ? "" : " is-empty"}`}
+        aria-live="polite"
+      >
+        {typingLabel}
+      </div>
+
       {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
 
       <form className="community-dm-panel-composer" onSubmit={onSubmit}>
@@ -182,6 +211,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           className="community-dm-panel-input"
           value={props.input}
           onChange={(event) => props.onInputChange(event.target.value)}
+          onBlur={() => {
+            void props.onComposerBlur?.();
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();

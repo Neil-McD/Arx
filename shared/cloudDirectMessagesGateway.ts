@@ -5,6 +5,7 @@ import type {
   DirectMessage,
   DirectMessageConversation,
   DirectMessageRecipient,
+  DirectMessageTypingPresenceBundle,
 } from "./communityTypes";
 
 type CloudDirectMessagesGatewayParams<SessionT> = {
@@ -41,6 +42,20 @@ function emitLiveRows<TRow>(
     const result = watch.localQueryResult();
     if (typeof result === "undefined") return;
     onUpdate(coerceRows<TRow>(result));
+  } catch (error) {
+    onError?.(error);
+  }
+}
+
+function emitLiveResult<TResult>(
+  watch: { localQueryResult(): unknown },
+  onUpdate: (result: TResult) => void,
+  onError?: (error: unknown) => void,
+) {
+  try {
+    const result = watch.localQueryResult();
+    if (typeof result === "undefined") return;
+    onUpdate(result as TResult);
   } catch (error) {
     onError?.(error);
   }
@@ -191,6 +206,28 @@ export function subscribeCloudDirectMessages<TRow = DirectMessage>(
   return watch.onUpdate(publish);
 }
 
+export function subscribeCloudDirectTyping<TResult = DirectMessageTypingPresenceBundle>(
+  params: {
+    liveClient: CloudDirectMessagesLiveClient;
+    conversationId: string;
+    onUpdate: (result: TResult) => void;
+    onError?: (error: unknown) => void;
+  },
+): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    "directMessages:listDirectTyping" as any,
+    {
+      authSubject: params.liveClient.authSubject,
+      conversationId: params.conversationId as any,
+    } as any,
+  );
+  const publish = () => {
+    emitLiveResult<TResult>(watch as any, params.onUpdate, params.onError);
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
 export async function sendCloudDirectMessage<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     conversationId: string;
@@ -205,4 +242,28 @@ export async function sendCloudDirectMessage<SessionT>(
   })) as DirectMessage | null;
   if (!payload?.id) throw new Error("Failed to send direct message.");
   return payload;
+}
+
+export async function setCloudDirectTyping<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("directMessages:setDirectTyping" as any, {
+    authSubject,
+    conversationId: params.conversationId,
+  });
+}
+
+export async function clearCloudDirectTyping<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("directMessages:clearDirectTyping" as any, {
+    authSubject,
+    conversationId: params.conversationId,
+  });
 }

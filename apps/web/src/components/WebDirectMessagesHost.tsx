@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DirectMessage, DirectMessageConversation, DirectMessageRecipient } from "../../../../shared/communityTypes";
 import {
+  clearCloudDirectTyping,
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
   listCloudEligibleDirectMessageRecipientsForViewer,
@@ -11,6 +12,7 @@ import {
   sendCloudDirectMessage,
   subscribeCloudDirectMessages,
 } from "../../../../shared/cloudDirectMessagesGateway";
+import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
 import { WebDirectMessageInboxPanel } from "./WebDirectMessageInboxPanel";
 import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 
@@ -73,8 +75,32 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const hasInboxLiveSubscriptionRef = useRef(false);
   const directMessageOpenRequestRef = useRef(0);
   const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
+  const typingInputHadTextRef = useRef(false);
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
+  const directTypingPresence = useDirectMessageTypingPresence({
+    isEnabled: isOpen && Boolean(activeConversationId),
+    session: session as any,
+    conversationId: activeConversationId,
+    canSendMessages: Boolean(session && directMessagePanel && !directMessagePanel.isSending),
+    inputValue: directMessagePanel?.input ?? "",
+  });
+
+  const clearDirectTypingForConversation = useCallback(
+    async (conversationId: string | null | undefined) => {
+      const normalizedConversationId = String(conversationId ?? "").trim();
+      if (!session || !normalizedConversationId) return;
+      try {
+        await clearCloudDirectTyping({
+          session,
+          conversationId: normalizedConversationId,
+        });
+      } catch {
+        // Typing presence is opportunistic; message state stays authoritative.
+      }
+    },
+    [session],
+  );
 
   const loadInbox = useCallback(async () => {
     const requestId = inboxLoadRequestRef.current + 1;
@@ -139,6 +165,18 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   useEffect(() => {
     readMarkSeqByConversationRef.current = {};
   }, [sessionUserId]);
+
+  useEffect(() => {
+    if (!activeConversationId || !session) {
+      typingInputHadTextRef.current = false;
+      return;
+    }
+    const conversationId = activeConversationId;
+    return () => {
+      typingInputHadTextRef.current = false;
+      void clearDirectTypingForConversation(conversationId);
+    };
+  }, [activeConversationId, clearDirectTypingForConversation, session]);
 
   useEffect(() => {
     if (!isOpen || !isNewMessageMode) return;
@@ -483,6 +521,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         conversationId: current.conversation.id,
         text,
       });
+      await clearDirectTypingForConversation(current.conversation.id);
+      typingInputHadTextRef.current = false;
       setDirectMessagePanel((previous) =>
         previous?.conversation.id === current.conversation.id
           ? {
@@ -504,7 +544,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           : previous,
       );
     }
-  }, [directMessagePanel, session]);
+  }, [clearDirectTypingForConversation, directMessagePanel, session]);
 
   if (!isOpen) return null;
 
@@ -518,11 +558,17 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           isLoading={directMessagePanel.isLoading}
           isSending={directMessagePanel.isSending}
           error={directMessagePanel.error}
+          typingPresence={directTypingPresence}
           sessionUserId={sessionUserId}
           getInitials={getInitials}
           getAvatarColor={getAvatarColor}
           renderTextWithLinks={renderTextWithLinks}
           onInputChange={(value) => {
+            const nextHasText = value.trim().length > 0;
+            if (!nextHasText && typingInputHadTextRef.current) {
+              void clearDirectTypingForConversation(directMessagePanel.conversation.id);
+            }
+            typingInputHadTextRef.current = nextHasText;
             setDirectMessagePanel((previous) =>
               previous
                 ? {
@@ -533,10 +579,16 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             );
           }}
           onSend={sendDirectMessage}
+          onComposerBlur={() => {
+            typingInputHadTextRef.current = false;
+            void clearDirectTypingForConversation(directMessagePanel.conversation.id);
+          }}
           onReadThroughSeq={(seq) => {
             void markConversationRead(directMessagePanel.conversation.id, seq);
           }}
           onBackToInbox={() => {
+            typingInputHadTextRef.current = false;
+            void clearDirectTypingForConversation(directMessagePanel.conversation.id);
             setDirectMessagePanel(null);
           }}
         />

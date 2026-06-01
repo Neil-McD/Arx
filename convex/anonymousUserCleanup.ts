@@ -44,6 +44,7 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "communityChatMessages", index: "by_sender", field: "senderUserId" },
   { table: "communityMessageReactions", index: "by_user", field: "userId" },
   { table: "communityTypingPresence", index: "by_user", field: "userId" },
+  { table: "dmTypingPresence", index: "by_user", field: "userId" },
   { table: "developerApps", index: "by_owner", field: "ownerUserId" },
   { table: "appOAuthStates", index: "by_user_catalogAppId", field: "userId" },
   { table: "userPlatformAppMounts", index: "by_user", field: "userId" },

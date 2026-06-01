@@ -423,6 +423,7 @@ export const deleteOwnAccount = mutation({
     await record("communitySubscriptions", await deleteRowsByIndex(ctx, "communitySubscriptions", "by_user", "userId", userId));
     await record("communityMessageReactions", await deleteRowsByIndex(ctx, "communityMessageReactions", "by_user", "userId", userId));
     await record("communityTypingPresence", await deleteRowsByIndex(ctx, "communityTypingPresence", "by_user", "userId", userId));
+    await record("dmTypingPresence", await deleteRowsByIndex(ctx, "dmTypingPresence", "by_user", "userId", userId));
     await record("communityMemberSettings", await deleteRowsByIndex(ctx, "communityMemberSettings", "by_user", "userId", userId));
     await record("communityResources", await deleteRowsByIndex(ctx, "communityResources", "by_createdBy", "createdByUserId", userId));
     await record("communityEvents", await deleteRowsByIndex(ctx, "communityEvents", "by_createdBy", "createdByUserId", userId));
@@ -562,6 +563,7 @@ export const deleteOwnAccount = mutation({
     let deletedDmMessages = 0;
     let deletedDmParticipants = 0;
     let deletedDmConversations = 0;
+    let deletedDmTypingPresence = 0;
     for (const conversationId of dmConversationIds) {
       const messages = await ctx.db
         .query("dmMessages")
@@ -581,6 +583,15 @@ export const deleteOwnAccount = mutation({
       }
       deletedDmParticipants += participants.length;
 
+      const typingRows = await ctx.db
+        .query("dmTypingPresence")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId as any))
+        .collect();
+      for (const row of typingRows) {
+        await ctx.db.delete(row._id);
+      }
+      deletedDmTypingPresence += typingRows.length;
+
       const conversation = await ctx.db.get(conversationId as any);
       if (conversation) {
         await ctx.db.delete(conversation._id);
@@ -589,6 +600,7 @@ export const deleteOwnAccount = mutation({
     }
     await record("dmMessages", deletedDmMessages);
     await record("dmParticipants", deletedDmParticipants);
+    await record("dmTypingPresence", deletedDmTypingPresence);
     await record("dmConversations", deletedDmConversations);
 
     await record("cloudProjects", await deleteRowsByIndex(ctx, "cloudProjects", "by_owner", "ownerId", userId));

@@ -117,6 +117,22 @@ export type DirectMessage = {
   updated_at: string;
 };
 
+export type DirectMessageTypingPresenceUser = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+  display_until_ms: number;
+  updated_at?: string | null;
+};
+
+export type DirectMessageTypingPresenceBundle = {
+  users: DirectMessageTypingPresenceUser[];
+  total_count: number;
+};
+
 export type CommunityChatMessage<TAttachment = unknown> = {
   id: string;
   community_id: string;

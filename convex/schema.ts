@@ -1389,6 +1389,18 @@ export default defineSchema({
     .index("by_conversation_seq", ["conversationId", "seq"])
     .index("by_senderUser", ["senderUserId"]),
 
+  dmTypingPresence: defineTable({
+    conversationId: v.id("dmConversations"),
+    userId: v.id("users"),
+    displayUntil: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_user", ["userId"])
+    .index("by_conversation_user", ["conversationId", "userId"])
+    .index("by_conversation_displayUntil", ["conversationId", "displayUntil"]),
+
   communityAgentConfigs: defineTable({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),

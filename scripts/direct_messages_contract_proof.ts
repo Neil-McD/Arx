@@ -10,6 +10,9 @@ const directMessages = read("convex/directMessages.ts");
 const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudDirectMessagesGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
+const directTypingHook = read("shared/useDirectMessageTypingPresence.ts");
+const account = read("convex/account.ts");
+const anonymousCleanup = read("convex/anonymousUserCleanup.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
 const messageRow = read("shared/CommunityChatMessageRow.tsx");
@@ -43,6 +46,18 @@ const dmListMessagesQuery = directMessages.slice(
   directMessages.indexOf("export const listDirectMessages"),
   directMessages.indexOf("export const sendDirectMessage"),
 );
+const dmSetTypingMutation = directMessages.slice(
+  directMessages.indexOf("export const setDirectTyping"),
+  directMessages.indexOf("export const clearDirectTyping"),
+);
+const dmClearTypingMutation = directMessages.slice(
+  directMessages.indexOf("export const clearDirectTyping"),
+  directMessages.indexOf("export const listDirectTyping"),
+);
+const dmListTypingQuery = directMessages.slice(
+  directMessages.indexOf("export const listDirectTyping"),
+  directMessages.indexOf("export const listDirectMessages"),
+);
 const dmSendMutation = directMessages.slice(
   directMessages.indexOf("export const sendDirectMessage"),
 );
@@ -52,9 +67,11 @@ assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastReadSeq: v\.number\(\)/, "DM participants must store per-user read position");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastActivityAt: v\.optional\(v\.number\(\)\)/, "DM participants must store optional inbox activity ordering");
 assert.match(schema, /dmMessages: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*senderType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\), v\.literal\("system"\)\)/, "DM messages must be conversation-scoped and agent-native");
+assert.match(schema, /dmTypingPresence: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*userId: v\.id\("users"\)[\s\S]*displayUntil: v\.number\(\)/, "DM typing presence must be conversation-scoped ephemeral presence");
 assert.match(schema, /\.index\("by_canonicalKey", \["canonicalKey"\]\)/, "direct conversations must have a canonical pair key");
 assert.match(schema, /\.index\("by_user_status", \["userId", "status"\]\)/, "participants must support a current-user inbox query");
 assert.match(schema, /\.index\("by_user_status_lastActivityAt", \["userId", "status", "lastActivityAt"\]\)/, "participants must support bounded inbox activity ordering");
+assert.match(schema, /\.index\("by_conversation_user", \["conversationId", "userId"\]\)[\s\S]*\.index\("by_conversation_displayUntil", \["conversationId", "displayUntil"\]\)/, "DM typing presence must support per-user upsert and bounded live queries");
 
 assert.match(directMessages, /ensureDirectConversationFromCommunity = mutation/, "backend must expose community-context DM creation");
 assert.match(directMessages, /targetUserId: v\.string\(\)/, "DM creation must target a public user id");
@@ -104,6 +121,8 @@ assert.match(directMessages, /readDirectMessageTextPreview/, "conversation proje
 assert.match(directMessages, /lastSeq > 0[\s\S]*query\("dmMessages" as any\)[\s\S]*withIndex\("by_conversation_seq"[\s\S]*eq\("conversationId", row\._id\)\.eq\("seq", lastSeq\)/, "conversation projection must read the latest message by conversation and sequence");
 assert.match(directMessages, /last_message_preview: lastMessage \? readDirectMessageTextPreview\(lastMessage\.contentJson\) : null/, "conversation projection must expose the latest text preview");
 assert.match(communityTypes, /last_message_preview: string \| null/, "shared DM conversation type must expose the latest text preview");
+assert.match(communityTypes, /export type DirectMessageTypingPresenceUser/, "shared DM types must expose typing presence users");
+assert.match(communityTypes, /export type DirectMessageTypingPresenceBundle/, "shared DM types must expose typing presence bundles");
 assert.match(dmEnsureUserParticipantHelper, /touchActivity: boolean/, "participant ensure helper must distinguish creation/send activity from open-only access");
 assert.match(dmEnsureUserParticipantHelper, /fallbackActivityAt\?: number/, "participant ensure helper must support historical activity initialization");
 assert.match(dmEnsureUserParticipantHelper, /if \(args\.touchActivity\) \{[\s\S]*patch\.lastActivityAt = args\.nowMs[\s\S]*fallbackActivityAt/, "participant ensure helper must only bump existing activity when explicitly requested");
@@ -121,6 +140,25 @@ assert.match(directMessages, /ctx\.db\.patch\(participant\._id,[\s\S]*lastReadSe
 assert.match(directMessages, /Active participants can read existing DM history; current relationship is rechecked before each send\./, "DM read/send policy must be explicit");
 assert.match(dmListMessagesQuery, /requireActiveUserParticipant/, "DM history reads must require active conversation participation");
 assert.doesNotMatch(dmListMessagesQuery, /requireDirectConversationSendAccess|requireDirectMessageRelationshipAccess/, "DM history reads must not require current mutual access once someone is an active participant");
+assert.match(directMessages, /setDirectTyping = mutation/, "backend must expose a DM typing heartbeat mutation");
+assert.match(directMessages, /clearDirectTyping = mutation/, "backend must expose a DM typing clear mutation");
+assert.match(directMessages, /listDirectTyping = query/, "backend must expose a live DM typing query");
+assert.match(dmSetTypingMutation, /requireActiveUserParticipant/, "typing writes must require active conversation participation");
+assert.match(dmSetTypingMutation, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "typing writes must require profile setup like message sends");
+assert.match(dmSetTypingMutation, /requireDirectConversationSendAccess/, "typing writes must require current DM send access");
+assert.match(dmSetTypingMutation, /DM_TYPING_DISPLAY_WINDOW_MS/, "typing writes must set a bounded display TTL");
+assert.match(dmSetTypingMutation, /query\("dmTypingPresence" as any\)[\s\S]*withIndex\("by_conversation_user"/, "typing writes must upsert by conversation and user");
+assert.match(dmClearTypingMutation, /requireActiveUserParticipant/, "typing clears must require active conversation participation");
+assert.doesNotMatch(dmClearTypingMutation, /requireDirectConversationSendAccess|requireProfileSetupCompleteForUser|requireDirectMessageRelationshipAccess/, "typing clears must not require current send access");
+assert.match(dmClearTypingMutation, /query\("dmTypingPresence" as any\)[\s\S]*withIndex\("by_conversation_user"/, "typing clears must target the viewer row by conversation and user");
+assert.match(dmClearTypingMutation, /ctx\.db\.delete\(existing\._id\)/, "typing clears must delete only the viewer's active row");
+assert.match(dmListTypingQuery, /requireActiveUserParticipant/, "typing reads must require active conversation participation");
+assert.doesNotMatch(dmListTypingQuery, /requireDirectConversationSendAccess|requireDirectMessageRelationshipAccess/, "typing reads must not require current send access");
+assert.match(dmListTypingQuery, /withIndex\("by_conversation_displayUntil"[\s\S]*gt\("displayUntil", nowMs\)/, "typing reads must query only non-expired rows through the displayUntil index");
+assert.match(dmListTypingQuery, /normalizeIdValue\(row\.userId\) !== normalizeIdValue\(viewerUserId\)/, "typing reads must exclude the viewer");
+assert.match(dmListTypingQuery, /MAX_DM_TYPING_PRESENCE_SCAN_ROWS/, "typing reads must stay bounded");
+assert.match(account, /dmTypingPresence/, "account deletion must clean DM typing presence rows");
+assert.match(anonymousCleanup, /dmTypingPresence/, "anonymous cleanup must include DM typing presence rows");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
 assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
@@ -146,6 +184,18 @@ assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose l
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
 assert.match(gateway, /markCloudDirectConversationRead/, "web gateway must expose direct conversation read mutation");
 assert.match(gateway, /directMessages:markDirectConversationRead/, "web gateway read mutation must use the canonical backend mutation");
+assert.match(gateway, /subscribeCloudDirectTyping/, "web gateway must expose live DM typing subscriptions");
+assert.match(gateway, /directMessages:listDirectTyping/, "web gateway typing subscription must watch the canonical backend query");
+assert.match(gateway, /setCloudDirectTyping/, "web gateway must expose a DM typing heartbeat");
+assert.match(gateway, /directMessages:setDirectTyping/, "web gateway typing heartbeat must use the canonical backend mutation");
+assert.match(gateway, /clearCloudDirectTyping/, "web gateway must expose a DM typing clear");
+assert.match(gateway, /directMessages:clearDirectTyping/, "web gateway typing clear must use the canonical backend mutation");
+assert.match(directTypingHook, /useDirectMessageTypingPresence/, "web must have a dedicated DM typing hook");
+assert.match(directTypingHook, /DEFAULT_TYPING_THROTTLE_MS = 2000/, "DM typing heartbeat must be throttled");
+assert.match(directTypingHook, /subscribeCloudDirectTyping/, "DM typing hook must subscribe to live backend typing state");
+assert.match(directTypingHook, /setCloudDirectTyping/, "DM typing hook must publish typing heartbeats through the backend");
+assert.match(directTypingHook, /row\.display_until_ms > nowMs/, "DM typing hook must drop expired presence locally");
+assert.match(directTypingHook, /lastSentAtRef\.current = 0/, "DM typing hook must reset heartbeat throttle when conversations change");
 
 assert.match(projection, /activeCommunity:[\s\S]*id: params\.activeCommunity\.id/, "chat panel must receive active community id for DM source context");
 assert.match(projection, /onOpenDirectMessageFromCommunity: params\.onOpenDirectMessageFromCommunity/, "community projection must pass profile DM launch requests to the app shell");
@@ -176,6 +226,11 @@ assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether th
 assert.match(dmPanel, /onBackToInbox\?: \(\) => void/, "DM conversation panel must support returning to the inbox when opened globally");
 assert.match(dmPanel, /onReadThroughSeq\?: \(seq: number\) => void \| Promise<void>/, "DM conversation panel must report read-through sequence");
 assert.match(dmPanel, /props\.onReadThroughSeq\?\.\(lastMessageSeq\)/, "DM conversation panel must mark visible newest messages read");
+assert.match(dmPanel, /typingPresence: DirectMessageTypingPresenceBundle/, "DM panel must receive typing presence as data");
+assert.match(dmPanel, /onComposerBlur\?: \(\) => void \| Promise<void>/, "DM panel must let the host clear typing presence on composer blur");
+assert.match(dmPanel, /onBlur=\{\(\) => \{[\s\S]*props\.onComposerBlur/, "DM panel composer blur must call the host typing clear hook");
+assert.match(dmPanel, /formatDirectTypingLabel/, "DM panel must format typing labels locally");
+assert.match(dmPanel, /community-dm-panel-typing/, "DM panel must render a reserved typing indicator row");
 assert.match(dmHost, /listCloudDirectConversations/, "global DM host must load the current user's inbox");
 assert.match(dmHost, /subscribeCloudDirectConversations<DirectMessageConversation>/, "global DM host must keep inbox rows live");
 assert.match(dmHost, /hasInboxLiveSubscriptionRef/, "global DM host must avoid duplicate snapshot loads when the live inbox subscription is active");
@@ -195,6 +250,14 @@ assert.match(dmHost, /onReadThroughSeq=\{\(seq\) =>/, "global DM host must conne
 assert.match(dmHost, /ensureCloudDirectConversationFromCommunity/, "global DM host must create DMs from profile launch requests");
 assert.match(dmHost, /openRequest: DirectMessageOpenRequest/, "global DM host must accept canonical open requests from profile actions");
 assert.match(dmHost, /subscribeCloudDirectMessages<DirectMessage>/, "global DM host must own live direct message subscriptions");
+assert.match(dmHost, /useDirectMessageTypingPresence/, "global DM host must own DM typing presence");
+assert.match(dmHost, /clearCloudDirectTyping/, "global DM host must clear stale DM typing presence explicitly");
+assert.match(dmHost, /clearDirectTypingForConversation/, "global DM host must centralize DM typing clear calls");
+assert.match(dmHost, /typingPresence=\{directTypingPresence\}/, "global DM host must pass typing presence into the DM panel");
+assert.match(dmHost, /await clearDirectTypingForConversation\(current\.conversation\.id\)/, "global DM host must clear typing presence after a successful send");
+assert.match(dmHost, /onComposerBlur=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence on composer blur");
+assert.match(dmHost, /onBackToInbox=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when leaving a conversation");
+assert.match(dmHost, /!nextHasText && typingInputHadTextRef\.current[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when the composer becomes empty");
 assert.match(dmHost, /WebDirectMessageInboxPanel/, "global DM host must render the inbox panel");
 assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing conversations into the live DM panel");
 assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");
@@ -225,6 +288,8 @@ assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "globa
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*background: transparent/, "DM conversation back control must stay flat, not circular");
+assert.match(css, /\.community-dm-panel-typing/, "DM conversation panel must style typing presence");
+assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*visibility: hidden/, "DM typing row must reserve space when empty");
 assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
 assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox must size to content instead of forcing full conversation-panel height");
 assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");
