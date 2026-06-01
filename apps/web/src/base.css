@@ -9455,8 +9455,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 8px;
   overflow: auto;
-  margin: -50px -12px -46px 0;
-  padding: 56px 14px 50px 2px;
+  margin-right: -12px;
+  padding: 6px 14px 2px 2px;
 }
 
 .community-dm-panel-empty {
