@@ -18,6 +18,7 @@ import type {
 } from "./communityResourcesContracts";
 import {
   WebCommunityResourceViewerContent,
+  type WebCommunityResourceInlineEditorField,
   type WebCommunityResourceSourceLineage,
 } from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
@@ -473,119 +474,6 @@ function ResourceRailItem(props: {
   );
 }
 
-function ResourceInlineEditor(props: {
-  resource: CommunityResource;
-  editor: CommunityResourcesActions["resourceEditor"];
-}) {
-  const { resource, editor } = props;
-  const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const roleLabel = editor.roleInput === "source" ? "Source" : "Page";
-  const canSave =
-    editor.titleInput.trim().length > 0 &&
-    (editor.bodyInput.trim().length > 0 || editor.urlInput.trim().length > 0) &&
-    !editor.isSaving;
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      titleInputRef.current?.focus();
-      titleInputRef.current?.select();
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [resource.id]);
-
-  const handleSave = async () => {
-    if (!canSave) return;
-    await editor.saveInlineEditResource();
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      editor.cancelInlineEditResource();
-      return;
-    }
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      void handleSave();
-    }
-  };
-
-  return (
-    <div className="resource-inline-editor" onKeyDown={handleKeyDown}>
-      <div className="resource-inline-editor-toolbar">
-        <div className="resource-inline-editor-kicker">{roleLabel} edit</div>
-        <button
-          className={`resource-inline-pin${editor.pinnedInput ? " is-active" : ""}`}
-          type="button"
-          onClick={() => editor.onChangePinned(!editor.pinnedInput)}
-          aria-pressed={editor.pinnedInput}
-          title={editor.pinnedInput ? "Unpin resource" : "Pin resource"}
-          disabled={editor.isSaving}
-        >
-          <PinIcon />
-        </button>
-      </div>
-
-      <input
-        ref={titleInputRef}
-        className="resource-inline-title-input"
-        type="text"
-        value={editor.titleInput}
-        onChange={(event) => editor.onChangeTitle(event.target.value)}
-        placeholder="Resource title"
-        disabled={editor.isSaving}
-      />
-
-      <label className="resource-inline-field">
-        <span>Source URL</span>
-        <input
-          className="resource-inline-url-input"
-          type="text"
-          value={editor.urlInput}
-          onChange={(event) => editor.onChangeUrl(event.target.value)}
-          placeholder="Optional link or video URL"
-          disabled={editor.isSaving}
-        />
-      </label>
-
-      <label className="resource-inline-field">
-        <span>{editor.roleInput === "source" ? "Notes" : "Content"}</span>
-        <textarea
-          className="resource-inline-body-input"
-          value={editor.bodyInput}
-          onChange={(event) => editor.onChangeBody(event.target.value)}
-          placeholder={
-            editor.roleInput === "source"
-              ? "Add extraction notes, context, or review instructions."
-              : "Write the page content, context, or takeaway."
-          }
-          disabled={editor.isSaving}
-        />
-      </label>
-
-      {editor.error ? <div className="auth-error resource-inline-error">{editor.error}</div> : null}
-
-      <div className="resource-inline-editor-actions">
-        <button
-          type="button"
-          className="resource-inline-secondary"
-          onClick={editor.cancelInlineEditResource}
-          disabled={editor.isSaving}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="platform-save-button resource-inline-save"
-          onClick={() => void handleSave()}
-          disabled={!canSave}
-        >
-          {editor.isSaving ? "Saving..." : "Save changes"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const { capabilities, state, actions } = props;
@@ -599,6 +487,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [draggingResourceModuleId, setDraggingResourceModuleId] = useState<string | null>(null);
   const [dropTargetResourceId, setDropTargetResourceId] = useState<string | null>(null);
   const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
+  const [activeResourceEditField, setActiveResourceEditField] =
+    useState<WebCommunityResourceInlineEditorField | null>(null);
   const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
 
   const pendingDeleteResource = useMemo(
@@ -853,6 +743,13 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setPendingOpenResourceId(null);
   }, [actions, displayableResourceIds, pendingOpenResourceId, resourcesById]);
 
+  useEffect(() => {
+    const editingId = actions.resourceEditor.editingResourceId;
+    if (!editingId || !selectedResource || editingId !== selectedResource.id) {
+      setActiveResourceEditField(null);
+    }
+  }, [actions.resourceEditor.editingResourceId, selectedResource]);
+
   const handleModuleDragStart = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
     if (!canReorderModules || module.is_virtual) {
       event.preventDefault();
@@ -950,6 +847,27 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     actions.setOpenResourceEmbedId(resource.id);
   };
 
+  const startResourceInlineEdit = (
+    resource: CommunityResource,
+    field: WebCommunityResourceInlineEditorField,
+  ) => {
+    if (resourceNeedsBodyHydration(resource)) return;
+    handleSelectResource(resource);
+    actions.resourceEditor.beginInlineEditResource(resource);
+    setActiveResourceEditField(field);
+  };
+
+  const cancelResourceInlineEdit = () => {
+    actions.resourceEditor.cancelInlineEditResource();
+    setActiveResourceEditField(null);
+  };
+
+  const saveResourceInlineEdit = async () => {
+    const didSave = await actions.resourceEditor.saveInlineEditResource();
+    if (didSave) setActiveResourceEditField(null);
+    return didSave;
+  };
+
   const renderResourceRailItem = (resource: CommunityResource) => {
     const categoryId = getResourceCategoryId(resource);
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
@@ -962,7 +880,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         resource={resource}
         isActive={selectedResource?.id === resource.id}
         onSelect={() => handleSelectResource(resource)}
-        onEdit={() => actions.resourceEditor.beginInlineEditResource(resource)}
+        onEdit={() => startResourceInlineEdit(resource, "body")}
         onDelete={() => setPendingDeleteResourceId(resource.id)}
         onDragStart={(event) => handleResourceDragStart(event, resource)}
         onDragOver={(event) => handleResourceDragOver(event, resource)}
@@ -981,6 +899,54 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   const selectedModuleStatus = selectedModule?.module_status === "live" ? "live" : "draft";
   const selectedModuleNextStatus = selectedModuleStatus === "live" ? "draft" : "live";
+  const isSelectedResourceEditing =
+    Boolean(selectedResource) && actions.resourceEditor.editingResourceId === selectedResource?.id;
+  const selectedResourceEditorDirty = Boolean(
+    selectedResource &&
+      isSelectedResourceEditing &&
+      (
+        actions.resourceEditor.titleInput !== selectedResource.title ||
+        actions.resourceEditor.urlInput !== (selectedResource.url ?? "") ||
+        actions.resourceEditor.bodyInput !== (selectedResource.body_md ?? "") ||
+        actions.resourceEditor.pinnedInput !== selectedResource.pinned
+      ),
+  );
+  const selectedResourceEditorCanSave = Boolean(
+    isSelectedResourceEditing &&
+      selectedResourceEditorDirty &&
+      actions.resourceEditor.titleInput.trim().length > 0 &&
+      (
+        actions.resourceEditor.bodyInput.trim().length > 0 ||
+        actions.resourceEditor.urlInput.trim().length > 0
+      ) &&
+      !actions.resourceEditor.isSaving,
+  );
+  const selectedResourceInlineEditor =
+    capabilities.canOperateResources && selectedResource && !selectedResourceNeedsBodyHydration
+      ? {
+          canEdit: true,
+          isEditing: isSelectedResourceEditing,
+          activeField: activeResourceEditField,
+          titleInput: actions.resourceEditor.titleInput,
+          urlInput: actions.resourceEditor.urlInput,
+          bodyInput: actions.resourceEditor.bodyInput,
+          pinnedInput: actions.resourceEditor.pinnedInput,
+          error: actions.resourceEditor.error,
+          isSaving: actions.resourceEditor.isSaving,
+          isDirty: selectedResourceEditorDirty,
+          canSave: selectedResourceEditorCanSave,
+          onBeginEdit: (field: WebCommunityResourceInlineEditorField) => {
+            startResourceInlineEdit(selectedResource, field);
+          },
+          onSetActiveField: setActiveResourceEditField,
+          onChangeTitle: actions.resourceEditor.onChangeTitle,
+          onChangeUrl: actions.resourceEditor.onChangeUrl,
+          onChangeBody: actions.resourceEditor.onChangeBody,
+          onChangePinned: actions.resourceEditor.onChangePinned,
+          onSave: saveResourceInlineEdit,
+          onCancel: cancelResourceInlineEdit,
+        }
+      : null;
 
   return (
     <>
@@ -1130,58 +1096,52 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             </aside>
             <div className="knowledge-resource-reader">
               {selectedResource ? (
-                actions.resourceEditor.editingResourceId === selectedResource.id ? (
-                  <ResourceInlineEditor
-                    resource={selectedResource}
-                    editor={actions.resourceEditor}
-                  />
-                ) : (
-                  <WebCommunityResourceViewerContent
-                    resource={selectedResource}
-                    sourceLineage={selectedSourceLineage}
-                    actions={
-                      capabilities.canOperateResources ? (
-                        <>
-                          {getResourceRole(selectedResource) === "source" ? (
-                            <button
-                              className="resource-card-action resource-source-draft-action"
-                              type="button"
-                              title="Create page draft"
-                              onClick={() => {
-                                if (!selectedResource) return;
-                                void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
-                                  if (created) setPendingOpenResourceId(created.id);
-                                });
-                              }}
-                            >
-                              Draft page
-                            </button>
-                          ) : null}
+                <WebCommunityResourceViewerContent
+                  resource={selectedResource}
+                  sourceLineage={selectedSourceLineage}
+                  editor={selectedResourceInlineEditor}
+                  actions={
+                    capabilities.canOperateResources ? (
+                      <>
+                        {getResourceRole(selectedResource) === "source" ? (
                           <button
-                            className="resource-card-action"
+                            className="resource-card-action resource-source-draft-action"
                             type="button"
-                            title={selectedResourceNeedsBodyHydration ? "Loading page content" : "Edit knowledge item"}
-                            disabled={selectedResourceNeedsBodyHydration}
+                            title="Create page draft"
                             onClick={() => {
-                              if (selectedResourceNeedsBodyHydration) return;
-                              actions.resourceEditor.beginInlineEditResource(selectedResource);
+                              if (!selectedResource) return;
+                              void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
+                                if (created) setPendingOpenResourceId(created.id);
+                              });
                             }}
                           >
-                            <EditIcon />
+                            Draft page
                           </button>
-                          <button
-                            className="resource-card-action danger"
-                            type="button"
-                            title="Delete knowledge item"
-                            onClick={() => setPendingDeleteResourceId(selectedResource.id)}
-                          >
-                            <DeleteIcon />
-                          </button>
-                        </>
-                      ) : null
-                    }
-                  />
-                )
+                        ) : null}
+                        <button
+                          className="resource-card-action"
+                          type="button"
+                          title={selectedResourceNeedsBodyHydration ? "Loading page content" : "Edit knowledge item"}
+                          disabled={selectedResourceNeedsBodyHydration}
+                          onClick={() => {
+                            if (selectedResourceNeedsBodyHydration) return;
+                            startResourceInlineEdit(selectedResource, "body");
+                          }}
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          className="resource-card-action danger"
+                          type="button"
+                          title="Delete knowledge item"
+                          onClick={() => setPendingDeleteResourceId(selectedResource.id)}
+                        >
+                          <DeleteIcon />
+                        </button>
+                      </>
+                    ) : null
+                  }
+                />
               ) : (
                 <div className="community-panel-state-shell">
                   <div className="chat-empty-state">
