@@ -273,16 +273,22 @@ function ResourceCategorySection(props: {
           ) : null}
           {canManage && !module.is_virtual && isMenuOpen ? (
             <div
-              className="knowledge-category-menu-popover"
+              className="knowledge-category-menu-popover web-floating-menu"
               role="menu"
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >
-              <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, onEdit)}>
+              <button
+                className="web-floating-menu-item"
+                type="button"
+                role="menuitem"
+                onClick={(event) => closeAndRun(event, onEdit)}
+              >
                 <EditIcon />
                 <span>Edit</span>
               </button>
               <button
+                className="web-floating-menu-item"
                 type="button"
                 role="menuitem"
                 onClick={(event) => closeAndRun(event, () => onSetStatus(nextModuleStatus))}
@@ -291,7 +297,7 @@ function ResourceCategorySection(props: {
                 <span>{moduleStatus === "live" ? "Move to draft" : "Make live"}</span>
               </button>
               <button
-                className="danger"
+                className="web-floating-menu-item danger"
                 type="button"
                 role="menuitem"
                 onClick={(event) => closeAndRun(event, onDelete)}
@@ -431,12 +437,13 @@ function ResourceRailItem(props: {
           </button>
           {isMenuOpen ? (
             <div
-              className="knowledge-resource-menu-popover"
+              className="knowledge-resource-menu-popover web-floating-menu"
               role="menu"
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >
               <button
+                className="web-floating-menu-item"
                 type="button"
                 role="menuitem"
                 title={isEditDisabled ? "Loading page content" : "Edit page"}
@@ -450,7 +457,7 @@ function ResourceRailItem(props: {
                 <span>Edit</span>
               </button>
               <button
-                className="danger"
+                className="web-floating-menu-item danger"
                 type="button"
                 role="menuitem"
                 onClick={(event) => closeAndRun(event, onDelete)}
