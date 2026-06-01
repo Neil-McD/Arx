@@ -12,6 +12,10 @@ type CloudDirectMessagesGatewayParams<SessionT> = {
   session: SessionT;
 };
 
+type DirectMessageUploadableFile = {
+  type?: string;
+};
+
 export type CloudDirectMessagesLiveClient = {
   client: ConvexReactClient;
   authSubject: string;
@@ -232,6 +236,7 @@ export async function sendCloudDirectMessage<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     conversationId: string;
     text: string;
+    attachments?: unknown[];
   },
 ): Promise<DirectMessage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -239,9 +244,62 @@ export async function sendCloudDirectMessage<SessionT>(
     authSubject,
     conversationId: params.conversationId,
     text: params.text,
+    attachments: params.attachments ?? [],
   })) as DirectMessage | null;
   if (!payload?.id) throw new Error("Failed to send direct message.");
   return payload;
+}
+
+async function requestCloudDirectMessageAttachmentUploadUrl<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+  },
+): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("directMessages:generateDirectMessageAttachmentUploadUrl" as any, {
+    authSubject,
+    conversationId: params.conversationId,
+  });
+  const uploadUrl =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? String((payload as Record<string, unknown>).uploadUrl ?? "").trim()
+      : "";
+  if (!uploadUrl) {
+    throw new Error("Failed to start direct message attachment upload.");
+  }
+  return uploadUrl;
+}
+
+export async function uploadCloudDirectMessageAttachmentFile<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+    file: File | Blob | DirectMessageUploadableFile;
+  },
+): Promise<string> {
+  const uploadUrl = await requestCloudDirectMessageAttachmentUploadUrl({
+    session: params.session,
+    conversationId: params.conversationId,
+  });
+  const contentType =
+    params.file && typeof params.file === "object" && "type" in params.file
+      ? String((params.file as DirectMessageUploadableFile).type ?? "").trim() || "application/octet-stream"
+      : "application/octet-stream";
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": contentType,
+    },
+    body: params.file as BodyInit,
+  });
+  if (!response.ok) {
+    throw new Error("Failed to upload attachment.");
+  }
+  const payload = (await response.json()) as { storageId?: string | null };
+  const storageId = String(payload?.storageId ?? "").trim();
+  if (!storageId) {
+    throw new Error("Failed to upload attachment.");
+  }
+  return storageId;
 }
 
 export async function setCloudDirectTyping<SessionT>(

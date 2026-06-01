@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DirectMessage, DirectMessageConversation, DirectMessageRecipient } from "../../../../shared/communityTypes";
+import type { DirectMessage, DirectMessageAttachment, DirectMessageConversation, DirectMessageRecipient } from "../../../../shared/communityTypes";
+import {
+  isLikelyImageFile,
+  isSupportedChatRasterImage,
+  readChatImageAsDataUrl,
+} from "../../../../shared/attachmentHelpers";
 import {
   clearCloudDirectTyping,
   createCloudDirectMessagesLiveClient,
@@ -11,15 +16,22 @@ import {
   subscribeCloudDirectConversations,
   sendCloudDirectMessage,
   subscribeCloudDirectMessages,
+  uploadCloudDirectMessageAttachmentFile,
 } from "../../../../shared/cloudDirectMessagesGateway";
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
 import { WebDirectMessageInboxPanel } from "./WebDirectMessageInboxPanel";
 import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 
+type DirectMessageAttachmentDraft = DirectMessageAttachment & {
+  data_url?: string | null;
+  file?: File | null;
+};
+
 type DirectMessagePanelState = {
   conversation: DirectMessageConversation;
   messages: DirectMessage[];
   input: string;
+  attachments: DirectMessageAttachmentDraft[];
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
@@ -47,6 +59,195 @@ function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === "string" && error.trim()) return error.trim();
   return fallback;
+}
+
+const MAX_DM_ATTACHMENTS_PER_MESSAGE = 8;
+const MAX_DM_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
+const MAX_DM_IMAGE_DATA_URL_CHARS = 600_000;
+
+function createDirectAttachmentId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `attachment-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function displayNameForDirectAttachmentFile(file: File, fallbackIndex: number): string {
+  const existingName = String(file.name ?? "").trim();
+  if (existingName) return existingName;
+  const mime = String(file.type ?? "").toLowerCase();
+  const extension =
+    mime === "image/png"
+      ? "png"
+      : mime === "image/jpeg"
+        ? "jpg"
+        : mime === "image/webp"
+          ? "webp"
+          : mime === "image/gif"
+            ? "gif"
+            : mime === "application/pdf"
+              ? "pdf"
+              : "bin";
+  return `${mime.startsWith("image/") ? "Pasted image" : "Attachment"} ${fallbackIndex + 1}.${extension}`;
+}
+
+function isAllowedDirectAttachmentFile(file: File): boolean {
+  const mime = String(file.type ?? "").toLowerCase();
+  const name = String(file.name ?? "").toLowerCase();
+  const blockedMimes = new Set([
+    "application/gzip",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-7z-compressed",
+    "application/x-msdownload",
+    "application/x-rar-compressed",
+    "application/x-sh",
+    "application/zip",
+    "image/avif",
+    "image/heic",
+    "image/heif",
+    "image/svg+xml",
+  ]);
+  if (
+    blockedMimes.has(mime) ||
+    [".avif", ".heic", ".heif", ".svg", ".zip", ".rar", ".7z", ".gz", ".exe", ".sh"].some((extension) =>
+      name.endsWith(extension),
+    )
+  ) {
+    return false;
+  }
+  if (isLikelyImageFile(file, { allowAvif: false, allowSvg: false })) {
+    return isSupportedChatRasterImage(file, { allowAvif: false, allowSvg: false });
+  }
+  const allowedMimes = new Set([
+    "application/json",
+    "application/msword",
+    "application/pdf",
+    "application/rtf",
+    "application/vnd.ms-excel",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/csv",
+    "text/markdown",
+    "text/plain",
+  ]);
+  if (mime && allowedMimes.has(mime)) return true;
+  return [
+    ".csv",
+    ".doc",
+    ".docx",
+    ".json",
+    ".md",
+    ".pdf",
+    ".ppt",
+    ".pptx",
+    ".rtf",
+    ".txt",
+    ".xls",
+    ".xlsx",
+  ].some((extension) => name.endsWith(extension));
+}
+
+async function ingestDirectMessageAttachmentsFromFileList(
+  files: FileList,
+  existing: DirectMessageAttachmentDraft[],
+): Promise<{ attachments: DirectMessageAttachmentDraft[]; error: string | null }> {
+  if (files.length === 0) return { attachments: existing, error: null };
+  const remaining = Math.max(0, MAX_DM_ATTACHMENTS_PER_MESSAGE - existing.length);
+  if (remaining === 0) {
+    return {
+      attachments: existing,
+      error: `You can attach up to ${MAX_DM_ATTACHMENTS_PER_MESSAGE} files per message.`,
+    };
+  }
+
+  const picked = Array.from(files).slice(0, remaining);
+  const next: DirectMessageAttachmentDraft[] = [];
+  let error: string | null = null;
+  let totalBytes = existing.reduce((total, attachment) => total + Math.max(0, Math.floor(Number(attachment.size ?? 0))), 0);
+  for (const [index, file] of picked.entries()) {
+    if (!file) continue;
+    const name = displayNameForDirectAttachmentFile(file, index);
+    if (!isAllowedDirectAttachmentFile(file)) {
+      error = `${name}: unsupported file type.`;
+      continue;
+    }
+    if (file.size > MAX_DM_ATTACHMENT_BYTES) {
+      error = `${name} is too large (max ${(MAX_DM_ATTACHMENT_BYTES / (1024 * 1024)).toFixed(0)}MB).`;
+      continue;
+    }
+    if (totalBytes + file.size > MAX_DM_ATTACHMENT_TOTAL_BYTES) {
+      error = `Attachments can be up to ${(MAX_DM_ATTACHMENT_TOTAL_BYTES / (1024 * 1024)).toFixed(0)}MB total per message.`;
+      continue;
+    }
+    totalBytes += file.size;
+    const isImage = isLikelyImageFile(file, { allowAvif: false, allowSvg: false });
+    const base: DirectMessageAttachmentDraft = {
+      id: createDirectAttachmentId(),
+      name,
+      type: isImage ? "image" : "file",
+      mime: String(file.type ?? "").trim() || null,
+      size: file.size,
+      file,
+    };
+    if (isImage) {
+      try {
+        base.data_url = await readChatImageAsDataUrl(file, MAX_DM_IMAGE_DATA_URL_CHARS);
+      } catch (readError) {
+        error = toErrorMessage(readError, `${name}: failed to read image.`);
+        continue;
+      }
+    }
+    next.push(base);
+  }
+  return {
+    attachments: [...existing, ...next],
+    error,
+  };
+}
+
+async function prepareDirectAttachmentsForSend<SessionT>(
+  attachments: DirectMessageAttachmentDraft[],
+  session: SessionT,
+  conversationId: string,
+): Promise<DirectMessageAttachmentDraft[]> {
+  const prepared: DirectMessageAttachmentDraft[] = [];
+  for (const attachment of attachments) {
+    const currentStorageId = String(attachment.storage_id ?? "").trim();
+    let nextStorageId = currentStorageId || null;
+    if (!nextStorageId && attachment.file instanceof File) {
+      nextStorageId = await uploadCloudDirectMessageAttachmentFile({
+        session,
+        conversationId,
+        file: attachment.file,
+      });
+    }
+    prepared.push({
+      ...attachment,
+      storage_id: nextStorageId,
+      file: null,
+    });
+  }
+  return prepared;
+}
+
+function serializeDirectAttachmentsForWrite(attachments: DirectMessageAttachmentDraft[]): unknown[] {
+  const out: unknown[] = [];
+  for (const attachment of attachments) {
+    const storageId = String(attachment.storage_id ?? "").trim();
+    if (!storageId) continue;
+    out.push({
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      mime: attachment.mime ?? null,
+      size: attachment.size,
+      storageId,
+    });
+  }
+  return out;
 }
 
 export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProps<SessionT>) {
@@ -315,6 +516,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           conversation,
           messages: [],
           input: "",
+          attachments: [],
           isLoading: true,
           isSending: false,
           error: null,
@@ -437,6 +639,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         conversation,
         messages: [],
         input: "",
+        attachments: [],
         isLoading: true,
         isSending: false,
         error: null,
@@ -488,6 +691,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           conversation,
           messages: [],
           input: "",
+          attachments: [],
           isLoading: true,
           isSending: false,
           error: null,
@@ -505,7 +709,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const sendDirectMessage = useCallback(async () => {
     const current = directMessagePanel;
     const text = String(current?.input ?? "").trim();
-    if (!current || !text || !session) return;
+    const attachmentsToSend = [...(current?.attachments ?? [])];
+    if (!current || (!text && attachmentsToSend.length === 0) || !session) return;
     setDirectMessagePanel((previous) =>
       previous?.conversation.id === current.conversation.id
         ? {
@@ -516,10 +721,17 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         : previous,
     );
     try {
+      const preparedAttachments = await prepareDirectAttachmentsForSend(
+        attachmentsToSend,
+        session,
+        current.conversation.id,
+      );
+      const serializedAttachments = serializeDirectAttachmentsForWrite(preparedAttachments);
       await sendCloudDirectMessage({
         session,
         conversationId: current.conversation.id,
         text,
+        attachments: serializedAttachments,
       });
       await clearDirectTypingForConversation(current.conversation.id);
       typingInputHadTextRef.current = false;
@@ -528,6 +740,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           ? {
               ...previous,
               input: "",
+              attachments: [],
               isSending: false,
               error: null,
             }
@@ -546,6 +759,38 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     }
   }, [clearDirectTypingForConversation, directMessagePanel, session]);
 
+  const handleDirectAttachmentFilesSelected = useCallback(
+    async (files: FileList) => {
+      const current = directMessagePanel;
+      if (!current || files.length === 0) return;
+      const result = await ingestDirectMessageAttachmentsFromFileList(files, current.attachments);
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === current.conversation.id
+          ? {
+              ...previous,
+              attachments: result.attachments,
+              error: result.error,
+            }
+          : previous,
+      );
+    },
+    [directMessagePanel],
+  );
+
+  const removeDirectAttachment = useCallback((id: string) => {
+    const attachmentId = String(id ?? "").trim();
+    if (!attachmentId) return;
+    setDirectMessagePanel((previous) =>
+      previous
+        ? {
+            ...previous,
+            attachments: previous.attachments.filter((attachment) => attachment.id !== attachmentId),
+            error: null,
+          }
+        : previous,
+    );
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -558,6 +803,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           isLoading={directMessagePanel.isLoading}
           isSending={directMessagePanel.isSending}
           error={directMessagePanel.error}
+          attachments={directMessagePanel.attachments}
           typingPresence={directTypingPresence}
           sessionUserId={sessionUserId}
           getInitials={getInitials}
@@ -579,6 +825,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             );
           }}
           onSend={sendDirectMessage}
+          onAttachmentFilesSelected={handleDirectAttachmentFilesSelected}
+          onRemoveAttachment={removeDirectAttachment}
           onComposerBlur={() => {
             typingInputHadTextRef.current = false;
             void clearDirectTypingForConversation(directMessagePanel.conversation.id);

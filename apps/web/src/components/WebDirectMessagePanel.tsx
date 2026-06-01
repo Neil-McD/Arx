@@ -1,13 +1,22 @@
-import { ArrowLeft, MessageCircle } from "lucide-react";
-import type { FormEvent, ReactNode } from "react";
+import { ArrowLeft, MessageCircle, Paperclip } from "lucide-react";
+import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import type {
   DirectMessage,
+  DirectMessageAttachment,
   DirectMessageConversation,
   DirectMessageParticipant,
   DirectMessageTypingPresenceBundle,
 } from "../../../../shared/communityTypes";
+import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
+import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
+import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+
+type DirectMessageComposerAttachment = DirectMessageAttachment & {
+  data_url?: string | null;
+};
 
 type WebDirectMessagePanelProps = {
   conversation: DirectMessageConversation;
@@ -16,6 +25,7 @@ type WebDirectMessagePanelProps = {
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
+  attachments: DirectMessageComposerAttachment[];
   typingPresence: DirectMessageTypingPresenceBundle;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
@@ -23,6 +33,8 @@ type WebDirectMessagePanelProps = {
   renderTextWithLinks: (text: string) => ReactNode;
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
+  onAttachmentFilesSelected?: (files: FileList) => void | Promise<void>;
+  onRemoveAttachment?: (id: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
   onBackToInbox?: () => void;
@@ -37,6 +49,114 @@ function getMessageText(message: DirectMessage): string {
     return String((content as Record<string, unknown>).text ?? "").trim();
   }
   return "";
+}
+
+function getMessageAttachments(message: DirectMessage): DirectMessageAttachment[] {
+  return parseMessageAttachments(message.content_json).map((attachment) => ({
+    id: attachment.id,
+    name: attachment.name,
+    type: attachment.type,
+    mime: attachment.mime,
+    size: attachment.size,
+    url: attachment.url,
+    storage_id: attachment.storage_id,
+  }));
+}
+
+function openAttachmentUrl(url: string | null | undefined) {
+  const normalizedUrl = String(url ?? "").trim();
+  if (!normalizedUrl) return;
+  window.open(normalizedUrl, "_blank", "noopener,noreferrer");
+}
+
+function DirectMessageAttachmentViews(props: {
+  attachments: DirectMessageComposerAttachment[];
+  isComposer?: boolean;
+  onRemoveAttachment?: (id: string) => void;
+}) {
+  const { imageAttachments, fileAttachments } = partitionCommunityAttachments(props.attachments);
+  if (imageAttachments.length === 0 && fileAttachments.length === 0) return null;
+  const imageViews = imageAttachments.map((item) => ({
+    id: item.attachment.id,
+    url: item.url,
+    previewUrl: item.previewUrl,
+    fullUrl: item.fullUrl,
+    name: item.name,
+  }));
+  return (
+    <>
+      {imageViews.length > 0 ? (
+        props.isComposer ? (
+          <div className={`chat-media-grid count-${Math.min(Math.max(imageViews.length, 1), 4)} chat-media-grid-composer community-dm-media-grid`}>
+            {imageAttachments.map((item) => (
+              <div key={item.attachment.id} className="chat-media-item chat-media-item-static">
+                <img src={item.previewUrl} alt={item.name} />
+                <button
+                  type="button"
+                  className="chat-media-remove"
+                  onClick={() => props.onRemoveAttachment?.(item.attachment.id)}
+                  title="Remove"
+                  aria-label={`Remove ${item.name}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <CommunityChatMediaGrid
+            images={imageViews}
+            className="community-dm-media-grid"
+            onOpenImage={(images, index) => {
+              openAttachmentUrl(images[index]?.fullUrl ?? images[index]?.url ?? null);
+            }}
+          />
+        )
+      ) : null}
+      {fileAttachments.length > 0 ? (
+        <div className="attachments-preview community-dm-attachments-preview">
+          {fileAttachments.map((attachment) =>
+            props.isComposer ? (
+              <div key={attachment.id} className="attachment-item" title={attachment.name}>
+                <div className="attachment-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                    <path d="M16 13H8" />
+                    <path d="M16 17H8" />
+                    <path d="M10 9H8" />
+                  </svg>
+                </div>
+                <span className="attachment-name">{attachment.name}</span>
+                <button
+                  className="attachment-remove"
+                  type="button"
+                  onClick={() => props.onRemoveAttachment?.(attachment.id)}
+                  title="Remove"
+                  aria-label={`Remove ${attachment.name}`}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <AttachmentChipButton
+                key={attachment.id}
+                name={attachment.name}
+                onClick={
+                  typeof attachment.url === "string" && attachment.url.trim().length > 0
+                    ? () => openAttachmentUrl(attachment.url)
+                    : null
+                }
+                disabled={!(typeof attachment.url === "string" && attachment.url.trim().length > 0)}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 function resolveDirectMessagePeer(
@@ -70,6 +190,7 @@ function formatDirectTypingLabel(
 
 export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shouldFollowMessagesRef = useRef(true);
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
@@ -92,6 +213,15 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void props.onSend();
+  };
+
+  const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const files = input.files;
+    if (files && files.length > 0) {
+      void props.onAttachmentFilesSelected?.(files);
+    }
+    input.value = "";
   };
 
   useEffect(() => {
@@ -183,13 +313,15 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           props.messages.map((message) => {
             const isOwn = message.sender_user_id === props.sessionUserId;
             const text = getMessageText(message);
+            const attachments = getMessageAttachments(message);
             return (
               <div
                 key={message.id}
                 className={`community-dm-panel-message${isOwn ? " is-own" : ""}`}
               >
                 <div className="community-dm-panel-message-bubble">
-                  {props.renderTextWithLinks(text)}
+                  {text ? <div className="community-dm-panel-message-text">{props.renderTextWithLinks(text)}</div> : null}
+                  <DirectMessageAttachmentViews attachments={attachments} />
                 </div>
               </div>
             );
@@ -206,7 +338,35 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
 
       {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
 
+      {props.attachments.length > 0 ? (
+        <div className="community-dm-composer-attachments">
+          <DirectMessageAttachmentViews
+            attachments={props.attachments}
+            isComposer={true}
+            onRemoveAttachment={props.onRemoveAttachment}
+          />
+        </div>
+      ) : null}
+
       <form className="community-dm-panel-composer" onSubmit={onSubmit}>
+        <input
+          ref={fileInputRef}
+          className="community-dm-panel-file-input"
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.csv,.doc,.docx,.json,.md,.pdf,.ppt,.pptx,.rtf,.txt,.xls,.xlsx"
+          onChange={onFileInputChange}
+        />
+        <button
+          className="community-dm-panel-attach"
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={props.isSending}
+          aria-label="Attach files"
+          title="Attach files"
+        >
+          <Paperclip aria-hidden="true" />
+        </button>
         <textarea
           className="community-dm-panel-input"
           value={props.input}
@@ -227,7 +387,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         <button
           className="community-dm-panel-send chat-send ask-send-btn ask-send-btn-v2"
           type="submit"
-          disabled={props.isSending || props.input.trim().length === 0}
+          disabled={props.isSending || (props.input.trim().length === 0 && props.attachments.length === 0)}
           aria-label="Send direct message"
           title="Send"
         >

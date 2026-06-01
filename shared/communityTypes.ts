@@ -117,6 +117,16 @@ export type DirectMessage = {
   updated_at: string;
 };
 
+export type DirectMessageAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "file";
+  mime: string | null;
+  size: number;
+  url?: string | null;
+  storage_id?: string | null;
+};
+
 export type DirectMessageTypingPresenceUser = {
   user_id: string;
   display_name: string | null;

@@ -44,6 +44,10 @@ const dmInboxQuery = directMessages.slice(
 );
 const dmListMessagesQuery = directMessages.slice(
   directMessages.indexOf("export const listDirectMessages"),
+  directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrl"),
+);
+const dmAttachmentUploadMutation = directMessages.slice(
+  directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrl"),
   directMessages.indexOf("export const sendDirectMessage"),
 );
 const dmSetTypingMutation = directMessages.slice(
@@ -61,12 +65,17 @@ const dmListTypingQuery = directMessages.slice(
 const dmSendMutation = directMessages.slice(
   directMessages.indexOf("export const sendDirectMessage"),
 );
+const dmHostSerializeAttachments = dmHost.slice(
+  dmHost.indexOf("function serializeDirectAttachmentsForWrite"),
+  dmHost.indexOf("export function WebDirectMessagesHost"),
+);
 
 assert.match(schema, /dmConversations: defineTable\(\{[\s\S]*kind: v\.literal\("direct"\)[\s\S]*canonicalKey: v\.string\(\)[\s\S]*createdFromCommunityId: v\.id\("communities"\)/, "DM conversations must be direct rooms created from community context");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\)\)/, "DM participants must support users and future agents");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastReadSeq: v\.number\(\)/, "DM participants must store per-user read position");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastActivityAt: v\.optional\(v\.number\(\)\)/, "DM participants must store optional inbox activity ordering");
 assert.match(schema, /dmMessages: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*senderType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\), v\.literal\("system"\)\)/, "DM messages must be conversation-scoped and agent-native");
+assert.doesNotMatch(schema, /dmAttachments:/, "first DM attachment slice must not introduce a separate attachment table");
 assert.match(schema, /dmTypingPresence: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*userId: v\.id\("users"\)[\s\S]*displayUntil: v\.number\(\)/, "DM typing presence must be conversation-scoped ephemeral presence");
 assert.match(schema, /\.index\("by_canonicalKey", \["canonicalKey"\]\)/, "direct conversations must have a canonical pair key");
 assert.match(schema, /\.index\("by_user_status", \["userId", "status"\]\)/, "participants must support a current-user inbox query");
@@ -121,6 +130,8 @@ assert.match(directMessages, /readDirectMessageTextPreview/, "conversation proje
 assert.match(directMessages, /lastSeq > 0[\s\S]*query\("dmMessages" as any\)[\s\S]*withIndex\("by_conversation_seq"[\s\S]*eq\("conversationId", row\._id\)\.eq\("seq", lastSeq\)/, "conversation projection must read the latest message by conversation and sequence");
 assert.match(directMessages, /last_message_preview: lastMessage \? readDirectMessageTextPreview\(lastMessage\.contentJson\) : null/, "conversation projection must expose the latest text preview");
 assert.match(communityTypes, /last_message_preview: string \| null/, "shared DM conversation type must expose the latest text preview");
+assert.match(communityTypes, /export type DirectMessageAttachment/, "shared DM types must expose the DM attachment shape");
+assert.match(directMessages, /Sent an image[\s\S]*Sent a file[\s\S]*Sent attachments/, "DM inbox preview must summarize attachment-only messages");
 assert.match(communityTypes, /export type DirectMessageTypingPresenceUser/, "shared DM types must expose typing presence users");
 assert.match(communityTypes, /export type DirectMessageTypingPresenceBundle/, "shared DM types must expose typing presence bundles");
 assert.match(dmEnsureUserParticipantHelper, /touchActivity: boolean/, "participant ensure helper must distinguish creation/send activity from open-only access");
@@ -160,12 +171,27 @@ assert.match(dmListTypingQuery, /MAX_DM_TYPING_PRESENCE_SCAN_ROWS/, "typing read
 assert.match(account, /dmTypingPresence/, "account deletion must clean DM typing presence rows");
 assert.match(anonymousCleanup, /dmTypingPresence/, "anonymous cleanup must include DM typing presence rows");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
+assert.match(directMessages, /generateDirectMessageAttachmentUploadUrl = mutation/, "backend must expose a DM attachment upload URL mutation");
+assert.match(dmAttachmentUploadMutation, /requireActiveUserParticipant/, "DM attachment upload must require active conversation participation");
+assert.match(dmAttachmentUploadMutation, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM attachment upload must require profile setup");
+assert.match(dmAttachmentUploadMutation, /requireDirectConversationSendAccess/, "DM attachment upload must require current send access");
+assert.match(dmAttachmentUploadMutation, /ctx\.storage\.generateUploadUrl/, "DM attachment upload must use Convex storage upload URLs");
 assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*listConversationParticipants[\s\S]*participantType === "user"[\s\S]*peerParticipants\.length !== 1/, "DM send access guard must require exactly one active human peer");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*requireDirectMessageRelationshipAccess\(\{[\s\S]*targetUserId: peerUserId,[\s\S]*preferredCommunityId: args\.conversation\.createdFromCommunityId/, "DM send access guard must prefer the original community while allowing any current mutual community");
 assert.doesNotMatch(directMessages, /requireDirectConversationSendAccess[\s\S]*requiredCommunityId: args\.conversation\.createdFromCommunityId/, "DM sends must not treat createdFromCommunityId as the only permanent authorization source");
 assert.match(directMessages, /sendDirectMessage = mutation[\s\S]*requireDirectConversationSendAccess\(\{[\s\S]*conversation,[\s\S]*viewerUserId/, "send mutation must enforce continuous shared-community access before appending");
+assert.match(dmSendMutation, /attachments: v\.optional\(v\.array\(v\.any\(\)\)\)/, "send mutation must accept bounded attachment metadata");
+assert.match(dmSendMutation, /normalizeStoredDirectMessageAttachments\(args\.attachments,[\s\S]*enforceWritePolicy: true/, "send mutation must normalize DM attachments with write policy enforcement");
+assert.match(dmSendMutation, /dm_message_payload_required/, "send mutation must allow attachment-only messages but reject empty payloads");
+assert.match(directMessages, /MAX_DM_STORED_ATTACHMENTS = 8/, "DM attachments must keep a small per-message count limit");
+assert.match(directMessages, /MAX_DM_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/, "DM attachments must enforce a 10MB per-file metadata limit");
+assert.match(directMessages, /MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 \* 1024 \* 1024/, "DM attachments must enforce a 25MB total metadata limit");
+assert.match(directMessages, /dm_attachment_storage_required/, "DM attachments must require uploaded storage ids instead of inline payloads");
+assert.doesNotMatch(directMessages, /data_url/, "DM backend must not store raw attachment data URLs");
+assert.match(directMessages, /maybeResolveDirectMessageStorageUrl[\s\S]*ctx\.storage\.getUrl[\s\S]*mapDirectMessageContentJsonForRead/, "DM read mapping must resolve stored attachment URLs only after participant-gated reads");
+assert.match(dmSendMutation, /contentJson = attachments\.length > 0 \? \{ text, attachments \} : \{ text \}/, "DM send must keep attachments embedded in the message payload");
 assert.match(dmSendMutation, /touchActiveConversationParticipantsActivity\(\{[\s\S]*nowMs,[\s\S]*senderParticipantId: participant\._id,[\s\S]*senderLastReadSeq: seq/, "send mutation must update participant inbox activity and mark the sender read through their own message");
 assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slice must not introduce follow graph semantics");
 
@@ -182,6 +208,9 @@ assert.match(gateway, /subscribeCloudDirectConversations/, "web gateway must exp
 assert.match(gateway, /subscribeCloudDirectConversations[\s\S]*watchQuery\([\s\S]*directMessages:listMyDirectConversations/, "live DM inbox subscription must watch the canonical inbox query");
 assert.match(gateway, /subscribeCloudDirectMessages/, "web gateway must expose live direct message subscriptions");
 assert.match(gateway, /sendCloudDirectMessage/, "web gateway must send direct messages");
+assert.match(gateway, /uploadCloudDirectMessageAttachmentFile/, "web gateway must upload direct message attachments");
+assert.match(gateway, /directMessages:generateDirectMessageAttachmentUploadUrl/, "web gateway must request DM attachment upload URLs from the canonical backend mutation");
+assert.match(gateway, /directMessages:sendDirectMessage[\s\S]*attachments: params\.attachments \?\? \[\]/, "web gateway must pass attachment metadata through the canonical send mutation");
 assert.match(gateway, /markCloudDirectConversationRead/, "web gateway must expose direct conversation read mutation");
 assert.match(gateway, /directMessages:markDirectConversationRead/, "web gateway read mutation must use the canonical backend mutation");
 assert.match(gateway, /subscribeCloudDirectTyping/, "web gateway must expose live DM typing subscriptions");
@@ -219,7 +248,7 @@ assert.match(messageRow, /disabled=\{!canMessageSender\}/, "hover profile messag
 assert.match(dmPanel, /From \{communityName\}/, "DM panel must surface source community context");
 assert.match(dmPanel, /participant_type === "user"/, "DM panel must resolve the human peer from participants");
 assert.match(dmPanel, /Start a direct message from this shared community/, "empty DM state must explain the community-origin model");
-assert.match(dmPanel, /import \{ ArrowLeft, MessageCircle \} from "lucide-react"/, "DM conversation back control must use the flat back-arrow icon");
+assert.match(dmPanel, /import \{ ArrowLeft, MessageCircle, Paperclip \} from "lucide-react"/, "DM conversation panel must use lucide icons for back, empty, and attachment actions");
 assert.match(dmPanel, /DM_AUTO_SCROLL_THRESHOLD_PX/, "DM panel must keep chat-like auto-scroll constrained by a bottom threshold");
 assert.match(dmPanel, /scrollMessagesToBottom/, "DM panel must scroll opened or followed conversations to the newest message");
 assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether the viewer is reading older messages before auto-following");
@@ -227,6 +256,13 @@ assert.match(dmPanel, /onBackToInbox\?: \(\) => void/, "DM conversation panel mu
 assert.match(dmPanel, /onReadThroughSeq\?: \(seq: number\) => void \| Promise<void>/, "DM conversation panel must report read-through sequence");
 assert.match(dmPanel, /props\.onReadThroughSeq\?\.\(lastMessageSeq\)/, "DM conversation panel must mark visible newest messages read");
 assert.match(dmPanel, /typingPresence: DirectMessageTypingPresenceBundle/, "DM panel must receive typing presence as data");
+assert.match(dmPanel, /parseMessageAttachments/, "DM panel must reuse the canonical message attachment parser");
+assert.match(dmPanel, /partitionCommunityAttachments/, "DM panel must reuse the canonical attachment partitioning helper");
+assert.match(dmPanel, /AttachmentChipButton/, "DM panel must reuse the canonical file attachment chip");
+assert.match(dmPanel, /CommunityChatMediaGrid/, "DM panel must reuse the canonical image grid");
+assert.match(dmPanel, /onAttachmentFilesSelected\?: \(files: FileList\) => void \| Promise<void>/, "DM panel must expose file-picker attachment selection");
+assert.match(dmPanel, /community-dm-panel-file-input[\s\S]*type="file"[\s\S]*multiple/, "DM composer must use a real multi-file input");
+assert.match(dmPanel, /Paperclip/, "DM composer must expose an attachment button");
 assert.match(dmPanel, /onComposerBlur\?: \(\) => void \| Promise<void>/, "DM panel must let the host clear typing presence on composer blur");
 assert.match(dmPanel, /onBlur=\{\(\) => \{[\s\S]*props\.onComposerBlur/, "DM panel composer blur must call the host typing clear hook");
 assert.match(dmPanel, /formatDirectTypingLabel/, "DM panel must format typing labels locally");
@@ -254,6 +290,16 @@ assert.match(dmHost, /useDirectMessageTypingPresence/, "global DM host must own 
 assert.match(dmHost, /clearCloudDirectTyping/, "global DM host must clear stale DM typing presence explicitly");
 assert.match(dmHost, /clearDirectTypingForConversation/, "global DM host must centralize DM typing clear calls");
 assert.match(dmHost, /typingPresence=\{directTypingPresence\}/, "global DM host must pass typing presence into the DM panel");
+assert.match(dmHost, /MAX_DM_ATTACHMENTS_PER_MESSAGE = 8/, "global DM host must keep the same per-message attachment count limit");
+assert.match(dmHost, /MAX_DM_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/, "global DM host must enforce the 10MB per-file attachment limit");
+assert.match(dmHost, /MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 \* 1024 \* 1024/, "global DM host must enforce the 25MB total attachment limit");
+assert.match(dmHost, /isAllowedDirectAttachmentFile/, "global DM host must filter unsupported DM attachment types before upload");
+assert.match(dmHost, /uploadCloudDirectMessageAttachmentFile/, "global DM host must upload DM attachments through the DM gateway");
+assert.match(dmHostSerializeAttachments, /storageId/, "global DM host must serialize uploaded storage ids for DM attachment sends");
+assert.doesNotMatch(dmHostSerializeAttachments, /data_url|text:/, "global DM host must not serialize inline attachment payloads for DMs");
+assert.match(dmHost, /attachments=\{directMessagePanel\.attachments\}/, "global DM host must pass composer attachments into the DM panel");
+assert.match(dmHost, /onAttachmentFilesSelected=\{handleDirectAttachmentFilesSelected\}/, "global DM host must wire file selection to the DM panel");
+assert.match(dmHost, /onRemoveAttachment=\{removeDirectAttachment\}/, "global DM host must wire attachment removal to the DM panel");
 assert.match(dmHost, /await clearDirectTypingForConversation\(current\.conversation\.id\)/, "global DM host must clear typing presence after a successful send");
 assert.match(dmHost, /onComposerBlur=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence on composer blur");
 assert.match(dmHost, /onBackToInbox=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when leaving a conversation");
