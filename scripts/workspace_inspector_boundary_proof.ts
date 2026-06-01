@@ -124,7 +124,7 @@ assert.match(
 );
 assert.match(
   userDataPanel,
-  /forceDirectoryRefreshRef[\s\S]*refresh: forceRefresh[\s\S]*directoryFreshnessLabel[\s\S]*Refresh files/,
+  /forceDirectoryRefreshRef[\s\S]*refresh: forceRefresh[\s\S]*directoryIndicator[\s\S]*workspace-files-refresh/,
   "Files panel must default to cached listings and require an explicit refresh for another provider read",
 );
 assert.match(

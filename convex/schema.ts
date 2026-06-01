@@ -524,6 +524,29 @@ export default defineSchema({
     .index("by_project_path", ["projectId", "path"])
     .index("by_project_updatedAt", ["projectId", "updatedAt"]),
 
+  workspaceFilePreviewSnapshots: defineTable({
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    path: v.string(),
+    providerId: v.optional(v.literal("blaxel")),
+    providerSandboxId: v.optional(v.string()),
+    name: v.string(),
+    type: v.union(v.literal("file"), v.literal("directory"), v.literal("other")),
+    previewKind: v.union(v.literal("text"), v.literal("directory"), v.literal("unsupported")),
+    sizeBytes: v.optional(v.union(v.number(), v.null())),
+    mimeType: v.optional(v.union(v.string(), v.null())),
+    text: v.optional(v.string()),
+    truncated: v.optional(v.boolean()),
+    reason: v.optional(v.string()),
+    checkedAt: v.number(),
+    staleAt: v.optional(v.number()),
+    staleReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project_path", ["projectId", "path"])
+    .index("by_project_updatedAt", ["projectId", "updatedAt"]),
+
   criticalAuditEvents: defineTable({
     eventKey: v.string(),
     eventType: v.string(),

@@ -251,6 +251,79 @@ export const upsertWorkspaceDirectorySnapshotInternal = internalMutation({
   },
 });
 
+export const getWorkspaceFilePreviewSnapshotInternal = internalQuery({
+  args: {
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    path: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const snapshot = await ctx.db
+      .query("workspaceFilePreviewSnapshots")
+      .withIndex("by_project_path", (q) =>
+        q.eq("projectId", args.projectId).eq("path", args.path)
+      )
+      .first();
+    if (!snapshot || String(snapshot.ownerId) !== String(args.ownerId)) return null;
+    return snapshot;
+  },
+});
+
+export const upsertWorkspaceFilePreviewSnapshotInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    path: v.string(),
+    providerId: v.optional(v.literal("blaxel")),
+    providerSandboxId: v.optional(v.string()),
+    name: v.string(),
+    type: v.union(v.literal("file"), v.literal("directory"), v.literal("other")),
+    previewKind: v.union(v.literal("text"), v.literal("directory"), v.literal("unsupported")),
+    sizeBytes: v.optional(v.union(v.number(), v.null())),
+    mimeType: v.optional(v.union(v.string(), v.null())),
+    text: v.optional(v.string()),
+    truncated: v.optional(v.boolean()),
+    reason: v.optional(v.string()),
+    checkedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("workspaceFilePreviewSnapshots")
+      .withIndex("by_project_path", (q) =>
+        q.eq("projectId", args.projectId).eq("path", args.path)
+      )
+      .first();
+    const nowMs = Date.now();
+    const row = {
+      ownerId: args.ownerId,
+      providerId: args.providerId,
+      providerSandboxId: args.providerSandboxId,
+      name: args.name,
+      type: args.type,
+      previewKind: args.previewKind,
+      sizeBytes: args.sizeBytes,
+      mimeType: args.mimeType,
+      text: args.text,
+      truncated: args.truncated,
+      reason: args.reason,
+      checkedAt: args.checkedAt,
+      staleAt: undefined,
+      staleReason: undefined,
+      updatedAt: nowMs,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, row);
+      return existing._id;
+    }
+    return await ctx.db.insert("workspaceFilePreviewSnapshots", {
+      projectId: args.projectId,
+      path: args.path,
+      ...row,
+      createdAt: nowMs,
+    });
+  },
+});
+
 export const markWorkspaceDirectorySnapshotsStaleInternal = internalMutation({
   args: {
     projectId: v.id("cloudProjects"),
@@ -463,6 +536,51 @@ function parseBlaxelDirectoryEntries(
       `${left.type}:${left.name}`.localeCompare(`${right.type}:${right.name}`),
     )
     .slice(0, DIRECTORY_ENTRY_LIMIT);
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeCachedWorkspaceFilePreviewSnapshot(snapshot: any) {
+  const path = normalizeOptionalString(snapshot?.path) ?? ".";
+  const name = normalizeOptionalString(snapshot?.name) ?? basenameOfPath(path);
+  const type = normalizeOptionalString(snapshot?.type);
+  const previewKind = normalizeOptionalString(snapshot?.previewKind);
+  const base = {
+    ok: true,
+    path,
+    name,
+    cached: true,
+    checkedAt: normalizeNullableNumber(snapshot?.checkedAt ?? snapshot?.updatedAt),
+  };
+  if (previewKind === "text" && type === "file") {
+    return {
+      ...base,
+      type: "file",
+      previewKind: "text",
+      sizeBytes: normalizeNullableNumber(snapshot?.sizeBytes),
+      text: String(snapshot?.text ?? ""),
+      truncated: snapshot?.truncated === true,
+    };
+  }
+  if (previewKind === "directory" && type === "directory") {
+    return {
+      ...base,
+      type: "directory",
+      previewKind: "directory",
+    };
+  }
+  return {
+    ...base,
+    type: type === "other" ? "other" : "file",
+    previewKind: "unsupported",
+    sizeBytes: normalizeNullableNumber(snapshot?.sizeBytes),
+    mimeType: typeof snapshot?.mimeType === "string" ? snapshot.mimeType : null,
+    reason: String(snapshot?.reason ?? "This file cannot be previewed."),
+  };
 }
 
 async function ensureBlaxelInspectorWorkspace(params: {
@@ -836,6 +954,38 @@ async function readBlaxelInspectorFilePreview(params: {
   return await runWithBlaxelInspectorWorkspace({
     ...params,
     operation: async (workspace) => {
+      async function cachePreview(preview: Record<string, unknown>) {
+        await params.ctx.runMutation(
+          internal.workspaceInspector.upsertWorkspaceFilePreviewSnapshotInternal as any,
+          {
+            projectId: params.projectId,
+            ownerId: workspace.ownerId,
+            path: params.relPath,
+            providerId: "blaxel",
+            providerSandboxId: workspace.sandboxName,
+            name: String(preview.name ?? basenameOfPath(params.relPath)),
+            type:
+              preview.type === "directory"
+                ? "directory"
+                : preview.type === "other"
+                  ? "other"
+                  : "file",
+            previewKind:
+              preview.previewKind === "text"
+                ? "text"
+                : preview.previewKind === "directory"
+                  ? "directory"
+                  : "unsupported",
+            sizeBytes: normalizeNullableNumber(preview.sizeBytes),
+            mimeType: typeof preview.mimeType === "string" ? preview.mimeType : null,
+            text: typeof preview.text === "string" ? preview.text : undefined,
+            truncated: preview.truncated === true,
+            reason: typeof preview.reason === "string" ? preview.reason : undefined,
+            checkedAt: Date.now(),
+          },
+        );
+        return preview;
+      }
       const parentPath = parentWorkspacePath(params.relPath);
       const parentListing = await listBlaxelWorkspaceDirectory({
         sandboxName: workspace.sandboxName,
@@ -853,20 +1003,20 @@ async function readBlaxelInspectorFilePreview(params: {
         };
       }
       if (target.kind === "directory") {
-        return {
+        return await cachePreview({
           ok: true,
           path: params.relPath,
           name: basenameOfPath(params.relPath),
           type: "directory",
           previewKind: "directory",
-        };
+        });
       }
 
       const sizeBytes = blaxelEntrySize(target.entry);
       const extension = extensionOfPath(params.relPath);
       const imageMimeType = IMAGE_MIME_BY_EXTENSION[extension] ?? null;
       if (imageMimeType) {
-        return {
+        return await cachePreview({
           ok: true,
           path: params.relPath,
           name: basenameOfPath(params.relPath),
@@ -875,11 +1025,11 @@ async function readBlaxelInspectorFilePreview(params: {
           mimeType: imageMimeType,
           sizeBytes,
           reason: "Image preview is not available for Blaxel workspaces yet.",
-        };
+        });
       }
 
       if (!isTextPreviewCandidate(params.relPath)) {
-        return {
+        return await cachePreview({
           ok: true,
           path: params.relPath,
           name: basenameOfPath(params.relPath),
@@ -887,11 +1037,11 @@ async function readBlaxelInspectorFilePreview(params: {
           previewKind: "unsupported",
           sizeBytes,
           reason: "This file type is not previewed yet.",
-        };
+        });
       }
 
       if (sizeBytes === null) {
-        return {
+        return await cachePreview({
           ok: true,
           path: params.relPath,
           name: basenameOfPath(params.relPath),
@@ -899,11 +1049,11 @@ async function readBlaxelInspectorFilePreview(params: {
           previewKind: "unsupported",
           sizeBytes,
           reason: "File size is unavailable, so this file is not previewed.",
-        };
+        });
       }
 
       if (typeof sizeBytes === "number" && sizeBytes > TEXT_PREVIEW_MAX_BYTES) {
-        return {
+        return await cachePreview({
           ok: true,
           path: params.relPath,
           name: basenameOfPath(params.relPath),
@@ -911,7 +1061,7 @@ async function readBlaxelInspectorFilePreview(params: {
           previewKind: "unsupported",
           sizeBytes,
           reason: "Text file is too large to preview in the workspace panel.",
-        };
+        });
       }
 
       const read = await readBlaxelWorkspaceFile({
@@ -921,7 +1071,7 @@ async function readBlaxelInspectorFilePreview(params: {
       if (!read.ok) return read;
       const text = String(read.content ?? "");
       if (isLikelyBinaryText(text)) {
-        return {
+        return await cachePreview({
           ok: true,
           path: params.relPath,
           name: basenameOfPath(params.relPath),
@@ -929,10 +1079,10 @@ async function readBlaxelInspectorFilePreview(params: {
           previewKind: "unsupported",
           sizeBytes,
           reason: "Binary files are not previewed in the workspace panel.",
-        };
+        });
       }
 
-      return {
+      return await cachePreview({
         ok: true,
         path: params.relPath,
         name: basenameOfPath(params.relPath),
@@ -941,7 +1091,7 @@ async function readBlaxelInspectorFilePreview(params: {
         sizeBytes,
         text: text.slice(0, TEXT_PREVIEW_MAX_BYTES),
         truncated: text.length > TEXT_PREVIEW_MAX_BYTES,
-      };
+      });
     },
   });
 }
@@ -1017,6 +1167,30 @@ export const readWorkspaceFilePreview = action({
     const normalized = normalizeInspectorPath(args.path);
     if (!normalized.ok) return normalized;
     const relPath = normalized.relPath;
+    const resolvedProject = await resolveInspectorProject({
+      ctx,
+      authSubject: args.authSubject ?? null,
+      projectId: args.projectId,
+    });
+    if (!resolvedProject.ok) return resolvedProject;
+    const cached = await ctx.runQuery(
+      internal.workspaceInspector.getWorkspaceFilePreviewSnapshotInternal as any,
+      {
+        projectId: args.projectId,
+        ownerId: resolvedProject.resolved.actor.dbUserId,
+        path: relPath,
+      },
+    );
+    if (cached) {
+      const checkedAt = Number(cached.checkedAt ?? cached.updatedAt ?? Date.now());
+      const invalidatedAt = Number(
+        resolvedProject.resolved.project.workspaceDirectorySnapshotInvalidatedAt ?? 0,
+      );
+      const stale =
+        (Number.isFinite(invalidatedAt) && invalidatedAt >= checkedAt) ||
+        typeof cached.staleAt === "number";
+      if (!stale) return normalizeCachedWorkspaceFilePreviewSnapshot(cached);
+    }
     return await readBlaxelInspectorFilePreview({
       ctx,
       authSubject: args.authSubject ?? null,

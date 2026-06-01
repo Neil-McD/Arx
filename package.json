@@ -143,6 +143,7 @@
     "probe:blaxel-workspace-lifecycle-upgrade": "bash scripts/run_blaxel_workspace_lifecycle_upgrade_probe.sh",
     "diagnose:blaxel-workspace-inspector": "bash scripts/run_blaxel_workspace_inspector_diagnostic.sh",
     "check:workspace-inspector-boundary-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_inspector_boundary_proof.ts",
+    "check:workspace-file-preview-cache-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_file_preview_cache_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
     "check:platform-harness-prompt-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_harness_prompt_contract_proof.ts",
     "check:runtime-failure-finalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_failure_finalization_proof.ts",
