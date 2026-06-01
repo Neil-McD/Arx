@@ -45,6 +45,10 @@ function emptyProfileCommunityContext(): ProfileCommunityContext {
   return {
     owned_communities: [],
     mutual_communities: [],
+    is_self: false,
+    can_message: false,
+    message_context_community_id: null,
+    message_unavailable_reason: "no_mutual_community",
   };
 }
 
@@ -167,18 +171,29 @@ export async function listCloudProfileRowsByUserIds<SessionT, TProfile extends C
 export async function fetchCloudProfileCommunityContext<SessionT>(
   params: CloudProfilesGatewayParams<SessionT> & {
     targetUserId: string;
+    preferredCommunityId?: string | null;
   },
 ): Promise<ProfileCommunityContext> {
   const targetUserId = String(params.targetUserId ?? "").trim();
   if (!targetUserId) return emptyProfileCommunityContext();
+  const preferredCommunityId = String(params.preferredCommunityId ?? "").trim() || null;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.query("profiles:getProfileCommunityContext" as any, {
     authSubject,
     targetUserId,
+    preferredCommunityId,
   })) as Partial<ProfileCommunityContext> | null;
   return {
     owned_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.owned_communities ?? []),
     mutual_communities: coerceGatewayRows<CommunityAvatarSummary>(payload?.mutual_communities ?? []),
+    is_self: Boolean(payload?.is_self),
+    can_message: Boolean(payload?.can_message),
+    message_context_community_id: String(payload?.message_context_community_id ?? "").trim() || null,
+    message_unavailable_reason:
+      payload?.message_unavailable_reason === "self" ||
+      payload?.message_unavailable_reason === "no_mutual_community"
+        ? payload.message_unavailable_reason
+        : null,
   };
 }
 

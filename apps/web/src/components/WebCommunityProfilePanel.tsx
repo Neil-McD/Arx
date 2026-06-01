@@ -83,6 +83,7 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
   const hasOwnedCommunities = ownedCommunities.length > 0;
   const hasSecondaryCommunities = secondaryCommunities.length > 0;
   const hasCommunitySections = hasOwnedCommunities || hasSecondaryCommunities;
+  const canMessageProfile = !isSelfProfile && communityContext.can_message && !isMessageDisabled && Boolean(onMessage);
 
   return (
     <aside
@@ -107,8 +108,9 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
           <button
             type="button"
             className="chat-profile-message-button community-profile-panel-message"
-            disabled={isSelfProfile || isMessageDisabled || !onMessage}
+            disabled={!canMessageProfile}
             onClick={() => {
+              if (!canMessageProfile) return;
               void onMessage?.();
             }}
           >

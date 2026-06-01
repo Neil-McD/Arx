@@ -19,6 +19,7 @@ assert.match(panel, /Mutual communities/, "profile panel must keep the mutual co
 assert.match(panel, /My communities/, "self profile must label non-owned participation as My communities");
 assert.match(panel, /communityContext\.owned_communities/, "owned section must render backend owned community context");
 assert.match(panel, /communityContext\.mutual_communities/, "mutual section must render backend mutual community context");
+assert.match(panel, /communityContext\.can_message/, "profile panel message button must use backend relationship message eligibility");
 assert.match(panel, /hasOwnedCommunities \? \(/, "owned communities section must only render when owned community data exists");
 assert.match(panel, /isSelfProfile/, "profile panel must know whether it is rendering the viewer's own profile");
 assert.match(panel, /ownedCommunityIds = new Set\(ownedCommunities\.map\(\(community\) => community\.id\)\)/, "self profile must compute owned community ids for duplicate removal");
@@ -59,8 +60,23 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /isSelfProfile=\{Boolean\(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId\)\}/,
-  "chat panel must identify when the selected profile is the signed-in viewer",
+  /isSelfProfile=\{profilePanelCommunityContext\.is_self \|\| Boolean\(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId\)\}/,
+  "chat panel must prefer backend self relationship while preserving a local fallback",
+);
+assert.match(
+  chatPanel,
+  /preferredCommunityId: activeCommunity\?\.id \?\? null/,
+  "chat panel must let the backend prefer the current community as message context",
+);
+assert.match(
+  chatPanel,
+  /profilePanelCommunityContext\.message_context_community_id[\s\S]*openDirectMessage\(profilePanelUserId, profilePanelCommunityContext\.message_context_community_id\)/,
+  "profile panel message action must use the backend-selected message context community",
+);
+assert.match(
+  chatPanel,
+  /!canOpenDirectMessageFromCommunity \|\| !profilePanelCommunityContext\.can_message/,
+  "profile panel message action must stay disabled when the relationship is not message eligible",
 );
 assert.doesNotMatch(
   chatPanel,

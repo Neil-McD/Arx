@@ -88,6 +88,10 @@ const EMPTY_MESSAGE_REACTIONS: MessageReaction[] = [];
 const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
   owned_communities: [],
   mutual_communities: [],
+  is_self: false,
+  can_message: false,
+  message_context_community_id: null,
+  message_unavailable_reason: "no_mutual_community",
 };
 
 export type WebCommunityChatPanelProps = {
@@ -392,6 +396,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     setProfilePanelUserId(null);
+    setProfileCommunityContextByUserId({});
   }, [activeCommunity?.id]);
 
   useEffect(() => {
@@ -405,6 +410,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     void fetchCloudProfileCommunityContext({
       session,
       targetUserId,
+      preferredCommunityId: activeCommunity?.id ?? null,
     })
       .then((context) => {
         if (cancelled) return;
@@ -423,7 +429,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [profileCommunityContextByUserId, profilePanelUserId, session]);
+  }, [activeCommunity?.id, profileCommunityContextByUserId, profilePanelUserId, session]);
 
   useEffect(() => {
     if (!profilePanelUserId) return;
@@ -442,9 +448,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     };
   }, [profilePanelUserId]);
 
-  const openDirectMessage = useCallback((targetUserId: string) => {
+  const openDirectMessage = useCallback((targetUserId: string, sourceCommunityIdOverride?: string | null) => {
     const normalizedTargetUserId = String(targetUserId ?? "").trim();
-    const sourceCommunityId = String(activeCommunity?.id ?? "").trim();
+    const sourceCommunityId = String(sourceCommunityIdOverride ?? activeCommunity?.id ?? "").trim();
     if (!normalizedTargetUserId || !sourceCommunityId || !onOpenDirectMessageFromCommunity) return;
     if (normalizedTargetUserId === sessionUserId) return;
     setProfilePanelUserId(null);
@@ -852,11 +858,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           displayName={profilePanelDisplayName}
           avatarColor={profilePanelAvatarColor}
           communityContext={profilePanelCommunityContext}
-          isSelfProfile={Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
-          isMessageDisabled={!canOpenDirectMessageFromCommunity}
+          isSelfProfile={profilePanelCommunityContext.is_self || Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
+          isMessageDisabled={!canOpenDirectMessageFromCommunity || !profilePanelCommunityContext.can_message}
           onMessage={
-            profilePanelUserId && profilePanelUserId !== sessionUserId
-              ? () => openDirectMessage(profilePanelUserId)
+            profilePanelUserId && profilePanelUserId !== sessionUserId && profilePanelCommunityContext.message_context_community_id
+              ? () => openDirectMessage(profilePanelUserId, profilePanelCommunityContext.message_context_community_id)
               : undefined
           }
           getInitials={getInitials}

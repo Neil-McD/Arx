@@ -14,6 +14,7 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 }
 
 const profiles = read("convex/profiles.ts");
+const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudProfilesGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 
@@ -30,33 +31,48 @@ assert.match(
 );
 assert.match(
   communityTypes,
-  /export type ProfileCommunityContext = \{[\s\S]*owned_communities: CommunityAvatarSummary\[];[\s\S]*mutual_communities: CommunityAvatarSummary\[];/,
-  "profile community context must have exactly owned and mutual community buckets",
+  /export type ProfileCommunityContext = \{[\s\S]*owned_communities: CommunityAvatarSummary\[];[\s\S]*mutual_communities: CommunityAvatarSummary\[];[\s\S]*is_self: boolean;[\s\S]*can_message: boolean;[\s\S]*message_context_community_id: string \| null;[\s\S]*message_unavailable_reason: "self" \| "no_mutual_community" \| null;/,
+  "profile community context must include display buckets plus viewer-relative message eligibility",
 );
 
 assert.match(
-  profiles,
+  relationshipCore,
   /communityMembershipRowIsActive/,
   "profile community context must use the canonical active membership predicate",
 );
 assert.match(
-  profiles,
+  relationshipCore,
   /resolveCommunityBrandingFields/,
   "profile community context must reuse the canonical community branding/avatar projection",
 );
 assert.match(
-  profiles,
-  /function listActiveCommunityMembershipsByUserId[\s\S]*withIndex\("by_user"/,
-  "profile community context must read memberships through the user index",
+  relationshipCore,
+  /function listActiveCommunityMembershipsByUserId[\s\S]*withIndex\("by_user_createdAt"/,
+  "profile community context must read memberships through the bounded user-createdAt index",
 );
 assert.match(
-  profiles,
-  /function listOwnedCommunitiesByOwnerId[\s\S]*withIndex\("by_owner"/,
-  "owned communities must read through the owner index",
+  relationshipCore,
+  /function listOwnedCommunitiesByOwnerId[\s\S]*withIndex\("by_owner_createdAt"/,
+  "owned communities must read through the bounded owner-createdAt index",
 );
 assert.match(
-  querySlice,
-  /listOwnedCommunitiesByOwnerId\(ctx, targetUser\._id\)[\s\S]*listOwnedCommunitiesByOwnerId\(ctx, viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(ctx, viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(ctx, targetUser\._id\)/,
+  relationshipCore,
+  /MAX_PROFILE_RELATIONSHIP_OWNED_ROWS[\s\S]*MAX_PROFILE_RELATIONSHIP_MEMBERSHIP_ROWS[\s\S]*MAX_PROFILE_RELATIONSHIP_MUTUAL_ROWS/,
+  "profile relationship resolution must use explicit read and fanout caps",
+);
+assert.match(
+  relationshipCore,
+  /\.take\(MAX_PROFILE_RELATIONSHIP_MEMBERSHIP_ROWS\)[\s\S]*\.take\(MAX_PROFILE_RELATIONSHIP_OWNED_ROWS\)/,
+  "profile relationship source reads must be bounded",
+);
+assert.doesNotMatch(
+  relationshipCore,
+  /\.collect\(\)/,
+  "profile relationship resolver must not collect unbounded owned or membership rows",
+);
+assert.match(
+  relationshipCore,
+  /listOwnedCommunitiesByOwnerId\(args\.ctx, args\.targetUserId\)[\s\S]*listOwnedCommunitiesByOwnerId\(args\.ctx, args\.viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(args\.ctx, args\.viewerUserId\)[\s\S]*listActiveCommunityMembershipsByUserId\(args\.ctx, args\.targetUserId\)/,
   "mutual communities must be derived from effective participation: owned communities plus active membership sets",
 );
 assert.match(
@@ -65,37 +81,37 @@ assert.match(
   "profile community context must require an authenticated viewer",
 );
 assert.match(
-  querySlice,
+  relationshipCore,
   /community\.visibility === "published"/,
   "published owned communities may be visible as public community identity",
 );
 assert.match(
-  querySlice,
+  relationshipCore,
   /viewerIsTarget/,
   "target users must be able to see their own owned community context",
 );
 assert.match(
-  querySlice,
+  relationshipCore,
   /viewerCommunityIds\.has\(String\(community\._id\)\)/,
   "unlisted owned communities must only appear to active co-members",
 );
 assert.match(
-  querySlice,
+  relationshipCore,
   /viewerMemberships\.map\(\(row\) => String\(row\.communityId\)\)/,
   "viewer membership rows must count toward mutual community intersections",
 );
 assert.match(
-  querySlice,
+  relationshipCore,
   /viewerOwnedCommunities\.map\(\(community\) => String\(community\._id\)\)/,
   "viewer-owned communities must count toward mutual community intersections even without membership rows",
 );
 assert.match(
-  querySlice,
+  relationshipCore,
   /ownedCommunities\.map\(\(community\) => community\._id\)/,
   "target-owned communities must count toward mutual community intersections even without membership rows",
 );
 assert.doesNotMatch(
-  querySlice,
+  relationshipCore,
   /!ownedCommunityIds\.has/,
   "ownership must not remove a community from mutuals because ownership and mutual participation are separate facts",
 );
@@ -103,6 +119,31 @@ assert.match(
   querySlice,
   /owned_communities:[\s\S]*mutual_communities:/,
   "query must return owned and mutual community arrays",
+);
+assert.match(
+  querySlice,
+  /resolveViewerProfileRelationship/,
+  "profile context query must delegate relationship logic to the central resolver",
+);
+assert.match(
+  relationshipCore,
+  /requireCommunityChatAccess/,
+  "message eligibility must be based on current chat access, not only stale membership rows",
+);
+assert.match(
+  relationshipCore,
+  /resolvePreferredDirectMessageCommunity[\s\S]*requireCommunityChatAccess[\s\S]*userId: args\.viewerUserId[\s\S]*requireCommunityChatAccess[\s\S]*userId: args\.targetUserId/,
+  "DM relationship resolution must fast-path a valid preferred community before broader bounded discovery",
+);
+assert.match(
+  relationshipCore,
+  /resolveViewerDirectMessageRelationship[\s\S]*const preferredCommunity = await resolvePreferredDirectMessageCommunity\(args\)[\s\S]*if \(preferredCommunity\)/,
+  "DM relationship resolution must return from the preferred-community fast path",
+);
+assert.match(
+  relationshipCore,
+  /viewerIsTarget[\s\S]*"self"[\s\S]*"no_mutual_community"/,
+  "relationship context must explain why the profile cannot be messaged",
 );
 
 assert.match(
@@ -117,8 +158,8 @@ assert.match(
 );
 assert.match(
   gateway,
-  /authSubject,[\s\S]*targetUserId,/,
-  "cloud gateway must send authenticated viewer and target user identity",
+  /authSubject,[\s\S]*targetUserId,[\s\S]*preferredCommunityId,/,
+  "cloud gateway must send authenticated viewer, target user, and preferred community identity",
 );
 
-console.log("PASS: profile community context contract uses canonical community avatars and fail-closed membership visibility.");
+console.log("PASS: profile relationship context uses canonical community avatars and fail-closed message eligibility.");

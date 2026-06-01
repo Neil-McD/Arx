@@ -55,6 +55,10 @@ export type CommunityAvatarSummary = {
 export type ProfileCommunityContext = {
   owned_communities: CommunityAvatarSummary[];
   mutual_communities: CommunityAvatarSummary[];
+  is_self: boolean;
+  can_message: boolean;
+  message_context_community_id: string | null;
+  message_unavailable_reason: "self" | "no_mutual_community" | null;
 };
 
 export type DirectMessageParticipant = {

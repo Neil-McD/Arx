@@ -129,6 +129,7 @@ import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as platformSkillRuntime from "../platformSkillRuntime.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
+import type * as profileRelationshipCore from "../profileRelationshipCore.js";
 import type * as profiles from "../profiles.js";
 import type * as projects from "../projects.js";
 import type * as providerConnectionProbes from "../providerConnectionProbes.js";
@@ -303,6 +304,7 @@ declare const fullApi: ApiFromModules<{
   platformSkillRuntime: typeof platformSkillRuntime;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
+  profileRelationshipCore: typeof profileRelationshipCore;
   profiles: typeof profiles;
   projects: typeof projects;
   providerConnectionProbes: typeof providerConnectionProbes;

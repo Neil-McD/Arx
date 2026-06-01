@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const schema = read("convex/schema.ts");
 const directMessages = read("convex/directMessages.ts");
+const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudDirectMessagesGateway.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
@@ -52,8 +53,12 @@ assert.match(schema, /\.index\("by_user_status_lastActivityAt", \["userId", "sta
 
 assert.match(directMessages, /ensureDirectConversationFromCommunity = mutation/, "backend must expose community-context DM creation");
 assert.match(directMessages, /targetUserId: v\.string\(\)/, "DM creation must target a public user id");
-assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId,[\s\S]*userId: viewerUserId/, "viewer must have access to the source community");
-assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId,[\s\S]*userId: targetUser\._id/, "target must have access to the source community");
+assert.match(directMessages, /resolveViewerDirectMessageRelationship/, "DM backend must reuse the canonical viewer relationship resolver");
+assert.match(relationshipCore, /export async function resolveViewerDirectMessageRelationship/, "profile relationship core must expose a DM-specific relationship helper");
+assert.match(relationshipCore, /resolvePreferredDirectMessageCommunity[\s\S]*requireCommunityChatAccess[\s\S]*userId: args\.viewerUserId[\s\S]*requireCommunityChatAccess[\s\S]*userId: args\.targetUserId/, "DM relationship helper must fast-path a valid preferred community");
+assert.match(directMessages, /async function requireDirectMessageRelationshipAccess/, "DM backend must centralize shared-community relationship authorization");
+assert.match(directMessages, /requiredCommunityId\?: any \| null/, "DM creation must be able to require a specific source community for new rooms");
+assert.match(directMessages, /requiredCommunityId: isNewConversation \? args\.communityId : null/, "new DM rooms must require the requested community while existing rooms can reopen through any current mutual community");
 assert.match(directMessages, /throw new Error\("dm_target_self"\)/, "users must not open self-DMs");
 assert.match(directMessages, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM writes must require profile setup");
 assert.match(directMessages, /listMyDirectConversations = query/, "backend must expose current-user DM inbox query even if UI inbox is deferred");
@@ -109,7 +114,8 @@ assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expos
 assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*listConversationParticipants[\s\S]*participantType === "user"[\s\S]*peerParticipants\.length !== 1/, "DM send access guard must require exactly one active human peer");
-assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.conversation\.createdFromCommunityId,[\s\S]*userId: args\.viewerUserId[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.conversation\.createdFromCommunityId,[\s\S]*userId: peerUserId/, "DM send access guard must recheck viewer and peer access to the conversation community");
+assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*requireDirectMessageRelationshipAccess\(\{[\s\S]*targetUserId: peerUserId,[\s\S]*preferredCommunityId: args\.conversation\.createdFromCommunityId/, "DM send access guard must prefer the original community while allowing any current mutual community");
+assert.doesNotMatch(directMessages, /requireDirectConversationSendAccess[\s\S]*requiredCommunityId: args\.conversation\.createdFromCommunityId/, "DM sends must not treat createdFromCommunityId as the only permanent authorization source");
 assert.match(directMessages, /sendDirectMessage = mutation[\s\S]*requireDirectConversationSendAccess\(\{[\s\S]*conversation,[\s\S]*viewerUserId/, "send mutation must enforce continuous shared-community access before appending");
 assert.match(dmSendMutation, /touchActiveConversationParticipantsActivity\(\{[\s\S]*nowMs,[\s\S]*senderParticipantId: participant\._id,[\s\S]*senderLastReadSeq: seq/, "send mutation must update participant inbox activity and mark the sender read through their own message");
 assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slice must not introduce follow graph semantics");
@@ -145,7 +151,8 @@ assert.doesNotMatch(chatPanel, /<WebDirectMessagePanel/, "community chat panel m
 assert.doesNotMatch(chatPanel, /follow|follower|following/i, "DM UI slice must not add follow controls");
 
 assert.match(profilePanel, /onMessage\?: \(\) => void \| Promise<void>/, "right profile card must expose a message action");
-assert.match(profilePanel, /disabled=\{isSelfProfile \|\| isMessageDisabled \|\| !onMessage\}/, "right profile message action must be disabled for self or unavailable contexts");
+assert.match(profilePanel, /canMessageProfile = !isSelfProfile && communityContext\.can_message && !isMessageDisabled && Boolean\(onMessage\)/, "right profile message action must be disabled for self or unavailable contexts");
+assert.match(profilePanel, /disabled=\{!canMessageProfile\}/, "right profile message button must use resolved profile message eligibility");
 assert.match(messageRow, /onMessageSender\?: \(userId: string\) => void \| Promise<void>/, "hover profile card must expose a message action");
 assert.match(messageRow, /disabled=\{!canMessageSender\}/, "hover profile message action must be disabled until DM context is available");
 

@@ -12,6 +12,7 @@ import {
 } from "./communityCore";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
+import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCore";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 
 type UserRow = {
@@ -86,6 +87,30 @@ function buildDirectConversationCanonicalKey(leftUserId: any, rightUserId: any):
   const [left, right] = [normalizeIdValue(leftUserId), normalizeIdValue(rightUserId)].sort();
   if (!left || !right) throw new Error("dm_participant_required");
   return `dm:direct:v1:${left}:${right}`;
+}
+
+async function requireDirectMessageRelationshipAccess(args: {
+  ctx: any;
+  viewerUserId: any;
+  targetUserId: any;
+  preferredCommunityId?: any | null;
+  requiredCommunityId?: any | null;
+}): Promise<string> {
+  const relationship = await resolveViewerDirectMessageRelationship({
+    ctx: args.ctx,
+    viewerUserId: args.viewerUserId,
+    targetUserId: args.targetUserId,
+    preferredCommunityId: args.preferredCommunityId ?? null,
+  });
+  const messageContextCommunityId = String(relationship.message_context_community_id ?? "").trim();
+  if (!relationship.can_message || !messageContextCommunityId) {
+    throw new Error("dm_conversation_access_required");
+  }
+  const requiredCommunityId = String(args.requiredCommunityId ?? "").trim();
+  if (requiredCommunityId && messageContextCommunityId !== requiredCommunityId) {
+    throw new Error("dm_conversation_access_required");
+  }
+  return messageContextCommunityId;
 }
 
 function normalizeRecipientSearch(raw: unknown): string {
@@ -267,20 +292,15 @@ async function requireDirectConversationSendAccess(args: {
   }
 
   const peerUserId = peerParticipants[0]?.userId;
-  try {
-    await requireCommunityChatAccess({
-      ctx: args.ctx,
-      communityId: args.conversation.createdFromCommunityId,
-      userId: args.viewerUserId,
-    });
-    await requireCommunityChatAccess({
-      ctx: args.ctx,
-      communityId: args.conversation.createdFromCommunityId,
-      userId: peerUserId,
-    });
-  } catch {
+  if (!peerUserId) {
     throw new Error("dm_conversation_access_required");
   }
+  await requireDirectMessageRelationshipAccess({
+    ctx: args.ctx,
+    viewerUserId: args.viewerUserId,
+    targetUserId: peerUserId,
+    preferredCommunityId: args.conversation.createdFromCommunityId,
+  });
 }
 
 async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike) {
@@ -546,22 +566,19 @@ export const ensureDirectConversationFromCommunity = mutation({
       throw new Error("dm_target_self");
     }
 
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: viewerUserId,
-    });
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: targetUser._id,
-    });
     await requireProfileSetupCompleteForUser(ctx, viewerUserId);
 
     const nowMs = Date.now();
     const canonicalKey = buildDirectConversationCanonicalKey(viewerUserId, targetUser._id);
     let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
     const isNewConversation = !conversation;
+    await requireDirectMessageRelationshipAccess({
+      ctx,
+      viewerUserId,
+      targetUserId: targetUser._id,
+      preferredCommunityId: args.communityId,
+      requiredCommunityId: isNewConversation ? args.communityId : null,
+    });
 
     if (isNewConversation) {
       const conversationId = await ctx.db.insert("dmConversations" as any, {
