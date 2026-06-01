@@ -7,7 +7,6 @@ import {
   deleteCloudCommunityResourceModule,
   listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
-  prepareCloudCommunityBrandingField,
   reorderCloudCommunityResourceModules,
   reorderCloudCommunityResources,
   saveCloudCommunityResource,
@@ -35,12 +34,6 @@ type ResourceModuleLike = {
   id: string;
   name: string;
   module_status?: "draft" | "live";
-  description_md: string | null;
-  banner_url: string | null;
-  banner_storage_id?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
   sort_order?: number;
 };
 
@@ -79,15 +72,8 @@ type UseCommunityResourceControllerArgs<
   resourceStatusInput: "draft" | "review" | "published" | "processing" | "failed";
   resourceModuleIdInput: string | null;
   moduleNameInput: string;
-  moduleDescriptionInput: string;
-  moduleBannerUrlInput: string;
-  moduleBannerFocusX: number;
-  moduleBannerFocusY: number;
-  moduleBannerZoom: number;
   editingResourceId: string | null;
   editingResourceModuleId: string | null;
-  editingResourceModuleBannerStorageId: string | null;
-  editingResourceModuleBannerUrl: string | null;
   beforeSaveValidate?: (payload: { title: string; description: string; rawUrl: string }) => Promise<string | null>;
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
@@ -101,8 +87,6 @@ type UseCommunityResourceControllerArgs<
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
   setEditingResourceModuleId: Dispatch<SetStateAction<string | null>>;
-  setEditingResourceModuleBannerStorageId: Dispatch<SetStateAction<string | null>>;
-  setEditingResourceModuleBannerUrl: Dispatch<SetStateAction<string | null>>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
   setResourceBodyInput: Dispatch<SetStateAction<string>>;
@@ -111,11 +95,6 @@ type UseCommunityResourceControllerArgs<
   setResourceStatusInput: Dispatch<SetStateAction<"draft" | "review" | "published" | "processing" | "failed">>;
   setResourceModuleIdInput: Dispatch<SetStateAction<string | null>>;
   setModuleNameInput: Dispatch<SetStateAction<string>>;
-  setModuleDescriptionInput: Dispatch<SetStateAction<string>>;
-  setModuleBannerUrlInput: Dispatch<SetStateAction<string>>;
-  setModuleBannerFocusX: Dispatch<SetStateAction<number>>;
-  setModuleBannerFocusY: Dispatch<SetStateAction<number>>;
-  setModuleBannerZoom: Dispatch<SetStateAction<number>>;
 };
 
 export function useCommunityResourceController<
@@ -146,14 +125,7 @@ export function useCommunityResourceController<
   const resetModuleEditor = useCallback((clearError: boolean) => {
     const current = argsRef.current;
     current.setEditingResourceModuleId(null);
-    current.setEditingResourceModuleBannerStorageId(null);
-    current.setEditingResourceModuleBannerUrl(null);
     current.setModuleNameInput("");
-    current.setModuleDescriptionInput("");
-    current.setModuleBannerUrlInput("");
-    current.setModuleBannerFocusX(0.5);
-    current.setModuleBannerFocusY(0.5);
-    current.setModuleBannerZoom(1);
     if (clearError) {
       current.setResourceModuleError(null);
     }
@@ -302,7 +274,7 @@ export function useCommunityResourceController<
 
     const name = current.moduleNameInput.trim();
     if (!name) {
-      current.setResourceModuleError("Module name is required.");
+      current.setResourceModuleError("Category name is required.");
       return;
     }
 
@@ -310,13 +282,6 @@ export function useCommunityResourceController<
     current.setIsSavingResourceModule(true);
     try {
       const isPatch = Boolean(current.editingResourceModuleId);
-      const bannerField = await prepareCloudCommunityBrandingField({
-        session,
-        kind: "banner",
-        nextValue: current.moduleBannerUrlInput,
-        currentStorageId: current.editingResourceModuleBannerStorageId,
-        currentResolvedUrl: current.editingResourceModuleBannerUrl,
-      });
       await saveCloudCommunityResourceModule({
         session,
         moduleId: isPatch ? current.editingResourceModuleId : null,
@@ -324,12 +289,6 @@ export function useCommunityResourceController<
         payload: {
           ...(isPatch ? {} : { community_id: current.activeCommunityId }),
           name,
-          description_md: current.moduleDescriptionInput.trim() || null,
-          banner_storage_id: bannerField.storageId ?? null,
-          banner_url: bannerField.url ?? null,
-          banner_focus_x: current.moduleBannerFocusX,
-          banner_focus_y: current.moduleBannerFocusY,
-          banner_zoom: current.moduleBannerZoom,
         },
       });
       current.setShowResourceModuleModal(false);
@@ -340,7 +299,7 @@ export function useCommunityResourceController<
         ? error
         : error instanceof Error
           ? error.message
-          : "Failed to save module.";
+          : "Failed to save category.";
       current.setResourceModuleError(message);
     } finally {
       current.setIsSavingResourceModule(false);
@@ -361,7 +320,7 @@ export function useCommunityResourceController<
         ? error
         : error instanceof Error
           ? error.message
-          : "Failed to delete module.";
+          : "Failed to delete category.";
       current.setResourceModuleError(message);
       return false;
     }
@@ -404,7 +363,7 @@ export function useCommunityResourceController<
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to update module status.";
+            : "Failed to update category status.";
         current.setResourceModuleError(message);
         return false;
       }
@@ -447,7 +406,7 @@ export function useCommunityResourceController<
         ? error
         : error instanceof Error
           ? error.message
-          : "Failed to reorder modules.";
+          : "Failed to reorder categories.";
       current.setResourceModuleError(message);
       return false;
     }

@@ -966,8 +966,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           <div className="feed-header-copy">
             <div className="resources-header">Resources</div>
             <div className="feed-header-subtitle">
-              {selectedModule?.description_md?.trim() ||
-                `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
+              {`Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
             {selectedModule?.is_virtual ? (
               <div className="resource-module-status-line is-cleanup">Needs sorting</div>
