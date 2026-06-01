@@ -98,7 +98,7 @@ function getComposerAttachmentUploadStatus(
 ): "queued" | "uploading" | "ready" | "failed" {
   if (String(attachment.storage_id ?? "").trim()) return "ready";
   if (attachment.uploadStatus) return attachment.uploadStatus;
-  return "ready";
+  return "failed";
 }
 
 function getComposerAttachmentUploadLabel(status: "queued" | "uploading" | "ready" | "failed"): string {

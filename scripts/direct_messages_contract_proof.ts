@@ -69,6 +69,14 @@ const dmHostSerializeAttachments = dmHost.slice(
   dmHost.indexOf("function serializeDirectAttachmentsForWrite"),
   dmHost.indexOf("export function WebDirectMessagesHost"),
 );
+const dmHostUploadAttachmentDraft = dmHost.slice(
+  dmHost.indexOf("const uploadDirectAttachmentDraft = useCallback"),
+  dmHost.indexOf("const sendDirectMessage = useCallback"),
+);
+const dmPanelComposerAttachmentStatus = dmPanel.slice(
+  dmPanel.indexOf("function getComposerAttachmentUploadStatus"),
+  dmPanel.indexOf("function getComposerAttachmentUploadLabel"),
+);
 
 assert.match(schema, /dmConversations: defineTable\(\{[\s\S]*kind: v\.literal\("direct"\)[\s\S]*canonicalKey: v\.string\(\)[\s\S]*createdFromCommunityId: v\.id\("communities"\)/, "DM conversations must be direct rooms created from community context");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\)\)/, "DM participants must support users and future agents");
@@ -265,6 +273,7 @@ assert.match(dmPanel, /onAttachmentFilesSelected\?: \(files: DirectMessageAttach
 assert.match(dmPanel, /uploadStatus\?: "queued" \| "uploading" \| "ready" \| "failed"/, "DM composer attachment views must understand upload lifecycle state");
 assert.match(dmPanel, /onRetryAttachment\?: \(id: string\) => void/, "DM composer must expose attachment retry actions");
 assert.match(dmPanel, /getComposerAttachmentUploadStatus/, "DM composer must resolve upload state before rendering attachment previews");
+assert.match(dmPanelComposerAttachmentStatus, /return "failed";/, "malformed composer attachment state must fail closed instead of appearing ready");
 assert.match(dmPanel, /canSendDirectMessage = !props\.isSending && hasComposerPayload && !hasAttachmentBlockers/, "DM composer send button must block while attachments are not ready");
 assert.match(dmPanel, /community-dm-attachment-state-overlay/, "DM image composer previews must surface queued, uploading, and failed states");
 assert.match(dmPanel, /hasDragFiles[\s\S]*getDragFiles/, "DM panel must detect dropped files without depending only on populated FileList during dragenter");
@@ -307,6 +316,9 @@ assert.match(dmHost, /uploadCloudDirectMessageAttachmentFile/, "global DM host m
 assert.match(dmHost, /uploadStatus\?: "queued" \| "uploading" \| "ready" \| "failed"/, "global DM host must model attachment upload lifecycle state");
 assert.match(dmHost, /uploadStatus: "queued"/, "new DM attachment drafts must start queued");
 assert.match(dmHost, /uploadDirectAttachmentDraft/, "global DM host must upload attachment drafts before send");
+assert.match(dmHostUploadAttachmentDraft, /shouldClearPanelError = currentUploadError\.length > 0 && previous\.error === currentUploadError/, "DM upload start must clear only the current attachment upload error");
+assert.match(dmHostUploadAttachmentDraft, /error: shouldClearPanelError \? null : previous\.error/, "DM upload start must preserve unrelated validation errors");
+assert.doesNotMatch(dmHostUploadAttachmentDraft, /error: nextHasFailedAttachment \? previous\.error : null/, "DM upload success must not erase unrelated validation errors");
 assert.match(dmHost, /hasUnreadyDirectAttachments/, "global DM host must block sends while attachments are queued, uploading, or failed");
 assert.match(dmHostSerializeAttachments, /getDirectAttachmentUploadStatus\(attachment\) !== "ready"[\s\S]*continue/, "global DM host must serialize only ready uploaded attachments");
 assert.match(dmHostSerializeAttachments, /storageId/, "global DM host must serialize uploaded storage ids for DM attachment sends");

@@ -745,19 +745,25 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       }
       setDirectMessagePanel((previous) =>
         previous?.conversation.id === conversationId
-          ? {
-              ...previous,
-              attachments: previous.attachments.map((item) =>
-                item.id === attachmentId
-                  ? {
-                      ...item,
-                      uploadStatus: "uploading",
-                      uploadError: null,
-                    }
-                  : item,
-              ),
-              error: null,
-            }
+          ? (() => {
+              const currentUploadError = String(
+                previous.attachments.find((item) => item.id === attachmentId)?.uploadError ?? "",
+              ).trim();
+              const shouldClearPanelError = currentUploadError.length > 0 && previous.error === currentUploadError;
+              return {
+                ...previous,
+                attachments: previous.attachments.map((item) =>
+                  item.id === attachmentId
+                    ? {
+                        ...item,
+                        uploadStatus: "uploading",
+                        uploadError: null,
+                      }
+                    : item,
+                ),
+                error: shouldClearPanelError ? null : previous.error,
+              };
+            })()
           : previous,
       );
       try {
@@ -779,13 +785,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
                 }
               : item,
           );
-          const nextHasFailedAttachment = nextAttachments.some(
-            (item) => getDirectAttachmentUploadStatus(item) === "failed",
-          );
           return {
             ...previous,
             attachments: nextAttachments,
-            error: nextHasFailedAttachment ? previous.error : null,
+            error: previous.error,
           };
         });
       } catch (error) {
