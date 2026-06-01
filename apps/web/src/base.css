@@ -12752,6 +12752,39 @@ button.chat-reply-quote:hover {
   min-width: 188px;
 }
 
+.resources-panel .feed-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 8px;
+}
+
+.resources-preview-mode-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.resources-preview-mode-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.feed-header-actions .resources-preview-mode-switcher {
+  width: 104px;
+  min-width: 104px;
+}
+
+.resources-preview-mode-switcher .platform-switcher-btn {
+  min-height: 28px;
+  padding: 5px 10px;
+}
+
 .resource-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

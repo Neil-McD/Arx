@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type {
   CommunityResource,
   CommunityResourceModule,
@@ -70,6 +71,23 @@ function resourceNeedsBodyHydration(resource: CommunityResource | null): boolean
   if (!resource) return false;
   const bodyChars = Number(resource.body_chars ?? 0);
   return Number.isFinite(bodyChars) && bodyChars > 0 && !(resource.body_md ?? "").trim();
+}
+
+function resourceHasUsableKnowledgeContent(resource: CommunityResource): boolean {
+  const bodyChars = Number(resource.body_chars ?? 0);
+  return Boolean(
+    resource.title.trim() &&
+      (
+        (Number.isFinite(bodyChars) && bodyChars > 0) ||
+        (resource.body_md ?? "").trim() ||
+        (resource.url ?? "").trim() ||
+        (resource.file_key ?? "").trim()
+      ),
+  );
+}
+
+function isMemberVisibleResource(resource: CommunityResource): boolean {
+  return getResourceRole(resource) === "page" && resourceHasUsableKnowledgeContent(resource);
 }
 
 function compareResources(a: CommunityResource, b: CommunityResource): number {
@@ -496,7 +514,10 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
+  const canManageResources = capabilities.canOperateResources && !isPreviewMode;
+  const previewSwitcherStyle = buildPlatformSwitcherStyle(2, isPreviewMode ? 1 : 0);
 
   const pendingDeleteResource = useMemo(
     () => state.resources.find((resource) => resource.id === pendingDeleteResourceId) ?? null,
@@ -521,7 +542,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => state.resources.some((resource) => !resource.module_id || !realModuleIdLookup.has(resource.module_id)),
     [realModuleIdLookup, state.resources],
   );
-  const moduleViews = useMemo<ResourceModuleView[]>(() => {
+  const baseModuleViews = useMemo<ResourceModuleView[]>(() => {
     const modules = state.modules.slice().sort((a, b) => {
       const sortDelta = (a.sort_order ?? 0) - (b.sort_order ?? 0);
       if (sortDelta !== 0) return sortDelta;
@@ -550,17 +571,25 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       },
     ];
   }, [hasLegacyResources, state.modules, state.resources]);
+  const moduleViews = useMemo(
+    () =>
+      isPreviewMode
+        ? baseModuleViews.filter((module) => !module.is_virtual && module.module_status === "live")
+        : baseModuleViews,
+    [baseModuleViews, isPreviewMode],
+  );
   const reorderableModuleIds = useMemo(
     () => moduleViews.filter((module) => !module.is_virtual).map((module) => module.id),
     [moduleViews],
   );
-  const canReorderModules = capabilities.canOperateResources && reorderableModuleIds.length > 1;
+  const canReorderModules = canManageResources && reorderableModuleIds.length > 1;
   const resourcesBySelectionId = useMemo(() => {
     const map = new Map<string, CommunityResource[]>();
     moduleViews.forEach((module) => {
       map.set(module.id, []);
     });
     state.resources.forEach((resource) => {
+      if (isPreviewMode && !isMemberVisibleResource(resource)) return;
       const selectionId =
         resource.module_id && realModuleIdLookup.has(resource.module_id)
           ? resource.module_id
@@ -573,7 +602,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       map.set(selectionId, resources.slice().sort(compareResources));
     });
     return map;
-  }, [moduleViews, realModuleIdLookup, state.resources]);
+  }, [isPreviewMode, moduleViews, realModuleIdLookup, state.resources]);
   const categorySections = useMemo(
     () =>
       moduleViews.map((module) => {
@@ -596,8 +625,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     [categorySections],
   );
   const displayableResources = useMemo(
-    () => (capabilities.canOperateResources ? [...allPageResources, ...allSourceResources] : allPageResources),
-    [allPageResources, allSourceResources, capabilities.canOperateResources],
+    () => (canManageResources ? [...allPageResources, ...allSourceResources] : allPageResources),
+    [allPageResources, allSourceResources, canManageResources],
   );
   const displayableResourceIds = useMemo(
     () => new Set(displayableResources.map((resource) => resource.id)),
@@ -631,21 +660,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!module) return null;
     const section = categorySections.find((candidate) => candidate.module.id === module.id);
     if (!section) return null;
-    return section.pageResources[0] ?? (capabilities.canOperateResources ? section.sourceResources[0] : null) ?? null;
+    return section.pageResources[0] ?? (canManageResources ? section.sourceResources[0] : null) ?? null;
   };
   const firstDisplayableResource = displayableResources[0] ?? null;
   const selectedCategoryFirstResource = selectedModule ? getFirstResourceForCategory(selectedModule) : null;
-  const shouldShowSourceInbox = capabilities.canOperateResources && allSourceResources.length > 0;
+  const shouldShowSourceInbox = canManageResources && allSourceResources.length > 0;
   const selectedSourceResource = useMemo(() => {
+    if (isPreviewMode) return null;
     const sourceId = selectedResource?.source_resource_id?.trim();
     if (!sourceId) return null;
     return resourcesById.get(sourceId) ?? null;
-  }, [resourcesById, selectedResource?.source_resource_id]);
+  }, [isPreviewMode, resourcesById, selectedResource?.source_resource_id]);
   const selectedSourceResourceModuleId = selectedSourceResource
     ? getResourceCategoryId(selectedSourceResource)
     : null;
   const canOpenSelectedSourceResource = Boolean(
-    capabilities.canOperateResources &&
+    canManageResources &&
       selectedSourceResource &&
       selectedSourceResourceModuleId &&
       moduleViews.some((module) => module.id === selectedSourceResourceModuleId),
@@ -665,6 +695,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       : null;
   const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
+  const hasVisibleResourceContent = moduleViews.length > 0 || displayableResources.length > 0;
   const wasRefreshingResourcesRef = useRef(false);
   const hasCompletedResourceLoadRef = useRef(false);
   useEffect(() => {
@@ -675,6 +706,17 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [isRefreshingResources]);
   const showInitialResourceLoading =
     isRefreshingResources && !hasResourceContent && !hasCompletedResourceLoadRef.current;
+
+  useEffect(() => {
+    if (capabilities.canOperateResources || !isPreviewMode) return;
+    setIsPreviewMode(false);
+  }, [capabilities.canOperateResources, isPreviewMode]);
+
+  useEffect(() => {
+    if (canManageResources || !actions.resourceEditor.editingResourceId) return;
+    actions.resourceEditor.cancelInlineEditResource();
+    setActiveResourceEditField(null);
+  }, [actions.resourceEditor, canManageResources]);
 
   useEffect(() => {
     const selectedModuleExists = selectedModuleId
@@ -795,7 +837,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
     const categoryId = getResourceCategoryId(resource);
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
-    if (!capabilities.canOperateResources || getResourceRole(resource) !== "page" || reorderableIds.length < 2) {
+    if (!canManageResources || getResourceRole(resource) !== "page" || reorderableIds.length < 2) {
       event.preventDefault();
       return;
     }
@@ -876,7 +918,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     const categoryId = getResourceCategoryId(resource);
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
     const canReorderResource =
-      capabilities.canOperateResources && getResourceRole(resource) === "page" && reorderableIds.length > 1;
+      canManageResources && getResourceRole(resource) === "page" && reorderableIds.length > 1;
 
     return (
       <ResourceRailItem
@@ -893,7 +935,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         }}
         onDrop={(event) => handleResourceDrop(event, resource)}
         onDragEnd={handleResourceDragEnd}
-        canManage={capabilities.canOperateResources}
+        canManage={canManageResources}
         canReorder={canReorderResource}
         isDragging={draggingResourceId === resource.id}
         isDropTarget={dropTargetResourceId === resource.id}
@@ -925,7 +967,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       !actions.resourceEditor.isSaving,
   );
   const selectedResourceInlineEditor =
-    capabilities.canOperateResources && selectedResource && !selectedResourceNeedsBodyHydration
+    canManageResources && selectedResource && !selectedResourceNeedsBodyHydration
       ? {
           canEdit: true,
           isEditing: isSelectedResourceEditing,
@@ -960,7 +1002,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             </div>
             {selectedModule?.is_virtual ? (
               <div className="resource-module-status-line is-cleanup">Needs sorting</div>
-            ) : capabilities.canOperateResources && selectedModule && selectedModuleStatus === "draft" ? (
+            ) : canManageResources && selectedModule && selectedModuleStatus === "draft" ? (
               <div className="resource-module-status-line is-draft">Draft category</div>
             ) : null}
           </div>
@@ -968,7 +1010,34 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             <div className="feed-header-badge" aria-label={`${allPageResources.length} pages`}>
               {allPageResources.length}
             </div>
-            {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
+            {capabilities.canOperateResources ? (
+              <div className="resources-preview-mode-control">
+                <span className="resources-preview-mode-label">Preview mode</span>
+                <div
+                  className="platform-switcher platform-switcher-compact resources-preview-mode-switcher"
+                  aria-label="Preview mode"
+                  style={previewSwitcherStyle}
+                >
+                  <button
+                    className={`platform-switcher-btn${!isPreviewMode ? " is-active" : ""}`}
+                    type="button"
+                    aria-pressed={!isPreviewMode}
+                    onClick={() => setIsPreviewMode(false)}
+                  >
+                    Off
+                  </button>
+                  <button
+                    className={`platform-switcher-btn${isPreviewMode ? " is-active" : ""}`}
+                    type="button"
+                    aria-pressed={isPreviewMode}
+                    onClick={() => setIsPreviewMode(true)}
+                  >
+                    On
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {capabilities.hasActiveCommunity && canManageResources ? (
               <div className="resources-add-split" role="group" aria-label="Resource actions">
                 {selectedModule && !selectedModule.is_virtual ? (
                   <button
@@ -1008,7 +1077,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
-        ) : !hasResourceContent ? (
+        ) : !hasVisibleResourceContent ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
               <div className="chat-empty-icon">
@@ -1021,7 +1090,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 Welcome to {capabilities.activeCommunityName ?? "your"} resources
               </div>
               <div className="chat-empty-text">
-                {capabilities.canOperateResources
+                {canManageResources
                   ? "Create a category to organize durable pages, sources, and references."
                   : "Resources shared by the community team will show up here."}
               </div>
@@ -1041,7 +1110,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
                     onDelete={() => void actions.handleDeleteModule(section.module.id)}
                     onAddPage={() => actions.openNewResourceModal(section.module.id)}
-                    canManage={capabilities.canOperateResources && !section.module.is_virtual}
+                    canManage={canManageResources && !section.module.is_virtual}
                     canReorder={canReorderModules && !section.module.is_virtual}
                     isDragging={draggingModuleId === section.module.id}
                     isDropTarget={dropTargetModuleId === section.module.id}
@@ -1075,7 +1144,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     sourceLineage={selectedSourceLineage}
                     editor={selectedResourceInlineEditor}
                   />
-                  {capabilities.canOperateResources && getResourceRole(selectedResource) === "source" ? (
+                  {canManageResources && getResourceRole(selectedResource) === "source" ? (
                     <div className="resource-reader-inline-actions">
                       <button
                         className="resources-add-choice"
