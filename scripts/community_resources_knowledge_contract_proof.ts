@@ -19,6 +19,7 @@ const attention = read("convex/communityAttention.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const resourceDirectory = read("shared/communityResourceDirectory.ts");
 const resourceModal = read("apps/web/src/components/WebCommunityResourceModal.tsx");
+const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
@@ -495,6 +496,26 @@ assert.match(
   resourcesPanel,
   /onAddPage=\{\(\) => actions\.openNewResourceModal\(section\.module\.id\)\}/,
   "inline page creation must target the category that owns the add-page row",
+);
+assert.match(
+  resourceModuleModal,
+  /Add category[\s\S]*Category name[\s\S]*Save category/,
+  "resource category modal should use category terminology and only ask for a name",
+);
+assert.doesNotMatch(
+  resourceModuleModal,
+  /Description|Banner|moduleDescriptionInput|moduleBanner|Upload banner|Drop a banner image|WebCommunityBannerEditorModal/,
+  "resource category modal must not expose retired module description or banner fields",
+);
+assert.doesNotMatch(
+  resourceController,
+  /moduleDescriptionInput|moduleBannerUrlInput|prepareCloudCommunityBrandingField|description_md: current\.moduleDescriptionInput|banner_storage_id: bannerField/,
+  "manual resource category saves must not write retired module description or banner fields",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  /selectedModule\?\.description_md/,
+  "resources header must not surface retired module descriptions",
 );
 assert.doesNotMatch(
   resourcesPanel,
