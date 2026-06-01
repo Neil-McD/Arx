@@ -647,7 +647,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   );
   const handleOpenSelectedSourceResource = () => {
     if (!selectedSourceResource || !selectedSourceResourceModuleId || !canOpenSelectedSourceResource) return;
-    setPendingOpenResourceId(selectedSourceResource.id);
     actions.handleSelectModule(selectedSourceResourceModuleId);
     actions.setOpenResourceEmbedId(selectedSourceResource.id);
   };
@@ -906,7 +905,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       isSelectedResourceEditing &&
       (
         actions.resourceEditor.titleInput !== selectedResource.title ||
-        actions.resourceEditor.urlInput !== (selectedResource.url ?? "") ||
         actions.resourceEditor.bodyInput !== (selectedResource.body_md ?? "") ||
         actions.resourceEditor.pinnedInput !== selectedResource.pinned
       ),
@@ -917,7 +915,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       actions.resourceEditor.titleInput.trim().length > 0 &&
       (
         actions.resourceEditor.bodyInput.trim().length > 0 ||
-        actions.resourceEditor.urlInput.trim().length > 0
+        (selectedResource?.url ?? "").trim().length > 0
       ) &&
       !actions.resourceEditor.isSaving,
   );
@@ -928,7 +926,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           isEditing: isSelectedResourceEditing,
           activeField: activeResourceEditField,
           titleInput: actions.resourceEditor.titleInput,
-          urlInput: actions.resourceEditor.urlInput,
           bodyInput: actions.resourceEditor.bodyInput,
           pinnedInput: actions.resourceEditor.pinnedInput,
           error: actions.resourceEditor.error,
@@ -940,7 +937,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           },
           onSetActiveField: setActiveResourceEditField,
           onChangeTitle: actions.resourceEditor.onChangeTitle,
-          onChangeUrl: actions.resourceEditor.onChangeUrl,
           onChangeBody: actions.resourceEditor.onChangeBody,
           onChangePinned: actions.resourceEditor.onChangePinned,
           onSave: saveResourceInlineEdit,
@@ -1096,52 +1092,28 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             </aside>
             <div className="knowledge-resource-reader">
               {selectedResource ? (
-                <WebCommunityResourceViewerContent
-                  resource={selectedResource}
-                  sourceLineage={selectedSourceLineage}
-                  editor={selectedResourceInlineEditor}
-                  actions={
-                    capabilities.canOperateResources ? (
-                      <>
-                        {getResourceRole(selectedResource) === "source" ? (
-                          <button
-                            className="resource-card-action resource-source-draft-action"
-                            type="button"
-                            title="Create page draft"
-                            onClick={() => {
-                              if (!selectedResource) return;
-                              void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
-                                if (created) setPendingOpenResourceId(created.id);
-                              });
-                            }}
-                          >
-                            Draft page
-                          </button>
-                        ) : null}
-                        <button
-                          className="resource-card-action"
-                          type="button"
-                          title={selectedResourceNeedsBodyHydration ? "Loading page content" : "Edit knowledge item"}
-                          disabled={selectedResourceNeedsBodyHydration}
-                          onClick={() => {
-                            if (selectedResourceNeedsBodyHydration) return;
-                            startResourceInlineEdit(selectedResource, "body");
-                          }}
-                        >
-                          <EditIcon />
-                        </button>
-                        <button
-                          className="resource-card-action danger"
-                          type="button"
-                          title="Delete knowledge item"
-                          onClick={() => setPendingDeleteResourceId(selectedResource.id)}
-                        >
-                          <DeleteIcon />
-                        </button>
-                      </>
-                    ) : null
-                  }
-                />
+                <>
+                  <WebCommunityResourceViewerContent
+                    resource={selectedResource}
+                    sourceLineage={selectedSourceLineage}
+                    editor={selectedResourceInlineEditor}
+                  />
+                  {capabilities.canOperateResources && getResourceRole(selectedResource) === "source" ? (
+                    <div className="resource-reader-inline-actions">
+                      <button
+                        className="resources-add-choice"
+                        type="button"
+                        onClick={() => {
+                          void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
+                            if (created) setPendingOpenResourceId(created.id);
+                          });
+                        }}
+                      >
+                        Draft page
+                      </button>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="community-panel-state-shell">
                   <div className="chat-empty-state">
