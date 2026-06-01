@@ -22,7 +22,7 @@ export const DEFAULT_WORKSPACE_COMPUTER_LIFECYCLE_INTENT =
 
 export const WORKSPACE_COMPUTER_LIFECYCLE_POLICY = {
   file_inspection: {
-    idleDeleteAfter: "5m",
+    idleDeleteAfter: "30s",
     maxAgeDeleteAfter: "1h",
     allowActiveRunPastMaxAge: false,
   },

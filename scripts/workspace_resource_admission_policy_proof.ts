@@ -35,7 +35,7 @@ function read(relativePath: string): string {
 assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 1);
 assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 10);
 assert.equal(WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS, 500);
-assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter, "5m");
+assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter, "30s");
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter, "10m");
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter, "30m");
 assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 1);
@@ -594,7 +594,7 @@ assert.match(
 );
 assert.match(
   blaxelEnvExample,
-  /BLAXEL_WORKSPACE_VOLUME_LIMIT=""[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER="1"[\s\S]*BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER="5m"[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER="10m"[\s\S]*BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER="30m"[\s\S]*BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER="1h"/,
+  /BLAXEL_WORKSPACE_VOLUME_LIMIT=""[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER="1"[\s\S]*BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER="30s"[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER="10m"[\s\S]*BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER="30m"[\s\S]*BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER="1h"/,
   "local Blaxel staging env example must document provider quota and intent-specific lifecycle guards",
 );
 assert.match(

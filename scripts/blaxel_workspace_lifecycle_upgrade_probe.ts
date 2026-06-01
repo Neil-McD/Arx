@@ -399,7 +399,7 @@ async function main() {
     result.evidence.initialLifecycleIntent = metadataLabels(sandbox).lifecycle_intent;
     result.evidence.initialFileInspectionPolicyOk =
       result.evidence.initialLifecycleIntent === "file_inspection" &&
-      hasPolicy(result.evidence.initialLifecyclePolicies, "ttl-idle", "5m") &&
+      hasPolicy(result.evidence.initialLifecyclePolicies, "ttl-idle", "30s") &&
       hasPolicy(result.evidence.initialLifecyclePolicies, "ttl-max-age", "1h");
 
     await timed(result, "writeVolumeFile", async () => {
