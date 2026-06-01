@@ -414,8 +414,13 @@ assert.match(
 
 assert.match(
   resourceModal,
-  /resourceRoleInput === "source"/,
-  "resource modal must expose source-specific authoring behavior",
+  /Add page[\s\S]*Save a durable page for the community knowledge base[\s\S]*Save page/,
+  "manual add-page modal must present as page-only",
+);
+assert.doesNotMatch(
+  resourceModal,
+  /resource-kind-segment|Knowledge item kind|onChangeRole|>\s*Page\s*<[\s\S]*>\s*Source\s*</,
+  "manual add-page modal must not expose the retired page/source selector",
 );
 assert.doesNotMatch(
   resourceModal,
@@ -496,6 +501,11 @@ assert.match(
   resourcesPanel,
   /onAddPage=\{\(\) => actions\.openNewResourceModal\(section\.module\.id\)\}/,
   "inline page creation must target the category that owns the add-page row",
+);
+assert.match(
+  webResourceController,
+  /openNewResourceModal[\s\S]*setResourceRoleInput\("page"\)[\s\S]*setResourceStatusInput\("draft"\)/,
+  "inline add-page flow must force page role and draft status",
 );
 assert.match(
   resourceModuleModal,

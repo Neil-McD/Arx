@@ -198,6 +198,8 @@ export function useWebCommunityResourceUiController<
 
   const openNewResourceModal = (moduleId?: string | null) => {
     rawOpenNewResourceModal();
+    setResourceRoleInput("page");
+    setResourceStatusInput("draft");
     setResourceModuleIdInput(moduleId ?? null);
   };
 
@@ -221,13 +223,6 @@ export function useWebCommunityResourceUiController<
   const saveInlineEditResource = async () => {
     const didSave = await handleSaveCommunityResource();
     return didSave === true;
-  };
-
-  const handleChangeResourceRole = (role: "page" | "source") => {
-    setResourceRoleInput(role);
-    if (!editingResourceId) {
-      setResourceStatusInput(role === "source" ? "review" : "draft");
-    }
   };
 
   const openNewModuleModal = () => {
@@ -371,7 +366,6 @@ export function useWebCommunityResourceUiController<
       resourceUrlInput,
       resourceBodyInput,
       resourcePinnedInput,
-      resourceRoleInput,
       resourceError,
       isSavingResource,
       onClose: closeResourceModal,
@@ -384,7 +378,6 @@ export function useWebCommunityResourceUiController<
       onChangeUrl: setResourceUrlInput,
       onChangeBody: setResourceBodyInput,
       onChangePinned: setResourcePinnedInput,
-      onChangeRole: handleChangeResourceRole,
     },
     loadCommunityResourceModules,
     loadCommunityResources,
