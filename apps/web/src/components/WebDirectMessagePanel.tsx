@@ -314,15 +314,25 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             const isOwn = message.sender_user_id === props.sessionUserId;
             const text = getMessageText(message);
             const attachments = getMessageAttachments(message);
+            const hasText = text.length > 0;
+            const hasAttachments = attachments.length > 0;
+            const isMediaOnly = !hasText && attachments.some((attachment) => attachment.type === "image");
+            if (!hasText && !hasAttachments) return null;
             return (
               <div
                 key={message.id}
-                className={`community-dm-panel-message${isOwn ? " is-own" : ""}`}
+                className={`community-dm-panel-message${isOwn ? " is-own" : ""}${isMediaOnly ? " is-media-only" : ""}`}
               >
-                <div className="community-dm-panel-message-bubble">
-                  {text ? <div className="community-dm-panel-message-text">{props.renderTextWithLinks(text)}</div> : null}
-                  <DirectMessageAttachmentViews attachments={attachments} />
-                </div>
+                {isMediaOnly ? (
+                  <div className="community-dm-panel-media-only">
+                    <DirectMessageAttachmentViews attachments={attachments} />
+                  </div>
+                ) : (
+                  <div className="community-dm-panel-message-bubble">
+                    {hasText ? <div className="community-dm-panel-message-text">{props.renderTextWithLinks(text)}</div> : null}
+                    <DirectMessageAttachmentViews attachments={attachments} />
+                  </div>
+                )}
               </div>
             );
           })
