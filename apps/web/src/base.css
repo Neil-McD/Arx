@@ -12094,24 +12094,6 @@ button.chat-reply-quote:hover {
   padding-right: 12px;
 }
 
-.knowledge-resource-rail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  padding: 2px 4px 6px;
-}
-
-.knowledge-resource-rail-kicker,
-.knowledge-resource-rail-count {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 .knowledge-resource-list {
   display: grid;
   align-content: start;
@@ -12219,12 +12201,6 @@ button.chat-reply-quote:hover {
 
 .knowledge-category-badge.is-cleanup {
   border-style: dashed;
-}
-
-.knowledge-category-count {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.25;
 }
 
 .knowledge-category-header-actions {

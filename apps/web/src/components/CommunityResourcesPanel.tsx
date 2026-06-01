@@ -158,8 +158,6 @@ function ModuleStatusIcon(props: { status: "draft" | "live" }) {
 
 function ResourceCategorySection(props: {
   module: ResourceModuleView;
-  pageCount: number;
-  sourceCount: number;
   isActive: boolean;
   onEdit: () => void;
   onSetStatus: (status: "draft" | "live") => void;
@@ -179,8 +177,6 @@ function ResourceCategorySection(props: {
 }) {
   const {
     module,
-    pageCount,
-    sourceCount,
     isActive,
     onEdit,
     onSetStatus,
@@ -251,12 +247,6 @@ function ResourceCategorySection(props: {
             ) : canManage && moduleStatus === "draft" ? (
               <span className="knowledge-category-badge is-draft">Draft</span>
             ) : null}
-          </div>
-          <div className="knowledge-category-count">
-            {pageCount} {pageCount === 1 ? "page" : "pages"}
-            {sourceCount > 0 && canManage
-              ? ` · ${sourceCount} ${sourceCount === 1 ? "source" : "sources"}`
-              : ""}
           </div>
         </div>
         <div className="knowledge-category-header-actions">
@@ -1040,17 +1030,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         ) : (
           <div className="knowledge-workspace">
             <aside className="knowledge-resource-rail" aria-label="Resources">
-              <div className="knowledge-resource-rail-header">
-                <div className="knowledge-resource-rail-kicker">Wiki</div>
-                <div className="knowledge-resource-rail-count">{allPageResources.length}</div>
-              </div>
               <div className="knowledge-resource-list">
                 {categorySections.map((section) => (
                   <ResourceCategorySection
                     key={section.module.id}
                     module={section.module}
-                    pageCount={section.pageResources.length}
-                    sourceCount={section.sourceResources.length}
                     isActive={selectedModule?.id === section.module.id}
                     onSelectCategory={() => handleSelectCategory(section.module)}
                     onEdit={() => actions.handleEditModule(section.module)}

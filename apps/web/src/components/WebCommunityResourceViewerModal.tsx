@@ -61,19 +61,6 @@ function getEmbedProviderLabel(provider: string | null | undefined): string {
   return "Video";
 }
 
-function getRoleLabel(resource: CommunityResource): string {
-  return resource.resource_role === "source" ? "Source" : "Page";
-}
-
-function buildEyebrow(resource: CommunityResource, urlOverride?: string | null): string {
-  const role = getRoleLabel(resource);
-  const url = urlOverride === undefined ? resource.url : urlOverride;
-  const embed = url ? parseEmbedUrl(url) : null;
-  if (embed) return `${role} · ${getEmbedProviderLabel(embed.provider)}`;
-  if (normalizeExternalUrl(url)) return `${role} · ${getHostLabel(url)}`;
-  return role;
-}
-
 function hasStoredBodyContent(resource: CommunityResource): boolean {
   const bodyChars = Number(resource.body_chars ?? 0);
   return Number.isFinite(bodyChars) && bodyChars > 0;
@@ -104,7 +91,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const embed = currentUrl ? parseEmbedUrl(currentUrl) : null;
   const sourceUrl = normalizeExternalUrl(currentUrl);
   const hostLabel = getHostLabel(currentUrl);
-  const eyebrow = buildEyebrow(resource, currentUrl);
   const persistedBody = resource.body_md?.trim() ?? "";
   const trimmedBody = editor?.isEditing ? editor.bodyInput.trim() : persistedBody;
   const titleText = editor?.isEditing ? editor.titleInput : resource.title;
@@ -359,7 +345,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   return (
     <div className="resource-viewer-content">
       <div className="resource-viewer-header">
-        <div className="resource-viewer-eyebrow">{eyebrow}</div>
         <div className="resource-viewer-title-row">
           <h1 className="resource-viewer-title">
             {renderTitleContent()}
