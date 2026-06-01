@@ -77,6 +77,10 @@ const dmPanelComposerAttachmentStatus = dmPanel.slice(
   dmPanel.indexOf("function getComposerAttachmentUploadStatus"),
   dmPanel.indexOf("function getComposerAttachmentUploadLabel"),
 );
+const dmInternalChromeCss = css.slice(
+  css.indexOf(".community-dm-panel-header,"),
+  css.indexOf(".community-dm-panel-header {"),
+);
 
 assert.match(schema, /dmConversations: defineTable\(\{[\s\S]*kind: v\.literal\("direct"\)[\s\S]*canonicalKey: v\.string\(\)[\s\S]*createdFromCommunityId: v\.id\("communities"\)/, "DM conversations must be direct rooms created from community context");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\)\)/, "DM participants must support users and future agents");
@@ -362,7 +366,9 @@ assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "globa
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.doesNotMatch(css, /\.community-dm-panel::before|\.community-dm-panel::after/, "DM panel must not cover readable inbox or chat content with global pseudo-element scrims");
-assert.match(css, /\.community-dm-panel-header,[\s\S]*\.community-dm-panel-composer,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed chrome must reuse the existing glass material above the scroll layer");
+assert.match(css, /\.community-dm-panel \{[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM panel root must own the single glass material");
+assert.match(dmInternalChromeCss, /\.community-dm-panel-header,[\s\S]*\.community-dm-panel-composer,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*\}/, "DM fixed chrome must layer above the scroll area without becoming nested glass cards");
+assert.doesNotMatch(dmInternalChromeCss, /background: var\(--web-floating-chrome-bg|box-shadow:|backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed chrome must not duplicate the profile/DM panel glass material inside the panel");
 assert.match(css, /\.community-dm-panel-messages \{[\s\S]*overflow: auto;[\s\S]*margin: -50px -12px -46px 0;[\s\S]*padding: 56px 14px 50px 2px/, "DM conversation messages must scroll underneath existing glass header and composer chrome");
 assert.match(css, /\.community-dm-inbox-list \{[\s\S]*overflow: auto;[\s\S]*margin: -50px -12px 0 0;[\s\S]*padding: 52px 14px 2px 2px/, "DM inbox rows must scroll underneath existing glass header chrome");
 assert.match(css, /\.community-dm-recipient-list \{[\s\S]*overflow: auto;[\s\S]*margin-top: -46px;[\s\S]*padding: 48px 2px 2px/, "DM recipient rows must scroll underneath existing glass search chrome");
