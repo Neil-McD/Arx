@@ -9662,6 +9662,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-weight: 820;
 }
 
+.community-dm-inbox-row.is-unread .community-dm-inbox-row-meta {
+  color: var(--text-primary);
+  font-weight: 720;
+}
+
 .community-dm-inbox-avatar {
   position: relative;
   width: 38px;
@@ -9736,19 +9741,17 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-inbox-row-unread {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 820;
-  line-height: 1;
   background: var(--accent-primary);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 38%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-primary) 38%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent-primary) 40%, transparent);
 }
 
 .community-dm-inbox-row-meta {

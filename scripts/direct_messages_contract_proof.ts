@@ -9,6 +9,7 @@ const schema = read("convex/schema.ts");
 const directMessages = read("convex/directMessages.ts");
 const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudDirectMessagesGateway.ts");
+const communityTypes = read("shared/communityTypes.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
 const messageRow = read("shared/CommunityChatMessageRow.tsx");
@@ -32,11 +33,15 @@ const dmEnsureUserParticipantHelper = directMessages.slice(
 );
 const dmEnsureConversationMutation = directMessages.slice(
   directMessages.indexOf("export const ensureDirectConversationFromCommunity"),
-  directMessages.indexOf("export const listEligibleDirectMessageRecipients"),
+  directMessages.indexOf("export const listEligibleDirectMessageRecipientsForViewer"),
 );
 const dmInboxQuery = directMessages.slice(
   directMessages.indexOf("export const listMyDirectConversations"),
   directMessages.indexOf("export const markDirectConversationRead"),
+);
+const dmListMessagesQuery = directMessages.slice(
+  directMessages.indexOf("export const listDirectMessages"),
+  directMessages.indexOf("export const sendDirectMessage"),
 );
 const dmSendMutation = directMessages.slice(
   directMessages.indexOf("export const sendDirectMessage"),
@@ -62,7 +67,7 @@ assert.match(directMessages, /requiredCommunityId: isNewConversation \? args\.co
 assert.match(directMessages, /throw new Error\("dm_target_self"\)/, "users must not open self-DMs");
 assert.match(directMessages, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM writes must require profile setup");
 assert.match(directMessages, /listMyDirectConversations = query/, "backend must expose current-user DM inbox query even if UI inbox is deferred");
-assert.match(directMessages, /listEligibleDirectMessageRecipients = query/, "backend must expose community-scoped DM recipient lookup");
+assert.doesNotMatch(directMessages, /listEligibleDirectMessageRecipients = query/, "backend must not keep the deleted community-scoped recipient lookup");
 assert.match(directMessages, /listEligibleDirectMessageRecipientsForViewer = query/, "backend must expose viewer-wide DM recipient lookup for the global inbox picker");
 assert.match(directMessages, /listDirectMessageSourceCommunitiesForViewer/, "viewer-wide DM recipient lookup must compile the viewer's communities");
 assert.match(schema, /\.index\("by_owner_createdAt", \["ownerId", "createdAt"\]\)/, "communities must support bounded recent owner-community discovery");
@@ -82,20 +87,23 @@ assert.match(directMessages, /MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_ROWS/, "viewer-
 assert.match(dmCandidateHelper, /\.take\(Math\.min\(maxUserIds, MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_ROWS\)\)/, "viewer-wide DM recipient lookup must use one bounded indexed membership read per source community");
 assert.doesNotMatch(dmCandidateHelper, /\.paginate\(/, "viewer-wide DM recipient lookup must not run paginated queries inside the global picker helper");
 assert.doesNotMatch(dmCandidateHelper, /\.collect\(\)/, "viewer-wide DM recipient lookup must not collect every member in a source community");
-assert.match(directMessages, /paginationOptsValidator/, "DM recipient lookup must use Convex pagination rather than a capped membership scan");
-assert.match(directMessages, /\.paginate\(\{[\s\S]*numItems: memberPageSize/, "DM recipient lookup must page through community memberships");
+assert.doesNotMatch(directMessages, /paginationOptsValidator/, "DM backend must not keep pagination machinery for the deleted community-scoped recipient API");
+assert.doesNotMatch(directMessages, /\.paginate\(/, "DM backend must not keep the deleted paginated community-scoped recipient lookup");
 assert.doesNotMatch(directMessages, /MAX_DM_RECIPIENT_SCAN_ROWS/, "DM recipient lookup must not hide members behind a fixed scan cap");
-assert.match(directMessages, /MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS/, "DM recipient search must scan more than one visible page when needed");
-assert.match(directMessages, /while \([\s\S]*pagesScanned < MAX_DM_RECIPIENT_SEARCH_PAGES/, "DM recipient search must walk bounded membership pages to find matches");
+assert.doesNotMatch(directMessages, /MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS|MAX_DM_RECIPIENT_SEARCH_PAGES|pagesScanned/, "DM backend must not keep deleted community-scoped search paging constants");
 assert.match(directMessages, /communityMembershipRowIsActive/, "DM recipient lookup must use active community memberships");
 assert.match(directMessages, /userKey === normalizeIdValue\(viewerUserId\)/, "DM recipient lookup must exclude the viewer");
-assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId,[\s\S]*userId,[\s\S]*\}\)/, "DM recipient lookup must verify recipient community access");
+assert.match(directMessages, /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.community\._id,[\s\S]*userId: args\.userId/, "global DM recipient lookup must verify recipient community access");
 assert.match(directMessages, /existing_conversation_id/, "DM recipient lookup must surface existing canonical conversation ids");
-assert.match(directMessages, /continueCursor/, "DM recipient lookup must return the next membership cursor");
-assert.match(directMessages, /isDone: rawPage\.isDone/, "DM recipient lookup must return pagination completion state");
+assert.doesNotMatch(directMessages, /continueCursor|isDone: rawPage\.isDone/, "DM backend must not expose cursor metadata for the deleted community-scoped recipient lookup");
 assert.match(directMessages, /viewer_last_read_seq/, "conversation projection must expose the viewer read cursor");
 assert.match(directMessages, /unread_count/, "conversation projection must expose unread count");
 assert.match(directMessages, /has_unread/, "conversation projection must expose unread state");
+assert.match(directMessages, /MAX_DM_PREVIEW_CHARS/, "conversation projection must keep inbox previews bounded");
+assert.match(directMessages, /readDirectMessageTextPreview/, "conversation projection must extract a safe latest-message preview");
+assert.match(directMessages, /lastSeq > 0[\s\S]*query\("dmMessages" as any\)[\s\S]*withIndex\("by_conversation_seq"[\s\S]*eq\("conversationId", row\._id\)\.eq\("seq", lastSeq\)/, "conversation projection must read the latest message by conversation and sequence");
+assert.match(directMessages, /last_message_preview: lastMessage \? readDirectMessageTextPreview\(lastMessage\.contentJson\) : null/, "conversation projection must expose the latest text preview");
+assert.match(communityTypes, /last_message_preview: string \| null/, "shared DM conversation type must expose the latest text preview");
 assert.match(dmEnsureUserParticipantHelper, /touchActivity: boolean/, "participant ensure helper must distinguish creation/send activity from open-only access");
 assert.match(dmEnsureUserParticipantHelper, /fallbackActivityAt\?: number/, "participant ensure helper must support historical activity initialization");
 assert.match(dmEnsureUserParticipantHelper, /if \(args\.touchActivity\) \{[\s\S]*patch\.lastActivityAt = args\.nowMs[\s\S]*fallbackActivityAt/, "participant ensure helper must only bump existing activity when explicitly requested");
@@ -110,6 +118,9 @@ assert.match(directMessages, /async function touchActiveConversationParticipants
 assert.match(directMessages, /touchActiveConversationParticipantsActivity[\s\S]*lastActivityAt: args\.nowMs/, "participant activity helper must update lastActivityAt");
 assert.match(directMessages, /markDirectConversationRead = mutation/, "backend must expose an authoritative read mutation");
 assert.match(directMessages, /ctx\.db\.patch\(participant\._id,[\s\S]*lastReadSeq: lastSeq/, "read mutation must advance the participant read cursor");
+assert.match(directMessages, /Active participants can read existing DM history; current relationship is rechecked before each send\./, "DM read/send policy must be explicit");
+assert.match(dmListMessagesQuery, /requireActiveUserParticipant/, "DM history reads must require active conversation participation");
+assert.doesNotMatch(dmListMessagesQuery, /requireDirectConversationSendAccess|requireDirectMessageRelationshipAccess/, "DM history reads must not require current mutual access once someone is an active participant");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
 assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
@@ -122,13 +133,12 @@ assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slic
 
 assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway must open or create direct conversations");
 assert.match(gateway, /listCloudDirectConversations/, "web gateway must expose the current user's direct conversation list");
-assert.match(gateway, /listCloudEligibleDirectMessageRecipients/, "web gateway must expose eligible community recipient lookup");
-assert.match(gateway, /directMessages:listEligibleDirectMessageRecipients/, "web gateway recipient lookup must use the canonical backend query");
+assert.doesNotMatch(gateway, /export async function listCloudEligibleDirectMessageRecipients</, "web gateway must not expose the deleted community-scoped recipient lookup");
+assert.doesNotMatch(gateway, /directMessages:listEligibleDirectMessageRecipients"/, "web gateway must not call the deleted community-scoped recipient query");
 assert.match(gateway, /listCloudEligibleDirectMessageRecipientsForViewer/, "web gateway must expose global viewer-wide recipient lookup");
 assert.match(gateway, /directMessages:listEligibleDirectMessageRecipientsForViewer/, "web gateway global recipient lookup must use the canonical backend query");
-assert.match(gateway, /DirectMessageRecipientPage/, "web gateway recipient lookup must expose rows with pagination metadata");
-assert.match(gateway, /paginationOpts:[\s\S]*cursor: params\.cursor \?\? null,[\s\S]*numItems: params\.limit \?\? 20/, "web gateway recipient lookup must pass cursor-based pagination");
-assert.match(gateway, /continueCursor/, "web gateway recipient lookup must preserve the backend continuation cursor");
+assert.doesNotMatch(gateway, /DirectMessageRecipientPage|paginationOpts|continueCursor/, "web gateway must not keep deleted recipient pagination contract");
+assert.doesNotMatch(communityTypes, /DirectMessageRecipientPage/, "shared community types must not expose deleted recipient pagination metadata");
 assert.match(gateway, /listCloudDirectMessages/, "web gateway must list direct messages");
 assert.match(gateway, /subscribeCloudDirectConversations/, "web gateway must expose live direct conversation subscriptions");
 assert.match(gateway, /subscribeCloudDirectConversations[\s\S]*watchQuery\([\s\S]*directMessages:listMyDirectConversations/, "live DM inbox subscription must watch the canonical inbox query");
@@ -188,7 +198,8 @@ assert.match(dmHost, /subscribeCloudDirectMessages<DirectMessage>/, "global DM h
 assert.match(dmHost, /WebDirectMessageInboxPanel/, "global DM host must render the inbox panel");
 assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing conversations into the live DM panel");
 assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");
-assert.match(dmInboxPanel, /Started in \{communityName\}/, "DM inbox rows must preserve community-origin provenance");
+assert.match(dmInboxPanel, /conversation\.last_message_preview/, "DM inbox rows must prefer the latest message preview");
+assert.match(dmInboxPanel, /Started in \$\{communityName\}/, "DM inbox rows must preserve community-origin provenance as the no-message fallback");
 assert.match(dmInboxPanel, /New message/, "DM inbox must expose a new-message picker view");
 assert.match(dmInboxPanel, /Your communities/, "DM recipient picker must be global across viewer communities");
 assert.match(dmInboxPanel, /Shared in \$\{communityName\}/, "DM recipient rows must show chosen shared community provenance");
@@ -223,6 +234,8 @@ assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must styl
 assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker must not keep CSS for deleted fake pagination control");
 assert.match(css, /\.direct-messages-topbar-button \{[\s\S]*position: relative/, "top-right DM button must anchor the unread badge");
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
+assert.match(css, /\.community-dm-inbox-row\.is-unread \.community-dm-inbox-row-meta \{[\s\S]*color: var\(--text-primary\)[\s\S]*font-weight: 720/, "unread DM inbox previews must read as new");
+assert.match(css, /\.community-dm-inbox-row-unread \{[\s\S]*width: 8px[\s\S]*height: 8px/, "DM inbox unread indicator must be a small dot");
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");
 
 console.log("PASS: direct messages are community-origin, participant-based, and follow-free.");

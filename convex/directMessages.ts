@@ -1,5 +1,4 @@
 import { mutation, query } from "./_generated/server";
-import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
   communityMembershipRowIsActive,
@@ -62,10 +61,9 @@ type DirectMessageLike = {
 };
 
 const MAX_DM_TEXT_CHARS = 4000;
+const MAX_DM_PREVIEW_CHARS = 120;
 const MAX_DM_MESSAGE_ROWS = 200;
 const MAX_DM_RECIPIENT_ROWS = 25;
-const MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS = 75;
-const MAX_DM_RECIPIENT_SEARCH_PAGES = 8;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
 const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
 const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
@@ -81,6 +79,19 @@ function normalizeDirectMessageText(raw: unknown): string {
   const text = String(raw ?? "").trim();
   if (!text) throw new Error("dm_message_text_required");
   return text.slice(0, MAX_DM_TEXT_CHARS);
+}
+
+function readDirectMessageTextPreview(contentJson: unknown): string | null {
+  const rawText =
+    typeof contentJson === "string"
+      ? contentJson
+      : contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)
+        ? (contentJson as Record<string, unknown>).text
+        : null;
+  const normalized = String(rawText ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (normalized.length <= MAX_DM_PREVIEW_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_DM_PREVIEW_CHARS - 3).trimEnd()}...`;
 }
 
 function buildDirectConversationCanonicalKey(leftUserId: any, rightUserId: any): string {
@@ -350,6 +361,15 @@ async function mapDirectConversation(
   const community = (await ctx.db.get(row.createdFromCommunityId)) as CommunityLike | null;
   const participants = await listConversationParticipants(ctx, row._id);
   const lastSeq = Math.max(0, Math.floor(row.lastSeq ?? 0));
+  const lastMessage =
+    lastSeq > 0
+      ? ((await ctx.db
+          .query("dmMessages" as any)
+          .withIndex("by_conversation_seq", (q: any) =>
+            q.eq("conversationId", row._id).eq("seq", lastSeq),
+          )
+          .first()) as DirectMessageLike | null)
+      : null;
   const viewerUserKey = normalizeIdValue(opts?.viewerUserId);
   const viewerParticipant = viewerUserKey
     ? participants.find(
@@ -374,6 +394,7 @@ async function mapDirectConversation(
     viewer_last_read_seq: viewerLastReadSeq,
     unread_count: unreadCount,
     has_unread: unreadCount > 0,
+    last_message_preview: lastMessage ? readDirectMessageTextPreview(lastMessage.contentJson) : null,
     last_message_at:
       typeof row.lastMessageAt === "number" && Number.isFinite(row.lastMessageAt)
         ? toIsoString(row.lastMessageAt)
@@ -619,128 +640,6 @@ export const ensureDirectConversationFromCommunity = mutation({
   },
 });
 
-export const listEligibleDirectMessageRecipients = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    search: v.optional(v.string()),
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const { community } = await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: viewerUserId,
-    });
-    const safeLimit = Math.max(
-      1,
-      Math.min(MAX_DM_RECIPIENT_ROWS, Math.floor(args.paginationOpts.numItems ?? 20)),
-    );
-    const isFirstPage = args.paginationOpts.cursor === null;
-    const memberPageSize = Math.max(1, isFirstPage ? safeLimit - 1 : safeLimit);
-    const search = normalizeRecipientSearch(args.search);
-    const seenUserIds = new Set<string>();
-    const recipients: EligibleDirectMessageRecipient[] = [];
-    const addRecipient = async (userId: any) => {
-      if (recipients.length >= safeLimit) return;
-      const userKey = normalizeIdValue(userId);
-      if (!userKey || userKey === normalizeIdValue(viewerUserId) || seenUserIds.has(userKey)) {
-        return;
-      }
-      const recipient = await mapEligibleDirectMessageRecipient({
-        ctx,
-        community,
-        viewerUserId,
-        userId,
-        search,
-      });
-      if (recipient) {
-        seenUserIds.add(userKey);
-        recipients.push(recipient);
-      }
-    };
-
-    if (search) {
-      let cursor = args.paginationOpts.cursor ?? null;
-      let isDone = false;
-      let pagesScanned = 0;
-      const searchPageSize = Math.max(
-        safeLimit,
-        Math.min(MAX_DM_RECIPIENT_SEARCH_PAGE_ROWS, safeLimit * 4),
-      );
-
-      if (cursor === null) {
-        await addRecipient(community.ownerId);
-      }
-
-      while (
-        recipients.length < safeLimit &&
-        !isDone &&
-        pagesScanned < MAX_DM_RECIPIENT_SEARCH_PAGES
-      ) {
-        const rawPage = await ctx.db
-          .query("communityMemberships" as any)
-          .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-          .order("desc")
-          .paginate({
-            ...args.paginationOpts,
-            cursor,
-            numItems: searchPageSize,
-            maximumRowsRead: Math.max(
-              args.paginationOpts.maximumRowsRead ?? searchPageSize,
-              searchPageSize,
-            ),
-          });
-        pagesScanned += 1;
-
-        for (const row of rawPage.page as CommunityMembershipLike[]) {
-          if (!communityMembershipRowIsActive(row)) continue;
-          await addRecipient(row.userId);
-          if (recipients.length >= safeLimit) break;
-        }
-
-        cursor = typeof rawPage.continueCursor === "string" ? rawPage.continueCursor : null;
-        isDone = rawPage.isDone || !cursor;
-      }
-
-      return {
-        rows: recipients,
-        continueCursor: !isDone && cursor ? cursor : null,
-        isDone: isDone || !cursor,
-      };
-    }
-
-    const rawPage = await ctx.db
-      .query("communityMemberships" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .paginate({
-        ...args.paginationOpts,
-        numItems: memberPageSize,
-        maximumRowsRead: Math.max(
-          args.paginationOpts.maximumRowsRead ?? memberPageSize * 4,
-          memberPageSize,
-        ),
-      });
-
-    if (isFirstPage) await addRecipient(community.ownerId);
-    for (const row of rawPage.page as CommunityMembershipLike[]) {
-      if (!communityMembershipRowIsActive(row)) continue;
-      await addRecipient(row.userId);
-    }
-
-    return {
-      rows: recipients,
-      continueCursor: typeof rawPage.continueCursor === "string" ? rawPage.continueCursor : null,
-      isDone: rawPage.isDone,
-    };
-  },
-});
-
 export const listEligibleDirectMessageRecipientsForViewer = query({
   args: {
     authSubject: v.optional(v.string()),
@@ -898,6 +797,7 @@ export const listDirectMessages = query({
       conversationId: args.conversationId,
       userId: viewerUserId,
     });
+    // Active participants can read existing DM history; current relationship is rechecked before each send.
     const safeLimit = Math.max(1, Math.min(MAX_DM_MESSAGE_ROWS, Math.floor(args.limit ?? 100)));
     const beforeSeq =
       typeof args.beforeSeq === "number" && Number.isFinite(args.beforeSeq)

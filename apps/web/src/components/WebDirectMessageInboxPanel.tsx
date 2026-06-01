@@ -175,6 +175,8 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
             const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
             const peerAvatarSeed = peer?.user_id ?? peerLabel;
             const communityName = conversation.created_from_community?.name ?? "shared community";
+            const previewText =
+              String(conversation.last_message_preview ?? "").trim() || `Started in ${communityName}`;
             const timeLabel = formatInboxTime(conversation.last_message_at ?? conversation.updated_at);
             const unreadCount = Math.max(0, Math.floor(Number(conversation.unread_count ?? 0)));
             const hasUnread = Boolean(conversation.has_unread || unreadCount > 0);
@@ -183,6 +185,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                 key={conversation.id}
                 type="button"
                 className={`community-dm-inbox-row${hasUnread ? " is-unread" : ""}`}
+                aria-label={`${peerLabel}, ${hasUnread ? "unread, " : ""}${previewText}`}
                 onClick={() => props.onSelectConversation(conversation)}
               >
                 <UserAvatar
@@ -205,18 +208,12 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                       {hasUnread ? (
                         <span
                           className="community-dm-inbox-row-unread"
-                          aria-label={
-                            unreadCount > 0
-                              ? `${unreadCount} unread direct messages`
-                              : "Unread direct messages"
-                          }
-                        >
-                          {unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : ""}
-                        </span>
+                          aria-hidden="true"
+                        />
                       ) : null}
                     </span>
                   </span>
-                  <span className="community-dm-inbox-row-meta">Started in {communityName}</span>
+                  <span className="community-dm-inbox-row-meta">{previewText}</span>
                 </span>
               </button>
             );

@@ -86,6 +86,7 @@ export type DirectMessageConversation = {
   viewer_last_read_seq: number;
   unread_count: number;
   has_unread: boolean;
+  last_message_preview: string | null;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;
@@ -103,12 +104,6 @@ export type DirectMessageRecipient = {
   community_id: string;
   community_name: string;
   existing_conversation_id: string | null;
-};
-
-export type DirectMessageRecipientPage = {
-  rows: DirectMessageRecipient[];
-  continueCursor: string | null;
-  isDone: boolean;
 };
 
 export type DirectMessage = {
