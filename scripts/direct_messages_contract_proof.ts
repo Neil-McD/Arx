@@ -351,7 +351,7 @@ assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global dir
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*background: transparent/, "DM conversation back control must stay flat, not circular");
 assert.match(css, /\.community-dm-panel-typing/, "DM conversation panel must style typing presence");
-assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*visibility: hidden/, "DM typing row must reserve space when empty");
+assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*display: none/, "empty DM typing row must not steal vertical message space");
 assert.match(css, /\.community-dm-attachment-state-overlay/, "DM composer images must style attachment upload state overlays");
 assert.match(css, /\.community-dm-attachment-retry/, "DM composer must style failed attachment retry controls");
 assert.match(css, /\.community-dm-attachment-item\.is-failed/, "DM composer file chips must style failed attachment state");

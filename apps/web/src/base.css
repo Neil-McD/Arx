@@ -9320,7 +9320,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   overflow: hidden;
   border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
   border-radius: 18px;
@@ -9442,7 +9442,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 8px;
   overflow: auto;
   margin-right: -12px;
-  padding: 8px 14px 8px 2px;
+  padding: 6px 14px 2px 2px;
 }
 
 .community-dm-panel-empty {
@@ -9552,7 +9552,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-panel-typing {
-  min-height: 16px;
+  min-height: 14px;
   padding: 0 4px;
   color: var(--text-muted);
   font-size: 12px;
@@ -9560,7 +9560,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-panel-typing.is-empty {
-  visibility: hidden;
+  display: none;
 }
 
 .community-dm-panel-error {
