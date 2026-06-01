@@ -29085,17 +29085,7 @@ button.message-citation-chip:hover {
   white-space: nowrap;
 }
 
-.workspace-files-cache-note {
-  flex: 0 1 auto;
-  min-width: 0;
-  color: var(--text-faint);
-  font-size: 10.5px;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+.workspace-files-status,
 .workspace-files-refresh {
   flex: 0 0 auto;
   width: 24px;
@@ -29106,6 +29096,14 @@ button.message-citation-chip:hover {
   color: var(--text-secondary);
   display: inline-grid;
   place-items: center;
+}
+
+.workspace-files-status {
+  background: transparent;
+  color: rgba(120, 230, 165, 0.86);
+}
+
+.workspace-files-refresh {
   cursor: pointer;
 }
 
@@ -29117,6 +29115,14 @@ button.message-citation-chip:hover {
 .workspace-files-refresh:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.workspace-files-refresh--error {
+  color: #ff7b6f;
+}
+
+.workspace-files-refresh .is-spinning {
+  animation: workspace-files-spin 0.85s linear infinite;
 }
 
 .workspace-files-list {

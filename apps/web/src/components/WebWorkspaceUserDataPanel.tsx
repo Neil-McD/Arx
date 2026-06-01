@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
   ChevronLeft,
   File,
   FileCode2,
@@ -1025,16 +1026,22 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryRefreshNonce((value) => value + 1);
   }, [filesExpanded, isLoadingDirectory, props.activeProjectId, props.session]);
 
-  const directoryFreshnessLabel = useMemo(() => {
+  const directoryIndicator = useMemo(() => {
+    if (isLoadingDirectory) {
+      return { kind: "loading" as const, label: "Refreshing files" };
+    }
+    if (directoryError) {
+      return { kind: "error" as const, label: "Could not refresh files. Try again." };
+    }
+    if (directoryIsStale) {
+      return { kind: "refresh" as const, label: "Refresh files" };
+    }
     if (!directoryCheckedAt) return null;
-    const ageSeconds = Math.max(0, Math.floor((Date.now() - directoryCheckedAt) / 1000));
-    const ageLabel = ageSeconds < 60
-      ? "now"
-      : ageSeconds < 3600
-        ? `${Math.floor(ageSeconds / 60)}m ago`
-        : `${Math.floor(ageSeconds / 3600)}h ago`;
-    return `${directoryIsCached ? "Cached" : "Checked"} ${ageLabel}${directoryIsStale ? " · may be stale" : ""}`;
-  }, [directoryCheckedAt, directoryIsCached, directoryIsStale]);
+    return {
+      kind: "ok" as const,
+      label: directoryIsCached ? "File list ready" : "Files up to date",
+    };
+  }, [directoryCheckedAt, directoryError, directoryIsCached, directoryIsStale, isLoadingDirectory]);
 
   return (
     <div className="workspace-user-data-panel__grid">
@@ -1152,19 +1159,32 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                 </button>
               ) : null}
               <span className="workspace-files-path">{formatWorkspaceBreadcrumb(directoryPath)}</span>
-              {directoryFreshnessLabel ? (
-                <span className="workspace-files-cache-note">{directoryFreshnessLabel}</span>
+              {directoryIndicator?.kind === "ok" ? (
+                <span
+                  className="workspace-files-status workspace-files-status--ok"
+                  aria-label={directoryIndicator.label}
+                  title={directoryIndicator.label}
+                  role="img"
+                >
+                  <Check size={13} strokeWidth={2.2} aria-hidden="true" />
+                </span>
+              ) : directoryIndicator ? (
+                <button
+                  type="button"
+                  className={`workspace-files-refresh workspace-files-refresh--${directoryIndicator.kind}`}
+                  onClick={handleRefreshDirectory}
+                  disabled={isLoadingDirectory}
+                  aria-label={directoryIndicator.label}
+                  title={directoryIndicator.label}
+                >
+                  <RefreshCw
+                    className={directoryIndicator.kind === "loading" ? "is-spinning" : undefined}
+                    size={13}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
+                </button>
               ) : null}
-              <button
-                type="button"
-                className="workspace-files-refresh"
-                onClick={handleRefreshDirectory}
-                disabled={isLoadingDirectory}
-                aria-label="Refresh files"
-                title="Refresh files"
-              >
-                <RefreshCw size={13} strokeWidth={2} aria-hidden="true" />
-              </button>
               {isComputerOnForFiles && workspaceFilesProviderId !== "blaxel" ? (
                 <label
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
