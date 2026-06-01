@@ -9359,7 +9359,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   position: relative;
   z-index: 2;
   border-radius: 14px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
+  background: transparent;
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
