@@ -12448,6 +12448,30 @@ button.chat-reply-quote:hover {
   padding: 7px 8px;
 }
 
+.knowledge-resource-inline-add {
+  width: 100%;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  border: 1px dashed color-mix(in srgb, var(--border-default) 72%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.knowledge-resource-inline-add:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-gold) 48%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-gold) 7%, transparent);
+}
+
 .knowledge-resource-item {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;
