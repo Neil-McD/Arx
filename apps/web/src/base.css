@@ -12165,6 +12165,7 @@ button.chat-reply-quote:hover {
 }
 
 .knowledge-category-section {
+  position: relative;
   display: grid;
   align-content: start;
   gap: 5px;
@@ -12274,51 +12275,55 @@ button.chat-reply-quote:hover {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  z-index: 2;
 }
 
 .knowledge-category-menu-trigger {
-  width: 24px;
-  height: 24px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  width: 26px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary));
   display: grid;
   place-items: center;
   padding: 0;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  opacity: 0.92;
+  transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
 
 .knowledge-category-menu-trigger:hover,
 .knowledge-category-menu-trigger[aria-expanded="true"] {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--border-default) 74%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  opacity: 1;
 }
 
 .knowledge-category-menu-trigger svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   fill: currentColor;
 }
 
-.knowledge-category-menu-popover {
+.knowledge-category-menu-popover,
+.knowledge-resource-menu-popover {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 6;
-  min-width: 136px;
-  border: 1px solid var(--border-default);
+  z-index: 30;
+  min-width: 154px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, var(--border-default));
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
-  box-shadow: var(--shadow-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 98%, #050507 2%);
+  box-shadow: 0 18px 46px color-mix(in srgb, #000 48%, transparent);
   padding: 5px;
   display: grid;
   gap: 2px;
 }
 
-.knowledge-category-menu-popover button {
+.knowledge-category-menu-popover button,
+.knowledge-resource-menu-popover button {
   width: 100%;
   border: 0;
   border-radius: 8px;
@@ -12335,21 +12340,37 @@ button.chat-reply-quote:hover {
   cursor: pointer;
 }
 
-.knowledge-category-menu-popover button:hover {
-  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+.knowledge-category-menu-popover button:hover,
+.knowledge-resource-menu-popover button:hover {
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
   color: var(--text-primary);
 }
 
-.knowledge-category-menu-popover button.danger {
+.knowledge-category-menu-popover button:disabled,
+.knowledge-resource-menu-popover button:disabled {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+  cursor: not-allowed;
+}
+
+.knowledge-category-menu-popover button:disabled:hover,
+.knowledge-resource-menu-popover button:disabled:hover {
+  background: transparent;
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.knowledge-category-menu-popover button.danger,
+.knowledge-resource-menu-popover button.danger {
   color: color-mix(in srgb, #f97316 72%, var(--text-primary));
 }
 
-.knowledge-category-menu-popover button.danger:hover {
+.knowledge-category-menu-popover button.danger:hover,
+.knowledge-resource-menu-popover button.danger:hover {
   background: color-mix(in srgb, #f97316 12%, transparent);
   color: color-mix(in srgb, #fb923c 82%, var(--text-primary));
 }
 
-.knowledge-category-menu-popover svg {
+.knowledge-category-menu-popover svg,
+.knowledge-resource-menu-popover svg {
   width: 15px;
   height: 15px;
   fill: none;
@@ -12581,6 +12602,7 @@ button.chat-reply-quote:hover {
 }
 
 .knowledge-resource-item-actions {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -12594,6 +12616,32 @@ button.chat-reply-quote:hover {
 .knowledge-resource-item.is-active .knowledge-resource-item-actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.knowledge-resource-menu-trigger {
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.knowledge-resource-menu-trigger:hover,
+.knowledge-resource-menu-trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  color: var(--text-primary);
+}
+
+.knowledge-resource-menu-trigger svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
 }
 
 .knowledge-resource-reader {

@@ -272,7 +272,12 @@ function ResourceCategorySection(props: {
             </button>
           ) : null}
           {canManage && !module.is_virtual && isMenuOpen ? (
-            <div className="knowledge-category-menu-popover" role="menu">
+            <div
+              className="knowledge-category-menu-popover"
+              role="menu"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
               <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, onEdit)}>
                 <EditIcon />
                 <span>Edit</span>
@@ -356,12 +361,24 @@ function ResourceRailItem(props: {
   } = props;
   const summary = (resource.body_md ?? "").trim();
   const isEditDisabled = resourceNeedsBodyHydration(resource);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleItemKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onSelect();
     }
+  };
+
+  const handleMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setIsMenuOpen((current) => !current);
+  };
+
+  const closeAndRun = (event: MouseEvent<HTMLButtonElement>, callback: () => void) => {
+    event.stopPropagation();
+    setIsMenuOpen(false);
+    callback();
   };
 
   return (
@@ -386,6 +403,7 @@ function ResourceRailItem(props: {
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       onKeyDown={handleItemKeyDown}
+      onMouseLeave={() => setIsMenuOpen(false)}
     >
       <div className="knowledge-resource-item-icon" aria-hidden="true">
         <ResourceKindIcon resource={resource} />
@@ -400,31 +418,48 @@ function ResourceRailItem(props: {
       {canManage ? (
         <div className="knowledge-resource-item-actions">
           <button
-            className="resource-card-action"
+            className="knowledge-resource-menu-trigger"
             type="button"
-            title={isEditDisabled ? "Loading page content" : "Edit knowledge item"}
-            disabled={isEditDisabled}
+            title="Page actions"
+            aria-label={`Actions for ${resource.title}`}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (isEditDisabled) return;
-              onEdit();
-            }}
+            onClick={handleMenuClick}
           >
-            <EditIcon />
+            <MoreIcon />
           </button>
-          <button
-            className="resource-card-action danger"
-            type="button"
-            title="Delete knowledge item"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
-          >
-            <DeleteIcon />
-          </button>
+          {isMenuOpen ? (
+            <div
+              className="knowledge-resource-menu-popover"
+              role="menu"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                title={isEditDisabled ? "Loading page content" : "Edit page"}
+                disabled={isEditDisabled}
+                onClick={(event) => {
+                  if (isEditDisabled) return;
+                  closeAndRun(event, onEdit);
+                }}
+              >
+                <EditIcon />
+                <span>Edit</span>
+              </button>
+              <button
+                className="danger"
+                type="button"
+                role="menuitem"
+                onClick={(event) => closeAndRun(event, onDelete)}
+              >
+                <DeleteIcon />
+                <span>Delete</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
