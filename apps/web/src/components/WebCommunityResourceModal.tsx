@@ -8,7 +8,6 @@ type WebCommunityResourceModalProps = {
   resourceUrlInput: string;
   resourceBodyInput: string;
   resourcePinnedInput: boolean;
-  resourceRoleInput: "page" | "source";
   resourceError: string | null;
   isSavingResource: boolean;
   onClose: () => void;
@@ -18,7 +17,6 @@ type WebCommunityResourceModalProps = {
   onChangeUrl: (value: string) => void;
   onChangeBody: (value: string) => void;
   onChangePinned: (value: boolean) => void;
-  onChangeRole: (value: "page" | "source") => void;
 };
 
 function LinkIcon() {
@@ -62,7 +60,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
     resourceUrlInput,
     resourceBodyInput,
     resourcePinnedInput,
-    resourceRoleInput,
     resourceError,
     isSavingResource,
     onClose,
@@ -72,7 +69,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
     onChangeUrl,
     onChangeBody,
     onChangePinned,
-    onChangeRole,
   } = props;
 
   if (!isOpen) return null;
@@ -92,9 +88,9 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
       <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">Add resource</div>
+            <div className="modal-title">{props.editingResourceId ? "Edit page" : "Add page"}</div>
             <div className="resource-modal-subtitle">
-              Save a durable page or source for the community knowledge base.
+              Save a durable page for the community knowledge base.
             </div>
           </div>
           <button className="modal-close" onClick={onClose} title="Close">
@@ -103,28 +99,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
         </div>
         <div className="modal-body">
           <div className="resource-form">
-            <div className="resource-form-section">
-              <div className="resource-field-label">Kind</div>
-              <div className="resource-kind-segment" role="group" aria-label="Knowledge item kind">
-                <button
-                  type="button"
-                  className={resourceRoleInput === "page" ? "is-active" : ""}
-                  onClick={() => onChangeRole("page")}
-                  disabled={!hasActiveCommunity}
-                >
-                  Page
-                </button>
-                <button
-                  type="button"
-                  className={resourceRoleInput === "source" ? "is-active" : ""}
-                  onClick={() => onChangeRole("source")}
-                  disabled={!hasActiveCommunity}
-                >
-                  Source
-                </button>
-              </div>
-            </div>
-
             <div className="resource-form-section">
               <div className="resource-title-row">
                 <div className="resource-field-label">Title</div>
@@ -218,7 +192,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
               <div className="resource-field-label">Content</div>
               <textarea
                 className="resource-description-input"
-                placeholder={resourceRoleInput === "source" ? "Add extraction notes, context, or review instructions." : "Write the page content, context, or takeaway."}
+                placeholder="Write the page content, context, or takeaway."
                 value={resourceBodyInput}
                 onChange={(event) => onChangeBody(event.target.value)}
                 disabled={!hasActiveCommunity}
@@ -240,7 +214,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                 (resourceBodyInput.trim().length === 0 && resourceUrlInput.trim().length === 0)
               }
             >
-              {isSavingResource ? "Saving..." : "Save knowledge"}
+              {isSavingResource ? "Saving..." : "Save page"}
             </button>
             <button className="secondary" onClick={onCancel}>
               Cancel

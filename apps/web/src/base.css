@@ -11840,39 +11840,6 @@ button.chat-reply-quote:hover {
   font-size: 15px;
 }
 
-.resource-kind-segment {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 88%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 72%, var(--bg-card));
-  padding: 4px;
-}
-
-.resource-kind-segment button {
-  min-height: 36px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.resource-kind-segment button:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
-}
-
-.resource-kind-segment button.is-active {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-card-alt) 94%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-default) 72%, transparent);
-}
-
 .resource-description-input {
   line-height: 1.55;
   min-height: 140px;
