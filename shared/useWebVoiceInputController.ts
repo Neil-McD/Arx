@@ -4,6 +4,7 @@ import {
   transcribeVoice,
   VoiceTranscriptionRequestError,
 } from "./authCore";
+import { normalizePaidUsageFailureCode, type PaidUsageBillingMode } from "./paidUsageBilling";
 import { resolveUsableSession } from "./ensureUsableSession";
 import type { PaidToolKind } from "./workspaceCredits";
 import {
@@ -34,6 +35,7 @@ type VoiceInputIntent = {
 type VoiceToolBalanceDetails = {
   toolKind?: PaidToolKind | null;
   requiredCredits?: number | null;
+  paidUsageBillingMode?: PaidUsageBillingMode | null;
 };
 
 type UseWebVoiceInputControllerArgs<SessionT> = {
@@ -66,6 +68,14 @@ function isToolBalanceError(message: string): boolean {
     normalized.includes("add balance to use voice input") ||
     normalized.includes("tool balance is unavailable")
   );
+}
+
+function isVoiceToolBalanceError(error: unknown, message: string): boolean {
+  if (error instanceof VoiceTranscriptionRequestError) {
+    const code = normalizePaidUsageFailureCode(error.code);
+    if (code) return true;
+  }
+  return isToolBalanceError(message);
 }
 
 export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputControllerArgs<SessionT>) {
@@ -354,16 +364,18 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       args.showAppToastMessage("Transcript inserted.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (isToolBalanceError(message)) {
+      if (isVoiceToolBalanceError(error, message)) {
         const details =
           error instanceof VoiceTranscriptionRequestError
             ? {
                 toolKind: error.toolKind ?? "voice_input",
                 requiredCredits: error.requiredCredits,
+                paidUsageBillingMode: error.paidUsageBillingMode,
               }
             : {
                 toolKind: "voice_input" as const,
                 requiredCredits: null,
+                paidUsageBillingMode: null,
               };
         args.onToolBalanceRequired?.(surface, message, details);
         if (!args.onToolBalanceRequired) {

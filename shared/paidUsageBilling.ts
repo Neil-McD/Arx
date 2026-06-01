@@ -73,7 +73,7 @@ export function paidUsageBillingModeForWorkspaceStorageAction(
 export function paidUsageBillingModeForPaidToolFailure(
   _toolKind?: PaidToolKind | null,
 ): PaidUsageBillingMode {
-  return "prepaid_required";
+  return "card_preferred";
 }
 
 export function classifyPaidUsageFailure(params: {

@@ -293,6 +293,7 @@ async function proveSourceContract() {
   const runtimeHarnessCompositionSource = await readRepoFile("convex/runtimeHarnessComposition.ts");
   const communityAgentSource = await readRepoFile("convex/communityAgent.ts");
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
+  const paidToolCreditReservationSource = await readRepoFile("convex/paidToolCreditReservation.ts");
   const authCoreSource = await readRepoFile("shared/authCore.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
@@ -403,14 +404,18 @@ async function proveSourceContract() {
     "voice controller should not receive unused tier props",
   );
 
-  assert.match(runtimeAgentLoopSource, /tool_kind:\s*"web_research"[\s\S]*required_credits:/);
+  assert.match(runtimeAgentLoopSource, /toolKind:\s*"web_research"[\s\S]*toolName:\s*"web_research"/);
+  assert.match(
+    paidToolCreditReservationSource,
+    /tool_kind:\s*params\.toolKind[\s\S]*required_credits:\s*params\.requiredCredits/,
+  );
   assert.match(runtimeAgentLoopSource, /tool_kind:\s*"workspace_tools"/);
-  assert.match(httpVoiceSource, /tool_kind:\s*"voice_input"[\s\S]*required_credits:/);
-  assert.match(authCoreSource, /class VoiceTranscriptionRequestError[\s\S]*toolKind[\s\S]*requiredCredits/);
+  assert.match(httpVoiceSource, /toolKind:\s*"voice_input"[\s\S]*toolName:\s*"voice_transcribe"/);
+  assert.match(authCoreSource, /class VoiceTranscriptionRequestError[\s\S]*toolKind[\s\S]*requiredCredits[\s\S]*paidUsageBillingMode/);
   assert.match(
     appSource,
-    /toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"[\s\S]*requiredCredits:\s*details\?\.requiredCredits\s*\?\?\s*null/,
-    "voice balance failures should open the top-up modal with paid-tool metadata",
+    /toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"[\s\S]*requiredCredits:\s*details\?\.requiredCredits\s*\?\?\s*null[\s\S]*paidUsageBillingMode:\s*details\?\.paidUsageBillingMode\s*\?\?\s*null/,
+    "voice balance failures should open the billing modal with paid-tool metadata",
   );
 }
 

@@ -50,7 +50,7 @@ assert.equal(
 );
 assert.equal(
   paidUsageBillingModeForPaidToolFailure("web_research"),
-  "prepaid_required",
+  "card_preferred",
 );
 assert.equal(
   normalizePaidUsageFailureCode("workspace_card_required_for_additional_volume"),
@@ -99,7 +99,7 @@ assert.deepEqual(
   {
     isPaidUsageFailure: true,
     code: "workspace_credits_exhausted",
-    paidUsageBillingMode: "prepaid_required",
+    paidUsageBillingMode: "card_preferred",
     toolKind: "web_research",
   },
 );
@@ -111,7 +111,7 @@ assert.deepEqual(
   {
     isPaidUsageFailure: true,
     code: "workspace_credits_exhausted",
-    paidUsageBillingMode: "prepaid_required",
+    paidUsageBillingMode: "card_preferred",
     toolKind: "web_research",
   },
 );
@@ -123,7 +123,7 @@ assert.deepEqual(
   {
     isPaidUsageFailure: true,
     code: "workspace_uncollected_usage_blocked",
-    paidUsageBillingMode: "prepaid_required",
+    paidUsageBillingMode: "card_preferred",
     toolKind: "workspace_tools",
   },
 );
@@ -560,6 +560,7 @@ assert.match(
 );
 
 const blaxelWorkspaceWake = read("convex/blaxelWorkspaceWake.ts");
+const paidToolCreditReservation = read("convex/paidToolCreditReservation.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
 const crons = read("convex/crons.ts");
 const threads = read("convex/threads.ts");
@@ -621,6 +622,33 @@ assert.match(
   blaxelWorkspaceWake,
   /metadata: reservationMetadata,[\s\S]*allowUncollectedReservation: hasCardOnFile,[\s\S]*uncollectedReservationLimitCredits: hasCardOnFile[\s\S]*WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS/,
   "central Blaxel wake reservations must allow card-backed settlement only when a card is on file",
+);
+assert.match(
+  paidToolCreditReservation,
+  /getUserStripeCustomerInternal[\s\S]*hasPersistedWorkspaceCardOnFile[\s\S]*evaluatePaidToolStartAdmission[\s\S]*allowUncollectedReservation: hasCardOnFile[\s\S]*uncollectedReservationLimitCredits: hasCardOnFile[\s\S]*WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS/,
+  "central paid-tool reservations must use the same card-backed admission and exposure ceiling as workspace tools",
+);
+assert.match(
+  paidToolCreditReservation,
+  /billing_mode: billingMode[\s\S]*funding_source: fundingSource[\s\S]*card_backed_uncollected_limit_credits/,
+  "central paid-tool reservation metadata must distinguish card-backed and prepaid funding",
+);
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const httpVoice = read("convex/httpVoice.ts");
+assert.match(
+  runtimeAgentLoop,
+  /web_crawl[\s\S]*reservePaidToolCredits\([\s\S]*toolKind: "web_research"[\s\S]*toolName: "web_research"[\s\S]*action: "crawl"/,
+  "web crawl must use card-aware web research billing",
+);
+assert.match(
+  runtimeAgentLoop,
+  /web_research[\s\S]*reservePaidToolCredits\([\s\S]*toolKind: "web_research"[\s\S]*toolName: "web_research"[\s\S]*action,/,
+  "web research must use card-aware premium-tool billing",
+);
+assert.match(
+  httpVoice,
+  /reservePaidToolCredits\([\s\S]*toolKind: "voice_input"[\s\S]*toolName: "voice_transcribe"/,
+  "voice input must use card-aware premium-tool billing",
 );
 assert.match(
   blaxelWorkspaceWake,
@@ -994,8 +1022,8 @@ assert.match(
 );
 assert.match(
   inferenceIssueModal,
-  /Add a card to use workspace tools[\s\S]*No charge today\.[\s\S]*Usage is billed only when workspace tools run\./,
-  "card-first workspace billing modal copy must stay short and direct",
+  /paidToolUiLabel[\s\S]*workspace_tools[\s\S]*web_research[\s\S]*voice_input[\s\S]*Add a card to use \$\{paidToolLabel\}[\s\S]*No charge today[\s\S]*Usage is billed only when premium tools run\./,
+  "card-first paid-tool billing modal copy must stay short and tool-aware",
 );
 assert.match(
   inferenceIssueModal,
@@ -1076,7 +1104,6 @@ assert.match(
   "SSE runtime failures must use the shared paid-usage classifier before opening billing UI",
 );
 
-const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 assert.match(
   runtimeAgentLoop,
   /if \(!created\.ok\)[\s\S]*errorCode: created\.code[\s\S]*details: \(created as \{ details\?: Record<string, unknown> \| null \}\)\.details/,

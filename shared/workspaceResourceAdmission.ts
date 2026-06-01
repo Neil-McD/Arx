@@ -265,15 +265,20 @@ export function evaluateWorkspaceVolumeMaterializationAdmission(params: {
   });
 }
 
-export function evaluateWorkspaceSandboxStartAdmission(params: {
+export function evaluatePaidToolStartAdmission(params: {
   accountTier: WorkspaceResourceAccountTier;
   hasCardOnFile?: boolean | null;
   workspaceCreditBalance?: WorkspaceCreditBalanceLike | null;
   requiredCredits: number;
   cardBackedUncollectedLimitCredits?: number | null;
+  toolLabel?: string | null;
 }): WorkspaceResourceAdmissionDecision {
   const requiredCredits = normalizeFiniteAmount(params.requiredCredits);
   const hasCardOnFile = params.hasCardOnFile === true;
+  const toolLabel = String(params.toolLabel ?? "").trim() || "Premium tools";
+  const toolBalanceMessage = toolLabel.toLowerCase().endsWith("tools")
+    ? `${toolLabel} need tool balance before they run.`
+    : `${toolLabel} needs tool balance before it runs.`;
   const cardBackedUncollectedLimit = normalizeFiniteAmount(
     params.cardBackedUncollectedLimitCredits ??
       WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
@@ -295,8 +300,8 @@ export function evaluateWorkspaceSandboxStartAdmission(params: {
       currentCount: outstandingUsageCredits,
       requestedCount: requiredCredits,
       message: hasCardOnFile
-        ? "Workspace card-backed usage limit reached; settle prior usage before workspace tools can run."
-        : "Prior workspace usage must be cleared before workspace tools can run.",
+        ? `${toolLabel} card-backed usage limit reached; settle prior usage before premium tools can run.`
+        : `Prior ${toolLabel.toLowerCase()} usage must be cleared before premium tools can run.`,
     });
   }
   const spendableCredits = getSpendableWorkspaceToolBalanceCredits(
@@ -312,7 +317,7 @@ export function evaluateWorkspaceSandboxStartAdmission(params: {
         limit: cardBackedUncollectedLimit,
         currentCount: outstandingUsageCredits,
         requestedCount: requiredCredits,
-        message: "Workspace tools can run with card-backed billing.",
+        message: `${toolLabel} can run with card-backed billing.`,
       });
     }
     return admissionBlocked({
@@ -321,7 +326,7 @@ export function evaluateWorkspaceSandboxStartAdmission(params: {
       limit: requiredCredits,
       currentCount: spendableCredits,
       requestedCount: requiredCredits,
-      message: "Workspace tools need tool balance before they run.",
+      message: toolBalanceMessage,
     });
   }
   return admissionOk({
@@ -329,5 +334,18 @@ export function evaluateWorkspaceSandboxStartAdmission(params: {
     limit: requiredCredits,
     currentCount: spendableCredits,
     requestedCount: requiredCredits,
+  });
+}
+
+export function evaluateWorkspaceSandboxStartAdmission(params: {
+  accountTier: WorkspaceResourceAccountTier;
+  hasCardOnFile?: boolean | null;
+  workspaceCreditBalance?: WorkspaceCreditBalanceLike | null;
+  requiredCredits: number;
+  cardBackedUncollectedLimitCredits?: number | null;
+}): WorkspaceResourceAdmissionDecision {
+  return evaluatePaidToolStartAdmission({
+    ...params,
+    toolLabel: "Workspace tools",
   });
 }

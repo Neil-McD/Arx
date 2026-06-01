@@ -17,6 +17,9 @@ import {
 import {
   executeRuntimeWorkspaceTool,
 } from "./workspaceRuntimeTools.ts";
+import {
+  reservePaidToolCredits,
+} from "./paidToolCreditReservation.ts";
 import type {
   RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
@@ -889,44 +892,35 @@ async function executeRetrievalHarnessTool(params: {
     const webResearchCredits = priceWebResearchCredits(webResearchAction);
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
     const creditKey = newCreditKey("crawl");
-    try {
-      await params.ctx.runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
-        creditKey,
-        userId: params.userId,
-        communityId: params.communityId ?? undefined,
-        projectId: params.projectId ?? undefined,
-        runId: params.runId,
-        toolName: params.toolName,
-        action: "crawl",
-        vendor: "crawl4ai_or_simple_fetcher",
-        credits: webResearchCredits,
-        rawVendorCostUsd: webResearchVendorCostUsd,
-        polynetPriceUsd: creditsToUsd(webResearchCredits),
-        metadata: {
-          pricing_version: PAID_TOOL_PRICING_VERSION,
-          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-          estimated_vendor_cost_usd: webResearchVendorCostUsd,
-        },
-        nowMs: Date.now(),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    const reservation = await reservePaidToolCredits({
+      ctx: params.ctx,
+      creditKey,
+      userId: params.userId,
+      communityId: params.communityId ?? undefined,
+      projectId: params.projectId ?? undefined,
+      runId: params.runId,
+      toolKind: "web_research",
+      toolName: "web_research",
+      action: "crawl",
+      vendor: "crawl4ai_or_simple_fetcher",
+      credits: webResearchCredits,
+      rawVendorCostUsd: webResearchVendorCostUsd,
+      polynetPriceUsd: creditsToUsd(webResearchCredits),
+      metadata: {
+        estimated_vendor_cost_usd: webResearchVendorCostUsd,
+      },
+      nowMs: Date.now(),
+    });
+    if (!reservation.ok) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
-        errorMessage:
-          message === "credits_exhausted"
-            ? "Web crawl uses paid provider calls, so it needs tool balance before it runs."
-            : "Tool balance is unavailable for web crawl.",
-        details: {
-          tool_kind: "web_research",
-          required_credits: webResearchCredits,
-        },
+        errorCode: reservation.code,
+        errorMessage: reservation.message,
+        details: reservation.details,
       };
     }
-
     let payload: unknown;
     try {
       payload = await params.ctx.runAction((api as any).community.crawlWebRoot, {
@@ -1005,45 +999,35 @@ async function executeRetrievalHarnessTool(params: {
     const webResearchCredits = priceWebResearchCredits(webResearchAction);
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
     const creditKey = newCreditKey("web");
-    try {
-      await params.ctx.runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
-        creditKey,
-        userId: params.userId,
-        communityId: params.communityId ?? undefined,
-        projectId: params.projectId ?? undefined,
-        runId: params.runId,
-        toolName: params.toolName,
-        action,
-        vendor: action === "search" ? "openai_xai_fallback" : "jina",
-        credits: webResearchCredits,
-        rawVendorCostUsd: webResearchVendorCostUsd,
-        polynetPriceUsd: creditsToUsd(webResearchCredits),
-        metadata: {
-          pricing_version: PAID_TOOL_PRICING_VERSION,
-          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-          estimated_vendor_cost_usd: webResearchVendorCostUsd,
-        },
-        nowMs: Date.now(),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    const reservation = await reservePaidToolCredits({
+      ctx: params.ctx,
+      creditKey,
+      userId: params.userId,
+      communityId: params.communityId ?? undefined,
+      projectId: params.projectId ?? undefined,
+      runId: params.runId,
+      toolKind: "web_research",
+      toolName: "web_research",
+      action,
+      vendor: action === "search" ? "openai_xai_fallback" : "jina",
+      credits: webResearchCredits,
+      rawVendorCostUsd: webResearchVendorCostUsd,
+      polynetPriceUsd: creditsToUsd(webResearchCredits),
+      metadata: {
+        estimated_vendor_cost_usd: webResearchVendorCostUsd,
+      },
+      nowMs: Date.now(),
+    });
+    if (!reservation.ok) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
-        errorMessage:
-          message === "credits_exhausted"
-            ? "Web research uses paid provider calls, so it needs tool balance before it runs."
-            : "Tool balance is unavailable for web research.",
-        details: {
-          tool_kind: "web_research",
-          required_credits: webResearchCredits,
-          paid_usage_billing_mode: "prepaid_required",
-        },
+        errorCode: reservation.code,
+        errorMessage: reservation.message,
+        details: reservation.details,
       };
     }
-
     let result: Awaited<ReturnType<typeof executeWebResearch>>;
     try {
       result = await executeWebResearch({

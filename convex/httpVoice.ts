@@ -1,9 +1,6 @@
-import { internal } from "./_generated/api";
 import {
   creditsToUsd,
   estimateVoiceTranscriptionVendorCostUsd,
-  PAID_TOOL_PRICING_VERSION,
-  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceVoiceTranscriptionCredits,
   VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS,
   type VoiceTranscriptionProvider,
@@ -12,6 +9,9 @@ import {
   settleReservedCreditsBestEffort,
   settleReservedCreditsStrict,
 } from "./workspaceCreditSettlement";
+import {
+  reservePaidToolCredits,
+} from "./paidToolCreditReservation";
 
 type VoiceTranscribeInput = {
   audio_base64?: unknown;
@@ -639,46 +639,41 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         const reserveQuote =
           fallbackKeyPresent && fallbackQuote.credits > primaryQuote.credits ? fallbackQuote : primaryQuote;
         const voiceCredits = reserveQuote.credits;
-        try {
-          await (ctx as any).runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
-            creditKey,
-            userId: auth.actor.userId,
-            toolName: "voice_transcribe",
-            action: "transcribe",
-            vendor: "openai_groq",
-            credits: voiceCredits,
-            rawVendorCostUsd: reserveQuote.rawVendorCostUsd,
-            polynetPriceUsd: creditsToUsd(voiceCredits),
-            metadata: {
-              pricing_version: PAID_TOOL_PRICING_VERSION,
-              target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-              pricing_mode: "duration_seconds",
-              reserve_provider: reserveQuote.provider,
-              reserve_model: reserveQuote.model,
-              reserve_vendor_cost_usd: reserveQuote.rawVendorCostUsd,
-              reserve_polynet_price_usd: reserveQuote.polynetPriceUsd,
-              duration_seconds: durationEvidence.durationSeconds,
-              duration_ms: durationEvidence.durationMs,
-              duration_source: durationEvidence.source,
-              surface: surface || null,
-              mime_type: mimeType,
-              audio_bytes: bytes.byteLength,
-            },
-            nowMs: Date.now(),
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+        const reservation = await reservePaidToolCredits({
+          ctx,
+          creditKey,
+          userId: auth.actor.userId,
+          toolKind: "voice_input",
+          toolName: "voice_transcribe",
+          action: "transcribe",
+          vendor: "openai_groq",
+          credits: voiceCredits,
+          rawVendorCostUsd: reserveQuote.rawVendorCostUsd,
+          polynetPriceUsd: creditsToUsd(voiceCredits),
+          metadata: {
+            pricing_mode: "duration_seconds",
+            reserve_provider: reserveQuote.provider,
+            reserve_model: reserveQuote.model,
+            reserve_vendor_cost_usd: reserveQuote.rawVendorCostUsd,
+            reserve_polynet_price_usd: reserveQuote.polynetPriceUsd,
+            duration_seconds: durationEvidence.durationSeconds,
+            duration_ms: durationEvidence.durationMs,
+            duration_source: durationEvidence.source,
+            surface: surface || null,
+            mime_type: mimeType,
+            audio_bytes: bytes.byteLength,
+          },
+          nowMs: Date.now(),
+        });
+        if (!reservation.ok) {
           return jsonResponse(req, 402, {
             ok: false,
-            error: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
-            code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+            error: reservation.code,
+            code: reservation.code,
             tool_kind: "voice_input",
             required_credits: voiceCredits,
-            paid_usage_billing_mode: "prepaid_required",
-            message:
-              message === "credits_exhausted"
-                ? "Add balance to use voice input."
-                : "Tool balance is unavailable for voice input.",
+            paid_usage_billing_mode: reservation.details.paid_usage_billing_mode,
+            message: reservation.message,
           });
         }
 

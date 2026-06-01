@@ -7507,6 +7507,7 @@ export default function App() {
         message: message.trim() || null,
         toolKind: details?.toolKind ?? "voice_input",
         requiredCredits: details?.requiredCredits ?? null,
+        paidUsageBillingMode: details?.paidUsageBillingMode ?? null,
       });
     },
     appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),

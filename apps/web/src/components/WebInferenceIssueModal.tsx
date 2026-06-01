@@ -48,6 +48,13 @@ type WebInferenceIssueModalProps = {
   onStartWorkspaceCardSetupCheckout?: () => Promise<void> | void;
 };
 
+function paidToolUiLabel(kind: PaidToolKind | null): string {
+  if (kind === "workspace_tools") return "workspace tools";
+  if (kind === "web_research") return "web research";
+  if (kind === "voice_input") return "voice input";
+  return "premium tools";
+}
+
 export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
   const {
     hasSession,
@@ -100,12 +107,13 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     inferenceIssueModal.requiredCredits > 0
       ? inferenceIssueModal.requiredCredits
       : null;
+  const paidToolLabel = paidToolUiLabel(paidToolKind);
 
   const paidToolTitle =
     requiresWorkspaceCardSetup
       ? paidUsageBillingMode === "card_required"
         ? "Add a card to create another computer"
-        : "Add a card to use workspace tools"
+        : `Add a card to use ${paidToolLabel}`
     : isWorkspaceBillingIssue
       ? "Add balance to use premium tools"
       : "Add balance to use premium tools";
@@ -210,7 +218,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
             <div className="workspace-billing-trust-panel" aria-label="Workspace billing details">
               <div className="workspace-billing-trust-title">No charge today</div>
               <div className="workspace-billing-trust-copy">
-                Usage is billed only when workspace tools run.
+                Usage is billed only when premium tools run.
               </div>
             </div>
           )}

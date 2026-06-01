@@ -4,6 +4,10 @@ import {
 } from "./convexAuthSessionProbe";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { isStandaloneWebApp } from "./browserRuntimeMode";
+import {
+  normalizePaidUsageBillingMode,
+  type PaidUsageBillingMode,
+} from "./paidUsageBilling";
 import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
 
 export type AuthUser = {
@@ -58,6 +62,7 @@ export class VoiceTranscriptionRequestError extends Error {
   readonly code: string | null;
   readonly toolKind: PaidToolKind | null;
   readonly requiredCredits: number | null;
+  readonly paidUsageBillingMode: PaidUsageBillingMode | null;
 
   constructor(args: {
     message: string;
@@ -65,6 +70,7 @@ export class VoiceTranscriptionRequestError extends Error {
     code?: string | null;
     toolKind?: PaidToolKind | null;
     requiredCredits?: number | null;
+    paidUsageBillingMode?: PaidUsageBillingMode | null;
   }) {
     super(args.message);
     this.name = "VoiceTranscriptionRequestError";
@@ -72,6 +78,7 @@ export class VoiceTranscriptionRequestError extends Error {
     this.code = args.code ?? null;
     this.toolKind = args.toolKind ?? null;
     this.requiredCredits = args.requiredCredits ?? null;
+    this.paidUsageBillingMode = args.paidUsageBillingMode ?? null;
   }
 }
 
@@ -127,6 +134,9 @@ async function readVoiceTranscriptionRequestError(
       paid_tool_kind?: unknown;
       required_credits?: unknown;
       requiredCredits?: unknown;
+      paid_usage_billing_mode?: unknown;
+      paidUsageBillingMode?: unknown;
+      billing_mode?: unknown;
     };
     const message =
       readString(json.message) ??
@@ -141,6 +151,11 @@ async function readVoiceTranscriptionRequestError(
       ),
       requiredCredits: normalizePositiveCredits(
         json.required_credits ?? json.requiredCredits,
+      ),
+      paidUsageBillingMode: normalizePaidUsageBillingMode(
+        json.paid_usage_billing_mode ??
+          json.paidUsageBillingMode ??
+          json.billing_mode,
       ),
     });
   } catch {
