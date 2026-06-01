@@ -9502,7 +9502,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-panel-input:focus {
-  border-color: color-mix(in srgb, var(--accent-pink) 42%, var(--border-default));
+  border-color: color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 80%, transparent);
+  box-shadow: none;
 }
 
 .community-dm-panel-send {
