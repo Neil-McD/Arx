@@ -1317,12 +1317,14 @@ export default defineSchema({
     agentKind: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("left")),
     lastReadSeq: v.number(),
+    lastActivityAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_conversation_user", ["conversationId", "userId"])
-    .index("by_user_status", ["userId", "status"]),
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_status_lastActivityAt", ["userId", "status", "lastActivityAt"]),
 
   dmMessages: defineTable({
     conversationId: v.id("dmConversations"),

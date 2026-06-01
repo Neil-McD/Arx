@@ -25,13 +25,30 @@ const dmCandidateHelper = directMessages.slice(
   directMessages.indexOf("async function listDirectMessageCandidateUserIdsForCommunity"),
   directMessages.indexOf("export const ensureDirectConversationFromCommunity"),
 );
+const dmEnsureUserParticipantHelper = directMessages.slice(
+  directMessages.indexOf("async function ensureUserParticipant"),
+  directMessages.indexOf("async function touchActiveConversationParticipantsActivity"),
+);
+const dmEnsureConversationMutation = directMessages.slice(
+  directMessages.indexOf("export const ensureDirectConversationFromCommunity"),
+  directMessages.indexOf("export const listEligibleDirectMessageRecipients"),
+);
+const dmInboxQuery = directMessages.slice(
+  directMessages.indexOf("export const listMyDirectConversations"),
+  directMessages.indexOf("export const markDirectConversationRead"),
+);
+const dmSendMutation = directMessages.slice(
+  directMessages.indexOf("export const sendDirectMessage"),
+);
 
 assert.match(schema, /dmConversations: defineTable\(\{[\s\S]*kind: v\.literal\("direct"\)[\s\S]*canonicalKey: v\.string\(\)[\s\S]*createdFromCommunityId: v\.id\("communities"\)/, "DM conversations must be direct rooms created from community context");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\)\)/, "DM participants must support users and future agents");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastReadSeq: v\.number\(\)/, "DM participants must store per-user read position");
+assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastActivityAt: v\.optional\(v\.number\(\)\)/, "DM participants must store optional inbox activity ordering");
 assert.match(schema, /dmMessages: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*senderType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\), v\.literal\("system"\)\)/, "DM messages must be conversation-scoped and agent-native");
 assert.match(schema, /\.index\("by_canonicalKey", \["canonicalKey"\]\)/, "direct conversations must have a canonical pair key");
 assert.match(schema, /\.index\("by_user_status", \["userId", "status"\]\)/, "participants must support a current-user inbox query");
+assert.match(schema, /\.index\("by_user_status_lastActivityAt", \["userId", "status", "lastActivityAt"\]\)/, "participants must support bounded inbox activity ordering");
 
 assert.match(directMessages, /ensureDirectConversationFromCommunity = mutation/, "backend must expose community-context DM creation");
 assert.match(directMessages, /targetUserId: v\.string\(\)/, "DM creation must target a public user id");
@@ -74,10 +91,27 @@ assert.match(directMessages, /isDone: rawPage\.isDone/, "DM recipient lookup mus
 assert.match(directMessages, /viewer_last_read_seq/, "conversation projection must expose the viewer read cursor");
 assert.match(directMessages, /unread_count/, "conversation projection must expose unread count");
 assert.match(directMessages, /has_unread/, "conversation projection must expose unread state");
+assert.match(dmEnsureUserParticipantHelper, /touchActivity: boolean/, "participant ensure helper must distinguish creation/send activity from open-only access");
+assert.match(dmEnsureUserParticipantHelper, /fallbackActivityAt\?: number/, "participant ensure helper must support historical activity initialization");
+assert.match(dmEnsureUserParticipantHelper, /if \(args\.touchActivity\) \{[\s\S]*patch\.lastActivityAt = args\.nowMs[\s\S]*fallbackActivityAt/, "participant ensure helper must only bump existing activity when explicitly requested");
+assert.doesNotMatch(dmEnsureUserParticipantHelper, /if \(existing\) \{[\s\S]*lastActivityAt: args\.nowMs[\s\S]*return;/, "opening an existing DM must not blindly bump participant activity to now");
+assert.match(dmEnsureConversationMutation, /const isNewConversation = !conversation/, "DM creation must track whether the canonical room is new");
+assert.match(dmEnsureConversationMutation, /const participantFallbackActivityAt = isNewConversation \? nowMs : conversation\.updatedAt/, "existing DM opens must use historical conversation activity as fallback");
+assert.match(dmEnsureConversationMutation, /ensureUserParticipant\(\{[\s\S]*touchActivity: isNewConversation,[\s\S]*fallbackActivityAt: participantFallbackActivityAt[\s\S]*ensureUserParticipant\(\{[\s\S]*touchActivity: isNewConversation,[\s\S]*fallbackActivityAt: participantFallbackActivityAt/, "DM creation must only touch participant activity for newly created conversations");
+assert.match(dmInboxQuery, /withIndex\("by_user_status_lastActivityAt"[\s\S]*userId[\s\S]*status/, "inbox query must use the bounded participant activity index");
+assert.match(dmInboxQuery, /\.order\("desc"\)[\s\S]*\.take\(safeLimit\)/, "inbox query must read only the visible participant window");
+assert.doesNotMatch(dmInboxQuery, /\.collect\(\)/, "inbox query must not collect every participant row for a user");
+assert.match(directMessages, /async function touchActiveConversationParticipantsActivity/, "DM writes must have a helper for participant inbox activity");
+assert.match(directMessages, /touchActiveConversationParticipantsActivity[\s\S]*lastActivityAt: args\.nowMs/, "participant activity helper must update lastActivityAt");
 assert.match(directMessages, /markDirectConversationRead = mutation/, "backend must expose an authoritative read mutation");
 assert.match(directMessages, /ctx\.db\.patch\(participant\._id,[\s\S]*lastReadSeq: lastSeq/, "read mutation must advance the participant read cursor");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
-assert.match(directMessages, /ctx\.db\.patch\(participant\._id,[\s\S]*lastReadSeq: seq/, "send mutation must mark the sender read through their own message");
+assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
+assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
+assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*listConversationParticipants[\s\S]*participantType === "user"[\s\S]*peerParticipants\.length !== 1/, "DM send access guard must require exactly one active human peer");
+assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.conversation\.createdFromCommunityId,[\s\S]*userId: args\.viewerUserId[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.conversation\.createdFromCommunityId,[\s\S]*userId: peerUserId/, "DM send access guard must recheck viewer and peer access to the conversation community");
+assert.match(directMessages, /sendDirectMessage = mutation[\s\S]*requireDirectConversationSendAccess\(\{[\s\S]*conversation,[\s\S]*viewerUserId/, "send mutation must enforce continuous shared-community access before appending");
+assert.match(dmSendMutation, /touchActiveConversationParticipantsActivity\(\{[\s\S]*nowMs,[\s\S]*senderParticipantId: participant\._id,[\s\S]*senderLastReadSeq: seq/, "send mutation must update participant inbox activity and mark the sender read through their own message");
 assert.doesNotMatch(directMessages, /follow|follower|following/i, "first DM slice must not introduce follow graph semantics");
 
 assert.match(gateway, /ensureCloudDirectConversationFromCommunity/, "web gateway must open or create direct conversations");

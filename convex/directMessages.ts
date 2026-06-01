@@ -43,6 +43,7 @@ type DirectMessageParticipantLike = {
   agentKind?: string;
   status: "active" | "left";
   lastReadSeq: number;
+  lastActivityAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -140,6 +141,8 @@ async function ensureUserParticipant(args: {
   conversationId: any;
   userId: any;
   nowMs: number;
+  touchActivity: boolean;
+  fallbackActivityAt?: number;
 }): Promise<void> {
   const existing = (await args.ctx.db
     .query("dmParticipants" as any)
@@ -148,23 +151,71 @@ async function ensureUserParticipant(args: {
     )
     .first()) as DirectMessageParticipantLike | null;
   if (existing) {
+    const patch: Record<string, unknown> = {};
     if (existing.status !== "active") {
-      await args.ctx.db.patch(existing._id, {
-        status: "active",
-        updatedAt: args.nowMs,
-      });
+      patch.status = "active";
+    }
+    if (args.touchActivity) {
+      patch.lastActivityAt = args.nowMs;
+    } else if (
+      typeof existing.lastActivityAt !== "number" &&
+      typeof args.fallbackActivityAt === "number" &&
+      Number.isFinite(args.fallbackActivityAt)
+    ) {
+      patch.lastActivityAt = args.fallbackActivityAt;
+    }
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = args.nowMs;
+      await args.ctx.db.patch(existing._id, patch);
     }
     return;
   }
+  const initialActivityAt =
+    args.touchActivity ||
+    typeof args.fallbackActivityAt !== "number" ||
+    !Number.isFinite(args.fallbackActivityAt)
+      ? args.nowMs
+      : args.fallbackActivityAt;
   await args.ctx.db.insert("dmParticipants" as any, {
     conversationId: args.conversationId,
     participantType: "user",
     userId: args.userId,
     status: "active",
     lastReadSeq: 0,
+    lastActivityAt: initialActivityAt,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
+}
+
+async function touchActiveConversationParticipantsActivity(args: {
+  ctx: any;
+  conversationId: any;
+  nowMs: number;
+  senderParticipantId?: any;
+  senderLastReadSeq?: number;
+}): Promise<void> {
+  const senderParticipantKey = normalizeIdValue(args.senderParticipantId);
+  const senderLastReadSeq = Math.max(0, Math.floor(args.senderLastReadSeq ?? 0));
+  const participants = await listConversationParticipants(args.ctx, args.conversationId);
+  await Promise.all(
+    participants
+      .filter((participant) => participant.status === "active")
+      .map((participant) => {
+        const patch: Record<string, unknown> = {
+          lastActivityAt: args.nowMs,
+          updatedAt: args.nowMs,
+        };
+        if (
+          senderParticipantKey &&
+          normalizeIdValue(participant._id) === senderParticipantKey &&
+          senderLastReadSeq > Math.max(0, Math.floor(participant.lastReadSeq ?? 0))
+        ) {
+          patch.lastReadSeq = senderLastReadSeq;
+        }
+        return args.ctx.db.patch(participant._id, patch);
+      }),
+  );
 }
 
 async function requireActiveUserParticipant(args: {
@@ -185,6 +236,51 @@ async function requireActiveUserParticipant(args: {
     .first()) as DirectMessageParticipantLike | null;
   if (!participant || participant.status !== "active") throw new Error("dm_participant_required");
   return { conversation, participant };
+}
+
+async function requireDirectConversationSendAccess(args: {
+  ctx: any;
+  conversation: DirectMessageConversationLike;
+  viewerUserId: any;
+}): Promise<void> {
+  if (args.conversation.kind !== DIRECT_CONVERSATION_KIND) {
+    throw new Error("dm_conversation_access_required");
+  }
+
+  const viewerUserKey = normalizeIdValue(args.viewerUserId);
+  const activeUserParticipants = (await listConversationParticipants(args.ctx, args.conversation._id))
+    .filter(
+      (participant) =>
+        participant.status === "active" &&
+        participant.participantType === "user" &&
+        normalizeIdValue(participant.userId),
+    );
+  const viewerParticipant = activeUserParticipants.find(
+    (participant) => normalizeIdValue(participant.userId) === viewerUserKey,
+  );
+  const peerParticipants = activeUserParticipants.filter(
+    (participant) => normalizeIdValue(participant.userId) !== viewerUserKey,
+  );
+
+  if (!viewerParticipant || peerParticipants.length !== 1) {
+    throw new Error("dm_conversation_access_required");
+  }
+
+  const peerUserId = peerParticipants[0]?.userId;
+  try {
+    await requireCommunityChatAccess({
+      ctx: args.ctx,
+      communityId: args.conversation.createdFromCommunityId,
+      userId: args.viewerUserId,
+    });
+    await requireCommunityChatAccess({
+      ctx: args.ctx,
+      communityId: args.conversation.createdFromCommunityId,
+      userId: peerUserId,
+    });
+  } catch {
+    throw new Error("dm_conversation_access_required");
+  }
 }
 
 async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike) {
@@ -465,8 +561,9 @@ export const ensureDirectConversationFromCommunity = mutation({
     const nowMs = Date.now();
     const canonicalKey = buildDirectConversationCanonicalKey(viewerUserId, targetUser._id);
     let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
+    const isNewConversation = !conversation;
 
-    if (!conversation) {
+    if (isNewConversation) {
       const conversationId = await ctx.db.insert("dmConversations" as any, {
         kind: DIRECT_CONVERSATION_KIND,
         canonicalKey,
@@ -477,23 +574,28 @@ export const ensureDirectConversationFromCommunity = mutation({
         updatedAt: nowMs,
       });
       conversation = (await ctx.db.get(conversationId)) as DirectMessageConversationLike | null;
-    } else {
+    } else if (conversation) {
       await ctx.db.patch(conversation._id, { updatedAt: nowMs });
       conversation = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
     }
     if (!conversation) throw new Error("dm_conversation_create_failed");
+    const participantFallbackActivityAt = isNewConversation ? nowMs : conversation.updatedAt;
 
     await ensureUserParticipant({
       ctx,
       conversationId: conversation._id,
       userId: viewerUserId,
       nowMs,
+      touchActivity: isNewConversation,
+      fallbackActivityAt: participantFallbackActivityAt,
     });
     await ensureUserParticipant({
       ctx,
       conversationId: conversation._id,
       userId: targetUser._id,
       nowMs,
+      touchActivity: isNewConversation,
+      fallbackActivityAt: participantFallbackActivityAt,
     });
 
     return await mapDirectConversation(ctx, conversation, { viewerUserId });
@@ -706,17 +808,30 @@ export const listMyDirectConversations = query({
     const safeLimit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 30)));
     const participants = (await ctx.db
       .query("dmParticipants" as any)
-      .withIndex("by_user_status", (q: any) => q.eq("userId", viewerUserId).eq("status", "active"))
-      .collect()) as DirectMessageParticipantLike[];
-    const conversations: DirectMessageConversationLike[] = [];
+      .withIndex("by_user_status_lastActivityAt", (q: any) =>
+        q.eq("userId", viewerUserId).eq("status", "active"),
+      )
+      .order("desc")
+      .take(safeLimit)) as DirectMessageParticipantLike[];
+    const conversationRows: Array<{
+      conversation: DirectMessageConversationLike;
+      sortAt: number;
+    }> = [];
     for (const participant of participants) {
       const conversation = (await ctx.db.get(participant.conversationId)) as DirectMessageConversationLike | null;
-      if (conversation) conversations.push(conversation);
+      if (!conversation) continue;
+      conversationRows.push({
+        conversation,
+        sortAt:
+          typeof participant.lastActivityAt === "number" && Number.isFinite(participant.lastActivityAt)
+            ? participant.lastActivityAt
+            : conversation.updatedAt,
+      });
     }
-    conversations.sort((left, right) => right.updatedAt - left.updatedAt);
+    conversationRows.sort((left, right) => right.sortAt - left.sortAt);
     return await Promise.all(
-      conversations.slice(0, safeLimit).map((row) =>
-        mapDirectConversation(ctx, row, { viewerUserId }),
+      conversationRows.map((row) =>
+        mapDirectConversation(ctx, row.conversation, { viewerUserId }),
       ),
     );
   },
@@ -801,6 +916,11 @@ export const sendDirectMessage = mutation({
       userId: viewerUserId,
     });
     await requireProfileSetupCompleteForUser(ctx, viewerUserId);
+    await requireDirectConversationSendAccess({
+      ctx,
+      conversation,
+      viewerUserId,
+    });
 
     const nowMs = Date.now();
     const seq = Math.max(0, Math.floor(conversation.lastSeq ?? 0)) + 1;
@@ -819,12 +939,13 @@ export const sendDirectMessage = mutation({
       lastMessageAt: nowMs,
       updatedAt: nowMs,
     });
-    if (seq > Math.max(0, Math.floor(participant.lastReadSeq ?? 0))) {
-      await ctx.db.patch(participant._id, {
-        lastReadSeq: seq,
-        updatedAt: nowMs,
-      });
-    }
+    await touchActiveConversationParticipantsActivity({
+      ctx,
+      conversationId: conversation._id,
+      nowMs,
+      senderParticipantId: participant._id,
+      senderLastReadSeq: seq,
+    });
     const message = (await ctx.db.get(messageId)) as DirectMessageLike | null;
     if (!message) throw new Error("dm_message_create_failed");
     return await mapDirectMessage(ctx, message);
