@@ -12075,31 +12075,6 @@ button.chat-reply-quote:hover {
   color: var(--text-primary);
 }
 
-.resource-list {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.resource-list.resource-list-empty {
-  justify-content: center;
-}
-
-.resource-list.resource-list-empty .chat-empty-state {
-  width: 100%;
-}
-
-.resource-library {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  padding: 4px 2px 2px 1px;
-  scroll-padding-top: 4px;
-}
-
 .knowledge-workspace {
   display: grid;
   grid-template-columns: minmax(176px, 224px) minmax(0, 1fr);
@@ -12111,16 +12086,10 @@ button.chat-reply-quote:hover {
 }
 
 .knowledge-resource-rail {
-  position: sticky;
-  top: 4px;
   align-self: start;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
-  min-height: 0;
-  max-height: calc(100dvh - 24px);
-  overflow: hidden;
   border-right: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   padding-right: 12px;
 }
@@ -12149,7 +12118,6 @@ button.chat-reply-quote:hover {
   gap: 12px;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
   padding: 0 4px 2px 0;
 }
 
@@ -12644,7 +12612,6 @@ button.chat-reply-quote:hover {
 .knowledge-resource-reader {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
   padding: 0 2px 2px 0;
 }
 
@@ -13826,23 +13793,16 @@ button.chat-reply-quote:hover {
 
   .knowledge-workspace {
     grid-template-columns: minmax(0, 1fr);
-    overflow: auto;
   }
 
   .knowledge-resource-rail {
-    position: static;
     border-right: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
     padding: 0 0 12px;
-    min-height: auto;
-    max-height: none;
-    overflow: visible;
   }
 
   .knowledge-resource-list {
     display: grid;
-    max-height: 260px;
-    overflow: auto;
     padding: 0 0 2px;
   }
 
