@@ -362,10 +362,10 @@ assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "globa
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.doesNotMatch(css, /\.community-dm-panel::before|\.community-dm-panel::after/, "DM panel must not cover readable inbox or chat content with global pseudo-element scrims");
-assert.match(css, /\.community-dm-panel-header,[\s\S]*\.community-dm-panel-composer,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed chrome must reuse the existing glass material without adding overlay geometry");
-assert.match(css, /\.community-dm-panel-messages \{[\s\S]*overflow: auto/, "DM conversation messages must own scrolling without a readability-blocking overlay");
-assert.match(css, /\.community-dm-inbox-list \{[\s\S]*overflow: auto/, "DM inbox rows must own scrolling without a readability-blocking overlay");
-assert.match(css, /\.community-dm-recipient-list \{[\s\S]*overflow: auto/, "DM recipient rows must own scrolling without a readability-blocking overlay");
+assert.match(css, /\.community-dm-panel-header,[\s\S]*\.community-dm-panel-composer,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed chrome must reuse the existing glass material above the scroll layer");
+assert.match(css, /\.community-dm-panel-messages \{[\s\S]*overflow: auto;[\s\S]*margin: -50px -12px -46px 0;[\s\S]*padding: 56px 14px 50px 2px/, "DM conversation messages must scroll underneath existing glass header and composer chrome");
+assert.match(css, /\.community-dm-inbox-list \{[\s\S]*overflow: auto;[\s\S]*margin: -50px -12px 0 0;[\s\S]*padding: 52px 14px 2px 2px/, "DM inbox rows must scroll underneath existing glass header chrome");
+assert.match(css, /\.community-dm-recipient-list \{[\s\S]*overflow: auto;[\s\S]*margin-top: -46px;[\s\S]*padding: 48px 2px 2px/, "DM recipient rows must scroll underneath existing glass search chrome");
 assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*background: transparent/, "DM conversation back control must stay flat, not circular");
 assert.match(css, /\.community-dm-panel-typing/, "DM conversation panel must style typing presence");
 assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*display: none/, "empty DM typing row must not steal vertical message space");

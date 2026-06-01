@@ -9356,6 +9356,9 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-panel-composer,
 .community-dm-inbox-header,
 .community-dm-recipient-search {
+  position: relative;
+  z-index: 2;
+  border-radius: 14px;
   background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
@@ -9452,8 +9455,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 8px;
   overflow: auto;
-  margin-right: -12px;
-  padding: 6px 14px 2px 2px;
+  margin: -50px -12px -46px 0;
+  padding: 56px 14px 50px 2px;
 }
 
 .community-dm-panel-empty {
@@ -9821,8 +9824,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
-  margin-right: -12px;
-  padding: 2px 14px 2px 2px;
+  margin: -50px -12px 0 0;
+  padding: 52px 14px 2px 2px;
 }
 
 .community-dm-inbox-panel .community-dm-panel-empty {
@@ -9858,7 +9861,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
-  padding: 2px;
+  margin-top: -46px;
+  padding: 48px 2px 2px;
 }
 
 .community-dm-inbox-row {
