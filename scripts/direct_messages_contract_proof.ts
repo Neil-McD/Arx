@@ -381,8 +381,8 @@ assert.doesNotMatch(css, /\.community-dm-panel::before|\.community-dm-panel::aft
 assert.match(css, /\.community-dm-panel \{[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM panel root must keep the profile-style glass material");
 assert.match(dmInternalChromeCss, /\.community-dm-panel-header,[\s\S]*\.community-dm-panel-composer,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*border-radius: 14px;[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed chrome must keep only a light glass material on the existing covered areas");
 assert.doesNotMatch(dmInternalChromeCss, /box-shadow:|border: 1px solid/, "DM fixed chrome must not become nested glass cards");
-assert.match(dmPanelMessagesCss, /overflow: auto;[\s\S]*margin-right: -12px;[\s\S]*padding: 6px 14px 2px 2px/, "DM conversation messages must preserve the original viewport cutoff above the composer");
-assert.doesNotMatch(dmPanelMessagesCss, /margin: -50px -12px -46px 0|padding: 56px 14px 50px 2px/, "DM conversation messages must not scroll underneath the header and composer");
+assert.match(dmPanelMessagesCss, /overflow: auto;[\s\S]*margin: -50px -12px -46px 0;[\s\S]*padding: 56px 14px 50px 2px/, "DM conversation messages must keep resting content in the original viewport while allowing scroll-under behind the fixed chrome");
+assert.doesNotMatch(dmPanelMessagesCss, /margin-right: -12px;[\s\S]*padding: 6px 14px 2px 2px/, "DM conversation messages must not hard-cut at the fixed header and composer");
 assert.match(dmInboxListCss, /overflow: auto;[\s\S]*padding: 2px/, "DM inbox rows must preserve the original list viewport");
 assert.doesNotMatch(dmInboxListCss, /margin: -50px -12px 0 0|padding: 52px 14px 2px 2px/, "DM inbox rows must not scroll underneath the header");
 assert.match(dmRecipientListCss, /overflow: auto;[\s\S]*padding: 2px/, "DM recipient rows must preserve the original list viewport");
