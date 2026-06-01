@@ -9351,6 +9351,16 @@ button.community-launch-knowledge-integration-chip:disabled {
   height: 28px;
 }
 
+.community-dm-panel-header,
+.community-dm-composer-attachments,
+.community-dm-panel-composer,
+.community-dm-inbox-header,
+.community-dm-recipient-search {
+  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+}
+
 .community-dm-panel-header {
   display: flex;
   align-items: center;

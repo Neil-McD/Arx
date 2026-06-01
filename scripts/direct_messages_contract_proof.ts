@@ -362,6 +362,7 @@ assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "globa
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.doesNotMatch(css, /\.community-dm-panel::before|\.community-dm-panel::after/, "DM panel must not cover readable inbox or chat content with global pseudo-element scrims");
+assert.match(css, /\.community-dm-panel-header,[\s\S]*\.community-dm-panel-composer,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed chrome must reuse the existing glass material without adding overlay geometry");
 assert.match(css, /\.community-dm-panel-messages \{[\s\S]*overflow: auto/, "DM conversation messages must own scrolling without a readability-blocking overlay");
 assert.match(css, /\.community-dm-inbox-list \{[\s\S]*overflow: auto/, "DM inbox rows must own scrolling without a readability-blocking overlay");
 assert.match(css, /\.community-dm-recipient-list \{[\s\S]*overflow: auto/, "DM recipient rows must own scrolling without a readability-blocking overlay");
