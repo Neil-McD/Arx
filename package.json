@@ -129,6 +129,7 @@
     "check:workspace-billing-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_billing_surface_proof.ts",
     "check:provider-cost-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/provider_cost_accounting_contract_proof.ts",
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
+    "check:web-research-local-url-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/web_research_local_url_policy_proof.ts",
     "check:runtime-preview-probe-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_probe_proof.ts",
     "check:workspace-credit-accounting-behavior": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_behavior_test.ts",
     "check:blaxel-workspace-lifecycle-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/blaxel_workspace_lifecycle_accounting_proof.ts",

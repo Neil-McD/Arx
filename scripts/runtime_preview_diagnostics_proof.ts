@@ -98,7 +98,7 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     maxConsecutiveFailures: 3,
     maxNoProgressSteps: 3,
   },
-  allowedToolNames: ["terminal_start", "terminal_read", "computer_screenshot"],
+  allowedToolNames: ["terminal_start", "terminal_read", "web_research", "computer_open_url", "computer_screenshot"],
   harnessName: "chat_tools",
   runtimeTurnContext: buildRuntimeTurnContextPacket({
     activeBackgroundTerminals: [
@@ -118,5 +118,8 @@ assert.match(prompt, /preview_process=blank/);
 assert.doesNotMatch(prompt, /; preview=blank/);
 assert.match(prompt, /terminal health, preview transport\/render probe, browser\/computer observation, then app root\/runtime\/CSS diagnosis/);
 assert.match(prompt, /preview_process as process\/transport availability only/);
+assert.match(prompt, /Do not use web_research for localhost, 127\.0\.0\.1, private-network URLs, sandbox preview URLs, or app visual verification/);
+assert.match(prompt, /For localhost app checks, use bash or terminal_read inside the workspace/);
+assert.match(prompt, /Do not open plain localhost or 127\.0\.0\.1 with computer tools unless the computer surface is explicitly bound to the workspace preview session/);
 
 console.log("runtime_preview_diagnostics_proof: ok");

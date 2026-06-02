@@ -445,6 +445,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   if (params.allowedToolNames.includes("web_research")) {
     toolGuidance.push(
       "- Use web_research for current external facts, official references, frontier signal, or information unlikely to exist in workspace or product docs.",
+      "- Do not use web_research for localhost, 127.0.0.1, private-network URLs, sandbox preview URLs, or app visual verification. For sandbox-local checks, use workspace bash/terminal evidence and the workspace preview surface.",
       "- If you start web research, complete the research loop: find relevant sources, open the best sources, extract facts, synthesize the answer, and name or cite the sources used.",
       "- For latest/current/recent queries, anchor on the runtime date, compare dates when available, and state exact dates when they matter.",
       "- Use short, specific search queries. Refine noisy searches instead of overstuffing the first query.",
@@ -514,12 +515,14 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- For previewable apps, use one dense app shell that fits inline and expanded preview modes without page-level overflow.",
       "- Prefer one active background terminal. Reuse or stop terminals based on fresh terminal state.",
       "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/computer observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
+      "- For localhost app checks, use bash or terminal_read inside the workspace. Do not route localhost through web_research or a generic public web tool.",
       "- After a successful background terminal start, do not echo the returned preview/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
     );
   }
   if (params.allowedToolNames.includes("computer_open_url")) {
     toolGuidance.push(
       "- Use computer tools only when visual interaction is materially necessary after direct tools or preview links are insufficient.",
+      "- Do not open plain localhost or 127.0.0.1 with computer tools unless the computer surface is explicitly bound to the workspace preview session. Prefer the workspace preview surface for sandbox apps.",
       "- Treat screenshots and computer-tool errors as ground truth. Stop after one reasonable retry when the same blocker persists.",
     );
   }

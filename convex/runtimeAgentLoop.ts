@@ -29,6 +29,7 @@ import {
 } from "./workspaceCreditBudgetSignal.ts";
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
+import { classifyWebResearchUrlAccess } from "../shared/webResearchUrlPolicy.ts";
 import {
   settleReservedCreditsBestEffort,
   settleReservedCreditsStrict,
@@ -995,6 +996,18 @@ async function executeRetrievalHarnessTool(params: {
         : String(normalizedArgs.action ?? "").trim() === "open_page"
           ? "open_page"
           : "search";
+    if (action === "open_page" || action === "find_in_page") {
+      const access = classifyWebResearchUrlAccess(String(normalizedArgs.url ?? "").trim());
+      if (!access.ok) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: access.code ?? "invalid_tool_args",
+          errorMessage: access.message ?? "web_research requires a valid public web URL.",
+        };
+      }
+    }
     const webResearchAction = action as WebResearchCreditAction;
     const webResearchCredits = priceWebResearchCredits(webResearchAction);
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);

@@ -1,4 +1,4 @@
-import { decodeHtmlEntities, searchWithFallbackHtml } from "./fallbackHtmlSearchTransport";
+import { searchWithFallbackHtml } from "./fallbackHtmlSearchTransport";
 import { searchWithOpenAiWebSearch } from "./openAiWebSearchTransport";
 import { searchWithXAi } from "./xAiSearchTransport";
 import type {
@@ -12,29 +12,13 @@ import {
   estimateWebResearchVendorCostUsd,
   type WebResearchCreditAction,
 } from "../shared/workspaceCredits";
+import {
+  classifyWebResearchUrlAccess,
+  normalizeWebResearchUrl,
+} from "../shared/webResearchUrlPolicy.ts";
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
-}
-
-function normalizeUrl(rawUrl: string): string | null {
-  const trimmed = String(rawUrl ?? "").trim();
-  if (!trimmed) return null;
-  try {
-    const prefixed =
-      trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
-    const url = new URL(prefixed);
-    if (url.hostname === "duckduckgo.com" && url.pathname === "/l/") {
-      const redirected = url.searchParams.get("uddg");
-      if (redirected) {
-        return normalizeUrl(decodeHtmlEntities(redirected));
-      }
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 
 function isTimeSensitiveSearchQuery(query: string): boolean {
@@ -90,7 +74,7 @@ function dedupeResults(results: NormalizedSearchResult[]): NormalizedSearchResul
   const seen = new Set<string>();
   const deduped: NormalizedSearchResult[] = [];
   for (const result of results) {
-    const key = normalizeUrl(result.url);
+    const key = normalizeWebResearchUrl(result.url);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     deduped.push(result);
@@ -154,7 +138,7 @@ function mergeResultsWithDiversity(
       const batch = batches[batchIndex] ?? [];
       while (indexes[batchIndex] < batch.length) {
         const candidate = batch[indexes[batchIndex]++];
-        const key = normalizeUrl(candidate?.url ?? "");
+        const key = normalizeWebResearchUrl(candidate?.url ?? "");
         if (!candidate || !key || seen.has(key)) continue;
         seen.add(key);
         merged.push(candidate);
@@ -340,14 +324,15 @@ export async function searchWeb(params: {
 export async function fetchWebPage(params: {
   url: string;
 }): Promise<WebResearchResult> {
-  const url = normalizeUrl(params.url);
-  if (!url) {
+  const access = classifyWebResearchUrlAccess(params.url);
+  if (!access.ok || !access.normalizedUrl) {
     return {
       ok: false,
-      code: "invalid_tool_args",
-      message: "web_research open_page requires a valid http or https URL.",
+      code: access.code ?? "invalid_tool_args",
+      message: access.message ?? "web_research open_page requires a valid http or https URL.",
     };
   }
+  const url = access.normalizedUrl;
 
   let response: Response;
   try {
