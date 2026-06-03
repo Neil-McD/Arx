@@ -3,9 +3,14 @@ import type {
   ThreadWorkingStatePrompt,
 } from "./runtimePrompt.ts";
 import { deriveRuntimePreviewDiagnosis } from "./runtimePreviewDiagnostics.ts";
+import {
+  renderRuntimeTurnEnvelopeForPrompt,
+  type RuntimeTurnEnvelopeV1,
+} from "./runtimeTurnEnvelope.ts";
 
 export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
+  runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
   recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
@@ -22,6 +27,7 @@ export type RuntimeTurnContextSnapshotV1 = {
   version: 1;
   capturedAt: number;
   latestUserText: string | null;
+  runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null;
   threadWorkingState: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
   recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
@@ -418,6 +424,7 @@ function withRuntimePreviewDiagnosis(
 
 export function buildRuntimeTurnContextPacket(params: {
   latestUserText?: string | null;
+  runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals?: Array<RuntimeWorkspaceTerminalPrompt | null | undefined> | null;
   recentBackgroundProcessEvents?: Array<RuntimeBackgroundProcessEventPrompt | null | undefined> | null;
@@ -426,6 +433,7 @@ export function buildRuntimeTurnContextPacket(params: {
 }): RuntimeTurnContextPacket {
   return {
     latestUserText: params.latestUserText ?? null,
+    runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
     threadWorkingState: params.threadWorkingState ?? null,
     activeBackgroundTerminals: Array.isArray(params.activeBackgroundTerminals)
       ? params.activeBackgroundTerminals.filter(
@@ -571,6 +579,7 @@ export function buildRuntimeTurnContextSnapshot(params: {
     version: 1,
     capturedAt,
     latestUserText: compactSnapshotString(params.packet.latestUserText, 500),
+    runtimeTurnEnvelope: params.packet.runtimeTurnEnvelope ?? null,
     threadWorkingState: compactThreadWorkingStateSnapshot(
       params.packet.threadWorkingState,
     ),
@@ -810,6 +819,7 @@ export function renderRuntimeTurnContextForPrompt(
 ): string | null {
   if (!packet) return null;
   return joinPromptBlocks([
+    renderRuntimeTurnEnvelopeForPrompt(packet.runtimeTurnEnvelope),
     buildThreadWorkingStatePrompt(packet),
     buildWorkspaceProcessContextPrompt(packet),
     buildRecentBackgroundProcessEventsPrompt(packet),

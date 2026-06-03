@@ -86,6 +86,10 @@ import {
   type RuntimeCommunityPromptFields,
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
+import {
+  buildRuntimeTurnEnvelope,
+  type RuntimeTurnEnvelopeV1,
+} from "../shared/runtimeTurnEnvelope";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
@@ -1351,6 +1355,10 @@ async function executeRetrievalAgentLoop(
       eventKey?: string;
       payload: Record<string, unknown>;
     }) => Promise<void>;
+    refreshRuntimeContextSnapshot?: (
+      phase?: "started" | "active",
+      runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null,
+    ) => Promise<void>;
     touchRunHeartbeat?: () => Promise<void>;
   },
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
@@ -1450,6 +1458,20 @@ async function executeRetrievalAgentLoop(
   const latestUserTextForRuntimeContext =
     [...params.messages].reverse().find((message) => message.role === "user")
       ?.content ?? null;
+  const runtimeTurnEnvelope = buildRuntimeTurnEnvelope({
+    latestUserText: latestUserTextForRuntimeContext,
+    threadWorkingState: params.threadWorkingState,
+    threadId: params.threadId ?? null,
+    communityId: params.communityId ?? null,
+    projectId: params.projectId ?? null,
+    communityResourceLane: resolvedHarness.communityResourceLane,
+    allowedToolNames: effectiveAllowedToolNames,
+  });
+  try {
+    await params.refreshRuntimeContextSnapshot?.("started", runtimeTurnEnvelope);
+  } catch {
+    // Best-effort snapshot persistence; the explicit prompt envelope below remains canonical.
+  }
   const runtimeTurnContext = (
     await loadRuntimeTurnContextPacketForRun({
       ctx: params.ctx,
@@ -1458,6 +1480,7 @@ async function executeRetrievalAgentLoop(
       projectId: params.projectId ?? null,
       runId: params.runId,
       latestUserText: latestUserTextForRuntimeContext,
+      runtimeTurnEnvelope,
       threadWorkingState: params.threadWorkingState,
     })
   ).packet;
@@ -2530,6 +2553,10 @@ async function executeChatToolsAgentLoop(
       eventKey?: string;
       payload: Record<string, unknown>;
     }) => Promise<void>;
+    refreshRuntimeContextSnapshot?: (
+      phase?: "started" | "active",
+      runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null,
+    ) => Promise<void>;
     touchRunHeartbeat?: () => Promise<void>;
   },
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {

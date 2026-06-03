@@ -113,6 +113,7 @@
     "check:runtime-shell-command-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_shell_command_audit_proof.ts",
     "check:runtime-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_diagnostics_proof.ts",
     "check:runtime-working-state-ledger-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_working_state_ledger_proof.ts",
+    "check:runtime-turn-envelope-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_turn_envelope_proof.ts",
     "check:runtime-workspace-state-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_state_proof.ts",
     "check:workspace-active-project-coherence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_active_project_coherence_proof.ts",
     "check:workspace-draft-project-route-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_draft_project_route_proof.ts",

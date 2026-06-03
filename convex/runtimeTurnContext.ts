@@ -13,6 +13,7 @@ import type {
   RuntimeWorkspaceTerminalPrompt,
   ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
+import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
 import {
   mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
@@ -176,6 +177,7 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
   projectId?: string | null;
   runId?: string | null;
   latestUserText?: string | null;
+  runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   runtimeStop?: RuntimeTurnContextPacket["runtimeStop"];
   summarizeCurrentRunEvents?: boolean;
@@ -211,6 +213,7 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
   });
   const packet = buildRuntimeTurnContextPacket({
     latestUserText: params.latestUserText ?? null,
+    runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
     threadWorkingState,
     activeBackgroundTerminals,
     recentBackgroundProcessEvents,
