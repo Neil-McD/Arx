@@ -30286,6 +30286,16 @@ button.message-citation-chip:hover {
   margin-top: 6px;
 }
 
+.community-events-agenda-time {
+  display: grid;
+  gap: 3px;
+}
+
+.community-events-agenda-time span + span {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
 .community-events-agenda-location-row {
   display: flex;
   flex-wrap: wrap;

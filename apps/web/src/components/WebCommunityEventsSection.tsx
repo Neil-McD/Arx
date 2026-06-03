@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  communityEventDateTimeInputToIso,
+  getCommunityEventViewerTimeZone,
+  normalizeCommunityEventTimeZone,
+  toCommunityEventDateTimeInputValue,
+} from "../../../../shared/communityEventTime";
 import type {
   CommunityEvent,
   CommunityEventsActions,
@@ -17,6 +23,7 @@ type EventDraft = {
   description_md: string;
   starts_at: string;
   ends_at: string;
+  timezone: string;
   location_type: "online" | "physical" | "tbd";
   location_label: string;
   url: string;
@@ -25,6 +32,17 @@ type EventDraft = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_EVENT_TIME_ZONES = [
+  "UTC",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Berlin",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
 
 function startOfLocalMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -53,39 +71,61 @@ function getDefaultSelectedDayForMonth(monthDate: Date): string {
   return toLocalDateKey(startOfLocalMonth(monthDate));
 }
 
-function toLocalDateTimeInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-function parseInputDateTime(value: string): string | null {
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
-}
-
 function formatMonthLabel(date: Date): string {
   return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(date);
 }
 
-function formatEventTime(event: CommunityEvent): string {
+function getUniqueTimeZoneOptions(currentTimeZone: string): string[] {
+  const viewerTimeZone = getCommunityEventViewerTimeZone();
+  return [currentTimeZone, viewerTimeZone, ...DEFAULT_EVENT_TIME_ZONES]
+    .map((timeZone) => normalizeCommunityEventTimeZone(timeZone))
+    .filter((timeZone, index, all) => all.indexOf(timeZone) === index);
+}
+
+function formatTimeZoneLabel(timeZone: string, referenceDate: Date = new Date()): string {
+  const normalized = normalizeCommunityEventTimeZone(timeZone);
+  const displayName = normalized.split("/").pop()?.replace(/_/g, " ") ?? normalized;
+  const shortName = new Intl.DateTimeFormat(undefined, {
+    timeZone: normalized,
+    timeZoneName: "short",
+  })
+    .formatToParts(referenceDate)
+    .find((part) => part.type === "timeZoneName")?.value;
+  return shortName ? `${displayName} (${shortName})` : displayName;
+}
+
+function formatEventTimeInZone(event: CommunityEvent, timeZone: string, includeZoneName: boolean): string {
   const startsAt = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;
   const dateFormatter = new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone,
   });
   const timeFormatter = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    timeZone,
+    timeZoneName: includeZoneName ? "short" : undefined,
   });
   const startLabel = `${dateFormatter.format(startsAt)} at ${timeFormatter.format(startsAt)}`;
   if (!endsAt) return startLabel;
   return `${startLabel} - ${timeFormatter.format(endsAt)}`;
+}
+
+function formatEventTime(event: CommunityEvent): { primary: string; secondary: string | null } {
+  const viewerTimeZone = getCommunityEventViewerTimeZone();
+  const eventTimeZone = normalizeCommunityEventTimeZone(event.timezone);
+  const startsAt = new Date(event.starts_at);
+  const primary = `${formatEventTimeInZone(event, viewerTimeZone, false)} (your time)`;
+  if (eventTimeZone === viewerTimeZone) {
+    return { primary, secondary: `Event timezone: ${formatTimeZoneLabel(eventTimeZone, startsAt)}` };
+  }
+  return {
+    primary,
+    secondary: `Event time: ${formatEventTimeInZone(event, eventTimeZone, true)}`,
+  };
 }
 
 function buildCalendarDays(monthDate: Date): Date[] {
@@ -96,12 +136,14 @@ function buildCalendarDays(monthDate: Date): Date[] {
 }
 
 function makeDraft(dayKey: string | null): EventDraft {
+  const timezone = getCommunityEventViewerTimeZone();
   const base = dayKey ? new Date(`${dayKey}T12:00:00`) : new Date(Date.now() + DAY_MS);
   return {
     title: "",
     description_md: "",
-    starts_at: toLocalDateTimeInputValue(base),
+    starts_at: toCommunityEventDateTimeInputValue(base, timezone),
     ends_at: "",
+    timezone,
     location_type: "online",
     location_label: "",
     url: "",
@@ -111,17 +153,19 @@ function makeDraft(dayKey: string | null): EventDraft {
 }
 
 function makeDraftFromEvent(event: CommunityEvent): EventDraft {
+  const timezone = normalizeCommunityEventTimeZone(event.timezone);
   return {
     title: event.title,
     description_md: event.description_md ?? "",
-    starts_at: toLocalDateTimeInputValue(new Date(event.series_starts_at)),
-    ends_at: event.series_ends_at ? toLocalDateTimeInputValue(new Date(event.series_ends_at)) : "",
+    starts_at: toCommunityEventDateTimeInputValue(new Date(event.series_starts_at), timezone),
+    ends_at: event.series_ends_at ? toCommunityEventDateTimeInputValue(new Date(event.series_ends_at), timezone) : "",
+    timezone,
     location_type: event.location_type,
     location_label: event.location_label ?? "",
     url: event.url ?? "",
     recurrence_frequency: event.recurrence_frequency,
     recurrence_until: event.recurrence_until
-      ? toLocalDateTimeInputValue(new Date(event.recurrence_until))
+      ? toCommunityEventDateTimeInputValue(new Date(event.recurrence_until), timezone)
       : "",
   };
 }
@@ -140,6 +184,7 @@ function buildGoogleCalendarUrl(event: CommunityEvent): string {
     dates: `${formatGoogleDate(start)}/${formatGoogleDate(end)}`,
     details,
     location: event.location_label ?? event.url ?? "",
+    ctz: normalizeCommunityEventTimeZone(event.timezone),
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
@@ -158,6 +203,7 @@ function EventModal(props: {
   onSubmit: () => void;
 }) {
   const { draft, isSaving, error, title, onChange, onClose, onSubmit } = props;
+  const timezoneOptions = getUniqueTimeZoneOptions(draft.timezone);
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     onSubmit();
@@ -213,6 +259,19 @@ function EventModal(props: {
               />
             </label>
           </div>
+          <label>
+            <span>Event timezone</span>
+            <select
+              value={normalizeCommunityEventTimeZone(draft.timezone)}
+              onChange={(event) => onChange({ ...draft, timezone: normalizeCommunityEventTimeZone(event.target.value) })}
+            >
+              {timezoneOptions.map((timeZone) => (
+                <option key={timeZone} value={timeZone}>
+                  {formatTimeZoneLabel(timeZone)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             <span>Location</span>
             <select
@@ -367,12 +426,13 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       setLocalError("Title is required.");
       return;
     }
-    const startsAt = parseInputDateTime(draft.starts_at);
+    const timezone = normalizeCommunityEventTimeZone(draft.timezone);
+    const startsAt = communityEventDateTimeInputToIso(draft.starts_at, timezone);
     if (!startsAt) {
       setLocalError("Start time is required.");
       return;
     }
-    const endsAt = draft.ends_at ? parseInputDateTime(draft.ends_at) : null;
+    const endsAt = draft.ends_at ? communityEventDateTimeInputToIso(draft.ends_at, timezone) : null;
     if (draft.ends_at && !endsAt) {
       setLocalError("End time is invalid.");
       return;
@@ -381,7 +441,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       draft.recurrence_frequency === "none"
         ? null
         : draft.recurrence_until
-          ? parseInputDateTime(draft.recurrence_until)
+          ? communityEventDateTimeInputToIso(draft.recurrence_until, timezone)
           : null;
     if (draft.recurrence_frequency !== "none" && draft.recurrence_until && !recurrenceUntil) {
       setLocalError("Repeat end date is invalid.");
@@ -395,7 +455,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         description_md: draft.description_md.trim() || null,
         starts_at: startsAt,
         ends_at: endsAt,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        timezone,
         location_type: draft.location_type,
         location_label: draft.location_label.trim() || null,
         url: draft.url.trim() || null,
@@ -525,6 +585,8 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                 const isRecurring = isRecurringCommunityEvent(event);
                 const editLabel = isRecurring ? "Edit series" : "Edit event";
                 const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
+                const eventTimeLabel = formatEventTime(event);
+                const eventTimeZone = normalizeCommunityEventTimeZone(event.timezone);
                 return (
                   <article key={event.id} id={`community-event-${event.id}`} className="community-events-agenda-item">
                     <div className="community-events-agenda-item-top">
@@ -545,11 +607,16 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                         </div>
                       ) : null}
                     </div>
-                    <div className="community-events-agenda-meta">{formatEventTime(event)}</div>
+                    <div className="community-events-agenda-meta community-events-agenda-time">
+                      <span>{eventTimeLabel.primary}</span>
+                      {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}
+                    </div>
                     {event.recurrence_frequency !== "none" ? (
                       <div className="community-events-agenda-meta">
                         Repeats {event.recurrence_frequency}
-                        {event.recurrence_until ? ` until ${new Date(event.recurrence_until).toLocaleDateString()}` : ""}
+                        {event.recurrence_until
+                          ? ` until ${new Date(event.recurrence_until).toLocaleDateString(undefined, { timeZone: eventTimeZone })}`
+                          : ""}
                       </div>
                     ) : null}
                     {event.location_label || event.url ? (

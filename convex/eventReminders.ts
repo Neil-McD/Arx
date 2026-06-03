@@ -2,6 +2,11 @@ import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
+import {
+  getCommunityEventOccurrenceStartsInRange,
+  normalizeCommunityEventRecurrenceFrequency,
+  normalizeCommunityEventRecurrenceInterval,
+} from "../shared/communityEventTime";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
@@ -53,122 +58,19 @@ function normalizePositiveMs(value: unknown, fallback: number, max: number): num
   return Math.max(1, Math.min(max, Math.floor(parsed)));
 }
 
-function normalizeRecurrenceFrequency(raw: unknown): "none" | "daily" | "weekly" | "monthly" {
-  const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "daily" || value === "weekly" || value === "monthly") return value;
-  return "none";
-}
-
-function normalizeRecurrenceInterval(raw: unknown): number {
-  const value = typeof raw === "number" && Number.isFinite(raw) ? Math.floor(raw) : 1;
-  return Math.max(1, Math.min(12, value));
-}
-
-function daysInMonth(year: number, monthIndex: number): number {
-  return new Date(year, monthIndex + 1, 0).getDate();
-}
-
-function addMonthsClamped(date: Date, monthCount: number, preferredDayOfMonth: number): Date {
-  const next = new Date(date);
-  const targetMonth = date.getMonth() + monthCount;
-  next.setDate(1);
-  next.setMonth(targetMonth);
-  next.setDate(Math.min(preferredDayOfMonth, daysInMonth(next.getFullYear(), next.getMonth())));
-  return next;
-}
-
-function addRecurrenceStep(
-  date: Date,
-  frequency: "daily" | "weekly" | "monthly",
-  interval: number,
-  preferredDayOfMonth: number,
-): Date {
-  const next = new Date(date);
-  if (frequency === "daily") next.setDate(next.getDate() + interval);
-  if (frequency === "weekly") next.setDate(next.getDate() + interval * 7);
-  if (frequency === "monthly") return addMonthsClamped(date, interval, preferredDayOfMonth);
-  return next;
-}
-
-function findFirstOccurrenceOnOrAfter(params: {
-  startsAt: number;
-  rangeStart: number;
-  frequency: "daily" | "weekly" | "monthly";
-  interval: number;
-}): Date {
-  const start = new Date(params.startsAt);
-  const preferredDayOfMonth = start.getDate();
-  if (params.rangeStart <= params.startsAt) return start;
-  if (params.frequency === "daily" || params.frequency === "weekly") {
-    const intervalMs =
-      params.frequency === "daily"
-        ? params.interval * DAY_MS
-        : params.interval * 7 * DAY_MS;
-    const intervalsElapsed = Math.max(
-      0,
-      Math.floor((params.rangeStart - params.startsAt) / intervalMs),
-    );
-    let candidate = new Date(params.startsAt + intervalsElapsed * intervalMs);
-    if (candidate.getTime() < params.rangeStart) {
-      candidate = addRecurrenceStep(
-        candidate,
-        params.frequency,
-        params.interval,
-        preferredDayOfMonth,
-      );
-    }
-    return candidate;
-  }
-  const rangeStart = new Date(params.rangeStart);
-  const monthsElapsed =
-    (rangeStart.getFullYear() - start.getFullYear()) * 12 +
-    (rangeStart.getMonth() - start.getMonth());
-  const intervalsElapsed = Math.max(0, Math.floor(monthsElapsed / params.interval));
-  let candidate = addMonthsClamped(
-    start,
-    intervalsElapsed * params.interval,
-    preferredDayOfMonth,
-  );
-  if (candidate.getTime() < params.rangeStart) {
-    candidate = addRecurrenceStep(
-      candidate,
-      params.frequency,
-      params.interval,
-      preferredDayOfMonth,
-    );
-  }
-  return candidate;
-}
-
 function getEventOccurrenceStartsInWindow(row: CommunityEventRow, windowStart: number, windowEnd: number): number[] {
   if (row.status !== "live") return [];
-  const frequency = normalizeRecurrenceFrequency(row.recurrenceFrequency);
-  if (frequency === "none") {
-    return row.startsAt >= windowStart && row.startsAt <= windowEnd ? [row.startsAt] : [];
-  }
-  if (row.startsAt > windowEnd) return [];
   const recurrenceUntil = typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null;
-  if (recurrenceUntil !== null && recurrenceUntil < windowStart) return [];
-
-  const interval = normalizeRecurrenceInterval(row.recurrenceInterval);
-  const preferredDayOfMonth = new Date(row.startsAt).getDate();
-  const occurrenceStarts: number[] = [];
-  let occurrence = findFirstOccurrenceOnOrAfter({
+  return getCommunityEventOccurrenceStartsInRange({
     startsAt: row.startsAt,
     rangeStart: windowStart,
-    frequency,
-    interval,
+    rangeEnd: windowEnd,
+    frequency: normalizeCommunityEventRecurrenceFrequency(row.recurrenceFrequency),
+    interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
+    recurrenceUntil,
+    timeZone: row.timezone,
+    limit: 10,
   });
-  while (occurrenceStarts.length < 10) {
-    const occurrenceMs = occurrence.getTime();
-    if (occurrenceMs > windowEnd) break;
-    if (recurrenceUntil === null || occurrenceMs <= recurrenceUntil) {
-      occurrenceStarts.push(occurrenceMs);
-    }
-    if (recurrenceUntil !== null && occurrenceMs >= recurrenceUntil) break;
-    occurrence = addRecurrenceStep(occurrence, frequency, interval, preferredDayOfMonth);
-  }
-  return occurrenceStarts;
 }
 
 function buildAppUrl(path: string): string {

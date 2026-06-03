@@ -71,6 +71,24 @@ assert.match(
 );
 
 assert.match(
+  eventsPanel,
+  /const timezone = normalizeCommunityEventTimeZone\(draft\.timezone\);[\s\S]*communityEventDateTimeInputToIso\(draft\.starts_at, timezone\)[\s\S]*timezone,/,
+  "event saves must parse datetime-local inputs against the selected event timezone",
+);
+
+assert.match(
+  eventsPanel,
+  /<span>Event timezone<\/span>[\s\S]*normalizeCommunityEventTimeZone\(draft\.timezone\)/,
+  "event editor must expose the event timezone anchor",
+);
+
+assert.match(
+  eventsPanel,
+  /formatEventTime\(event\)[\s\S]*community-events-agenda-time[\s\S]*eventTimeLabel\.primary[\s\S]*eventTimeLabel\.secondary/,
+  "agenda rows must expose viewer-local time and event timezone context",
+);
+
+assert.match(
   styles,
   /@media \(max-width: 640px\) \{[\s\S]*\.community-events-day-marker \{[\s\S]*display: inline-flex;/,
   "mobile calendar must keep a visible event marker when event pills are hidden",

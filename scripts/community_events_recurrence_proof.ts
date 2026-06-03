@@ -1,111 +1,49 @@
 import assert from "node:assert/strict";
+import {
+  communityEventDateTimeInputToIso,
+  getCommunityEventOccurrenceStartsInRange,
+} from "../shared/communityEventTime.ts";
 
-type Frequency = "none" | "daily" | "weekly" | "monthly";
-
-function daysInMonth(year: number, monthIndex: number): number {
-  return new Date(year, monthIndex + 1, 0).getDate();
-}
-
-function addMonthsClamped(date: Date, monthCount: number, preferredDayOfMonth: number): Date {
-  const next = new Date(date);
-  const targetMonth = date.getMonth() + monthCount;
-  next.setDate(1);
-  next.setMonth(targetMonth);
-  next.setDate(Math.min(preferredDayOfMonth, daysInMonth(next.getFullYear(), next.getMonth())));
-  return next;
-}
-
-function addRecurrenceStep(
-  date: Date,
-  frequency: Exclude<Frequency, "none">,
-  interval: number,
-  preferredDayOfMonth: number,
-): Date {
-  const next = new Date(date);
-  if (frequency === "daily") next.setDate(next.getDate() + interval);
-  if (frequency === "weekly") next.setDate(next.getDate() + interval * 7);
-  if (frequency === "monthly") return addMonthsClamped(date, interval, preferredDayOfMonth);
-  return next;
-}
-
-function findFirstOccurrenceOnOrAfter(params: {
-  startsAt: number;
-  rangeStart: number;
-  frequency: Exclude<Frequency, "none">;
-  interval: number;
-}): Date {
-  const start = new Date(params.startsAt);
-  const preferredDayOfMonth = start.getDate();
-  if (params.rangeStart <= params.startsAt) return start;
-  if (params.frequency === "daily" || params.frequency === "weekly") {
-    const intervalMs = params.frequency === "daily"
-      ? params.interval * 24 * 60 * 60 * 1000
-      : params.interval * 7 * 24 * 60 * 60 * 1000;
-    const intervalsElapsed = Math.max(
-      0,
-      Math.floor((params.rangeStart - params.startsAt) / intervalMs),
-    );
-    let candidate = new Date(params.startsAt + intervalsElapsed * intervalMs);
-    if (candidate.getTime() < params.rangeStart) {
-      candidate = addRecurrenceStep(
-        candidate,
-        params.frequency,
-        params.interval,
-        preferredDayOfMonth,
-      );
-    }
-    return candidate;
-  }
-  const rangeStart = new Date(params.rangeStart);
-  const monthsElapsed =
-    (rangeStart.getFullYear() - start.getFullYear()) * 12 +
-    (rangeStart.getMonth() - start.getMonth());
-  const intervalsElapsed = Math.max(0, Math.floor(monthsElapsed / params.interval));
-  let candidate = addMonthsClamped(
-    start,
-    intervalsElapsed * params.interval,
-    preferredDayOfMonth,
-  );
-  if (candidate.getTime() < params.rangeStart) {
-    candidate = addRecurrenceStep(
-      candidate,
-      params.frequency,
-      params.interval,
-      preferredDayOfMonth,
-    );
-  }
-  return candidate;
-}
+type Frequency = "daily" | "weekly" | "monthly";
 
 function expand(params: {
   startsAt: string;
-  frequency: Exclude<Frequency, "none">;
+  frequency: Frequency;
   rangeStart: string;
   rangeEnd: string;
   until?: string;
+  timeZone?: string;
 }): string[] {
-  const startsAt = Date.parse(params.startsAt);
-  const rangeStart = Date.parse(params.rangeStart);
-  const rangeEnd = Date.parse(params.rangeEnd);
-  const until = params.until ? Date.parse(params.until) : null;
-  const preferredDayOfMonth = new Date(startsAt).getDate();
-  const out: string[] = [];
-  let occurrence = findFirstOccurrenceOnOrAfter({
-    startsAt,
-    rangeStart,
+  return getCommunityEventOccurrenceStartsInRange({
+    startsAt: Date.parse(params.startsAt),
+    rangeStart: Date.parse(params.rangeStart),
+    rangeEnd: Date.parse(params.rangeEnd),
     frequency: params.frequency,
     interval: 1,
-  });
-  while (out.length < 20) {
-    const ms = occurrence.getTime();
-    if (ms > rangeEnd) break;
-    if (until === null || ms <= until) {
-      out.push(occurrence.toISOString().slice(0, 10));
-    }
-    if (until !== null && ms >= until) break;
-    occurrence = addRecurrenceStep(occurrence, params.frequency, 1, preferredDayOfMonth);
-  }
-  return out;
+    recurrenceUntil: params.until ? Date.parse(params.until) : null,
+    timeZone: params.timeZone ?? "UTC",
+    limit: 20,
+  }).map((ms) => new Date(ms).toISOString().slice(0, 10));
+}
+
+function expandIso(params: {
+  startsAt: string;
+  frequency: Frequency;
+  rangeStart: string;
+  rangeEnd: string;
+  until?: string;
+  timeZone?: string;
+}): string[] {
+  return getCommunityEventOccurrenceStartsInRange({
+    startsAt: Date.parse(params.startsAt),
+    rangeStart: Date.parse(params.rangeStart),
+    rangeEnd: Date.parse(params.rangeEnd),
+    frequency: params.frequency,
+    interval: 1,
+    recurrenceUntil: params.until ? Date.parse(params.until) : null,
+    timeZone: params.timeZone ?? "UTC",
+    limit: 20,
+  }).map((ms) => new Date(ms).toISOString());
 }
 
 assert.deepEqual(
@@ -147,6 +85,26 @@ assert.deepEqual(
     until: "2026-05-03T17:00:00.000Z",
   }),
   ["2026-05-01", "2026-05-02", "2026-05-03"],
+);
+
+assert.equal(
+  communityEventDateTimeInputToIso("2026-03-02T09:00", "America/New_York"),
+  "2026-03-02T14:00:00.000Z",
+);
+
+assert.deepEqual(
+  expandIso({
+    startsAt: "2026-03-02T14:00:00.000Z",
+    frequency: "weekly",
+    rangeStart: "2026-03-02T00:00:00.000Z",
+    rangeEnd: "2026-03-17T00:00:00.000Z",
+    timeZone: "America/New_York",
+  }),
+  [
+    "2026-03-02T14:00:00.000Z",
+    "2026-03-09T13:00:00.000Z",
+    "2026-03-16T13:00:00.000Z",
+  ],
 );
 
 console.log("community_events_recurrence_proof: ok");

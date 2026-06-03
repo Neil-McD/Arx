@@ -51,6 +51,12 @@ assert.match(
 
 assert.match(
   reminders,
+  /getCommunityEventOccurrenceStartsInRange[\s\S]*timeZone: row\.timezone/,
+  "event reminders must use the same timezone-aware recurrence expansion as the Events tab",
+);
+
+assert.match(
+  reminders,
   /listActiveCommunityRecipientUserIds\(ctx, \{[\s\S]*communityOwnerId: community\.ownerId[\s\S]*limit: limitRecipientsPerEvent/,
   "event reminders must use the canonical active community recipient policy",
 );
