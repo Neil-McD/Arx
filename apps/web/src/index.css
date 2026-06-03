@@ -130,26 +130,16 @@
   -webkit-backdrop-filter: none;
 }
 
-/* AI page only: float the controls as small glass "islands". */
+/* Web: float header controls as small glass "islands". */
 .app-root.web-header-islands .app-topbar .topbar-left,
 .app-root.web-header-islands .app-topbar .topbar-center,
-.app-root.web-header-islands .app-topbar .topbar-right {
+.app-topbar .topbar-right.topbar-right-island {
   padding: 6px 8px;
   border-radius: 12px;
   background: var(--web-floating-chrome-bg);
   box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
-}
-
-/* Keep the top-right community shortcut plain unless it is paired with the workspace right-panel toggle. */
-.app-root.web-header-islands .app-topbar .topbar-right:not(.has-workspace-right-panel-control) {
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .app-topbar .topbar-right .community-btn:hover,
