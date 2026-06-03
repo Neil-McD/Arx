@@ -27202,18 +27202,21 @@ button.message-citation-chip:hover {
 .agent-preview-composer-shell {
   width: 100%;
   min-height: 68px;
-  border: 1px solid var(--border-muted);
+  border: 1px solid color-mix(in srgb, var(--border-muted) 72%, transparent);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 58%, var(--bg-workspace, var(--bg-app)) 42%);
+  opacity: 0.76;
   padding: 18px 20px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  cursor: not-allowed;
+  user-select: none;
 }
 
 .agent-preview-composer-placeholder {
   font-size: 16px;
-  color: var(--text-faint);
+  color: color-mix(in srgb, var(--text-faint) 78%, transparent);
 }
 
 .agent-capability-toolbar {
