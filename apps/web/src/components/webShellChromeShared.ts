@@ -70,6 +70,9 @@ export type WebCommunityShellProps = {
   onSelectCommunityTab: (tab: CommunityTab) => void;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onOpenMobileAgentSettings: () => void;
+  canOpenDirectMessages: boolean;
+  directMessagesUnreadCount: number;
+  onOpenDirectMessages: () => void;
   onOpenDiscover: () => void;
   onOpenMobileCreateCommunity: () => void;
   communities: CommunityLike[];

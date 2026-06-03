@@ -1217,6 +1217,10 @@ export default function App() {
     setDirectMessageOpenRequest(null);
     setIsDirectMessagesOpen((current) => !current);
   }, []);
+  const handleOpenDirectMessages = useCallback(() => {
+    setDirectMessageOpenRequest(null);
+    setIsDirectMessagesOpen(true);
+  }, []);
   const handleCloseDirectMessages = useCallback(() => {
     setDirectMessageOpenRequest(null);
     setIsDirectMessagesOpen(false);
@@ -11004,6 +11008,9 @@ export default function App() {
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
     openMobileAgentSettings,
+    canOpenDirectMessages: Boolean(session),
+    directMessagesUnreadCount,
+    handleOpenDirectMessages,
     handleOpenDiscover,
     openMobileCreateCommunity,
     hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,

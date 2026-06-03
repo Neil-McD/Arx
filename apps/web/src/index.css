@@ -3086,6 +3086,7 @@
 }
 
 .mobile-community-selector-action-avatar {
+  position: relative;
   width: 34px;
   height: 34px;
   border-radius: var(--radius-sm);

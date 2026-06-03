@@ -67,6 +67,9 @@ export function buildWebShellChromeHostProps(params: {
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   openMobileAgentSettings: () => void;
+  canOpenDirectMessages: boolean;
+  directMessagesUnreadCount: number;
+  handleOpenDirectMessages: () => void;
   handleOpenDiscover: () => void;
   openMobileCreateCommunity: () => void;
   hasCommunityCreateAccess: boolean;
@@ -192,6 +195,9 @@ export function buildWebShellChromeHostProps(params: {
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
       onOpenMobileAgentSettings: params.openMobileAgentSettings,
+      canOpenDirectMessages: params.canOpenDirectMessages,
+      directMessagesUnreadCount: params.directMessagesUnreadCount,
+      onOpenDirectMessages: params.handleOpenDirectMessages,
       onOpenDiscover: params.handleOpenDiscover,
       onOpenMobileCreateCommunity: params.openMobileCreateCommunity,
       communities: params.communities.map((community) => ({

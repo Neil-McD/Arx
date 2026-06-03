@@ -12,6 +12,15 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
 
   if (!communityShell.showMobileShell) return null;
 
+  const directMessagesUnreadDisplay =
+    communityShell.directMessagesUnreadCount > 99
+      ? "99+"
+      : String(communityShell.directMessagesUnreadCount);
+  const directMessagesActionLabel =
+    communityShell.directMessagesUnreadCount > 0
+      ? `Messages, ${directMessagesUnreadDisplay} unread`
+      : "Messages";
+
   return (
     <>
       <WebMobileDrawer
@@ -62,6 +71,29 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           <div className="mobile-community-menu" role="menu" aria-label="Communities">
             <div className="mobile-community-selector">
               <div className="mobile-community-selector-actions">
+                {communityShell.canOpenDirectMessages ? (
+                  <button
+                    type="button"
+                    className="mobile-community-selector-item mobile-community-selector-item-action"
+                    aria-label={directMessagesActionLabel}
+                    onClick={() => {
+                      communityShell.setMobileOverlay(null);
+                      communityShell.onOpenDirectMessages();
+                    }}
+                  >
+                    <span className="mobile-community-selector-action-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" />
+                      </svg>
+                      {communityShell.directMessagesUnreadCount > 0 ? (
+                        <span className="unread-badge">
+                          {directMessagesUnreadDisplay}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mobile-community-selector-name">Messages</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="mobile-community-selector-item mobile-community-selector-item-action"
