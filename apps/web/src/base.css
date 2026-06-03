@@ -9824,7 +9824,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
-  padding: 2px;
+  margin-right: -12px;
+  padding: 2px 14px 2px 2px;
 }
 
 .community-dm-inbox-panel .community-dm-panel-empty {

@@ -383,7 +383,7 @@ assert.match(dmInternalChromeCss, /\.community-dm-panel-header,[\s\S]*\.communit
 assert.doesNotMatch(dmInternalChromeCss, /box-shadow:|border: 1px solid/, "DM fixed chrome must not become nested glass cards");
 assert.match(dmPanelMessagesCss, /overflow: auto;[\s\S]*margin-right: -12px;[\s\S]*padding: 6px 14px 2px 2px/, "DM conversation messages must preserve the original viewport cutoff above the composer");
 assert.doesNotMatch(dmPanelMessagesCss, /margin: -50px -12px -46px 0|padding: 56px 14px 50px 2px/, "DM conversation messages must not scroll underneath the header and composer");
-assert.match(dmInboxListCss, /overflow: auto;[\s\S]*padding: 2px/, "DM inbox rows must preserve the original list viewport");
+assert.match(dmInboxListCss, /overflow: auto;[\s\S]*margin-right: -12px;[\s\S]*padding: 2px 14px 2px 2px/, "DM inbox rows must align the scrollbar with the panel edge without crowding row content");
 assert.doesNotMatch(dmInboxListCss, /margin: -50px -12px 0 0|padding: 52px 14px 2px 2px/, "DM inbox rows must not scroll underneath the header");
 assert.match(dmRecipientListCss, /overflow: auto;[\s\S]*padding: 2px/, "DM recipient rows must preserve the original list viewport");
 assert.doesNotMatch(dmRecipientListCss, /margin-top: -46px|padding: 48px 2px 2px/, "DM recipient rows must not scroll underneath the search field");
