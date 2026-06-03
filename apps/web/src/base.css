@@ -26856,24 +26856,22 @@ button.message-citation-chip:hover {
   transition:
     border-color 120ms ease,
     background 120ms ease,
-    transform 120ms ease,
     box-shadow 120ms ease;
 }
 
 .agent-canvas-target-card:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent-gold) 42%, var(--border-muted));
-  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  border-color: var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
 }
 
 .agent-canvas-target-card.is-active {
-  border-color: color-mix(in srgb, var(--accent-gold) 58%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent-gold) 8%, var(--bg-card));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 18%, transparent);
+  border-color: var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  box-shadow: none;
 }
 
 .agent-canvas-target-card-editable {
-  cursor: text;
+  cursor: default;
 }
 
 .agent-canvas-target-kicker {
@@ -27096,11 +27094,21 @@ button.message-citation-chip:hover {
   resize: vertical;
   min-height: 120px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.system-prompt-input:hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 38%, var(--border-muted));
+  background: color-mix(in srgb, var(--bg-card) 98%, transparent);
 }
 
 .system-prompt-input:focus {
   outline: none;
   border-color: var(--accent-gold);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 18%, transparent);
 }
 
 .system-prompt-input::placeholder {
@@ -27136,10 +27144,16 @@ button.message-citation-chip:hover {
   cursor: default;
 }
 
+.agent-editor-action-card:hover {
+  transform: none;
+  border-color: var(--border-muted);
+  background: var(--workspace-landing-action-bg, color-mix(in srgb, var(--bg-card) 72%, transparent));
+}
+
 .agent-editor-action-card.is-active {
-  border-color: color-mix(in srgb, var(--accent-gold) 58%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent-gold) 8%, var(--bg-card));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 18%, transparent);
+  border-color: var(--border-muted);
+  background: var(--workspace-landing-action-bg, color-mix(in srgb, var(--bg-card) 72%, transparent));
+  box-shadow: none;
 }
 
 .agent-editor-action-header {
@@ -27167,6 +27181,10 @@ button.message-citation-chip:hover {
   padding: 11px 12px;
   font-size: 13px;
   line-height: 1.45;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .agent-editor-inline-label-input {
@@ -27174,11 +27192,18 @@ button.message-citation-chip:hover {
   font-weight: 600;
 }
 
+.agent-editor-inline-label-input:hover,
+.agent-editor-inline-prompt-input:hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 38%, var(--border-muted));
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 68%, var(--bg-card) 32%);
+}
+
 .agent-editor-inline-label-input:focus,
 .agent-editor-inline-prompt-input:focus,
 .agent-capability-select:focus {
   outline: none;
   border-color: var(--accent-gold);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 18%, transparent);
 }
 
 .agent-editor-inline-label-input::placeholder,
