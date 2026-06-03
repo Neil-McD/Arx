@@ -12670,6 +12670,30 @@ button.chat-reply-quote:hover {
   cursor: not-allowed;
 }
 
+.knowledge-category-inline-add {
+  width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  border: 1px dashed color-mix(in srgb, var(--border-default) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card-alt) 28%, transparent);
+  color: var(--text-muted);
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.knowledge-category-inline-add:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-gold) 48%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-gold) 7%, transparent);
+}
+
 .knowledge-resource-item {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;

@@ -549,6 +549,21 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
+  /knowledge-category-inline-add[\s\S]*openNewModuleModal[\s\S]*Add category/,
+  "category creation must live in the resources rail instead of the header",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  /resources-add-choice[\s\S]*>\s*Category\s*</,
+  "resources header must not keep a competing add-category button",
+);
+assert.match(
+  resourcesPanel,
+  /!hasVisibleResourceContent && !canManageResources/,
+  "resource managers must still see the rail add-category control when the resource set is empty",
+);
+assert.match(
+  resourcesPanel,
   /onAddPage=\{\(\) => void handleAddPageDraft\(section\.module\.id\)\}/,
   "inline page creation must target the category that owns the add-page row",
 );

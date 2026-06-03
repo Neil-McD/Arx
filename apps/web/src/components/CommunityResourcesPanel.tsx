@@ -1049,15 +1049,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                       {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
                     </button>
                   ) : null}
-                  <button
-                    className="resources-add-choice"
-                    type="button"
-                    onClick={() => actions.openNewModuleModal()}
-                    title="Add category"
-                  >
-                    <span aria-hidden="true">+</span>
-                    <span>Category</span>
-                  </button>
                 </div>
               ) : null}
             </div>
@@ -1107,7 +1098,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
-        ) : !hasVisibleResourceContent ? (
+        ) : !hasVisibleResourceContent && !canManageResources ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
               <div className="chat-empty-icon">
@@ -1156,6 +1147,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     {section.pageResources.map(renderResourceRailItem)}
                   </ResourceCategorySection>
                 ))}
+                {canManageResources ? (
+                  <button
+                    className="knowledge-category-inline-add"
+                    type="button"
+                    onClick={() => actions.openNewModuleModal()}
+                  >
+                    <span aria-hidden="true">+</span>
+                    <span>Add category</span>
+                  </button>
+                ) : null}
                 {shouldShowSourceInbox ? (
                   <div className="knowledge-source-inbox-section">
                     <div className="knowledge-resource-section-header">
