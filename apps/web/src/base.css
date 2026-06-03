@@ -12887,10 +12887,30 @@ button.chat-reply-quote:hover {
   min-width: 188px;
 }
 
-.resources-panel .feed-header-actions {
+.resources-panel .feed-header-actions.has-preview-mode {
+  flex: 1 1 auto;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: space-between;
+  min-width: 0;
+  column-gap: 18px;
   row-gap: 8px;
+}
+
+.resources-header-admin-actions,
+.resources-header-view-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.resources-header-admin-actions {
+  min-width: 0;
+}
+
+.resources-header-view-actions {
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .resources-preview-mode-control {

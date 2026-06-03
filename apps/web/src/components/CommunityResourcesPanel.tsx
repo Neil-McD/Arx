@@ -1006,58 +1006,66 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="resource-module-status-line is-draft">Draft category</div>
             ) : null}
           </div>
-          <div className="feed-header-actions">
-            <div className="feed-header-badge" aria-label={`${allPageResources.length} pages`}>
-              {allPageResources.length}
-            </div>
-            {capabilities.canOperateResources ? (
-              <div className="resources-preview-mode-control">
-                <span className="resources-preview-mode-label">Preview mode</span>
-                <div
-                  className="platform-switcher platform-switcher-compact resources-preview-mode-switcher"
-                  aria-label="Preview mode"
-                  style={previewSwitcherStyle}
-                >
+          <div
+            className={`feed-header-actions resources-header-actions${
+              capabilities.canOperateResources ? " has-preview-mode" : ""
+            }`}
+          >
+            <div className="resources-header-admin-actions">
+              <div className="feed-header-badge" aria-label={`${allPageResources.length} pages`}>
+                {allPageResources.length}
+              </div>
+              {capabilities.hasActiveCommunity && canManageResources ? (
+                <div className="resources-add-split" role="group" aria-label="Resource actions">
+                  {selectedModule && !selectedModule.is_virtual ? (
+                    <button
+                      className={`resources-module-status-action is-${selectedModuleNextStatus}`}
+                      type="button"
+                      onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
+                      title={selectedModuleStatus === "live" ? "Move category to draft" : "Make category live"}
+                    >
+                      {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
+                    </button>
+                  ) : null}
                   <button
-                    className={`platform-switcher-btn${!isPreviewMode ? " is-active" : ""}`}
+                    className="resources-add-choice"
                     type="button"
-                    aria-pressed={!isPreviewMode}
-                    onClick={() => setIsPreviewMode(false)}
+                    onClick={() => actions.openNewModuleModal()}
+                    title="Add category"
                   >
-                    Off
-                  </button>
-                  <button
-                    className={`platform-switcher-btn${isPreviewMode ? " is-active" : ""}`}
-                    type="button"
-                    aria-pressed={isPreviewMode}
-                    onClick={() => setIsPreviewMode(true)}
-                  >
-                    On
+                    <span aria-hidden="true">+</span>
+                    <span>Category</span>
                   </button>
                 </div>
-              </div>
-            ) : null}
-            {capabilities.hasActiveCommunity && canManageResources ? (
-              <div className="resources-add-split" role="group" aria-label="Resource actions">
-                {selectedModule && !selectedModule.is_virtual ? (
-                  <button
-                    className={`resources-module-status-action is-${selectedModuleNextStatus}`}
-                    type="button"
-                    onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
-                    title={selectedModuleStatus === "live" ? "Move category to draft" : "Make category live"}
+              ) : null}
+            </div>
+            {capabilities.canOperateResources ? (
+              <div className="resources-header-view-actions">
+                <div className="resources-preview-mode-control">
+                  <span className="resources-preview-mode-label">Preview mode</span>
+                  <div
+                    className="platform-switcher platform-switcher-compact resources-preview-mode-switcher"
+                    aria-label="Preview mode"
+                    style={previewSwitcherStyle}
                   >
-                    {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
-                  </button>
-                ) : null}
-                <button
-                  className="resources-add-choice"
-                  type="button"
-                  onClick={() => actions.openNewModuleModal()}
-                  title="Add category"
-                >
-                  <span aria-hidden="true">+</span>
-                  <span>Category</span>
-                </button>
+                    <button
+                      className={`platform-switcher-btn${!isPreviewMode ? " is-active" : ""}`}
+                      type="button"
+                      aria-pressed={!isPreviewMode}
+                      onClick={() => setIsPreviewMode(false)}
+                    >
+                      Off
+                    </button>
+                    <button
+                      className={`platform-switcher-btn${isPreviewMode ? " is-active" : ""}`}
+                      type="button"
+                      aria-pressed={isPreviewMode}
+                      onClick={() => setIsPreviewMode(true)}
+                    >
+                      On
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : null}
           </div>
