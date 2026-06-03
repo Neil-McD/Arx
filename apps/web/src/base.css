@@ -27047,6 +27047,33 @@ button.message-citation-chip:hover {
   text-align: left;
 }
 
+.agent-preview-label {
+  justify-self: start;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 76%, transparent);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-preview-hero {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
 .agent-editor-intro {
   margin: 4px 0 0;
   max-width: 64ch;
@@ -27085,16 +27112,19 @@ button.message-citation-chip:hover {
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .agent-preview-shell .web-empty-thread-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
   max-width: 56ch;
+  text-align: center;
 }
 
 .agent-editor-actions {
   margin-top: 0;
+  justify-self: center;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -27170,6 +27200,7 @@ button.message-citation-chip:hover {
 }
 
 .agent-preview-composer-shell {
+  width: 100%;
   min-height: 68px;
   border: 1px solid var(--border-muted);
   border-radius: 20px;

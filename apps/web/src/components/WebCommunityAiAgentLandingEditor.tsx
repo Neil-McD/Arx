@@ -130,17 +130,20 @@ export function WebCommunityAiAgentLandingEditor(props: WebCommunityAiAgentLandi
           />
         </div>
 
-        <div className="agent-preview-shell" aria-label="Landing preview">
-          <div className="web-empty-thread-title">
-            Welcome to <span className="web-empty-thread-title-accent">{previewCommunityName}</span>
-          </div>
-          {previewProjectName.trim() ? (
-            <div className="web-empty-thread-subtitle">
-              You are in <span className="web-empty-thread-subtitle-accent">{previewProjectName}</span> workspace
+        <div className="agent-preview-shell" aria-label="Preview workspace">
+          <div className="agent-preview-label">Preview workspace</div>
+          <div className="agent-preview-hero">
+            <div className="web-empty-thread-title">
+              Welcome to <span className="web-empty-thread-title-accent">{previewCommunityName}</span>
             </div>
-          ) : null}
-          <div className="agent-preview-composer-shell" aria-hidden="true">
-            <div className="agent-preview-composer-placeholder">Describe what you need help with...</div>
+            {previewProjectName.trim() ? (
+              <div className="web-empty-thread-subtitle">
+                You are in <span className="web-empty-thread-subtitle-accent">{previewProjectName}</span> workspace
+              </div>
+            ) : null}
+            <div className="agent-preview-composer-shell" aria-hidden="true">
+              <div className="agent-preview-composer-placeholder">Describe what you need help with...</div>
+            </div>
           </div>
           <div className="web-empty-thread-actions agent-editor-actions" role="list" aria-label="Starter prompts">
             {promptCards.map((card) => {
