@@ -181,6 +181,7 @@ function ResourceCategorySection(props: {
   onSetStatus: (status: "draft" | "live") => void;
   onDelete: () => void;
   onAddPage: () => void;
+  isAddingPage: boolean;
   onSelectCategory: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
@@ -200,6 +201,7 @@ function ResourceCategorySection(props: {
     onSetStatus,
     onDelete,
     onAddPage,
+    isAddingPage,
     onSelectCategory,
     onDragStart,
     onDragOver,
@@ -326,8 +328,10 @@ function ResourceCategorySection(props: {
           <button
             className="knowledge-resource-inline-add"
             type="button"
+            disabled={isAddingPage}
             onClick={(event) => {
               event.stopPropagation();
+              if (isAddingPage) return;
               onAddPage();
             }}
           >
@@ -515,6 +519,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
   const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
   const canManageResources = capabilities.canOperateResources && !isPreviewMode;
   const previewSwitcherStyle = buildPlatformSwitcherStyle(2, isPreviewMode ? 1 : 0);
@@ -903,6 +908,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setActiveResourceEditField(field);
   };
 
+  const handleAddPageDraft = async (moduleId: string | null) => {
+    if (isCreatingPageDraft) return;
+    setIsCreatingPageDraft(true);
+    try {
+      const created = await actions.handleCreateBlankPageDraft(moduleId);
+      if (!created) return;
+      setPendingOpenResourceId(created.id);
+      actions.handleSelectModule(getResourceCategoryId(created));
+      actions.setOpenResourceEmbedId(created.id);
+      actions.resourceEditor.beginInlineEditResource(created);
+      setActiveResourceEditField("title");
+    } finally {
+      setIsCreatingPageDraft(false);
+    }
+  };
+
   const cancelResourceInlineEdit = () => {
     actions.resourceEditor.cancelInlineEditResource();
     setActiveResourceEditField(null);
@@ -961,6 +982,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       selectedResourceEditorDirty &&
       actions.resourceEditor.titleInput.trim().length > 0 &&
       (
+        (selectedResource ? getResourceRole(selectedResource) === "page" : false) ||
         actions.resourceEditor.bodyInput.trim().length > 0 ||
         (selectedResource?.url ?? "").trim().length > 0
       ) &&
@@ -1117,7 +1139,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     onEdit={() => actions.handleEditModule(section.module)}
                     onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
                     onDelete={() => void actions.handleDeleteModule(section.module.id)}
-                    onAddPage={() => actions.openNewResourceModal(section.module.id)}
+                    onAddPage={() => void handleAddPageDraft(section.module.id)}
+                    isAddingPage={isCreatingPageDraft}
                     canManage={canManageResources && !section.module.is_virtual}
                     canReorder={canReorderModules && !section.module.is_virtual}
                     isDragging={draggingModuleId === section.module.id}

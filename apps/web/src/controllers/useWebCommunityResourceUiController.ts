@@ -87,6 +87,7 @@ export type UseWebCommunityResourceUiControllerResult<
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
   handleCreatePageDraftFromSource: (resource: ResourceT) => Promise<ResourceT | null>;
+  handleCreateBlankPageDraft: (moduleId?: string | null) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   resourceModalProps: ComponentProps<typeof WebCommunityResourceModal>;
@@ -135,6 +136,7 @@ export function useWebCommunityResourceUiController<
     handleSaveCommunityResource,
     handleDeleteResource,
     handleCreatePageDraftFromSource,
+    handleCreateBlankPageDraft,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
     activeCommunityId: params.activeCommunityId,
     session: params.session,
@@ -322,6 +324,7 @@ export function useWebCommunityResourceUiController<
     },
     handleDeleteResource,
     handleCreatePageDraftFromSource,
+    handleCreateBlankPageDraft,
     resourceModuleModalProps: {
       isOpen: showResourceModuleModal,
       isEditingModule: Boolean(editingResourceModuleId),

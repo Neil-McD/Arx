@@ -12665,6 +12665,11 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--accent-gold) 7%, transparent);
 }
 
+.knowledge-resource-inline-add:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .knowledge-resource-item {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;

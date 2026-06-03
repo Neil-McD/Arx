@@ -331,9 +331,59 @@ assert.match(
   "web gateway must call the canonical source-to-page draft mutation",
 );
 assert.match(
+  resourceGateway,
+  /saveCloudCommunityResource<SessionT, TResult = unknown>[\s\S]*return payload as TResult/,
+  "web gateway must return created resource rows from resource saves",
+);
+assert.match(
   resourceController,
   /handleCreatePageDraftFromSource[\s\S]*createCloudCommunityResourcePageDraftFromSource/,
   "web resource controller must expose source-to-page draft creation",
+);
+assert.match(
+  resourceController,
+  /handleCreateBlankPageDraft[\s\S]*resource_role: "page"[\s\S]*title: "Untitled page"[\s\S]*saveCloudCommunityResource<SessionT, ResourceT>/,
+  "web resource controller must create blank page drafts without opening the add-page modal",
+);
+assert.match(
+  resourceController,
+  /canSaveEmptyPageDraft[\s\S]*current\.editingResourceId[\s\S]*current\.resourceRoleInput === "page"[\s\S]*!description && !rawUrl && !canSaveEmptyPageDraft/,
+  "inline page draft edits must allow saving a title-only draft before body content is written",
+);
+assert.match(
+  resourceContracts,
+  /handleCreateBlankPageDraft: \(moduleId\?: string \| null\) => Promise<CommunityResource \| null>/,
+  "resources panel contract must expose blank page draft creation",
+);
+assert.match(
+  webResourceController,
+  /handleCreateBlankPageDraft/,
+  "web resource UI controller must pass through blank page draft creation",
+);
+assert.match(
+  resourcesPanel,
+  /handleAddPageDraft[\s\S]*isCreatingPageDraft[\s\S]*handleCreateBlankPageDraft[\s\S]*beginInlineEditResource\(created\)[\s\S]*setActiveResourceEditField\("title"\)/,
+  "add-page clicks must create an inline-editable draft page instead of opening the modal",
+);
+assert.match(
+  resourcesPanel,
+  /selectedResource \? getResourceRole\(selectedResource\) === "page" : false[\s\S]*actions\.resourceEditor\.bodyInput\.trim\(\)\.length > 0/,
+  "inline page drafts must be saveable before body text exists",
+);
+assert.match(
+  resourcesPanel,
+  /isAddingPage=\{isCreatingPageDraft\}/,
+  "add-page draft creation must guard duplicate clicks while the draft is being created",
+);
+assert.match(
+  resourceViewer,
+  /resource-viewer-empty-edit-trigger/,
+  "inline editor must let creators move from title editing into the empty body editor without canceling",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  /onAddPage=\{\(\) => actions\.openNewResourceModal/,
+  "resources rail add-page control must not route through the old modal",
 );
 assert.match(
   communityExperience,
@@ -499,13 +549,13 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /onAddPage=\{\(\) => actions\.openNewResourceModal\(section\.module\.id\)\}/,
+  /onAddPage=\{\(\) => void handleAddPageDraft\(section\.module\.id\)\}/,
   "inline page creation must target the category that owns the add-page row",
 );
 assert.match(
   webResourceController,
   /openNewResourceModal[\s\S]*setResourceRoleInput\("page"\)[\s\S]*setResourceStatusInput\("draft"\)/,
-  "inline add-page flow must force page role and draft status",
+  "manual new-resource modal fallback must force page role and draft status",
 );
 assert.match(
   resourceModuleModal,

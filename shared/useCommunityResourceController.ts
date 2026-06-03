@@ -195,7 +195,8 @@ export function useCommunityResourceController<
 
     const rawUrl = current.resourceUrlInput.trim();
     const description = current.resourceBodyInput.trim();
-    if (!description && !rawUrl) {
+    const canSaveEmptyPageDraft = Boolean(current.editingResourceId) && current.resourceRoleInput === "page";
+    if (!description && !rawUrl && !canSaveEmptyPageDraft) {
       current.setResourceError("Add content or a source URL.");
       return false;
     }
@@ -507,6 +508,48 @@ export function useCommunityResourceController<
     }
   }, [loadCommunityResources]);
 
+  const handleCreateBlankPageDraft = useCallback(async (moduleId?: string | null): Promise<ResourceT | null> => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return null;
+
+    current.setResourceError(null);
+    current.setIsSavingResource(true);
+    try {
+      const payload: Record<string, unknown> = {
+        community_id: current.activeCommunityId,
+        type: "post",
+        resource_role: "page",
+        title: "Untitled page",
+        body_md: null,
+        url: null,
+        pinned: false,
+        module_id: moduleId ?? null,
+      };
+      if (current.includeFileKeyOnSave) {
+        payload.file_key = null;
+      }
+      const created = await saveCloudCommunityResource<SessionT, ResourceT>({
+        session,
+        resourceId: null,
+        isPatch: false,
+        payload,
+      });
+      await loadCommunityResources(current.activeCommunityId, session);
+      return created;
+    } catch (error) {
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : current.saveFailureMessage;
+      current.setResourceError(message);
+      return null;
+    } finally {
+      current.setIsSavingResource(false);
+    }
+  }, [loadCommunityResources]);
+
   return {
     loadCommunityResourceModules,
     loadCommunityResources,
@@ -518,5 +561,6 @@ export function useCommunityResourceController<
     handleSaveCommunityResource,
     handleDeleteResource,
     handleCreatePageDraftFromSource,
+    handleCreateBlankPageDraft,
   };
 }

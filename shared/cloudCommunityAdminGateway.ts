@@ -1535,20 +1535,21 @@ export async function listCloudCommunityResourceModuleRows<SessionT, TModule = u
   return coerceGatewayRows<TModule>(payload);
 }
 
-export async function saveCloudCommunityResource<SessionT>(
+export async function saveCloudCommunityResource<SessionT, TResult = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     resourceId: string | null;
     isPatch: boolean;
     payload: Record<string, unknown>;
   },
-): Promise<void> {
+): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:saveCommunityResource" as any, {
+  const payload = await client.mutation("community:saveCommunityResource" as any, {
     authSubject,
     resourceId: params.resourceId,
     isPatch: params.isPatch,
     payload: params.payload,
   });
+  return payload as TResult;
 }
 
 export async function createCloudCommunityResourcePageDraftFromSource<SessionT, TResource = unknown>(

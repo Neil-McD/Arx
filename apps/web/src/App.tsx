@@ -2568,6 +2568,7 @@ export default function App() {
     resourceEditor,
     handleDeleteResource,
     handleCreatePageDraftFromSource,
+    handleCreateBlankPageDraft,
     setShowResourceModal,
     setEditingResourceId,
     setResourceTitleInput,
@@ -9661,6 +9662,7 @@ export default function App() {
         resourceEditor,
         handleDeleteResource,
         handleCreatePageDraftFromSource,
+        handleCreateBlankPageDraft,
         reloadResources: async () => {
           const usableSession = await ensureUsableAuthSession();
           if (!usableSession || !activeCommunityId) return;

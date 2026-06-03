@@ -92,5 +92,6 @@ export type CommunityResourcesActions = {
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
   handleCreatePageDraftFromSource: (resource: CommunityResource) => Promise<CommunityResource | null>;
+  handleCreateBlankPageDraft: (moduleId?: string | null) => Promise<CommunityResource | null>;
   reloadResources?: () => Promise<void> | void;
 };

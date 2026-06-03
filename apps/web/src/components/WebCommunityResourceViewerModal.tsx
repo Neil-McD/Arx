@@ -155,7 +155,15 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
       if (!(target instanceof Element)) return;
       if (
         target.closest(
-          ".resource-viewer-title-input, .resource-viewer-prose-input, .resource-viewer-edit-actions, .resource-viewer-pin-toggle",
+          [
+            ".resource-viewer-title-input",
+            ".resource-viewer-title-edit-trigger",
+            ".resource-viewer-prose-input",
+            ".resource-viewer-prose-edit-trigger",
+            ".resource-viewer-empty-edit-trigger",
+            ".resource-viewer-edit-actions",
+            ".resource-viewer-pin-toggle",
+          ].join(", "),
         )
       ) {
         return;
