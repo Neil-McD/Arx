@@ -120,7 +120,7 @@ function formatEventTime(event: CommunityEvent): { primary: string; secondary: s
   const startsAt = new Date(event.starts_at);
   const primary = `${formatEventTimeInZone(event, viewerTimeZone, false)} (your time)`;
   if (eventTimeZone === viewerTimeZone) {
-    return { primary, secondary: `Event timezone: ${formatTimeZoneLabel(eventTimeZone, startsAt)}` };
+    return { primary, secondary: formatTimeZoneLabel(eventTimeZone, startsAt) };
   }
   return {
     primary,
