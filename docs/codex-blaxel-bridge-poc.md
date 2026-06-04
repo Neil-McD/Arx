@@ -307,7 +307,7 @@ Must prove:
 Implementation:
 
 - Feature flag per user or operator.
-- Start with read-only workspace/context tools.
+- Start with an operator-only staged thread turn: persist the user prompt as a normal thread message, run Codex in Blaxel with PolyNet context, stream JSONL evidence, and persist the final Codex assistant text through the existing idempotent bridge finalizer.
 - Enable write/bash only after audit and cancellation are reliable.
 
 ## Kill Criteria

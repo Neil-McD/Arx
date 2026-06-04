@@ -294,6 +294,19 @@ function main() {
         /eventType: "codex_exec_final"/.test(codexExecSmoke),
     ),
     check(
+      "codex_exec_supports_real_thread_turn_mode",
+      /POLYNET_CODEX_BRIDGE_MODE/.test(codexExecSmoke) &&
+        /mode === "thread_turn"/.test(codexExecSmoke) &&
+        /USER_REQUEST/.test(codexExecSmoke) &&
+        /final_text_nonempty/.test(codexExecSmoke) &&
+        /codex_bridge_thread_turn/.test(codexExecSmoke) &&
+        /startOperatorCodexBridgeThreadTurnAsync/.test(codexExecSmoke) &&
+        /userMessageKey/.test(codexExecSmoke) &&
+        /threads\.addCloudThreadMessage/.test(codexExecSmoke) &&
+        /user:\$\{params\.runId\}:codex_bridge_prompt/.test(codexExecSmoke) &&
+        /codex_bridge_thread_turn_async/.test(codexExecSmoke),
+    ),
+    check(
       "codex_exec_smoke_streams_jsonl_while_running",
       /const \{ spawn, spawnSync \} = require\("node:child_process"\)/.test(codexExecSmoke) &&
         /async function runCodexExecStreaming/.test(codexExecSmoke) &&
@@ -434,6 +447,7 @@ function main() {
     check(
       "web_operator_panel_exposes_staging_bridge_trigger",
       /startOperatorCodexBridgeCodexExecRunCanonical/.test(codexBridgeGateway) &&
+        /startOperatorCodexBridgeThreadTurnCanonical/.test(codexBridgeGateway) &&
         /loadOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
         /reconcileOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
         /bootstrapConvexAuthenticatedClient/.test(codexBridgeGateway) &&
@@ -442,6 +456,7 @@ function main() {
         /threads:getCloudThreadByThreadKey/.test(codexBridgeGateway) &&
         /threads:getCloudThreadById/.test(codexBridgeGateway) &&
         /codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRunAsync/.test(codexBridgeGateway) &&
+        /codexBridgeCodexExecSmoke:startOperatorCodexBridgeThreadTurnAsync/.test(codexBridgeGateway) &&
         /codexBridgeCodexExecSmoke:reconcileOperatorCodexBridgeCodexExecRun/.test(codexBridgeGateway) &&
         /operatorDashboard:getCodexBridgeRunForOperator/.test(codexBridgeGateway) &&
         /threadId,\n    \.\.\.\(baseUrl/.test(codexBridgeGateway) &&
