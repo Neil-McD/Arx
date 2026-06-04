@@ -44,6 +44,16 @@ function main() {
   const codexExecRunStartIndex = codexExecSmoke.indexOf("ensureCloudRuntimeRunStartedByBridgeInternal");
   const blaxelUnavailableIndex = blaxel.indexOf("WORKLOAD_UNAVAILABLE");
   const blaxelNotFoundIndex = blaxel.indexOf("404|not found|not_found|does not exist");
+  const publicFinishMutationStart = threads.indexOf("export const finishCloudRuntimeRun = mutation({");
+  const bridgeFinishMutationStart = threads.indexOf(
+    "export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({",
+  );
+  const publicFinishMutation =
+    publicFinishMutationStart >= 0 && bridgeFinishMutationStart > publicFinishMutationStart
+      ? threads.slice(publicFinishMutationStart, bridgeFinishMutationStart)
+      : "";
+  const bridgeFinishMutation =
+    bridgeFinishMutationStart >= 0 ? threads.slice(bridgeFinishMutationStart) : "";
   const fallbackUseTargets = [
     shared,
     smoke,
@@ -293,6 +303,55 @@ function main() {
         !/stdout_preview|stderr_preview/.test(codexExecSmoke) &&
         !/final_text: clipText\(finalText/.test(codexExecSmoke) &&
         !/errorMessage: status === "succeeded" \? null : errorMessage/.test(codexExecSmoke),
+    ),
+    check(
+      "codex_exec_finish_carries_bounded_assistant_output",
+      /assistantText\?: string \| null/.test(shared) &&
+        /assistantModelId\?: string \| null/.test(shared) &&
+        /assistantText: status === "succeeded" \? clipText\(finalText, 20_000\) : null/.test(
+          codexExecSmoke,
+        ) &&
+        /assistantModelId: model \|\| null/.test(codexExecSmoke) &&
+        /assistantText: safeOptionalText\(parsed\.body\.assistantText, 20_000\)/.test(http) &&
+        /assistantModelId: safeOptionalText\(parsed\.body\.assistantModelId, 160\)/.test(http) &&
+        /assistantText: request\.assistantText/.test(http) &&
+        /assistantModelId: request\.assistantModelId/.test(http),
+    ),
+    check(
+      "bridge_assistant_output_is_internal_claims_only",
+      publicFinishMutationStart >= 0 &&
+        bridgeFinishMutationStart >= 0 &&
+        !/assistantText|assistantModelId/.test(publicFinishMutation) &&
+        /assistantText: v\.optional\(v\.string\(\)\)/.test(bridgeFinishMutation) &&
+        /assistantModelId: v\.optional\(v\.string\(\)\)/.test(bridgeFinishMutation),
+    ),
+    check(
+      "bridge_finish_persists_idempotent_assistant_message",
+      /function normalizeBridgeAssistantText/.test(threads) &&
+        /text\.length > 20_000 \? text\.slice\(0, 20_000\) : text/.test(threads) &&
+        /function normalizeBridgeAssistantModelId/.test(threads) &&
+        /async function upsertCodexBridgeAssistantMessageForRun/.test(threads) &&
+        threads.includes("const messageKey = `assistant:${runId}:codex_bridge_final`;") &&
+        /withIndex\("by_owner_messageKey"/.test(threads) &&
+        /if \(existing\.threadId !== args\.thread\._id\) throw new Error\("message_key_conflict"\)/.test(
+          threads,
+        ) &&
+        /role: "assistant"/.test(threads) &&
+        /engineId: "codex_blaxel_bridge"/.test(threads) &&
+        /inference_source: "codex_bridge"/.test(threads) &&
+        /status === "ok"[\s\S]*upsertCodexBridgeAssistantMessageForRun/.test(bridgeFinishMutation) &&
+        /assistantText: args\.assistantText/.test(bridgeFinishMutation) &&
+        /assistantModelId: args\.assistantModelId/.test(bridgeFinishMutation),
+    ),
+    check(
+      "run_finished_links_persisted_bridge_assistant_message",
+      /assistantMessage\?: CloudMessageLike \| null/.test(threads) &&
+        /assistant_message_id: args\.assistantMessage \? String\(args\.assistantMessage\._id\) : null/.test(
+          threads,
+        ) &&
+        /assistant_message_key: args\.assistantMessage\?\.messageKey \?\? null/.test(threads) &&
+        /assistant_message_seq:/.test(threads) &&
+        /assistantMessage,/.test(bridgeFinishMutation),
     ),
     check(
       "codex_exec_smoke_uses_ephemeral_codex_home",
