@@ -2,11 +2,12 @@ import {
   runChatgptCompletion,
   runChatgptStreamingCompletion,
 } from "./httpChatgpt";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { loadPublicModelMap } from "./httpInferenceConfig";
 import {
   normalizeMaxTokens,
   normalizeMessages,
+  extractTextFromContentJson,
   runOpenAiCompletion,
   runOpenRouterCompletion,
   runOpenRouterStreamingCompletion,
@@ -79,6 +80,31 @@ type RuntimeCompletionFailure = {
   code: string;
   message: string;
 };
+
+const CODEX_BRIDGE_RUNTIME_POLL_INTERVAL_MS = 1500;
+const CODEX_BRIDGE_RUNTIME_RECONCILE_AFTER_MS = 100_000;
+const CODEX_BRIDGE_RUNTIME_MAX_WAIT_MS = 150_000;
+
+function isCodexBridgeRuntimeHarnessRequested(input: RuntimeTurnInput): boolean {
+  return String(input.requested_harness ?? "").trim() === "codex_bridge";
+}
+
+function buildCodexBridgeRuntimeRunId(runId: string): string {
+  const normalized = String(runId ?? "").trim();
+  if (!normalized) return `codex_bridge_runtime:${crypto.randomUUID()}`;
+  return normalized.startsWith("codex_bridge_runtime:")
+    ? normalized
+    : `codex_bridge_runtime:${normalized}`;
+}
+
+function isTerminalRuntimeRunStatus(status: unknown): boolean {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  return normalized === "ok" || normalized === "error" || normalized === "cancelled";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.floor(ms))));
+}
 
 function openAiModelIdFromRef(modelRef: string): string | null {
   const trimmed = String(modelRef ?? "").trim();
@@ -198,6 +224,72 @@ function mapPersistedRuntimeEventRow(value: unknown): {
     created_at: new Date(
       Number.isFinite(createdAtMs) ? Math.floor(createdAtMs) : Date.now(),
     ).toISOString(),
+  };
+}
+
+async function loadCodexBridgeRuntimeSnapshot(args: {
+  ctx: any;
+  ownerId: string;
+  threadId: string;
+  runId: string;
+}): Promise<{
+  run: Record<string, unknown> | null;
+  events: Array<{
+    id: string;
+    run_id: string;
+    seq: number;
+    event_type: string;
+    payload: unknown;
+    created_at: string;
+  }>;
+  assistantMessage: {
+    id: string | null;
+    key: string | null;
+    seq: number | null;
+    content: string;
+  } | null;
+}> {
+  const run = (await args.ctx.runQuery(
+    (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
+    {
+      ownerId: args.ownerId,
+      runId: args.runId,
+    },
+  )) as Record<string, unknown> | null;
+  const rawEvents = (await args.ctx.runQuery(
+    (internal as any).threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
+    {
+      ownerId: args.ownerId,
+      runId: args.runId,
+    },
+  )) as unknown[];
+  const events = rawEvents
+    .map(mapPersistedRuntimeEventRow)
+    .filter((event): event is NonNullable<ReturnType<typeof mapPersistedRuntimeEventRow>> => Boolean(event));
+  const assistantKey = `assistant:${args.runId}:codex_bridge_final`;
+  const assistantRow = (await args.ctx.runQuery(
+    (api as any).threads.getCloudThreadMessageByOwnerMessageKey as any,
+    {
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+      messageKey: assistantKey,
+    },
+  )) as { _id?: unknown; messageKey?: unknown; seq?: unknown; contentJson?: unknown } | null;
+  const assistantContent = extractTextFromContentJson(assistantRow?.contentJson);
+  return {
+    run,
+    events,
+    assistantMessage:
+      assistantRow && assistantContent
+        ? {
+            id: String(assistantRow._id ?? "").trim() || null,
+            key: String(assistantRow.messageKey ?? "").trim() || assistantKey,
+            seq: Number.isFinite(Number(assistantRow.seq))
+              ? Math.max(0, Math.floor(Number(assistantRow.seq)))
+              : null,
+            content: assistantContent,
+          }
+        : null,
   };
 }
 
@@ -492,6 +584,226 @@ export async function handleRuntimeTurnRequest(args: {
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
     };
+    if (isCodexBridgeRuntimeHarnessRequested(input)) {
+      runtimeTurnStage = "codex_bridge_start";
+      const bridgeRunId = buildCodexBridgeRuntimeRunId(runId);
+      const userMessageKeyForBridgeRun = `user:${bridgeRunId}:codex_bridge_prompt`;
+      const bridgeSuccessResponse = buildRuntimeTurnSuccessResponder({
+        req,
+        stream,
+        runId: bridgeRunId,
+        requestId,
+        lane,
+        requestedModelId,
+        jsonResponse: (_req, status, payload) =>
+          runtimeJsonResponse(status, payload as Record<string, unknown>),
+        sseResponse: (_req, events) => runtimeSseResponse(events),
+      });
+      if (!runtimeProjectId) {
+        return runtimeJsonResponse(409, {
+          ok: false,
+          code: "codex_bridge_runtime_project_missing",
+          error: "codex_bridge_runtime_project_missing",
+          message: "Codex bridge runtime turns require a project-backed thread.",
+          run_id: bridgeRunId,
+        });
+      }
+      const existingBridgeSnapshot = await loadCodexBridgeRuntimeSnapshot({
+        ctx,
+        ownerId: actor.dbUserId,
+        threadId: String(ownedThread._id),
+        runId: bridgeRunId,
+      });
+      if (existingBridgeSnapshot.assistantMessage) {
+        return bridgeSuccessResponse({
+          content: existingBridgeSnapshot.assistantMessage.content,
+          promptTokens: null,
+          completionTokens: null,
+          resolvedInferenceSource: inferenceSource,
+          inferenceLaneFallbacks: null,
+          userMessageId: null,
+          userMessageKey: userMessageKeyForBridgeRun,
+          userMessageSeq: null,
+          assistantMessageId: existingBridgeSnapshot.assistantMessage.id,
+          assistantMessageKey: existingBridgeSnapshot.assistantMessage.key,
+          assistantMessageSeq: existingBridgeSnapshot.assistantMessage.seq,
+        });
+      }
+      const started = (await ctx.runAction(
+        (api as any).codexBridgeCodexExecSmoke.startOperatorCodexBridgeThreadTurnAsync as any,
+        {
+          authSubject: actor.authSubject,
+          projectId: runtimeProjectId as any,
+          threadId: ownedThread._id as any,
+          prompt: latestUserText,
+          runId: bridgeRunId,
+          runtimeCaller: true,
+        },
+      )) as {
+        ok?: boolean;
+        code?: string;
+        ownerId?: string | null;
+        runId?: string;
+        processName?: string | null;
+        userMessageKey?: string | null;
+        failures?: string[];
+        errors?: unknown[];
+      };
+      if (started.ok !== true) {
+        const failureCode =
+          started.failures?.find((failure) => String(failure ?? "").trim()) ??
+          started.code ??
+          "codex_bridge_runtime_start_failed";
+        return runtimeJsonResponse(503, {
+          ok: false,
+          code: failureCode,
+          error: failureCode,
+          message: "Codex bridge runtime turn failed to start.",
+          run_id: bridgeRunId,
+        });
+      }
+
+      const waitForBridgeFinal = async (emitEvent?: (event: ReturnType<typeof mapPersistedRuntimeEventRow> & {}) => void) => {
+        const startedAt = Date.now();
+        let lastEventSeq = 0;
+        let reconcileAttempted = false;
+        while (Date.now() - startedAt <= CODEX_BRIDGE_RUNTIME_MAX_WAIT_MS) {
+          runtimeTurnStage = "codex_bridge_wait";
+          const snapshot = await loadCodexBridgeRuntimeSnapshot({
+            ctx,
+            ownerId: actor.dbUserId,
+            threadId: String(ownedThread._id),
+            runId: bridgeRunId,
+          });
+          for (const event of snapshot.events) {
+            if (event.seq <= lastEventSeq) continue;
+            lastEventSeq = Math.max(lastEventSeq, event.seq);
+            emitEvent?.(event);
+          }
+          const status = String(snapshot.run?.status ?? "").trim().toLowerCase();
+          if (snapshot.assistantMessage) return snapshot.assistantMessage;
+          if (isTerminalRuntimeRunStatus(status)) {
+            throw new Error(
+              String(snapshot.run?.errorMessage ?? snapshot.run?.errorCode ?? "").trim() ||
+                `Codex bridge runtime turn finished with status ${status || "unknown"}.`,
+            );
+          }
+          if (
+            !reconcileAttempted &&
+            Date.now() - startedAt >= CODEX_BRIDGE_RUNTIME_RECONCILE_AFTER_MS &&
+            started.processName
+          ) {
+            reconcileAttempted = true;
+            try {
+              await ctx.runAction(
+                (api as any).codexBridgeCodexExecSmoke.reconcileOperatorCodexBridgeCodexExecRun as any,
+                {
+                  authSubject: actor.authSubject,
+                  projectId: runtimeProjectId as any,
+                  threadId: ownedThread._id as any,
+                  runId: bridgeRunId,
+                  processName: started.processName,
+                  finishStaleRunning: true,
+                  runtimeCaller: true,
+                },
+              );
+            } catch {
+              // Keep polling; the timeout/error path below will report the user-visible result.
+            }
+          }
+          await sleep(CODEX_BRIDGE_RUNTIME_POLL_INTERVAL_MS);
+        }
+        throw new Error("Codex bridge runtime turn timed out before producing a final response.");
+      };
+
+      if (stream) {
+        return runtimeSseResponse(async (writer) => {
+          writer.send({
+            event: "start",
+            data: {
+              run_id: bridgeRunId,
+              lane,
+              engine_id: "codex_blaxel_bridge",
+              model_id: requestedModelId,
+              inference_source: inferenceSource,
+              inference_lane_fallbacks: null,
+            },
+          });
+          try {
+            const assistantMessage = await waitForBridgeFinal((event) => {
+              writer.send({
+                event: "runtime_event",
+                data: event,
+              });
+            });
+            writer.send({
+              event: "delta",
+              data: {
+                delta: assistantMessage.content,
+                full_content: assistantMessage.content,
+              },
+            });
+            writer.send({
+              event: "done",
+              data: {
+                run_id: bridgeRunId,
+                lane,
+                engine_id: "codex_blaxel_bridge",
+                model_id: requestedModelId,
+                inference_source: inferenceSource,
+                inference_lane_fallbacks: null,
+                full_content: assistantMessage.content,
+                prompt_tokens: null,
+                completion_tokens: null,
+                user_message_id: null,
+                user_message_key: started.userMessageKey ?? userMessageKeyForBridgeRun,
+                user_message_seq: null,
+                assistant_message_id: assistantMessage.id,
+                assistant_message_key: assistantMessage.key,
+                assistant_message_seq: assistantMessage.seq,
+              },
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Codex bridge runtime turn failed.";
+            writer.send({
+              event: "error",
+              data: {
+                code: "codex_bridge_runtime_failed",
+                error: message,
+                message,
+                status: 503,
+              },
+            });
+          }
+        });
+      }
+
+      try {
+        const assistantMessage = await waitForBridgeFinal();
+        return bridgeSuccessResponse({
+          content: assistantMessage.content,
+          promptTokens: null,
+          completionTokens: null,
+          resolvedInferenceSource: inferenceSource,
+          inferenceLaneFallbacks: null,
+          userMessageId: null,
+          userMessageKey: started.userMessageKey ?? userMessageKeyForBridgeRun,
+          userMessageSeq: null,
+          assistantMessageId: assistantMessage.id,
+          assistantMessageKey: assistantMessage.key,
+          assistantMessageSeq: assistantMessage.seq,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Codex bridge runtime turn failed.";
+        return runtimeJsonResponse(503, {
+          ok: false,
+          code: "codex_bridge_runtime_failed",
+          error: "codex_bridge_runtime_failed",
+          message,
+          run_id: bridgeRunId,
+        });
+      }
+    }
     const runStartArgs: Record<string, unknown> = {
       ownerId: actor.dbUserId,
       threadId: ownedThread._id,

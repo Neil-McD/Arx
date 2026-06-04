@@ -25,6 +25,8 @@ function main() {
   const blaxel = read("convex/blaxelWorkspaceClient.ts");
   const smoke = read("convex/codexBridgeSmoke.ts");
   const codexExecSmoke = read("convex/codexBridgeCodexExecSmoke.ts");
+  const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
+  const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
   const operatorGate = read("convex/codexBridgeOperatorGate.ts");
   const codexBridgeGateway = read("shared/cloudCodexBridgeGateway.ts");
   const webWorkspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
@@ -304,7 +306,27 @@ function main() {
         /userMessageKey/.test(codexExecSmoke) &&
         /threads\.addCloudThreadMessage/.test(codexExecSmoke) &&
         /user:\$\{params\.runId\}:codex_bridge_prompt/.test(codexExecSmoke) &&
+        /runtimeCaller: v\.optional\(v\.boolean\(\)\)/.test(codexExecSmoke) &&
+        /POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS/.test(codexExecSmoke) &&
+        /threads\.getCloudThreadById/.test(codexExecSmoke) &&
+        /runtimeAuthorized/.test(codexExecSmoke) &&
+        /reconcileOperatorCodexBridgeCodexExecRun/.test(codexExecSmoke) &&
         /codex_bridge_thread_turn_async/.test(codexExecSmoke),
+    ),
+    check(
+      "runtime_turn_can_explicitly_request_codex_bridge_harness",
+      /requested_harness\?: "codex_bridge" \| null/.test(runtimeTurnResolution) &&
+        /isCodexBridgeRuntimeHarnessRequested/.test(runtimeTurnHandlers) &&
+        /String\(input\.requested_harness \?\? ""\)\.trim\(\) === "codex_bridge"/.test(runtimeTurnHandlers) &&
+        /buildCodexBridgeRuntimeRunId/.test(runtimeTurnHandlers) &&
+        /runtimeCaller: true/.test(runtimeTurnHandlers) &&
+        /CODEX_BRIDGE_RUNTIME_RECONCILE_AFTER_MS/.test(runtimeTurnHandlers) &&
+        /reconcileOperatorCodexBridgeCodexExecRun/.test(runtimeTurnHandlers) &&
+        /loadCodexBridgeRuntimeSnapshot/.test(runtimeTurnHandlers) &&
+        /event: "runtime_event"/.test(runtimeTurnHandlers) &&
+        /engine_id: "codex_blaxel_bridge"/.test(runtimeTurnHandlers) &&
+        /assistant:\$\{args\.runId\}:codex_bridge_final/.test(runtimeTurnHandlers) &&
+        !/requested_harness: "codex_bridge"/.test(webWorkspaceHost),
     ),
     check(
       "codex_exec_smoke_streams_jsonl_while_running",
@@ -421,7 +443,9 @@ function main() {
         /POLYNET_CODEX_BRIDGE_OPENAI_API_KEY/.test(stagingGuard) &&
         /POLYNET_CODEX_BRIDGE_ALLOW_SHARED_OPENAI_KEY/.test(stagingGuard) &&
         /POLYNET_CODEX_BRIDGE_OPERATOR_SECRET=/.test(envExample) &&
-        /POLYNET_CODEX_BRIDGE_OPERATOR_SECRET=/.test(stagingEnvExample),
+        /POLYNET_CODEX_BRIDGE_OPERATOR_SECRET=/.test(stagingEnvExample) &&
+        /POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS=false/.test(envExample) &&
+        /POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS="false"/.test(stagingEnvExample),
     ),
     check(
       "codex_exec_smoke_mints_token_before_run_start",
