@@ -686,6 +686,21 @@ assert.match(
   "Blaxel ensure must delete terminal sandboxes before provider recreation instead of reporting a dead sandbox as active",
 );
 assert.match(
+  blaxelWorkspaceClient,
+  /function isBlaxelWorkspaceSandboxProvisioningState[\s\S]*"deploying"[\s\S]*provisioningBlaxelSandboxFailure/,
+  "Blaxel provider client must classify provisioning sandbox states as not ready",
+);
+assert.match(
+  blaxelWorkspaceClient,
+  /ensureBlaxelWorkspaceSandbox[\s\S]*isBlaxelWorkspaceSandboxProvisioningState\(existingState\)[\s\S]*SandboxInstance\.delete\(sandboxName\)[\s\S]*const createdState = sandboxStateFrom\(sandbox\)[\s\S]*isBlaxelWorkspaceSandboxProvisioningState\(createdState\)[\s\S]*return provisioningBlaxelSandboxFailure\(createdState\)/,
+  "Blaxel ensure must replace stuck provisioning sandboxes and must not report newly provisioning sandboxes as active",
+);
+assert.match(
+  blaxelWorkspaceClient,
+  /resolveBlaxelWorkspaceSandboxIfReady[\s\S]*isBlaxelWorkspaceSandboxProvisioningState\(state\)[\s\S]*return provisioningBlaxelSandboxFailure\(state\)/,
+  "Blaxel command resolution must reject provisioning sandboxes before process execution",
+);
+assert.match(
   blaxelWorkspaceWake,
   /resolveReusableProjectWorkspaceLease[\s\S]*inspectBlaxelWorkspaceComputer[\s\S]*isBlaxelWorkspaceSandboxTerminalState\(inspected\.state\)[\s\S]*return null/,
   "reusable Blaxel workspace leases must not reuse provider sandboxes in terminal states",
