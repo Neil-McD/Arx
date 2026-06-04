@@ -693,6 +693,21 @@ export function isBlaxelWorkspaceSandboxTerminalState(value: unknown): boolean {
   );
 }
 
+function isBlaxelWorkspaceSandboxProvisioningState(value: unknown): boolean {
+  const state = normalizeBlaxelSandboxState(value);
+  return Boolean(
+    state &&
+    [
+      "creating",
+      "deploying",
+      "deployment_pending",
+      "pending",
+      "provisioning",
+      "starting",
+    ].includes(state),
+  );
+}
+
 function terminalBlaxelSandboxFailure(
   state: unknown,
 ): WorkspaceComputerProviderFailure {
@@ -700,6 +715,19 @@ function terminalBlaxelSandboxFailure(
     status: 404,
     code: "blaxel_sandbox_not_found",
     message: "Blaxel sandbox is no longer reusable.",
+    details: {
+      provider_state: normalizeOptionalString(state) ?? null,
+    },
+  });
+}
+
+function provisioningBlaxelSandboxFailure(
+  state: unknown,
+): WorkspaceComputerProviderFailure {
+  return failure({
+    status: 503,
+    code: "blaxel_sandbox_not_ready",
+    message: "Blaxel sandbox is not ready.",
     details: {
       provider_state: normalizeOptionalString(state) ?? null,
     },
@@ -1156,7 +1184,10 @@ export async function ensureBlaxelWorkspaceSandbox(
         await existingSandbox.wait({ maxWait: 120_000, interval: 2_000 });
       }
       const existingState = sandboxStateFrom(existingSandbox);
-      if (isBlaxelWorkspaceSandboxTerminalState(existingState)) {
+      if (
+        isBlaxelWorkspaceSandboxTerminalState(existingState) ||
+        isBlaxelWorkspaceSandboxProvisioningState(existingState)
+      ) {
         try {
           await SandboxInstance.delete(sandboxName);
         } catch (deleteError) {
@@ -1202,6 +1233,13 @@ export async function ensureBlaxelWorkspaceSandbox(
           if (typeof (updatedSandbox as any)?.wait === "function") {
             await (updatedSandbox as any).wait({ maxWait: 120_000, interval: 2_000 });
           }
+          const updatedState = sandboxStateFrom(updatedSandbox);
+          if (isBlaxelWorkspaceSandboxTerminalState(updatedState)) {
+            return terminalBlaxelSandboxFailure(updatedState);
+          }
+          if (isBlaxelWorkspaceSandboxProvisioningState(updatedState)) {
+            return provisioningBlaxelSandboxFailure(updatedState);
+          }
           await ensureBlaxelWorkspaceRootDirectory(updatedSandbox, workspaceRoot);
           return {
             ok: true,
@@ -1239,6 +1277,9 @@ export async function ensureBlaxelWorkspaceSandbox(
     const createdState = sandboxStateFrom(sandbox);
     if (isBlaxelWorkspaceSandboxTerminalState(createdState)) {
       return terminalBlaxelSandboxFailure(createdState);
+    }
+    if (isBlaxelWorkspaceSandboxProvisioningState(createdState)) {
+      return provisioningBlaxelSandboxFailure(createdState);
     }
     await ensureBlaxelWorkspaceRootDirectory(sandbox, workspaceRoot);
     return {
@@ -1389,6 +1430,9 @@ export async function resolveBlaxelWorkspaceSandboxIfReady(params: {
     const state = sandboxStateFrom(sandbox);
     if (isBlaxelWorkspaceSandboxTerminalState(state)) {
       return terminalBlaxelSandboxFailure(state);
+    }
+    if (isBlaxelWorkspaceSandboxProvisioningState(state)) {
+      return provisioningBlaxelSandboxFailure(state);
     }
     return {
       ok: true,
