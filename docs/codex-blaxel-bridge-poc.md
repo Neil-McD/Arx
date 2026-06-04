@@ -427,3 +427,15 @@ volumes and correcting process-state interpretation, the bridge substrate,
 Codex exec smoke, and runtime-authorized thread-turn path all pass against
 Convex staging. Next verification should move to the staging UI/operator flow
 and Vercel staging build freshness rather than adding more harness logic.
+
+Additional staging UI readiness note:
+
+1. `polynet-staging.vercel.app` was still pinned to an older preview build
+   (`44089ad49ed6cecfbd3d7891f7cc82527658af92`) while the latest branch
+   preview had the correct commit
+   (`e8f048b03bf28f0f0c083fe32c354bdffa680d48`).
+2. The first fresh branch preview booted without the required branch-scoped
+   preview env and failed runtime startup with `Missing Convex runtime URL.`
+3. Branch-scoped preview env is now configured for
+   `codex/blaxel-codex-bridge-poc`; the next Git preview build should prove
+   whether the staging UI/operator flow can boot against Convex staging.
