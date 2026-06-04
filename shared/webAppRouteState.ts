@@ -1,4 +1,3 @@
-import { isUuid } from "./appIdentity";
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
@@ -81,6 +80,13 @@ function joinPathWithQueryAndHash(pathname: string, search: string, hash: string
 }
 
 export function normalizeWorkspaceDraftProjectId(value: string | null | undefined): string | null {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return null;
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(normalized)) return null;
+  return normalized;
+}
+
+export function normalizeWorkspaceThreadId(value: string | null | undefined): string | null {
   const normalized = String(value ?? "").trim();
   if (!normalized) return null;
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(normalized)) return null;
@@ -189,8 +195,8 @@ export function buildWorkspaceCommunityDraftPath(
 }
 
 export function buildWorkspaceThreadPath(threadId: string | null | undefined): string {
-  const normalized = String(threadId ?? "").trim();
-  if (!isUuid(normalized)) return buildWorkspaceDraftPath();
+  const normalized = normalizeWorkspaceThreadId(threadId);
+  if (!normalized) return buildWorkspaceDraftPath();
   return `/workspace/thread/${encodeURIComponent(normalized)}`;
 }
 
@@ -467,7 +473,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         settingsPage: "agent",
         communitySlug: null,
         communityTab: "chat",
-        threadId: isUuid(rawThreadId) ? rawThreadId : null,
+        threadId: normalizeWorkspaceThreadId(rawThreadId),
       };
     }
     if (segments[1] === "community" && segments.length === 5 && segments[3] === "setup") {

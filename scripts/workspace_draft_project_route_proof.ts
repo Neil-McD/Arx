@@ -23,6 +23,21 @@ assert.match(
 );
 assert.match(
   routeState,
+  /export function normalizeWorkspaceThreadId[\s\S]*\/\^\[A-Za-z0-9_-\]\{1,160\}\$\/\.test\(normalized\)/,
+  "workspace thread route ids must accept safe Convex ids without falling back to draft mode",
+);
+assert.match(
+  routeState,
+  /export function buildWorkspaceThreadPath\(threadId: string \| null \| undefined\): string \{[\s\S]*const normalized = normalizeWorkspaceThreadId\(threadId\);[\s\S]*return `\/workspace\/thread\/\$\{encodeURIComponent\(normalized\)\}`;/,
+  "workspace thread route builder must preserve normalized non-UUID thread ids",
+);
+assert.match(
+  routeState,
+  /if \(segments\[1\] === "thread" && segments\.length >= 3\) \{[\s\S]*threadId: normalizeWorkspaceThreadId\(rawThreadId\),[\s\S]*\}/,
+  "workspace thread route parser must preserve normalized non-UUID thread ids",
+);
+assert.match(
+  routeState,
   /function appendWorkspaceDraftProjectSearch\(path: string, projectId\?: string \| null\)[\s\S]*parsed\.searchParams\.set\(WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM, normalizedProjectId\)/,
   "draft routes must append the normalized project id as query state",
 );
