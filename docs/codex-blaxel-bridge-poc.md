@@ -369,3 +369,18 @@ Additional verification after the async operator launcher patch:
 8. Fresh operator-token-gated Codex exec smoke after the shared launcher refactor: `codex_bridge_codex_exec_1780575084076_470dcbd2`
 
 Next step before staging browser verification: confirm the `polynet-staging` Vercel project has built this branch through Git, ensure the staging user has an operator role in Convex, then open a staging workspace thread as an operator and run the Codex bridge control.
+
+Additional verification after the explicit runtime-turn gate and Blaxel readiness hardening:
+
+1. `npm run check:codex-bridge-contract-proof`
+2. `npx tsc --noEmit --pretty false`
+3. `git diff --check`
+4. `npm run build`
+5. `CONVEX_DEPLOYMENT=dev:quick-porcupine-949 npx convex dev --once --typecheck disable --codegen disable --tail-logs disable`
+6. Runtime bridge flag confirmed disabled after probes: `POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS=false`
+7. Runtime-authorized Codex bridge probe `codex_bridge_runtime_readiness_probe_17805877103N` reached `codex_bridge_context_fetched`, `codex_exec_invoked`, and `codex_exec_stream_started`, then stalled before final callback. Reconcile finished the run as `error` with provider code `blaxel_sandbox_not_ready`.
+8. Non-Codex Blaxel process lifecycle probe `codex_bridge_blaxel_process_probe_17805885403N` started a trivial shell loop in the same project sandbox with `agent_run` lifecycle. Immediate read succeeded and saw the marker log. After 20 seconds, the second read and stop both failed with `blaxel_sandbox_not_ready`.
+9. Follow-up 5-second probe `codex_bridge_blaxel_process_probe_17805885913N_5s` failed earlier at sandbox ensure with `blaxel_request_failed`.
+10. Resource inventory reported the target project volume present, no provider sandboxes, and staging volume quota risk (`providerVolumeCount=5`, `providerVolumeLimit=5`, safety buffer 1).
+
+Current read: the remaining blocker is Blaxel project-sandbox lifecycle/readback reliability, not Codex JSONL parsing or PolyNet context injection. Do not add more bridge harness logic until a trivial non-Codex process can survive and remain readable long enough for the runtime turn path.

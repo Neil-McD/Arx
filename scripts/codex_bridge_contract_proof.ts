@@ -384,6 +384,21 @@ function main() {
         ),
     ),
     check(
+      "codex_bridge_has_non_codex_blaxel_process_lifecycle_probe",
+      /probeOperatorCodexBridgeBlaxelProcessLifecycle/.test(codexExecSmoke) &&
+        /deploymentKind !== "staging"/.test(codexExecSmoke) &&
+        /operatorAccess\.getOperatorWriteAccessInternal/.test(codexExecSmoke) &&
+        /resolveCodexBridgeRunScopeInternal/.test(codexExecSmoke) &&
+        /lifecycleIntent: "agent_run"/.test(codexExecSmoke) &&
+        /purpose: "codex_bridge_blaxel_process_probe"/.test(codexExecSmoke) &&
+        /POLYNET_BLAXEL_PROCESS_PROBE_MARKER/.test(codexExecSmoke) &&
+        /waitForCompletion: false/.test(codexExecSmoke) &&
+        /const firstRead = await readBlaxelWorkspaceProcess/.test(codexExecSmoke) &&
+        /await sleep\(waitMs\)/.test(codexExecSmoke) &&
+        /const secondRead = await readBlaxelWorkspaceProcess/.test(codexExecSmoke) &&
+        /const stopped = await stopBlaxelWorkspaceProcess/.test(codexExecSmoke),
+    ),
+    check(
       "codex_exec_finish_carries_bounded_assistant_output",
       /assistantText\?: string \| null/.test(shared) &&
         /assistantModelId\?: string \| null/.test(shared) &&

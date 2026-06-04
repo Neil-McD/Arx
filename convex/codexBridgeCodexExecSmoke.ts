@@ -108,6 +108,50 @@ type CodexExecThreadTurnAsyncLaunchResult = CodexExecAsyncLaunchResult & {
   userMessageKey?: string | null;
 };
 
+type BlaxelBridgeProcessProbeEvidence = {
+  stagingOnly: boolean;
+  operatorAuthorized: boolean;
+  providerPolicySelected: boolean;
+  projectLoaded: boolean;
+  sandboxEnsured: boolean;
+  commandStarted: boolean;
+  firstReadOk: boolean;
+  secondReadOk: boolean;
+  markerSeenBeforeWait: boolean;
+  markerSeenAfterWait: boolean;
+  processSurvivedWait: boolean;
+  stopAttempted: boolean;
+  stoppedProcess: boolean;
+};
+
+type BlaxelBridgeProcessProbeResult = {
+  ok: boolean;
+  code: string;
+  deploymentKind: string;
+  projectId: string;
+  threadId: string;
+  ownerId: string | null;
+  probeId: string;
+  sandboxName: string;
+  processName: string;
+  waitMs: number;
+  evidence: BlaxelBridgeProcessProbeEvidence;
+  reads: {
+    firstStatus?: string | null;
+    firstExitCode?: number | null;
+    firstStdoutTail?: string | null;
+    firstStderrTail?: string | null;
+    firstLogsTail?: string | null;
+    secondStatus?: string | null;
+    secondExitCode?: number | null;
+    secondStdoutTail?: string | null;
+    secondStderrTail?: string | null;
+    secondLogsTail?: string | null;
+  };
+  failures: string[];
+  errors: CodexExecSmokeError[];
+};
+
 type CodexExecProcessReconcileResult = {
   ok: boolean;
   code: string;
@@ -721,6 +765,24 @@ function initialAsyncLaunchEvidence(): CodexExecAsyncLaunchEvidence {
   };
 }
 
+function initialBlaxelBridgeProcessProbeEvidence(): BlaxelBridgeProcessProbeEvidence {
+  return {
+    stagingOnly: false,
+    operatorAuthorized: false,
+    providerPolicySelected: false,
+    projectLoaded: false,
+    sandboxEnsured: false,
+    commandStarted: false,
+    firstReadOk: false,
+    secondReadOk: false,
+    markerSeenBeforeWait: false,
+    markerSeenAfterWait: false,
+    processSurvivedWait: false,
+    stopAttempted: false,
+    stoppedProcess: false,
+  };
+}
+
 function buildRunId(raw: unknown, prefix = "codex_bridge_codex_exec"): string {
   const provided = String(raw ?? "").trim();
   if (provided) return provided.slice(0, 180);
@@ -741,6 +803,10 @@ function readOptionalPositiveIntegerEnv(name: string, fallback: number): number 
 function readOptionalNonNegativeIntegerEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(readEnv(name), 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.floor(ms))));
 }
 
 function textTail(value: unknown, limit: number): string | null {
@@ -1682,6 +1748,269 @@ export const startOperatorCodexBridgeCodexExecRunAsync = action({
         errors,
       };
     }
+  },
+});
+
+export const probeOperatorCodexBridgeBlaxelProcessLifecycle = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.id("cloudProjects"),
+    threadId: v.id("threads"),
+    probeId: v.optional(v.string()),
+    waitMs: v.optional(v.number()),
+    stopProcess: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<BlaxelBridgeProcessProbeResult> => {
+    const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
+    const failures: string[] = [];
+    const errors: CodexExecSmokeError[] = [];
+    const evidence = initialBlaxelBridgeProcessProbeEvidence();
+    evidence.stagingOnly = deploymentKind === "staging";
+    const waitMs = Math.max(1_000, Math.min(60_000, Math.floor(Number(args.waitMs ?? 20_000))));
+    const probeId = buildRunId(args.probeId, "codex_bridge_blaxel_process_probe");
+    let projectId = String(args.projectId);
+    let threadId = String(args.threadId);
+    let ownerId: string | null = null;
+    let names = buildBlaxelProjectWorkspaceNames(args.projectId);
+    const processName = `polynet-blaxel-probe-${randomUUID().slice(0, 8)}`;
+    const marker = `POLYNET_BLAXEL_PROCESS_PROBE_${probeId}`;
+    const reads: BlaxelBridgeProcessProbeResult["reads"] = {};
+
+    if (deploymentKind !== "staging") {
+      failures.push("not_staging_deployment");
+      return {
+        ok: false,
+        code: "codex_bridge_blaxel_process_probe_staging_only",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        probeId,
+        sandboxName: names.sandboxName,
+        processName,
+        waitMs,
+        evidence,
+        reads,
+        failures,
+        errors,
+      };
+    }
+
+    try {
+      await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
+        authSubject: args.authSubject,
+      });
+      evidence.operatorAuthorized = true;
+    } catch (error) {
+      failures.push("operator_write_access_required");
+      errors.push(sanitizeSmokeError(error));
+    }
+
+    const policy = resolveWorkspaceComputerProviderFromServerEnv();
+    evidence.providerPolicySelected = policy.providerId === "blaxel";
+    if (!evidence.providerPolicySelected) failures.push("blaxel_policy_not_selected");
+
+    const scope = (await ctx.runQuery(
+      (internal as any).threads.resolveCodexBridgeRunScopeInternal as any,
+      {
+        threadId: args.threadId,
+        expectedProjectId: args.projectId,
+      },
+    )) as Record<string, unknown> | null;
+    evidence.projectLoaded = Boolean(scope);
+    ownerId = normalizeOptionalString(scope?.ownerId);
+    projectId = normalizeOptionalString(scope?.projectId) ?? projectId;
+    threadId = normalizeOptionalString(scope?.threadId) ?? threadId;
+    names = buildBlaxelProjectWorkspaceNames(projectId);
+    if (!scope) failures.push("bridge_scope_missing");
+    if (!ownerId) failures.push("bridge_scope_owner_missing");
+    if (!projectId) failures.push("bridge_scope_project_missing");
+    if (!threadId) failures.push("bridge_scope_thread_missing");
+
+    if (failures.length > 0 || !ownerId || !projectId || !threadId) {
+      return {
+        ok: false,
+        code: "codex_bridge_blaxel_process_probe",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        probeId,
+        sandboxName: names.sandboxName,
+        processName,
+        waitMs,
+        evidence,
+        reads,
+        failures,
+        errors,
+      };
+    }
+
+    const ensured = await ensureBlaxelWorkspaceComputer({
+      sandboxName: names.sandboxName,
+      volumeName: names.volumeName,
+      lifecycleIntent: "agent_run",
+      labels: {
+        purpose: "codex_bridge_blaxel_process_probe",
+        project_id: projectId,
+        owner_id: ownerId,
+      },
+    });
+    if (!ensured.ok) {
+      failures.push("sandbox_ensure_failed");
+      errors.push({
+        responseStatus: ensured.status,
+        providerCode: ensured.code,
+        errorMessage: redactSensitiveText(ensured.message),
+      });
+      return {
+        ok: false,
+        code: "codex_bridge_blaxel_process_probe",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        probeId,
+        sandboxName: names.sandboxName,
+        processName,
+        waitMs,
+        evidence,
+        reads,
+        failures,
+        errors,
+      };
+    }
+    evidence.sandboxEnsured = true;
+
+    const commandResult = await executeBlaxelWorkspaceCommand({
+      sandboxName: names.sandboxName,
+      cwd: ".",
+      processName,
+      waitForCompletion: false,
+      timeoutSeconds: 300,
+      readyRetryMs: 60_000,
+      env: {
+        POLYNET_BLAXEL_PROCESS_PROBE_MARKER: marker,
+      },
+      command:
+        "sh -lc 'i=0; while true; do printf \"%s tick=%s time=%s\\n\" \"$POLYNET_BLAXEL_PROCESS_PROBE_MARKER\" \"$i\" \"$(date +%s)\"; i=$((i+1)); sleep 2; done'",
+    });
+    if (!commandResult.ok) {
+      failures.push("probe_process_start_failed");
+      errors.push({
+        responseStatus: commandResult.status,
+        providerCode: commandResult.code,
+        errorMessage: redactSensitiveText(commandResult.message),
+      });
+      return {
+        ok: false,
+        code: "codex_bridge_blaxel_process_probe",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        probeId,
+        sandboxName: names.sandboxName,
+        processName,
+        waitMs,
+        evidence,
+        reads,
+        failures,
+        errors,
+      };
+    }
+    evidence.commandStarted = true;
+
+    const firstRead = await readBlaxelWorkspaceProcess({
+      sandboxName: names.sandboxName,
+      processName,
+    });
+    if (firstRead.ok) {
+      const readRecord = firstRead as unknown as Record<string, unknown>;
+      reads.firstStatus = normalizeProcessStatus(readRecord.status);
+      reads.firstExitCode = processExitCode(readRecord.exitCode);
+      reads.firstStdoutTail = textTail(readRecord.stdout, 1200);
+      reads.firstStderrTail = textTail(readRecord.stderr, 1200);
+      reads.firstLogsTail = textTail(readRecord.logs, 1600);
+      evidence.firstReadOk = true;
+      evidence.markerSeenBeforeWait = combinedProcessOutput(readRecord).includes(marker);
+    } else {
+      failures.push("probe_first_read_failed");
+      errors.push({
+        responseStatus: firstRead.status,
+        providerCode: firstRead.code,
+        errorMessage: redactSensitiveText(firstRead.message),
+      });
+    }
+
+    await sleep(waitMs);
+
+    const secondRead = await readBlaxelWorkspaceProcess({
+      sandboxName: names.sandboxName,
+      processName,
+    });
+    if (secondRead.ok) {
+      const readRecord = secondRead as unknown as Record<string, unknown>;
+      reads.secondStatus = normalizeProcessStatus(readRecord.status);
+      reads.secondExitCode = processExitCode(readRecord.exitCode);
+      reads.secondStdoutTail = textTail(readRecord.stdout, 1200);
+      reads.secondStderrTail = textTail(readRecord.stderr, 1200);
+      reads.secondLogsTail = textTail(readRecord.logs, 1600);
+      evidence.secondReadOk = true;
+      evidence.markerSeenAfterWait = combinedProcessOutput(readRecord).includes(marker);
+      evidence.processSurvivedWait = evidence.markerSeenAfterWait && !isProcessTerminal(readRecord);
+    } else {
+      failures.push("probe_second_read_failed");
+      errors.push({
+        responseStatus: secondRead.status,
+        providerCode: secondRead.code,
+        errorMessage: redactSensitiveText(secondRead.message),
+      });
+    }
+
+    if (args.stopProcess !== false) {
+      evidence.stopAttempted = true;
+      const stopped = await stopBlaxelWorkspaceProcess({
+        sandboxName: names.sandboxName,
+        processName,
+      });
+      evidence.stoppedProcess = stopped.ok === true;
+      if (!stopped.ok) {
+        failures.push("probe_stop_failed");
+        errors.push({
+          responseStatus: stopped.status,
+          providerCode: stopped.code,
+          errorMessage: redactSensitiveText(stopped.message),
+        });
+      }
+    }
+
+    const ok =
+      failures.length === 0 &&
+      evidence.commandStarted &&
+      evidence.firstReadOk &&
+      evidence.secondReadOk &&
+      evidence.markerSeenBeforeWait &&
+      evidence.markerSeenAfterWait &&
+      evidence.processSurvivedWait &&
+      (args.stopProcess === false || evidence.stoppedProcess);
+
+    return {
+      ok,
+      code: "codex_bridge_blaxel_process_probe",
+      deploymentKind,
+      projectId,
+      threadId,
+      ownerId,
+      probeId,
+      sandboxName: names.sandboxName,
+      processName,
+      waitMs,
+      evidence,
+      reads,
+      failures,
+      errors,
+    };
   },
 });
 
