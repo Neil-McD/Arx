@@ -76,6 +76,7 @@ type CodexExecSmokeResult = {
 type CodexExecAsyncLaunchEvidence = {
   stagingOnly: boolean;
   operatorAuthorized: boolean;
+  runtimeAuthorized: boolean;
   providerPolicySelected: boolean;
   projectLoaded: boolean;
   codexAuthAvailable: boolean;
@@ -709,6 +710,7 @@ function initialAsyncLaunchEvidence(): CodexExecAsyncLaunchEvidence {
   return {
     stagingOnly: false,
     operatorAuthorized: false,
+    runtimeAuthorized: false,
     providerPolicySelected: false,
     projectLoaded: false,
     codexAuthAvailable: false,
@@ -813,6 +815,20 @@ function isRunOldEnoughForCodexBridgeReconcile(run: Record<string, unknown> | nu
     8 * 60 * 1000,
   );
   return Number.isFinite(startedAt) && startedAt > 0 && Math.max(0, nowMs - Math.floor(startedAt)) >= staleAfterMs;
+}
+
+function isRunOldEnoughForUnavailableCodexBridgeReconcile(run: Record<string, unknown> | null, nowMs: number): boolean {
+  if (!run) return false;
+  const startedAt = Number(run.startedAt ?? 0);
+  const unavailableAfterMs = readOptionalNonNegativeIntegerEnv(
+    "POLYNET_CODEX_BRIDGE_RECONCILE_UNAVAILABLE_AFTER_MS",
+    90 * 1000,
+  );
+  return (
+    Number.isFinite(startedAt) &&
+    startedAt > 0 &&
+    Math.max(0, nowMs - Math.floor(startedAt)) >= unavailableAfterMs
+  );
 }
 
 function processOutputShowsCodexExecSuccess(read: Record<string, unknown> | null): boolean {
@@ -1677,6 +1693,7 @@ export const startOperatorCodexBridgeThreadTurnAsync = action({
     prompt: v.string(),
     runId: v.optional(v.string()),
     baseUrl: v.optional(v.string()),
+    runtimeCaller: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<CodexExecThreadTurnAsyncLaunchResult> => {
     const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
@@ -1734,10 +1751,58 @@ export const startOperatorCodexBridgeThreadTurnAsync = action({
       };
     }
 
-    await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
-      authSubject: args.authSubject,
-    });
-    evidence.operatorAuthorized = true;
+    if (args.runtimeCaller === true) {
+      if (readEnv("POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS") !== "true") {
+        return {
+          ok: false,
+          code: "codex_bridge_thread_turn_async_failed",
+          deploymentKind,
+          projectId,
+          threadId,
+          ownerId,
+          runId,
+          sandboxName: names.sandboxName,
+          processName,
+          providerCommandId: null,
+          status: null,
+          exitCode: null,
+          evidence,
+          userMessageKey,
+          failures: ["runtime_codex_bridge_disabled"],
+          errors,
+        };
+      }
+      const ownedThread = (await ctx.runQuery((api as any).threads.getCloudThreadById as any, {
+        authSubject: args.authSubject ?? null,
+        threadId: args.threadId,
+      })) as { ownerId?: unknown; projectId?: unknown } | null;
+      if (!ownedThread || String(ownedThread.projectId ?? "") !== String(args.projectId)) {
+        return {
+          ok: false,
+          code: "codex_bridge_thread_turn_async_failed",
+          deploymentKind,
+          projectId,
+          threadId,
+          ownerId,
+          runId,
+          sandboxName: names.sandboxName,
+          processName,
+          providerCommandId: null,
+          status: null,
+          exitCode: null,
+          evidence,
+          userMessageKey,
+          failures: ["runtime_codex_bridge_thread_scope_invalid"],
+          errors,
+        };
+      }
+      evidence.runtimeAuthorized = true;
+    } else {
+      await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
+        authSubject: args.authSubject,
+      });
+      evidence.operatorAuthorized = true;
+    }
 
     try {
       const launched = await launchCodexBridgeCodexExecCommand({
@@ -1754,7 +1819,10 @@ export const startOperatorCodexBridgeThreadTurnAsync = action({
         failures,
         errors,
         purposeLabel: "codex-bridge-thread-turn-async",
-        harnessProfileSource: "codex_bridge_thread_turn_async",
+        harnessProfileSource:
+          args.runtimeCaller === true
+            ? "runtime_codex_bridge_thread_turn_async"
+            : "codex_bridge_thread_turn_async",
         waitForCompletion: false,
       });
       projectId = launched.projectId;
@@ -1915,6 +1983,7 @@ export const reconcileOperatorCodexBridgeCodexExecRun = action({
     processName: v.optional(v.string()),
     finishStaleRunning: v.optional(v.boolean()),
     stopStaleRunning: v.optional(v.boolean()),
+    runtimeCaller: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<CodexExecProcessReconcileResult> => {
     const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
@@ -1956,9 +2025,44 @@ export const reconcileOperatorCodexBridgeCodexExecRun = action({
       };
     }
 
-    await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
-      authSubject: args.authSubject,
-    });
+    if (args.runtimeCaller === true) {
+      if (readEnv("POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS") !== "true") {
+        failures.push("runtime_codex_bridge_disabled");
+      } else {
+        const ownedThread = (await ctx.runQuery((api as any).threads.getCloudThreadById as any, {
+          authSubject: args.authSubject ?? null,
+          threadId: args.threadId,
+        })) as { projectId?: unknown } | null;
+        if (!ownedThread || String(ownedThread.projectId ?? "") !== String(args.projectId)) {
+          failures.push("runtime_codex_bridge_thread_scope_invalid");
+        }
+      }
+    } else {
+      await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
+        authSubject: args.authSubject,
+      });
+    }
+    if (failures.length > 0) {
+      return {
+        ok: false,
+        code: "codex_bridge_codex_exec_reconcile",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        runId,
+        sandboxName: names.sandboxName,
+        processName,
+        runStatus,
+        processStatus,
+        processExitCode: processExit,
+        finishedRun,
+        stoppedProcess,
+        observation,
+        failures,
+        errors,
+      };
+    }
 
     const scope = (await ctx.runQuery(
       (internal as any).threads.resolveCodexBridgeRunScopeInternal as any,
@@ -2037,6 +2141,8 @@ export const reconcileOperatorCodexBridgeCodexExecRun = action({
     const runIsRunning = runStatus === "running";
     const runIsStale = isRunStaleForCodexBridgeReconcile(run, nowMs);
     const runIsOldEnough = isRunOldEnoughForCodexBridgeReconcile(run, nowMs);
+    const runIsOldEnoughForUnavailableProcess =
+      isRunOldEnoughForUnavailableCodexBridgeReconcile(run, nowMs);
     let reconciledStatus: string | null = null;
     const readFailedWithMissingProcess =
       readError?.code === "blaxel_process_not_found" ||
@@ -2049,7 +2155,9 @@ export const reconcileOperatorCodexBridgeCodexExecRun = action({
     const shouldFinishStaleRunning =
       runIsRunning &&
       args.finishStaleRunning === true &&
-      ((processRunning && runIsStale) || readFailedWithMissingProcess || (readFailedWithUnavailableProcess && runIsOldEnough));
+      ((processRunning && runIsStale) ||
+        readFailedWithMissingProcess ||
+        (readFailedWithUnavailableProcess && runIsOldEnoughForUnavailableProcess));
 
     if (ownerId && runIsRunning && processName) {
       try {

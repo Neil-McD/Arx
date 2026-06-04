@@ -34,6 +34,7 @@ export type RuntimeTurnInput = {
     | "platform"
     | "auto"
     | null;
+  requested_harness?: "codex_bridge" | null;
   stream?: boolean;
   idempotency_key?: string | null;
   user_message_key?: string | null;
