@@ -289,6 +289,13 @@ Implementation:
 
 Status: first staging operator trigger implemented locally. The browser calls an authenticated Convex action, Convex verifies operator write access, starts a hidden Codex exec run in Blaxel asynchronously, and polls the hidden bridge run ledger while Codex is still running. True live progress in the normal thread UI remains a later UI slice; the operator panel is the current staging control surface.
 
+Async liveness contract:
+
+- The async launcher records a `codex_exec_process_started` event with the Blaxel process handle for the run.
+- A staging-only operator reconciliation action can read the Blaxel process, append a bounded `codex_exec_process_observed` event, and close a terminal or stale missed-callback run through the existing bridge finalizer.
+- Blaxel `standby` sandboxes are treated as not-ready for command execution; the bridge must not launch Codex into a sleeping/redeploying sandbox.
+- This is lifecycle supervision only; it does not route context, select tools, or constrain Codex behavior.
+
 ### Slice 5: Replace One Narrow Runtime Path
 
 Must prove:

@@ -704,6 +704,7 @@ function isBlaxelWorkspaceSandboxProvisioningState(value: unknown): boolean {
       "pending",
       "provisioning",
       "starting",
+      "standby",
     ].includes(state),
   );
 }

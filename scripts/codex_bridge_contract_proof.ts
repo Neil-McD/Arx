@@ -317,6 +317,30 @@ function main() {
         !/errorMessage: status === "succeeded" \? null : errorMessage/.test(codexExecSmoke),
     ),
     check(
+      "async_codex_exec_persists_process_handle",
+      /startOperatorCodexBridgeCodexExecRunAsync/.test(codexExecSmoke) &&
+        /eventType: "codex_exec_process_started"/.test(codexExecSmoke) &&
+        /eventKey: "codex_exec_process_started"/.test(codexExecSmoke) &&
+        /process_name: processName/.test(codexExecSmoke) &&
+        /provider_command_id: commandResult\.providerCommandId \?\? processName/.test(codexExecSmoke) &&
+        /codex_exec_process_started_event_failed/.test(codexExecSmoke),
+    ),
+    check(
+      "async_codex_exec_has_operator_reconcile_path",
+      /readBlaxelWorkspaceProcess/.test(codexExecSmoke) &&
+        /stopBlaxelWorkspaceProcess/.test(codexExecSmoke) &&
+        /reconcileOperatorCodexBridgeCodexExecRun/.test(codexExecSmoke) &&
+        /deploymentKind !== "staging"/.test(codexExecSmoke) &&
+        /operatorAccess\.getOperatorWriteAccessInternal/.test(codexExecSmoke) &&
+        /eventType: "codex_exec_process_observed"/.test(codexExecSmoke) &&
+        /finishStaleRunning/.test(codexExecSmoke) &&
+        /codex_exec_process_stale_timeout/.test(codexExecSmoke) &&
+        /status: reconciledStatus/.test(codexExecSmoke) &&
+        /assistantText: reconciledStatus === "ok" \? CODEX_EXEC_MARKER : undefined/.test(
+          codexExecSmoke,
+        ),
+    ),
+    check(
       "codex_exec_finish_carries_bounded_assistant_output",
       /assistantText\?: string \| null/.test(shared) &&
         /assistantModelId\?: string \| null/.test(shared) &&
