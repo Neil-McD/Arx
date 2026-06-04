@@ -261,12 +261,18 @@ assert.match(prompt, /When the member asks your name, answer with the configured
 assert.match(prompt, /You are the member's Polynet agent: a sharp little intelligence/);
 assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
-assert.match(prompt, /Use get_active_community_context when the answer depends on the active community's identity/);
-assert.match(prompt, /When available, use community resource tools when canonical resource navigation/);
-assert.match(prompt, /Use community_resources_map first/);
-assert.match(prompt, /Use community_resources_read to batch-read/);
-assert.match(prompt, /Use community_resources_list to inspect/);
-assert.match(prompt, /Use community_search when active community activity, archive memory, or learned context matter beyond the resource directory/);
+assert.match(prompt, /Community resource tools, when listed, expose canonical resource navigation/);
+assert.match(prompt, /Community search, when listed, exposes active community activity, archive memory, and learned context beyond the resource directory/);
+assert.match(prompt, /Community context capabilities expose bounded profile, live resource, and archive-memory evidence/);
+assert.match(prompt, /Workspace capabilities operate on the active computer workspace/);
+assert.doesNotMatch(
+  prompt.slice(
+    prompt.indexOf("AGENT_OPERATING_POLICY"),
+    prompt.indexOf("COMMUNITY_LENS"),
+  ),
+  /\bUse (?:get_active_community_context|community_resources_\w+|community_resource_read|community_search|read|grep|glob|bash)\b/,
+  "operating policy should not route through specific tool guidance",
+);
 assert.match(prompt, /About excerpt: Used to prove prompt layout/);
 assert.match(prompt, /The about excerpt is not a complete knowledge base/);
 assert.doesNotMatch(prompt, /About: Used to prove prompt layout/);
@@ -410,8 +416,8 @@ assert.match(
 );
 assert.match(
   runtimePromptSource,
-  /Do not start the same long-running server command with both terminal_start and bash/,
-  "terminal guidance should prevent duplicate long-running server launches",
+  /Background terminal capabilities are for long-running or previewable processes/,
+  "terminal guidance should describe the background terminal capability boundary",
 );
 
 console.log("runtime_prompt_layout_proof: ok");

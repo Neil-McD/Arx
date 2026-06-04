@@ -24,6 +24,14 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function promptBlock(prompt: string, blockName: string, nextBlockName: string): string {
+  const start = prompt.indexOf(blockName);
+  assert.notEqual(start, -1, `expected ${blockName} block`);
+  const next = prompt.indexOf(nextBlockName, start + blockName.length);
+  assert.notEqual(next, -1, `expected ${nextBlockName} block after ${blockName}`);
+  return prompt.slice(start, next);
+}
+
 function assertSameArray(actual: readonly string[], expected: readonly string[], message: string) {
   assert.equal(stable(actual), stable(expected), message);
 }
@@ -176,19 +184,30 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);
   assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_write,web_research,web_crawl,read,write,bash/);
-  assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
-  assert.match(platformHarnessPrompt, /Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL/);
-  assert.match(platformHarnessPrompt, /Use get_active_community_context when the answer depends on the active community's identity/);
-  assert.match(platformHarnessPrompt, /Use community_resources_map first/);
-  assert.match(platformHarnessPrompt, /Use community_resources_read to batch-read/);
-  assert.match(platformHarnessPrompt, /Use community_resources_list to inspect/);
+  assert.match(platformHarnessPrompt, /Community context capabilities expose bounded profile, live resource, and archive-memory evidence/);
+  assert.match(platformHarnessPrompt, /Product documentation capabilities expose platform-level definitions and workflows/);
+  assert.match(platformHarnessPrompt, /External web capabilities expose current-source lookup and bounded crawling/);
+  assert.match(platformHarnessPrompt, /Workspace capabilities operate on the active computer workspace/);
   assert.doesNotMatch(
     platformHarnessPrompt,
     /community_resource_builder_read with target_type and an exact id copied from list output/,
     "member/read prompt fixture must not include builder resource edit guidance",
   );
-  assert.match(platformHarnessPrompt, /Use community_search when active community activity/);
-  assert.match(platformHarnessPrompt, /Use read to inspect specific files/);
+  const operatingPolicy = promptBlock(
+    platformHarnessPrompt,
+    "AGENT_OPERATING_POLICY",
+    "COMMUNITY_LENS",
+  );
+  assert.doesNotMatch(
+    operatingPolicy,
+    /\bUse (?:get_active_community_context|community_resources_\w+|community_resource_read|community_search|web_research|web_crawl|read|grep|glob|bash)\b/,
+    "operating policy should expose capabilities without routing to specific tools",
+  );
+  assert.doesNotMatch(
+    operatingPolicy,
+    /\b(jobKind|intentKind|routeKind|recommended tool|preferred tool|community_resources_map first)\b/i,
+    "operating policy should not classify or recommend a deterministic route",
+  );
   assert.doesNotMatch(
     platformHarnessPrompt,
     /\bfree tier\b|\bbuilder tier\b|\bpro tier\b|builder_tier|canonicalTier|effectiveTier/i,
@@ -238,10 +257,10 @@ function provePromptEntrypoints() {
   });
   assert.match(
     builderHarnessPrompt,
-    /community_resource_builder_read with ref to inspect a wiki category, page, source, readable path, resources:\/\/ URI, or exact id/,
+    /Resources Architect builder tools are builder-lane only and expose draft, review, source inbox, and health state/,
   );
-  assert.match(builderHarnessPrompt, /retry with the most specific directory_uri/);
-  assert.match(builderHarnessPrompt, /wait for explicit builder approval before calling community_resource_builder_apply_changeset/);
+  assert.match(builderHarnessPrompt, /the most specific directory_uri is the safe retry target/);
+  assert.match(builderHarnessPrompt, /Apply only after explicit approval of the exact staged changeset/);
   assert.match(
     builderHarnessPrompt,
     /translate resource tool results into product state/,
@@ -256,7 +275,7 @@ function provePromptEntrypoints() {
   );
   assert.match(
     builderHarnessPrompt,
-    /Report saved versus reused state, page count, source-unit count when visible/,
+    /saved versus reused state, page count, source-unit count when visible/,
   );
 
   const platformChatPrompt = composePlatformChatRuntimeSystemPrompt({

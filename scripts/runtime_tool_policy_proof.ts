@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  COMPUTER_USE_TOOL_NAMES,
+  NON_SANDBOX_TOOL_NAMES,
   RETRIEVAL_TOOL_NAMES,
+  WORKSPACE_SANDBOX_TOOL_NAMES,
+  isComputerUseToolName,
   requiresWorkspaceSandbox,
   type RetrievalToolName,
 } from "../shared/retrievalTools.ts";
@@ -13,12 +17,123 @@ import {
   getMountedRuntimeToolPolicy,
   getUnknownRuntimeToolPolicy,
   isRuntimeToolPolicyParallelEligible,
+  type RuntimeToolCategory,
 } from "../shared/runtimeToolPolicy.ts";
 
 const rootDir = process.cwd();
 
+type FixedRuntimeToolCategory = Exclude<
+  RuntimeToolCategory,
+  "mcp" | "resolver" | "unknown"
+>;
+
+const FIXED_TOOL_FAMILIES = {
+  docs: ["search_product_docs", "get_product_doc"],
+  community: [
+    "get_active_community_context",
+    "community_resources_map",
+    "community_resources_read",
+    "community_resources_list",
+    "community_resource_read",
+    "community_resources_search",
+    "community_resource_builder_list",
+    "community_resource_builder_read",
+    "community_resource_builder_stage_changeset",
+    "community_resource_builder_apply_changeset",
+    "community_search",
+    "community_write",
+  ],
+  web: ["web_research", "web_crawl"],
+  workspace_fs: ["list_dir", "read", "glob", "grep", "sha256", "write", "edit"],
+  workspace_shell: ["bash"],
+  terminal: ["terminal_start", "terminal_read", "terminal_write", "terminal_stop"],
+  computer: COMPUTER_USE_TOOL_NAMES,
+} as const satisfies Record<FixedRuntimeToolCategory, readonly RetrievalToolName[]>;
+
+const WORKSPACE_FAMILY_NAMES = [
+  "workspace_fs",
+  "workspace_shell",
+  "terminal",
+  "computer",
+] as const;
+
+const NON_WORKSPACE_FAMILY_NAMES = ["docs", "community", "web"] as const;
+
 async function readRepoFile(relativePath: string): Promise<string> {
   return await readFile(path.join(rootDir, relativePath), "utf8");
+}
+
+function sorted(values: readonly string[]): string[] {
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+function familyTools(
+  familyNames: readonly FixedRuntimeToolCategory[],
+): RetrievalToolName[] {
+  return familyNames.flatMap((familyName) => [...FIXED_TOOL_FAMILIES[familyName]]);
+}
+
+function proveFixedToolsHaveSingleCapabilityFamily() {
+  const familyCounts = new Map<RetrievalToolName, number>();
+  const expectedCategories = new Map<RetrievalToolName, FixedRuntimeToolCategory>();
+
+  for (const [category, toolNames] of Object.entries(FIXED_TOOL_FAMILIES) as Array<
+    [FixedRuntimeToolCategory, readonly RetrievalToolName[]]
+  >) {
+    for (const toolName of toolNames) {
+      familyCounts.set(toolName, (familyCounts.get(toolName) ?? 0) + 1);
+      expectedCategories.set(toolName, category);
+    }
+  }
+
+  for (const toolName of RETRIEVAL_TOOL_NAMES) {
+    assert.equal(
+      familyCounts.get(toolName),
+      1,
+      `${toolName} must belong to exactly one fixed capability family`,
+    );
+    assert.equal(
+      getFixedRuntimeToolPolicy(toolName).category,
+      expectedCategories.get(toolName),
+      `${toolName} policy category must match its capability family`,
+    );
+  }
+
+  assert.deepEqual(
+    sorted(familyTools(WORKSPACE_FAMILY_NAMES)),
+    sorted(WORKSPACE_SANDBOX_TOOL_NAMES),
+    "workspace sandbox tools must match workspace-bound capability families",
+  );
+  assert.deepEqual(
+    sorted(familyTools(NON_WORKSPACE_FAMILY_NAMES)),
+    sorted(NON_SANDBOX_TOOL_NAMES),
+    "non-sandbox tools must match platform/community/web capability families",
+  );
+
+  for (const toolName of WORKSPACE_SANDBOX_TOOL_NAMES) {
+    assert.equal(
+      requiresWorkspaceSandbox(toolName),
+      true,
+      `${toolName} must lazily require a workspace sandbox`,
+    );
+  }
+  for (const toolName of NON_SANDBOX_TOOL_NAMES) {
+    assert.equal(
+      requiresWorkspaceSandbox(toolName),
+      false,
+      `${toolName} must not wake a workspace sandbox`,
+    );
+  }
+  for (const toolName of COMPUTER_USE_TOOL_NAMES) {
+    assert.equal(isComputerUseToolName(toolName), true);
+    assert.equal(
+      WORKSPACE_SANDBOX_TOOL_NAMES.includes(toolName),
+      true,
+      `${toolName} must stay workspace-bound`,
+    );
+  }
+
+  console.log("PASS: fixed tool capability families match policy and sandbox boundaries");
 }
 
 function proveFixedPolicyCoverage() {
@@ -285,6 +400,7 @@ async function proveApprovalBlocksAreRemovedFromRuntimeHarness() {
   console.log("PASS: mounted runtime tools use full-access execution, not approvals");
 }
 
+proveFixedToolsHaveSingleCapabilityFamily();
 proveFixedPolicyCoverage();
 proveDefensiveMutationDefaults();
 proveFixedPolicyBoundaries();

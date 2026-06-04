@@ -269,8 +269,8 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
-    "Broad read workflow: map or list the live Resources wiki first",
-    "member resource lane broad read workflow",
+    "Resource navigation, search, and read results are evidence for the model to choose from",
+    "member resource lane model-led evidence surface",
   );
   assertIncludes(
     runtimePrompt,
@@ -289,13 +289,13 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
-    "For read-only member-style questions, follow the live Resources read workflow",
-    "builder resource lane inherits member read workflow",
+    "Member-visible answers should be grounded in live Resources",
+    "builder resource lane keeps member-visible answers grounded in live evidence",
   );
   assertIncludes(
     runtimePrompt,
-    "Broad requests like improve resources",
-    "builder resource lane discovery-first behavior",
+    "Broad requests like improve resources, clean this up, refactor knowledge, or organize references need resource ground truth and builder alignment before changesets",
+    "builder resource lane keeps broad edits aligned before mutation",
   );
   assertIncludes(
     runtimePrompt,

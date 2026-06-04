@@ -38,6 +38,7 @@ import {
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
+import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
 import {
   buildRuntimeFailureFinalAnswer,
   hasConnectedAppFailureEvidence,
@@ -535,7 +536,12 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: String(ownedThread._id),
       runId,
     });
-    const persistContextSnapshotBestEffort = async (phase: "started" | "active" | "finished"): Promise<void> => {
+    let runtimeTurnEnvelopeForRun: RuntimeTurnEnvelopeV1 | null = null;
+    const persistContextSnapshotBestEffort = async (
+      phase: "started" | "active" | "finished",
+      runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null,
+    ): Promise<void> => {
+      if (runtimeTurnEnvelope) runtimeTurnEnvelopeForRun = runtimeTurnEnvelope;
       try {
         const nowMs = Date.now();
         const loadedContext = await loadRuntimeTurnContextPacketForRun({
@@ -545,6 +551,7 @@ export async function handleRuntimeTurnRequest(args: {
           projectId: runtimeProjectId,
           runId,
           latestUserText,
+          runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
           threadWorkingState: ownedThread.workingState ?? null,
           summarizeCurrentRunEvents: phase !== "started",
           runtimeStop: null,
@@ -605,6 +612,7 @@ export async function handleRuntimeTurnRequest(args: {
             projectId: runtimeProjectId,
             runId,
             latestUserText,
+            runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
             threadWorkingState: ownedThread.workingState ?? null,
             summarizeCurrentRunEvents: params.status !== "ok",
             runtimeStop:
@@ -751,6 +759,7 @@ export async function handleRuntimeTurnRequest(args: {
           projectId: runtimeProjectId,
           runId,
           latestUserText,
+          runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
           threadWorkingState: ownedThread.workingState ?? null,
           summarizeCurrentRunEvents: true,
           runtimeStop: {
@@ -955,6 +964,12 @@ export async function handleRuntimeTurnRequest(args: {
               allowedToolNames,
               apiKeyOverride: providerApiKeyOverride,
               appendRunEvent: streamAppendRunEvent,
+              refreshRuntimeContextSnapshot: async (
+                phase: "started" | "active" = "active",
+                runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
+              ): Promise<void> => {
+                await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
+              },
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
             });
           } catch (error) {
@@ -1242,6 +1257,12 @@ export async function handleRuntimeTurnRequest(args: {
           appendRunEvent: async (event): Promise<void> => {
             await appendRunEvent(event);
             await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
+          },
+          refreshRuntimeContextSnapshot: async (
+            phase: "started" | "active" = "active",
+            runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
+          ): Promise<void> => {
+            await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
         });

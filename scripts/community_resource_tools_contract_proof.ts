@@ -255,12 +255,10 @@ assert.match(
   /internal\.communityResources\.searchCommunityResourceDirectoryInternal/,
 );
 
-assert.match(runtimePrompt, /When available, use community resource tools when canonical resource navigation/);
-assert.match(runtimePrompt, /Use community_resources_map first/);
-assert.match(runtimePrompt, /Use community_resources_read to batch-read/);
-assert.match(runtimePrompt, /Use community_resources_list to inspect/);
-assert.match(runtimePrompt, /Use community_resource_read to inspect one member-visible resource/);
-assert.match(runtimePrompt, /Use community_resources_search for targeted lookup/);
+assert.match(runtimePrompt, /Community resource tools, when listed, expose canonical resource navigation/);
+assert.match(runtimePrompt, /Resources are the member-facing source of truth/);
+assert.match(runtimePrompt, /Resource navigation, search, and read results are evidence for the model to choose from/);
+assert.match(runtimePrompt, /Do not claim a resource exists or says something when the answer depends on resource content unless you listed, searched, or read it/);
 assert.match(timeline, /community_resources_map/);
 assert.match(timeline, /community_resources_read/);
 assert.match(timeline, /community_resources_list/);

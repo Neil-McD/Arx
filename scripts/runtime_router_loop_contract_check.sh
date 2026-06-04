@@ -192,7 +192,7 @@ require_match_in_file "$RESOLUTION_FILE" '"community_write"' \
   "runtime capability resolution includes community tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("search_product_docs", "get_product_doc"\)' \
   "runtime capability resolution includes product docs tools"
-require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research"\)' \
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research", "web_crawl"\)' \
   "runtime capability resolution includes web research tools"
 require_match_in_file "$RESOLUTION_FILE" 'if \(params.activeCapabilityFamilies.includes\("workspace_tools"\)\)' \
   "runtime capability resolution gates workspace tools structurally"
