@@ -267,7 +267,15 @@ function main() {
       blaxelUnavailableIndex >= 0 &&
         blaxelNotFoundIndex >= 0 &&
         blaxelUnavailableIndex < blaxelNotFoundIndex &&
+        /loadReadyBlaxelWorkspaceSandbox/.test(blaxel) &&
+        /normalizePositiveInteger\(params\.timeoutMs, 5_000\)/.test(blaxel) &&
+        /sandbox\.wait\(\{[\s\S]*maxWait: Math\.min\(remainingMs, intervalMs\)/.test(blaxel) &&
+        /sandbox = await params\.SandboxInstance\.get\(sandboxName\);[\s\S]*const state = sandboxStateFrom\(sandbox\);/.test(blaxel) &&
+        /loadBlaxelWorkspaceSandboxForOperation/.test(blaxel) &&
+        /readyTimeoutMs\?: number \| null/.test(blaxel) &&
         /executeBlaxelWorkspaceCommandOnce/.test(blaxel) &&
+        /const resolved = await loadBlaxelWorkspaceSandboxForOperation\(\{[\s\S]*sandboxName: params\.sandboxName/.test(blaxel) &&
+        /const sandbox = resolved\.sandbox/.test(blaxel) &&
         /readyRetryMs\?: number \| null/.test(blaxel) &&
         /BLAXEL_WORKSPACE_COMMAND_READY_RETRY_MS", 5_000/.test(blaxel) &&
         /result\.code !== "blaxel_sandbox_not_ready"/.test(blaxel) &&

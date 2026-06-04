@@ -735,6 +735,66 @@ function provisioningBlaxelSandboxFailure(
   });
 }
 
+async function loadReadyBlaxelWorkspaceSandbox(params: {
+  SandboxInstance: any;
+  sandboxName: string;
+  timeoutMs?: number | null;
+  intervalMs?: number | null;
+}): Promise<
+  | {
+      ok: true;
+      sandbox: any;
+      providerSandboxId: string;
+      state: string | null;
+    }
+  | WorkspaceComputerProviderFailure
+> {
+  const sandboxName = normalizeString(params.sandboxName);
+  const timeoutMs = normalizePositiveInteger(params.timeoutMs, 5_000);
+  const intervalMs = normalizePositiveInteger(params.intervalMs, 2_000);
+  const deadlineMs = Date.now() + timeoutMs;
+  let lastState: string | null = null;
+
+  while (true) {
+    let sandbox: any;
+    try {
+      sandbox = await params.SandboxInstance.get(sandboxName);
+      if (typeof sandbox?.wait === "function") {
+        const remainingMs = Math.max(1, deadlineMs - Date.now());
+        await sandbox.wait({
+          maxWait: Math.min(remainingMs, intervalMs),
+          interval: Math.min(intervalMs, 2_000),
+        });
+      }
+      sandbox = await params.SandboxInstance.get(sandboxName);
+    } catch (error) {
+      const failed = classifyBlaxelError(error);
+      if (failed.code !== "blaxel_sandbox_not_ready") return failed;
+      if (Date.now() >= deadlineMs) return failed;
+      await sleep(Math.min(intervalMs, Math.max(1, deadlineMs - Date.now())));
+      continue;
+    }
+
+    const state = sandboxStateFrom(sandbox);
+    lastState = state;
+    if (isBlaxelWorkspaceSandboxTerminalState(state)) {
+      return terminalBlaxelSandboxFailure(state);
+    }
+    if (!isBlaxelWorkspaceSandboxProvisioningState(state)) {
+      return {
+        ok: true,
+        sandbox,
+        providerSandboxId: sandboxIdFrom(sandbox, sandboxName),
+        state,
+      };
+    }
+    if (Date.now() >= deadlineMs) {
+      return provisioningBlaxelSandboxFailure(lastState);
+    }
+    await sleep(Math.min(intervalMs, Math.max(1, deadlineMs - Date.now())));
+  }
+}
+
 function sandboxUrlFrom(sandbox: any): string | null {
   return (
     normalizeOptionalString(sandbox?.metadata?.url) ??
@@ -1416,6 +1476,34 @@ export async function resolveBlaxelWorkspaceSandboxIfReady(params: {
   volumeName?: string | null;
   workspaceRoot?: string | null;
 }): Promise<WorkspaceComputerProviderSession | WorkspaceComputerProviderFailure> {
+  const loaded = await loadBlaxelWorkspaceSandboxForOperation(params);
+  if (loaded.ok === false) return loaded;
+  return {
+    ok: true,
+    providerId: "blaxel",
+    providerSandboxId: loaded.providerSandboxId,
+    projectVolumeId: loaded.projectVolumeId,
+    workspaceRoot: loaded.workspaceRoot,
+    startedAt: Date.now(),
+  };
+}
+
+async function loadBlaxelWorkspaceSandboxForOperation(params: {
+  sandboxName: string;
+  volumeName?: string | null;
+  workspaceRoot?: string | null;
+  readyTimeoutMs?: number | null;
+}): Promise<
+  | {
+      ok: true;
+      providerId: "blaxel";
+      providerSandboxId: string;
+      projectVolumeId?: string | null;
+      workspaceRoot: string;
+      sandbox: any;
+    }
+  | WorkspaceComputerProviderFailure
+> {
   const loadedConfig = loadBlaxelWorkspaceConfig();
   if (loadedConfig.ok === false) return loadedConfig;
   const loadedCore = await loadBlaxelCore();
@@ -1423,29 +1511,20 @@ export async function resolveBlaxelWorkspaceSandboxIfReady(params: {
   const sandboxName = normalizeString(params.sandboxName);
   const workspaceRoot =
     normalizeOptionalString(params.workspaceRoot) ?? loadedConfig.config.workspaceRoot;
-  try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(sandboxName);
-    if (typeof sandbox?.wait === "function") {
-      await sandbox.wait({ maxWait: 120_000, interval: 2_000 });
-    }
-    const state = sandboxStateFrom(sandbox);
-    if (isBlaxelWorkspaceSandboxTerminalState(state)) {
-      return terminalBlaxelSandboxFailure(state);
-    }
-    if (isBlaxelWorkspaceSandboxProvisioningState(state)) {
-      return provisioningBlaxelSandboxFailure(state);
-    }
-    return {
-      ok: true,
-      providerId: "blaxel",
-      providerSandboxId: sandboxIdFrom(sandbox, sandboxName),
-      projectVolumeId: normalizeOptionalString(params.volumeName),
-      workspaceRoot,
-      startedAt: Date.now(),
-    };
-  } catch (error) {
-    return classifyBlaxelError(error);
-  }
+  const ready = await loadReadyBlaxelWorkspaceSandbox({
+    SandboxInstance: loadedCore.mod.SandboxInstance,
+    sandboxName,
+    timeoutMs: params.readyTimeoutMs,
+  });
+  if (ready.ok === false) return ready;
+  return {
+    ok: true,
+    providerId: "blaxel",
+    providerSandboxId: ready.providerSandboxId,
+    projectVolumeId: normalizeOptionalString(params.volumeName),
+    workspaceRoot,
+    sandbox: ready.sandbox,
+  };
 }
 
 export async function destroyBlaxelWorkspaceSandbox(params: {
@@ -1579,15 +1658,13 @@ async function resolveGuardedBlaxelWorkspacePath(params: {
 async function executeBlaxelWorkspaceCommandOnce(
   params: BlaxelWorkspaceCommandSpec,
 ): Promise<BlaxelWorkspaceCommandResult> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   const sandboxName = normalizeString(params.sandboxName);
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(sandboxName);
+    const sandbox = resolved.sandbox;
     const processName =
       normalizeOptionalString(params.processName) ??
       `polynet-command-${crypto.randomUUID().slice(0, 8)}`;
@@ -1675,15 +1752,13 @@ export async function readBlaxelWorkspaceProcess(params: {
   sandboxName: string;
   processName: string;
 }): Promise<BlaxelWorkspaceProcessResult> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   const processName = normalizeString(params.processName);
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const sandbox = resolved.sandbox;
     let process: unknown;
     try {
       process = await sandbox.process.get(processName);
@@ -1738,15 +1813,13 @@ export async function stopBlaxelWorkspaceProcess(params: {
   sandboxName: string;
   processName: string;
 }): Promise<BlaxelWorkspaceProcessStopResult> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   const processName = normalizeString(params.processName);
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const sandbox = resolved.sandbox;
     const stopped = await sandbox.process.kill(processName);
     return {
       ok: true,
@@ -1764,12 +1837,10 @@ export async function listBlaxelWorkspaceDirectory(params: {
   sandboxName: string;
   path?: string | null;
 }): Promise<BlaxelWorkspaceDirectoryResult> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   let directoryPath: string;
   try {
     directoryPath = normalizeBlaxelWorkspacePath(
@@ -1780,7 +1851,7 @@ export async function listBlaxelWorkspaceDirectory(params: {
     return invalidWorkspacePathFailure();
   }
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const sandbox = resolved.sandbox;
     const guardedDirectory = await resolveGuardedBlaxelWorkspacePath({
       sandbox,
       workspaceRoot: resolved.workspaceRoot,
@@ -1805,12 +1876,10 @@ export async function readBlaxelWorkspaceFile(params: {
   sandboxName: string;
   path: string;
 }): Promise<BlaxelWorkspaceFileResult> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   let filePath: string;
   try {
     filePath = normalizeBlaxelWorkspacePath(params.path, resolved.workspaceRoot);
@@ -1818,7 +1887,7 @@ export async function readBlaxelWorkspaceFile(params: {
     return invalidWorkspacePathFailure();
   }
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const sandbox = resolved.sandbox;
     const guardedFile = await resolveGuardedBlaxelWorkspacePath({
       sandbox,
       workspaceRoot: resolved.workspaceRoot,
@@ -1844,12 +1913,10 @@ export async function writeBlaxelWorkspaceFile(params: {
   path: string;
   content: string;
 }): Promise<{ ok: true; providerId: "blaxel"; providerSandboxId: string; path: string } | WorkspaceComputerProviderFailure> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   let filePath: string;
   try {
     filePath = normalizeBlaxelWorkspacePath(params.path, resolved.workspaceRoot);
@@ -1857,7 +1924,7 @@ export async function writeBlaxelWorkspaceFile(params: {
     return invalidWorkspacePathFailure();
   }
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const sandbox = resolved.sandbox;
     const guardedFile = await resolveGuardedBlaxelWorkspacePath({
       sandbox,
       workspaceRoot: resolved.workspaceRoot,
@@ -1883,14 +1950,12 @@ export async function getBlaxelWorkspacePreviewUrl(params: {
   previewName?: string | null;
   public?: boolean | null;
 }): Promise<BlaxelWorkspacePreviewResult> {
-  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+  const resolved = await loadBlaxelWorkspaceSandboxForOperation({
     sandboxName: params.sandboxName,
   });
   if (resolved.ok === false) return resolved;
-  const loadedCore = await loadBlaxelCore();
-  if (loadedCore.ok === false) return loadedCore;
   try {
-    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const sandbox = resolved.sandbox;
     const preview = await sandbox.previews.createIfNotExists({
       metadata: {
         name: normalizeBlaxelPreviewName(params.previewName, params.port),
