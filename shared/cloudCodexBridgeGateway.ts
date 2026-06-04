@@ -1,5 +1,9 @@
 import type { AuthSessionLike } from "./authSession";
-import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
+import {
+  bootstrapConvexAuthenticatedClient,
+  requireConvexUrl,
+  type ConvexClient,
+} from "./convexAuthenticatedClient";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 
 export type OperatorCodexBridgeRunResult = {
@@ -47,6 +51,40 @@ export type OperatorCodexBridgeRunReadback = {
   events: OperatorCodexBridgeRunEvent[];
 };
 
+type ConvexThreadIdentityRow = {
+  _id?: string | null;
+};
+
+async function resolveOperatorCodexBridgeCanonicalThreadId(params: {
+  client: ConvexClient;
+  authSubject: string;
+  threadId: string | null | undefined;
+}): Promise<string> {
+  const requestedThreadId = String(params.threadId ?? "").trim();
+  if (!requestedThreadId) throw new Error("codex_bridge_thread_id_required");
+
+  const threadByKey = (await params.client.query("threads:getCloudThreadByThreadKey" as any, {
+    authSubject: params.authSubject,
+    threadKey: requestedThreadId,
+  })) as ConvexThreadIdentityRow | null;
+  const threadIdByKey = String(threadByKey?._id ?? "").trim();
+  if (threadIdByKey) return threadIdByKey;
+
+  try {
+    const threadById = (await params.client.query("threads:getCloudThreadById" as any, {
+      authSubject: params.authSubject,
+      threadId: requestedThreadId,
+      includeArchived: false,
+    })) as ConvexThreadIdentityRow | null;
+    const threadIdById = String(threadById?._id ?? "").trim();
+    if (threadIdById) return threadIdById;
+  } catch {
+    // A route thread key is not necessarily a Convex id. Keep the backend validator strict.
+  }
+
+  throw new Error("codex_bridge_thread_not_found");
+}
+
 export async function startOperatorCodexBridgeCodexExecRunCanonical(params: {
   session: AuthSessionLike;
   projectId: string;
@@ -56,10 +94,15 @@ export async function startOperatorCodexBridgeCodexExecRunCanonical(params: {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const baseUrl = readConvexRuntimeUrl();
+  const threadId = await resolveOperatorCodexBridgeCanonicalThreadId({
+    client,
+    authSubject,
+    threadId: params.threadId,
+  });
   return (await client.action("codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRunAsync" as any, {
     authSubject,
     projectId: params.projectId,
-    threadId: params.threadId,
+    threadId,
     ...(baseUrl ? { baseUrl } : null),
     ...(params.prompt ? { prompt: params.prompt } : null),
   })) as OperatorCodexBridgeRunResult;
@@ -75,11 +118,18 @@ export async function loadOperatorCodexBridgeRunCanonical(params: {
 }): Promise<OperatorCodexBridgeRunReadback | null> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const threadId = params.threadId
+    ? await resolveOperatorCodexBridgeCanonicalThreadId({
+        client,
+        authSubject,
+        threadId: params.threadId,
+      })
+    : null;
   return (await client.query("operatorDashboard:getCodexBridgeRunForOperator" as any, {
     authSubject,
     ownerId: params.ownerId,
     runId: params.runId,
-    ...(params.threadId ? { threadId: params.threadId } : null),
+    ...(threadId ? { threadId } : null),
     ...(typeof params.afterSeq === "number" && Number.isFinite(params.afterSeq)
       ? { afterSeq: Math.max(0, Math.floor(params.afterSeq)) }
       : null),
