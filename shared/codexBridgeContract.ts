@@ -54,6 +54,8 @@ export type CodexBridgeRunFinishRequestV1 = {
   reason?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  assistantText?: string | null;
+  assistantModelId?: string | null;
   finishedAt?: number | null;
 };
 

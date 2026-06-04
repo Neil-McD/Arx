@@ -534,6 +534,8 @@ export function registerCodexBridgeRoutes(args: RegisterCodexBridgeRoutesArgs): 
           reason: safeOptionalText(parsed.body.reason, 500),
           errorCode: safeOptionalText(parsed.body.errorCode, 160),
           errorMessage: safeOptionalText(parsed.body.errorMessage, 1000),
+          assistantText: safeOptionalText(parsed.body.assistantText, 20_000),
+          assistantModelId: safeOptionalText(parsed.body.assistantModelId, 160),
           finishedAt: normalizeOptionalEpochMs(parsed.body.finishedAt),
         };
       } catch (error) {
@@ -573,6 +575,8 @@ export function registerCodexBridgeRoutes(args: RegisterCodexBridgeRoutesArgs): 
               request.errorCode ??
               (request.status === "timed_out" ? "codex_bridge_timed_out" : undefined),
             errorMessage: request.errorMessage,
+            assistantText: request.assistantText,
+            assistantModelId: request.assistantModelId,
             finishedAt: request.finishedAt,
             nowMs: Date.now(),
           },

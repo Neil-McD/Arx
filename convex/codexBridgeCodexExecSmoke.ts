@@ -484,6 +484,8 @@ try {
         : status === "timed_out"
           ? "Codex exec smoke timed out before producing the expected marker."
           : "Codex exec smoke failed before producing the expected marker.",
+    assistantText: status === "succeeded" ? clipText(finalText, 20_000) : null,
+    assistantModelId: model || null,
     finishedAt: Date.now(),
   });
 

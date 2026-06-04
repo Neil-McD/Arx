@@ -1056,6 +1056,7 @@ async function finalizeRuntimeRunRecord(args: {
   errorMessage?: string;
   nowMs: number;
   finishedAt?: number;
+  assistantMessage?: CloudMessageLike | null;
 }): Promise<RuntimeRunLike> {
   const normalizedStatus = normalizeRunStatus(args.status);
   if (normalizedStatus === "running") {
@@ -1117,6 +1118,12 @@ async function finalizeRuntimeRunRecord(args: {
       reason: reason ?? null,
       error_code: errorCode ?? null,
       error_message: errorMessage ?? null,
+      assistant_message_id: args.assistantMessage ? String(args.assistantMessage._id) : null,
+      assistant_message_key: args.assistantMessage?.messageKey ?? null,
+      assistant_message_seq:
+        args.assistantMessage && Number.isFinite(Number(args.assistantMessage.seq))
+          ? Math.max(0, Math.floor(Number(args.assistantMessage.seq)))
+          : null,
     },
     createdAt: finishedAt,
   });
@@ -1177,6 +1184,91 @@ function deriveTitleFromContent(contentJson: unknown): string | undefined {
     return normalized.slice(0, 80);
   }
   return undefined;
+}
+
+function normalizeBridgeAssistantText(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  return text.length > 20_000 ? text.slice(0, 20_000) : text;
+}
+
+function normalizeBridgeAssistantModelId(value: unknown): string {
+  return String(value ?? "").trim().slice(0, 160) || "codex";
+}
+
+async function upsertCodexBridgeAssistantMessageForRun(args: {
+  ctx: any;
+  ownerId: any;
+  thread: ThreadLike;
+  run: RuntimeRunLike;
+  assistantText?: string;
+  assistantModelId?: string;
+  createdAt: number;
+  nowMs: number;
+}): Promise<CloudMessageLike | null> {
+  const text = normalizeBridgeAssistantText(args.assistantText);
+  if (!text) return null;
+  const runId = normalizeRunId(args.run.runId);
+  const messageKey = `assistant:${runId}:codex_bridge_final`;
+  const modelId = normalizeBridgeAssistantModelId(args.assistantModelId ?? args.run.modelId);
+  const existing = (await args.ctx.db
+    .query("cloudMessages")
+    .withIndex("by_owner_messageKey", (q: any) =>
+      q.eq("ownerId", args.ownerId).eq("messageKey", messageKey),
+    )
+    .first()) as CloudMessageLike | null;
+  const contentJson = {
+    text,
+    meta: {
+      model_id: modelId,
+      inference_source: "codex_bridge",
+      lane: "codex_bridge",
+      codex_bridge: {
+        contract_name: String(args.run.contractName ?? "codex_blaxel_bridge"),
+        contract_version: String(args.run.contractVersion ?? "v1"),
+        run_visibility: String(args.run.visibility ?? "internal_hidden"),
+        harness_profile: String(args.run.harnessProfile ?? "codex_blaxel_bridge"),
+      },
+    },
+  };
+  if (existing) {
+    if (existing.threadId !== args.thread._id) throw new Error("message_key_conflict");
+    await args.ctx.db.patch(existing._id, {
+      role: "assistant",
+      contentJson,
+      engineId: "codex_blaxel_bridge",
+      modelId,
+      runId,
+    });
+    await args.ctx.db.patch(args.thread._id, {
+      updatedAt: args.nowMs,
+      lastSeq: Math.max(0, Math.floor(Math.max(args.thread.lastSeq ?? 0, existing.seq ?? 0))),
+    });
+    const updated = (await args.ctx.db.get(existing._id)) as CloudMessageLike | null;
+    if (!updated) throw new Error("message_update_failed");
+    return updated;
+  }
+
+  const seq = Math.max(0, Math.floor((args.thread.lastSeq ?? 0) + 1));
+  const id = await args.ctx.db.insert("cloudMessages", {
+    ownerId: args.ownerId,
+    threadId: args.thread._id,
+    messageKey,
+    seq,
+    role: "assistant",
+    contentJson,
+    engineId: "codex_blaxel_bridge",
+    modelId,
+    runId,
+    createdAt: args.createdAt,
+  });
+  await args.ctx.db.patch(args.thread._id, {
+    updatedAt: args.nowMs,
+    lastSeq: Math.max(0, Math.floor(Math.max(args.thread.lastSeq ?? 0, seq))),
+  });
+  const created = (await args.ctx.db.get(id)) as CloudMessageLike | null;
+  if (!created) throw new Error("message_create_failed");
+  return created;
 }
 
 export const listCloudThreadsByOwner = query({
@@ -2644,6 +2736,8 @@ export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
     reason: v.optional(v.string()),
     errorCode: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
+    assistantText: v.optional(v.string()),
+    assistantModelId: v.optional(v.string()),
     finishedAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -2670,6 +2764,21 @@ export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
       throw new Error("run_community_scope_conflict");
     }
     if (run.status !== "running") return run;
+    const finishedAt =
+      typeof args.finishedAt === "number" && Number.isFinite(args.finishedAt) ? Math.floor(args.finishedAt) : nowMs;
+    const assistantMessage =
+      status === "ok"
+        ? await upsertCodexBridgeAssistantMessageForRun({
+            ctx,
+            ownerId: args.ownerId,
+            thread,
+            run,
+            assistantText: args.assistantText,
+            assistantModelId: args.assistantModelId,
+            createdAt: finishedAt,
+            nowMs,
+          })
+        : null;
 
     return await finalizeRuntimeRunRecord({
       ctx,
@@ -2681,7 +2790,8 @@ export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
       errorCode: args.errorCode,
       errorMessage: args.errorMessage,
       nowMs,
-      finishedAt: args.finishedAt,
+      finishedAt,
+      assistantMessage,
     });
   },
 });
