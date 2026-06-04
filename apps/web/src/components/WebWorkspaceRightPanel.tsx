@@ -51,10 +51,12 @@ export function WebWorkspaceRightPanel(props: {
     canStart: boolean;
     projectId: string | null;
     threadId: string | null;
+    prompt: string;
     isRunning: boolean;
     result: OperatorCodexBridgeRunResult | null;
     readback: OperatorCodexBridgeRunReadback | null;
     error: string | null;
+    onPromptChange: (value: string) => void;
     onStart: () => void;
   } | null;
   builderPartnerProgramPanel: WebBuilderPartnerProgramPanelProps | null;

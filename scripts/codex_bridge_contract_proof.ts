@@ -463,21 +463,27 @@ function main() {
         /\.\.\(threadId \? \{ threadId \} : null\)/.test(codexBridgeGateway) &&
         /startOperatorCodexBridgeCodexExecRunAsync/.test(codexExecSmoke) &&
         /waitForCompletion: false/.test(codexExecSmoke) &&
-        /startOperatorCodexBridgeCodexExecRunCanonical/.test(webWorkspaceHost) &&
+        /startOperatorCodexBridgeThreadTurnCanonical/.test(webWorkspaceHost) &&
         /loadOperatorCodexBridgeRunCanonical/.test(webWorkspaceHost) &&
         /reconcileOperatorCodexBridgeRunCanonical/.test(webWorkspaceHost) &&
+        /operatorCodexBridgePrompt/.test(webWorkspaceHost) &&
+        /prompt,\n\s+\}\);/.test(webWorkspaceHost) &&
         /CODEX_BRIDGE_RECONCILE_AFTER_MS/.test(webWorkspaceHost) &&
         /operatorCodexBridgeReconcileAttemptRef/.test(webWorkspaceHost) &&
         /finishStaleRunning: true/.test(webWorkspaceHost) &&
         /setTimeout\(poll, 2000\)/.test(webWorkspaceHost) &&
-        /props\.operatorRightPanelSession && props\.activeProjectId && props\.activeThreadId/.test(webWorkspaceHost) &&
+        /props\.operatorRightPanelSession &&\n\s+props\.activeProjectId &&\n\s+props\.activeThreadId &&\n\s+operatorCodexBridgePrompt\.trim\(\)/.test(webWorkspaceHost) &&
         /codexBridgeAction=\{\{/.test(webWorkspaceHost) &&
         /codexBridgeAction: \{/.test(webWorkspaceRightPanel) &&
+        /prompt: string/.test(webWorkspaceRightPanel) &&
+        /onPromptChange: \(value: string\) => void/.test(webWorkspaceRightPanel) &&
         /readback: OperatorCodexBridgeRunReadback/.test(webWorkspaceRightPanel) &&
         /codexBridgeAction=\{props\.codexBridgeAction\}/.test(webWorkspaceRightPanel) &&
         /function OperatorCodexBridgePanel/.test(operatorPlatformPanel) &&
+        /Prompt/.test(operatorPlatformPanel) &&
+        /onPromptChange/.test(operatorPlatformPanel) &&
         /Ledger events/.test(operatorPlatformPanel) &&
-        /Run Codex smoke/.test(operatorPlatformPanel),
+        /Run thread turn/.test(operatorPlatformPanel),
     ),
     check(
       "operator_bridge_readback_is_role_gated_and_contract_limited",
