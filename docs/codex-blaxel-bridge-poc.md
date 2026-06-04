@@ -287,7 +287,7 @@ Implementation:
 - One authenticated operator action and compact operator-panel trigger, not a user-facing default.
 - Use Vercel `polynet-staging` plus Convex `dev:quick-porcupine-949`.
 
-Status: first staging operator trigger implemented locally. The browser calls an authenticated Convex action, Convex verifies operator write access, mints the existing short-lived bridge operator token server-side, and delegates to the hidden Codex exec smoke run. The operator panel reads back the hidden bridge run ledger after completion. True live progress in the normal thread UI remains the next UI slice because the current launcher still waits for the Blaxel command to finish.
+Status: first staging operator trigger implemented locally. The browser calls an authenticated Convex action, Convex verifies operator write access, starts a hidden Codex exec run in Blaxel asynchronously, and polls the hidden bridge run ledger while Codex is still running. True live progress in the normal thread UI remains a later UI slice; the operator panel is the current staging control surface.
 
 ### Slice 5: Replace One Narrow Runtime Path
 
@@ -350,4 +350,15 @@ Additional verification after the operator-panel trigger and readback patch:
 
 The local smoke scripts read the operator secret from env and pass only a short-lived, scope-bound operator token to Convex. Internal-hidden smoke runs are operational evidence only; they must not mutate thread working memory or community source traces.
 
-Next step before staging browser verification: commit and push this branch so the `polynet-staging` Vercel project can build the updated web UI through Git, then open a staging workspace thread as an operator and run the Codex bridge control.
+Additional verification after the async operator launcher patch:
+
+1. `npm run build`
+2. `npm run check:codex-bridge-contract-proof`
+3. `npm run check:codex-bridge-operator-token-proof`
+4. `npm run check:runtime-run-source-trace-proof`
+5. `npx tsc --noEmit --pretty false`
+6. `CONVEX_DEPLOYMENT=dev:quick-porcupine-949 npx convex codegen`
+7. `CONVEX_DEPLOYMENT=dev:quick-porcupine-949 npm run check:blaxel-staging-readiness`
+8. Fresh operator-token-gated Codex exec smoke after the shared launcher refactor: `codex_bridge_codex_exec_1780575084076_470dcbd2`
+
+Next step before staging browser verification: confirm the `polynet-staging` Vercel project has built this branch through Git, ensure the staging user has an operator role in Convex, then open a staging workspace thread as an operator and run the Codex bridge control.

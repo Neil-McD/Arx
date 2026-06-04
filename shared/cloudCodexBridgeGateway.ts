@@ -11,6 +11,10 @@ export type OperatorCodexBridgeRunResult = {
   ownerId?: string | null;
   runId?: string;
   sandboxName?: string | null;
+  processName?: string | null;
+  providerCommandId?: string | null;
+  status?: string | null;
+  exitCode?: number | null;
   evidence?: Record<string, boolean | undefined>;
   failures?: string[];
   errors?: unknown[];
@@ -52,7 +56,7 @@ export async function startOperatorCodexBridgeCodexExecRunCanonical(params: {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const baseUrl = readConvexRuntimeUrl();
-  return (await client.action("codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRun" as any, {
+  return (await client.action("codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRunAsync" as any, {
     authSubject,
     projectId: params.projectId,
     threadId: params.threadId,

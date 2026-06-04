@@ -47,6 +47,20 @@ function formatEvidenceSummary(result: OperatorCodexBridgeRunResult | null): str
   return `${passed}/${values.length}`;
 }
 
+function formatCodexBridgeStatus(
+  isRunning: boolean,
+  result: OperatorCodexBridgeRunResult | null,
+  readback: OperatorCodexBridgeRunReadback | null,
+): string {
+  const runStatus = String(readback?.run.status ?? "").trim().toLowerCase();
+  if (isRunning) return runStatus ? `Running (${runStatus})` : "Running";
+  if (runStatus === "ok") return "Succeeded";
+  if (["error", "failed", "timed_out", "cancelled"].includes(runStatus)) return "Failed";
+  if (result?.ok === true) return "Started";
+  if (result?.ok === false) return "Failed";
+  return "Idle";
+}
+
 function OperatorCodexBridgePanel(props: {
   action: OperatorCodexBridgeAction | null;
 }) {
@@ -74,7 +88,7 @@ function OperatorCodexBridgePanel(props: {
         </div>
         <div className="operator-dashboard__row">
           <span>Status</span>
-          <strong>{action.isRunning ? "Running" : result?.ok === true ? "Succeeded" : result?.ok === false ? "Failed" : "Idle"}</strong>
+          <strong>{formatCodexBridgeStatus(action.isRunning, result, readback)}</strong>
         </div>
         <div className="operator-dashboard__row">
           <span>Evidence</span>
@@ -104,7 +118,7 @@ function OperatorCodexBridgePanel(props: {
           onClick={action.onStart}
         >
           {action.isRunning ? <Loader2 size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
-          <span>{action.isRunning ? "Running Codex smoke" : "Run Codex smoke"}</span>
+          <span>{action.isRunning ? "Observing Codex run" : "Run Codex smoke"}</span>
         </button>
       </div>
     </section>

@@ -107,6 +107,12 @@ type LandingActionButton = {
   prompt: string;
 };
 
+function isTerminalCodexBridgeRunStatus(status: string | null | undefined): boolean {
+  return ["ok", "error", "failed", "cancelled", "timed_out"].includes(
+    String(status ?? "").trim().toLowerCase(),
+  );
+}
+
 const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
 const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-tab:v2";
 const WORKSPACE_RIGHT_PANEL_MODE_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-mode:v1";
@@ -1379,16 +1385,21 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       const ownerId = String(result.ownerId ?? "").trim();
       const runId = String(result.runId ?? "").trim();
       if (ownerId && runId) {
-        readback = await loadOperatorCodexBridgeRunCanonical({
-          session,
-          ownerId,
-          runId,
-          threadId,
-          limit: 120,
-        });
+        try {
+          readback = await loadOperatorCodexBridgeRunCanonical({
+            session,
+            ownerId,
+            runId,
+            threadId,
+            limit: 120,
+          });
+        } catch {
+          readback = null;
+        }
       }
+      const terminalStatus = isTerminalCodexBridgeRunStatus(readback?.run.status);
       setOperatorCodexBridgeRun({
-        isRunning: false,
+        isRunning: result.ok === true && !terminalStatus,
         result,
         readback,
         error: result.ok === false ? result.failures?.join(", ") || result.code || "Codex bridge run failed." : null,
@@ -1396,7 +1407,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       if (result.runId) {
         props.showAppToastMessage(
           result.ok === true
-            ? `Codex bridge run finished: ${result.runId}`
+            ? `Codex bridge run started: ${result.runId}`
             : `Codex bridge run failed: ${result.runId}`,
         );
       }
@@ -1412,6 +1423,82 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     }
   }, [
     props.activeProjectId,
+    props.activeThreadId,
+    props.operatorRightPanelSession,
+    props.showAppToastMessage,
+  ]);
+
+  useEffect(() => {
+    if (!operatorCodexBridgeRun.isRunning) return;
+    const session = props.operatorRightPanelSession ?? null;
+    const result = operatorCodexBridgeRun.result;
+    const ownerId = String(result?.ownerId ?? "").trim();
+    const runId = String(result?.runId ?? "").trim();
+    const threadId = String(result?.threadId ?? props.activeThreadId ?? "").trim();
+    if (!session || !ownerId || !runId) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      try {
+        const readback = await loadOperatorCodexBridgeRunCanonical({
+          session,
+          ownerId,
+          runId,
+          threadId: threadId || null,
+          limit: 120,
+        });
+        if (cancelled) return;
+        const status = String(readback?.run.status ?? "").trim().toLowerCase();
+        const isTerminal = isTerminalCodexBridgeRunStatus(status);
+        setOperatorCodexBridgeRun((prev) => {
+          if (String(prev.result?.runId ?? "") !== runId) return prev;
+          return {
+            ...prev,
+            isRunning: !isTerminal,
+            readback,
+            error:
+              isTerminal && status !== "ok"
+                ? readback?.run.error_message || readback?.run.error_code || "Codex bridge run failed."
+                : prev.error,
+          };
+        });
+        if (isTerminal) {
+          props.showAppToastMessage(
+            status === "ok"
+              ? `Codex bridge run finished: ${runId}`
+              : `Codex bridge run failed: ${runId}`,
+          );
+          return;
+        }
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Codex bridge readback failed.";
+        setOperatorCodexBridgeRun((prev) =>
+          String(prev.result?.runId ?? "") === runId
+            ? {
+                ...prev,
+                error: message,
+              }
+            : prev,
+        );
+      }
+      if (!cancelled) {
+        timer = setTimeout(poll, 2000);
+      }
+    };
+
+    timer = setTimeout(poll, 1200);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    operatorCodexBridgeRun.isRunning,
+    operatorCodexBridgeRun.result?.ownerId,
+    operatorCodexBridgeRun.result?.runId,
+    operatorCodexBridgeRun.result?.threadId,
     props.activeThreadId,
     props.operatorRightPanelSession,
     props.showAppToastMessage,

@@ -342,10 +342,13 @@ function main() {
         /loadOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
         /bootstrapConvexAuthenticatedClient/.test(codexBridgeGateway) &&
         /readConvexRuntimeUrl/.test(codexBridgeGateway) &&
-        /codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRun/.test(codexBridgeGateway) &&
+        /codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRunAsync/.test(codexBridgeGateway) &&
         /operatorDashboard:getCodexBridgeRunForOperator/.test(codexBridgeGateway) &&
+        /startOperatorCodexBridgeCodexExecRunAsync/.test(codexExecSmoke) &&
+        /waitForCompletion: false/.test(codexExecSmoke) &&
         /startOperatorCodexBridgeCodexExecRunCanonical/.test(webWorkspaceHost) &&
         /loadOperatorCodexBridgeRunCanonical/.test(webWorkspaceHost) &&
+        /setTimeout\(poll, 2000\)/.test(webWorkspaceHost) &&
         /props\.operatorRightPanelSession && props\.activeProjectId && props\.activeThreadId/.test(webWorkspaceHost) &&
         /codexBridgeAction=\{\{/.test(webWorkspaceHost) &&
         /codexBridgeAction: \{/.test(webWorkspaceRightPanel) &&
