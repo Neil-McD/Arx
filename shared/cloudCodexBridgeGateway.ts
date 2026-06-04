@@ -51,6 +51,30 @@ export type OperatorCodexBridgeRunReadback = {
   events: OperatorCodexBridgeRunEvent[];
 };
 
+export type OperatorCodexBridgeRunReconcileResult = {
+  ok?: boolean;
+  code?: string;
+  deploymentKind?: string;
+  projectId?: string;
+  threadId?: string;
+  ownerId?: string | null;
+  runId?: string;
+  sandboxName?: string | null;
+  processName?: string | null;
+  runStatus?: string | null;
+  processStatus?: string | null;
+  processExitCode?: number | null;
+  finishedRun?: boolean;
+  stoppedProcess?: boolean;
+  observation?: {
+    stdoutTail?: string | null;
+    stderrTail?: string | null;
+    logsTail?: string | null;
+  };
+  failures?: string[];
+  errors?: unknown[];
+};
+
 type ConvexThreadIdentityRow = {
   _id?: string | null;
 };
@@ -135,4 +159,29 @@ export async function loadOperatorCodexBridgeRunCanonical(params: {
       : null),
     limit: Math.max(1, Math.min(500, Math.floor(params.limit ?? 120))),
   })) as OperatorCodexBridgeRunReadback | null;
+}
+
+export async function reconcileOperatorCodexBridgeRunCanonical(params: {
+  session: AuthSessionLike;
+  projectId: string;
+  threadId: string;
+  runId: string;
+  processName?: string | null;
+  finishStaleRunning?: boolean | null;
+}): Promise<OperatorCodexBridgeRunReconcileResult> {
+  requireConvexUrl();
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const threadId = await resolveOperatorCodexBridgeCanonicalThreadId({
+    client,
+    authSubject,
+    threadId: params.threadId,
+  });
+  return (await client.action("codexBridgeCodexExecSmoke:reconcileOperatorCodexBridgeCodexExecRun" as any, {
+    authSubject,
+    projectId: params.projectId,
+    threadId,
+    runId: params.runId,
+    ...(params.processName ? { processName: params.processName } : null),
+    ...(params.finishStaleRunning === true ? { finishStaleRunning: true } : null),
+  })) as OperatorCodexBridgeRunReconcileResult;
 }

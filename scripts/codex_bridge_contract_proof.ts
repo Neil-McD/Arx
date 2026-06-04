@@ -435,12 +435,14 @@ function main() {
       "web_operator_panel_exposes_staging_bridge_trigger",
       /startOperatorCodexBridgeCodexExecRunCanonical/.test(codexBridgeGateway) &&
         /loadOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
+        /reconcileOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
         /bootstrapConvexAuthenticatedClient/.test(codexBridgeGateway) &&
         /readConvexRuntimeUrl/.test(codexBridgeGateway) &&
         /resolveOperatorCodexBridgeCanonicalThreadId/.test(codexBridgeGateway) &&
         /threads:getCloudThreadByThreadKey/.test(codexBridgeGateway) &&
         /threads:getCloudThreadById/.test(codexBridgeGateway) &&
         /codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRunAsync/.test(codexBridgeGateway) &&
+        /codexBridgeCodexExecSmoke:reconcileOperatorCodexBridgeCodexExecRun/.test(codexBridgeGateway) &&
         /operatorDashboard:getCodexBridgeRunForOperator/.test(codexBridgeGateway) &&
         /threadId,\n    \.\.\.\(baseUrl/.test(codexBridgeGateway) &&
         /\.\.\(threadId \? \{ threadId \} : null\)/.test(codexBridgeGateway) &&
@@ -448,6 +450,10 @@ function main() {
         /waitForCompletion: false/.test(codexExecSmoke) &&
         /startOperatorCodexBridgeCodexExecRunCanonical/.test(webWorkspaceHost) &&
         /loadOperatorCodexBridgeRunCanonical/.test(webWorkspaceHost) &&
+        /reconcileOperatorCodexBridgeRunCanonical/.test(webWorkspaceHost) &&
+        /CODEX_BRIDGE_RECONCILE_AFTER_MS/.test(webWorkspaceHost) &&
+        /operatorCodexBridgeReconcileAttemptRef/.test(webWorkspaceHost) &&
+        /finishStaleRunning: true/.test(webWorkspaceHost) &&
         /setTimeout\(poll, 2000\)/.test(webWorkspaceHost) &&
         /props\.operatorRightPanelSession && props\.activeProjectId && props\.activeThreadId/.test(webWorkspaceHost) &&
         /codexBridgeAction=\{\{/.test(webWorkspaceHost) &&

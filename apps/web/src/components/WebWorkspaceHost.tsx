@@ -30,6 +30,7 @@ import {
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import {
   loadOperatorCodexBridgeRunCanonical,
+  reconcileOperatorCodexBridgeRunCanonical,
   startOperatorCodexBridgeCodexExecRunCanonical,
   type OperatorCodexBridgeRunReadback,
   type OperatorCodexBridgeRunResult,
@@ -111,6 +112,17 @@ function isTerminalCodexBridgeRunStatus(status: string | null | undefined): bool
   return ["ok", "error", "failed", "cancelled", "timed_out"].includes(
     String(status ?? "").trim().toLowerCase(),
   );
+}
+
+const CODEX_BRIDGE_RECONCILE_AFTER_MS = 75_000;
+const CODEX_BRIDGE_RECONCILE_MIN_INTERVAL_MS = 60_000;
+
+function latestCodexBridgeEventAtMs(readback: OperatorCodexBridgeRunReadback | null): number | null {
+  const lastEvent = readback?.events[readback.events.length - 1] ?? null;
+  const parsed = lastEvent ? Date.parse(lastEvent.created_at) : NaN;
+  if (Number.isFinite(parsed)) return parsed;
+  const updatedAt = readback?.run.updated_at ? Date.parse(readback.run.updated_at) : NaN;
+  return Number.isFinite(updatedAt) ? updatedAt : null;
 }
 
 const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
@@ -1261,6 +1273,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
   const inflightPreviewIdsRef = useRef<Set<string>>(new Set());
   const lastPreviewObservationSignatureRef = useRef<Map<string, string>>(new Map());
+  const operatorCodexBridgeReconcileAttemptRef = useRef<Map<string, number>>(new Map());
   const latestPreviewRunIdByTerminalId = useMemo(
     () =>
       buildLatestPreviewRunIdByTerminalId({
@@ -1405,6 +1418,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         error: result.ok === false ? result.failures?.join(", ") || result.code || "Codex bridge run failed." : null,
       });
       if (result.runId) {
+        operatorCodexBridgeReconcileAttemptRef.current.delete(String(result.runId));
         props.showAppToastMessage(
           result.ok === true
             ? `Codex bridge run started: ${result.runId}`
@@ -1435,6 +1449,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     const ownerId = String(result?.ownerId ?? "").trim();
     const runId = String(result?.runId ?? "").trim();
     const threadId = String(result?.threadId ?? props.activeThreadId ?? "").trim();
+    const projectId = String(result?.projectId ?? props.activeProjectId ?? "").trim();
+    const processName = String(result?.processName ?? result?.providerCommandId ?? "").trim();
     if (!session || !ownerId || !runId) return;
 
     let cancelled = false;
@@ -1442,7 +1458,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
     const poll = async () => {
       try {
-        const readback = await loadOperatorCodexBridgeRunCanonical({
+        let readback = await loadOperatorCodexBridgeRunCanonical({
           session,
           ownerId,
           runId,
@@ -1450,8 +1466,50 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           limit: 120,
         });
         if (cancelled) return;
-        const status = String(readback?.run.status ?? "").trim().toLowerCase();
-        const isTerminal = isTerminalCodexBridgeRunStatus(status);
+        let status = String(readback?.run.status ?? "").trim().toLowerCase();
+        let isTerminal = isTerminalCodexBridgeRunStatus(status);
+        const lastProgressAt = latestCodexBridgeEventAtMs(readback);
+        const nowMs = Date.now();
+        const lastReconcileAttemptAt = operatorCodexBridgeReconcileAttemptRef.current.get(runId) ?? 0;
+        const shouldReconcile =
+          !isTerminal &&
+          Boolean(projectId && threadId) &&
+          lastProgressAt !== null &&
+          nowMs - lastProgressAt >= CODEX_BRIDGE_RECONCILE_AFTER_MS &&
+          nowMs - lastReconcileAttemptAt >= CODEX_BRIDGE_RECONCILE_MIN_INTERVAL_MS;
+        if (shouldReconcile) {
+          operatorCodexBridgeReconcileAttemptRef.current.set(runId, nowMs);
+          const reconciled = await reconcileOperatorCodexBridgeRunCanonical({
+            session,
+            projectId,
+            threadId,
+            runId,
+            processName: processName || null,
+            finishStaleRunning: true,
+          });
+          if (cancelled) return;
+          if (reconciled.ok === false) {
+            const message = reconciled.failures?.filter(Boolean).join(", ") || reconciled.code || "Codex bridge reconcile failed.";
+            setOperatorCodexBridgeRun((prev) =>
+              String(prev.result?.runId ?? "") === runId
+                ? {
+                    ...prev,
+                    error: message,
+                  }
+                : prev,
+            );
+          }
+          readback = await loadOperatorCodexBridgeRunCanonical({
+            session,
+            ownerId,
+            runId,
+            threadId: threadId || null,
+            limit: 120,
+          });
+          if (cancelled) return;
+          status = String(readback?.run.status ?? "").trim().toLowerCase();
+          isTerminal = isTerminalCodexBridgeRunStatus(status);
+        }
         setOperatorCodexBridgeRun((prev) => {
           if (String(prev.result?.runId ?? "") !== runId) return prev;
           return {
@@ -1497,8 +1555,12 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   }, [
     operatorCodexBridgeRun.isRunning,
     operatorCodexBridgeRun.result?.ownerId,
+    operatorCodexBridgeRun.result?.processName,
+    operatorCodexBridgeRun.result?.projectId,
+    operatorCodexBridgeRun.result?.providerCommandId,
     operatorCodexBridgeRun.result?.runId,
     operatorCodexBridgeRun.result?.threadId,
+    props.activeProjectId,
     props.activeThreadId,
     props.operatorRightPanelSession,
     props.showAppToastMessage,
