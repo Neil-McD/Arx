@@ -235,6 +235,18 @@ function main() {
         /normalizeIdValue\(args\.run\.communityId\)/.test(threads),
     ),
     check(
+      "bridge_start_reconciles_stale_running_run_before_blocking",
+      /let runningRun = await getRunningRuntimeRunByThread/.test(threads) &&
+        /isRuntimeRunStale\(\{ run: runningRun, nowMs \}\)/.test(threads) &&
+        /reason: "stale_bridge_run_reconciled"/.test(threads) &&
+        /errorCode: "stale_bridge_run_reconciled"/.test(threads) &&
+        /Previous hidden Codex bridge run lost liveness/.test(threads) &&
+        /runningRun = await getRunningRuntimeRunByThread/.test(threads) &&
+        /if \(runningRun && runningRun\.runId !== runId\) throw new Error\("thread_run_in_progress"\)/.test(
+          threads,
+        ),
+    ),
+    check(
       "internal_hidden_runs_are_evidence_only",
       /if \(args\.run\.visibility === "internal_hidden"\) return;/.test(threads) &&
         /const shouldUpdateThreadWorkingState = run\.visibility !== "internal_hidden"/.test(threads) &&
