@@ -103,6 +103,10 @@ type CodexExecAsyncLaunchResult = {
   errors: CodexExecSmokeError[];
 };
 
+type CodexExecThreadTurnAsyncLaunchResult = CodexExecAsyncLaunchResult & {
+  userMessageKey?: string | null;
+};
+
 type CodexExecProcessReconcileResult = {
   ok: boolean;
   code: string;
@@ -140,6 +144,7 @@ const eventUrl = process.env.POLYNET_CODEX_BRIDGE_EVENT_URL;
 const finishUrl = process.env.POLYNET_CODEX_BRIDGE_FINISH_URL;
 const contextUrl = process.env.POLYNET_CODEX_BRIDGE_CONTEXT_URL;
 const marker = process.env.POLYNET_CODEX_BRIDGE_EXPECTED_MARKER || "BRIDGE_CODEX_OK";
+const mode = process.env.POLYNET_CODEX_BRIDGE_MODE === "thread_turn" ? "thread_turn" : "smoke";
 const npmSpec = process.env.POLYNET_CODEX_BRIDGE_CODEX_NPM_SPEC || "@openai/codex@0.137.0";
 const model = process.env.POLYNET_CODEX_BRIDGE_CODEX_MODEL || "";
 const maxEvents = Number(process.env.POLYNET_CODEX_BRIDGE_MAX_JSONL_EVENTS || 80);
@@ -340,8 +345,9 @@ try {
     payload: {
       npm_spec: npmSpec,
       model: model || null,
+      mode,
       context_prompt_chars: contextPrompt.length,
-      expected_marker: marker,
+      expected_marker: mode === "smoke" ? marker : null,
     },
     createdAt: Date.now(),
   });
@@ -374,13 +380,22 @@ try {
   if (model) args.push("-m", model);
   args.push("-");
 
-  const prompt = [
-    "You are Codex running headlessly inside a Blaxel sandbox for a PolyNet bridge smoke.",
-    "Do not modify files. Do not inspect unrelated repository state.",
-    "PolyNet has already fetched the bounded run context below. Treat it as orientation only.",
-    contextPrompt ? "POLYNET_CONTEXT\\n" + clipText(contextPrompt, 12000) : "POLYNET_CONTEXT\\n(none)",
-    "Task: answer with exactly " + marker + " and nothing else.",
-  ].join("\\n\\n");
+  const prompt =
+    mode === "thread_turn"
+      ? [
+          "You are Codex running headlessly inside a Blaxel sandbox for a PolyNet thread turn.",
+          "Use the bounded PolyNet context as orientation. Answer the user's request directly.",
+          "Do not modify files unless the user's request explicitly asks for workspace changes.",
+          contextPrompt ? "POLYNET_CONTEXT\\n" + clipText(contextPrompt, 12000) : "POLYNET_CONTEXT\\n(none)",
+          "USER_REQUEST\\n" + clipText(promptText, 8000),
+        ].join("\\n\\n")
+      : [
+          "You are Codex running headlessly inside a Blaxel sandbox for a PolyNet bridge smoke.",
+          "Do not modify files. Do not inspect unrelated repository state.",
+          "PolyNet has already fetched the bounded run context below. Treat it as orientation only.",
+          contextPrompt ? "POLYNET_CONTEXT\\n" + clipText(contextPrompt, 12000) : "POLYNET_CONTEXT\\n(none)",
+          "Task: answer with exactly " + marker + " and nothing else.",
+        ].join("\\n\\n");
 
   const localCodex = commandExists("codex");
   const command = localCodex ? "codex" : "npx";
@@ -473,10 +488,12 @@ try {
     source: "bridge_worker",
     payload: {
       exit_code: codexExitCode,
+      mode,
       parsed_event_count: parsedEventCount,
       streamed_jsonl_event_count: streamedJsonlEventCount,
       invalid_jsonl_count: invalidJsonlCount,
-      final_text_matches_marker: finalText.trim() === marker,
+      final_text_matches_marker: mode === "smoke" ? finalText.trim() === marker : null,
+      final_text_nonempty: finalText.trim().length > 0,
       final_text_chars: finalText.length,
       error_present: Boolean(errorMessage),
       stdout_chars: typeof child.stdoutChars === "number" ? child.stdoutChars : stdout.length,
@@ -490,26 +507,34 @@ try {
   status =
     child.timedOut
       ? "timed_out"
-      : codexExitCode === 0 && finalText.trim() === marker
+      : codexExitCode === 0 && (mode === "smoke" ? finalText.trim() === marker : finalText.trim().length > 0)
         ? "succeeded"
         : "failed";
   await postJson(finishUrl, {
     version: 1,
     runId,
     status,
-    reason: "codex_bridge_codex_exec_smoke",
+    reason: mode === "thread_turn" ? "codex_bridge_thread_turn" : "codex_bridge_codex_exec_smoke",
     errorCode:
       status === "succeeded"
         ? null
         : status === "timed_out"
-          ? "codex_exec_smoke_timed_out"
-          : "codex_exec_smoke_failed",
+          ? mode === "thread_turn"
+            ? "codex_bridge_thread_turn_timed_out"
+            : "codex_exec_smoke_timed_out"
+          : mode === "thread_turn"
+            ? "codex_bridge_thread_turn_failed"
+            : "codex_exec_smoke_failed",
     errorMessage:
       status === "succeeded"
         ? null
         : status === "timed_out"
-          ? "Codex exec smoke timed out before producing the expected marker."
-          : "Codex exec smoke failed before producing the expected marker.",
+          ? mode === "thread_turn"
+            ? "Codex bridge thread turn timed out before producing a final response."
+            : "Codex exec smoke timed out before producing the expected marker."
+          : mode === "thread_turn"
+            ? "Codex bridge thread turn failed before producing a final response."
+            : "Codex exec smoke failed before producing the expected marker.",
     assistantText: status === "succeeded" ? clipText(finalText, 20_000) : null,
     assistantModelId: model || null,
     finishedAt: Date.now(),
@@ -518,11 +543,13 @@ try {
   console.log(status === "succeeded" ? "BRIDGE_CODEX_EXEC_SMOKE_OK" : "BRIDGE_CODEX_EXEC_SMOKE_FAILED");
   console.log(JSON.stringify({
     status,
+    mode,
     codex_exit_code: codexExitCode,
     parsed_event_count: parsedEventCount,
     streamed_jsonl_event_count: streamedJsonlEventCount,
     invalid_jsonl_count: invalidJsonlCount,
-    final_text_matches_marker: finalText.trim() === marker,
+    final_text_matches_marker: mode === "smoke" ? finalText.trim() === marker : null,
+    final_text_nonempty: finalText.trim().length > 0,
     final_text_chars: finalText.length,
     error_present: Boolean(errorMessage),
   }));
@@ -692,10 +719,10 @@ function initialAsyncLaunchEvidence(): CodexExecAsyncLaunchEvidence {
   };
 }
 
-function buildRunId(raw: unknown): string {
+function buildRunId(raw: unknown, prefix = "codex_bridge_codex_exec"): string {
   const provided = String(raw ?? "").trim();
   if (provided) return provided.slice(0, 180);
-  return `codex_bridge_codex_exec_${Date.now()}_${randomUUID().slice(0, 8)}`;
+  return `${prefix}_${Date.now()}_${randomUUID().slice(0, 8)}`;
 }
 
 function resolveCodexExecApiKey(): { key: string; source: string } | null {
@@ -835,11 +862,14 @@ type CodexExecLaunchEvidence = CodexExecSmokeEvidence | CodexExecAsyncLaunchEvid
 
 async function launchCodexBridgeCodexExecCommand(params: {
   ctx: any;
+  authSubject?: string | null;
   projectId: any;
   threadId: any;
   runId: string;
   baseUrl?: string | null;
   prompt?: string | null;
+  mode?: "smoke" | "thread_turn";
+  userMessageText?: string | null;
   evidence: CodexExecLaunchEvidence;
   failures: string[];
   errors: CodexExecSmokeError[];
@@ -854,6 +884,7 @@ async function launchCodexBridgeCodexExecCommand(params: {
       ownerId: string;
       names: ReturnType<typeof buildBlaxelProjectWorkspaceNames>;
       communityId: string | null;
+      userMessageKey: string | null;
       processName: string;
       commandResult: Awaited<ReturnType<typeof executeBlaxelWorkspaceCommand>>;
     }
@@ -970,6 +1001,7 @@ async function launchCodexBridgeCodexExecCommand(params: {
   const prompt =
     String(params.prompt ?? "").trim() ||
     "Run the PolyNet Codex bridge smoke and produce the required marker.";
+  const mode = params.mode === "thread_turn" ? "thread_turn" : "smoke";
   const run = (await params.ctx.runMutation(
     (internal as any).threads.ensureCloudRuntimeRunStartedByBridgeInternal as any,
     {
@@ -992,6 +1024,96 @@ async function launchCodexBridgeCodexExecCommand(params: {
   )) as Record<string, unknown> | null;
   params.evidence.runStarted = Boolean(run);
 
+  let userMessageKey: string | null = null;
+  const userMessageText = String(params.userMessageText ?? "").trim();
+  if (mode === "thread_turn") {
+    if (!userMessageText) {
+      params.failures.push("codex_bridge_thread_turn_prompt_missing");
+      try {
+        await params.ctx.runMutation(
+          (internal as any).threads.finishCloudRuntimeRunByBridgeClaimsInternal as any,
+          {
+            ownerId: ownerId as any,
+            threadId: params.threadId,
+            runId: params.runId,
+            claimProjectId: projectId,
+            claimCommunityId: communityId ?? undefined,
+            status: "error",
+            reason: "codex_bridge_thread_turn_prompt_missing",
+            errorCode: "codex_bridge_thread_turn_prompt_missing",
+            errorMessage: "Codex bridge thread turn prompt is missing.",
+            nowMs: Date.now(),
+          },
+        );
+      } catch {
+        // The launch result carries the prompt failure.
+      }
+      return {
+        ok: false,
+        projectId,
+        threadId,
+        ownerId,
+        names,
+      };
+    }
+    try {
+      userMessageKey = `user:${params.runId}:codex_bridge_prompt`;
+      await params.ctx.runMutation((api as any).threads.addCloudThreadMessage as any, {
+        authSubject: params.authSubject ?? null,
+        threadId: params.threadId,
+        messageKey: userMessageKey,
+        role: "user",
+        contentJson: {
+          text: userMessageText,
+          meta: {
+            inference_source: "codex_bridge",
+            lane: "codex_bridge",
+            codex_bridge: {
+              contract_name: "codex_blaxel_bridge",
+              contract_version: "v1",
+              harness_profile: "codex_blaxel_bridge_poc",
+              run_visibility: "internal_hidden",
+              prompt_source: "operator_thread_turn",
+            },
+          },
+        },
+        engineId: "codex_blaxel_bridge",
+        modelId: "codex",
+        runId: params.runId,
+        nowMs: Date.now(),
+      });
+    } catch (error) {
+      params.failures.push("codex_bridge_thread_turn_user_message_failed");
+      params.errors.push(sanitizeSmokeError(error));
+      try {
+        await params.ctx.runMutation(
+          (internal as any).threads.finishCloudRuntimeRunByBridgeClaimsInternal as any,
+          {
+            ownerId: ownerId as any,
+            threadId: params.threadId,
+            runId: params.runId,
+            claimProjectId: projectId,
+            claimCommunityId: communityId ?? undefined,
+            status: "error",
+            reason: "codex_bridge_thread_turn_user_message_failed",
+            errorCode: "codex_bridge_thread_turn_user_message_failed",
+            errorMessage: "Codex bridge failed to persist the user prompt message.",
+            nowMs: Date.now(),
+          },
+        );
+      } catch {
+        // The launch result carries the message persistence failure.
+      }
+      return {
+        ok: false,
+        projectId,
+        threadId,
+        ownerId,
+        names,
+      };
+    }
+  }
+
   const processName = `codex-bridge-codex-${randomUUID().slice(0, 8)}`;
   const commandResult = await executeBlaxelWorkspaceCommand({
     sandboxName: names.sandboxName,
@@ -1008,6 +1130,7 @@ async function launchCodexBridgeCodexExecCommand(params: {
       [CODEX_BRIDGE_CONTEXT_URL_ENV_NAME]: `${baseUrl}/runtime/codex_bridge/context`,
       OPENAI_API_KEY: apiKey.key,
       POLYNET_CODEX_BRIDGE_EXPECTED_MARKER: CODEX_EXEC_MARKER,
+      POLYNET_CODEX_BRIDGE_MODE: mode,
       POLYNET_CODEX_EXEC_PROMPT: prompt,
       POLYNET_CODEX_BRIDGE_CODEX_NPM_SPEC:
         readEnv("POLYNET_CODEX_BRIDGE_CODEX_NPM_SPEC") || DEFAULT_CODEX_NPM_SPEC,
@@ -1027,6 +1150,7 @@ async function launchCodexBridgeCodexExecCommand(params: {
     ownerId,
     names,
     communityId,
+    userMessageKey,
     processName,
     commandResult,
   };
@@ -1545,6 +1669,243 @@ export const startOperatorCodexBridgeCodexExecRunAsync = action({
   },
 });
 
+export const startOperatorCodexBridgeThreadTurnAsync = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.id("cloudProjects"),
+    threadId: v.id("threads"),
+    prompt: v.string(),
+    runId: v.optional(v.string()),
+    baseUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<CodexExecThreadTurnAsyncLaunchResult> => {
+    const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
+    const evidence = initialAsyncLaunchEvidence();
+    const failures: string[] = [];
+    const errors: CodexExecSmokeError[] = [];
+    const runId = buildRunId(args.runId, "codex_bridge_thread_turn");
+    let projectId = String(args.projectId);
+    let threadId = String(args.threadId);
+    let ownerId: string | null = null;
+    let names = buildBlaxelProjectWorkspaceNames(args.projectId);
+    let processName: string | null = null;
+    let userMessageKey: string | null = null;
+    const prompt = String(args.prompt ?? "").trim().slice(0, 8000);
+
+    evidence.stagingOnly = deploymentKind === "staging";
+    if (!evidence.stagingOnly) {
+      return {
+        ok: false,
+        code: "codex_bridge_thread_turn_async_staging_only",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        runId,
+        sandboxName: names.sandboxName,
+        processName,
+        providerCommandId: null,
+        status: null,
+        exitCode: null,
+        evidence,
+        userMessageKey,
+        failures: ["not_staging_deployment"],
+        errors,
+      };
+    }
+    if (!prompt) {
+      return {
+        ok: false,
+        code: "codex_bridge_thread_turn_async_failed",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        runId,
+        sandboxName: names.sandboxName,
+        processName,
+        providerCommandId: null,
+        status: null,
+        exitCode: null,
+        evidence,
+        userMessageKey,
+        failures: ["prompt_required"],
+        errors,
+      };
+    }
+
+    await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
+      authSubject: args.authSubject,
+    });
+    evidence.operatorAuthorized = true;
+
+    try {
+      const launched = await launchCodexBridgeCodexExecCommand({
+        ctx,
+        authSubject: args.authSubject ?? null,
+        projectId: args.projectId,
+        threadId: args.threadId,
+        runId,
+        baseUrl: args.baseUrl ?? null,
+        prompt,
+        mode: "thread_turn",
+        userMessageText: prompt,
+        evidence,
+        failures,
+        errors,
+        purposeLabel: "codex-bridge-thread-turn-async",
+        harnessProfileSource: "codex_bridge_thread_turn_async",
+        waitForCompletion: false,
+      });
+      projectId = launched.projectId;
+      threadId = launched.threadId;
+      ownerId = launched.ownerId;
+      names = launched.names;
+      if (!launched.ok) {
+        return {
+          ok: false,
+          code: "codex_bridge_thread_turn_async_failed",
+          deploymentKind,
+          projectId,
+          threadId,
+          ownerId,
+          runId,
+          sandboxName: names.sandboxName,
+          processName,
+          providerCommandId: null,
+          status: null,
+          exitCode: null,
+          evidence,
+          userMessageKey,
+          failures,
+          errors,
+        };
+      }
+      const communityId = launched.communityId;
+      userMessageKey = launched.userMessageKey;
+      processName = launched.processName;
+      const commandResult = launched.commandResult;
+
+      if (!commandResult.ok) {
+        failures.push("codex_bridge_thread_turn_command_start_failed");
+        errors.push({
+          responseStatus: commandResult.status,
+          providerCode: commandResult.code,
+          errorMessage: redactSensitiveText(commandResult.message),
+        });
+        try {
+          await ctx.runMutation(
+            (internal as any).threads.finishCloudRuntimeRunByBridgeClaimsInternal as any,
+            {
+              ownerId: ownerId as any,
+              threadId: args.threadId,
+              runId,
+              claimProjectId: projectId,
+              claimCommunityId: communityId ?? undefined,
+              status: "error",
+              reason: "codex_bridge_thread_turn_async_start_failed",
+              errorCode: "codex_bridge_thread_turn_command_start_failed",
+              errorMessage: "Codex bridge thread turn command failed to start.",
+              nowMs: Date.now(),
+            },
+          );
+        } catch {
+          // The start result below carries the provider failure; run cleanup is best-effort.
+        }
+        return {
+          ok: false,
+          code: "codex_bridge_thread_turn_async_failed",
+          deploymentKind,
+          projectId,
+          threadId,
+          ownerId,
+          runId,
+          sandboxName: names.sandboxName,
+          processName,
+          providerCommandId: null,
+          status: null,
+          exitCode: null,
+          evidence,
+          userMessageKey,
+          failures,
+          errors,
+        };
+      }
+
+      evidence.commandStarted = true;
+      try {
+        await ctx.runMutation(
+          (internal as any).threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any,
+          {
+            ownerId: ownerId as any,
+            threadId: args.threadId,
+            runId,
+            claimProjectId: projectId,
+            claimCommunityId: communityId ?? undefined,
+            eventType: "codex_exec_process_started",
+            eventKey: "codex_exec_process_started",
+            payload: {
+              sandbox_name: names.sandboxName,
+              process_name: processName,
+              provider_command_id: commandResult.providerCommandId ?? processName,
+              status: commandResult.status ?? null,
+              exit_code: commandResult.exitCode ?? null,
+              mode: "thread_turn",
+              user_message_key: userMessageKey,
+            },
+            nowMs: Date.now(),
+          },
+        );
+      } catch (error) {
+        failures.push("codex_exec_process_started_event_failed");
+        errors.push(sanitizeSmokeError(error));
+      }
+      return {
+        ok: true,
+        code:
+          failures.length === 0
+            ? "codex_bridge_thread_turn_async_started"
+            : "codex_bridge_thread_turn_async_started_with_warnings",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        runId,
+        sandboxName: names.sandboxName,
+        processName,
+        providerCommandId: commandResult.providerCommandId ?? processName,
+        status: commandResult.status,
+        exitCode: commandResult.exitCode,
+        evidence,
+        userMessageKey,
+        failures,
+        errors,
+      };
+    } catch (error) {
+      failures.push("unexpected_codex_bridge_thread_turn_async_error");
+      errors.push(sanitizeSmokeError(error));
+      return {
+        ok: false,
+        code: "codex_bridge_thread_turn_async_failed",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        runId,
+        sandboxName: names.sandboxName,
+        processName,
+        providerCommandId: null,
+        status: null,
+        exitCode: null,
+        evidence,
+        userMessageKey,
+        failures,
+        errors,
+      };
+    }
+  },
+});
+
 export const reconcileOperatorCodexBridgeCodexExecRun = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -1680,12 +2041,15 @@ export const reconcileOperatorCodexBridgeCodexExecRun = action({
     const readFailedWithMissingProcess =
       readError?.code === "blaxel_process_not_found" ||
       readError?.code === "blaxel_sandbox_not_found";
+    const readFailedWithUnavailableProcess =
+      readError?.code === "blaxel_sandbox_not_ready" ||
+      readError?.code === "blaxel_request_failed";
     const processRunning = isProcessRunning(read);
     const terminalProcess = isProcessTerminal(read);
     const shouldFinishStaleRunning =
       runIsRunning &&
       args.finishStaleRunning === true &&
-      ((processRunning && runIsStale) || readFailedWithMissingProcess);
+      ((processRunning && runIsStale) || readFailedWithMissingProcess || (readFailedWithUnavailableProcess && runIsOldEnough));
 
     if (ownerId && runIsRunning && processName) {
       try {
@@ -1758,13 +2122,17 @@ export const reconcileOperatorCodexBridgeCodexExecRun = action({
               reconciledStatus === "ok"
                 ? undefined
                 : shouldFinishStaleRunning
-                  ? "codex_exec_process_stale_timeout"
+                  ? readFailedWithUnavailableProcess
+                    ? "codex_exec_process_unavailable"
+                    : "codex_exec_process_stale_timeout"
                   : readError?.code ?? (processFailed ? "codex_exec_process_failed" : "codex_exec_process_finished_without_marker"),
             errorMessage:
               reconciledStatus === "ok"
                 ? undefined
                 : shouldFinishStaleRunning
-                  ? "Codex bridge process lost liveness before posting its finish callback."
+                  ? readFailedWithUnavailableProcess
+                    ? "Codex bridge process became unavailable before posting its finish callback."
+                    : "Codex bridge process lost liveness before posting its finish callback."
                   : "Codex bridge process finished before posting a successful finish callback.",
             assistantText: reconciledStatus === "ok" ? CODEX_EXEC_MARKER : undefined,
             assistantModelId: readEnv("POLYNET_CODEX_BRIDGE_CODEX_MODEL") || undefined,
