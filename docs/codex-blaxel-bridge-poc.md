@@ -383,4 +383,47 @@ Additional verification after the explicit runtime-turn gate and Blaxel readines
 9. Follow-up 5-second probe `codex_bridge_blaxel_process_probe_17805885913N_5s` failed earlier at sandbox ensure with `blaxel_request_failed`.
 10. Resource inventory reported the target project volume present, no provider sandboxes, and staging volume quota risk (`providerVolumeCount=5`, `providerVolumeLimit=5`, safety buffer 1).
 
-Current read: the remaining blocker is Blaxel project-sandbox lifecycle/readback reliability, not Codex JSONL parsing or PolyNet context injection. Do not add more bridge harness logic until a trivial non-Codex process can survive and remain readable long enough for the runtime turn path.
+Read at that point: the remaining blocker was Blaxel project-sandbox
+lifecycle/readback reliability, not Codex JSONL parsing or PolyNet context
+injection. The next slice had to prove a trivial non-Codex process could
+survive and remain readable long enough for the runtime turn path.
+
+Additional verification after staging orphan-volume cleanup and process-state
+probe correction:
+
+1. `npm run check:workspace-resource-inventory-diagnostic-proof`
+2. `npm run check:codex-bridge-contract-proof`
+3. `npx tsc --noEmit --pretty false`
+4. `git diff --check`
+5. `npm run build`
+6. `CONVEX_DEPLOYMENT=dev:quick-porcupine-949 npx convex dev --once --typecheck disable --codegen disable --tail-logs disable`
+7. Runtime bridge flag confirmed disabled before cleanup:
+   `POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS=false`
+8. Orphan-volume cleanup dry run found exactly two unattached orphan volumes
+   and four protected project volumes:
+   `pn-p-jd74jr0194jh49ms4chqysra9187m4qt-v`,
+   `pn-p-jd754tj3q5zhqc79jg319yn4n5852rnq-v`
+9. Exact-name destructive cleanup deleted those two staging orphan volumes.
+10. Resource inventory then reported `providerVolumeCount=3`,
+    `orphanVolumes=0`, `quotaRisk=false`, and one available safe volume slot.
+11. Non-Codex Blaxel process lifecycle probe
+    `codex_bridge_blaxel_process_probe_1780589371_20s_after_state_fix`
+    passed: command start, immediate read, read after 20 seconds, process
+    survival, and stop all succeeded.
+12. Operator-token-gated Codex exec smoke
+    `codex_bridge_codex_exec_1780589456231_2228482d` passed with Codex CLI
+    invoked, JSONL stream parsed, final callback complete, ledger event visible,
+    and run finished.
+13. Runtime-authorized thread-turn probe
+    `codex_bridge_runtime_probe_1780589543_after_substrate_fix` passed with
+    `runStatus=ok`, process status `completed`, parsed JSONL events, and
+    nonempty final text.
+14. Runtime bridge flag confirmed disabled after the probe:
+    `POLYNET_ENABLE_CODEX_BRIDGE_RUNTIME_TURNS=false`
+
+Current read: the previous blocker was provider substrate hygiene, not Codex
+execution or PolyNet context injection. After deleting two staging orphan
+volumes and correcting process-state interpretation, the bridge substrate,
+Codex exec smoke, and runtime-authorized thread-turn path all pass against
+Convex staging. Next verification should move to the staging UI/operator flow
+and Vercel staging build freshness rather than adding more harness logic.

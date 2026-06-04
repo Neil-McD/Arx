@@ -4,6 +4,7 @@ import { action, internalAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
+  destroyBlaxelWorkspaceVolume,
   listBlaxelWorkspaceSandboxes,
   listBlaxelWorkspaceVolumes,
   loadBlaxelWorkspaceConfig,
@@ -71,6 +72,14 @@ function normalizeDeploymentKind(value: unknown): string {
 function normalizeLimit(value: unknown): number {
   const parsed = Math.floor(Number(value ?? 500));
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(1000, parsed) : 500;
+}
+
+function normalizeNameSet(values: string[] | undefined): Set<string> {
+  return new Set(
+    (values ?? [])
+      .map((value) => normalizeString(value))
+      .filter(Boolean),
+  );
 }
 
 function hasOperatorAccess(value: unknown): boolean {
@@ -545,6 +554,196 @@ export const reconcileInactiveLegacyWorkspaceProjectPointersInternal = internalA
       },
       candidates,
       cleared,
+    };
+  },
+});
+
+export const cleanupBlaxelWorkspaceOrphanVolumes = action({
+  args: {
+    authSubject: v.string(),
+    volumeNames: v.optional(v.array(v.string())),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
+    const policy = resolveWorkspaceComputerProviderFromServerEnv();
+    if (deploymentKind !== "staging") {
+      return {
+        ok: false,
+        code: "blaxel_orphan_volume_cleanup_staging_only",
+        deploymentKind,
+        policy,
+      };
+    }
+    const operatorAccess = await ctx.runQuery(
+      (api as any).operatorAccess.getMyOperatorAccessOptional,
+      {
+        authSubject: args.authSubject,
+      },
+    );
+    if (!hasOperatorAccess(operatorAccess)) {
+      return {
+        ok: false,
+        code: "blaxel_orphan_volume_cleanup_operator_access_required",
+        deploymentKind,
+        policy,
+      };
+    }
+
+    const dryRun = args.dryRun !== false;
+    const projectLimit = normalizeLimit(args.limit ?? 1000);
+    const requestedVolumeNames = normalizeNameSet(args.volumeNames);
+    if (!dryRun && requestedVolumeNames.size === 0) {
+      return {
+        ok: false,
+        code: "blaxel_orphan_volume_cleanup_requires_explicit_volume_names",
+        deploymentKind,
+        policy,
+        dryRun,
+      };
+    }
+
+    const [projectRows, volumesResult] = await Promise.all([
+      ctx.runQuery(
+        internal.projects.listCloudProjectsForWorkspaceResourceInventoryInternal as any,
+        {
+          limit: projectLimit,
+        },
+      ) as Promise<ProjectInventoryRow[]>,
+      listBlaxelWorkspaceVolumes(),
+    ]);
+    if (volumesResult.ok !== true) {
+      return {
+        ok: false,
+        code: "blaxel_orphan_volume_cleanup_provider_request_failed",
+        deploymentKind,
+        policy,
+        volumes: sanitizeFailure(volumesResult),
+      };
+    }
+    if (projectRows.length >= projectLimit) {
+      return {
+        ok: false,
+        code: "blaxel_orphan_volume_cleanup_project_inventory_truncated",
+        deploymentKind,
+        policy,
+        dryRun,
+        projectLimit,
+        projectRows: projectRows.length,
+      };
+    }
+
+    const protectedVolumeNames = new Set<string>();
+    for (const project of projectRows) {
+      const expectedNames = buildBlaxelProjectWorkspaceNames(projectId(project));
+      protectedVolumeNames.add(expectedNames.volumeName);
+      const recordedVolumeId = normalizeOptionalString(project.providerVolumeId);
+      if (
+        recordedVolumeId &&
+        resolveRecordedWorkspaceResourceProviderId({
+          providerId: project.providerVolumeProviderId,
+          resourceId: recordedVolumeId,
+        }) === "blaxel"
+      ) {
+        protectedVolumeNames.add(recordedVolumeId);
+      }
+    }
+
+    const safetyRows = volumesResult.resources.map((resource) => {
+      const protectedByProject = protectedVolumeNames.has(resource.name);
+      const classification = protectedByProject
+        ? "project_owned_volume"
+        : classifyUnmatchedProviderResource({ kind: "volume", resource });
+      const requested =
+        requestedVolumeNames.size === 0 || requestedVolumeNames.has(resource.name);
+      const blockedReason = protectedByProject
+        ? "project_owned_volume"
+        : classification !== "orphan_volume"
+          ? classification
+          : resource.attachedTo
+            ? "attached_volume"
+            : requested
+              ? null
+              : "not_requested";
+      return {
+        name: resource.name,
+        status: resource.status,
+        attachedTo: resource.attachedTo,
+        labels: resource.labels,
+        classification,
+        requested,
+        protectedByProject,
+        deleteEligible:
+          requested &&
+          !protectedByProject &&
+          classification === "orphan_volume" &&
+          !resource.attachedTo,
+        blockedReason,
+      };
+    });
+
+    const requestedMissing = [...requestedVolumeNames]
+      .filter((name) => !volumesResult.resources.some((resource) => resource.name === name));
+    const requestedUnsafe = safetyRows
+      .filter((row) => requestedVolumeNames.has(row.name) && !row.deleteEligible);
+    const candidates = safetyRows.filter((row) => row.deleteEligible);
+    if (!dryRun && (requestedMissing.length > 0 || requestedUnsafe.length > 0)) {
+      return {
+        ok: false,
+        code: "blaxel_orphan_volume_cleanup_requested_volume_not_eligible",
+        deploymentKind,
+        policy,
+        dryRun,
+        requestedMissing,
+        requestedUnsafe,
+        candidates,
+      };
+    }
+
+    const deleted: Array<{
+      name: string;
+      ok: boolean;
+      code?: string;
+      message?: string;
+    }> = [];
+    if (!dryRun) {
+      for (const candidate of candidates) {
+        const deletedVolume = await destroyBlaxelWorkspaceVolume({
+          volumeName: candidate.name,
+        });
+        deleted.push(
+          deletedVolume.ok
+            ? { name: candidate.name, ok: true }
+            : {
+                name: candidate.name,
+                ok: false,
+                code: deletedVolume.code,
+                message: deletedVolume.message,
+              },
+        );
+      }
+    }
+
+    return {
+      ok: true,
+      code: "blaxel_orphan_volume_cleanup",
+      deploymentKind,
+      policy,
+      dryRun,
+      summary: {
+        projectRows: projectRows.length,
+        providerVolumes: volumesResult.resources.length,
+        protectedProjectVolumes: protectedVolumeNames.size,
+        requestedVolumes: requestedVolumeNames.size,
+        eligibleOrphanVolumes: candidates.length,
+        deletedVolumes: deleted.filter((row) => row.ok).length,
+        failedDeletes: deleted.filter((row) => !row.ok).length,
+      },
+      candidates,
+      requestedMissing,
+      requestedUnsafe,
+      deleted,
     };
   },
 });

@@ -858,6 +858,7 @@ function isProcessRunning(read: Record<string, unknown> | null): boolean {
 
 function isProcessTerminal(read: Record<string, unknown> | null): boolean {
   if (!read) return false;
+  if (isProcessRunning(read)) return false;
   const status = String(read.status ?? "").trim().toLowerCase();
   if (processExitCode(read.exitCode) !== null) return true;
   return /success|complete|exit|stop|kill|fail|error|done/.test(status);

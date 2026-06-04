@@ -159,6 +159,14 @@ never clear active project rows or matched Blaxel volume pointers. Cleared legac
 volume pointers are marked with `workspaceVolumeRetentionState: deleted` because
 the row is no longer a valid active project-volume authority.
 
+Orphan provider volume cleanup is a staging-only operator repair path for Blaxel
+quota pressure caused by provider volumes that no `cloudProjects` row owns. It
+must default to dry-run, must require exact volume names before deleting, must
+refuse truncated project inventory, and must delete only unattached resources
+classified as `orphan_volume`. Expected project volume names and recorded
+Blaxel-owned project volume ids are protected even when provider labels are
+stale or missing.
+
 Project deletion dispatches cleanup by recorded provider owner. Blaxel-owned
 resources delete the Blaxel sandbox first, then delete the Blaxel volume;
 missing provider resources count as already cleaned up.

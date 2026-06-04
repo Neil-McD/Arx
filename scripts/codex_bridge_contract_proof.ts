@@ -399,6 +399,12 @@ function main() {
         /const stopped = await stopBlaxelWorkspaceProcess/.test(codexExecSmoke),
     ),
     check(
+      "codex_bridge_process_terminal_state_respects_running_status",
+      /function isProcessTerminal\(read: Record<string, unknown> \| null\): boolean \{[\s\S]*if \(!read\) return false;[\s\S]*if \(isProcessRunning\(read\)\) return false;[\s\S]*processExitCode\(read\.exitCode\) !== null/.test(
+        codexExecSmoke,
+      ),
+    ),
+    check(
       "codex_exec_finish_carries_bounded_assistant_output",
       /assistantText\?: string \| null/.test(shared) &&
         /assistantModelId\?: string \| null/.test(shared) &&

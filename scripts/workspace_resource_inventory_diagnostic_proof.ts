@@ -10,6 +10,9 @@ const inventory = read("convex/blaxelWorkspaceResourceInventory.ts");
 const projects = read("convex/projects.ts");
 const docs = read("docs/workspace-computer-provider-contract.md");
 const packageJson = read("package.json");
+const diagnosticCore = inventory.match(
+  /async function diagnoseBlaxelWorkspaceResourceInventoryCore[\s\S]*$/,
+)?.[0] ?? "";
 
 assert.match(
   client,
@@ -139,6 +142,56 @@ assert.match(
 );
 assert.match(
   inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes = action/,
+  "orphan provider volume cleanup must expose an operator action for staging repair",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*deploymentKind !== "staging"/,
+  "orphan provider volume cleanup must be staging-only",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*authSubject: v\.string\(\)[\s\S]*operatorAccess\.getMyOperatorAccessOptional[\s\S]*blaxel_orphan_volume_cleanup_operator_access_required/,
+  "orphan provider volume cleanup must require operator access",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*dryRun = args\.dryRun !== false/,
+  "orphan provider volume cleanup must default to dry-run",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*!dryRun && requestedVolumeNames\.size === 0[\s\S]*blaxel_orphan_volume_cleanup_requires_explicit_volume_names/,
+  "destructive orphan provider volume cleanup must require exact volume names",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*protectedVolumeNames\.add\(expectedNames\.volumeName\)[\s\S]*protectedVolumeNames\.add\(recordedVolumeId\)/,
+  "orphan provider volume cleanup must protect expected and recorded project volumes",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*projectRows\.length >= projectLimit[\s\S]*blaxel_orphan_volume_cleanup_project_inventory_truncated/,
+  "orphan provider volume cleanup must refuse truncated project inventory",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*classification === "orphan_volume"[\s\S]*!resource\.attachedTo/,
+  "orphan provider volume cleanup must target only unattached orphan volumes",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*requestedUnsafe[\s\S]*blaxel_orphan_volume_cleanup_requested_volume_not_eligible/,
+  "orphan provider volume cleanup must fail closed when requested volumes are not eligible",
+);
+assert.match(
+  inventory,
+  /cleanupBlaxelWorkspaceOrphanVolumes[\s\S]*destroyBlaxelWorkspaceVolume/,
+  "orphan provider volume cleanup must use the scoped Blaxel volume destroy wrapper",
+);
+assert.match(
+  inventory,
   /listCloudProjectsForWorkspaceResourceInventoryInternal/,
   "provider inventory diagnostic must compare provider truth against PolyNet project truth",
 );
@@ -198,7 +251,7 @@ assert.match(
   "provider inventory diagnostic must return sanitized provider volume quota evidence",
 );
 assert.doesNotMatch(
-  inventory,
+  diagnosticCore,
   /destroyBlaxel|ensureBlaxel|createBlaxel|\.delete\(|\.create\(/,
   "provider inventory diagnostic must not create, ensure, or delete provider resources",
 );
@@ -233,6 +286,11 @@ assert.match(
   docs,
   /Inactive legacy pointer reconciliation/,
   "workspace provider contract must document inactive legacy pointer reconciliation",
+);
+assert.match(
+  docs,
+  /Orphan provider volume cleanup/,
+  "workspace provider contract must document orphan provider volume cleanup",
 );
 assert.match(
   docs,
