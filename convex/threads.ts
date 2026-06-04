@@ -2582,10 +2582,28 @@ export const ensureCloudRuntimeRunStartedByBridgeInternal = internalMutation({
       return existing;
     }
 
-    const runningRun = await getRunningRuntimeRunByThread({
+    let runningRun = await getRunningRuntimeRunByThread({
       ctx,
       threadId: thread._id,
     });
+    if (runningRun && runningRun.runId !== runId && isRuntimeRunStale({ run: runningRun, nowMs })) {
+      await finalizeRuntimeRunRecord({
+        ctx,
+        ownerId: scope.ownerId,
+        thread,
+        run: runningRun,
+        status: "error",
+        reason: "stale_bridge_run_reconciled",
+        errorCode: "stale_bridge_run_reconciled",
+        errorMessage: "Previous hidden Codex bridge run lost liveness and was reconciled before starting a new bridge run.",
+        nowMs,
+        finishedAt: nowMs,
+      });
+      runningRun = await getRunningRuntimeRunByThread({
+        ctx,
+        threadId: thread._id,
+      });
+    }
     if (runningRun && runningRun.runId !== runId) throw new Error("thread_run_in_progress");
 
     const startedAt =
