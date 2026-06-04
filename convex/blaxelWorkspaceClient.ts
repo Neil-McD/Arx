@@ -76,8 +76,10 @@ export type BlaxelWorkspaceCommandSpec = {
   sandboxName: string;
   command: string;
   cwd?: string | null;
+  env?: Record<string, string> | null;
   processName?: string | null;
   timeoutSeconds?: number | null;
+  readyRetryMs?: number | null;
   waitForCompletion?: boolean | null;
   waitForPorts?: number[] | null;
 };
@@ -263,6 +265,18 @@ function normalizeString(value: unknown): string {
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = normalizeString(value);
   return normalized || null;
+}
+
+function normalizeCommandEnv(value: unknown): Record<string, string> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const out: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(record)) {
+    const normalizedKey = key.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(normalizedKey)) continue;
+    out[normalizedKey] = String(rawValue ?? "");
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 function normalizeBlaxelPreviewName(value: unknown, fallbackPort: number): string {
@@ -549,6 +563,14 @@ function classifyBlaxelError(error: unknown): WorkspaceComputerProviderFailure {
       details,
     });
   }
+  if (/WORKLOAD_UNAVAILABLE|currently not available|temporarily unavailable|not ready|starting|pending/i.test(message)) {
+    return failure({
+      status: 503,
+      code: "blaxel_sandbox_not_ready",
+      message: "Blaxel sandbox is not ready.",
+      details,
+    });
+  }
   if (/404|not found|not_found|does not exist/i.test(message)) {
     return failure({
       status: 404,
@@ -557,7 +579,7 @@ function classifyBlaxelError(error: unknown): WorkspaceComputerProviderFailure {
       details,
     });
   }
-  if (/wait|timeout|not ready|starting|pending/i.test(message)) {
+  if (/wait|timeout/i.test(message)) {
     return failure({
       status: 503,
       code: "blaxel_sandbox_not_ready",
@@ -1509,7 +1531,7 @@ async function resolveGuardedBlaxelWorkspacePath(params: {
   }
 }
 
-export async function executeBlaxelWorkspaceCommand(
+async function executeBlaxelWorkspaceCommandOnce(
   params: BlaxelWorkspaceCommandSpec,
 ): Promise<BlaxelWorkspaceCommandResult> {
   const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
@@ -1542,9 +1564,11 @@ export async function executeBlaxelWorkspaceCommand(
       if (guardedWorkingDir.ok === false) return guardedWorkingDir;
       workingDir = guardedWorkingDir.path;
     }
+    const commandEnv = normalizeCommandEnv(params.env);
     const result = await sandbox.process.exec({
       name: processName,
       command: params.command,
+      ...(commandEnv ? { env: commandEnv } : null),
       ...(workingDir ? { workingDir } : null),
       waitForCompletion: params.waitForCompletion ?? true,
       ...(Array.isArray(params.waitForPorts) && params.waitForPorts.length > 0
@@ -1580,6 +1604,25 @@ export async function executeBlaxelWorkspaceCommand(
     };
   } catch (error) {
     return classifyBlaxelError(error);
+  }
+}
+
+export async function executeBlaxelWorkspaceCommand(
+  params: BlaxelWorkspaceCommandSpec,
+): Promise<BlaxelWorkspaceCommandResult> {
+  const retryBudgetMs =
+    typeof params.readyRetryMs === "number" && Number.isFinite(params.readyRetryMs)
+      ? Math.max(0, Math.floor(params.readyRetryMs))
+      : readNonNegativeIntegerEnv("BLAXEL_WORKSPACE_COMMAND_READY_RETRY_MS", 5_000);
+  const deadlineMs = Date.now() + retryBudgetMs;
+  let delayMs = 500;
+  while (true) {
+    const result = await executeBlaxelWorkspaceCommandOnce(params);
+    if (result.ok || result.code !== "blaxel_sandbox_not_ready") return result;
+    const remainingMs = deadlineMs - Date.now();
+    if (remainingMs <= 0) return result;
+    await sleep(Math.min(delayMs, remainingMs));
+    delayMs = Math.min(delayMs * 2, 30_000);
   }
 }
 

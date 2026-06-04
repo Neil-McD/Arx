@@ -1168,6 +1168,7 @@ Rules:
 - Thread community lens changes are allowed after a run starts, but they only affect future runs.
 - Runtime source-trace capture writes to the immutable run community lens captured at run start, not the mutable current thread lens.
 - Only runtime runs with a canonical thread community lens create community evidence.
+- `internal_hidden` operational runs do not create community source traces; they remain runtime evidence only.
 - Runtime run evidence is single-community evidence. It must never read from, write to, or merge with another community.
 - Runtime source traces use stable source ids so retries and stale-run reconciliation update the same evidence row.
 - Runtime source traces default to `visibilityScope: admin` and `sourceVisibility: redacted`.

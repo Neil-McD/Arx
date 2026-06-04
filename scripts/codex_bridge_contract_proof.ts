@@ -1,0 +1,385 @@
+import { readFileSync } from "node:fs";
+import process from "node:process";
+
+type Check = {
+  name: string;
+  ok: boolean;
+  detail?: string;
+};
+
+function read(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+function check(name: string, ok: boolean, detail?: string): Check {
+  return { name, ok, detail };
+}
+
+function main() {
+  const shared = read("shared/codexBridgeContract.ts");
+  const token = read("convex/codexBridgeToken.ts");
+  const http = read("convex/httpCodexBridge.ts");
+  const httpRoot = read("convex/http.ts");
+  const threads = read("convex/threads.ts");
+  const operatorDashboard = read("convex/operatorDashboard.ts");
+  const blaxel = read("convex/blaxelWorkspaceClient.ts");
+  const smoke = read("convex/codexBridgeSmoke.ts");
+  const codexExecSmoke = read("convex/codexBridgeCodexExecSmoke.ts");
+  const operatorGate = read("convex/codexBridgeOperatorGate.ts");
+  const codexBridgeGateway = read("shared/cloudCodexBridgeGateway.ts");
+  const webWorkspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
+  const webWorkspaceRightPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
+  const operatorPlatformPanel = read("apps/web/src/components/OperatorPlatformPanelView.tsx");
+  const echoSmokeScript = read("scripts/codex_bridge_echo_smoke.ts");
+  const codexExecSmokeScript = read("scripts/codex_bridge_codex_exec_smoke.ts");
+  const operatorTokenScript = read("scripts/codex_bridge_operator_token.ts");
+  const stagingGuard = read("scripts/blaxel_staging_readiness_guard.sh");
+  const docs = read("docs/codex-blaxel-bridge-poc.md");
+  const envExample = read(".env.example");
+  const stagingEnvExample = read(".env.staging.local.example");
+  const packageJson = read("package.json");
+  const smokeMintIndex = smoke.indexOf("const minted = await mintCodexBridgeRunToken");
+  const smokeRunStartIndex = smoke.indexOf("ensureCloudRuntimeRunStartedByBridgeInternal");
+  const codexExecMintIndex = codexExecSmoke.indexOf("const minted = await mintCodexBridgeRunToken");
+  const codexExecRunStartIndex = codexExecSmoke.indexOf("ensureCloudRuntimeRunStartedByBridgeInternal");
+  const blaxelUnavailableIndex = blaxel.indexOf("WORKLOAD_UNAVAILABLE");
+  const blaxelNotFoundIndex = blaxel.indexOf("404|not found|not_found|does not exist");
+  const fallbackUseTargets = [
+    shared,
+    smoke,
+    codexExecSmoke,
+    operatorGate,
+    echoSmokeScript,
+    codexExecSmokeScript,
+    operatorTokenScript,
+    docs,
+    envExample,
+    stagingEnvExample,
+  ].join("\n");
+
+  const checks: Check[] = [
+    check(
+      "shared_contract_exports_run_scoped_env",
+      /CODEX_BRIDGE_TOKEN_ENV_NAME = "POLYNET_CODEX_BRIDGE_TOKEN"/.test(shared) &&
+        /CODEX_BRIDGE_EVENT_URL_ENV_NAME/.test(shared) &&
+        /CODEX_BRIDGE_FINISH_URL_ENV_NAME/.test(shared) &&
+        /CODEX_BRIDGE_OPERATOR_SECRET_ENV_NAME = "POLYNET_CODEX_BRIDGE_OPERATOR_SECRET"/.test(shared),
+    ),
+    check(
+      "smoke_actions_are_operator_token_gated",
+      /verifyCodexBridgeOperatorToken/.test(operatorGate) &&
+        /CODEX_BRIDGE_OPERATOR_TOKEN_ISSUER/.test(operatorGate) &&
+        /fixedTimeEqual/.test(operatorGate) &&
+        /operatorToken: v\.string\(\)/.test(smoke) &&
+        /operatorToken: v\.string\(\)/.test(codexExecSmoke) &&
+        /verifyCodexBridgeOperatorToken\(args\.operatorToken/.test(smoke) &&
+        /verifyCodexBridgeOperatorToken\(args\.operatorToken/.test(codexExecSmoke) &&
+        /mintCodexBridgeOperatorToken/.test(echoSmokeScript) &&
+        /mintCodexBridgeOperatorToken/.test(codexExecSmokeScript) &&
+        /operatorToken: parsed\.operatorToken/.test(echoSmokeScript) &&
+        /operatorToken: parsed\.operatorToken/.test(codexExecSmokeScript) &&
+        /delete childEnv\.POLYNET_CODEX_BRIDGE_OPERATOR_SECRET/.test(echoSmokeScript) &&
+        /delete childEnv\.POLYNET_CODEX_BRIDGE_OPERATOR_SECRET/.test(codexExecSmokeScript) &&
+        !/--operator-secret/.test(echoSmokeScript) &&
+        !/--operator-secret/.test(codexExecSmokeScript),
+    ),
+    check(
+      "operator_token_binds_smoke_scope",
+      /normalizeCodexBridgeBaseUrlOrigin/.test(shared) &&
+        /projectId: string/.test(operatorTokenScript) &&
+        /threadId: string/.test(operatorTokenScript) &&
+        /baseUrl\?: string \| null/.test(operatorTokenScript) &&
+        /payload\.projectId !== params\.projectId/.test(operatorGate) &&
+        /payload\.threadId !== params\.threadId/.test(operatorGate) &&
+        /payload\.baseUrlOrigin !== expectedBaseUrlOrigin/.test(operatorGate) &&
+        /projectId: String\(args\.projectId\)/.test(smoke) &&
+        /threadId: String\(args\.threadId\)/.test(smoke) &&
+        /projectId: String\(args\.projectId\)/.test(codexExecSmoke) &&
+        /threadId: String\(args\.threadId\)/.test(codexExecSmoke) &&
+        /projectId,\s*threadId,\s*baseUrl/.test(echoSmokeScript) &&
+        /projectId,\s*threadId,\s*baseUrl/.test(codexExecSmokeScript),
+    ),
+    check(
+      "operator_token_can_be_minted_server_side_after_role_gate",
+      /export async function mintCodexBridgeOperatorTokenForServer/.test(operatorGate) &&
+        /CODEX_BRIDGE_OPERATOR_TOKEN_MAX_TTL_MS/.test(operatorGate) &&
+        /crypto\.randomUUID\(\)/.test(operatorGate) &&
+        /baseUrlOrigin/.test(operatorGate) &&
+        /startOperatorCodexBridgeCodexExecRun/.test(codexExecSmoke) &&
+        /operatorAccess\.getOperatorWriteAccessInternal/.test(codexExecSmoke) &&
+        /mintCodexBridgeOperatorTokenForServer/.test(codexExecSmoke) &&
+        /deploymentKind !== "staging"/.test(codexExecSmoke) &&
+        /ctx\.runAction/.test(codexExecSmoke),
+    ),
+    check(
+      "token_uses_dedicated_hmac_secret",
+      /CODEX_BRIDGE_SIGNING_SECRET_ENV_NAME = "ARX_CODEX_BRIDGE_SIGNING_SECRET"/.test(token) &&
+        /crypto\.subtle\.sign\("HMAC"/.test(token) &&
+        /crypto\.subtle\.verify\(\s*"HMAC"/.test(token),
+    ),
+    check(
+      "token_enforces_operation_and_expiry",
+      /requiredOperation/.test(token) &&
+        /claims\.expiresAt <= nowMs/.test(token) &&
+        /codex_bridge_token_operation_denied/.test(token),
+    ),
+    check(
+      "token_ttl_is_capped",
+      /CODEX_BRIDGE_MAX_TOKEN_TTL_MS = 15 \* 60 \* 1000/.test(token) &&
+        /Math\.min\(CODEX_BRIDGE_MAX_TOKEN_TTL_MS, Math\.max\(1_000, Math\.floor\(params\.ttlMs\)\)\)/.test(token),
+    ),
+    check(
+      "http_routes_are_registered",
+      /registerCodexBridgeRoutes/.test(httpRoot) &&
+        /path: "\/runtime\/codex_bridge\/event"/.test(http) &&
+        /path: "\/runtime\/codex_bridge\/finish"/.test(http) &&
+        /path: "\/runtime\/codex_bridge\/context"/.test(http),
+    ),
+    check(
+      "http_routes_use_bridge_token_not_user_bearer",
+      /verifyCodexBridgeRunToken/.test(http) &&
+        !/requireAuthenticatedActor|requireAuthenticatedSubject/.test(http),
+    ),
+    check(
+      "http_routes_write_existing_ledger_internal_mutations",
+      /appendCloudRuntimeRunEventByBridgeClaimsInternal/.test(http) &&
+        /finishCloudRuntimeRunByBridgeClaimsInternal/.test(http),
+    ),
+    check(
+      "http_context_route_uses_context_operation_and_audits_fetch",
+      /requiredOperation: "context"/.test(http) &&
+        /loadRuntimeTurnContextPacketForRun/.test(http) &&
+        /buildRuntimeTurnContextSnapshot/.test(http) &&
+        /CodexBridgeContextHttpResponseV1/.test(shared) &&
+        /const httpResponse: CodexBridgeContextHttpResponseV1/.test(http) &&
+        /contextResponse\?\.context\?\.contextPrompt/.test(codexExecSmoke) &&
+        /eventType: "codex_bridge_context_fetched"/.test(http),
+    ),
+    check(
+      "http_null_timestamps_are_omitted",
+      /if \(raw === null \|\| raw === undefined\) return undefined/.test(http) &&
+        /typeof raw === "string" && raw\.trim\(\) === ""/.test(http),
+    ),
+    check(
+      "threads_have_bridge_start_append_finish",
+      /ensureCloudRuntimeRunStartedByBridgeInternal/.test(threads) &&
+        /appendCloudRuntimeRunEventByBridgeClaimsInternal/.test(threads) &&
+        /finishCloudRuntimeRunByBridgeClaimsInternal/.test(threads) &&
+        /getCloudThreadRuntimeContextByOwnerInternal/.test(threads) &&
+        /resolveCodexBridgeRunScopeInternal/.test(threads),
+    ),
+    check(
+      "threads_validate_bridge_scope",
+      /run_project_scope_conflict/.test(threads) &&
+        /run_community_scope_conflict/.test(threads) &&
+        /runtime_run_not_running/.test(threads) &&
+        /bridge_project_scope_conflict/.test(threads) &&
+        /bridge_project_owner_conflict/.test(threads) &&
+        /bridge_existing_run_scope_conflict/.test(threads) &&
+        /bridge_existing_run_contract_conflict/.test(threads),
+    ),
+    check(
+      "bridge_run_scope_is_thread_canonical",
+      /async function resolveCodexBridgeRunScope/.test(threads) &&
+        /const thread = \(await args\.ctx\.db\.get\(args\.threadId\)\)/.test(threads) &&
+        /const projectId = normalizeIdValue\(thread\.projectId\)/.test(threads) &&
+        /expectedProjectId && expectedProjectId !== projectId/.test(threads) &&
+        /resolveRuntimeRunCanonicalCommunityLens/.test(threads) &&
+        /resolveCodexBridgeRunScopeInternal/.test(smoke) &&
+        /resolveCodexBridgeRunScopeInternal/.test(codexExecSmoke) &&
+        !/getCloudProjectByIdInternal/.test(smoke) &&
+        !/getCloudProjectByIdInternal/.test(codexExecSmoke),
+    ),
+    check(
+      "bridge_start_resolves_and_writes_canonical_scope",
+      /export const ensureCloudRuntimeRunStartedByBridgeInternal = internalMutation\({[\s\S]*const scope = await resolveCodexBridgeRunScope/.test(
+        threads,
+      ) &&
+        /expectedProjectId: args\.projectId/.test(threads) &&
+        /expectedCommunityId: args\.communityId/.test(threads) &&
+        /bridge_owner_scope_conflict/.test(threads) &&
+        /projectId: scope\.projectId/.test(threads) &&
+        /communityId: scope\.communityId/.test(threads) &&
+        /communityContextVersion: scope\.communityContextVersion/.test(threads) &&
+        !/projectId: args\.projectId,[\s\S]*communityId: runtimeCommunityLens\.communityId/.test(
+          threads,
+        ),
+    ),
+    check(
+      "bridge_start_reuses_only_matching_hidden_bridge_runs",
+      /function assertExistingCodexBridgeRunMatchesScope/.test(threads) &&
+        /args\.run\.status !== "running"/.test(threads) &&
+        /args\.run\.visibility !== "internal_hidden"/.test(threads) &&
+        /String\(args\.run\.contractName \?\? ""\)\.trim\(\) !== args\.contractName/.test(
+          threads,
+        ) &&
+        /String\(args\.run\.contractVersion \?\? ""\)\.trim\(\) !== args\.contractVersion/.test(
+          threads,
+        ) &&
+        /String\(args\.run\.executionMode \?\? ""\)\.trim\(\) !== args\.executionMode/.test(
+          threads,
+        ) &&
+        /normalizeIdValue\(args\.run\.projectId\) !== normalizeIdValue\(args\.scope\.projectId\)/.test(
+          threads,
+        ) &&
+        /normalizeIdValue\(args\.run\.communityId\)/.test(threads),
+    ),
+    check(
+      "internal_hidden_runs_are_evidence_only",
+      /if \(args\.run\.visibility === "internal_hidden"\) return;/.test(threads) &&
+        /const shouldUpdateThreadWorkingState = run\.visibility !== "internal_hidden"/.test(threads) &&
+        /if \(shouldUpdateThreadWorkingState && workingState\) \{[\s\S]*await args\.ctx\.db\.patch\(args\.thread\._id/.test(
+          threads,
+        ),
+    ),
+    check(
+      "blaxel_command_accepts_env",
+      /env\?: Record<string, string> \| null/.test(blaxel) &&
+        /normalizeCommandEnv/.test(blaxel) &&
+        /\.\.\(commandEnv \? \{ env: commandEnv \}/.test(blaxel),
+    ),
+    check(
+      "blaxel_command_retries_workload_warmup",
+      blaxelUnavailableIndex >= 0 &&
+        blaxelNotFoundIndex >= 0 &&
+        blaxelUnavailableIndex < blaxelNotFoundIndex &&
+        /executeBlaxelWorkspaceCommandOnce/.test(blaxel) &&
+        /readyRetryMs\?: number \| null/.test(blaxel) &&
+        /BLAXEL_WORKSPACE_COMMAND_READY_RETRY_MS", 5_000/.test(blaxel) &&
+        /result\.code !== "blaxel_sandbox_not_ready"/.test(blaxel) &&
+        /readyRetryMs: 60_000/.test(smoke) &&
+        /readyRetryMs: 60_000/.test(codexExecSmoke),
+    ),
+    check(
+      "smoke_passes_token_via_env_not_command",
+      /command: ECHO_COMMAND/.test(smoke) &&
+        /\[CODEX_BRIDGE_TOKEN_ENV_NAME\]: minted\.token/.test(smoke) &&
+        !/Bearer \$\{minted\.token\}|Bearer " \+ minted\.token/.test(smoke),
+    ),
+    check(
+      "smoke_mints_token_before_run_start",
+      smokeMintIndex >= 0 &&
+        smokeRunStartIndex >= 0 &&
+        smokeMintIndex < smokeRunStartIndex,
+    ),
+    check(
+      "codex_exec_smoke_uses_real_codex_jsonl_and_context",
+      /smokeCodexBridgeCodexExec/.test(codexExecSmoke) &&
+        /"exec",[\s\S]*"--json"/.test(codexExecSmoke) &&
+        /"--dangerously-bypass-approvals-and-sandbox"/.test(codexExecSmoke) &&
+        /CODEX_BRIDGE_CONTEXT_URL_ENV_NAME/.test(codexExecSmoke) &&
+        /operations: \["event", "finish", "context"\]/.test(codexExecSmoke) &&
+        /eventType: "codex_exec_final"/.test(codexExecSmoke),
+    ),
+    check(
+      "codex_exec_smoke_streams_jsonl_while_running",
+      /const \{ spawn, spawnSync \} = require\("node:child_process"\)/.test(codexExecSmoke) &&
+        /async function runCodexExecStreaming/.test(codexExecSmoke) &&
+        /const child = spawn\(command, args/.test(codexExecSmoke) &&
+        /child\.stdout\.on\("data"/.test(codexExecSmoke) &&
+        /eventPostQueue = eventPostQueue\.then/.test(codexExecSmoke) &&
+        /async function handleCodexJsonlLine/.test(codexExecSmoke) &&
+        /eventType: "codex_exec_stream_started"/.test(codexExecSmoke) &&
+        /eventKey: "codex_exec_jsonl:" \+ eventIndex/.test(codexExecSmoke) &&
+        /streamed_jsonl_event_count/.test(codexExecSmoke) &&
+        /evidence\.codexJsonlStreamStarted/.test(codexExecSmoke) &&
+        /"codexJsonlStreamStarted"/.test(codexExecSmokeScript) &&
+        !/const lines = stdout\.split/.test(codexExecSmoke),
+    ),
+    check(
+      "codex_exec_smoke_redacts_process_output_from_ledger",
+      /summarizeCodexJsonlEvent/.test(codexExecSmoke) &&
+        /final_text_matches_marker/.test(codexExecSmoke) &&
+        !/stdout_preview|stderr_preview/.test(codexExecSmoke) &&
+        !/final_text: clipText\(finalText/.test(codexExecSmoke) &&
+        !/errorMessage: status === "succeeded" \? null : errorMessage/.test(codexExecSmoke),
+    ),
+    check(
+      "codex_exec_smoke_uses_ephemeral_codex_home",
+      /const safeRunId = runId\.replace/.test(codexExecSmoke) &&
+        /const codexHome = "\/tmp\/polynet-codex-home-"/.test(codexExecSmoke) &&
+        /delete execEnv\.OPENAI_API_KEY/.test(codexExecSmoke) &&
+        /rmSync\(codexHome, \{ recursive: true, force: true \}\)/.test(codexExecSmoke),
+    ),
+    check(
+      "codex_exec_smoke_requires_dedicated_openai_key",
+      /readEnv\("POLYNET_CODEX_BRIDGE_OPENAI_API_KEY"\)/.test(codexExecSmoke) &&
+        !fallbackUseTargets.includes("POLYNET_CODEX_BRIDGE_ALLOW_SHARED_OPENAI_KEY") &&
+        !fallbackUseTargets.includes("shared_staging_openai"),
+    ),
+    check(
+      "staging_guard_enforces_bridge_secrets",
+      /POLYNET_CODEX_BRIDGE_OPERATOR_SECRET/.test(stagingGuard) &&
+        /POLYNET_CODEX_BRIDGE_OPENAI_API_KEY/.test(stagingGuard) &&
+        /POLYNET_CODEX_BRIDGE_ALLOW_SHARED_OPENAI_KEY/.test(stagingGuard) &&
+        /POLYNET_CODEX_BRIDGE_OPERATOR_SECRET=/.test(envExample) &&
+        /POLYNET_CODEX_BRIDGE_OPERATOR_SECRET=/.test(stagingEnvExample),
+    ),
+    check(
+      "codex_exec_smoke_mints_token_before_run_start",
+      codexExecMintIndex >= 0 &&
+        codexExecRunStartIndex >= 0 &&
+        codexExecMintIndex < codexExecRunStartIndex,
+    ),
+    check(
+      "codex_exec_smoke_is_staging_only_and_hidden",
+      /deploymentKind === "staging"/.test(codexExecSmoke) &&
+        /visibility: "internal_hidden"/.test(codexExecSmoke) &&
+        !/api\.runtimeTurn|runCloudRuntimeTurn|createRuntimeTurnRequest/.test(codexExecSmoke),
+    ),
+    check(
+      "package_exposes_bridge_smoke",
+      /"smoke:codex-bridge-echo": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/codex_bridge_echo_smoke\.ts"/.test(
+        packageJson,
+      ) &&
+        /"smoke:codex-bridge-codex-exec": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/codex_bridge_codex_exec_smoke\.ts"/.test(
+          packageJson,
+        ),
+    ),
+    check(
+      "web_operator_panel_exposes_staging_bridge_trigger",
+      /startOperatorCodexBridgeCodexExecRunCanonical/.test(codexBridgeGateway) &&
+        /loadOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
+        /bootstrapConvexAuthenticatedClient/.test(codexBridgeGateway) &&
+        /readConvexRuntimeUrl/.test(codexBridgeGateway) &&
+        /codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRun/.test(codexBridgeGateway) &&
+        /operatorDashboard:getCodexBridgeRunForOperator/.test(codexBridgeGateway) &&
+        /startOperatorCodexBridgeCodexExecRunCanonical/.test(webWorkspaceHost) &&
+        /loadOperatorCodexBridgeRunCanonical/.test(webWorkspaceHost) &&
+        /props\.operatorRightPanelSession && props\.activeProjectId && props\.activeThreadId/.test(webWorkspaceHost) &&
+        /codexBridgeAction=\{\{/.test(webWorkspaceHost) &&
+        /codexBridgeAction: \{/.test(webWorkspaceRightPanel) &&
+        /readback: OperatorCodexBridgeRunReadback/.test(webWorkspaceRightPanel) &&
+        /codexBridgeAction=\{props\.codexBridgeAction\}/.test(webWorkspaceRightPanel) &&
+        /function OperatorCodexBridgePanel/.test(operatorPlatformPanel) &&
+        /Ledger events/.test(operatorPlatformPanel) &&
+        /Run Codex smoke/.test(operatorPlatformPanel),
+    ),
+    check(
+      "operator_bridge_readback_is_role_gated_and_contract_limited",
+      /getCodexBridgeRunForOperator/.test(operatorDashboard) &&
+        /await requireOperatorAccess\(ctx, args\.authSubject\)/.test(operatorDashboard) &&
+        /withIndex\("by_owner_runId"/.test(operatorDashboard) &&
+        /String\(run\.contractName \?\? ""\) !== "codex_blaxel_bridge"/.test(operatorDashboard) &&
+        /String\(run\.visibility \?\? ""\) !== "internal_hidden"/.test(operatorDashboard) &&
+        /withIndex\("by_owner_run_seq"/.test(operatorDashboard),
+    ),
+  ];
+
+  const failed = checks.filter((item) => !item.ok);
+  console.log(
+    JSON.stringify(
+      {
+        ok: failed.length === 0,
+        check: "codex_bridge_contract_proof",
+        passed: checks.length - failed.length,
+        failed: failed.map((item) => item.name),
+      },
+      null,
+      2,
+    ),
+  );
+  if (failed.length > 0) process.exit(1);
+}
+
+main();

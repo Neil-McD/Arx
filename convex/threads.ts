@@ -39,6 +39,12 @@ type ThreadLike = {
   threadKey?: string;
 };
 
+type CloudProjectLike = {
+  _id: any;
+  ownerId: any;
+  status?: string;
+};
+
 type CloudMessageLike = {
   _id: any;
   ownerId: any;
@@ -811,6 +817,101 @@ async function requireOwnedCloudThread(args: {
   return row;
 }
 
+async function resolveCodexBridgeRunScope(args: {
+  ctx: any;
+  threadId: any;
+  expectedProjectId?: any;
+  expectedCommunityId?: any;
+  expectedCommunityContextVersion?: number;
+}): Promise<{
+  ownerId: any;
+  threadId: any;
+  projectId: any;
+  communityId?: any;
+  communityContextVersion?: number;
+}> {
+  const thread = (await args.ctx.db.get(args.threadId)) as ThreadLike | null;
+  if (!thread) throw new Error("thread_not_found");
+  if (typeof thread.archivedAt === "number") throw new Error("thread_archived");
+
+  const projectId = normalizeIdValue(thread.projectId);
+  if (!projectId) throw new Error("bridge_thread_project_missing");
+  const expectedProjectId = normalizeIdValue(args.expectedProjectId);
+  if (expectedProjectId && expectedProjectId !== projectId) {
+    throw new Error("bridge_project_scope_conflict");
+  }
+
+  const project = (await args.ctx.db.get(thread.projectId as any)) as CloudProjectLike | null;
+  if (!project) throw new Error("project_not_found");
+  if (normalizeIdValue(project.ownerId) !== normalizeIdValue(thread.ownerId)) {
+    throw new Error("bridge_project_owner_conflict");
+  }
+
+  const runtimeCommunityLens = await resolveRuntimeRunCanonicalCommunityLens({
+    ctx: args.ctx,
+    thread,
+    ownerId: thread.ownerId,
+    requestedCommunityId: args.expectedCommunityId,
+    requestedContextVersion: args.expectedCommunityContextVersion,
+  });
+
+  return {
+    ownerId: thread.ownerId,
+    threadId: thread._id,
+    projectId: thread.projectId,
+    communityId: runtimeCommunityLens.communityId,
+    communityContextVersion: runtimeCommunityLens.communityContextVersion,
+  };
+}
+
+function assertExistingCodexBridgeRunMatchesScope(args: {
+  run: RuntimeRunLike;
+  scope: {
+    ownerId: any;
+    threadId: any;
+    projectId: any;
+    communityId?: any;
+    communityContextVersion?: number;
+  };
+  executionMode: string;
+  contractName: string;
+  contractVersion: string;
+}): void {
+  if (args.run.status !== "running") throw new Error("bridge_existing_run_not_running");
+  if (args.run.visibility !== "internal_hidden") throw new Error("bridge_existing_run_contract_conflict");
+  if (String(args.run.contractName ?? "").trim() !== args.contractName) {
+    throw new Error("bridge_existing_run_contract_conflict");
+  }
+  if (String(args.run.contractVersion ?? "").trim() !== args.contractVersion) {
+    throw new Error("bridge_existing_run_contract_conflict");
+  }
+  if (String(args.run.executionMode ?? "").trim() !== args.executionMode) {
+    throw new Error("bridge_existing_run_contract_conflict");
+  }
+
+  if (normalizeIdValue(args.run.ownerId) !== normalizeIdValue(args.scope.ownerId)) {
+    throw new Error("bridge_existing_run_scope_conflict");
+  }
+  if (normalizeIdValue(args.run.threadId) !== normalizeIdValue(args.scope.threadId)) {
+    throw new Error("run_thread_conflict");
+  }
+  if (normalizeIdValue(args.run.projectId) !== normalizeIdValue(args.scope.projectId)) {
+    throw new Error("bridge_existing_run_scope_conflict");
+  }
+  const runCommunityId = normalizeIdValue(args.run.communityId);
+  const scopeCommunityId = normalizeIdValue(args.scope.communityId);
+  if (runCommunityId !== scopeCommunityId) {
+    throw new Error("bridge_existing_run_scope_conflict");
+  }
+  if (scopeCommunityId) {
+    const runContextVersion = Math.max(0, Math.floor(normalizeContextVersion(args.run.communityContextVersion)));
+    const scopeContextVersion = Math.max(0, Math.floor(normalizeContextVersion(args.scope.communityContextVersion)));
+    if (runContextVersion !== scopeContextVersion) {
+      throw new Error("bridge_existing_run_scope_conflict");
+    }
+  }
+}
+
 async function getRuntimeRunByOwnerRunId(args: {
   ctx: any;
   ownerId: any;
@@ -921,6 +1022,7 @@ async function recordRuntimeRunCommunitySourceTraceBestEffort(args: {
   finishedAt: number;
   nowMs: number;
 }): Promise<void> {
+  if (args.run.visibility === "internal_hidden") return;
   const runCommunityId = normalizeIdValue(args.run.communityId);
   if (!runCommunityId) return;
   try {
@@ -970,34 +1072,37 @@ async function finalizeRuntimeRunRecord(args: {
   const errorCode = String(args.errorCode ?? "").trim() || undefined;
   const errorMessage = String(args.errorMessage ?? "").trim() || undefined;
   const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
-
-  const recentMessages = (await args.ctx.db
-    .query("cloudMessages")
-    .withIndex("by_thread_seq", (q: any) => q.eq("threadId", args.thread._id))
-    .order("desc")
-    .take(50)) as CloudMessageLike[];
-  const latestRunUserMessage = recentMessages.find(
-    (message) => message.runId === run.runId && message.role === "user",
-  );
-  const runEvents = (await args.ctx.db
-    .query("runtimeRunEvents")
-    .withIndex("by_owner_run_seq", (q: any) =>
-      q.eq("ownerId", args.ownerId).eq("runId", run.runId),
-    )
-    .collect()) as RuntimeRunEventLike[];
-  const workingState = compactThreadWorkingState(
-    mergeRuntimeWorkingStateTaskLedger({
-      previous: args.thread.workingState,
-      current: summarizeRuntimeWorkingStateFromEvents({
-        latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
-        runStatus: status,
-        runReason: reason,
-        runErrorMessage: errorMessage,
-        events: runEvents,
-        nowMs: args.nowMs,
+  const shouldUpdateThreadWorkingState = run.visibility !== "internal_hidden";
+  let workingState: ThreadWorkingStateLike | null = null;
+  if (shouldUpdateThreadWorkingState) {
+    const recentMessages = (await args.ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q: any) => q.eq("threadId", args.thread._id))
+      .order("desc")
+      .take(50)) as CloudMessageLike[];
+    const latestRunUserMessage = recentMessages.find(
+      (message) => message.runId === run.runId && message.role === "user",
+    );
+    const runEvents = (await args.ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", run.runId),
+      )
+      .collect()) as RuntimeRunEventLike[];
+    workingState = compactThreadWorkingState(
+      mergeRuntimeWorkingStateTaskLedger({
+        previous: args.thread.workingState,
+        current: summarizeRuntimeWorkingStateFromEvents({
+          latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
+          runStatus: status,
+          runReason: reason,
+          runErrorMessage: errorMessage,
+          events: runEvents,
+          nowMs: args.nowMs,
+        }),
       }),
-    }),
-  );
+    );
+  }
 
   await args.ctx.db.insert("runtimeRunEvents", {
     ownerId: args.ownerId,
@@ -1030,15 +1135,17 @@ async function finalizeRuntimeRunRecord(args: {
     lastEventSeq: seq,
     updatedAt: args.nowMs,
   });
-  await args.ctx.db.patch(args.thread._id, {
-    workingState,
-    ...(status === "ok" && run.visibility !== "internal_hidden"
-      ? {
-          latestUserVisibleCompletedRunId: run.runId,
-        }
-      : null),
-    updatedAt: args.nowMs,
-  });
+  if (shouldUpdateThreadWorkingState && workingState) {
+    await args.ctx.db.patch(args.thread._id, {
+      workingState,
+      ...(status === "ok"
+        ? {
+            latestUserVisibleCompletedRunId: run.runId,
+          }
+        : null),
+      updatedAt: args.nowMs,
+    });
+  }
   const updated = (await args.ctx.db.get(run._id)) as RuntimeRunLike | null;
   if (!updated) throw new Error("runtime_run_not_found");
   await recordRuntimeRunCommunitySourceTraceBestEffort({
@@ -1863,6 +1970,55 @@ export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   },
 });
 
+export const getCloudThreadRuntimeContextByOwnerInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+  },
+  handler: async (ctx, args) => {
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    return {
+      _id: thread._id,
+      ownerId: thread.ownerId,
+      projectId: thread.projectId,
+      communityId: thread.communityId,
+      contextVersion: thread.contextVersion,
+      workingState: thread.workingState ?? null,
+      title: thread.title ?? null,
+      updatedAt: thread.updatedAt,
+    };
+  },
+});
+
+export const resolveCodexBridgeRunScopeInternal = internalQuery({
+  args: {
+    threadId: v.id("threads"),
+    expectedProjectId: v.optional(v.id("cloudProjects")),
+    expectedCommunityId: v.optional(v.string()),
+    expectedCommunityContextVersion: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const scope = await resolveCodexBridgeRunScope({
+      ctx,
+      threadId: args.threadId,
+      expectedProjectId: args.expectedProjectId,
+      expectedCommunityId: args.expectedCommunityId,
+      expectedCommunityContextVersion: args.expectedCommunityContextVersion,
+    });
+    return {
+      ownerId: scope.ownerId,
+      threadId: scope.threadId,
+      projectId: scope.projectId,
+      communityId: scope.communityId ?? null,
+      communityContextVersion: scope.communityContextVersion ?? null,
+    };
+  },
+});
+
 export const listStaleRunningRuntimeRunsInternal = internalQuery({
   args: {
     nowMs: v.optional(v.number()),
@@ -1979,7 +2135,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     harnessProfile: v.optional(v.string()),
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
-    latestUserText: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -2257,6 +2412,268 @@ export const finishCloudRuntimeRun = mutation({
     return await finalizeRuntimeRunRecord({
       ctx,
       ownerId,
+      thread,
+      run,
+      status,
+      reason: args.reason,
+      errorCode: args.errorCode,
+      errorMessage: args.errorMessage,
+      nowMs,
+      finishedAt: args.finishedAt,
+    });
+  },
+});
+
+export const ensureCloudRuntimeRunStartedByBridgeInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    lane: v.optional(v.string()),
+    visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
+    projectId: v.optional(v.id("cloudProjects")),
+    communityId: v.optional(v.id("communities")),
+    communityContextVersion: v.optional(v.number()),
+    executionMode: v.optional(v.string()),
+    contractName: v.optional(v.string()),
+    contractVersion: v.optional(v.string()),
+    harnessProfile: v.optional(v.string()),
+    harnessProfileSource: v.optional(v.string()),
+    capabilityFamilies: v.optional(v.array(v.string())),
+    startedAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const runId = normalizeRunId(args.runId);
+    if (args.visibility === "user_visible") throw new Error("bridge_visibility_invalid");
+    const visibility = "internal_hidden" as const;
+    const executionMode = String(args.executionMode ?? "").trim() || "codex_bridge";
+    const contractName = String(args.contractName ?? "").trim() || "codex_blaxel_bridge";
+    if (contractName !== "codex_blaxel_bridge") throw new Error("bridge_contract_name_invalid");
+    const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
+    const harnessProfile = String(args.harnessProfile ?? "").trim() || "codex_blaxel_bridge";
+    const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || "bridge_internal";
+    const capabilityFamilies = Array.isArray(args.capabilityFamilies)
+      ? args.capabilityFamilies
+          .map((value) => String(value ?? "").trim())
+          .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index)
+      : ["codex_bridge"];
+    const scope = await resolveCodexBridgeRunScope({
+      ctx,
+      threadId: args.threadId,
+      expectedProjectId: args.projectId,
+      expectedCommunityId: args.communityId,
+      expectedCommunityContextVersion: args.communityContextVersion,
+    });
+    if (normalizeIdValue(scope.ownerId) !== normalizeIdValue(args.ownerId)) {
+      throw new Error("bridge_owner_scope_conflict");
+    }
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: scope.ownerId,
+      threadId: scope.threadId,
+    });
+    const existing = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: scope.ownerId,
+      runId,
+    });
+    if (existing) {
+      assertExistingCodexBridgeRunMatchesScope({
+        run: existing,
+        scope,
+        executionMode,
+        contractName,
+        contractVersion,
+      });
+      return existing;
+    }
+
+    const runningRun = await getRunningRuntimeRunByThread({
+      ctx,
+      threadId: thread._id,
+    });
+    if (runningRun && runningRun.runId !== runId) throw new Error("thread_run_in_progress");
+
+    const startedAt =
+      typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
+    const lane = normalizeRunLane(args.lane);
+
+    const id = await ctx.db.insert("runtimeRuns", {
+      ownerId: scope.ownerId,
+      threadId: thread._id,
+      runId,
+      lane,
+      visibility,
+      projectId: scope.projectId,
+      communityId: scope.communityId,
+      communityContextVersion: scope.communityContextVersion,
+      executionMode,
+      contractName,
+      contractVersion,
+      harnessProfile,
+      harnessProfileSource,
+      capabilityFamilies,
+      workspaceSessionState: "none",
+      runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
+      workspaceSessionUpdatedAt: startedAt,
+      status: "running",
+      lastEventSeq: 1,
+      startedAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+
+    await ctx.db.insert("runtimeRunEvents", {
+      ownerId: scope.ownerId,
+      threadId: thread._id,
+      runId,
+      seq: 1,
+      eventType: "run_started",
+      eventKey: "run_started",
+      payload: {
+        run_id: runId,
+        lane,
+        visibility,
+        project_id: scope.projectId ?? null,
+        community_id: scope.communityId ?? null,
+        community_context_version: scope.communityContextVersion ?? null,
+        execution_mode: executionMode,
+        contract_name: contractName,
+        contract_version: contractVersion,
+        harness_profile: harnessProfile,
+        harness_profile_source: harnessProfileSource,
+        capability_families: capabilityFamilies,
+      },
+      createdAt: startedAt,
+    });
+
+    const created = (await ctx.db.get(id)) as RuntimeRunLike | null;
+    if (!created) throw new Error("runtime_run_create_failed");
+    return created;
+  },
+});
+
+export const appendCloudRuntimeRunEventByBridgeClaimsInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    claimProjectId: v.optional(v.string()),
+    claimCommunityId: v.optional(v.string()),
+    eventType: v.string(),
+    eventKey: v.optional(v.string()),
+    payload: v.any(),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) throw new Error("runtime_run_not_found");
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (args.claimProjectId && normalizeIdValue(run.projectId) !== args.claimProjectId) {
+      throw new Error("run_project_scope_conflict");
+    }
+    if (args.claimCommunityId && normalizeIdValue(run.communityId) !== args.claimCommunityId) {
+      throw new Error("run_community_scope_conflict");
+    }
+    if (run.status !== "running") throw new Error("runtime_run_not_running");
+
+    const eventType = String(args.eventType ?? "").trim();
+    if (!eventType) throw new Error("runtime_event_type_required");
+    const eventKey = String(args.eventKey ?? "").trim() || undefined;
+    if (eventKey) {
+      const existing = (await ctx.db
+        .query("runtimeRunEvents")
+        .withIndex("by_owner_run_eventKey", (q: any) =>
+          q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
+        )
+        .first()) as RuntimeRunEventLike | null;
+      if (existing) return existing;
+    }
+
+    const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
+    const createdAt =
+      typeof args.createdAt === "number" && Number.isFinite(args.createdAt) ? Math.floor(args.createdAt) : nowMs;
+    const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
+      summary: run.runtimeHarnessTelemetrySummary,
+      eventType,
+      payload: args.payload,
+    });
+    const id = await ctx.db.insert("runtimeRunEvents", {
+      ownerId: args.ownerId,
+      threadId: thread._id,
+      runId,
+      seq,
+      eventType,
+      eventKey,
+      payload: args.payload,
+      createdAt,
+    });
+    await ctx.db.patch(run._id, {
+      lastEventSeq: seq,
+      runtimeHarnessTelemetrySummary,
+      updatedAt: nowMs,
+    });
+    const created = (await ctx.db.get(id)) as RuntimeRunEventLike | null;
+    if (!created) throw new Error("runtime_event_create_failed");
+    return created;
+  },
+});
+
+export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    claimProjectId: v.optional(v.string()),
+    claimCommunityId: v.optional(v.string()),
+    status: v.string(),
+    reason: v.optional(v.string()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    finishedAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const status = normalizeRunStatus(args.status);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) throw new Error("runtime_run_not_found");
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (args.claimProjectId && normalizeIdValue(run.projectId) !== args.claimProjectId) {
+      throw new Error("run_project_scope_conflict");
+    }
+    if (args.claimCommunityId && normalizeIdValue(run.communityId) !== args.claimCommunityId) {
+      throw new Error("run_community_scope_conflict");
+    }
+    if (run.status !== "running") return run;
+
+    return await finalizeRuntimeRunRecord({
+      ctx,
+      ownerId: args.ownerId,
       thread,
       run,
       status,

@@ -28,6 +28,12 @@ import {
   type WorkspaceTerminalPreviewStatus,
 } from "../../../../shared/workspaceTerminalsGateway";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import {
+  loadOperatorCodexBridgeRunCanonical,
+  startOperatorCodexBridgeCodexExecRunCanonical,
+  type OperatorCodexBridgeRunReadback,
+  type OperatorCodexBridgeRunResult,
+} from "../../../../shared/cloudCodexBridgeGateway";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { useWorkspaceAutoScroll } from "../../../../shared/useWorkspaceAutoScroll";
@@ -1225,6 +1231,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isCommunityRecentSignalsExpanded, setIsCommunityRecentSignalsExpanded] = useState(false);
   const [workspaceFilesResetNonce, setWorkspaceFilesResetNonce] = useState(0);
   const [workspaceRightPanelWidth, setWorkspaceRightPanelWidth] = useState(WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH);
+  const [operatorCodexBridgeRun, setOperatorCodexBridgeRun] = useState<{
+    isRunning: boolean;
+    result: OperatorCodexBridgeRunResult | null;
+    readback: OperatorCodexBridgeRunReadback | null;
+    error: string | null;
+  }>({
+    isRunning: false,
+    result: null,
+    readback: null,
+    error: null,
+  });
   const loadedRightPanelPreferencesKeyRef = useRef<string | null>(
     buildWorkspaceRightPanelPreferenceLoadKey(
       initialRightPanelStorageUserId,
@@ -1333,6 +1350,72 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       isOperatorRightPanelTabActive,
     surface: "workspace_operator_data_panel",
   });
+  const handleStartOperatorCodexBridgeRun = useCallback(async () => {
+    const session = props.operatorRightPanelSession ?? null;
+    const projectId = String(props.activeProjectId ?? "").trim();
+    const threadId = String(props.activeThreadId ?? "").trim();
+    if (!session || !projectId || !threadId) {
+      setOperatorCodexBridgeRun((prev) => ({
+        ...prev,
+        isRunning: false,
+        error: "Open a project thread with an operator session before starting Codex.",
+      }));
+      return;
+    }
+
+    setOperatorCodexBridgeRun({
+      isRunning: true,
+      result: null,
+      readback: null,
+      error: null,
+    });
+    try {
+      const result = await startOperatorCodexBridgeCodexExecRunCanonical({
+        session,
+        projectId,
+        threadId,
+      });
+      let readback: OperatorCodexBridgeRunReadback | null = null;
+      const ownerId = String(result.ownerId ?? "").trim();
+      const runId = String(result.runId ?? "").trim();
+      if (ownerId && runId) {
+        readback = await loadOperatorCodexBridgeRunCanonical({
+          session,
+          ownerId,
+          runId,
+          threadId,
+          limit: 120,
+        });
+      }
+      setOperatorCodexBridgeRun({
+        isRunning: false,
+        result,
+        readback,
+        error: result.ok === false ? result.failures?.join(", ") || result.code || "Codex bridge run failed." : null,
+      });
+      if (result.runId) {
+        props.showAppToastMessage(
+          result.ok === true
+            ? `Codex bridge run finished: ${result.runId}`
+            : `Codex bridge run failed: ${result.runId}`,
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Codex bridge run failed.";
+      setOperatorCodexBridgeRun({
+        isRunning: false,
+        result: null,
+        readback: null,
+        error: message,
+      });
+      props.showAppToastMessage(message);
+    }
+  }, [
+    props.activeProjectId,
+    props.activeThreadId,
+    props.operatorRightPanelSession,
+    props.showAppToastMessage,
+  ]);
 
   useEffect(() => {
     props.onWorkspaceRightPanelLayoutChange?.({
@@ -2365,6 +2448,16 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
+            codexBridgeAction={{
+              canStart: Boolean(props.operatorRightPanelSession && props.activeProjectId && props.activeThreadId),
+              projectId: props.activeProjectId,
+              threadId: props.activeThreadId,
+              isRunning: operatorCodexBridgeRun.isRunning,
+              result: operatorCodexBridgeRun.result,
+              readback: operatorCodexBridgeRun.readback,
+              error: operatorCodexBridgeRun.error,
+              onStart: handleStartOperatorCodexBridgeRun,
+            }}
             builderPartnerProgramPanel={props.builderPartnerProgramPanel ?? null}
             isLoading={operatorData.isLoading}
             error={operatorData.error}

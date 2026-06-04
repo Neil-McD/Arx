@@ -57,6 +57,76 @@ export const getOperatorAccess = query({
   },
 });
 
+export const getCodexBridgeRunForOperator = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    ownerId: v.id("users"),
+    runId: v.string(),
+    threadId: v.optional(v.id("threads")),
+    afterSeq: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    const runId = String(args.runId ?? "").trim();
+    if (!runId) throw new Error("codex_bridge_run_id_required");
+    const run = await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_owner_runId", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", runId))
+      .first();
+    if (!run) return null;
+    if (args.threadId && run.threadId !== args.threadId) return null;
+    if (String(run.contractName ?? "") !== "codex_blaxel_bridge") {
+      throw new Error("codex_bridge_run_contract_mismatch");
+    }
+    if (String(run.visibility ?? "") !== "internal_hidden") {
+      throw new Error("codex_bridge_run_visibility_mismatch");
+    }
+
+    const safeLimit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 120)));
+    const afterSeq =
+      typeof args.afterSeq === "number" && Number.isFinite(args.afterSeq)
+        ? Math.max(0, Math.floor(args.afterSeq))
+        : null;
+    const rows = await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) =>
+        afterSeq === null
+          ? q.eq("ownerId", args.ownerId).eq("runId", runId)
+          : q.eq("ownerId", args.ownerId).eq("runId", runId).gt("seq", afterSeq),
+      )
+      .take(safeLimit);
+    const events = rows
+      .sort((a: any, b: any) => Number(a.seq ?? 0) - Number(b.seq ?? 0))
+      .map((event: any) => ({
+        id: String(event._id),
+        run_id: String(event.runId ?? ""),
+        seq: Math.max(0, Math.floor(Number(event.seq ?? 0))),
+        event_type: String(event.eventType ?? ""),
+        payload: event.payload ?? null,
+        created_at: new Date(Number(event.createdAt ?? Date.now())).toISOString(),
+      }));
+
+    return {
+      run: {
+        id: String(run._id),
+        run_id: String(run.runId ?? ""),
+        thread_id: String(run.threadId ?? ""),
+        owner_id: String(run.ownerId ?? ""),
+        project_id: String(run.projectId ?? ""),
+        community_id: run.communityId ? String(run.communityId) : null,
+        status: String(run.status ?? ""),
+        error_code: run.errorCode ? String(run.errorCode) : null,
+        error_message: run.errorMessage ? String(run.errorMessage) : null,
+        started_at: new Date(Number(run.startedAt ?? Date.now())).toISOString(),
+        updated_at: new Date(Number(run.updatedAt ?? Date.now())).toISOString(),
+        last_event_seq: Math.max(0, Math.floor(Number(run.lastEventSeq ?? 0))),
+      },
+      events,
+    };
+  },
+});
+
 export const getOperatorOverview = query({
   args: {
     authSubject: v.optional(v.string()),

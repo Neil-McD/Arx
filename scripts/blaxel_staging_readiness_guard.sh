@@ -85,6 +85,22 @@ if ! printf '%s\n' "$convex_env" | grep -q '^ARX_PREVIEW_PROXY_SIGNING_SECRET=';
   fail "ARX_PREVIEW_PROXY_SIGNING_SECRET missing in Convex staging env; workspace previews cannot mint proxy tokens"
 fi
 ok "Convex staging preview proxy signing secret is configured"
+if ! printf '%s\n' "$convex_env" | grep -q '^ARX_CODEX_BRIDGE_SIGNING_SECRET='; then
+  fail "ARX_CODEX_BRIDGE_SIGNING_SECRET missing in Convex staging env; Codex bridge callbacks cannot be verified"
+fi
+ok "Convex staging Codex bridge signing secret is configured"
+if ! printf '%s\n' "$convex_env" | grep -q '^POLYNET_CODEX_BRIDGE_OPERATOR_SECRET='; then
+  fail "POLYNET_CODEX_BRIDGE_OPERATOR_SECRET missing in Convex staging env; Codex bridge smokes are not operator-gated"
+fi
+ok "Convex staging Codex bridge operator secret is configured"
+if ! printf '%s\n' "$convex_env" | grep -q '^POLYNET_CODEX_BRIDGE_OPENAI_API_KEY='; then
+  fail "POLYNET_CODEX_BRIDGE_OPENAI_API_KEY missing in Convex staging env; Codex exec smoke cannot authenticate with a dedicated bridge key"
+fi
+ok "Convex staging Codex bridge dedicated OpenAI key is configured"
+if printf '%s\n' "$convex_env" | grep -q '^POLYNET_CODEX_BRIDGE_ALLOW_SHARED_OPENAI_KEY='; then
+  fail "POLYNET_CODEX_BRIDGE_ALLOW_SHARED_OPENAI_KEY must be removed; Codex bridge may not reuse shared OPENAI_API_KEY fallback"
+fi
+ok "Convex staging Codex bridge shared OpenAI fallback is disabled"
 if ! printf '%s\n' "$convex_env" | grep -q '^ARX_SOURCE_URL_FETCHER_ENDPOINT='; then
   fail "ARX_SOURCE_URL_FETCHER_ENDPOINT missing in Convex staging env; Knowledge source URL ingestion cannot reach the broker"
 fi

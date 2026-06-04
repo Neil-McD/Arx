@@ -93,6 +93,11 @@ assert.doesNotMatch(
 const traceWriterBlock = functionBlock(threads, "recordRuntimeRunCommunitySourceTraceBestEffort");
 assert.match(
   traceWriterBlock,
+  /if \(args\.run\.visibility === "internal_hidden"\) return;[\s\S]*const runCommunityId = normalizeIdValue\(args\.run\.communityId\)/,
+  "internal hidden operational runs should remain runtime evidence only and skip community source traces",
+);
+assert.match(
+  traceWriterBlock,
   /const runCommunityId = normalizeIdValue\(args\.run\.communityId\)[\s\S]*if \(!runCommunityId\) return;[\s\S]*communityId: runCommunityId/,
   "runtime run evidence should write to the immutable run community lens captured at run start",
 );

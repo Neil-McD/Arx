@@ -1,6 +1,10 @@
 import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { OperatorCommunityRecord } from "../../../../shared/operatorTypes";
+import type {
+  OperatorCodexBridgeRunReadback,
+  OperatorCodexBridgeRunResult,
+} from "../../../../shared/cloudCodexBridgeGateway";
 import {
   CommunityPanelContent,
   WorkspacePanelContent,
@@ -43,6 +47,16 @@ export function WebWorkspaceRightPanel(props: {
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
   partnerPayoutCycleActions: PartnerPayoutCycleActions;
+  codexBridgeAction: {
+    canStart: boolean;
+    projectId: string | null;
+    threadId: string | null;
+    isRunning: boolean;
+    result: OperatorCodexBridgeRunResult | null;
+    readback: OperatorCodexBridgeRunReadback | null;
+    error: string | null;
+    onStart: () => void;
+  } | null;
   builderPartnerProgramPanel: WebBuilderPartnerProgramPanelProps | null;
   isLoading: boolean;
   error: string | null;
@@ -150,6 +164,7 @@ export function WebWorkspaceRightPanel(props: {
             securityAudit={props.state.securityAudit}
             runtimeTools={props.state.runtimeTools}
             frontendErrors={props.state.frontendErrors}
+            codexBridgeAction={props.codexBridgeAction}
           />
         ) : activeInsightTab === "business" ? (
           <OperatorBusinessPanelView

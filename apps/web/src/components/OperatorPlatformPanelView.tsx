@@ -1,3 +1,8 @@
+import { Loader2, Play } from "lucide-react";
+import type {
+  OperatorCodexBridgeRunReadback,
+  OperatorCodexBridgeRunResult,
+} from "../../../../shared/cloudCodexBridgeGateway";
 import { buildOperatorPlatformHealthCards } from "../../../../shared/operatorPlatformHealth";
 import type {
   OperatorAuthAccessDiagnosticsSnapshot,
@@ -17,12 +22,102 @@ import {
   formatPlatformScore,
 } from "./workspaceRightPanelOperatorShared";
 
+type OperatorCodexBridgeAction = {
+  canStart: boolean;
+  projectId: string | null;
+  threadId: string | null;
+  isRunning: boolean;
+  result: OperatorCodexBridgeRunResult | null;
+  readback: OperatorCodexBridgeRunReadback | null;
+  error: string | null;
+  onStart: () => void;
+};
+
+function formatShortId(value: string | null | undefined): string {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized.slice(0, 12) : "-";
+}
+
+function formatEvidenceSummary(result: OperatorCodexBridgeRunResult | null): string {
+  const evidence = result?.evidence ?? null;
+  if (!evidence) return "-";
+  const values = Object.values(evidence);
+  if (values.length === 0) return "-";
+  const passed = values.filter((value) => value === true).length;
+  return `${passed}/${values.length}`;
+}
+
+function OperatorCodexBridgePanel(props: {
+  action: OperatorCodexBridgeAction | null;
+}) {
+  const action = props.action;
+  if (!action) return null;
+  const result = action.result;
+  const readback = action.readback;
+  const events = readback?.events.slice(-6) ?? [];
+  const failures = result?.failures?.filter(Boolean) ?? [];
+  return (
+    <section className="operator-dashboard__panel">
+      <h2>Codex bridge</h2>
+      <div className="operator-dashboard__table">
+        <div className="operator-dashboard__row">
+          <span>Target project</span>
+          <strong>{formatShortId(action.projectId)}</strong>
+        </div>
+        <div className="operator-dashboard__row">
+          <span>Target thread</span>
+          <strong>{formatShortId(action.threadId)}</strong>
+        </div>
+        <div className="operator-dashboard__row">
+          <span>Last run</span>
+          <strong>{formatShortId(result?.runId)}</strong>
+        </div>
+        <div className="operator-dashboard__row">
+          <span>Status</span>
+          <strong>{action.isRunning ? "Running" : result?.ok === true ? "Succeeded" : result?.ok === false ? "Failed" : "Idle"}</strong>
+        </div>
+        <div className="operator-dashboard__row">
+          <span>Evidence</span>
+          <strong>{formatEvidenceSummary(result)}</strong>
+        </div>
+        <div className="operator-dashboard__row">
+          <span>Ledger events</span>
+          <strong>{readback?.events.length ?? 0}</strong>
+        </div>
+        {events.map((event) => (
+          <div className="operator-dashboard__row" key={`${event.run_id}:${event.seq}`}>
+            <div>
+              <strong>{event.event_type}</strong>
+              <span>{formatEventTime(Date.parse(event.created_at))}</span>
+            </div>
+            <span>#{event.seq}</span>
+          </div>
+        ))}
+        {action.error ? <div className="operator-dashboard__empty">{action.error}</div> : null}
+        {failures.length > 0 ? (
+          <div className="operator-dashboard__empty">{failures.slice(0, 3).join(", ")}</div>
+        ) : null}
+        <button
+          type="button"
+          className="operator-dashboard__action"
+          disabled={!action.canStart || action.isRunning}
+          onClick={action.onStart}
+        >
+          {action.isRunning ? <Loader2 size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
+          <span>{action.isRunning ? "Running Codex smoke" : "Run Codex smoke"}</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function OperatorPlatformPanelView(props: {
   webDeploy: OperatorWebDeployDiagnosticsSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
+  codexBridgeAction?: OperatorCodexBridgeAction | null;
 }) {
   const healthCards = buildOperatorPlatformHealthCards(props);
   const securityTrust = props.securityAudit?.trustBoundary ?? null;
@@ -50,6 +145,8 @@ export function OperatorPlatformPanelView(props: {
           </div>
         ))}
       </section>
+
+      <OperatorCodexBridgePanel action={props.codexBridgeAction ?? null} />
 
       <section className="operator-dashboard__panel">
         <h2>Web &amp; deploy</h2>
