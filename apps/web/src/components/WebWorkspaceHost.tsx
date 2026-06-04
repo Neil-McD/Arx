@@ -31,7 +31,7 @@ import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/aut
 import {
   loadOperatorCodexBridgeRunCanonical,
   reconcileOperatorCodexBridgeRunCanonical,
-  startOperatorCodexBridgeCodexExecRunCanonical,
+  startOperatorCodexBridgeThreadTurnCanonical,
   type OperatorCodexBridgeRunReadback,
   type OperatorCodexBridgeRunResult,
 } from "../../../../shared/cloudCodexBridgeGateway";
@@ -116,6 +116,8 @@ function isTerminalCodexBridgeRunStatus(status: string | null | undefined): bool
 
 const CODEX_BRIDGE_RECONCILE_AFTER_MS = 75_000;
 const CODEX_BRIDGE_RECONCILE_MIN_INTERVAL_MS = 60_000;
+const DEFAULT_OPERATOR_CODEX_BRIDGE_PROMPT =
+  "In one short sentence, say this is a PolyNet Codex bridge thread-turn proof.";
 
 function latestCodexBridgeEventAtMs(readback: OperatorCodexBridgeRunReadback | null): number | null {
   const lastEvent = readback?.events[readback.events.length - 1] ?? null;
@@ -1260,6 +1262,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     readback: null,
     error: null,
   });
+  const [operatorCodexBridgePrompt, setOperatorCodexBridgePrompt] = useState(DEFAULT_OPERATOR_CODEX_BRIDGE_PROMPT);
   const loadedRightPanelPreferencesKeyRef = useRef<string | null>(
     buildWorkspaceRightPanelPreferenceLoadKey(
       initialRightPanelStorageUserId,
@@ -1373,11 +1376,20 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     const session = props.operatorRightPanelSession ?? null;
     const projectId = String(props.activeProjectId ?? "").trim();
     const threadId = String(props.activeThreadId ?? "").trim();
+    const prompt = operatorCodexBridgePrompt.trim();
     if (!session || !projectId || !threadId) {
       setOperatorCodexBridgeRun((prev) => ({
         ...prev,
         isRunning: false,
         error: "Open a project thread with an operator session before starting Codex.",
+      }));
+      return;
+    }
+    if (!prompt) {
+      setOperatorCodexBridgeRun((prev) => ({
+        ...prev,
+        isRunning: false,
+        error: "Enter a Codex prompt before starting the bridge run.",
       }));
       return;
     }
@@ -1389,10 +1401,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       error: null,
     });
     try {
-      const result = await startOperatorCodexBridgeCodexExecRunCanonical({
+      const result = await startOperatorCodexBridgeThreadTurnCanonical({
         session,
         projectId,
         threadId,
+        prompt,
       });
       let readback: OperatorCodexBridgeRunReadback | null = null;
       const ownerId = String(result.ownerId ?? "").trim();
@@ -1439,6 +1452,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     props.activeProjectId,
     props.activeThreadId,
     props.operatorRightPanelSession,
+    operatorCodexBridgePrompt,
     props.showAppToastMessage,
   ]);
 
@@ -2598,13 +2612,20 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
             codexBridgeAction={{
-              canStart: Boolean(props.operatorRightPanelSession && props.activeProjectId && props.activeThreadId),
+              canStart: Boolean(
+                props.operatorRightPanelSession &&
+                  props.activeProjectId &&
+                  props.activeThreadId &&
+                  operatorCodexBridgePrompt.trim(),
+              ),
               projectId: props.activeProjectId,
               threadId: props.activeThreadId,
+              prompt: operatorCodexBridgePrompt,
               isRunning: operatorCodexBridgeRun.isRunning,
               result: operatorCodexBridgeRun.result,
               readback: operatorCodexBridgeRun.readback,
               error: operatorCodexBridgeRun.error,
+              onPromptChange: setOperatorCodexBridgePrompt,
               onStart: handleStartOperatorCodexBridgeRun,
             }}
             builderPartnerProgramPanel={props.builderPartnerProgramPanel ?? null}

@@ -26,10 +26,12 @@ type OperatorCodexBridgeAction = {
   canStart: boolean;
   projectId: string | null;
   threadId: string | null;
+  prompt: string;
   isRunning: boolean;
   result: OperatorCodexBridgeRunResult | null;
   readback: OperatorCodexBridgeRunReadback | null;
   error: string | null;
+  onPromptChange: (value: string) => void;
   onStart: () => void;
 };
 
@@ -98,6 +100,16 @@ function OperatorCodexBridgePanel(props: {
           <span>Ledger events</span>
           <strong>{readback?.events.length ?? 0}</strong>
         </div>
+        <label className="operator-dashboard__field">
+          <span>Prompt</span>
+          <textarea
+            value={action.prompt}
+            rows={4}
+            maxLength={8000}
+            disabled={action.isRunning}
+            onChange={(event) => action.onPromptChange(event.currentTarget.value)}
+          />
+        </label>
         {events.map((event) => (
           <div className="operator-dashboard__row" key={`${event.run_id}:${event.seq}`}>
             <div>
@@ -118,7 +130,7 @@ function OperatorCodexBridgePanel(props: {
           onClick={action.onStart}
         >
           {action.isRunning ? <Loader2 size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
-          <span>{action.isRunning ? "Observing Codex run" : "Run Codex smoke"}</span>
+          <span>{action.isRunning ? "Observing Codex run" : "Run thread turn"}</span>
         </button>
       </div>
     </section>

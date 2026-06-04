@@ -29936,6 +29936,44 @@ button.message-citation-chip:hover {
   font-size: 14px;
 }
 
+.operator-dashboard__field {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.operator-dashboard__field span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.operator-dashboard__field textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  padding: 10px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.operator-dashboard__field textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 42%, rgba(255, 255, 255, 0.16));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.operator-dashboard__field textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .operator-dashboard__community-row {
   align-items: flex-start;
 }
