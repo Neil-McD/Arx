@@ -342,8 +342,13 @@ function main() {
         /loadOperatorCodexBridgeRunCanonical/.test(codexBridgeGateway) &&
         /bootstrapConvexAuthenticatedClient/.test(codexBridgeGateway) &&
         /readConvexRuntimeUrl/.test(codexBridgeGateway) &&
+        /resolveOperatorCodexBridgeCanonicalThreadId/.test(codexBridgeGateway) &&
+        /threads:getCloudThreadByThreadKey/.test(codexBridgeGateway) &&
+        /threads:getCloudThreadById/.test(codexBridgeGateway) &&
         /codexBridgeCodexExecSmoke:startOperatorCodexBridgeCodexExecRunAsync/.test(codexBridgeGateway) &&
         /operatorDashboard:getCodexBridgeRunForOperator/.test(codexBridgeGateway) &&
+        /threadId,\n    \.\.\.\(baseUrl/.test(codexBridgeGateway) &&
+        /\.\.\(threadId \? \{ threadId \} : null\)/.test(codexBridgeGateway) &&
         /startOperatorCodexBridgeCodexExecRunAsync/.test(codexExecSmoke) &&
         /waitForCompletion: false/.test(codexExecSmoke) &&
         /startOperatorCodexBridgeCodexExecRunCanonical/.test(webWorkspaceHost) &&
