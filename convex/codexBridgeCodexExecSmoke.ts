@@ -19,6 +19,8 @@ import { mintCodexBridgeRunToken } from "./codexBridgeToken.ts";
 import {
   ensureBlaxelWorkspaceComputer,
   executeBlaxelWorkspaceCommand,
+  readBlaxelWorkspaceProcess,
+  stopBlaxelWorkspaceProcess,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames.ts";
 import { resolveWorkspaceComputerProviderFromServerEnv } from "./workspaceComputerProviderPolicy.ts";
@@ -97,6 +99,30 @@ type CodexExecAsyncLaunchResult = {
   status: string | null;
   exitCode: number | null;
   evidence: CodexExecAsyncLaunchEvidence;
+  failures: string[];
+  errors: CodexExecSmokeError[];
+};
+
+type CodexExecProcessReconcileResult = {
+  ok: boolean;
+  code: string;
+  deploymentKind: string;
+  projectId: string;
+  threadId: string;
+  ownerId: string | null;
+  runId: string;
+  sandboxName: string | null;
+  processName: string | null;
+  runStatus: string | null;
+  processStatus: string | null;
+  processExitCode: number | null;
+  finishedRun: boolean;
+  stoppedProcess: boolean;
+  observation: {
+    stdoutTail?: string | null;
+    stderrTail?: string | null;
+    logsTail?: string | null;
+  };
   failures: string[];
   errors: CodexExecSmokeError[];
 };
@@ -681,6 +707,128 @@ function resolveCodexExecApiKey(): { key: string; source: string } | null {
 function readOptionalPositiveIntegerEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(readEnv(name), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readOptionalNonNegativeIntegerEnv(name: string, fallback: number): number {
+  const parsed = Number.parseInt(readEnv(name), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function textTail(value: unknown, limit: number): string | null {
+  const text = String(value ?? "");
+  if (!text) return null;
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const tail = text.length > safeLimit ? text.slice(text.length - safeLimit) : text;
+  return redactSensitiveText(tail);
+}
+
+function buildProcessOutputTail(read: Record<string, unknown> | null): {
+  stdoutTail?: string | null;
+  stderrTail?: string | null;
+  logsTail?: string | null;
+} {
+  if (!read) return {};
+  return {
+    stdoutTail: textTail(read.stdout, 1200),
+    stderrTail: textTail(read.stderr, 1200),
+    logsTail: textTail(read.logs, 1600),
+  };
+}
+
+function combinedProcessOutput(read: Record<string, unknown> | null): string {
+  if (!read) return "";
+  return [read.stdout, read.stderr, read.logs]
+    .map((value) => String(value ?? ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function normalizeProcessStatus(value: unknown): string | null {
+  const status = String(value ?? "").trim();
+  return status || null;
+}
+
+function processExitCode(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+}
+
+function isProcessRunning(read: Record<string, unknown> | null): boolean {
+  const status = String(read?.status ?? "").trim().toLowerCase();
+  if (/run|start|pending|deploy|creating|provision/.test(status)) return true;
+  if (processExitCode(read?.exitCode) !== null) return false;
+  if (/success|complete|exit|stop|kill|fail|error|done/.test(status)) return false;
+  return false;
+}
+
+function isProcessTerminal(read: Record<string, unknown> | null): boolean {
+  if (!read) return false;
+  const status = String(read.status ?? "").trim().toLowerCase();
+  if (processExitCode(read.exitCode) !== null) return true;
+  return /success|complete|exit|stop|kill|fail|error|done/.test(status);
+}
+
+function isRunStaleForCodexBridgeReconcile(run: Record<string, unknown> | null, nowMs: number): boolean {
+  if (!run) return false;
+  const updatedAt = Number(run.updatedAt ?? run.startedAt ?? 0);
+  const staleAfterMs = readOptionalNonNegativeIntegerEnv(
+    "POLYNET_CODEX_BRIDGE_RECONCILE_STALE_AFTER_MS",
+    8 * 60 * 1000,
+  );
+  return Number.isFinite(updatedAt) && updatedAt > 0 && Math.max(0, nowMs - Math.floor(updatedAt)) >= staleAfterMs;
+}
+
+function isRunOldEnoughForCodexBridgeReconcile(run: Record<string, unknown> | null, nowMs: number): boolean {
+  if (!run) return false;
+  const startedAt = Number(run.startedAt ?? 0);
+  const staleAfterMs = readOptionalNonNegativeIntegerEnv(
+    "POLYNET_CODEX_BRIDGE_RECONCILE_STALE_AFTER_MS",
+    8 * 60 * 1000,
+  );
+  return Number.isFinite(startedAt) && startedAt > 0 && Math.max(0, nowMs - Math.floor(startedAt)) >= staleAfterMs;
+}
+
+function processOutputShowsCodexExecSuccess(read: Record<string, unknown> | null): boolean {
+  const output = combinedProcessOutput(read);
+  return (
+    output.includes("BRIDGE_CODEX_EXEC_SMOKE_OK") ||
+    (output.includes(CODEX_EXEC_MARKER) && /"status"\s*:\s*"succeeded"/.test(output))
+  );
+}
+
+function processOutputShowsCodexExecFailure(read: Record<string, unknown> | null): boolean {
+  const output = combinedProcessOutput(read);
+  return (
+    output.includes("BRIDGE_CODEX_EXEC_SMOKE_FAILED") ||
+    /"status"\s*:\s*"(failed|timed_out)"/.test(output) ||
+    /codex_exec_bridge_error|codex_exec_smoke_failed/i.test(output)
+  );
+}
+
+function bridgeProcessObservationPayload(params: {
+  sandboxName: string | null;
+  processName: string;
+  providerCommandId?: string | null;
+  read: Record<string, unknown> | null;
+  readError?: { code?: string | null; message?: string | null; status?: number | null } | null;
+  reconciledStatus?: string | null;
+}) {
+  const read = params.read;
+  const tails = buildProcessOutputTail(read);
+  return {
+    sandbox_name: params.sandboxName ?? null,
+    process_name: params.processName,
+    provider_command_id: params.providerCommandId ?? params.processName,
+    process_status: normalizeProcessStatus(read?.status),
+    process_exit_code: processExitCode(read?.exitCode),
+    stdout_tail_chars: tails.stdoutTail?.length ?? 0,
+    stderr_tail_chars: tails.stderrTail?.length ?? 0,
+    logs_tail_chars: tails.logsTail?.length ?? 0,
+    read_error_code: params.readError?.code ?? null,
+    read_error_status: params.readError?.status ?? null,
+    read_error_message: params.readError?.message ? redactSensitiveText(params.readError.message) : null,
+    reconciled_status: params.reconciledStatus ?? null,
+  };
 }
 
 type CodexExecLaunchEvidence = CodexExecSmokeEvidence | CodexExecAsyncLaunchEvidence;
@@ -1328,9 +1476,37 @@ export const startOperatorCodexBridgeCodexExecRunAsync = action({
       }
 
       evidence.commandStarted = true;
+      try {
+        await ctx.runMutation(
+          (internal as any).threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any,
+          {
+            ownerId: ownerId as any,
+            threadId: args.threadId,
+            runId,
+            claimProjectId: projectId,
+            claimCommunityId: communityId ?? undefined,
+            eventType: "codex_exec_process_started",
+            eventKey: "codex_exec_process_started",
+            payload: {
+              sandbox_name: names.sandboxName,
+              process_name: processName,
+              provider_command_id: commandResult.providerCommandId ?? processName,
+              status: commandResult.status ?? null,
+              exit_code: commandResult.exitCode ?? null,
+            },
+            nowMs: Date.now(),
+          },
+        );
+      } catch (error) {
+        failures.push("codex_exec_process_started_event_failed");
+        errors.push(sanitizeSmokeError(error));
+      }
       return {
         ok: true,
-        code: "codex_bridge_codex_exec_async_started",
+        code:
+          failures.length === 0
+            ? "codex_bridge_codex_exec_async_started"
+            : "codex_bridge_codex_exec_async_started_with_warnings",
         deploymentKind,
         projectId,
         threadId,
@@ -1366,5 +1542,276 @@ export const startOperatorCodexBridgeCodexExecRunAsync = action({
         errors,
       };
     }
+  },
+});
+
+export const reconcileOperatorCodexBridgeCodexExecRun = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.id("cloudProjects"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    processName: v.optional(v.string()),
+    finishStaleRunning: v.optional(v.boolean()),
+    stopStaleRunning: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<CodexExecProcessReconcileResult> => {
+    const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
+    const failures: string[] = [];
+    const errors: CodexExecSmokeError[] = [];
+    const runId = String(args.runId ?? "").trim().slice(0, 180);
+    if (!runId) failures.push("run_id_required");
+    const names = buildBlaxelProjectWorkspaceNames(args.projectId);
+    let ownerId: string | null = null;
+    let projectId = String(args.projectId);
+    let threadId = String(args.threadId);
+    let processName = normalizeOptionalString(args.processName);
+    let runStatus: string | null = null;
+    let processStatus: string | null = null;
+    let processExit: number | null = null;
+    let finishedRun = false;
+    let stoppedProcess = false;
+    let observation: CodexExecProcessReconcileResult["observation"] = {};
+
+    if (deploymentKind !== "staging") {
+      return {
+        ok: false,
+        code: "codex_bridge_codex_exec_reconcile_staging_only",
+        deploymentKind,
+        projectId,
+        threadId,
+        ownerId,
+        runId,
+        sandboxName: names.sandboxName,
+        processName,
+        runStatus,
+        processStatus,
+        processExitCode: processExit,
+        finishedRun,
+        stoppedProcess,
+        observation,
+        failures: ["not_staging_deployment"],
+        errors,
+      };
+    }
+
+    await ctx.runQuery((internal as any).operatorAccess.getOperatorWriteAccessInternal as any, {
+      authSubject: args.authSubject,
+    });
+
+    const scope = (await ctx.runQuery(
+      (internal as any).threads.resolveCodexBridgeRunScopeInternal as any,
+      {
+        threadId: args.threadId,
+        expectedProjectId: args.projectId,
+      },
+    )) as Record<string, unknown> | null;
+    ownerId = normalizeOptionalString(scope?.ownerId);
+    projectId = normalizeOptionalString(scope?.projectId) ?? projectId;
+    threadId = normalizeOptionalString(scope?.threadId) ?? threadId;
+    const communityId = normalizeOptionalString(scope?.communityId);
+    if (!ownerId) failures.push("bridge_scope_owner_missing");
+
+    const run = ownerId
+      ? ((await ctx.runQuery(
+          (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
+          {
+            ownerId: ownerId as any,
+            runId,
+          },
+        )) as Record<string, unknown> | null)
+      : null;
+    runStatus = normalizeOptionalString(run?.status);
+    if (!run) failures.push("runtime_run_not_found");
+
+    const events = ownerId
+      ? ((await ctx.runQuery(
+          (internal as any).threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
+          {
+            ownerId: ownerId as any,
+            runId,
+          },
+        )) as Array<Record<string, unknown>>)
+      : [];
+    const processStarted = [...events]
+      .reverse()
+      .find((event) => event.eventType === "codex_exec_process_started");
+    const processPayload = asRecord(
+      asRecord(processStarted?.payload)?.bridge_payload ?? processStarted?.payload,
+    );
+    processName =
+      processName ??
+      normalizeOptionalString(processPayload?.process_name) ??
+      normalizeOptionalString(processPayload?.provider_command_id);
+    if (!processName) failures.push("codex_exec_process_name_missing");
+
+    let read: Record<string, unknown> | null = null;
+    let readError: { code?: string | null; message?: string | null; status?: number | null } | null = null;
+    if (processName && failures.length === 0) {
+      const processRead = await readBlaxelWorkspaceProcess({
+        sandboxName: names.sandboxName,
+        processName,
+      });
+      if (processRead.ok) {
+        read = processRead as unknown as Record<string, unknown>;
+        processStatus = normalizeProcessStatus(read.status);
+        processExit = processExitCode(read.exitCode);
+        observation = buildProcessOutputTail(read);
+      } else {
+        readError = {
+          code: normalizeOptionalString(processRead.code),
+          message: normalizeOptionalString(processRead.message),
+          status: safeNumber(processRead.status) ?? null,
+        };
+        processStatus = readError.code ?? null;
+        errors.push({
+          responseStatus: readError.status ?? undefined,
+          providerCode: readError.code ?? undefined,
+          errorMessage: readError.message ? redactSensitiveText(readError.message) : undefined,
+        });
+      }
+    }
+
+    const nowMs = Date.now();
+    const runIsRunning = runStatus === "running";
+    const runIsStale = isRunStaleForCodexBridgeReconcile(run, nowMs);
+    const runIsOldEnough = isRunOldEnoughForCodexBridgeReconcile(run, nowMs);
+    let reconciledStatus: string | null = null;
+    const readFailedWithMissingProcess =
+      readError?.code === "blaxel_process_not_found" ||
+      readError?.code === "blaxel_sandbox_not_found";
+    const processRunning = isProcessRunning(read);
+    const terminalProcess = isProcessTerminal(read);
+    const shouldFinishStaleRunning =
+      runIsRunning &&
+      args.finishStaleRunning === true &&
+      ((processRunning && runIsStale) || readFailedWithMissingProcess);
+
+    if (ownerId && runIsRunning && processName) {
+      try {
+        await ctx.runMutation(
+          (internal as any).threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any,
+          {
+            ownerId: ownerId as any,
+            threadId: args.threadId,
+            runId,
+            claimProjectId: projectId,
+            claimCommunityId: communityId ?? undefined,
+            eventType: "codex_exec_process_observed",
+            payload: bridgeProcessObservationPayload({
+              sandboxName: names.sandboxName,
+              processName,
+              providerCommandId: processName,
+              read,
+              readError,
+              reconciledStatus:
+                terminalProcess || shouldFinishStaleRunning
+                  ? processOutputShowsCodexExecSuccess(read)
+                    ? "ok"
+                    : "error"
+                  : null,
+            }),
+            nowMs,
+          },
+        );
+      } catch (error) {
+        failures.push("codex_exec_process_observation_event_failed");
+        errors.push(sanitizeSmokeError(error));
+      }
+    }
+
+    if (ownerId && runIsRunning && processName && shouldFinishStaleRunning && args.stopStaleRunning !== false) {
+      try {
+        const stopped = await stopBlaxelWorkspaceProcess({
+          sandboxName: names.sandboxName,
+          processName,
+        });
+        stoppedProcess = stopped.ok === true;
+        if (!stopped.ok) {
+          errors.push({
+            responseStatus: stopped.status,
+            providerCode: stopped.code,
+            errorMessage: redactSensitiveText(stopped.message),
+          });
+        }
+      } catch (error) {
+        errors.push(sanitizeSmokeError(error));
+      }
+    }
+
+    if (ownerId && runIsRunning && (terminalProcess || shouldFinishStaleRunning)) {
+      const processSucceeded = terminalProcess && processOutputShowsCodexExecSuccess(read) && processExit === 0;
+      const processFailed = processOutputShowsCodexExecFailure(read);
+      reconciledStatus = processSucceeded ? "ok" : "error";
+      try {
+        await ctx.runMutation(
+          (internal as any).threads.finishCloudRuntimeRunByBridgeClaimsInternal as any,
+          {
+            ownerId: ownerId as any,
+            threadId: args.threadId,
+            runId,
+            claimProjectId: projectId,
+            claimCommunityId: communityId ?? undefined,
+            status: reconciledStatus,
+            reason: "codex_bridge_codex_exec_process_reconciled",
+            errorCode:
+              reconciledStatus === "ok"
+                ? undefined
+                : shouldFinishStaleRunning
+                  ? "codex_exec_process_stale_timeout"
+                  : readError?.code ?? (processFailed ? "codex_exec_process_failed" : "codex_exec_process_finished_without_marker"),
+            errorMessage:
+              reconciledStatus === "ok"
+                ? undefined
+                : shouldFinishStaleRunning
+                  ? "Codex bridge process lost liveness before posting its finish callback."
+                  : "Codex bridge process finished before posting a successful finish callback.",
+            assistantText: reconciledStatus === "ok" ? CODEX_EXEC_MARKER : undefined,
+            assistantModelId: readEnv("POLYNET_CODEX_BRIDGE_CODEX_MODEL") || undefined,
+            finishedAt: nowMs,
+            nowMs,
+          },
+        );
+        finishedRun = true;
+        runStatus = reconciledStatus;
+      } catch (error) {
+        failures.push("codex_exec_process_finish_reconcile_failed");
+        errors.push(sanitizeSmokeError(error));
+      }
+    }
+
+    if (!finishedRun && runIsRunning && (runIsStale || runIsOldEnough) && args.finishStaleRunning !== true) {
+      failures.push("codex_exec_run_stale_reconcile_not_requested");
+    }
+    if (
+      !finishedRun &&
+      runIsRunning &&
+      (runIsStale || runIsOldEnough) &&
+      args.finishStaleRunning === true &&
+      !terminalProcess &&
+      !shouldFinishStaleRunning
+    ) {
+      failures.push("codex_exec_process_state_not_reconcilable");
+    }
+
+    return {
+      ok: failures.length === 0,
+      code: "codex_bridge_codex_exec_reconcile",
+      deploymentKind,
+      projectId,
+      threadId,
+      ownerId,
+      runId,
+      sandboxName: names.sandboxName,
+      processName,
+      runStatus,
+      processStatus,
+      processExitCode: processExit,
+      finishedRun,
+      stoppedProcess,
+      observation,
+      failures,
+      errors,
+    };
   },
 });

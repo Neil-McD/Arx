@@ -687,7 +687,7 @@ assert.match(
 );
 assert.match(
   blaxelWorkspaceClient,
-  /function isBlaxelWorkspaceSandboxProvisioningState[\s\S]*"deploying"[\s\S]*provisioningBlaxelSandboxFailure/,
+  /function isBlaxelWorkspaceSandboxProvisioningState[\s\S]*"deploying"[\s\S]*"standby"[\s\S]*provisioningBlaxelSandboxFailure/,
   "Blaxel provider client must classify provisioning sandbox states as not ready",
 );
 assert.match(
