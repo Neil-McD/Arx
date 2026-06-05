@@ -13,6 +13,19 @@ function runtimeEventsIncludeFinished(rows: ThreadStreamingRuntimeEvent[] | unde
   return Array.isArray(rows) && rows.some((row) => row.event_type === "run_finished");
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readAssistantTextDelta(row: ThreadStreamingRuntimeEvent): string {
+  if (row.event_type !== "assistant_text_delta") return "";
+  const payload = asRecord(row.payload);
+  const delta = typeof payload?.delta === "string" ? payload.delta : "";
+  return delta || "";
+}
+
 export function useWebRuntimeRunLifecycle<
   SessionT,
   ThreadMessageT extends ThreadMessageLike,
@@ -95,7 +108,7 @@ export function useWebRuntimeRunLifecycle<
             [params.activeThreadId!]: {
               runId: row.run_id,
               meta: null,
-              content: "",
+              content: existingEvents.map(readAssistantTextDelta).join(""),
               streamTransport: "recovery",
               runtimeEvents: existingEvents,
               lastRuntimeEventSeq,
@@ -176,17 +189,20 @@ export function useWebRuntimeRunLifecycle<
               const nextRows = [...(current.runtimeEvents ?? [])];
               const seenIds = new Set(nextRows.map((row) => row.id));
               let nextLastSeq = Math.max(0, Math.floor(current.lastRuntimeEventSeq ?? 0));
+              let nextContent = typeof current.content === "string" ? current.content : "";
               for (const row of rows) {
                 if (seenIds.has(row.id)) continue;
                 nextRows.push(row);
                 seenIds.add(row.id);
                 nextLastSeq = Math.max(nextLastSeq, Math.floor(row.seq ?? 0));
+                nextContent += readAssistantTextDelta(row);
               }
               nextRows.sort((a, b) => a.seq - b.seq);
               return {
                 ...prev,
                 [threadId]: {
                   ...current,
+                  content: nextContent,
                   runtimeEvents: nextRows,
                   lastRuntimeEventSeq: nextLastSeq,
                 },

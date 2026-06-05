@@ -5,6 +5,7 @@ import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerAppOAuthRoutes } from "./httpAppOAuth";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
+import { registerCodexBridgeRoutes } from "./httpCodexBridge";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
@@ -356,6 +357,13 @@ registerRuntimeMcpRoutes({
   jsonResponse,
   optionsResponse,
   requireAuthenticatedActor,
+});
+
+registerCodexBridgeRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
 });
 
 registerRuntimeTurnRoutes({

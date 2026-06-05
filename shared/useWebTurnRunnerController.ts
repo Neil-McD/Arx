@@ -22,6 +22,10 @@ import {
   listConvexCloudRuntimeRunEvents,
 } from "./cloudThreadsRead";
 import {
+  CODEX_BLAXEL_DEFAULT_MODEL_ID,
+  runCloudCodexBlaxelRuntimeTurn,
+} from "./cloudCodexRuntimeGateway";
+import {
   getNextSmoothStreamingText,
   shouldDisableStreamingSmoothing,
 } from "./smoothStreamingText";
@@ -52,6 +56,33 @@ import { isRecoverableRuntimeKernelStopReason } from "./runtimeKernelTypes";
 function normalizePositiveNumber(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isTruthyEnvFlag(value: unknown): boolean {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function isCodexBlaxelWebTurnsEnabled(): boolean {
+  return isTruthyEnvFlag(import.meta.env.VITE_ENABLE_CODEX_BLAXEL_WEB_TURNS);
+}
+
+function readLatestUserMessageText<ThreadMessageT extends PublicTurnThreadMessage>(params: {
+  messages?: ThreadMessageT[];
+  extractTextFromContentJson: (value: unknown) => string;
+}): string {
+  const messages = Array.isArray(params.messages) ? params.messages : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "user") continue;
+    const text = params.extractTextFromContentJson(message.content_json).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function isCodexBlaxelProviderConnectionFailure(code: string): boolean {
+  return code === "provider_connection_required" || code === "provider_connection_account_required";
 }
 
 export function useWebTurnRunnerController<
@@ -658,6 +689,143 @@ export function useWebTurnRunnerController<
     async (session: SessionT, threadId: string, params: RunAgentTurnParams): Promise<{ cancelled: boolean; error: string | null }> => {
       const current = argsRef.current;
       const exposeStreamingUi = params.suppressStreamingUi !== true;
+      const shouldUseCodexBlaxel =
+        isCodexBlaxelWebTurnsEnabled() &&
+        params.requestedFundingSource === "user_chatgpt" &&
+        params.inferenceSource === "chatgpt";
+      if (shouldUseCodexBlaxel) {
+        const prompt = readLatestUserMessageText({
+          messages: params.messages as ThreadMessageT[] | undefined,
+          extractTextFromContentJson: current.extractTextFromContentJson,
+        });
+        if (!prompt) {
+          return {
+            cancelled: false,
+            error: "Codex runtime turn prompt is required.",
+          };
+        }
+
+        try {
+          await ensureCloudThreadRecordForRuntime(session, threadId);
+        } catch (error) {
+          console.warn("Non-fatal: ensure cloud thread record failed:", error);
+        }
+
+        threadStreamingAbortRefById.current[threadId]?.abort();
+        const abort = new AbortController();
+        threadStreamingAbortRefById.current[threadId] = abort;
+        threadStreamingUserCancelledRefById.current[threadId] = false;
+        threadStreamingContentRefById.current[threadId] = "";
+        threadStreamingDisplayContentRefById.current[threadId] = "";
+        threadStreamingDrainingRefById.current[threadId] = false;
+        if (exposeStreamingUi) {
+          setThreadStreamingState(threadId, () => ({
+            runId: params.runIdHint,
+            meta: {
+              engine_id: "codex_blaxel_app_server",
+              model_id: CODEX_BLAXEL_DEFAULT_MODEL_ID,
+              inference_source: "chatgpt",
+              memory_used: [],
+              history_used: [],
+              community_evidence_used: null,
+            },
+            content: "",
+            streamTransport: "recovery",
+            runtimeEvents: [],
+            lastRuntimeEventSeq: 0,
+          }));
+        }
+
+        let preserveStreamingStateForRecovery = false;
+        let runIdFromServer = params.runIdHint;
+        try {
+          const result = await runCloudCodexBlaxelRuntimeTurn({
+            session: session as any,
+            threadId,
+            prompt,
+            runId: params.runIdHint,
+            destroyAfterRun: true,
+          });
+          if (result.runId) {
+            runIdFromServer = result.runId;
+            if (exposeStreamingUi) {
+              setThreadStreamingState(threadId, (entry) =>
+                entry
+                  ? {
+                      ...entry,
+                      runId: result.runId,
+                      streamTransport: "recovery",
+                    }
+                  : null,
+              );
+            }
+          }
+          const cancelled =
+            abort.signal.aborted ||
+            Boolean(threadStreamingUserCancelledRefById.current[threadId]);
+          if (cancelled) {
+            window.setTimeout(() => {
+              void current.loadThreadMessages(threadId, session).catch(() => null);
+              void current.loadThreads(session).catch(() => null);
+            }, 350);
+            return { cancelled: true, error: null };
+          }
+          if (!result.ok) {
+            const failureCode = String(result.failure.code ?? "").trim();
+            if (isCodexBlaxelProviderConnectionFailure(failureCode)) {
+              current.setInferenceIssueModal({
+                reason: "provider_connection_required",
+                threadId,
+                mode: params.mode === "regenerate" ? "regenerate" : "respond",
+                message: result.failure.message.trim() || null,
+                toolKind: null,
+                requiredCredits: null,
+                paidUsageBillingMode: null,
+              });
+              return { cancelled: false, error: null };
+            }
+            throw new Error(result.failure.message || failureCode || "Codex runtime turn failed.");
+          }
+
+          const recovered = await recoverRuntimeTurnFromPersistedState({
+            session,
+            threadId,
+            runId: runIdFromServer,
+            currentContent: "",
+            exposeStreamingUi,
+          });
+          if (recovered.recovered) {
+            preserveStreamingStateForRecovery = recovered.preserveStreamingState;
+            return {
+              cancelled: recovered.cancelled,
+              error: recovered.error,
+            };
+          }
+          await current.loadThreadMessages(threadId, session);
+          await current.loadThreads(session);
+          return { cancelled: false, error: null };
+        } catch (error) {
+          const cancelled =
+            abort.signal.aborted ||
+            Boolean(threadStreamingUserCancelledRefById.current[threadId]) ||
+            isAbortError(error);
+          if (cancelled) {
+            window.setTimeout(() => {
+              void current.loadThreadMessages(threadId, session).catch(() => null);
+              void current.loadThreads(session).catch(() => null);
+            }, 350);
+            return { cancelled: true, error: null };
+          }
+          return {
+            cancelled: false,
+            error: error instanceof Error ? error.message : "Codex runtime turn failed.",
+          };
+        } finally {
+          resetThreadStreamingState(threadId, {
+            preserveStreamingState: preserveStreamingStateForRecovery,
+          });
+        }
+      }
       let baseUrl: string;
       try {
         baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);

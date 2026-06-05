@@ -1,0 +1,329 @@
+export const EXPECTED_CODEX_RUNTIME_IMAGE_PREFIX = "sandbox/polynet-codex-runtime:";
+export const CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB = 2048;
+export const CODEX_APP_SERVER_WS_PORT = 4510;
+
+export type CodexBlaxelExternalAuthPayload = {
+  accessToken: string;
+  chatgptAccountId: string;
+  chatgptPlanType: string | null;
+};
+
+export function buildCodexBlaxelExternalAuthPayload(params: {
+  accessToken: string;
+  chatgptAccountId: string;
+  chatgptPlanType?: string | null;
+}): CodexBlaxelExternalAuthPayload {
+  return {
+    accessToken: params.accessToken,
+    chatgptAccountId: params.chatgptAccountId,
+    chatgptPlanType: params.chatgptPlanType ?? null,
+  };
+}
+
+export function safeResourceName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 54);
+}
+
+export function shellQuote(value: string): string {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+export function buildCodexWebSocketAppServerStartCommand(params: {
+  workspaceRoot: string;
+  bridgeDir: string;
+}): string {
+  const bridgeDir = `${params.workspaceRoot}/${params.bridgeDir}`;
+  const codexHome = `${bridgeDir}/codex-home`;
+  const outputFile = `${bridgeDir}/app-server-ws.out`;
+  const errorFile = `${bridgeDir}/app-server-ws.err`;
+  const statusFile = `${bridgeDir}/bridge-status.out`;
+  const listenUrl = `ws://127.0.0.1:${CODEX_APP_SERVER_WS_PORT}`;
+  return [
+    "set -euo pipefail",
+    `bridge_dir=${shellQuote(bridgeDir)}`,
+    `codex_home=${shellQuote(codexHome)}`,
+    `output_file=${shellQuote(outputFile)}`,
+    `error_file=${shellQuote(errorFile)}`,
+    `status_file=${shellQuote(statusFile)}`,
+    `listen_url=${shellQuote(listenUrl)}`,
+    'mkdir -p "$bridge_dir" "$codex_home"',
+    'chmod 700 "$bridge_dir" "$codex_home"',
+    'cp /home/codex/.codex/config.toml "$codex_home/config.toml"',
+    'export CODEX_HOME="$codex_home"',
+    "unset OPENAI_API_KEY CODEX_API_KEY",
+    'printf "%s\\n" "POLYNET_CODEX_WS_APP_SERVER_START_REQUESTED" | tee -a "$status_file"',
+    'exec codex app-server --listen "$listen_url" >> "$output_file" 2>> "$error_file"',
+  ].join("; ");
+}
+
+export function buildCodexWebSocketRuntimeBridgeClientCommand(params: {
+  workspaceRoot: string;
+  bridgeDir: string;
+  authPayloadPath: string;
+  runtimePayloadPath: string;
+}): string {
+  const bridgeDir = `${params.workspaceRoot}/${params.bridgeDir}`;
+  const authPayloadFile = `${params.workspaceRoot}/${params.authPayloadPath}`;
+  const runtimePayloadFile = `${params.workspaceRoot}/${params.runtimePayloadPath}`;
+  const statusFile = `${bridgeDir}/bridge-status.out`;
+  const appServerErrorFile = `${bridgeDir}/app-server-ws.err`;
+  const clientErrorFile = `${bridgeDir}/app-server-ws-runtime-client.err`;
+  const listenUrl = `ws://127.0.0.1:${CODEX_APP_SERVER_WS_PORT}`;
+  const webSocketRuntimeDriver = [
+    "const fs = require('node:fs');",
+    `const url = ${JSON.stringify(listenUrl)};`,
+    "const authPath = process.argv[1];",
+    "const runtimePath = process.argv[2];",
+    "const WebSocketCtor = globalThis.WebSocket;",
+    "if (!WebSocketCtor) { console.error('node_global_websocket_missing'); process.exit(2); }",
+    "function mark(value) { console.log(value); }",
+    "function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }",
+    "function isRecord(value) { return value && typeof value === 'object' && !Array.isArray(value); }",
+    "function readString(record, key) { return isRecord(record) && typeof record[key] === 'string' ? record[key] : ''; }",
+    "function redactSensitiveText(value) { return String(value == null ? '' : value).slice(0, 2000).replace(/\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b/g, '[redacted_jwt]').replace(/\\b(sk-[A-Za-z0-9_-]{16,})\\b/g, '[redacted_api_key]').replace(/Bearer\\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]'); }",
+    "function readJsonAndRemove(path) { const raw = fs.readFileSync(path, 'utf8'); try { fs.unlinkSync(path); } catch {} return JSON.parse(raw); }",
+    "function readAuthPayload() {",
+    "  const source = readJsonAndRemove(authPath);",
+    "  const accessToken = String(source.accessToken || '').trim();",
+    "  const chatgptAccountId = String(source.chatgptAccountId || '').trim();",
+    "  if (!accessToken || !chatgptAccountId) throw new Error('invalid_auth_payload');",
+    "  return { accessToken, chatgptAccountId, chatgptPlanType: source.chatgptPlanType ?? null };",
+    "}",
+    "function readRuntimePayload() {",
+    "  const source = readJsonAndRemove(runtimePath);",
+    "  const runId = String(source.runId || '').trim();",
+    "  const bridgeToken = String(source.bridgeToken || '').trim();",
+    "  const eventUrl = String(source.eventUrl || '').trim();",
+    "  const finishUrl = String(source.finishUrl || '').trim();",
+    "  const prompt = String(source.prompt || '').trim();",
+    "  const developerInstructions = String(source.developerInstructions || '').trim();",
+    "  const modelId = String(source.modelId || '').trim() || 'gpt-5.3-codex-spark';",
+    "  if (!runId || !bridgeToken || !eventUrl || !finishUrl || !prompt) throw new Error('invalid_runtime_payload');",
+    "  return { runId, bridgeToken, eventUrl, finishUrl, prompt, developerInstructions, modelId };",
+    "}",
+    "const authPayload = readAuthPayload();",
+    "const runtimePayload = readRuntimePayload();",
+    "let eventOrdinal = 0;",
+    "let eventQueue = Promise.resolve();",
+    "let finalPosted = false;",
+    "async function postJson(url, body) {",
+    "  const response = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + runtimePayload.bridgeToken, 'content-type': 'application/json' }, body: JSON.stringify(body) });",
+    "  const text = await response.text();",
+    "  if (!response.ok) throw new Error(redactSensitiveText(text || response.statusText || 'bridge_callback_failed'));",
+    "  return text ? JSON.parse(text) : {};",
+    "}",
+    "function enqueueBridgeEvent(eventType, payload, eventKey) {",
+    "  const key = eventKey || runtimePayload.runId + ':' + eventType + ':' + eventOrdinal++;",
+    "  eventQueue = eventQueue.then(() => postJson(runtimePayload.eventUrl, { version: 1, runId: runtimePayload.runId, source: 'bridge_worker', eventType, eventKey: key, payload, createdAt: Date.now() }));",
+    "  return eventQueue;",
+    "}",
+    "function enqueueCodexMessage(message) {",
+    "  const ordinal = eventOrdinal++;",
+    "  eventQueue = eventQueue.then(() => postJson(runtimePayload.eventUrl, { version: 1, runId: runtimePayload.runId, source: 'codex_app_server_ws', ordinal, codexMessage: message, createdAt: Date.now() }));",
+    "  return eventQueue;",
+    "}",
+    "async function flushEvents() { await eventQueue; }",
+    "async function finishBridge(status, reason, errorCode, errorMessage, assistantText) {",
+    "  finalPosted = true;",
+    "  return await postJson(runtimePayload.finishUrl, { version: 1, runId: runtimePayload.runId, status, reason, errorCode: errorCode || null, errorMessage: errorMessage ? redactSensitiveText(errorMessage) : null, assistantText: assistantText || null, assistantModelId: runtimePayload.modelId, finishedAt: Date.now() });",
+    "}",
+    "async function connectWithRetry() {",
+    "  const deadline = Date.now() + 30000;",
+    "  let lastError = null;",
+    "  while (Date.now() < deadline) {",
+    "    try {",
+    "      const socket = new WebSocketCtor(url);",
+    "      await new Promise((resolve, reject) => {",
+    "        const timer = setTimeout(() => { try { socket.close(); } catch {} reject(new Error('websocket_open_timeout')); }, 1500);",
+    "        socket.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true });",
+    "        socket.addEventListener('error', (event) => { clearTimeout(timer); reject(event.error || new Error('websocket_open_error')); }, { once: true });",
+    "      });",
+    "      return socket;",
+    "    } catch (error) { lastError = error; await sleep(500); }",
+    "  }",
+    "  throw lastError || new Error('websocket_connect_timeout');",
+    "}",
+    "function eventText(event) {",
+    "  const data = event.data;",
+    "  if (typeof data === 'string') return data;",
+    "  if (data && typeof Buffer !== 'undefined') return Buffer.from(data).toString('utf8');",
+    "  return String(data || '');",
+    "}",
+    "function collectAssistantTextFromItems(items) {",
+    "  if (!Array.isArray(items)) return '';",
+    "  return items.filter((item) => isRecord(item) && item.type === 'agentMessage').map((item) => String(item.text || '').trim()).filter(Boolean).join('\\n\\n').trim();",
+    "}",
+    "function readNotificationTurnId(params) {",
+    "  const direct = readString(params, 'turnId');",
+    "  if (direct) return direct;",
+    "  const turn = isRecord(params && params.turn) ? params.turn : {};",
+    "  return readString(turn, 'id');",
+    "}",
+    "async function main() {",
+    "  const socket = await connectWithRetry();",
+    "  mark('POLYNET_CODEX_RUNTIME_WS_CLIENT_CONNECTED_OK');",
+    "  let nextId = 0;",
+    "  const pending = new Map();",
+    "  const waiters = new Set();",
+    "  const state = { accountUpdated: false, threadStarted: false, turnStarted: false, turnCompleted: false, turnFailed: false };",
+    "  const collector = { threadId: '', turnId: '', completedTurn: null, errorMessage: '', assistantTextByItem: new Map(), assistantItemOrder: [] };",
+    "  function notifyWaiters(message) {",
+    "    for (const waiter of Array.from(waiters)) {",
+    "      try { if (waiter.predicate(message, state)) { clearTimeout(waiter.timer); waiters.delete(waiter); waiter.resolve(message); } }",
+    "      catch (error) { clearTimeout(waiter.timer); waiters.delete(waiter); waiter.reject(error); }",
+    "    }",
+    "  }",
+    "  function waitFor(predicate, name, timeoutMs) {",
+    "    return new Promise((resolve, reject) => {",
+    "      if (predicate(null, state)) { resolve(null); return; }",
+    "      const waiter = { predicate, resolve, reject, timer: setTimeout(() => { waiters.delete(waiter); reject(new Error(name + '_timeout')); }, timeoutMs) };",
+    "      waiters.add(waiter);",
+    "    });",
+    "  }",
+    "  function sendRaw(message) { socket.send(JSON.stringify(message)); }",
+    "  function sendRequest(method, params, timeoutMs = 60000) {",
+    "    const id = nextId++;",
+    "    sendRaw({ method, id, params });",
+    "    return new Promise((resolve, reject) => {",
+    "      const timer = setTimeout(() => { pending.delete(id); reject(new Error(method + '_timeout')); }, timeoutMs);",
+    "      pending.set(id, { resolve, reject, timer, method });",
+    "    });",
+    "  }",
+    "  function sendNotification(method, params) { sendRaw({ method, params }); }",
+    "  function rememberAssistantText(itemId, delta) {",
+    "    if (!itemId || !delta) return;",
+    "    if (!collector.assistantTextByItem.has(itemId)) collector.assistantItemOrder.push(itemId);",
+    "    collector.assistantTextByItem.set(itemId, String(collector.assistantTextByItem.get(itemId) || '') + delta);",
+    "  }",
+    "  function collectExecutionText() {",
+    "    const itemText = collectAssistantTextFromItems(collector.completedTurn && collector.completedTurn.items);",
+    "    const deltaText = collector.assistantItemOrder.map((itemId) => String(collector.assistantTextByItem.get(itemId) || '').trim()).filter(Boolean).join('\\n\\n').trim();",
+    "    return (itemText || deltaText).trim();",
+    "  }",
+    "  socket.addEventListener('message', (event) => {",
+    "    let message;",
+    "    try { message = JSON.parse(eventText(event)); } catch { return; }",
+    "    if (message && message.method === 'account/chatgptAuthTokens/refresh' && message.id !== undefined) {",
+    "      enqueueBridgeEvent('codex_account_refresh_requested', { chatgpt_account_id_present: Boolean(authPayload.chatgptAccountId) }, 'codex_account_refresh_requested');",
+    "      sendRaw({ id: message.id, result: authPayload });",
+    "      notifyWaiters(message);",
+    "      return;",
+    "    }",
+    "    if (message && message.method) enqueueCodexMessage(message);",
+    "    const params = message && isRecord(message.params) ? message.params : {};",
+    "    if (message && message.method === 'account/updated') { state.accountUpdated = true; notifyWaiters(message); return; }",
+    "    if (message && message.method === 'thread/started') { state.threadStarted = true; notifyWaiters(message); return; }",
+    "    if (message && message.method === 'turn/started') { state.turnStarted = true; notifyWaiters(message); return; }",
+    "    if (message && message.method === 'item/agentMessage/delta') {",
+    "      if (!collector.threadId || readString(params, 'threadId') !== collector.threadId) return;",
+    "      const turnId = readNotificationTurnId(params);",
+    "      if (!collector.turnId || turnId !== collector.turnId) return;",
+    "      rememberAssistantText(readString(params, 'itemId') || readString(params, 'id') || 'assistant', readString(params, 'delta'));",
+    "      notifyWaiters(message);",
+    "      return;",
+    "    }",
+    "    if (message && message.method === 'turn/completed') {",
+    "      const turn = isRecord(params.turn) ? params.turn : {};",
+    "      if (collector.turnId && readNotificationTurnId(params) === collector.turnId) {",
+    "        collector.completedTurn = turn;",
+    "        if (String(turn.status || '') === 'failed') {",
+    "          state.turnFailed = true;",
+    "          const error = isRecord(turn.error) ? turn.error : {};",
+    "          collector.errorMessage = readString(error, 'message') || 'codex app-server turn failed';",
+    "        }",
+    "        state.turnCompleted = true;",
+    "      }",
+    "      notifyWaiters(message);",
+    "      return;",
+    "    }",
+    "    if (message && message.method === 'error') {",
+    "      const error = isRecord(params.error) ? params.error : {};",
+    "      collector.errorMessage = readString(error, 'message') || 'codex app-server error';",
+    "      notifyWaiters(message);",
+    "      return;",
+    "    }",
+    "    if (message && message.id !== undefined && pending.has(message.id)) {",
+    "      const item = pending.get(message.id); pending.delete(message.id); clearTimeout(item.timer);",
+    "      if (message.error) item.reject(new Error(item.method + '_error')); else item.resolve(message.result);",
+    "      notifyWaiters(message); return;",
+    "    }",
+    "    notifyWaiters(message);",
+    "  });",
+    "  try {",
+    "    await enqueueBridgeEvent('codex_app_server_runtime_bridge_started', { websocket_url: 'loopback', inherited_openai_api_key_cleared: true }, 'codex_app_server_runtime_bridge_started');",
+    "    const init = await sendRequest('initialize', { clientInfo: { name: 'polynet_blaxel_codex_runtime_bridge', title: 'PolyNet Codex Runtime Bridge', version: '0.1.0' }, capabilities: { experimentalApi: true } }, 30000);",
+    "    if (!init || typeof init !== 'object') throw new Error('initialize_invalid_result');",
+    "    sendNotification('initialized', {});",
+    "    await enqueueBridgeEvent('codex_app_server_initialized', { server_info_present: Boolean(init.serverInfo), user_agent_present: typeof init.userAgent === 'string' }, 'codex_app_server_initialized');",
+    "    const login = await sendRequest('account/login/start', { type: 'chatgptAuthTokens', ...authPayload }, 30000);",
+    "    if (!login || login.type !== 'chatgptAuthTokens') throw new Error('login_invalid_result');",
+    "    await waitFor((_, current) => current.accountUpdated, 'account_updated', 30000);",
+    "    await enqueueBridgeEvent('codex_account_login_succeeded', { auth_type: 'chatgptAuthTokens' }, 'codex_account_login_succeeded');",
+    "    const account = await sendRequest('account/read', { refreshToken: false }, 30000);",
+    "    if (!account || !account.account) throw new Error('account_read_invalid_result');",
+    "    await enqueueBridgeEvent('codex_account_read_succeeded', { account_present: true, chatgpt_account_id_present: Boolean(authPayload.chatgptAccountId) }, 'codex_account_read_succeeded');",
+    "    const thread = await sendRequest('thread/start', { model: runtimePayload.modelId, modelProvider: 'openai', cwd: process.cwd(), approvalPolicy: 'never', sandbox: 'danger-full-access', ephemeral: true, serviceName: 'PolyNet', developerInstructions: runtimePayload.developerInstructions }, 60000);",
+    "    if (!thread || !thread.thread || !thread.thread.id) throw new Error('thread_start_invalid_result');",
+    "    collector.threadId = String(thread.thread.id);",
+    "    await waitFor((_, current) => current.threadStarted, 'thread_started', 30000);",
+    "    const turn = await sendRequest('turn/start', { threadId: collector.threadId, clientUserMessageId: runtimePayload.runId, input: [{ type: 'text', text: runtimePayload.prompt }], cwd: process.cwd(), approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' }, model: runtimePayload.modelId }, 60000);",
+    "    if (!turn || !turn.turn || !turn.turn.id) throw new Error('turn_start_invalid_result');",
+    "    collector.turnId = String(turn.turn.id);",
+    "    await waitFor((_, current) => current.turnStarted, 'turn_started', 30000);",
+    "    await waitFor((_, current) => current.turnCompleted, 'turn_completed', 240000);",
+    "    if (state.turnFailed) throw new Error(collector.errorMessage || 'turn_failed');",
+    "    const finalText = collectExecutionText();",
+    "    if (!finalText) throw new Error('assistant_text_missing');",
+    "    await flushEvents();",
+    "    await finishBridge('succeeded', 'codex_blaxel_app_server_runtime_turn', null, null, finalText);",
+    "    mark('POLYNET_CODEX_RUNTIME_BRIDGE_OK ' + JSON.stringify({ ok: true, runId: runtimePayload.runId, assistantTextChars: finalText.length }));",
+    "  } catch (error) {",
+    "    const message = redactSensitiveText(error && error.message ? error.message : String(error));",
+    "    try { await enqueueBridgeEvent('codex_app_server_bridge_error', { message }, 'codex_app_server_bridge_error'); await flushEvents(); } catch {}",
+    "    if (!finalPosted) { try { await finishBridge('failed', 'codex_blaxel_app_server_runtime_turn_failed', message === 'turn_completed_timeout' ? 'codex_app_server_turn_timed_out' : 'codex_app_server_failed', message, null); } catch (finishError) { console.error(redactSensitiveText(finishError && finishError.message ? finishError.message : String(finishError))); } }",
+    "    mark('POLYNET_CODEX_RUNTIME_BRIDGE_FAILED ' + JSON.stringify({ ok: false, runId: runtimePayload.runId, error: message }));",
+    "    process.exitCode = 1;",
+    "  } finally { try { socket.close(); } catch {} }",
+    "}",
+    "main().catch((error) => { console.error(redactSensitiveText(error && error.message ? error.message : String(error))); process.exit(1); });",
+  ].join("\n");
+  return [
+    "set -euo pipefail",
+    `auth_payload_file=${shellQuote(authPayloadFile)}`,
+    `runtime_payload_file=${shellQuote(runtimePayloadFile)}`,
+    `status_file=${shellQuote(statusFile)}`,
+    `app_server_error_file=${shellQuote(appServerErrorFile)}`,
+    `client_error_file=${shellQuote(clientErrorFile)}`,
+    'cleanup_payloads() { rm -f "$auth_payload_file" "$runtime_payload_file"; }',
+    "trap cleanup_payloads EXIT",
+    'test -s "$auth_payload_file"',
+    'test -s "$runtime_payload_file"',
+    'chmod 600 "$auth_payload_file" "$runtime_payload_file"',
+    "unset OPENAI_API_KEY CODEX_API_KEY",
+    "client_status=0",
+    `node -e ${shellQuote(webSocketRuntimeDriver)} "$auth_payload_file" "$runtime_payload_file" 2>"$client_error_file" | tee -a "$status_file" || client_status=\${PIPESTATUS[0]}`,
+    "cleanup_payloads",
+    'test ! -e "$auth_payload_file"',
+    'test ! -e "$runtime_payload_file"',
+    'printf "%s\\n" "POLYNET_CODEX_RUNTIME_PAYLOADS_REMOVED" | tee -a "$status_file"',
+    'if [ "$client_status" -ne 0 ]; then if [ -s "$client_error_file" ]; then sed -E "s/(access[_ -]?token|refresh[_ -]?token|bearer)[^[:space:]]*/[redacted]/Ig; s/eyJ[A-Za-z0-9_.-]+/[redacted_jwt]/g" "$client_error_file" >&2; fi; if [ -s "$app_server_error_file" ]; then sed -E "s/(access[_ -]?token|refresh[_ -]?token|bearer)[^[:space:]]*/[redacted]/Ig; s/eyJ[A-Za-z0-9_.-]+/[redacted_jwt]/g" "$app_server_error_file" >&2; fi; exit "$client_status"; fi',
+  ].join("; ");
+}
+
+export function buildBridgeCleanupCommand(params: {
+  workspaceRoot: string;
+  bridgeDir: string;
+  authPayloadPath: string;
+}): string {
+  return [
+    "set -euo pipefail",
+    `rm -f ${shellQuote(`${params.workspaceRoot}/${params.authPayloadPath}`)}`,
+    `rm -rf ${shellQuote(`${params.workspaceRoot}/${params.bridgeDir}`)}`,
+    'printf "%s\\n" "POLYNET_CODEX_BRIDGE_CLEANUP_OK"',
+  ].join("; ");
+}

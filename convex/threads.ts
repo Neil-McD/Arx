@@ -1863,6 +1863,20 @@ export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   },
 });
 
+export const getCloudThreadByOwnerThreadIdInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+  },
+  handler: async (ctx, args) => {
+    const row = (await ctx.db.get(args.threadId)) as ThreadLike | null;
+    if (!row) return null;
+    if (row.ownerId !== args.ownerId) return null;
+    if (typeof row.archivedAt === "number") return null;
+    return row;
+  },
+});
+
 export const listStaleRunningRuntimeRunsInternal = internalQuery({
   args: {
     nowMs: v.optional(v.number()),
@@ -1958,6 +1972,185 @@ export const listRecentRuntimeToolFinishedEventsByOwnerThreadIdInternal = intern
   },
 });
 
+async function ensureCloudRuntimeRunStartedForOwner(args: {
+  ctx: any;
+  ownerId: any;
+  threadId: any;
+  runId: string;
+  lane?: string;
+  visibility?: "user_visible" | "internal_hidden";
+  internalFollowupKind?: string;
+  projectId?: any;
+  communityId?: any;
+  communityContextVersion?: number;
+  modelId?: string;
+  engineId?: string;
+  executionMode?: string;
+  sandboxMode?: string;
+  contractName?: string;
+  contractVersion?: string;
+  harnessProfile?: string;
+  harnessProfileSource?: string;
+  capabilityFamilies?: string[];
+  latestUserText?: string;
+  startedAt?: number;
+  nowMs?: number;
+}): Promise<RuntimeRunLike> {
+  const nowMs = args.nowMs ?? Date.now();
+  const thread = await requireOwnedCloudThread({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    threadId: args.threadId,
+  });
+  const runId = normalizeRunId(args.runId);
+  const existing = await getRuntimeRunByOwnerRunId({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    runId,
+  });
+  if (existing) {
+    if (existing.threadId !== thread._id) throw new Error("run_thread_conflict");
+    assertRuntimeRunMatchesRequestedCommunityLens({
+      run: existing,
+      requestedCommunityId: args.communityId,
+      requestedContextVersion: args.communityContextVersion,
+    });
+    return existing;
+  }
+
+  const runtimeCommunityLens = await resolveRuntimeRunCanonicalCommunityLens({
+    ctx: args.ctx,
+    thread,
+    ownerId: args.ownerId,
+    requestedCommunityId: args.communityId,
+    requestedContextVersion: args.communityContextVersion,
+  });
+
+  let runningRun = await getRunningRuntimeRunByThread({
+    ctx: args.ctx,
+    threadId: thread._id,
+  });
+  if (runningRun && runningRun.runId !== runId && isRuntimeRunStale({ run: runningRun, nowMs })) {
+    await finalizeRuntimeRunRecord({
+      ctx: args.ctx,
+      ownerId: args.ownerId,
+      thread,
+      run: runningRun,
+      status: "error",
+      reason: "stale_run_reconciled",
+      errorCode: "stale_run_reconciled",
+      errorMessage: "Previous run lost liveness and was reconciled before starting a new turn.",
+      nowMs,
+      finishedAt: nowMs,
+    });
+    runningRun = await getRunningRuntimeRunByThread({
+      ctx: args.ctx,
+      threadId: thread._id,
+    });
+  }
+  if (runningRun) {
+    if (runningRun.runId === runId) return runningRun;
+    throw new Error("thread_run_in_progress");
+  }
+
+  const startedAt =
+    typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
+  const lane = normalizeRunLane(args.lane);
+  const visibility = args.visibility === "internal_hidden" ? "internal_hidden" : "user_visible";
+  const internalFollowupKind = String(args.internalFollowupKind ?? "").trim() || undefined;
+  const executionMode = String(args.executionMode ?? "").trim() || "chat";
+  const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
+  const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
+  const modelId = String(args.modelId ?? "").trim() || undefined;
+  const engineId = String(args.engineId ?? "").trim() || undefined;
+  const projectId = args.projectId;
+  const communityId = runtimeCommunityLens.communityId;
+  const communityContextVersion = runtimeCommunityLens.communityContextVersion;
+  const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
+  const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
+  const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
+  const capabilityFamilies = Array.isArray(args.capabilityFamilies)
+    ? args.capabilityFamilies
+        .map((value) => String(value ?? "").trim())
+        .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index)
+    : undefined;
+  const startedWorkingState =
+    visibility === "internal_hidden"
+      ? null
+      : buildRunStartedWorkingState({
+          previous: thread.workingState,
+          latestUserText: args.latestUserText,
+          nowMs,
+        });
+
+  const id = await args.ctx.db.insert("runtimeRuns", {
+    ownerId: args.ownerId,
+    threadId: thread._id,
+    runId,
+    lane,
+    visibility,
+    internalFollowupKind,
+    projectId,
+    communityId,
+    communityContextVersion,
+    modelId,
+    engineId,
+    executionMode,
+    sandboxMode,
+    contractName,
+    contractVersion,
+    harnessProfile,
+    harnessProfileSource,
+    capabilityFamilies,
+    workspaceSessionState: "none",
+    runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
+    workspaceSessionUpdatedAt: startedAt,
+    status: "running",
+    lastEventSeq: 1,
+    startedAt,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+
+  await args.ctx.db.insert("runtimeRunEvents", {
+    ownerId: args.ownerId,
+    threadId: thread._id,
+    runId,
+    seq: 1,
+    eventType: "run_started",
+    eventKey: "run_started",
+    payload: {
+      run_id: runId,
+      lane,
+      visibility,
+      internal_followup_kind: internalFollowupKind ?? null,
+      project_id: projectId ?? null,
+      community_id: communityId ?? null,
+      community_context_version: communityContextVersion ?? null,
+      model_id: modelId ?? null,
+      engine_id: engineId ?? null,
+      execution_mode: executionMode,
+      sandbox_mode: sandboxMode ?? null,
+      contract_name: contractName,
+      contract_version: contractVersion,
+      harness_profile: harnessProfile ?? null,
+      harness_profile_source: harnessProfileSource ?? null,
+      capability_families: capabilityFamilies ?? [],
+    },
+    createdAt: startedAt,
+  });
+  if (startedWorkingState) {
+    await args.ctx.db.patch(thread._id, {
+      workingState: startedWorkingState,
+      updatedAt: nowMs,
+    });
+  }
+
+  const created = (await args.ctx.db.get(id)) as RuntimeRunLike | null;
+  if (!created) throw new Error("runtime_run_create_failed");
+  return created;
+}
+
 export const ensureCloudRuntimeRunStarted = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1989,159 +2182,327 @@ export const ensureCloudRuntimeRunStarted = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
+    return await ensureCloudRuntimeRunStartedForOwner({
       ctx,
       ownerId,
       threadId: args.threadId,
+      runId: args.runId,
+      lane: args.lane,
+      visibility: args.visibility,
+      internalFollowupKind: args.internalFollowupKind,
+      projectId: args.projectId,
+      communityId: args.communityId,
+      communityContextVersion: args.communityContextVersion,
+      modelId: args.modelId,
+      engineId: args.engineId,
+      executionMode: args.executionMode,
+      sandboxMode: args.sandboxMode,
+      contractName: args.contractName,
+      contractVersion: args.contractVersion,
+      harnessProfile: args.harnessProfile,
+      harnessProfileSource: args.harnessProfileSource,
+      capabilityFamilies: args.capabilityFamilies,
+      latestUserText: args.latestUserText,
+      startedAt: args.startedAt,
+      nowMs: args.nowMs,
+    });
+  },
+});
+
+export const ensureCloudRuntimeRunStartedByOwnerInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    lane: v.optional(v.string()),
+    visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
+    internalFollowupKind: v.optional(v.string()),
+    projectId: v.optional(v.id("cloudProjects")),
+    communityId: v.optional(v.id("communities")),
+    communityContextVersion: v.optional(v.number()),
+    modelId: v.optional(v.string()),
+    engineId: v.optional(v.string()),
+    executionMode: v.optional(v.string()),
+    sandboxMode: v.optional(v.string()),
+    contractName: v.optional(v.string()),
+    contractVersion: v.optional(v.string()),
+    harnessProfile: v.optional(v.string()),
+    harnessProfileSource: v.optional(v.string()),
+    capabilityFamilies: v.optional(v.array(v.string())),
+    latestUserText: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await ensureCloudRuntimeRunStartedForOwner({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+      runId: args.runId,
+      lane: args.lane,
+      visibility: args.visibility,
+      internalFollowupKind: args.internalFollowupKind,
+      projectId: args.projectId,
+      communityId: args.communityId,
+      communityContextVersion: args.communityContextVersion,
+      modelId: args.modelId,
+      engineId: args.engineId,
+      executionMode: args.executionMode,
+      sandboxMode: args.sandboxMode,
+      contractName: args.contractName,
+      contractVersion: args.contractVersion,
+      harnessProfile: args.harnessProfile,
+      harnessProfileSource: args.harnessProfileSource,
+      capabilityFamilies: args.capabilityFamilies,
+      latestUserText: args.latestUserText,
+      startedAt: args.startedAt,
+      nowMs: args.nowMs,
+    }),
+});
+
+function assertRuntimeRunMatchesBridgeClaims(args: {
+  run: RuntimeRunLike | null;
+  thread: ThreadLike;
+  claimProjectId?: unknown;
+  claimCommunityId?: unknown;
+}): asserts args is { run: RuntimeRunLike; thread: ThreadLike; claimProjectId?: unknown; claimCommunityId?: unknown } {
+  if (!args.run) throw new Error("runtime_run_not_found");
+  if (args.run.threadId !== args.thread._id) throw new Error("run_thread_conflict");
+  const claimProjectId = normalizeIdValue(args.claimProjectId);
+  if (claimProjectId && normalizeIdValue(args.run.projectId) !== claimProjectId) {
+    throw new Error("run_project_scope_conflict");
+  }
+  const claimCommunityId = normalizeIdValue(args.claimCommunityId);
+  if (claimCommunityId && normalizeIdValue(args.run.communityId) !== claimCommunityId) {
+    throw new Error("run_community_scope_conflict");
+  }
+}
+
+async function appendRuntimeRunEventByBridgeClaims(args: {
+  ctx: any;
+  ownerId: any;
+  threadId: any;
+  runId: string;
+  claimProjectId?: unknown;
+  claimCommunityId?: unknown;
+  eventType: string;
+  eventKey?: string;
+  payload: unknown;
+  createdAt?: number;
+  nowMs?: number;
+}): Promise<RuntimeRunEventLike> {
+  const nowMs = args.nowMs ?? Date.now();
+  const thread = await requireOwnedCloudThread({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    threadId: args.threadId,
+  });
+  const runId = normalizeRunId(args.runId);
+  const run = await getRuntimeRunByOwnerRunId({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    runId,
+  });
+  assertRuntimeRunMatchesBridgeClaims({
+    run,
+    thread,
+    claimProjectId: args.claimProjectId,
+    claimCommunityId: args.claimCommunityId,
+  });
+
+  const eventType = String(args.eventType ?? "").trim();
+  if (!eventType) throw new Error("runtime_event_type_required");
+  const eventKey = String(args.eventKey ?? "").trim() || undefined;
+  if (eventKey) {
+    const existing = (await args.ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_eventKey", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
+      )
+      .first()) as RuntimeRunEventLike | null;
+    if (existing) return existing;
+  }
+  if (run.status !== "running") throw new Error("runtime_run_already_finished");
+
+  const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
+  const createdAt =
+    typeof args.createdAt === "number" && Number.isFinite(args.createdAt) ? Math.floor(args.createdAt) : nowMs;
+  const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
+    summary: run.runtimeHarnessTelemetrySummary,
+    eventType,
+    payload: args.payload,
+  });
+  const id = await args.ctx.db.insert("runtimeRunEvents", {
+    ownerId: args.ownerId,
+    threadId: thread._id,
+    runId,
+    seq,
+    eventType,
+    eventKey,
+    payload: args.payload,
+    createdAt,
+  });
+  await args.ctx.db.patch(run._id, {
+    lastEventSeq: seq,
+    runtimeHarnessTelemetrySummary,
+    updatedAt: nowMs,
+  });
+  const created = (await args.ctx.db.get(id)) as RuntimeRunEventLike | null;
+  if (!created) throw new Error("runtime_event_create_failed");
+  return created;
+}
+
+async function upsertBridgeAssistantMessage(args: {
+  ctx: any;
+  ownerId: any;
+  thread: ThreadLike;
+  run: RuntimeRunLike;
+  assistantText?: string;
+  assistantModelId?: string;
+  nowMs: number;
+}): Promise<void> {
+  const assistantText = String(args.assistantText ?? "").trim();
+  if (!assistantText) return;
+  const modelId = String(args.assistantModelId ?? args.run.modelId ?? "").trim() || "codex";
+  const messageKey = `assistant:${String(args.thread.threadKey ?? args.thread._id)}:${args.run.runId}`;
+  const contentJson = {
+    text: assistantText,
+    meta: {
+      model_id: modelId,
+      inference_source: "chatgpt",
+      lane: "chatgpt",
+      codex_bridge: {
+        runtime: "blaxel_codex_app_server",
+      },
+    },
+  };
+  const existing = (await args.ctx.db
+    .query("cloudMessages")
+    .withIndex("by_owner_messageKey", (q: any) =>
+      q.eq("ownerId", args.ownerId).eq("messageKey", messageKey),
+    )
+    .first()) as CloudMessageLike | null;
+  if (existing) {
+    if (existing.threadId !== args.thread._id) throw new Error("message_key_conflict");
+    await args.ctx.db.patch(existing._id, {
+      role: "assistant",
+      contentJson,
+      engineId: "codex_blaxel_app_server",
+      modelId,
+      runId: args.run.runId,
+    });
+    await args.ctx.db.patch(args.thread._id, {
+      updatedAt: args.nowMs,
+      lastSeq: Math.max(0, Math.floor(Math.max(args.thread.lastSeq ?? 0, existing.seq ?? 0))),
+    });
+    return;
+  }
+
+  const seq = Math.max(0, Math.floor((args.thread.lastSeq ?? 0) + 1));
+  await args.ctx.db.insert("cloudMessages", {
+    ownerId: args.ownerId,
+    threadId: args.thread._id,
+    messageKey,
+    seq,
+    role: "assistant",
+    contentJson,
+    engineId: "codex_blaxel_app_server",
+    modelId,
+    runId: args.run.runId,
+    createdAt: args.nowMs,
+  });
+  await args.ctx.db.patch(args.thread._id, {
+    updatedAt: args.nowMs,
+    lastSeq: Math.max(0, Math.floor(Math.max(args.thread.lastSeq ?? 0, seq))),
+  });
+}
+
+export const appendCloudRuntimeRunEventByBridgeClaimsInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    claimProjectId: v.optional(v.string()),
+    claimCommunityId: v.optional(v.string()),
+    eventType: v.string(),
+    eventKey: v.optional(v.string()),
+    payload: v.any(),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await appendRuntimeRunEventByBridgeClaims({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+      runId: args.runId,
+      claimProjectId: args.claimProjectId,
+      claimCommunityId: args.claimCommunityId,
+      eventType: args.eventType,
+      eventKey: args.eventKey,
+      payload: args.payload,
+      createdAt: args.createdAt,
+      nowMs: args.nowMs,
+    }),
+});
+
+export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    claimProjectId: v.optional(v.string()),
+    claimCommunityId: v.optional(v.string()),
+    status: v.string(),
+    reason: v.optional(v.string()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    assistantText: v.optional(v.string()),
+    assistantModelId: v.optional(v.string()),
+    finishedAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
     });
     const runId = normalizeRunId(args.runId);
-    const existing = await getRuntimeRunByOwnerRunId({
+    const run = await getRuntimeRunByOwnerRunId({
       ctx,
-      ownerId,
+      ownerId: args.ownerId,
       runId,
     });
-    if (existing) {
-      if (existing.threadId !== thread._id) throw new Error("run_thread_conflict");
-      assertRuntimeRunMatchesRequestedCommunityLens({
-        run: existing,
-        requestedCommunityId: args.communityId,
-        requestedContextVersion: args.communityContextVersion,
-      });
-      return existing;
-    }
-
-    const runtimeCommunityLens = await resolveRuntimeRunCanonicalCommunityLens({
-      ctx,
+    assertRuntimeRunMatchesBridgeClaims({
+      run,
       thread,
-      ownerId,
-      requestedCommunityId: args.communityId,
-      requestedContextVersion: args.communityContextVersion,
+      claimProjectId: args.claimProjectId,
+      claimCommunityId: args.claimCommunityId,
     });
-
-    let runningRun = await getRunningRuntimeRunByThread({
+    if (run.status !== "running") return run;
+    await upsertBridgeAssistantMessage({
       ctx,
-      threadId: thread._id,
+      ownerId: args.ownerId,
+      thread,
+      run,
+      assistantText: args.assistantText,
+      assistantModelId: args.assistantModelId,
+      nowMs,
     });
-    if (runningRun && runningRun.runId !== runId && isRuntimeRunStale({ run: runningRun, nowMs })) {
-      await finalizeRuntimeRunRecord({
-        ctx,
-        ownerId,
-        thread,
-        run: runningRun,
-        status: "error",
-        reason: "stale_run_reconciled",
-        errorCode: "stale_run_reconciled",
-        errorMessage: "Previous run lost liveness and was reconciled before starting a new turn.",
-        nowMs,
-        finishedAt: nowMs,
-      });
-      runningRun = await getRunningRuntimeRunByThread({
-        ctx,
-        threadId: thread._id,
-      });
-    }
-    if (runningRun) {
-      if (runningRun.runId === runId) return runningRun;
-      throw new Error("thread_run_in_progress");
-    }
-
-    const startedAt =
-      typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
-    const lane = normalizeRunLane(args.lane);
-    const visibility = args.visibility === "internal_hidden" ? "internal_hidden" : "user_visible";
-    const internalFollowupKind = String(args.internalFollowupKind ?? "").trim() || undefined;
-    const executionMode = String(args.executionMode ?? "").trim() || "chat";
-    const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
-    const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
-    const modelId = String(args.modelId ?? "").trim() || undefined;
-    const engineId = String(args.engineId ?? "").trim() || undefined;
-    const projectId = args.projectId;
-    const communityId = runtimeCommunityLens.communityId;
-    const communityContextVersion = runtimeCommunityLens.communityContextVersion;
-    const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
-    const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
-    const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
-    const capabilityFamilies = Array.isArray(args.capabilityFamilies)
-      ? args.capabilityFamilies
-          .map((value) => String(value ?? "").trim())
-          .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index)
-      : undefined;
-    const startedWorkingState =
-      visibility === "internal_hidden"
-        ? null
-        : buildRunStartedWorkingState({
-            previous: thread.workingState,
-            latestUserText: args.latestUserText,
-            nowMs,
-          });
-
-    const id = await ctx.db.insert("runtimeRuns", {
-      ownerId,
-      threadId: thread._id,
-      runId,
-      lane,
-      visibility,
-      internalFollowupKind,
-      projectId,
-      communityId,
-      communityContextVersion,
-      modelId,
-      engineId,
-      executionMode,
-      sandboxMode,
-      contractName,
-      contractVersion,
-      harnessProfile,
-      harnessProfileSource,
-      capabilityFamilies,
-      workspaceSessionState: "none",
-      runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
-      workspaceSessionUpdatedAt: startedAt,
-      status: "running",
-      lastEventSeq: 1,
-      startedAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+    return await finalizeRuntimeRunRecord({
+      ctx,
+      ownerId: args.ownerId,
+      thread,
+      run,
+      status: normalizeRunStatus(args.status),
+      reason: args.reason,
+      errorCode: args.errorCode,
+      errorMessage: args.errorMessage,
+      nowMs,
+      finishedAt: args.finishedAt,
     });
-
-    await ctx.db.insert("runtimeRunEvents", {
-      ownerId,
-      threadId: thread._id,
-      runId,
-      seq: 1,
-      eventType: "run_started",
-      eventKey: "run_started",
-      payload: {
-        run_id: runId,
-        lane,
-        visibility,
-        internal_followup_kind: internalFollowupKind ?? null,
-        project_id: projectId ?? null,
-        community_id: communityId ?? null,
-        community_context_version: communityContextVersion ?? null,
-        model_id: modelId ?? null,
-        engine_id: engineId ?? null,
-        execution_mode: executionMode,
-        sandbox_mode: sandboxMode ?? null,
-        contract_name: contractName,
-        contract_version: contractVersion,
-        harness_profile: harnessProfile ?? null,
-        harness_profile_source: harnessProfileSource ?? null,
-        capability_families: capabilityFamilies ?? [],
-      },
-      createdAt: startedAt,
-    });
-    if (startedWorkingState) {
-      await ctx.db.patch(thread._id, {
-        workingState: startedWorkingState,
-        updatedAt: nowMs,
-      });
-    }
-
-    const created = (await ctx.db.get(id)) as RuntimeRunLike | null;
-    if (!created) throw new Error("runtime_run_create_failed");
-    return created;
   },
 });
 

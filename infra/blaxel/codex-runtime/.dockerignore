@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!entrypoint.sh
+!blaxel.toml
+!codex-config.toml
+!README.md
+!.dockerignore
+!.blaxelignore
