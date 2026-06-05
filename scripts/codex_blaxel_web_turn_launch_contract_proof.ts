@@ -81,6 +81,21 @@ assertIncludes(lifecycle, "listConvexCloudRuntimeRunEvents", "recovery polling m
 const projection = read("apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx");
 assertIncludes(projection, "params.runtimeEventsByRunId[message.run_id] ?? []", "persisted messages must attach hydrated runtime events");
 assertIncludes(projection, "params.activeThreadStreamingState.runtimeEvents", "active streaming state must feed existing timeline");
+assertIncludes(projection, "message.engine_id", "message footer attribution must use persisted runtime engine id");
+assertIncludes(projection, "extractRuntimeEngineIdFromMessageContent", "message footer attribution must fall back to content runtime metadata");
+assertIncludes(projection, "readRuntimeEngineIdFromEvents(runtimeEvents)", "message footer attribution must fall back to run_started engine metadata");
+
+const attribution = read("shared/modelAttributionUi.ts");
+assertIncludes(attribution, 'if (raw.includes("codex")) return "Codex";', "Codex runtime attribution must render Codex");
+assertIncludes(
+  attribution,
+  "runtimeProvider ? `${modelLabel} · ${runtimeProvider}` : appendInferenceProviderLabel(modelLabel, source)",
+  "Codex runtime attribution must override ChatGPT funding-source footer labels",
+);
+
+const app = read("apps/web/src/App.tsx");
+assertIncludes(app, "extractRuntimeEngineIdFromMessageContent", "workspace projection must receive runtime engine extractor");
+assertIncludes(app, "engineId,", "formatModelSignature must pass runtime engine id into attribution formatter");
 
 const componentFiles = listFilesRecursive("apps/web/src/components");
 for (const file of componentFiles) {

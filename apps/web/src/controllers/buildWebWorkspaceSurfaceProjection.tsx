@@ -31,6 +31,7 @@ type ThreadMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content_json: unknown;
+  engine_id: string | null;
   model_id: string | null;
   run_id: string | null;
 };
@@ -111,9 +112,11 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   setContextModal: Dispatch<SetStateAction<ContextModalPayload | null>>;
   extractInferenceSourceFromMessageContent: (contentJson: unknown) => string | null;
   extractModelIdFromMessageContent: (contentJson: unknown) => string | null;
+  extractRuntimeEngineIdFromMessageContent: (contentJson: unknown) => string | null;
   formatModelSignature: (
     modelId: string | null,
     inferenceSource: string | null,
+    engineId: string | null,
     toggles: ModelToggle[],
   ) => string | null;
   renderMarkdown: (
@@ -121,6 +124,22 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
     options: { onCopyCode: (text: string) => Promise<void> | void },
   ) => ReactNode;
 };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readRuntimeEngineIdFromEvents(events: ThreadStreamingRuntimeEvent[]): string | null {
+  for (const event of events) {
+    if (event.event_type !== "run_started") continue;
+    const payload = asRecord(event.payload);
+    const engineId = typeof payload?.engine_id === "string" ? payload.engine_id.trim() : "";
+    if (engineId) return engineId;
+  }
+  return null;
+}
 
 export function buildWebWorkspaceSurfaceProjection(
   params: BuildWebWorkspaceSurfaceProjectionParams,
@@ -199,10 +218,16 @@ export function buildWebWorkspaceSurfaceProjection(
             ? params.activeThreadStreamingState.runtimeEvents
             : params.runtimeEventsByRunId[message.run_id] ?? []
           : [];
+      const engineId = !isUser
+        ? (message.engine_id ?? "").trim() ||
+          params.extractRuntimeEngineIdFromMessageContent(message.content_json) ||
+          readRuntimeEngineIdFromEvents(runtimeEvents)
+        : null;
       const modelLabel = !isUser
         ? params.formatModelSignature(
             messageModelId,
             inferenceSource,
+            engineId,
             params.modelToggles,
           )
         : null;

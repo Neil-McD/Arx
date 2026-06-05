@@ -9,6 +9,7 @@ type ModelToggleLike = {
 type FormatModelAttributionLabelArgs = {
   modelId: string | null | undefined;
   inferenceSource: string | null | undefined;
+  engineId?: string | null | undefined;
   modelToggles: ReadonlyArray<ModelToggleLike>;
   inferenceLaneFallbacks?: ReadonlyArray<InferenceLaneFallbackTraceItem> | null;
   freeModelAllowlist?: ReadonlySet<string>;
@@ -45,13 +46,21 @@ function resolveModelLabel(
   return fallbackModelLabel(modelId);
 }
 
+function formatRuntimeEngineProviderLabel(value: string | null | undefined): string | null {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw.includes("codex")) return "Codex";
+  return null;
+}
+
 export function formatModelAttributionLabel(args: FormatModelAttributionLabelArgs): string | null {
   const modelId = (args.modelId ?? "").trim();
-  if (!modelId) return null;
+  const runtimeProvider = formatRuntimeEngineProviderLabel(args.engineId);
+  if (!modelId) return runtimeProvider;
   const isFreeModel = isFreeModelId(modelId, args.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST);
   const modelLabel = resolveModelLabel(modelId, args.modelToggles, args.freeModelLabels);
   const source = isFreeModel ? "free" : args.inferenceSource;
-  const base = appendInferenceProviderLabel(modelLabel, source);
+  const base = runtimeProvider ? `${modelLabel} · ${runtimeProvider}` : appendInferenceProviderLabel(modelLabel, source);
   const fallbackSuffix = formatInferenceLaneFallbackSuffix(args.inferenceLaneFallbacks ?? null);
   return `${base}${fallbackSuffix}`;
 }
@@ -110,6 +119,19 @@ export function extractModelIdFromMessageContent(content: unknown): string | nul
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+export function extractRuntimeEngineIdFromMessageContent(content: unknown): string | null {
+  const meta = extractMetaRecord(content);
+  if (!meta) return null;
+  const direct = meta.engine_id;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const codexBridge = meta.codex_bridge;
+  if (codexBridge && typeof codexBridge === "object" && !Array.isArray(codexBridge)) {
+    const runtime = (codexBridge as Record<string, unknown>).runtime;
+    if (typeof runtime === "string" && runtime.trim()) return runtime.trim();
+  }
+  return null;
 }
 
 export function extractInferenceLaneFallbacksFromMessageContent(
