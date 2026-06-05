@@ -59,6 +59,11 @@ assertIncludes(controller, 'engine_id: "codex_blaxel_app_server"', "streaming st
 assertIncludes(controller, 'streamTransport: "recovery"', "Codex web launch must use recovery polling, not a new SSE stream");
 assertIncludes(controller, "readLatestUserMessageText", "Codex prompt must come from the latest user message");
 assertIncludes(controller, "isCodexBlaxelProviderConnectionFailure", "provider-connection failures must keep existing modal semantics");
+assert.doesNotMatch(
+  controller,
+  /seq:\s*0/,
+  "web cloud message creation must not force seq=0; Convex must own thread message sequencing",
+);
 assertOrderWithin(
   controller,
   "const shouldUseCodexBlaxel =",
