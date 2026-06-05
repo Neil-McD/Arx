@@ -13,6 +13,10 @@ function assertContains(haystack: string, needle: string, label: string): void {
   assert.ok(haystack.includes(needle), `expected ${label}`);
 }
 
+function assertDoesNotContain(haystack: string, needle: string, label: string): void {
+  assert.ok(!haystack.includes(needle), `did not expect ${label}`);
+}
+
 function event(params: {
   seq: number;
   event_type: string;
@@ -71,10 +75,10 @@ function kinds(events: ReturnType<typeof event>[]): AgentActivityKind[] {
 
 const projection = readText("shared/runtimeActivityTimeline.ts");
 const runtimeTimelineUi = readText("shared/runtimeTimelineUi.ts");
+const runtimeLiveTimeline = readText("apps/web/src/components/RuntimeLiveTimeline.tsx");
 
 for (const token of [
   "export type AgentActivityKind",
-  '"planning"',
   '"exploring"',
   '"reading"',
   '"editing"',
@@ -87,6 +91,22 @@ for (const token of [
 ]) {
   assertContains(projection, token, `activity projection token ${token}`);
 }
+
+assertDoesNotContain(
+  projection,
+  '"planning"',
+  "synthetic planning activity in runtime projection",
+);
+assertDoesNotContain(
+  projection,
+  "Prepared the workspace run.",
+  "legacy synthetic planning summary",
+);
+assertDoesNotContain(
+  runtimeLiveTimeline,
+  "I’m setting up the run and deciding where to start.",
+  "legacy synthetic planning narration",
+);
 
 assertContains(
   runtimeTimelineUi,
@@ -114,7 +134,7 @@ const happyPath = [
 const happySteps = buildAgentActivityTimeline(happyPath);
 assert.deepEqual(
   happySteps.map((step) => step.kind),
-  ["planning", "exploring", "reading", "editing", "verifying", "completed"],
+  ["exploring", "reading", "editing", "verifying", "completed"],
 );
 assert.equal(happySteps.find((step) => step.kind === "exploring")?.stats.directoriesScanned, 1);
 assert.equal(happySteps.find((step) => step.kind === "exploring")?.stats.searches, 1);
@@ -143,7 +163,7 @@ const failedBuild = [
 const failedSteps = buildAgentActivityTimeline(failedBuild);
 assert.deepEqual(
   failedSteps.map((step) => step.kind),
-  ["planning", "editing", "verifying", "blocked"],
+  ["editing", "verifying", "blocked"],
 );
 assert.equal(failedSteps.find((step) => step.kind === "verifying")?.status, "error");
 assert.equal(failedSteps.find((step) => step.kind === "verifying")?.stats.checksFailed, 1);
@@ -157,7 +177,7 @@ const readOnly = [
   finished(5, 4, "bash", { command: "sed -n '1,120p' shared/runtimeTimelineUi.ts" }),
   event({ seq: 6, event_type: "run_finished", payload: { status: "ok" } }),
 ];
-assert.deepEqual(kinds(readOnly), ["planning", "exploring", "reading", "completed"]);
+assert.deepEqual(kinds(readOnly), ["exploring", "reading", "completed"]);
 assert.equal(
   buildAgentActivityTimeline(readOnly).some((step) => step.kind === "verifying"),
   false,
@@ -172,5 +192,14 @@ const liveSteps = buildAgentActivityTimeline(live);
 assert.equal(liveSteps[liveSteps.length - 1]?.kind, "reading");
 assert.equal(liveSteps[liveSteps.length - 1]?.status, "running");
 assert.equal(liveSteps[liveSteps.length - 1]?.isActive, true);
+
+const justStarted = [
+  event({ seq: 1, event_type: "run_started" }),
+];
+assert.deepEqual(
+  buildAgentActivityTimeline(justStarted),
+  [],
+  "run_started should remain timing metadata, not synthetic activity",
+);
 
 console.log("runtime_activity_timeline_proof: ok");

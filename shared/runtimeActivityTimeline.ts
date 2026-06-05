@@ -1,7 +1,6 @@
 import { isVerificationShellCommand } from "./runtimeWorkingStateLedger.ts";
 
 export type AgentActivityKind =
-  | "planning"
   | "exploring"
   | "reading"
   | "editing"
@@ -380,7 +379,6 @@ function formatDuration(durationMs: number | null): string | null {
 }
 
 function titleForKind(kind: AgentActivityKind): string {
-  if (kind === "planning") return "Planning";
   if (kind === "exploring") return "Exploring";
   if (kind === "reading") return "Reading";
   if (kind === "editing") return "Editing";
@@ -391,7 +389,6 @@ function titleForKind(kind: AgentActivityKind): string {
 
 function summarizeStep(kind: AgentActivityKind, stats: AgentActivityStats, items: AgentActivityItem[]): string {
   const parts: string[] = [];
-  if (kind === "planning") return "Prepared the workspace run.";
   if (kind === "exploring") {
     if (stats.directoriesScanned) parts.push(formatCount(stats.directoriesScanned, "directory", "directories"));
     if (stats.searches) parts.push(formatCount(stats.searches, "search"));
@@ -483,23 +480,6 @@ function runFinishedItem(event: RuntimeActivityEvent, firstEventCreatedAt: strin
   };
 }
 
-function runStartedItem(event: RuntimeActivityEvent): ToolActivityItem {
-  return {
-    id: `${event.run_id}:${event.seq}:run_started`,
-    kind: "planning",
-    title: "Started run",
-    detail: null,
-    toolName: null,
-    status: "ok",
-    seqStart: event.seq,
-    seqEnd: event.seq,
-    startedAt: event.created_at,
-    finishedAt: event.created_at,
-    durationMs: null,
-    stats: {},
-  };
-}
-
 export function buildAgentActivityTimeline(events: RuntimeActivityEvent[]): AgentActivityStep[] {
   const sorted = [...events].sort((a, b) => a.seq - b.seq);
   if (sorted.length === 0) return [];
@@ -521,7 +501,6 @@ export function buildAgentActivityTimeline(events: RuntimeActivityEvent[]): Agen
 
   for (const event of sorted) {
     if (event.event_type === "run_started") {
-      pushItem(runStartedItem(event));
       continue;
     }
     if (event.event_type === "tool_call_started" || event.event_type === "tool_call_finished") {

@@ -428,7 +428,6 @@ function activityWordForSteps(steps: AgentActivityStep[]): string {
 
 function narrationForStep(step: AgentActivityStep | null): string | null {
   if (!step) return null;
-  if (step.kind === "planning") return "I’m setting up the run and deciding where to start.";
   if (step.kind === "exploring") {
     if (step.stats.searches) return "I’m searching for the relevant path before changing anything.";
     if (step.stats.directoriesScanned) return "I’m mapping the workspace so I can work from the right place.";
