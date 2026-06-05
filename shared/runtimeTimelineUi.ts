@@ -245,7 +245,7 @@ function formatCount(count: number, singular: string, plural = `${singular}s`): 
 function categoryForTool(toolName: string): RuntimeToolCategory {
   if (toolName === "list_dir" || toolName === "read") return "exploration";
   if (toolName === "glob" || toolName === "grep" || toolName === "sha256") return "search";
-  if (toolName === "write" || toolName === "edit") return "writes";
+  if (toolName === "write" || toolName === "edit" || toolName === "apply_patch") return "writes";
   if (
     toolName === "bash" ||
     toolName === "terminal_start" ||
@@ -259,7 +259,7 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
     return "computer";
   }
   if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
-  if (toolName === "web_research" || toolName === "web_crawl") return "web";
+  if (toolName === "web_research" || toolName === "web_crawl" || toolName === "web_search") return "web";
   if (toolName === "get_active_community_context" || toolName.startsWith("community_")) return "community";
   return "other";
 }
@@ -299,6 +299,7 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "sha256") return `Hash ${shortPath || path || "file"}`;
   if (toolName === "write") return `Write ${shortPath || path || "file"}`;
   if (toolName === "edit") return `Edit ${shortPath || path || "file"}`;
+  if (toolName === "apply_patch") return "File change";
   if (toolName === "bash") return `Bash`;
   if (toolName === "terminal_start") return "Start terminal";
   if (toolName === "terminal_read") return "Check terminal";
@@ -334,6 +335,12 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
     }
     return "Web research";
   }
+  if (toolName === "web_search") {
+    const querySummary = summarizeSearchQuery(query);
+    const urlSummary = summarizeUrlLabel(url);
+    if (urlSummary) return `Web search: ${urlSummary}`;
+    return `Web search${querySummary ? `: ${querySummary}` : ""}`;
+  }
   if (toolName === "web_crawl") return `Web crawl${summarizeUrlLabel(url) ? `: ${summarizeUrlLabel(url)}` : ""}`;
   return toolName;
 }
@@ -343,6 +350,7 @@ function buildCallHref(toolName: string, args: Record<string, unknown> | null): 
     return normalizeHttpUrl(toStringValue(args?.url));
   }
   if (toolName === "web_crawl") return normalizeHttpUrl(toStringValue(args?.url));
+  if (toolName === "web_search") return normalizeHttpUrl(toStringValue(args?.url));
   if (toolName !== "web_research") return null;
   const action = toStringValue(args?.action);
   const url = toStringValue(args?.url);
@@ -360,7 +368,12 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
   const commands = calls.filter((call) => call.toolName === "bash").length;
   const computerCalls = calls.filter((call) => call.category === "computer").length;
   const docsCalls = calls.filter((call) => call.category === "docs").length;
-  const webCalls = calls.filter((call) => call.toolName === "web_research" || call.toolName === "web_crawl").length;
+  const webCalls = calls.filter(
+    (call) =>
+      call.toolName === "web_research" ||
+      call.toolName === "web_crawl" ||
+      call.toolName === "web_search",
+  ).length;
   const communityCalls = calls.filter((call) => call.toolName.startsWith("community_")).length;
   const prefix =
     category === "exploration"

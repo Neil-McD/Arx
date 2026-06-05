@@ -106,6 +106,241 @@ assert.equal(toolFinished?.eventType, "tool_call_finished");
 assert.equal(toolFinished?.payload.status, "ok");
 assert.equal(toolFinished?.payload.output_text, "/workspace");
 
+const codexReasoningSummaryDelta = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 12,
+  message: {
+    method: "item/reasoning/summaryTextDelta",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      itemId: "reasoning_item_2",
+      delta: "safe summary",
+    },
+  },
+});
+assert.equal(codexReasoningSummaryDelta?.eventType, "reasoning_summary_text_delta");
+assert.equal(codexReasoningSummaryDelta?.payload.delta, "safe summary");
+
+const codexReasoningTextDelta = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 13,
+  message: {
+    method: "item/reasoning/textDelta",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      itemId: "reasoning_item_3",
+      delta: "trace detail",
+    },
+  },
+});
+assert.equal(codexReasoningTextDelta?.eventType, "codex_reasoning_text_delta");
+assert.equal(codexReasoningTextDelta?.payload.visibility, "trace_only");
+assert.equal(codexReasoningTextDelta?.payload.delta_redacted, true);
+assert.equal(codexReasoningTextDelta?.payload.delta, undefined);
+
+const commandStarted = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 14,
+  message: {
+    method: "item/started",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "cmd_1",
+        type: "commandExecution",
+        command: "pwd",
+        cwd: "/workspace",
+        status: "inProgress",
+      },
+    },
+  },
+});
+assert.equal(commandStarted?.eventType, "tool_call_started");
+assert.equal(commandStarted?.payload.tool_name, "bash");
+assert.deepEqual(commandStarted?.payload.args, { command: "pwd", cwd: "/workspace" });
+
+const commandOutputDelta = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 15,
+  message: {
+    method: "item/commandExecution/outputDelta",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      itemId: "cmd_1",
+      delta: "/workspace\n",
+    },
+  },
+});
+assert.equal(commandOutputDelta?.eventType, "tool_call_output_delta");
+assert.equal(commandOutputDelta?.payload.tool_name, "bash");
+assert.equal(commandOutputDelta?.payload.output_delta, "/workspace\n");
+
+const commandFinished = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 16,
+  message: {
+    method: "item/completed",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "cmd_1",
+        type: "commandExecution",
+        command: "pwd",
+        cwd: "/workspace",
+        status: "completed",
+        exitCode: 0,
+        aggregatedOutput: "/workspace\n",
+      },
+    },
+  },
+});
+assert.equal(commandFinished?.eventType, "tool_call_finished");
+assert.equal(commandFinished?.payload.tool_name, "bash");
+assert.equal(commandFinished?.payload.output_text, "/workspace");
+
+const fileChangeStarted = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 17,
+  message: {
+    method: "item/started",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "patch_1",
+        type: "fileChange",
+        status: "inProgress",
+        changes: [{ path: "shared/codexAppServerEventNormalizer.ts", kind: "update" }],
+      },
+    },
+  },
+});
+assert.equal(fileChangeStarted?.eventType, "tool_call_started");
+assert.equal(fileChangeStarted?.payload.tool_name, "apply_patch");
+assert.deepEqual(fileChangeStarted?.payload.args, {
+  changes: [{ path: "shared/codexAppServerEventNormalizer.ts", kind: "update" }],
+});
+
+const mcpStarted = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 18,
+  message: {
+    method: "item/started",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "mcp_1",
+        type: "mcpToolCall",
+        server: "github",
+        tool: "search_issues",
+        arguments: { query: "repo:openai/codex" },
+      },
+    },
+  },
+});
+assert.equal(mcpStarted?.eventType, "tool_call_started");
+assert.equal(mcpStarted?.payload.tool_name, "github.search_issues");
+assert.deepEqual(mcpStarted?.payload.args, { query: "repo:openai/codex" });
+
+const dynamicStarted = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 19,
+  message: {
+    method: "item/started",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "dynamic_1",
+        type: "dynamicToolCall",
+        tool: "community_resources_search",
+        arguments: { query: "agent harness" },
+      },
+    },
+  },
+});
+assert.equal(dynamicStarted?.eventType, "tool_call_started");
+assert.equal(dynamicStarted?.payload.tool_name, "community_resources_search");
+assert.deepEqual(dynamicStarted?.payload.args, { query: "agent harness" });
+
+const webSearchStarted = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 20,
+  message: {
+    method: "item/started",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "web_1",
+        type: "webSearch",
+        status: "inProgress",
+        action: {
+          type: "search",
+          query: "codex app-server events",
+          queries: ["codex app-server events"],
+        },
+      },
+    },
+  },
+});
+assert.equal(webSearchStarted?.eventType, "tool_call_started");
+assert.equal(webSearchStarted?.payload.tool_name, "web_search");
+assert.deepEqual(webSearchStarted?.payload.args, {
+  query: "codex app-server events",
+  queries: ["codex app-server events"],
+});
+
+const fileChangeFinished = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 21,
+  message: {
+    method: "item/completed",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "patch_1",
+        type: "fileChange",
+        status: "completed",
+        changes: [{ path: "shared/codexAppServerEventNormalizer.ts", kind: "update" }],
+      },
+    },
+  },
+});
+assert.equal(fileChangeFinished?.eventType, "tool_call_finished");
+assert.equal(fileChangeFinished?.payload.tool_name, "apply_patch");
+
+const webSearchFinished = normalizeCodexAppServerNotification({
+  runId: "run_1",
+  ordinal: 22,
+  message: {
+    method: "item/completed",
+    params: {
+      threadId: "codex_thread_1",
+      turnId: "codex_turn_1",
+      item: {
+        id: "web_1",
+        type: "webSearch",
+        status: "completed",
+        action: {
+          type: "search",
+          query: "codex app-server events",
+          queries: ["codex app-server events"],
+        },
+      },
+    },
+  },
+});
+assert.equal(webSearchFinished?.eventType, "tool_call_finished");
+assert.equal(webSearchFinished?.payload.tool_name, "web_search");
+
 const skipped = normalizeCodexAppServerNotification({
   runId: "run_1",
   ordinal: 11,
@@ -172,6 +407,20 @@ assertIncludes(httpBridge, "normalizeCodexAppServerNotification", "event callbac
 assertIncludes(httpBridge, "appendCloudRuntimeRunEventByBridgeClaimsInternal", "events must append through bridge-claim mutation");
 assertIncludes(httpBridge, "finishCloudRuntimeRunByBridgeClaimsInternal", "finish must go through bridge-claim finalizer");
 assertIncludes(httpBridge, "detail: redactSensitiveText(message)", "bridge callback failures must return sanitized diagnostic detail");
+
+const runtimeTimelineUi = read("shared/runtimeTimelineUi.ts");
+assertIncludes(
+  runtimeTimelineUi,
+  'toolName === "write" || toolName === "edit" || toolName === "apply_patch"',
+  "Codex fileChange must be grouped as write activity",
+);
+assertIncludes(runtimeTimelineUi, 'if (toolName === "apply_patch") return "File change";', "Codex fileChange must get a clear UI label");
+assertIncludes(
+  runtimeTimelineUi,
+  'toolName === "web_research" || toolName === "web_crawl" || toolName === "web_search"',
+  "Codex webSearch must be grouped as web activity",
+);
+assertIncludes(runtimeTimelineUi, 'if (toolName === "web_search") {', "Codex webSearch must get a clear UI label");
 
 const threads = read("convex/threads.ts");
 assertIncludes(threads, "appendCloudRuntimeRunEventByBridgeClaimsInternal", "bridge event internal mutation must exist");

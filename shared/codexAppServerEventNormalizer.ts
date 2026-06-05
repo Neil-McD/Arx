@@ -26,6 +26,11 @@ function numberValue(value: unknown): number | null {
   return Number.isFinite(parsed) ? Math.floor(parsed) : null;
 }
 
+function optionalNumberValue(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function eventKeyPart(value: unknown, fallback: string): string {
   const normalized = String(value ?? "").trim();
   return (normalized || fallback).replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 120);
@@ -53,7 +58,87 @@ function readItemId(params: JsonRecord): string {
   return stringValue(params.itemId, 200) || stringValue(params.id, 200) || stringValue(item?.id, 200);
 }
 
+function readItemType(item: JsonRecord | null, params: JsonRecord): string {
+  return stringValue(item?.type ?? params.itemType ?? params.type, 120);
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => stringValue(item, 500)).filter(Boolean);
+}
+
+function boundedRecord(value: unknown, fallbackKey: string): JsonRecord {
+  const record = asRecord(value);
+  if (record) return record;
+  if (value === undefined || value === null) return {};
+  if (Array.isArray(value)) return { [fallbackKey]: value.slice(0, 50) };
+  return { [fallbackKey]: value };
+}
+
+function stringifyJsonValue(value: unknown, maxLength = 4000): string {
+  if (typeof value === "string") return rawString(value, maxLength);
+  if (value === undefined || value === null) return "";
+  if (typeof value === "number" || typeof value === "boolean") return rawString(value, maxLength);
+  try {
+    return JSON.stringify(value).slice(0, maxLength);
+  } catch {
+    return rawString(value, maxLength);
+  }
+}
+
+function readFileChanges(item: JsonRecord | null): JsonRecord[] {
+  const changes = Array.isArray(item?.changes) ? item?.changes : [];
+  return changes
+    .map((change) => {
+      const record = asRecord(change);
+      if (!record) return null;
+      const path = stringValue(record.path, 1000);
+      const kind = stringValue(record.kind, 120) || stringValue(record.type, 120);
+      if (!path && !kind) return null;
+      return {
+        ...(path ? { path } : {}),
+        kind: kind || "changed",
+      };
+    })
+    .filter((change): change is JsonRecord => Boolean(change))
+    .slice(0, 100);
+}
+
+function readWebSearchArgs(item: JsonRecord | null): JsonRecord {
+  const action = asRecord(item?.action);
+  const actionType = stringValue(action?.type, 120);
+  const queries = actionType === "search" ? readStringArray(action?.queries) : [];
+  const query =
+    stringValue(item?.query, 1000) ||
+    (actionType === "search" ? stringValue(action?.query, 1000) : "") ||
+    queries[0] ||
+    "";
+  const url = stringValue(action?.url, 2000);
+  const pattern = stringValue(action?.pattern, 1000);
+  return {
+    ...(query ? { query } : {}),
+    ...(queries.length > 0 ? { queries } : {}),
+    ...(actionType && actionType !== "search" ? { action: actionType } : {}),
+    ...(url ? { url } : {}),
+    ...(pattern ? { pattern } : {}),
+    ...(!query && !url && !pattern ? { query_unavailable: true } : {}),
+  };
+}
+
 function readToolName(item: JsonRecord | null, params: JsonRecord): string {
+  const itemType = readItemType(item, params);
+  if (itemType === "dynamicToolCall") {
+    return stringValue(item?.tool, 160) || "dynamic_tool";
+  }
+  if (itemType === "mcpToolCall") {
+    const server = stringValue(item?.server, 160);
+    const tool = stringValue(item?.tool, 160);
+    if (server && tool) return `${server}.${tool}`;
+    return tool || "mcp_tool";
+  }
+  if (itemType === "commandExecution") return "bash";
+  if (itemType === "fileChange") return "apply_patch";
+  if (itemType === "webSearch") return "web_search";
   const candidates = [
     item?.toolName,
     item?.tool_name,
@@ -71,6 +156,20 @@ function readToolName(item: JsonRecord | null, params: JsonRecord): string {
 }
 
 function readToolArgs(item: JsonRecord | null, params: JsonRecord): JsonRecord {
+  const itemType = readItemType(item, params);
+  if (itemType === "commandExecution") {
+    const command = rawString(item?.command, 8000);
+    const cwd = stringValue(item?.cwd, 1000);
+    return {
+      ...(command ? { command } : {}),
+      ...(cwd ? { cwd } : {}),
+    };
+  }
+  if (itemType === "fileChange") return { changes: readFileChanges(item) };
+  if (itemType === "webSearch") return readWebSearchArgs(item);
+  if (itemType === "dynamicToolCall" || itemType === "mcpToolCall") {
+    return boundedRecord(item?.arguments, "arguments");
+  }
   const candidates = [
     asRecord(item?.args),
     asRecord(item?.arguments),
@@ -83,9 +182,80 @@ function readToolArgs(item: JsonRecord | null, params: JsonRecord): JsonRecord {
 }
 
 function isToolItem(item: JsonRecord | null, params: JsonRecord): boolean {
-  const itemType = stringValue(item?.type ?? params.itemType ?? params.type, 120);
+  const itemType = readItemType(item, params);
+  if (
+    itemType === "dynamicToolCall" ||
+    itemType === "mcpToolCall" ||
+    itemType === "commandExecution" ||
+    itemType === "fileChange" ||
+    itemType === "webSearch"
+  ) {
+    return true;
+  }
   if (/tool|command|function/i.test(itemType)) return true;
   return Boolean(readToolName(item, params));
+}
+
+function readToolOutputText(item: JsonRecord | null, params: JsonRecord): string {
+  const itemType = readItemType(item, params);
+  if (itemType === "commandExecution") {
+    return rawString(item?.aggregatedOutput ?? item?.output ?? item?.text ?? params.output ?? "", 4000).trim();
+  }
+  if (itemType === "dynamicToolCall") {
+    const contentItems = Array.isArray(item?.contentItems) ? item?.contentItems : [];
+    const text = contentItems
+      .map((contentItem) => {
+        const record = asRecord(contentItem);
+        if (!record) return "";
+        if (record.type === "text" && typeof record.text === "string") return record.text;
+        if (typeof record.text === "string") return record.text;
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    return rawString(text || (item?.output ?? item?.text ?? params.output ?? ""), 4000);
+  }
+  if (itemType === "mcpToolCall") {
+    return stringifyJsonValue(item?.error ?? item?.result ?? item?.output ?? params.output, 4000);
+  }
+  if (itemType === "webSearch") {
+    const durationMs = optionalNumberValue(item?.durationMs);
+    return stringifyJsonValue(
+      {
+        status: stringValue(item?.status ?? params.status, 80) || "completed",
+        ...readWebSearchArgs(item),
+        ...(durationMs !== null ? { durationMs } : {}),
+      },
+      4000,
+    );
+  }
+  if (itemType === "fileChange") {
+    return stringifyJsonValue(
+      {
+        status: stringValue(item?.status ?? params.status, 80) || "completed",
+        changes: readFileChanges(item),
+      },
+      4000,
+    );
+  }
+  return rawString(item?.output ?? item?.text ?? params.output ?? "", 2000);
+}
+
+function readToolStatus(item: JsonRecord | null, params: JsonRecord): "ok" | "error" {
+  const status = stringValue(item?.status ?? params.status, 80).toLowerCase();
+  return status === "failed" ||
+    status === "error" ||
+    status === "declined" ||
+    status === "blocked" ||
+    status === "cancelled"
+    ? "error"
+    : "ok";
+}
+
+function readOutputDeltaToolName(method: string): string {
+  if (method === "item/commandExecution/outputDelta") return "bash";
+  if (method === "item/fileChange/outputDelta") return "apply_patch";
+  return "codex_tool";
 }
 
 function basePayload(params: {
@@ -165,7 +335,7 @@ export function normalizeCodexAppServerNotification(params: {
     };
   }
 
-  if (method === "item/agentReasoning/delta") {
+  if (method === "item/agentReasoning/delta" || method === "item/reasoning/summaryTextDelta") {
     const delta = rawString(rpcParams.delta, 8000);
     if (!delta) return null;
     return {
@@ -176,6 +346,66 @@ export function normalizeCodexAppServerNotification(params: {
         summary_stream_id: `codex:${eventKeyPart(turnId, "turn")}`,
         summary_index: 0,
         delta,
+      },
+    };
+  }
+
+  if (method === "item/reasoning/textDelta") {
+    const delta = rawString(rpcParams.delta, 8000);
+    if (!delta) return null;
+    return {
+      eventType: "codex_reasoning_text_delta",
+      eventKey: `${runId}:codex_reasoning_text_delta:${suffix}`,
+      payload: {
+        ...base,
+        reasoning_stream_id: `codex:${eventKeyPart(turnId, "turn")}`,
+        reasoning_index: 0,
+        delta_redacted: true,
+        redacted_char_count: delta.length,
+        visibility: "trace_only",
+      },
+    };
+  }
+
+  if (method === "item/plan/delta") {
+    const delta = rawString(rpcParams.delta, 8000);
+    if (!delta) return null;
+    return {
+      eventType: "codex_plan_delta",
+      eventKey: `${runId}:codex_plan_delta:${suffix}`,
+      payload: {
+        ...base,
+        plan_stream_id: `codex:${eventKeyPart(turnId, "turn")}`,
+        delta,
+      },
+    };
+  }
+
+  if (method === "turn/plan/updated") {
+    return {
+      eventType: "codex_plan_updated",
+      eventKey: `${runId}:codex_plan_updated:${eventKeyPart(turnId, "turn")}:${String(Math.max(0, ordinal))}`,
+      payload: {
+        ...base,
+        plan: rpcParams.plan ?? null,
+      },
+    };
+  }
+
+  if (method === "item/commandExecution/outputDelta" || method === "item/fileChange/outputDelta") {
+    const delta = rawString(rpcParams.delta, 8000);
+    if (!delta) return null;
+    const toolName = readOutputDeltaToolName(method);
+    const callId = `codex:${runId}:${eventKeyPart(itemId, String(ordinal))}`;
+    return {
+      eventType: "tool_call_output_delta",
+      eventKey: `${runId}:codex_tool_call_output_delta:${eventKeyPart(itemId, String(ordinal))}:${String(Math.max(0, ordinal))}`,
+      payload: {
+        ...base,
+        tool_call_id: callId,
+        provider_call_id: itemId || callId,
+        tool_name: toolName,
+        output_delta: delta,
       },
     };
   }
@@ -200,7 +430,7 @@ export function normalizeCodexAppServerNotification(params: {
   if (method === "item/completed" && isToolItem(item, rpcParams)) {
     const toolName = readToolName(item, rpcParams) || "codex_tool";
     const callId = `codex:${runId}:${eventKeyPart(itemId, String(ordinal))}`;
-    const status = stringValue(item?.status ?? rpcParams.status, 80);
+    const outputText = readToolOutputText(item, rpcParams);
     return {
       eventType: "tool_call_finished",
       eventKey: `${runId}:codex_tool_call_finished:${eventKeyPart(itemId, String(ordinal))}`,
@@ -211,8 +441,8 @@ export function normalizeCodexAppServerNotification(params: {
         tool_name: toolName,
         args: readToolArgs(item, rpcParams),
         attempt: 1,
-        status: status === "failed" || status === "error" ? "error" : "ok",
-        output_text: rawString(item?.output ?? item?.text ?? rpcParams.output ?? "", 2000) || null,
+        status: readToolStatus(item, rpcParams),
+        output_text: outputText || null,
       },
     };
   }
