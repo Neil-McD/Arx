@@ -19,6 +19,7 @@ type SessionLike = {
 type UseDirectMessageTypingPresenceArgs<SessionT extends SessionLike> = {
   isEnabled: boolean;
   session: SessionT | null;
+  ensureSession?: (session?: SessionT | null, source?: string) => Promise<SessionT | null>;
   conversationId: string | null;
   canSendMessages: boolean;
   inputValue: string;
@@ -72,22 +73,32 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
     let isDisposed = false;
     let unsubscribe: (() => void) | null = null;
 
-    try {
-      const liveClient = createCloudDirectMessagesLiveClient({ session: args.session });
-      liveClientRef.current?.close();
-      liveClientRef.current = liveClient;
-      unsubscribe = subscribeCloudDirectTyping<DirectMessageTypingPresenceBundle>({
-        liveClient,
-        conversationId: args.conversationId,
-        onUpdate: (nextPresence) => {
-          if (isDisposed) return;
-          setPresence(normalizeTypingPresencePayload(nextPresence));
-          setNowMs(Date.now());
-        },
-      });
-    } catch {
-      // Typing presence is opportunistic; message loading and sending remain authoritative.
-    }
+    void (async () => {
+      try {
+        const usableSession = args.ensureSession
+          ? await args.ensureSession(args.session, "direct_messages_typing_presence")
+          : args.session;
+        if (isDisposed || !usableSession || !args.conversationId) return;
+        const liveClient = createCloudDirectMessagesLiveClient({ session: usableSession });
+        if (isDisposed) {
+          liveClient.close();
+          return;
+        }
+        liveClientRef.current?.close();
+        liveClientRef.current = liveClient;
+        unsubscribe = subscribeCloudDirectTyping<DirectMessageTypingPresenceBundle>({
+          liveClient,
+          conversationId: args.conversationId,
+          onUpdate: (nextPresence) => {
+            if (isDisposed) return;
+            setPresence(normalizeTypingPresencePayload(nextPresence));
+            setNowMs(Date.now());
+          },
+        });
+      } catch {
+        // Typing presence is opportunistic; message loading and sending remain authoritative.
+      }
+    })();
 
     return () => {
       isDisposed = true;
@@ -96,7 +107,7 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
       liveClientRef.current = null;
       setPresence(EMPTY_TYPING_PRESENCE);
     };
-  }, [args.conversationId, args.isEnabled, args.session]);
+  }, [args.conversationId, args.ensureSession, args.isEnabled, args.session]);
 
   useEffect(() => {
     if (presence.users.length === 0) return;
@@ -130,8 +141,12 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
       try {
         const latestArgs = argsRef.current;
         if (!latestArgs.session || !latestArgs.conversationId) return;
+        const usableSession = latestArgs.ensureSession
+          ? await latestArgs.ensureSession(latestArgs.session, "direct_messages_typing_write")
+          : latestArgs.session;
+        if (!usableSession) return;
         await setCloudDirectTyping({
-          session: latestArgs.session,
+          session: usableSession,
           conversationId: latestArgs.conversationId,
         });
       } catch {
@@ -141,6 +156,7 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
   }, [
     args.canSendMessages,
     args.conversationId,
+    args.ensureSession,
     args.inputValue,
     args.isEnabled,
     args.session,

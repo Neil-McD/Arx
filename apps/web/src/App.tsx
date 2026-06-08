@@ -10845,6 +10845,7 @@ export default function App() {
         isOpen={isDirectMessagesOpen}
         openRequest={directMessageOpenRequest}
         session={session}
+        ensureSession={ensureUsableAuthSession}
         sessionUserId={canonicalSessionUserId}
         getInitials={getInitials}
         getAvatarColor={getAvatarColor}

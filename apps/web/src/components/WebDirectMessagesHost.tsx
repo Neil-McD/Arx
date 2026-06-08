@@ -51,6 +51,7 @@ type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
   openRequest: DirectMessageOpenRequest;
   session: SessionT | null;
+  ensureSession?: (session?: SessionT | null, source?: string) => Promise<SessionT | null>;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
@@ -63,6 +64,16 @@ function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === "string" && error.trim()) return error.trim();
   return fallback;
+}
+
+async function resolveDirectMessageSession<SessionT>(
+  session: SessionT | null,
+  ensureSession: WebDirectMessagesHostProps<SessionT>["ensureSession"],
+  source: string,
+): Promise<SessionT | null> {
+  if (!session) return null;
+  if (!ensureSession) return session;
+  return ensureSession(session, source);
 }
 
 const MAX_DM_ATTACHMENTS_PER_MESSAGE = 8;
@@ -248,6 +259,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     isOpen,
     openRequest,
     session,
+    ensureSession,
     sessionUserId,
     getInitials,
     getAvatarColor,
@@ -275,6 +287,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const directTypingPresence = useDirectMessageTypingPresence({
     isEnabled: isOpen && Boolean(activeConversationId),
     session: session as any,
+    ensureSession: ensureSession as any,
     conversationId: activeConversationId,
     canSendMessages: Boolean(session && directMessagePanel && !directMessagePanel.isSending),
     inputValue: directMessagePanel?.input ?? "",
@@ -285,15 +298,21 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       const normalizedConversationId = String(conversationId ?? "").trim();
       if (!session || !normalizedConversationId) return;
       try {
-        await clearCloudDirectTyping({
+        const usableSession = await resolveDirectMessageSession(
           session,
+          ensureSession,
+          "direct_messages_clear_typing",
+        );
+        if (!usableSession) return;
+        await clearCloudDirectTyping({
+          session: usableSession,
           conversationId: normalizedConversationId,
         });
       } catch {
         // Typing presence is opportunistic; message state stays authoritative.
       }
     },
-    [session],
+    [ensureSession, session],
   );
 
   const loadInbox = useCallback(async () => {
@@ -308,8 +327,15 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     setIsLoadingInbox(true);
     setInboxError(null);
     try {
+      const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_inbox");
+      if (inboxLoadRequestRef.current !== requestId) return;
+      if (!usableSession) {
+        setConversations([]);
+        setInboxError(null);
+        return;
+      }
       const rows = await listCloudDirectConversations({
-        session,
+        session: usableSession,
         limit: 30,
       });
       if (inboxLoadRequestRef.current !== requestId) return;
@@ -321,7 +347,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       if (inboxLoadRequestRef.current !== requestId) return;
       setIsLoadingInbox(false);
     }
-  }, [session]);
+  }, [ensureSession, session]);
 
   const loadRecipients = useCallback(
     async (searchValue: string) => {
@@ -337,8 +363,19 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setIsLoadingRecipients(true);
       setRecipientError(null);
       try {
-        const rows = await listCloudEligibleDirectMessageRecipientsForViewer({
+        const usableSession = await resolveDirectMessageSession(
           session,
+          ensureSession,
+          "direct_messages_recipients",
+        );
+        if (recipientLoadRequestRef.current !== requestId) return;
+        if (!usableSession) {
+          setRecipients([]);
+          setRecipientError("Sign in to start a direct message.");
+          return;
+        }
+        const rows = await listCloudEligibleDirectMessageRecipientsForViewer({
+          session: usableSession,
           search: searchValue,
           limit: 20,
         });
@@ -353,7 +390,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         setIsLoadingRecipients(false);
       }
     },
-    [session],
+    [ensureSession, session],
   );
 
   useEffect(() => {
@@ -401,8 +438,17 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       readMarkSeqByConversationRef.current[normalizedConversationId] = seq;
 
       try {
-        const updatedConversation = await markCloudDirectConversationRead({
+        const usableSession = await resolveDirectMessageSession(
           session,
+          ensureSession,
+          "direct_messages_mark_read",
+        );
+        if (!usableSession) {
+          readMarkSeqByConversationRef.current[normalizedConversationId] = previousSeq;
+          return;
+        }
+        const updatedConversation = await markCloudDirectConversationRead({
+          session: usableSession,
           conversationId: normalizedConversationId,
         });
         readMarkSeqByConversationRef.current[normalizedConversationId] = Math.max(
@@ -426,7 +472,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         readMarkSeqByConversationRef.current[normalizedConversationId] = previousSeq;
       }
     },
-    [session],
+    [ensureSession, session],
   );
 
   useEffect(() => {
@@ -444,29 +490,49 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     setIsLoadingInbox(true);
     setInboxError(null);
 
-    try {
-      liveClient = createCloudDirectMessagesLiveClient({ session });
-      unsubscribe = subscribeCloudDirectConversations<DirectMessageConversation>({
-        liveClient,
-        limit: 30,
-        onUpdate: (rows) => {
-          if (isDisposed) return;
-          setConversations(rows);
+    void (async () => {
+      try {
+        const usableSession = await resolveDirectMessageSession(
+          session,
+          ensureSession,
+          "direct_messages_live_inbox",
+        );
+        if (isDisposed) return;
+        if (!usableSession) {
+          hasInboxLiveSubscriptionRef.current = false;
+          setConversations([]);
           setIsLoadingInbox(false);
           setInboxError(null);
-        },
-        onError: (error) => {
-          if (isDisposed) return;
-          setIsLoadingInbox(false);
-          setInboxError(toErrorMessage(error, "Failed to load direct messages."));
-        },
-      });
-    } catch (error) {
-      hasInboxLiveSubscriptionRef.current = false;
-      setIsLoadingInbox(false);
-      setInboxError(toErrorMessage(error, "Failed to load direct messages."));
-      void loadInbox();
-    }
+          return;
+        }
+        liveClient = createCloudDirectMessagesLiveClient({ session: usableSession });
+        if (isDisposed) {
+          liveClient.close();
+          return;
+        }
+        unsubscribe = subscribeCloudDirectConversations<DirectMessageConversation>({
+          liveClient,
+          limit: 30,
+          onUpdate: (rows) => {
+            if (isDisposed) return;
+            setConversations(rows);
+            setIsLoadingInbox(false);
+            setInboxError(null);
+          },
+          onError: (error) => {
+            if (isDisposed) return;
+            setIsLoadingInbox(false);
+            setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+          },
+        });
+      } catch (error) {
+        if (isDisposed) return;
+        hasInboxLiveSubscriptionRef.current = false;
+        setIsLoadingInbox(false);
+        setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+        void loadInbox();
+      }
+    })();
 
     return () => {
       isDisposed = true;
@@ -474,7 +540,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       unsubscribe();
       liveClient?.close();
     };
-  }, [loadInbox, session]);
+  }, [ensureSession, loadInbox, session]);
 
   useEffect(() => {
     if (!isOpen || !openRequest) return;
@@ -496,11 +562,19 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     setInboxError(null);
     setIsLoadingInbox(true);
 
-    void ensureCloudDirectConversationFromCommunity({
-      session,
-      targetUserId,
-      communityId,
-    })
+    void (async () => {
+      const usableSession = await resolveDirectMessageSession(
+        session,
+        ensureSession,
+        "direct_messages_open_from_community",
+      );
+      if (!usableSession) throw new Error("Sign in to open direct messages.");
+      return ensureCloudDirectConversationFromCommunity({
+        session: usableSession,
+        targetUserId,
+        communityId,
+      });
+    })()
       .then((conversation) => {
         if (isDisposed || directMessageOpenRequestRef.current !== requestId) return;
         setInboxError(null);
@@ -526,7 +600,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     return () => {
       isDisposed = true;
     };
-  }, [isOpen, markConversationRead, openRequest, session]);
+  }, [ensureSession, isOpen, markConversationRead, openRequest, session]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -551,56 +625,81 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     let unsubscribe = () => {};
     let liveClient: ReturnType<typeof createCloudDirectMessagesLiveClient> | null = null;
 
-    try {
-      liveClient = createCloudDirectMessagesLiveClient({ session });
-      unsubscribe = subscribeCloudDirectMessages<DirectMessage>({
-        liveClient,
-        conversationId: activeConversationId,
-        limit: 100,
-        onUpdate: (messages) => {
-          if (isDisposed) return;
-          setDirectMessagePanel((previous) =>
-            previous?.conversation.id === activeConversationId
-              ? {
-                  ...previous,
-                  messages,
-                  isLoading: false,
-                  error: null,
-                }
-              : previous,
-          );
-        },
-        onError: (error) => {
-          if (isDisposed) return;
+    void (async () => {
+      try {
+        const usableSession = await resolveDirectMessageSession(
+          session,
+          ensureSession,
+          "direct_messages_live_messages",
+        );
+        if (isDisposed) return;
+        if (!usableSession) {
           setDirectMessagePanel((previous) =>
             previous?.conversation.id === activeConversationId
               ? {
                   ...previous,
                   isLoading: false,
-                  error: toErrorMessage(error, "Failed to load direct messages."),
+                  error: "Sign in to view direct messages.",
                 }
               : previous,
           );
-        },
-      });
-    } catch (error) {
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === activeConversationId
-          ? {
-              ...previous,
-              isLoading: false,
-              error: toErrorMessage(error, "Failed to load direct messages."),
-            }
-          : previous,
-      );
-    }
+          return;
+        }
+        liveClient = createCloudDirectMessagesLiveClient({ session: usableSession });
+        if (isDisposed) {
+          liveClient.close();
+          return;
+        }
+        unsubscribe = subscribeCloudDirectMessages<DirectMessage>({
+          liveClient,
+          conversationId: activeConversationId,
+          limit: 100,
+          onUpdate: (messages) => {
+            if (isDisposed) return;
+            setDirectMessagePanel((previous) =>
+              previous?.conversation.id === activeConversationId
+                ? {
+                    ...previous,
+                    messages,
+                    isLoading: false,
+                    error: null,
+                  }
+                : previous,
+            );
+          },
+          onError: (error) => {
+            if (isDisposed) return;
+            setDirectMessagePanel((previous) =>
+              previous?.conversation.id === activeConversationId
+                ? {
+                    ...previous,
+                    isLoading: false,
+                    error: toErrorMessage(error, "Failed to load direct messages."),
+                  }
+                : previous,
+            );
+          },
+        });
+      } catch (error) {
+        if (isDisposed) return;
+        setDirectMessagePanel((previous) =>
+          previous?.conversation.id === activeConversationId
+            ? {
+                ...previous,
+                isLoading: false,
+                error: toErrorMessage(error, "Failed to load direct messages."),
+              }
+            : previous,
+        );
+      }
+    })();
 
     return () => {
       isDisposed = true;
       unsubscribe();
       liveClient?.close();
     };
-  }, [activeConversationId, isOpen, session]);
+  }, [activeConversationId, ensureSession, isOpen, session]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -670,8 +769,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setRecipientError(null);
       setIsLoadingRecipients(true);
       try {
-        const conversation = await ensureCloudDirectConversationFromCommunity({
+        const usableSession = await resolveDirectMessageSession(
           session,
+          ensureSession,
+          "direct_messages_start_conversation",
+        );
+        if (!usableSession) throw new Error("Sign in to open direct messages.");
+        const conversation = await ensureCloudDirectConversationFromCommunity({
+          session: usableSession,
           targetUserId,
           communityId,
         });
@@ -696,7 +801,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         setIsLoadingRecipients(false);
       }
     },
-    [markConversationRead, session],
+    [ensureSession, markConversationRead, session],
   );
 
   const uploadDirectAttachmentDraft = useCallback(
@@ -767,8 +872,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           : previous,
       );
       try {
-        const storageId = await uploadCloudDirectMessageAttachmentFile({
+        const usableSession = await resolveDirectMessageSession(
           session,
+          ensureSession,
+          "direct_messages_upload_attachment",
+        );
+        if (!usableSession) throw new Error("Sign in to upload attachments.");
+        const storageId = await uploadCloudDirectMessageAttachmentFile({
+          session: usableSession,
           conversationId,
           file: attachment.file,
         });
@@ -812,7 +923,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [session],
+    [ensureSession, session],
   );
 
   const sendDirectMessage = useCallback(async () => {
@@ -841,9 +952,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         : previous,
     );
     try {
+      const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_send");
+      if (!usableSession) throw new Error("Sign in to send direct messages.");
       const serializedAttachments = serializeDirectAttachmentsForWrite(attachmentsToSend);
       await sendCloudDirectMessage({
-        session,
+        session: usableSession,
         conversationId: current.conversation.id,
         text,
         attachments: serializedAttachments,
@@ -872,7 +985,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           : previous,
       );
     }
-  }, [clearDirectTypingForConversation, directMessagePanel, session]);
+  }, [clearDirectTypingForConversation, directMessagePanel, ensureSession, session]);
 
   const handleDirectAttachmentFilesSelected = useCallback(
     async (files: DirectMessageAttachmentFileInput) => {
