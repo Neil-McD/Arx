@@ -588,6 +588,24 @@ function mapLaunchCommunityCreateError(error: unknown): string {
   return message;
 }
 
+function isTransportRefreshError(error: unknown): boolean {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : String(error ?? "");
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized === "failed to fetch" ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("network error") ||
+    normalized.includes("load failed") ||
+    normalized.includes("fetch failed")
+  );
+}
+
 const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES = 75;
 const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH = 3;
 const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS = 5;
@@ -6291,8 +6309,13 @@ export default function App() {
               ? error.message
               : "Failed to load Builder Partner status.";
         if (requestId === builderPartnerProgramLoadRequestIdRef.current) {
-          setBuilderPartnerProgramError(message);
-          setBuilderPartnerProgram(null);
+          if (isTransportRefreshError(error)) {
+            console.warn("Builder Partner Program refresh failed:", error);
+            setBuilderPartnerProgramError(null);
+          } else {
+            setBuilderPartnerProgramError(message);
+            setBuilderPartnerProgram(null);
+          }
         }
         return null;
       } finally {

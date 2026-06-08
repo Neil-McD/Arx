@@ -591,6 +591,16 @@ function provePartnerRightPanelContract(
   );
   assertIncludes(
     appSource,
+    "isTransportRefreshError(error)",
+    "Partner Program refresh must recognize raw transport failures",
+  );
+  assertIncludes(
+    appSource,
+    "Builder Partner Program refresh failed:",
+    "Partner Program transport refresh failures must be logged instead of shown as account errors",
+  );
+  assertIncludes(
+    appSource,
     "builderPartnerProgramPanel: builderPartnerProgramPanelProps",
     "App shell must pass the existing partner snapshot/actions into the workspace right panel",
   );
