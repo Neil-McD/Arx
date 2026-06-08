@@ -8,10 +8,10 @@ import {
   destroyBlaxelWorkspaceComputer,
   ensureBlaxelWorkspaceComputer,
   executeBlaxelWorkspaceCommand,
+  prepareBlaxelWorkspaceBridgeFiles,
   readBlaxelWorkspaceFile,
   readBlaxelWorkspaceProcess,
   stopBlaxelWorkspaceProcess,
-  writeBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
   destroyBlaxelWorkspaceVolume,
@@ -687,16 +687,38 @@ export const runBlaxelCodexRuntimeTurn = action({
       sandboxStartedAt = sandboxStartRequestedAt;
       workspaceRoot = ensured.workspaceRoot;
 
-      const bridgePath = `${workspaceRoot}/${bridgeDir}`;
       const bridgeFilesStartedAt = Date.now();
-      const prepareDir = await executeBlaxelWorkspaceCommand({
+      const authPayloadContent = `${JSON.stringify(buildCodexBlaxelExternalAuthPayload({
+        accessToken: auth.accessToken,
+        chatgptAccountId,
+        chatgptPlanType: null,
+      }))}\n`;
+      const runtimePayloadContent = `${JSON.stringify({
+        runId,
+        bridgeToken: token.token,
+        eventUrl,
+        finishUrl,
+        prompt,
+        developerInstructions,
+        modelId,
+      })}\n`;
+      const bridgePrep = await prepareBlaxelWorkspaceBridgeFiles({
         sandboxName: names.sandboxName,
-        cwd: ".",
-        command: `bash -lc ${shellQuote(`mkdir -p ${shellQuote(bridgePath)} && chmod 700 ${shellQuote(bridgePath)}`)}`,
-        waitForCompletion: true,
-        timeoutSeconds: 30,
+        bridgeDir,
+        files: [
+          {
+            label: "auth_payload",
+            path: authPayloadPath,
+            content: authPayloadContent,
+          },
+          {
+            label: "runtime_payload",
+            path: runtimePayloadPath,
+            content: runtimePayloadContent,
+          },
+        ],
       });
-      if (!prepareDir.ok || prepareDir.exitCode !== 0) {
+      if (!bridgePrep.ok) {
         queueCodexRuntimePhaseEvent({
           eventType: "codex_bridge_files_prepared",
           eventKey: "codex_bridge_files_prepared",
@@ -706,37 +728,57 @@ export const runBlaxelCodexRuntimeTurn = action({
           payload: {
             ok: false,
             sandbox_name: names.sandboxName,
-            exit_code: prepareDir.ok ? prepareDir.exitCode ?? null : null,
+            failure_code: bridgePrep.code || null,
           },
         });
-        throw new Error("bridge_directory_prepare_failed");
+        throw new Error(`bridge_files_prepare_failed:${bridgePrep.code || bridgePrep.message}`);
       }
 
-      const authPayloadWrite = await writeBlaxelWorkspaceFile({
-        sandboxName: names.sandboxName,
-        path: authPayloadPath,
-        content: `${JSON.stringify(buildCodexBlaxelExternalAuthPayload({
-          accessToken: auth.accessToken,
-          chatgptAccountId,
-          chatgptPlanType: null,
-        }))}\n`,
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_bridge_dir_prepare_completed",
+        eventKey: "codex_bridge_dir_prepare_completed",
+        phase: "bridge_dir_prepare",
+        startedAt: bridgePrep.directoryPrepareStartedAt,
+        endedAt: bridgePrep.directoryPrepareCompletedAt,
+        payload: {
+          ok: true,
+          sandbox_name: names.sandboxName,
+          bridge_dir: bridgeDir,
+          directory_mode_applied: bridgePrep.directoryModeApplied,
+          directory_mode_method: bridgePrep.directoryModeMethod,
+          chmod_provider_command_id: bridgePrep.chmodProviderCommandId,
+        },
       });
-      if (!authPayloadWrite.ok) throw new Error(`auth_payload_write_failed:${authPayloadWrite.code}`);
-
-      const runtimePayloadWrite = await writeBlaxelWorkspaceFile({
-        sandboxName: names.sandboxName,
-        path: runtimePayloadPath,
-        content: `${JSON.stringify({
-          runId,
-          bridgeToken: token.token,
-          eventUrl,
-          finishUrl,
-          prompt,
-          developerInstructions,
-          modelId,
-        })}\n`,
-      });
-      if (!runtimePayloadWrite.ok) throw new Error(`runtime_payload_write_failed:${runtimePayloadWrite.code}`);
+      const authPayloadWrite = bridgePrep.files.find((file) => file.label === "auth_payload");
+      if (authPayloadWrite) {
+        queueCodexRuntimePhaseEvent({
+          eventType: "codex_bridge_auth_payload_write_completed",
+          eventKey: "codex_bridge_auth_payload_write_completed",
+          phase: "bridge_auth_payload_write",
+          startedAt: authPayloadWrite.writeStartedAt,
+          endedAt: authPayloadWrite.writeCompletedAt,
+          payload: {
+            ok: true,
+            sandbox_name: names.sandboxName,
+            bytes: authPayloadWrite.bytes,
+          },
+        });
+      }
+      const runtimePayloadWrite = bridgePrep.files.find((file) => file.label === "runtime_payload");
+      if (runtimePayloadWrite) {
+        queueCodexRuntimePhaseEvent({
+          eventType: "codex_bridge_runtime_payload_write_completed",
+          eventKey: "codex_bridge_runtime_payload_write_completed",
+          phase: "bridge_runtime_payload_write",
+          startedAt: runtimePayloadWrite.writeStartedAt,
+          endedAt: runtimePayloadWrite.writeCompletedAt,
+          payload: {
+            ok: true,
+            sandbox_name: names.sandboxName,
+            bytes: runtimePayloadWrite.bytes,
+          },
+        });
+      }
       queueCodexRuntimePhaseEvent({
         eventType: "codex_bridge_files_prepared",
         eventKey: "codex_bridge_files_prepared",
@@ -747,8 +789,10 @@ export const runBlaxelCodexRuntimeTurn = action({
           ok: true,
           sandbox_name: names.sandboxName,
           bridge_dir: bridgeDir,
-          auth_payload_written: true,
-          runtime_payload_written: true,
+          auth_payload_written: Boolean(authPayloadWrite),
+          runtime_payload_written: Boolean(runtimePayloadWrite),
+          provider_sandbox_id: bridgePrep.providerSandboxId,
+          directory_mode_method: bridgePrep.directoryModeMethod,
         },
       });
 

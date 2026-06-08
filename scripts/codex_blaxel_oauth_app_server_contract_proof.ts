@@ -70,8 +70,8 @@ assertContains(
 );
 assertContains(
   runtimeAction,
-  "writeBlaxelWorkspaceFile",
-  "Runtime action must write short-lived auth/runtime payloads through the workspace file API.",
+  "prepareBlaxelWorkspaceBridgeFiles",
+  "Runtime action must write short-lived auth/runtime payloads through the bundled workspace bridge prep API.",
 );
 assertContains(
   runtimeAction,

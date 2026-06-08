@@ -5,12 +5,14 @@ import {
   getBlaxelWorkspacePreviewUrl as getBlaxelWorkspaceClientPreviewUrl,
   inspectBlaxelWorkspaceSandbox,
   listBlaxelWorkspaceDirectory as listBlaxelWorkspaceClientDirectory,
+  prepareBlaxelWorkspaceBridgeFiles as prepareBlaxelWorkspaceClientBridgeFiles,
   readBlaxelWorkspaceProcess as readBlaxelWorkspaceClientProcess,
   readBlaxelWorkspaceFile as readBlaxelWorkspaceClientFile,
   releaseBlaxelWorkspaceSandboxIfIdle,
   resolveBlaxelWorkspaceSandboxIfReady,
   stopBlaxelWorkspaceProcess as stopBlaxelWorkspaceClientProcess,
   writeBlaxelWorkspaceFile as writeBlaxelWorkspaceClientFile,
+  type BlaxelWorkspaceBridgeFileSpec,
   type BlaxelWorkspaceCommandSpec,
   type BlaxelWorkspaceSandboxSpec,
 } from "./blaxelWorkspaceClient.ts";
@@ -103,6 +105,16 @@ export async function writeBlaxelWorkspaceFile(
   },
 ) {
   return await writeBlaxelWorkspaceClientFile(params);
+}
+
+export async function prepareBlaxelWorkspaceBridgeFiles(
+  params: {
+    sandboxName: string;
+    bridgeDir: string;
+    files: BlaxelWorkspaceBridgeFileSpec[];
+  },
+) {
+  return await prepareBlaxelWorkspaceClientBridgeFiles(params);
 }
 
 export async function getBlaxelWorkspacePreviewUrl(

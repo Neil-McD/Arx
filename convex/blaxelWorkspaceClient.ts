@@ -96,6 +96,36 @@ export type BlaxelWorkspaceCommandResult =
     }
   | WorkspaceComputerProviderFailure;
 
+export type BlaxelWorkspaceBridgeFileSpec = {
+  label?: string | null;
+  path: string;
+  content: string;
+};
+
+export type BlaxelWorkspaceBridgeFilesPreparationResult =
+  | {
+      ok: true;
+      providerId: "blaxel";
+      providerSandboxId: string;
+      bridgeDir: string;
+      bridgePath: string;
+      directoryModeApplied: true;
+      directoryModeMethod: "sdk" | "process";
+      directoryPrepareStartedAt: number;
+      directoryPrepareCompletedAt: number;
+      chmodStartedAt: number;
+      chmodCompletedAt: number;
+      chmodProviderCommandId: string | null;
+      files: Array<{
+        label: string | null;
+        path: string;
+        bytes: number;
+        writeStartedAt: number;
+        writeCompletedAt: number;
+      }>;
+    }
+  | WorkspaceComputerProviderFailure;
+
 export type BlaxelWorkspaceProcessResult =
   | {
       ok: true;
@@ -626,6 +656,26 @@ async function ensureBlaxelWorkspaceRootDirectory(
     if (!isAlreadyExistsError(error)) {
       // Best effort. Some mounted volumes already exist but do not report mkdir
       // idempotently through the SDK.
+    }
+  }
+}
+
+async function ensureBlaxelWorkspaceDirectoryPath(
+  sandbox: any,
+  workspaceRoot: string,
+  directoryPath: string,
+) {
+  const root = normalizeWorkspaceRoot(workspaceRoot);
+  const normalizedDirectory = normalizeBlaxelWorkspacePath(directoryPath, root);
+  if (normalizedDirectory === root) return;
+  const relativePath = normalizedDirectory.slice(root.length).replace(/^\/+/, "");
+  let currentPath = root;
+  for (const segment of relativePath.split("/").filter(Boolean)) {
+    currentPath = `${currentPath}/${segment}`;
+    try {
+      await sandbox.fs.mkdir(currentPath);
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) throw error;
     }
   }
 }
@@ -1783,6 +1833,111 @@ export async function writeBlaxelWorkspaceFile(params: {
       providerId: "blaxel",
       providerSandboxId: resolved.providerSandboxId,
       path: guardedFile.path,
+    };
+  } catch (error) {
+    return classifyBlaxelError(error);
+  }
+}
+
+export async function prepareBlaxelWorkspaceBridgeFiles(params: {
+  sandboxName: string;
+  bridgeDir: string;
+  files: BlaxelWorkspaceBridgeFileSpec[];
+}): Promise<BlaxelWorkspaceBridgeFilesPreparationResult> {
+  if (!Array.isArray(params.files) || params.files.length === 0) {
+    return failure({
+      status: 400,
+      code: "bridge_files_missing",
+      message: "At least one bridge file is required.",
+    });
+  }
+  const resolved = await resolveBlaxelWorkspaceSandboxIfReady({
+    sandboxName: params.sandboxName,
+  });
+  if (resolved.ok === false) return resolved;
+  const loadedCore = await loadBlaxelCore();
+  if (loadedCore.ok === false) return loadedCore;
+  let bridgePath: string;
+  let normalizedFiles: Array<BlaxelWorkspaceBridgeFileSpec & { normalizedPath: string }>;
+  try {
+    bridgePath = normalizeBlaxelWorkspacePath(params.bridgeDir, resolved.workspaceRoot);
+    const bridgePrefix = `${bridgePath}/`;
+    normalizedFiles = params.files.map((file) => {
+      const normalizedPath = normalizeBlaxelWorkspacePath(file.path, resolved.workspaceRoot);
+      if (!normalizedPath.startsWith(bridgePrefix)) {
+        throw new Error("workspace_path_outside_root");
+      }
+      return { ...file, normalizedPath };
+    });
+  } catch {
+    return invalidWorkspacePathFailure();
+  }
+  try {
+    const sandbox = await loadedCore.mod.SandboxInstance.get(params.sandboxName);
+    const providerSandboxId = resolved.providerSandboxId;
+    const directoryPrepareStartedAt = Date.now();
+    await ensureBlaxelWorkspaceDirectoryPath(sandbox, resolved.workspaceRoot, bridgePath);
+    let directoryModeMethod: "sdk" | "process" = "process";
+    let chmodProviderCommandId: string | null = null;
+    const chmodStartedAt = Date.now();
+    const sandboxFs = sandbox.fs as { chmod?: (path: string, mode: string) => Promise<unknown> };
+    const sdkChmod = typeof sandboxFs.chmod === "function" ? sandboxFs.chmod.bind(sandbox.fs) : null;
+    if (sdkChmod) {
+      try {
+        await sdkChmod(bridgePath, "700");
+        directoryModeMethod = "sdk";
+      } catch {
+        directoryModeMethod = "process";
+      }
+    }
+    if (directoryModeMethod === "process") {
+      const processName = `polynet-bridge-chmod-${crypto.randomUUID().slice(0, 8)}`;
+      const chmodResult = await sandbox.process.exec({
+        name: processName,
+        command: `bash -lc ${shellQuote(`chmod 700 ${shellQuote(bridgePath)}`)}`,
+        waitForCompletion: true,
+        timeout: 15,
+      });
+      chmodProviderCommandId = commandIdFrom(chmodResult, processName);
+      if (exitCodeFrom(chmodResult) !== 0) {
+        return failure({
+          status: 500,
+          code: "bridge_directory_chmod_failed",
+          message: "Bridge directory permissions could not be applied.",
+          details: {
+            status: statusFrom(chmodResult),
+            exitCode: exitCodeFrom(chmodResult),
+          },
+        });
+      }
+    }
+    const directoryPrepareCompletedAt = Date.now();
+    const files = await Promise.all(normalizedFiles.map(async (file) => {
+      const writeStartedAt = Date.now();
+      await sandbox.fs.write(file.normalizedPath, file.content);
+      const writeCompletedAt = Date.now();
+      return {
+        label: normalizeOptionalString(file.label) ?? null,
+        path: file.normalizedPath,
+        bytes: Buffer.byteLength(file.content, "utf8"),
+        writeStartedAt,
+        writeCompletedAt,
+      };
+    }));
+    return {
+      ok: true,
+      providerId: "blaxel",
+      providerSandboxId,
+      bridgeDir: params.bridgeDir,
+      bridgePath,
+      directoryModeApplied: true,
+      directoryModeMethod,
+      directoryPrepareStartedAt,
+      directoryPrepareCompletedAt,
+      chmodStartedAt,
+      chmodCompletedAt: directoryPrepareCompletedAt,
+      chmodProviderCommandId,
+      files,
     };
   } catch (error) {
     return classifyBlaxelError(error);

@@ -40,6 +40,7 @@ import type * as businessAnalyticsCore from "../businessAnalyticsCore.js";
 import type * as chatgptAuth from "../chatgptAuth.js";
 import type * as chatgptResponsesTransport from "../chatgptResponsesTransport.js";
 import type * as codexBlaxelAppServerBridge from "../codexBlaxelAppServerBridge.js";
+import type * as codexBlaxelRuntimeLatencyProbe from "../codexBlaxelRuntimeLatencyProbe.js";
 import type * as codexBridgeToken from "../codexBridgeToken.js";
 import type * as community from "../community.js";
 import type * as communityAccessAudit from "../communityAccessAudit.js";
@@ -218,6 +219,7 @@ declare const fullApi: ApiFromModules<{
   chatgptAuth: typeof chatgptAuth;
   chatgptResponsesTransport: typeof chatgptResponsesTransport;
   codexBlaxelAppServerBridge: typeof codexBlaxelAppServerBridge;
+  codexBlaxelRuntimeLatencyProbe: typeof codexBlaxelRuntimeLatencyProbe;
   codexBridgeToken: typeof codexBridgeToken;
   community: typeof community;
   communityAccessAudit: typeof communityAccessAudit;

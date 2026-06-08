@@ -8,6 +8,7 @@ type RuntimeEvent = {
   seq: number;
   eventType: string;
   createdAt: number;
+  payload?: Record<string, unknown> | null;
 };
 
 type ProbeResult = {
@@ -102,86 +103,6 @@ function readUiTiming(argv: string[]): UiTiming | null {
   return raw.trim() ? (JSON.parse(raw) as UiTiming) : null;
 }
 
-function buildQuery(params: { threadKey?: string; runId?: string }) {
-  return `
-const params = ${JSON.stringify(params)};
-let thread = null;
-let run = null;
-
-if (params.threadKey) {
-  const threads = await ctx.db
-    .query("threads")
-    .filter((q) => q.eq(q.field("threadKey"), params.threadKey))
-    .take(2);
-  thread = threads[0] || null;
-  if (thread) {
-    const runs = await ctx.db
-      .query("runtimeRuns")
-      .withIndex("by_thread_startedAt", (q) => q.eq("threadId", thread._id))
-      .order("desc")
-      .take(20);
-    run = params.runId
-      ? runs.find((row) => row.runId === params.runId) || null
-      : runs.find((row) => row.runId === thread.latestUserVisibleCompletedRunId) || runs[0] || null;
-  }
-}
-
-if (!run && params.runId) {
-  const runs = await ctx.db
-    .query("runtimeRuns")
-    .filter((q) => q.eq(q.field("runId"), params.runId))
-    .take(2);
-  run = runs[0] || null;
-  if (run && !thread) thread = await ctx.db.get(run.threadId);
-}
-
-if (!thread && params.threadKey) return { ok: false, reason: "thread_not_found" };
-if (!run) return { ok: false, reason: "runtime_run_not_found" };
-
-const events = await ctx.db
-  .query("runtimeRunEvents")
-  .withIndex("by_thread_run_seq", (q) => q.eq("threadId", run.threadId).eq("runId", run.runId))
-  .order("asc")
-  .take(500);
-
-const providerCost = await ctx.db
-  .query("providerCostEntries")
-  .withIndex("by_costKey", (q) => q.eq("costKey", "codex_blaxel_runtime:" + run.runId + ":provider_cost"))
-  .unique();
-
-return {
-  ok: true,
-  thread: thread ? {
-    threadKey: thread.threadKey || null,
-    latestUserVisibleCompletedRunId: thread.latestUserVisibleCompletedRunId || null,
-  } : null,
-  run: {
-    runId: run.runId,
-    status: run.status,
-    modelId: run.modelId || null,
-    engineId: run.engineId || null,
-    executionMode: run.executionMode || null,
-    sandboxMode: run.sandboxMode || null,
-    harnessProfile: run.harnessProfile || null,
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt || null,
-  },
-  events: events.map((event) => ({
-    seq: event.seq,
-    eventType: event.eventType,
-    createdAt: event.createdAt,
-  })),
-  providerCost: providerCost ? {
-    costKey: providerCost.costKey,
-    component: providerCost.component,
-    billingDisposition: providerCost.billingDisposition,
-    rawVendorCostUsd: providerCost.rawVendorCostUsd,
-    metadata: providerCost.metadata || null,
-  } : null,
-};
-`;
-}
-
 function runConvexQuery(threadKey: string, runId: string): ProbeResult {
   const deployment = String(process.env.CONVEX_DEPLOYMENT ?? "").trim();
   if (deployment !== EXPECTED_CONVEX_DEPLOYMENT) {
@@ -193,14 +114,14 @@ function runConvexQuery(threadKey: string, runId: string): ProbeResult {
     [
       "convex",
       "run",
-      "--deployment",
+      "--deployment-name",
       deployment.replace(/^dev:/, ""),
       "--typecheck",
       "disable",
       "--codegen",
       "disable",
-      "--inline-query",
-      buildQuery({ threadKey: threadKey || undefined, runId: runId || undefined }),
+      "codexBlaxelRuntimeLatencyProbe:getCodexBlaxelRuntimeLatencyProbeDataInternal",
+      JSON.stringify({ threadKey: threadKey || undefined, runId: runId || undefined }),
     ],
     { cwd: process.cwd(), encoding: "utf8", env: process.env },
   );
@@ -219,6 +140,11 @@ function first(events: RuntimeEvent[], eventType: string): number | null {
 
 function last(events: RuntimeEvent[], eventType: string): number | null {
   return [...events].reverse().find((event) => event.eventType === eventType)?.createdAt ?? null;
+}
+
+function payloadFor(events: RuntimeEvent[], eventType: string): Record<string, unknown> | null {
+  const payload = events.find((event) => event.eventType === eventType)?.payload;
+  return payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null;
 }
 
 function numberValue(value: unknown): number | null {
@@ -248,6 +174,16 @@ function phase(name: string, start: number | null, end: number | null, source: s
   };
 }
 
+function payloadDurationPhase(name: string, events: RuntimeEvent[], eventType: string) {
+  const durationMs = numberValue(payloadFor(events, eventType)?.phase_duration_ms);
+  return {
+    name,
+    durationMs,
+    status: durationMs !== null ? "ok" : "missing",
+    source: "convex_event_payload",
+  };
+}
+
 function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -272,6 +208,10 @@ function main() {
     runStarted: first(events, "run_started") ?? run.startedAt,
     sandboxEnsureStarted: first(events, "codex_sandbox_ensure_started"),
     sandboxEnsureCompleted: first(events, "codex_sandbox_ensure_completed"),
+    bridgeDirPrepareCompleted: first(events, "codex_bridge_dir_prepare_completed"),
+    bridgeAuthPayloadWriteCompleted: first(events, "codex_bridge_auth_payload_write_completed"),
+    bridgeRuntimePayloadWriteCompleted: first(events, "codex_bridge_runtime_payload_write_completed"),
+    bridgeFilesPrepared: first(events, "codex_bridge_files_prepared"),
     appServerLaunchRequested: first(events, "codex_app_server_launch_requested"),
     bridgeStarted: first(events, "codex_app_server_runtime_bridge_started"),
     appServerInitialized: first(events, "codex_app_server_initialized"),
@@ -310,6 +250,12 @@ function main() {
   const phases = [
     phase("run_started_to_sandbox_ensure_start", marks.runStarted, marks.sandboxEnsureStarted, "convex"),
     phase("sandbox_ensure", marks.sandboxEnsureStarted, marks.sandboxEnsureCompleted, "convex"),
+    phase("sandbox_done_to_bridge_files_prepared", marks.sandboxEnsureCompleted, marks.bridgeFilesPrepared, "convex"),
+    payloadDurationPhase("bridge_dir_prepare", events, "codex_bridge_dir_prepare_completed"),
+    payloadDurationPhase("bridge_auth_payload_write", events, "codex_bridge_auth_payload_write_completed"),
+    payloadDurationPhase("bridge_runtime_payload_write", events, "codex_bridge_runtime_payload_write_completed"),
+    payloadDurationPhase("bridge_files_prepared", events, "codex_bridge_files_prepared"),
+    phase("bridge_files_prepared_to_app_server_launch", marks.bridgeFilesPrepared, marks.appServerLaunchRequested, "convex"),
     phase("app_server_launch_to_bridge_started", marks.appServerLaunchRequested, marks.bridgeStarted, "convex"),
     phase("bridge_started_to_app_server_initialized", marks.bridgeStarted, marks.appServerInitialized, "convex"),
     phase("codex_auth_login_to_account_read", marks.accountLoginSucceeded, marks.accountReadSucceeded, "convex"),
