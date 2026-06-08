@@ -106,6 +106,7 @@ import type * as httpAuthBridge from "../httpAuthBridge.js";
 import type * as httpBilling from "../httpBilling.js";
 import type * as httpChatgpt from "../httpChatgpt.js";
 import type * as httpCodexBridge from "../httpCodexBridge.js";
+import type * as httpCodexRunEventsStream from "../httpCodexRunEventsStream.js";
 import type * as httpCommunitySourceIntegrations from "../httpCommunitySourceIntegrations.js";
 import type * as httpContext from "../httpContext.js";
 import type * as httpEmail from "../httpEmail.js";
@@ -283,6 +284,7 @@ declare const fullApi: ApiFromModules<{
   httpBilling: typeof httpBilling;
   httpChatgpt: typeof httpChatgpt;
   httpCodexBridge: typeof httpCodexBridge;
+  httpCodexRunEventsStream: typeof httpCodexRunEventsStream;
   httpCommunitySourceIntegrations: typeof httpCommunitySourceIntegrations;
   httpContext: typeof httpContext;
   httpEmail: typeof httpEmail;

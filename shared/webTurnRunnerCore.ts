@@ -45,6 +45,18 @@ export type ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvi
   streamTransport?: "sse" | "recovery";
   runtimeEvents?: ThreadStreamingRuntimeEvent[];
   lastRuntimeEventSeq?: number;
+  streamTelemetry?: {
+    startedAtMs?: number;
+    sseStartedAtMs?: number;
+    firstDeltaReceivedAtMs?: number;
+    lastDeltaReceivedAtMs?: number;
+    firstDisplayPaintAtMs?: number;
+    lastDisplayPaintAtMs?: number;
+    targetChars?: number;
+    displayedChars?: number;
+    pendingChars?: number;
+    fastPaint?: boolean;
+  };
 };
 
 export type UseWebTurnRunnerControllerArgs<

@@ -47,4 +47,6 @@ export type WorkspaceStreamingMessageView = {
   runtimeEvents: ThreadStreamingRuntimeEvent[];
   content: string;
   runId: string | null;
+  modelLabel: string | null;
+  initialStatusLabel: string | null;
 };

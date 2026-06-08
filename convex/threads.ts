@@ -2303,6 +2303,7 @@ async function appendRuntimeRunEventByBridgeClaims(args: {
     ownerId: args.ownerId,
     runId,
   });
+  if (!run) throw new Error("runtime_run_not_found");
   assertRuntimeRunMatchesBridgeClaims({
     run,
     thread,
@@ -2475,6 +2476,7 @@ export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
       ownerId: args.ownerId,
       runId,
     });
+    if (!run) throw new Error("runtime_run_not_found");
     assertRuntimeRunMatchesBridgeClaims({
       run,
       thread,

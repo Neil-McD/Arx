@@ -44,6 +44,8 @@ export const DEFAULT_WORKSPACE_TOOL_BALANCE_TOPUP_PACK_ID: WorkspaceToolBalanceT
 export const WEB_RESEARCH_CREDITS_PER_CALL = 1;
 export const PAID_TOOL_TARGET_GROSS_MARGIN_BPS = 6000;
 export const PAID_TOOL_PRICING_VERSION = "paid_tools_v1";
+export const CODEX_BLAXEL_RUNTIME_PRICING_POLICY = "codex_blaxel_runtime_v1";
+export const CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER = 1.6;
 export const WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION = {
   search: 0.005,
   open_page: 0.001,
@@ -182,6 +184,15 @@ export function priceUsdForTargetGrossMargin(params: {
   return rawVendorCostUsd / (1 - marginRate);
 }
 
+export function priceUsdForCostMultiplier(params: {
+  rawVendorCostUsd: number;
+  costMultiplier: number;
+}): number {
+  const rawVendorCostUsd = Math.max(0, Number(params.rawVendorCostUsd) || 0);
+  const costMultiplier = Math.max(0, Number(params.costMultiplier) || 0);
+  return rawVendorCostUsd * costMultiplier;
+}
+
 export function priceUsdToWorkspaceCredits(priceUsd: number): number {
   return ceilCredits(convertUsdToWorkspaceCredits(priceUsd));
 }
@@ -292,6 +303,21 @@ export function priceWorkspaceUsageCredits(params: {
   return priceVendorCostUsdToWorkspaceCredits({
     rawVendorCostUsd: params.computeCostUsd,
   });
+}
+
+export function priceCodexBlaxelRuntimeUsd(params: {
+  rawVendorCostUsd: number;
+}): number {
+  return priceUsdForCostMultiplier({
+    rawVendorCostUsd: params.rawVendorCostUsd,
+    costMultiplier: CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER,
+  });
+}
+
+export function priceCodexBlaxelRuntimeCredits(params: {
+  rawVendorCostUsd: number;
+}): number {
+  return priceUsdToWorkspaceCredits(priceCodexBlaxelRuntimeUsd(params));
 }
 
 export function creditsToUsd(credits: number): number {

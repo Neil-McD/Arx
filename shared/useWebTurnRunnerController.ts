@@ -5,6 +5,7 @@ import {
   readCloudFunctionError,
 } from "./cloudFunctionErrors";
 import {
+  invokeCloudCodexRunEventsStream,
   invokeCloudPublicTurn,
   invokeCloudRuntimeTurn,
   requireCloudRuntimeBaseUrl,
@@ -52,6 +53,8 @@ import {
   normalizeGuestInferenceError,
 } from "./webTurnRunnerCore";
 import { isRecoverableRuntimeKernelStopReason } from "./runtimeKernelTypes";
+
+type ThreadStreamingTelemetry = NonNullable<ThreadStreamingState<unknown, unknown, unknown>["streamTelemetry"]>;
 
 function normalizePositiveNumber(value: unknown): number | null {
   const parsed = Number(value);
@@ -103,6 +106,9 @@ export function useWebTurnRunnerController<
   const threadStreamingDrainingRefById = useRef<Record<string, boolean>>({});
   const threadStreamingDrainResolversRefById = useRef<Record<string, Array<() => void>>>({});
   const threadStreamingUserCancelledRefById = useRef<Record<string, boolean>>({});
+  const threadStreamingActiveRunIdRefById = useRef<Record<string, string | null>>({});
+  const threadStreamingFastPaintRefById = useRef<Record<string, boolean>>({});
+  const threadStreamingTelemetryRefById = useRef<Record<string, ThreadStreamingTelemetry>>({});
 
   const setThreadStreamingState = useCallback(
     (
@@ -129,6 +135,19 @@ export function useWebTurnRunnerController<
     [],
   );
 
+  const updateThreadStreamingTelemetryRef = useCallback(
+    (
+      threadId: string,
+      updater: (previous: ThreadStreamingTelemetry) => ThreadStreamingTelemetry,
+    ): ThreadStreamingTelemetry => {
+      const previous = threadStreamingTelemetryRefById.current[threadId] ?? {};
+      const streamTelemetry = updater(previous);
+      threadStreamingTelemetryRefById.current[threadId] = streamTelemetry;
+      return streamTelemetry;
+    },
+    [],
+  );
+
   const resolveThreadStreamingDrain = useCallback((threadId: string): void => {
     const resolvers = threadStreamingDrainResolversRefById.current[threadId] ?? [];
     delete threadStreamingDrainResolversRefById.current[threadId];
@@ -136,13 +155,14 @@ export function useWebTurnRunnerController<
   }, []);
 
   const setThreadStreamingDisplayContent = useCallback(
-    (threadId: string, content: string): void => {
+    (threadId: string, content: string, streamTelemetry?: ThreadStreamingTelemetry): void => {
       threadStreamingDisplayContentRefById.current[threadId] = content;
       setThreadStreamingState(threadId, (entry) =>
         entry
           ? {
               ...entry,
               content,
+              streamTelemetry: streamTelemetry ?? entry.streamTelemetry,
               streamTransport: "sse",
             }
           : null,
@@ -158,13 +178,28 @@ export function useWebTurnRunnerController<
         threadStreamingRafRefById.current[threadId] = null;
         const targetContent = getSanitizedTargetContent();
         const currentContent = threadStreamingDisplayContentRefById.current[threadId] ?? "";
-        const nextContent = getNextSmoothStreamingText(currentContent, targetContent, {
-          draining: threadStreamingDrainingRefById.current[threadId] === true,
-          reducedMotion: shouldDisableStreamingSmoothing(),
-        });
+        const fastPaint = threadStreamingFastPaintRefById.current[threadId] === true;
+        const nextContent = fastPaint
+          ? targetContent
+          : getNextSmoothStreamingText(currentContent, targetContent, {
+              draining: threadStreamingDrainingRefById.current[threadId] === true,
+              reducedMotion: shouldDisableStreamingSmoothing(),
+            });
 
         if (nextContent !== currentContent) {
-          setThreadStreamingDisplayContent(threadId, nextContent);
+          const paintedAtMs = Date.now();
+          const previousTelemetry = threadStreamingTelemetryRefById.current[threadId] ?? {};
+          const streamTelemetry: ThreadStreamingTelemetry = {
+            ...previousTelemetry,
+            firstDisplayPaintAtMs: previousTelemetry.firstDisplayPaintAtMs ?? paintedAtMs,
+            lastDisplayPaintAtMs: paintedAtMs,
+            targetChars: targetContent.length,
+            displayedChars: nextContent.length,
+            pendingChars: Math.max(0, targetContent.length - nextContent.length),
+            fastPaint,
+          };
+          threadStreamingTelemetryRefById.current[threadId] = streamTelemetry;
+          setThreadStreamingDisplayContent(threadId, nextContent, streamTelemetry);
         }
 
         if (nextContent !== targetContent) {
@@ -189,10 +224,23 @@ export function useWebTurnRunnerController<
     ): Promise<void> => {
       const targetContent = getSanitizedTargetContent();
       if (
+        threadStreamingFastPaintRefById.current[threadId] === true ||
         shouldDisableStreamingSmoothing() ||
         (threadStreamingDisplayContentRefById.current[threadId] ?? "") === targetContent
       ) {
-        setThreadStreamingDisplayContent(threadId, targetContent);
+        const paintedAtMs = Date.now();
+        const previousTelemetry = threadStreamingTelemetryRefById.current[threadId] ?? {};
+        const streamTelemetry: ThreadStreamingTelemetry = {
+          ...previousTelemetry,
+          firstDisplayPaintAtMs: previousTelemetry.firstDisplayPaintAtMs ?? paintedAtMs,
+          lastDisplayPaintAtMs: paintedAtMs,
+          targetChars: targetContent.length,
+          displayedChars: targetContent.length,
+          pendingChars: 0,
+          fastPaint: threadStreamingFastPaintRefById.current[threadId] === true,
+        };
+        threadStreamingTelemetryRefById.current[threadId] = streamTelemetry;
+        setThreadStreamingDisplayContent(threadId, targetContent, streamTelemetry);
         return;
       }
 
@@ -235,6 +283,9 @@ export function useWebTurnRunnerController<
     delete threadStreamingDisplayContentRefById.current[threadId];
     delete threadStreamingDrainingRefById.current[threadId];
     delete threadStreamingUserCancelledRefById.current[threadId];
+    delete threadStreamingActiveRunIdRefById.current[threadId];
+    delete threadStreamingFastPaintRefById.current[threadId];
+    delete threadStreamingTelemetryRefById.current[threadId];
     if (options?.preserveStreamingState !== true) {
       setThreadStreamingState(threadId, () => null);
     }
@@ -379,6 +430,312 @@ export function useWebTurnRunnerController<
     [],
   );
 
+  const streamCodexRuntimeEvents = useCallback(
+    async (params: {
+      session: SessionT;
+      threadId: string;
+      runId: string | null | undefined;
+      replyToId?: string | null;
+      signal: AbortSignal;
+    }): Promise<void> => {
+      const runId = String(params.runId ?? "").trim();
+      if (!runId) return;
+      const current = argsRef.current;
+      let streamIsStale = false;
+      const isCurrentCodexSseRun = () =>
+        params.signal.aborted !== true &&
+        String(threadStreamingActiveRunIdRefById.current[params.threadId] ?? "").trim() === runId;
+      const shouldStopForStaleRun = () => {
+        if (isCurrentCodexSseRun()) return false;
+        streamIsStale = true;
+        return true;
+      };
+      let baseUrl: string;
+      try {
+        baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
+      } catch {
+        if (!isCurrentCodexSseRun()) return;
+        setThreadStreamingState(params.threadId, (entry) =>
+          entry
+            ? {
+                ...entry,
+                streamTransport: "recovery",
+              }
+            : null,
+        );
+        return;
+      }
+
+      const transport: CloudRuntimeTransport<SessionT> = {
+        baseUrl,
+        fetchPublic: current.fetchCloudPublic,
+        fetchAuth: current.fetchAuth,
+      };
+
+      const getSanitizedStreamingContent = () => {
+        if (!isCurrentCodexSseRun()) {
+          return threadStreamingDisplayContentRefById.current[params.threadId] ?? "";
+        }
+        const raw = threadStreamingContentRefById.current[params.threadId] ?? "";
+        return sanitizeUserFacingAssistantText({
+          text: raw,
+          blockedIds: [params.threadId, params.replyToId ?? null, runId],
+        });
+      };
+
+      const markRecoveryFallback = () => {
+        if (!isCurrentCodexSseRun()) return;
+        setThreadStreamingState(params.threadId, (entry) => {
+          if (!entry) return entry;
+          if (String(entry.runId ?? "").trim() !== runId) return entry;
+          return {
+            ...entry,
+            streamTransport: "recovery",
+          };
+        });
+      };
+
+      const scheduleStreamingFlush = () => {
+        scheduleThreadStreamingFlush(params.threadId, getSanitizedStreamingContent);
+      };
+
+      try {
+        if (!isCurrentCodexSseRun()) return;
+        setThreadStreamingState(params.threadId, (entry) =>
+          entry && String(entry.runId ?? "").trim() === runId
+            ? {
+                ...entry,
+                runId,
+                streamTransport: "sse",
+              }
+            : entry,
+        );
+        const response = await invokeCloudCodexRunEventsStream({
+          transport,
+          session: params.session,
+          payload: {
+            run_id: runId,
+            thread_id: params.threadId,
+            after_seq: 0,
+          },
+          signal: params.signal,
+        });
+        if (!response.ok) {
+          markRecoveryFallback();
+          return;
+        }
+        const reader = response.body?.getReader();
+        if (!reader) {
+          markRecoveryFallback();
+          return;
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let eventName = "message";
+        let dataBuffer = "";
+        let finalContent = "";
+        let seenDone = false;
+
+        const appendRuntimeEvent = (parsed: any) => {
+          const runtimeEventId = typeof parsed?.id === "string" ? parsed.id.trim() : "";
+          const runtimeEventRunId = typeof parsed?.run_id === "string" ? parsed.run_id.trim() : "";
+          const runtimeEventType =
+            typeof parsed?.event_type === "string" ? parsed.event_type.trim() : "";
+          const runtimeEventCreatedAt =
+            typeof parsed?.created_at === "string" ? parsed.created_at.trim() : "";
+          const runtimeEventSeqRaw = Number(parsed?.seq);
+          if (runtimeEventRunId !== runId || shouldStopForStaleRun()) {
+            seenDone = true;
+            return;
+          }
+          if (!runtimeEventId || !runtimeEventRunId || !runtimeEventType || !runtimeEventCreatedAt) {
+            return;
+          }
+          const runtimeEvent = {
+            id: runtimeEventId,
+            run_id: runtimeEventRunId,
+            seq: Number.isFinite(runtimeEventSeqRaw)
+              ? Math.max(0, Math.floor(runtimeEventSeqRaw))
+              : 0,
+            event_type: runtimeEventType,
+            payload: parsed?.payload ?? null,
+            created_at: runtimeEventCreatedAt,
+          };
+          current.setRuntimeEventsByRunId((prev) => {
+            const existing = prev[runtimeEventRunId] ?? [];
+            if (existing.some((row) => row.id === runtimeEvent.id)) return prev;
+            return {
+              ...prev,
+              [runtimeEventRunId]: [...existing, runtimeEvent].sort((a, b) => a.seq - b.seq),
+            };
+          });
+          setThreadStreamingState(params.threadId, (entry) => {
+            if (!entry) return entry;
+            if (String(entry.runId ?? "").trim() !== runId) return entry;
+            if (Array.isArray(entry.runtimeEvents) && entry.runtimeEvents.some((row) => row.id === runtimeEvent.id)) {
+              return entry;
+            }
+            const nextRuntimeEvents = [...(entry.runtimeEvents ?? []), runtimeEvent].sort(
+              (a, b) => a.seq - b.seq,
+            );
+            return {
+              ...entry,
+              runId: entry.runId ?? runtimeEventRunId,
+              streamTransport: "sse",
+              runtimeEvents: nextRuntimeEvents,
+              lastRuntimeEventSeq: Math.max(
+                Math.max(0, Math.floor(entry.lastRuntimeEventSeq ?? 0)),
+                runtimeEvent.seq,
+              ),
+            };
+          });
+          if (runtimeEventType === "run_finished") {
+            seenDone = true;
+          }
+        };
+
+        const flushEvent = () => {
+          const raw = dataBuffer.trim();
+          dataBuffer = "";
+          if (!raw) {
+            eventName = "message";
+            return;
+          }
+          let parsed: any = null;
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            parsed = { raw };
+          }
+          if (eventName === "start") {
+            if (typeof parsed?.run_id === "string" && parsed.run_id.trim()) {
+              if (parsed.run_id.trim() !== runId || shouldStopForStaleRun()) {
+                seenDone = true;
+                eventName = "message";
+                return;
+              }
+              const sseStartedAtMs = Date.now();
+              const streamTelemetry = updateThreadStreamingTelemetryRef(params.threadId, (previous) => ({
+                ...previous,
+                sseStartedAtMs: previous.sseStartedAtMs ?? sseStartedAtMs,
+                fastPaint: threadStreamingFastPaintRefById.current[params.threadId] === true,
+              }));
+              setThreadStreamingState(params.threadId, (entry) =>
+                entry && String(entry.runId ?? "").trim() === runId
+                  ? {
+                      ...entry,
+                      runId: parsed.run_id.trim(),
+                      streamTelemetry,
+                      streamTransport: "sse",
+                    }
+                  : entry,
+              );
+            }
+          } else if (eventName === "runtime_event") {
+            appendRuntimeEvent(parsed);
+          } else if (eventName === "delta") {
+            if (shouldStopForStaleRun()) {
+              seenDone = true;
+              eventName = "message";
+              return;
+            }
+            const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
+            const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
+            if (full !== null) {
+              finalContent = full;
+              threadStreamingContentRefById.current[params.threadId] = full;
+            } else if (delta) {
+              finalContent += delta;
+              threadStreamingContentRefById.current[params.threadId] = finalContent;
+            }
+            if (full !== null || delta) {
+              const deltaReceivedAtMs = Date.now();
+              updateThreadStreamingTelemetryRef(params.threadId, (previous) => {
+                const displayedChars = (threadStreamingDisplayContentRefById.current[params.threadId] ?? "").length;
+                return {
+                  ...previous,
+                  firstDeltaReceivedAtMs: previous.firstDeltaReceivedAtMs ?? deltaReceivedAtMs,
+                  lastDeltaReceivedAtMs: deltaReceivedAtMs,
+                  targetChars: finalContent.length,
+                  displayedChars,
+                  pendingChars: Math.max(0, finalContent.length - displayedChars),
+                  fastPaint: threadStreamingFastPaintRefById.current[params.threadId] === true,
+                };
+              });
+              scheduleStreamingFlush();
+            }
+          } else if (eventName === "done") {
+            if (shouldStopForStaleRun()) {
+              seenDone = true;
+              eventName = "message";
+              return;
+            }
+            if (typeof parsed?.full_content === "string") {
+              finalContent = parsed.full_content;
+              threadStreamingContentRefById.current[params.threadId] = parsed.full_content;
+              updateThreadStreamingTelemetryRef(params.threadId, (previous) => {
+                const doneReceivedAtMs = Date.now();
+                const displayedChars = (threadStreamingDisplayContentRefById.current[params.threadId] ?? "").length;
+                return {
+                  ...previous,
+                  lastDeltaReceivedAtMs: doneReceivedAtMs,
+                  targetChars: finalContent.length,
+                  displayedChars,
+                  pendingChars: Math.max(0, finalContent.length - displayedChars),
+                  fastPaint: threadStreamingFastPaintRefById.current[params.threadId] === true,
+                };
+              });
+              scheduleStreamingFlush();
+            }
+            seenDone = true;
+          } else if (eventName === "error") {
+            throw new Error(
+              (typeof parsed?.error === "string" && parsed.error.trim()) ||
+                (typeof parsed?.message === "string" && parsed.message.trim()) ||
+                "Codex runtime event stream failed.",
+            );
+          }
+          eventName = "message";
+        };
+
+        while (!seenDone && !streamIsStale) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          while (true) {
+            const idx = buffer.indexOf("\n");
+            if (idx < 0) break;
+            let line = buffer.slice(0, idx);
+            if (line.endsWith("\r")) line = line.slice(0, -1);
+            buffer = buffer.slice(idx + 1);
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+              continue;
+            }
+            if (line.startsWith("data:")) {
+              dataBuffer += line.slice(5).trim();
+              continue;
+            }
+            if (line === "") {
+              flushEvent();
+            }
+          }
+        }
+        if (streamIsStale || params.signal.aborted) return;
+        flushEvent();
+        if (!seenDone && !streamIsStale) {
+          markRecoveryFallback();
+        }
+      } catch (error) {
+        if (params.signal.aborted || isAbortError(error)) return;
+        console.warn("Codex runtime SSE stream failed; falling back to recovery polling:", error);
+        markRecoveryFallback();
+      }
+    },
+    [scheduleThreadStreamingFlush, setThreadStreamingState, updateThreadStreamingTelemetryRef],
+  );
+
   const stopStreamingTurn = useCallback((threadId?: string): void => {
     const resolvedThreadId = (threadId ?? argsRef.current.activeThreadId ?? "").trim();
     if (!resolvedThreadId) return;
@@ -466,6 +823,14 @@ export function useWebTurnRunnerController<
       threadStreamingContentRefById.current[params.threadId] = "";
       threadStreamingDisplayContentRefById.current[params.threadId] = "";
       threadStreamingDrainingRefById.current[params.threadId] = false;
+      threadStreamingFastPaintRefById.current[params.threadId] = false;
+      threadStreamingTelemetryRefById.current[params.threadId] = {
+        startedAtMs: Date.now(),
+        fastPaint: false,
+        targetChars: 0,
+        displayedChars: 0,
+        pendingChars: 0,
+      };
       setThreadStreamingState(params.threadId, () => ({
         runId: params.runIdHint,
         meta: {
@@ -480,6 +845,7 @@ export function useWebTurnRunnerController<
         streamTransport: "sse",
         runtimeEvents: [],
         lastRuntimeEventSeq: 0,
+        streamTelemetry: threadStreamingTelemetryRefById.current[params.threadId],
       }));
 
       const getSanitizedStreamingContent = () => {
@@ -715,9 +1081,18 @@ export function useWebTurnRunnerController<
         const abort = new AbortController();
         threadStreamingAbortRefById.current[threadId] = abort;
         threadStreamingUserCancelledRefById.current[threadId] = false;
+        threadStreamingActiveRunIdRefById.current[threadId] = params.runIdHint;
         threadStreamingContentRefById.current[threadId] = "";
         threadStreamingDisplayContentRefById.current[threadId] = "";
         threadStreamingDrainingRefById.current[threadId] = false;
+        threadStreamingFastPaintRefById.current[threadId] = true;
+        threadStreamingTelemetryRefById.current[threadId] = {
+          startedAtMs: Date.now(),
+          fastPaint: true,
+          targetChars: 0,
+          displayedChars: 0,
+          pendingChars: 0,
+        };
         if (exposeStreamingUi) {
           setThreadStreamingState(threadId, () => ({
             runId: params.runIdHint,
@@ -730,10 +1105,20 @@ export function useWebTurnRunnerController<
               community_evidence_used: null,
             },
             content: "",
-            streamTransport: "recovery",
+            streamTransport: params.runIdHint ? "sse" : "recovery",
             runtimeEvents: [],
             lastRuntimeEventSeq: 0,
+            streamTelemetry: threadStreamingTelemetryRefById.current[threadId],
           }));
+        }
+        if (exposeStreamingUi && params.runIdHint) {
+          void streamCodexRuntimeEvents({
+            session,
+            threadId,
+            runId: params.runIdHint,
+            replyToId: params.replyToId ?? null,
+            signal: abort.signal,
+          });
         }
 
         let preserveStreamingStateForRecovery = false;
@@ -747,14 +1132,20 @@ export function useWebTurnRunnerController<
             destroyAfterRun: true,
           });
           if (result.runId) {
+            const streamRunIdChanged =
+              typeof params.runIdHint === "string" &&
+              params.runIdHint.trim().length > 0 &&
+              result.runId !== params.runIdHint;
             runIdFromServer = result.runId;
+            threadStreamingActiveRunIdRefById.current[threadId] = result.runId;
             if (exposeStreamingUi) {
               setThreadStreamingState(threadId, (entry) =>
                 entry
                   ? {
                       ...entry,
                       runId: result.runId,
-                      streamTransport: "recovery",
+                      streamTransport:
+                        entry.streamTransport === "sse" && !streamRunIdChanged ? "sse" : "recovery",
                     }
                   : null,
               );
@@ -784,7 +1175,25 @@ export function useWebTurnRunnerController<
               });
               return { cancelled: false, error: null };
             }
-            throw new Error(result.failure.message || failureCode || "Codex runtime turn failed.");
+            const recoveredFailure = await recoverRuntimeTurnFromPersistedState({
+              session,
+              threadId,
+              runId: runIdFromServer,
+              currentContent: "",
+              exposeStreamingUi,
+            });
+            if (recoveredFailure.recovered) {
+              preserveStreamingStateForRecovery = recoveredFailure.preserveStreamingState;
+              if (recoveredFailure.cancelled) {
+                return { cancelled: true, error: null };
+              }
+            }
+            throw new Error(
+              recoveredFailure.error ||
+                result.failure.message ||
+                failureCode ||
+                "Codex runtime turn failed.",
+            );
           }
 
           const recovered = await recoverRuntimeTurnFromPersistedState({
@@ -821,6 +1230,7 @@ export function useWebTurnRunnerController<
             error: error instanceof Error ? error.message : "Codex runtime turn failed.",
           };
         } finally {
+          abort.abort();
           resetThreadStreamingState(threadId, {
             preserveStreamingState: preserveStreamingStateForRecovery,
           });
@@ -850,6 +1260,14 @@ export function useWebTurnRunnerController<
       threadStreamingContentRefById.current[threadId] = "";
       threadStreamingDisplayContentRefById.current[threadId] = "";
       threadStreamingDrainingRefById.current[threadId] = false;
+      threadStreamingFastPaintRefById.current[threadId] = false;
+      threadStreamingTelemetryRefById.current[threadId] = {
+        startedAtMs: Date.now(),
+        fastPaint: false,
+        targetChars: 0,
+        displayedChars: 0,
+        pendingChars: 0,
+      };
       if (exposeStreamingUi) {
         setThreadStreamingState(threadId, () => ({
           runId: params.runIdHint,
@@ -865,6 +1283,7 @@ export function useWebTurnRunnerController<
           streamTransport: "sse",
           runtimeEvents: [],
           lastRuntimeEventSeq: 0,
+          streamTelemetry: threadStreamingTelemetryRefById.current[threadId],
         }));
       }
       let runIdFromServer: string | null = null;
@@ -1318,6 +1737,7 @@ export function useWebTurnRunnerController<
       resetThreadStreamingState,
       scheduleThreadStreamingFlush,
       setThreadStreamingState,
+      streamCodexRuntimeEvents,
     ],
   );
 

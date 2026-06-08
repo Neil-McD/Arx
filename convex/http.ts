@@ -6,6 +6,7 @@ import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerAppOAuthRoutes } from "./httpAppOAuth";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerCodexBridgeRoutes } from "./httpCodexBridge";
+import { registerCodexRunEventsStreamRoutes } from "./httpCodexRunEventsStream";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
@@ -364,6 +365,15 @@ registerCodexBridgeRoutes({
   httpAction,
   jsonResponse,
   optionsResponse,
+});
+
+registerCodexRunEventsStreamRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+  sseResponse,
+  requireAuthenticatedActor,
 });
 
 registerRuntimeTurnRoutes({

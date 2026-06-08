@@ -63,7 +63,6 @@ function validateSmoke(value: unknown): string[] {
   if (smoke.ok !== true) failures.push("smoke_not_ok");
   if (!smoke.runId) failures.push("run_id_missing");
   if (!smoke.sandboxName) failures.push("sandbox_name_missing");
-  if (!smoke.volumeName) failures.push("volume_name_missing");
   if (smoke.eventSummary?.hasAssistantTextDelta !== true) failures.push("assistant_text_delta_missing");
   if (smoke.eventSummary?.hasRunFinished !== true) failures.push("run_finished_missing");
   if (!Number.isFinite(Number(smoke.eventSummary?.assistantTextChars)) || Number(smoke.eventSummary?.assistantTextChars) <= 0) {

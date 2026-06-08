@@ -460,6 +460,63 @@ function toolStepsForDrawers(steps: AgentActivityStep[]): AgentActivityStep[] {
   return steps.filter(isToolStep).slice(-DRAWER_STEP_LIMIT);
 }
 
+type CodexTimelineState = {
+  isCodex: boolean;
+  status: string | null;
+  isFinished: boolean;
+};
+
+function isCodexRuntimeEvent(event: ThreadStreamingRuntimeEvent): boolean {
+  const payload = asRecord(event.payload);
+  const harness = asRecord(payload?.harness);
+  return (
+    event.event_type.startsWith("codex_") ||
+    asString(harness?.kind) === "codex_app_server" ||
+    asString(payload?.engine_id) === "codex_blaxel_app_server" ||
+    asString(payload?.execution_mode) === "codex_app_server" ||
+    asString(payload?.harness_profile) === "codex_app_server_full_access"
+  );
+}
+
+function isRunFinishedSuccessfully(event: ThreadStreamingRuntimeEvent): boolean {
+  const payload = asRecord(event.payload);
+  const status = asString(payload?.status).toLowerCase();
+  return status === "ok" || status === "completed" || status === "succeeded";
+}
+
+function buildCodexTimelineState(events: ThreadStreamingRuntimeEvent[]): CodexTimelineState {
+  const sorted = [...events].sort((a, b) => a.seq - b.seq);
+  if (!sorted.some(isCodexRuntimeEvent)) {
+    return { isCodex: false, status: null, isFinished: false };
+  }
+
+  const finished = [...sorted].reverse().find((event) => event.event_type === "run_finished") ?? null;
+  if (finished) {
+    return {
+      isCodex: true,
+      status: isRunFinishedSuccessfully(finished) ? null : "Codex stopped",
+      isFinished: true,
+    };
+  }
+  if (sorted.some((event) => event.event_type === "assistant_text_delta")) {
+    return { isCodex: true, status: "Streaming", isFinished: false };
+  }
+  if (sorted.some((event) => event.event_type === "codex_turn_started")) {
+    return { isCodex: true, status: "Running Codex", isFinished: false };
+  }
+  if (
+    sorted.some((event) =>
+      event.event_type === "codex_app_server_initialized" ||
+      event.event_type === "codex_account_login_succeeded" ||
+      event.event_type === "codex_account_read_succeeded" ||
+      event.event_type === "codex_thread_started"
+    )
+  ) {
+    return { isCodex: true, status: "Connecting Codex", isFinished: false };
+  }
+  return { isCodex: true, status: "Starting Codex", isFinished: false };
+}
+
 export function RuntimeLiveTimeline(props: {
   events: ThreadStreamingRuntimeEvent[];
   session: AuthSessionLike | null;
@@ -473,6 +530,10 @@ export function RuntimeLiveTimeline(props: {
   );
   const runTiming = useMemo(
     () => runTimingForEvents(props.events),
+    [props.events],
+  );
+  const codexTimeline = useMemo(
+    () => buildCodexTimelineState(props.events),
     [props.events],
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -497,6 +558,9 @@ export function RuntimeLiveTimeline(props: {
   });
   const displayNarration = useSmoothStreamingText(narration ?? "", {
     active: showActiveIndicators && Boolean(narration),
+  });
+  const displayCodexStatus = useSmoothStreamingText(codexTimeline.status ?? "", {
+    active: showActiveIndicators && Boolean(codexTimeline.status) && !codexTimeline.isFinished,
   });
   const elapsedMs =
     runTiming.startedAtMs === null
@@ -535,6 +599,46 @@ export function RuntimeLiveTimeline(props: {
         ))}
       </div>
     ) : null;
+
+  if (codexTimeline.isCodex) {
+    if (!showActiveIndicators) {
+      return timerLabel || approvalCards ? (
+        <div className="runtime-live-timeline runtime-live-timeline-compact">
+          {timerLabel ? (
+            <span className="runtime-turn-timer">
+              {timerLabel}
+              <span className="runtime-turn-timer-chevron" aria-hidden="true">
+                &gt;
+              </span>
+            </span>
+          ) : null}
+          {approvalCards}
+        </div>
+      ) : null;
+    }
+
+    return timerLabel || approvalCards || displayCodexStatus ? (
+      <div className="runtime-live-timeline">
+        {timerLabel ? (
+          <span className="runtime-turn-timer">
+            {timerLabel}
+            <span className="runtime-turn-timer-chevron" aria-hidden="true">
+              ›
+            </span>
+          </span>
+        ) : null}
+        {approvalCards}
+        {displayCodexStatus ? (
+          <span
+            className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word"
+            aria-live="polite"
+          >
+            {displayCodexStatus}
+          </span>
+        ) : null}
+      </div>
+    ) : null;
+  }
 
   if (!showActiveIndicators) {
     return timerLabel || approvalCards ? (

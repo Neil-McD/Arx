@@ -102,7 +102,7 @@ export function buildCodexWebSocketRuntimeBridgeClientCommand(params: {
     "  const finishUrl = String(source.finishUrl || '').trim();",
     "  const prompt = String(source.prompt || '').trim();",
     "  const developerInstructions = String(source.developerInstructions || '').trim();",
-    "  const modelId = String(source.modelId || '').trim() || 'gpt-5.3-codex-spark';",
+    "  const modelId = String(source.modelId || '').trim() || 'gpt-5.5';",
     "  if (!runId || !bridgeToken || !eventUrl || !finishUrl || !prompt) throw new Error('invalid_runtime_payload');",
     "  return { runId, bridgeToken, eventUrl, finishUrl, prompt, developerInstructions, modelId };",
     "}",

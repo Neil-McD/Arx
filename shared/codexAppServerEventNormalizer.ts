@@ -88,20 +88,20 @@ function stringifyJsonValue(value: unknown, maxLength = 4000): string {
 
 function readFileChanges(item: JsonRecord | null): JsonRecord[] {
   const changes = Array.isArray(item?.changes) ? item?.changes : [];
-  return changes
-    .map((change) => {
-      const record = asRecord(change);
-      if (!record) return null;
-      const path = stringValue(record.path, 1000);
-      const kind = stringValue(record.kind, 120) || stringValue(record.type, 120);
-      if (!path && !kind) return null;
-      return {
-        ...(path ? { path } : {}),
-        kind: kind || "changed",
-      };
-    })
-    .filter((change): change is JsonRecord => Boolean(change))
-    .slice(0, 100);
+  const parsedChanges: JsonRecord[] = [];
+  for (const change of changes) {
+    const record = asRecord(change);
+    if (!record) continue;
+    const path = stringValue(record.path, 1000);
+    const kind = stringValue(record.kind, 120) || stringValue(record.type, 120);
+    if (!path && !kind) continue;
+    parsedChanges.push({
+      ...(path ? { path } : {}),
+      kind: kind || "changed",
+    });
+    if (parsedChanges.length >= 100) break;
+  }
+  return parsedChanges;
 }
 
 function readWebSearchArgs(item: JsonRecord | null): JsonRecord {

@@ -1,7 +1,7 @@
 import type { AuthSessionLike } from "./authSession";
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
 
-export const CODEX_BLAXEL_DEFAULT_MODEL_ID = "gpt-5.3-codex-spark";
+export const CODEX_BLAXEL_DEFAULT_MODEL_ID = "gpt-5.5";
 
 export type CloudCodexBlaxelRuntimeFailure = {
   code: string;

@@ -13,7 +13,10 @@ import {
   stopBlaxelWorkspaceProcess,
   writeBlaxelWorkspaceFile,
 } from "./blaxelWorkspaceComputerProvider.ts";
-import { destroyBlaxelWorkspaceVolume } from "./blaxelWorkspaceClient.ts";
+import {
+  destroyBlaxelWorkspaceVolume,
+  loadBlaxelWorkspaceConfig,
+} from "./blaxelWorkspaceClient.ts";
 import {
   buildBridgeCleanupCommand,
   buildCodexBlaxelExternalAuthPayload,
@@ -39,11 +42,40 @@ import {
   renderRuntimeTurnContextForPrompt,
 } from "../shared/runtimeTurnContextPacket";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
+import {
+  CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER,
+  CODEX_BLAXEL_RUNTIME_PRICING_POLICY,
+  PAID_TOOL_PRICING_VERSION,
+  creditsToUsd,
+  estimateWorkspaceComputeUsd,
+  priceCodexBlaxelRuntimeCredits,
+  priceCodexBlaxelRuntimeUsd,
+} from "../shared/workspaceCredits";
 
 type RuntimeTurnFailure = {
   code: string;
   message: string;
 };
+
+type CodexRuntimePhaseEventArgs = {
+  ctx: any;
+  ownerId: any;
+  threadId: any;
+  runId: string;
+  projectId?: unknown;
+  communityId?: unknown;
+  eventType: string;
+  eventKey: string;
+  phase: string;
+  startedAt?: number | null;
+  endedAt?: number | null;
+  payload?: Record<string, unknown>;
+};
+
+type QueuedCodexRuntimePhaseEventArgs = Omit<
+  CodexRuntimePhaseEventArgs,
+  "ctx" | "ownerId" | "threadId" | "runId" | "projectId" | "communityId"
+>;
 
 function readEnv(name: string): string {
   try {
@@ -60,6 +92,54 @@ function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function durationMs(startedAt?: number | null, endedAt?: number | null): number | null {
+  if (
+    typeof startedAt !== "number" ||
+    typeof endedAt !== "number" ||
+    !Number.isFinite(startedAt) ||
+    !Number.isFinite(endedAt)
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.floor(endedAt) - Math.floor(startedAt));
+}
+
+async function appendCodexRuntimePhaseEventBestEffort(params: CodexRuntimePhaseEventArgs): Promise<void> {
+  const nowMs = Date.now();
+  const startedAt = typeof params.startedAt === "number" && Number.isFinite(params.startedAt)
+    ? Math.floor(params.startedAt)
+    : null;
+  const endedAt = typeof params.endedAt === "number" && Number.isFinite(params.endedAt)
+    ? Math.floor(params.endedAt)
+    : null;
+  try {
+    await params.ctx.runMutation(internal.threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any, {
+      ownerId: params.ownerId,
+      threadId: params.threadId,
+      runId: params.runId,
+      claimProjectId: normalizeString(params.projectId) || undefined,
+      claimCommunityId: normalizeString(params.communityId) || undefined,
+      eventType: params.eventType,
+      eventKey: params.eventKey,
+      createdAt: endedAt ?? startedAt ?? nowMs,
+      nowMs,
+      payload: {
+        phase: params.phase,
+        phase_started_at: startedAt,
+        phase_ended_at: endedAt,
+        phase_duration_ms: durationMs(startedAt, endedAt),
+        ...params.payload,
+      },
+    });
+  } catch (error) {
+    console.warn("codex_runtime_phase_event_record_failed", {
+      runId: params.runId,
+      eventType: params.eventType,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function normalizeDeploymentKind(value: unknown): string {
   return normalizeString(value).toLowerCase();
 }
@@ -67,6 +147,11 @@ function normalizeDeploymentKind(value: unknown): string {
 function safeNumber(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.floor(parsed) : undefined;
+}
+
+function mbToGiB(value: unknown): number {
+  const mb = Math.max(0, Number(value) || 0);
+  return mb / 1024;
 }
 
 function redactSensitiveText(value: string): string {
@@ -232,6 +317,107 @@ function buildDeveloperInstructions(contextPrompt: string): string {
   ].filter(Boolean).join("\n\n");
 }
 
+async function recordTrackedCodexBlaxelRuntimeProviderCostBestEffort(params: {
+  ctx: any;
+  ownerId: any;
+  projectId?: any;
+  communityId?: any;
+  runId: string;
+  sandboxName: string;
+  volumeName?: string | null;
+  startedAt: number | null;
+  endedAt: number;
+  sandboxCpu: number;
+  sandboxMemoryGiB: number;
+  sandboxDiskGiB: number;
+  destroyedAfterRun: boolean;
+  bridgeCleanupAttempted: boolean;
+  bridgeCleanupSucceeded: boolean;
+  bridgeCleanupFailureCode?: string | null;
+  sandboxDestroyAttempted: boolean;
+  sandboxDestroySucceeded: boolean;
+  sandboxDestroyFailureCode?: string | null;
+  volumeDestroyAttempted: boolean;
+  volumeDestroySucceeded: boolean;
+  volumeDestroyFailureCode?: string | null;
+  outcome: "succeeded" | "failed" | "cancelled";
+  failureCode?: string | null;
+}): Promise<void> {
+  if (!(typeof params.startedAt === "number" && Number.isFinite(params.startedAt))) return;
+  const startedAt = Math.floor(params.startedAt);
+  const endedAt = Math.max(startedAt, Math.floor(params.endedAt));
+  const durationSeconds = Math.max(0, (endedAt - startedAt) / 1000);
+  const sandboxMemoryGiB = Math.max(0, Number(params.sandboxMemoryGiB) || 0);
+  const rawVendorCostUsd = estimateWorkspaceComputeUsd({
+    durationSeconds,
+    sandboxCpu: params.sandboxCpu,
+    sandboxMemoryGiB,
+  });
+  if (!(rawVendorCostUsd > 0)) return;
+
+  const polynetPriceUsd = priceCodexBlaxelRuntimeUsd({ rawVendorCostUsd });
+  const polynetPriceCredits = priceCodexBlaxelRuntimeCredits({ rawVendorCostUsd });
+  try {
+    await params.ctx.runMutation(internal.workspaceCredits.recordProviderCostInternal as any, {
+      costKey: `codex_blaxel_runtime:${params.runId}:provider_cost`,
+      userId: params.ownerId,
+      projectId: params.projectId ?? null,
+      communityId: params.communityId ?? null,
+      runId: params.runId,
+      category: "workspace",
+      component: "blaxel_active_runtime",
+      provider: "blaxel",
+      resourceId: params.sandboxName,
+      periodStart: startedAt,
+      periodEnd: endedAt,
+      quantityKind: "memory_gib_seconds",
+      quantity: durationSeconds * sandboxMemoryGiB,
+      rawVendorCostUsd,
+      evidence: "estimated",
+      billingDisposition: "tracked_only",
+      metadata: {
+        pricing_version: PAID_TOOL_PRICING_VERSION,
+        pricing_policy: CODEX_BLAXEL_RUNTIME_PRICING_POLICY,
+        cost_multiplier: CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER,
+        provider_cost_source: "codex_blaxel_runtime_turn",
+        provider_cost_user_charge_disposition: "tracked_only",
+        billing_disposition: "tracked_only",
+        raw_vendor_cost_usd: rawVendorCostUsd,
+        polynet_price_usd: polynetPriceUsd,
+        polynet_price_credits: polynetPriceCredits,
+        polynet_price_credits_usd: creditsToUsd(polynetPriceCredits),
+        duration_seconds: durationSeconds,
+        sandbox_started_at: startedAt,
+        sandbox_finished_at: endedAt,
+        sandbox_cpu: params.sandboxCpu,
+        sandbox_memory_gib: sandboxMemoryGiB,
+        sandbox_disk_gib: params.sandboxDiskGiB,
+        sandbox_name: params.sandboxName,
+        volume_name: params.volumeName,
+        destroyed_after_run: params.destroyedAfterRun,
+        bridge_cleanup_attempted: params.bridgeCleanupAttempted,
+        bridge_cleanup_succeeded: params.bridgeCleanupSucceeded,
+        bridge_cleanup_failure_code: normalizeString(params.bridgeCleanupFailureCode),
+        sandbox_destroy_attempted: params.sandboxDestroyAttempted,
+        sandbox_destroy_succeeded: params.sandboxDestroySucceeded,
+        sandbox_destroy_failure_code: normalizeString(params.sandboxDestroyFailureCode),
+        volume_destroy_attempted: params.volumeDestroyAttempted,
+        volume_destroy_succeeded: params.volumeDestroySucceeded,
+        volume_destroy_failure_code: normalizeString(params.volumeDestroyFailureCode),
+        outcome: params.outcome,
+        failure_code: normalizeString(params.failureCode),
+      },
+      nowMs: endedAt,
+    });
+  } catch (error) {
+    console.warn("codex_blaxel_runtime_provider_cost_record_failed", {
+      run_id: params.runId,
+      sandbox_name: params.sandboxName,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+}
+
 export const runBlaxelCodexRuntimeTurn = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -315,7 +501,7 @@ export const runBlaxelCodexRuntimeTurn = action({
     }
 
     const runId = normalizeString(args.runId) || `codex_blaxel:${randomUUID()}`;
-    const modelId = normalizeString(args.modelId) || "gpt-5.3-codex-spark";
+    const modelId = normalizeString(args.modelId) || "gpt-5.5";
     const startedAt = Date.now();
     const run = (await ctx.runMutation(internal.threads.ensureCloudRuntimeRunStartedByOwnerInternal as any, {
       ownerId: actor.userId as any,
@@ -341,19 +527,39 @@ export const runBlaxelCodexRuntimeTurn = action({
       startedAt,
       nowMs: startedAt,
     })) as { projectId?: unknown; communityId?: unknown } | null;
+    const claimProjectId = normalizeString(run?.projectId ?? thread.projectId) || undefined;
+    const claimCommunityId = normalizeString(run?.communityId ?? threadCommunityId) || undefined;
+    const phaseTelemetryWrites: Promise<void>[] = [];
+    const queueCodexRuntimePhaseEvent = (event: QueuedCodexRuntimePhaseEventArgs): void => {
+      phaseTelemetryWrites.push(appendCodexRuntimePhaseEventBestEffort({
+        ctx,
+        ownerId: actor.userId as any,
+        threadId: args.threadId,
+        runId,
+        projectId: claimProjectId,
+        communityId: claimCommunityId,
+        ...event,
+      }));
+    };
+    const flushCodexRuntimePhaseTelemetry = async (): Promise<void> => {
+      if (phaseTelemetryWrites.length === 0) return;
+      const writes = phaseTelemetryWrites.splice(0);
+      await Promise.allSettled(writes);
+    };
 
-    const contextLoadedAt = Date.now();
+    const contextLoadStartedAt = Date.now();
     const loadedContext = await loadRuntimeTurnContextPacketForRun({
       ctx,
       ownerId: actor.userId,
       threadId: args.threadId,
-      projectId: normalizeString(run?.projectId ?? thread.projectId) || null,
+      projectId: claimProjectId || null,
       runId,
       latestUserText: prompt,
       threadWorkingState: (thread.workingState as any) ?? null,
       summarizeCurrentRunEvents: false,
       runtimeStop: null,
     });
+    const contextLoadedAt = Date.now();
     const contextSnapshot = buildRuntimeTurnContextSnapshot({
       packet: loadedContext.packet,
       capturedAt: contextLoadedAt,
@@ -366,19 +572,30 @@ export const runBlaxelCodexRuntimeTurn = action({
       snapshot: contextSnapshot,
       nowMs: contextLoadedAt,
     });
-    const contextPrompt = renderRuntimeTurnContextForPrompt(loadedContext.packet).slice(0, 24_000);
+    queueCodexRuntimePhaseEvent({
+      eventType: "codex_runtime_context_loaded",
+      eventKey: "codex_runtime_context_loaded",
+      phase: "context_loaded",
+      startedAt: contextLoadStartedAt,
+      endedAt: contextLoadedAt,
+      payload: {
+        context_packet_present: Boolean(loadedContext.packet),
+      },
+    });
+    const contextPrompt = (renderRuntimeTurnContextForPrompt(loadedContext.packet) ?? "").slice(0, 24_000);
     const developerInstructions = buildDeveloperInstructions(contextPrompt);
 
     const token = await mintCodexBridgeRunToken({
       runId,
       ownerId: actor.userId,
       threadId: String(args.threadId),
-      projectId: normalizeString(run?.projectId ?? thread.projectId) || null,
-      communityId: normalizeString(run?.communityId ?? thread.communityId) || null,
+      projectId: claimProjectId || null,
+      communityId: claimCommunityId || null,
       operations: ["event", "finish"],
       ttlMs: 15 * 60 * 1000,
     });
     if (!token.ok) {
+      await flushCodexRuntimePhaseTelemetry().catch(() => null);
       await ctx.runMutation(internal.threads.finishCloudRuntimeRunByBridgeClaimsInternal as any, {
         ownerId: actor.userId as any,
         threadId: args.threadId,
@@ -397,33 +614,81 @@ export const runBlaxelCodexRuntimeTurn = action({
     }
 
     const names = buildResourceNames(runId);
+    const destroyAfterRun = args.destroyAfterRun !== false;
+    const runtimeVolumeName = destroyAfterRun ? null : names.volumeName;
     const bridgeDir = `.polynet/codex-runtime-bridge/${names.bridgeId}`;
     const authPayloadPath = `${bridgeDir}/auth-payload.json`;
     const runtimePayloadPath = `${bridgeDir}/runtime-payload.json`;
     const bridgeStatusPath = `${bridgeDir}/bridge-status.out`;
     const eventUrl = `${callbackBaseUrl}/runtime/codex_bridge/event`;
     const finishUrl = `${callbackBaseUrl}/runtime/codex_bridge/finish`;
-    const destroyAfterRun = args.destroyAfterRun !== false;
     let workspaceRoot = "/workspace";
     let webSocketProcessName: string | null = null;
     let clientProcessName: string | null = null;
+    const loadedBlaxelConfig = loadBlaxelWorkspaceConfig();
+    const sandboxCpu = 0;
+    const sandboxMemoryGiB = loadedBlaxelConfig.ok ? mbToGiB(loadedBlaxelConfig.config.memoryMb) : 0;
+    const sandboxDiskGiB = runtimeVolumeName ? mbToGiB(CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB) : 0;
+    let sandboxStartedAt: number | null = null;
+    let costOutcome: "succeeded" | "failed" | "cancelled" = "failed";
+    let costFailureCode: string | null = null;
 
     try {
+      const sandboxStartRequestedAt = Date.now();
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_sandbox_ensure_started",
+        eventKey: "codex_sandbox_ensure_started",
+        phase: "sandbox_ensure",
+        startedAt: sandboxStartRequestedAt,
+        payload: {
+          sandbox_name: names.sandboxName,
+          volume_name: runtimeVolumeName,
+          destroy_after_run: destroyAfterRun,
+          memory_mb: loadedBlaxelConfig.ok ? loadedBlaxelConfig.config.memoryMb : null,
+        },
+      });
       const ensured = await ensureBlaxelWorkspaceComputer({
         sandboxName: names.sandboxName,
-        volumeName: names.volumeName,
-        volumeSizeMb: CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB,
+        volumeName: runtimeVolumeName,
+        volumeSizeMb: runtimeVolumeName ? CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB : null,
         lifecycleIntent: "agent_run",
         labels: {
           purpose: "codex-runtime-turn",
         },
       });
+      const sandboxEnsureCompletedAt = Date.now();
       if (!ensured.ok) {
+        queueCodexRuntimePhaseEvent({
+          eventType: "codex_sandbox_ensure_completed",
+          eventKey: "codex_sandbox_ensure_completed",
+          phase: "sandbox_ensure",
+          startedAt: sandboxStartRequestedAt,
+          endedAt: sandboxEnsureCompletedAt,
+          payload: {
+            ok: false,
+            sandbox_name: names.sandboxName,
+            failure_code: ensured.code || null,
+          },
+        });
         throw new Error(`sandbox_ensure_failed:${ensured.code || ensured.message}`);
       }
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_sandbox_ensure_completed",
+        eventKey: "codex_sandbox_ensure_completed",
+        phase: "sandbox_ensure",
+        startedAt: sandboxStartRequestedAt,
+        endedAt: sandboxEnsureCompletedAt,
+        payload: {
+          ok: true,
+          sandbox_name: names.sandboxName,
+          workspace_root_present: Boolean(ensured.workspaceRoot),
+        },
+      });
+      sandboxStartedAt = sandboxStartRequestedAt;
       workspaceRoot = ensured.workspaceRoot;
 
       const bridgePath = `${workspaceRoot}/${bridgeDir}`;
+      const bridgeFilesStartedAt = Date.now();
       const prepareDir = await executeBlaxelWorkspaceCommand({
         sandboxName: names.sandboxName,
         cwd: ".",
@@ -432,6 +697,18 @@ export const runBlaxelCodexRuntimeTurn = action({
         timeoutSeconds: 30,
       });
       if (!prepareDir.ok || prepareDir.exitCode !== 0) {
+        queueCodexRuntimePhaseEvent({
+          eventType: "codex_bridge_files_prepared",
+          eventKey: "codex_bridge_files_prepared",
+          phase: "bridge_files_prepared",
+          startedAt: bridgeFilesStartedAt,
+          endedAt: Date.now(),
+          payload: {
+            ok: false,
+            sandbox_name: names.sandboxName,
+            exit_code: prepareDir.ok ? prepareDir.exitCode ?? null : null,
+          },
+        });
         throw new Error("bridge_directory_prepare_failed");
       }
 
@@ -460,8 +737,23 @@ export const runBlaxelCodexRuntimeTurn = action({
         })}\n`,
       });
       if (!runtimePayloadWrite.ok) throw new Error(`runtime_payload_write_failed:${runtimePayloadWrite.code}`);
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_bridge_files_prepared",
+        eventKey: "codex_bridge_files_prepared",
+        phase: "bridge_files_prepared",
+        startedAt: bridgeFilesStartedAt,
+        endedAt: Date.now(),
+        payload: {
+          ok: true,
+          sandbox_name: names.sandboxName,
+          bridge_dir: bridgeDir,
+          auth_payload_written: true,
+          runtime_payload_written: true,
+        },
+      });
 
       webSocketProcessName = safeResourceName(`polynet-codex-runtime-ws-${names.bridgeId}`);
+      const appServerLaunchStartedAt = Date.now();
       const webSocketStart = await executeBlaxelWorkspaceCommand({
         sandboxName: names.sandboxName,
         cwd: ".",
@@ -475,9 +767,23 @@ export const runBlaxelCodexRuntimeTurn = action({
         waitForCompletion: false,
         timeoutSeconds: 60,
       });
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_app_server_launch_requested",
+        eventKey: "codex_app_server_launch_requested",
+        phase: "app_server_launch_requested",
+        startedAt: appServerLaunchStartedAt,
+        endedAt: Date.now(),
+        payload: {
+          ok: webSocketStart.ok,
+          sandbox_name: names.sandboxName,
+          process_name: webSocketProcessName,
+          failure_code: webSocketStart.ok ? null : webSocketStart.code,
+        },
+      });
       if (!webSocketStart.ok) throw new Error(`codex_websocket_app_server_start_failed:${webSocketStart.code}`);
 
       clientProcessName = safeResourceName(`polynet-codex-runtime-client-${names.bridgeId}`);
+      const bridgeClientLaunchStartedAt = Date.now();
       const clientStarted = await executeBlaxelWorkspaceCommand({
         sandboxName: names.sandboxName,
         cwd: ".",
@@ -493,6 +799,20 @@ export const runBlaxelCodexRuntimeTurn = action({
         waitForCompletion: false,
         timeoutSeconds: 360,
       });
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_bridge_client_launch_requested",
+        eventKey: "codex_bridge_client_launch_requested",
+        phase: "bridge_client_launch_requested",
+        startedAt: bridgeClientLaunchStartedAt,
+        endedAt: Date.now(),
+        payload: {
+          ok: clientStarted.ok,
+          sandbox_name: names.sandboxName,
+          process_name: clientProcessName,
+          failure_code: clientStarted.ok ? null : clientStarted.code,
+        },
+      });
+      await flushCodexRuntimePhaseTelemetry();
       const commandResult = clientStarted.ok
         ? await waitForBridgeProcessCompletion({
             ctx,
@@ -505,10 +825,27 @@ export const runBlaxelCodexRuntimeTurn = action({
             intervalMs: 3_000,
           })
         : clientStarted;
+      queueCodexRuntimePhaseEvent({
+        eventType: "codex_bridge_client_completed",
+        eventKey: "codex_bridge_client_completed",
+        phase: "bridge_client_completed",
+        startedAt: bridgeClientLaunchStartedAt,
+        endedAt: Date.now(),
+        payload: {
+          ok: commandResult.ok,
+          sandbox_name: names.sandboxName,
+          process_name: clientProcessName,
+          failure_code: commandResult.ok ? null : commandResult.code,
+        },
+      });
+      await flushCodexRuntimePhaseTelemetry();
+      if (!commandResult.ok) {
+        throw new Error(redactSensitiveText(`codex_runtime_bridge_failed:${commandResult.message || commandResult.code}`));
+      }
       const stdout = normalizeString(commandResult.stdout);
       const okMarker = stdout.includes("POLYNET_CODEX_RUNTIME_BRIDGE_OK");
       const payloadsRemoved = stdout.includes("POLYNET_CODEX_RUNTIME_PAYLOADS_REMOVED");
-      if (!commandResult.ok || commandResult.exitCode !== 0 || !okMarker || !payloadsRemoved) {
+      if (commandResult.exitCode !== 0 || !okMarker || !payloadsRemoved) {
         throw new Error(redactSensitiveText(`codex_runtime_bridge_failed:${stdout || commandResult.stderr || commandResult.status}`));
       }
 
@@ -538,12 +875,13 @@ export const runBlaxelCodexRuntimeTurn = action({
           return total + String(payload.delta ?? "").length;
         }, 0);
 
+      costOutcome = "succeeded";
       return {
         ok: true,
         runId,
         modelId,
         sandboxName: names.sandboxName,
-        volumeName: names.volumeName,
+        volumeName: runtimeVolumeName,
         destroyedAfterRun: destroyAfterRun,
         eventSummary: {
           eventCount: events.length,
@@ -559,6 +897,8 @@ export const runBlaxelCodexRuntimeTurn = action({
       const failureCode = wasCancelled
         ? USER_CANCELLED_RUNTIME_CODE
         : "codex_blaxel_runtime_turn_failed";
+      costOutcome = wasCancelled ? "cancelled" : "failed";
+      costFailureCode = failureCode;
       await ctx.runMutation(internal.threads.finishCloudRuntimeRunByBridgeClaimsInternal as any, {
         ownerId: actor.userId as any,
         threadId: args.threadId,
@@ -575,10 +915,11 @@ export const runBlaxelCodexRuntimeTurn = action({
         ok: false,
         runId,
         sandboxName: names.sandboxName,
-        volumeName: names.volumeName,
+        volumeName: runtimeVolumeName,
         failure: safeFailure(failureCode, message),
       };
     } finally {
+      await flushCodexRuntimePhaseTelemetry().catch(() => null);
       if (clientProcessName) {
         await stopBlaxelWorkspaceProcess({
           sandboxName: names.sandboxName,
@@ -591,29 +932,98 @@ export const runBlaxelCodexRuntimeTurn = action({
           processName: webSocketProcessName,
         }).catch(() => null);
       }
-      await executeBlaxelWorkspaceCommand({
-        sandboxName: names.sandboxName,
-        cwd: ".",
-        command: `bash -lc ${shellQuote(
-          buildBridgeCleanupCommand({
-            workspaceRoot,
-            bridgeDir,
-            authPayloadPath,
-          }),
-        )}`,
-        waitForCompletion: true,
-        timeoutSeconds: 30,
-      }).catch(() => null);
-      if (destroyAfterRun) {
-        await destroyBlaxelWorkspaceComputer({
+      let bridgeCleanupAttempted = false;
+      let bridgeCleanupSucceeded = false;
+      let bridgeCleanupFailureCode: string | null = null;
+      let sandboxDestroyAttempted = false;
+      let sandboxDestroySucceeded = false;
+      let sandboxDestroyFailureCode: string | null = null;
+      let volumeDestroyAttempted = false;
+      let volumeDestroySucceeded = false;
+      let volumeDestroyFailureCode: string | null = null;
+
+      bridgeCleanupAttempted = true;
+      try {
+        const cleanupResult = await executeBlaxelWorkspaceCommand({
           sandboxName: names.sandboxName,
-          volumeName: names.volumeName,
-          workspaceRoot,
-        }).catch(() => null);
-        await destroyBlaxelWorkspaceVolume({
-          volumeName: names.volumeName,
-        }).catch(() => null);
+          cwd: ".",
+          command: `bash -lc ${shellQuote(
+            buildBridgeCleanupCommand({
+              workspaceRoot,
+              bridgeDir,
+              authPayloadPath,
+            }),
+          )}`,
+          waitForCompletion: true,
+          timeoutSeconds: 30,
+        });
+        bridgeCleanupSucceeded = cleanupResult.ok === true && cleanupResult.exitCode === 0;
+        if (!bridgeCleanupSucceeded) {
+          bridgeCleanupFailureCode = cleanupResult.ok === false
+            ? normalizeString(cleanupResult.code) || "bridge_cleanup_failed"
+            : `bridge_cleanup_exit_${cleanupResult.exitCode ?? "unknown"}`;
+        }
+      } catch (error) {
+        bridgeCleanupFailureCode = error instanceof Error ? error.message : String(error ?? "bridge_cleanup_failed");
       }
+      if (destroyAfterRun) {
+        sandboxDestroyAttempted = true;
+        try {
+          const sandboxDestroy = await destroyBlaxelWorkspaceComputer({
+            sandboxName: names.sandboxName,
+            volumeName: runtimeVolumeName,
+            workspaceRoot,
+          });
+          if (sandboxDestroy.ok === true) {
+            sandboxDestroySucceeded = true;
+          } else {
+            sandboxDestroyFailureCode = normalizeString(sandboxDestroy.code) || "sandbox_destroy_failed";
+          }
+        } catch (error) {
+          sandboxDestroyFailureCode = error instanceof Error ? error.message : String(error ?? "sandbox_destroy_failed");
+        }
+        if (runtimeVolumeName) {
+          volumeDestroyAttempted = true;
+          try {
+            const volumeDestroy = await destroyBlaxelWorkspaceVolume({
+              volumeName: runtimeVolumeName,
+            });
+            if (volumeDestroy.ok === true) {
+              volumeDestroySucceeded = true;
+            } else {
+              volumeDestroyFailureCode = normalizeString(volumeDestroy.code) || "volume_destroy_failed";
+            }
+          } catch (error) {
+            volumeDestroyFailureCode = error instanceof Error ? error.message : String(error ?? "volume_destroy_failed");
+          }
+        }
+      }
+      await recordTrackedCodexBlaxelRuntimeProviderCostBestEffort({
+        ctx,
+        ownerId: actor.userId as any,
+        projectId: (run?.projectId ?? thread.projectId) || null,
+        communityId: (run?.communityId ?? thread.communityId) || null,
+        runId,
+        sandboxName: names.sandboxName,
+        volumeName: runtimeVolumeName,
+        startedAt: sandboxStartedAt,
+        endedAt: Date.now(),
+        sandboxCpu,
+        sandboxMemoryGiB,
+        sandboxDiskGiB,
+        destroyedAfterRun: destroyAfterRun,
+        bridgeCleanupAttempted,
+        bridgeCleanupSucceeded,
+        bridgeCleanupFailureCode,
+        sandboxDestroyAttempted,
+        sandboxDestroySucceeded,
+        sandboxDestroyFailureCode,
+        volumeDestroyAttempted,
+        volumeDestroySucceeded,
+        volumeDestroyFailureCode,
+        outcome: costOutcome,
+        failureCode: costFailureCode,
+      });
     }
   },
 });

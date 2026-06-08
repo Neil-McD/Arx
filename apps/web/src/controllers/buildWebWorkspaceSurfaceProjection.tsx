@@ -141,6 +141,10 @@ function readRuntimeEngineIdFromEvents(events: ThreadStreamingRuntimeEvent[]): s
   return null;
 }
 
+function streamingInitialStatusLabelForEngine(engineId: string | null): string | null {
+  return engineId === "codex_blaxel_app_server" ? "Starting Codex" : null;
+}
+
 export function buildWebWorkspaceSurfaceProjection(
   params: BuildWebWorkspaceSurfaceProjectionParams,
 ): { workspaceHostProps: WebWorkspaceHostProps } {
@@ -255,6 +259,16 @@ export function buildWebWorkspaceSurfaceProjection(
 
   const runtimeEvents = params.activeThreadStreamingState?.runtimeEvents ?? [];
   const streamingContent = params.activeThreadStreamingState?.content ?? "";
+  const streamingMeta = params.activeThreadStreamingState?.meta ?? null;
+  const streamingEngineId =
+    (streamingMeta?.engine_id ?? "").trim() || readRuntimeEngineIdFromEvents(runtimeEvents);
+  const streamingModelLabel = params.formatModelSignature(
+    streamingMeta?.model_id ?? null,
+    streamingMeta?.inference_source ?? null,
+    streamingEngineId,
+    params.modelToggles,
+  );
+  const streamingInitialStatusLabel = streamingInitialStatusLabelForEngine(streamingEngineId);
   const hasStreamedContent = streamingContent.trim().length > 0;
   const hasTimeline = runtimeEvents.length > 0;
   const hasActiveRunId =
@@ -280,6 +294,8 @@ export function buildWebWorkspaceSurfaceProjection(
           runtimeEvents,
           content: streamingContent,
           runId: params.activeThreadStreamingRunId ?? null,
+          modelLabel: streamingModelLabel,
+          initialStatusLabel: streamingInitialStatusLabel,
         }
       : null;
 

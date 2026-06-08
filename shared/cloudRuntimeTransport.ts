@@ -53,3 +53,21 @@ export async function invokeCloudRuntimeTurn<SessionT>(params: {
     params.session,
   );
 }
+
+export async function invokeCloudCodexRunEventsStream<SessionT>(params: {
+  transport: CloudRuntimeTransport<SessionT>;
+  session: SessionT;
+  payload: unknown;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  return await params.transport.fetchAuth(
+    buildConvexRuntimeUrl(params.transport.baseUrl, "/runtime/codex_run_events_stream"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params.payload),
+      ...(params.signal ? { signal: params.signal } : null),
+    },
+    params.session,
+  );
+}

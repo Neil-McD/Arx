@@ -1,5 +1,6 @@
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import type { ReactNode } from "react";
+import { MessageFooter } from "../../../../shared/MessageFooterActions";
 import { RuntimeComputerUseViewer } from "./RuntimeComputerUseViewer";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
 import type {
@@ -23,6 +24,7 @@ export function WebWorkspaceStreamingMessage(
 
   const hasTimeline = view.runtimeEvents.length > 0;
   const hasStreamedContent = view.content.trim().length > 0;
+  const placeholderLabel = view.initialStatusLabel ?? "Thinking";
 
   return (
     <div className="message-item assistant streaming thinking">
@@ -58,12 +60,13 @@ export function WebWorkspaceStreamingMessage(
           <span
             className="streaming-placeholder shimmer-text streaming-thinking-footer"
             aria-live="polite"
-            aria-label="Thinking"
+            aria-label={placeholderLabel}
           >
-            Thinking
+            {placeholderLabel}
           </span>
         ) : null}
       </div>
+      <MessageFooter metaLabel={view.modelLabel} />
       {props.renderPreviewForRun(view.runId)}
     </div>
   );

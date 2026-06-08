@@ -17,10 +17,22 @@ function assertDoesNotContain(source: string, pattern: RegExp, message: string) 
   assert.equal(pattern.test(source), false, message);
 }
 
+function assertOrderWithin(source: string, anchor: string, snippets: string[], message: string) {
+  const anchorIndex = source.indexOf(anchor);
+  assert.notEqual(anchorIndex, -1, `${message}: missing anchor ${anchor}`);
+  let searchFrom = anchorIndex;
+  for (const snippet of snippets) {
+    const index = source.indexOf(snippet, searchFrom);
+    assert.notEqual(index, -1, `${message}: missing or out-of-order snippet ${snippet}`);
+    searchFrom = index + snippet.length;
+  }
+}
+
 const runtimeAction = read("convex/blaxelCodexRuntimeTurn.ts");
 const bridgeSource = read("convex/codexBlaxelAppServerBridge.ts");
 const codexConfig = read("infra/blaxel/codex-runtime/codex-config.toml");
 const packageJson = read("package.json");
+const workspaceCredits = read("shared/workspaceCredits.ts");
 
 for (const deletedPath of [
   "convex/blaxelWorkspaceCodexAppServerSmoke.ts",
@@ -94,7 +106,7 @@ assertContains(
 assertContains(
   runtimeAction,
   "destroyBlaxelWorkspaceVolume",
-  "Runtime action must clean up its temporary volume by default.",
+  "Runtime action must retain persistent-volume cleanup support when a volume is requested.",
 );
 assertContains(
   runtimeAction,
@@ -105,6 +117,148 @@ assertContains(
   runtimeAction,
   "CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB",
   "Runtime action must use runtime naming, not legacy smoke naming.",
+);
+assertContains(
+  runtimeAction,
+  'const modelId = normalizeString(args.modelId) || "gpt-5.5";',
+  "Runtime action must default Codex turns to GPT 5.5.",
+);
+assertContains(
+  bridgeSource,
+  "const modelId = String(source.modelId || '').trim() || 'gpt-5.5';",
+  "Codex app-server bridge must default missing runtime payload models to GPT 5.5.",
+);
+assertDoesNotContain(
+  `${runtimeAction}\n${bridgeSource}`,
+  /gpt-5\.3-codex-spark/,
+  "Codex runtime bridge must not keep the old Codex Spark default.",
+);
+assertContains(
+  runtimeAction,
+  "const runtimeVolumeName = destroyAfterRun ? null : names.volumeName;",
+  "Default ephemeral Codex runtime turns must not allocate Blaxel volumes.",
+);
+assertContains(
+  runtimeAction,
+  "volumeName: runtimeVolumeName",
+  "Runtime sandbox creation must use the optional runtime volume name.",
+);
+assertContains(
+  runtimeAction,
+  "volumeSizeMb: runtimeVolumeName ? CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB : null",
+  "Runtime sandbox creation must only request volume storage when a volume exists.",
+);
+assertContains(
+  runtimeAction,
+  "const sandboxDiskGiB = runtimeVolumeName ? mbToGiB(CODEX_APP_SERVER_RUNTIME_VOLUME_SIZE_MB) : 0;",
+  "Codex runtime disk metadata must be zero for ephemeral no-volume turns and the configured size for persistent turns.",
+);
+assertContains(
+  workspaceCredits,
+  'CODEX_BLAXEL_RUNTIME_PRICING_POLICY = "codex_blaxel_runtime_v1"',
+  "Workspace credit helpers must expose a dedicated Codex Blaxel runtime pricing policy.",
+);
+assertContains(
+  workspaceCredits,
+  "CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER = 1.6",
+  "Codex Blaxel runtime pricing must use a direct cost multiplier instead of the old gross-margin target.",
+);
+assertContains(
+  workspaceCredits,
+  "priceCodexBlaxelRuntimeCredits",
+  "Workspace credit helpers must expose Codex Blaxel runtime credit pricing.",
+);
+assertContains(
+  runtimeAction,
+  "recordTrackedCodexBlaxelRuntimeProviderCostBestEffort",
+  "Runtime action must record tracked-only Codex Blaxel provider cost evidence.",
+);
+assertContains(
+  runtimeAction,
+  "internal.workspaceCredits.recordProviderCostInternal",
+  "Runtime action must use the canonical provider-cost accounting writer.",
+);
+assertContains(
+  runtimeAction,
+  'component: "blaxel_active_runtime"',
+  "Runtime action must classify Codex sandbox cost as active Blaxel runtime.",
+);
+assertContains(
+  runtimeAction,
+  'billingDisposition: "tracked_only"',
+  "Runtime action must not debit users in the first Codex accounting slice.",
+);
+assertContains(
+  runtimeAction,
+  'provider_cost_source: "codex_blaxel_runtime_turn"',
+  "Runtime action must label provider-cost evidence as coming from Codex runtime turns.",
+);
+assertContains(
+  runtimeAction,
+  "pricing_policy: CODEX_BLAXEL_RUNTIME_PRICING_POLICY",
+  "Runtime action must persist the dedicated Codex pricing policy in metadata.",
+);
+assertContains(
+  runtimeAction,
+  "cost_multiplier: CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER",
+  "Runtime action must persist the Codex runtime cost multiplier in metadata.",
+);
+assertContains(
+  runtimeAction,
+  "polynet_price_usd",
+  "Runtime action must persist the user-facing price that would apply under the Codex policy.",
+);
+assertContains(
+  runtimeAction,
+  "destroyed_after_run",
+  "Runtime action accounting must preserve whether the sandbox was destroyed after the run.",
+);
+assertContains(
+  runtimeAction,
+  "bridge_cleanup_attempted",
+  "Runtime action accounting must record bridge cleanup attempt evidence.",
+);
+assertContains(
+  runtimeAction,
+  "bridge_cleanup_succeeded",
+  "Runtime action accounting must record bridge cleanup success evidence.",
+);
+assertContains(
+  runtimeAction,
+  "sandbox_destroy_attempted",
+  "Runtime action accounting must record sandbox destroy attempt evidence.",
+);
+assertContains(
+  runtimeAction,
+  "sandbox_destroy_succeeded",
+  "Runtime action accounting must record sandbox destroy success evidence.",
+);
+assertContains(
+  runtimeAction,
+  "volume_destroy_attempted",
+  "Runtime action accounting must record volume destroy attempt evidence.",
+);
+assertContains(
+  runtimeAction,
+  "volume_destroy_succeeded",
+  "Runtime action accounting must record volume destroy success evidence.",
+);
+assertOrderWithin(
+  runtimeAction,
+  "} finally {",
+  [
+    "bridgeCleanupAttempted = true;",
+    "sandboxDestroyAttempted = true;",
+    "if (runtimeVolumeName) {",
+    "volumeDestroyAttempted = true;",
+    "await recordTrackedCodexBlaxelRuntimeProviderCostBestEffort({",
+  ],
+  "Codex runtime provider-cost accounting must run after cleanup and any applicable destroy attempts",
+);
+assertDoesNotContain(
+  runtimeAction,
+  /PAID_TOOL_TARGET_GROSS_MARGIN_BPS|priceWorkspaceUsageCredits/,
+  "Codex runtime action must not reuse the old 60% gross-margin workspace billing path.",
 );
 
 for (const snippet of [

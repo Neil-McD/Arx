@@ -984,6 +984,8 @@ function areWorkspaceStreamingMessageViewsEqual(
   return (
     left.content === right.content &&
     left.runId === right.runId &&
+    left.modelLabel === right.modelLabel &&
+    left.initialStatusLabel === right.initialStatusLabel &&
     left.runtimeEvents === right.runtimeEvents
   );
 }
