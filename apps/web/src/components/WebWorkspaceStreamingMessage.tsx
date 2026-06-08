@@ -53,7 +53,6 @@ export function WebWorkspaceStreamingMessage(
             {props.renderMarkdown(view.content, {
               onCopyCode: props.copyTextToClipboard,
             })}
-            <span className="streaming-caret" aria-hidden="true" />
           </>
         ) : null}
         {!hasTimeline ? (

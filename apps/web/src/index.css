@@ -1107,28 +1107,6 @@
   stroke-linejoin: round;
 }
 
-.streaming-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 2px;
-  background: var(--text-primary);
-  opacity: 0.85;
-  animation: arxCaretBlink 1s steps(1, end) infinite;
-  vertical-align: -0.1em;
-}
-
-@keyframes arxCaretBlink {
-  0%,
-  50% {
-    opacity: 0.85;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
-  }
-}
-
 .ask-bar {
   width: calc(100% - 2 * var(--web-chat-gutter));
   /* Web: match the full chat column width (a bit wider than the message text). */
