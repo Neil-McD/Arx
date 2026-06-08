@@ -209,10 +209,15 @@ for (const eventType of [
   "codex_bridge_files_prepared",
   "codex_app_server_launch_requested",
   "codex_bridge_client_launch_requested",
-  "codex_bridge_client_completed",
+  "codex_bridge_client_failed",
 ]) {
   assertIncludes(blaxelRuntime, eventType, `Codex runtime phase telemetry must include ${eventType}`);
 }
+assert.doesNotMatch(
+  blaxelRuntime,
+  /codex_bridge_client_completed/,
+  "Codex runtime must not append success-side bridge completion after run_finished",
+);
 assertIncludes(blaxelRuntime, "phase_duration_ms", "Codex runtime phase telemetry must record phase duration");
 assertIncludes(blaxelRuntime, "appendCloudRuntimeRunEventByBridgeClaimsInternal", "Codex phase telemetry must use the runtime event ledger");
 

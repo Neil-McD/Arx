@@ -825,21 +825,21 @@ export const runBlaxelCodexRuntimeTurn = action({
             intervalMs: 3_000,
           })
         : clientStarted;
-      queueCodexRuntimePhaseEvent({
-        eventType: "codex_bridge_client_completed",
-        eventKey: "codex_bridge_client_completed",
-        phase: "bridge_client_completed",
-        startedAt: bridgeClientLaunchStartedAt,
-        endedAt: Date.now(),
-        payload: {
-          ok: commandResult.ok,
-          sandbox_name: names.sandboxName,
-          process_name: clientProcessName,
-          failure_code: commandResult.ok ? null : commandResult.code,
-        },
-      });
-      await flushCodexRuntimePhaseTelemetry();
       if (!commandResult.ok) {
+        queueCodexRuntimePhaseEvent({
+          eventType: "codex_bridge_client_failed",
+          eventKey: "codex_bridge_client_failed",
+          phase: "bridge_client_failed",
+          startedAt: bridgeClientLaunchStartedAt,
+          endedAt: Date.now(),
+          payload: {
+            ok: false,
+            sandbox_name: names.sandboxName,
+            process_name: clientProcessName,
+            failure_code: commandResult.code,
+          },
+        });
+        await flushCodexRuntimePhaseTelemetry();
         throw new Error(redactSensitiveText(`codex_runtime_bridge_failed:${commandResult.message || commandResult.code}`));
       }
       const stdout = normalizeString(commandResult.stdout);
