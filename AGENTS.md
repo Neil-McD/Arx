@@ -128,7 +128,10 @@ Classification buckets for every candidate:
 
 ## 6.5) Canonical Release Workflow
 
-- Active development worktree: `/Users/neilmcdevitt/code/arx`.
+- Production/main work must use a clean `main` worktree and follow the production release workflow.
+- Blaxel/Codex staging work must use `/Users/neilmcdevitt/code/arx-codex-blaxel-staging` on branch `codex/blaxel-staging-active-20260608`.
+- Before any Blaxel/Codex staging proof, smoke, commit, or deploy handoff, run `npm run check:blaxel-staging-worktree`.
+- Never run Blaxel/Codex staging work from `/Users/neilmcdevitt/code/arx`, `/Users/neilmcdevitt/code/arx-blaxel-stage`, `/Users/neilmcdevitt/code/arx-codex-blaxel-bridge`, a detached temp worktree, or `main`.
 - Legacy workspace-provider worktree snapshots are historical only and are not canonical or active.
 - Canonical Git release branch: `origin/main`.
 - Canonical production app: Vercel project `polynet`.
@@ -139,6 +142,7 @@ Classification buckets for every candidate:
 - Convex production releases are explicit and should be run intentionally from the validated code state.
 - Do not use direct local Vercel production deploys as a release path.
 - Follow [/Users/neilmcdevitt/code/arx/docs/alpha-release-workflow.md](/Users/neilmcdevitt/code/arx/docs/alpha-release-workflow.md) for the operational runbook.
+- Follow [/Users/neilmcdevitt/code/arx-codex-blaxel-staging/docs/blaxel-codex-dev-staging-path.md](/Users/neilmcdevitt/code/arx-codex-blaxel-staging/docs/blaxel-codex-dev-staging-path.md) for the Blaxel/Codex dev and staging path contract.
 
 ---
 

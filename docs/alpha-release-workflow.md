@@ -2,7 +2,10 @@
 
 ## Canonical Truths
 
-- Active development worktree: `/Users/neilmcdevitt/code/arx`
+- Production/main work requires a clean `main` worktree.
+- Blaxel/Codex staging worktree: `/Users/neilmcdevitt/code/arx-codex-blaxel-staging`
+- Blaxel/Codex staging branch: `codex/blaxel-staging-active-20260608`
+- Blaxel/Codex staging contract: `docs/blaxel-codex-dev-staging-path.md`
 - Legacy workspace worktree snapshots are historical only and are not part of active development or release truth
 - Canonical Git remote: `origin` -> `Neil-McD/Arx`
 - Canonical release branch: `main`
@@ -35,6 +38,15 @@ then the release is not complete until:
 3. one real MCP connect attempt has been re-tested on production
 
 This is the canonical path. Do not rely on branch names, preview URLs, or old Vercel projects as release truth.
+
+## Blaxel/Codex Staging Rule
+
+- Blaxel/Codex staging work must run from `/Users/neilmcdevitt/code/arx-codex-blaxel-staging`.
+- The required branch is `codex/blaxel-staging-active-20260608`.
+- The staging web target is `polynet-staging` at `https://polynet-staging.vercel.app`.
+- The staging Convex target is `dev:quick-porcupine-949`.
+- Run `npm run check:blaxel-staging-worktree` before Blaxel/Codex staging proofs, smokes, commits, or deploy handoffs.
+- Do not use `/Users/neilmcdevitt/code/arx`, old Blaxel worktrees, detached temp worktrees, or `main` for Blaxel/Codex staging work.
 
 ## Web Production Rule
 
