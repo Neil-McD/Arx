@@ -22,6 +22,7 @@ npm run check:blaxel-staging-worktree
 - Web URL: `https://polynet-staging.vercel.app`
 - Convex deployment: `dev:quick-porcupine-949`
 - Codex/Blaxel bridge smoke: `npm run smoke:codex-blaxel-runtime-bridge-staging`
+- Codex/Blaxel latency probe: `npm run probe:codex-blaxel-runtime-latency-staging -- --thread-key <threadKey>`
 
 Staging web releases must be built from `/Users/neilmcdevitt/code/arx-codex-blaxel-staging`. Do not deploy staging from the root worktree, a detached temp worktree, or `main`.
 

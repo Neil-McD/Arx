@@ -140,6 +140,7 @@
     "check:codex-blaxel-web-turn-launch-contract": "npm run check:blaxel-staging-worktree && node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_blaxel_web_turn_launch_contract_proof.ts",
     "check:blaxel-staging-worktree": "bash scripts/blaxel_staging_worktree_guard.sh",
     "smoke:codex-blaxel-runtime-bridge-staging": "npm run check:blaxel-staging-worktree && CONVEX_DEPLOYMENT=dev:quick-porcupine-949 node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_blaxel_runtime_bridge_staging_smoke.ts",
+    "probe:codex-blaxel-runtime-latency-staging": "npm run check:blaxel-staging-worktree && CONVEX_DEPLOYMENT=dev:quick-porcupine-949 node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_blaxel_runtime_latency_staging_probe.ts",
     "push:codex-blaxel-image": "npm run check:blaxel-staging-worktree && bash scripts/run_codex_blaxel_image_push.sh",
     "check:blaxel-staging-readiness": "bash scripts/blaxel_staging_readiness_guard.sh",
     "smoke:blaxel-workspace-provider": "bash scripts/run_blaxel_workspace_provider_smoke.sh",
