@@ -99,7 +99,11 @@ async function waitForHealth(proc: ChildProcessWithoutNullStreams, timeoutMs = 1
       );
     }
     try {
-      const response = await fetchJson(`${serviceUrl}/healthz`, undefined, 5000);
+      const response = await fetchJson(
+        `${serviceUrl}/healthz`,
+        { headers: { Authorization: `Bearer ${authToken}` } },
+        5000,
+      );
       if (response.status === 200) return response.body;
       lastError = `status=${response.status} body=${JSON.stringify(response.body)}`;
     } catch (error) {

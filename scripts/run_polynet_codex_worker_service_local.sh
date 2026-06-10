@@ -17,6 +17,8 @@ load_env_if_present() {
 
 # Env explicitly set by the caller (e.g. the service contract proof injecting
 # its own auth token and port) must win over values in local env files.
+# macOS ships Bash 3.2, so no associative arrays: snapshot to prefixed
+# variables and restore any that were set before sourcing.
 PRESET_VARS=(
   POLYNET_CODEX_WORKER_AUTH_TOKEN
   POLYNET_CODEX_WORKER_PORT
@@ -26,18 +28,20 @@ PRESET_VARS=(
   CONVEX_DEPLOYMENT
   POLYNET_DEPLOYMENT_KIND
 )
-declare -A PRESET_VALUES=()
 for var in "${PRESET_VARS[@]}"; do
   if [[ -n "${!var:-}" ]]; then
-    PRESET_VALUES[$var]="${!var}"
+    eval "PRESET_SNAPSHOT_${var}=\"${!var}\""
   fi
 done
 
 load_env_if_present "$STAGING_ENV_FILE"
 load_env_if_present "$BLAXEL_ENV_FILE"
 
-for var in "${!PRESET_VALUES[@]}"; do
-  export "$var"="${PRESET_VALUES[$var]}"
+for var in "${PRESET_VARS[@]}"; do
+  snapshot_var="PRESET_SNAPSHOT_${var}"
+  if [[ -n "${!snapshot_var:-}" ]]; then
+    export "$var"="${!snapshot_var}"
+  fi
 done
 
 export POLYNET_WORKSPACE_COMPUTER_PROVIDER="${POLYNET_WORKSPACE_COMPUTER_PROVIDER:-blaxel}"

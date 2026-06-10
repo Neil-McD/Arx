@@ -173,7 +173,7 @@ export async function handlePolynetCodexWorkerIngest(
   }
 
   let assistantPersisted = false;
-  if (assistantText.trim() || status === "error") {
+  if (assistantText.trim() || status === "error" || status === "cancelled") {
     try {
       await persistRuntimeAssistantMessage({
         ctx,
