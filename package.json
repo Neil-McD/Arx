@@ -130,6 +130,7 @@
     "check:workspace-billing-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_billing_surface_proof.ts",
     "check:provider-cost-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/provider_cost_accounting_contract_proof.ts",
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
+    "check:polynet-codex-worker-acceptance": "bash scripts/polynet_codex_worker_acceptance_gate.sh",
     "check:polynet-codex-worker-staging": "CONVEX_DEPLOYMENT=dev:quick-porcupine-949 POLYNET_DEPLOYMENT_KIND=staging bash scripts/polynet_codex_worker_staging_guard.sh",
     "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh",
     "check:polynet-codex-worker-service-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts --require-live",

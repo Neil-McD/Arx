@@ -30,7 +30,7 @@ PRESET_VARS=(
 )
 for var in "${PRESET_VARS[@]}"; do
   if [[ -n "${!var:-}" ]]; then
-    eval "PRESET_SNAPSHOT_${var}=\"${!var}\""
+    printf -v "PRESET_SNAPSHOT_${var}" '%s' "${!var}"
   fi
 done
 

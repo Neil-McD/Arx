@@ -63,6 +63,29 @@ workspace, not parallel sandboxes. Over-limit turns fail fast with
 `project_run_limit_reached` / `user_run_limit_reached` (429). The effective
 per-user parallelism ceiling is their own ChatGPT plan's rate limits.
 
+## Proof Hierarchy
+
+"All proofs green" means exactly one thing: the acceptance gate passes.
+
+```bash
+POLYNET_CODEX_WORKER_AUTH_TOKEN=... \
+npm run check:polynet-codex-worker-acceptance
+```
+
+Acceptance gates (each buys confidence in the deployed architecture):
+diff hygiene, staging guard, Fly config proof, Convex bridge contract,
+provider cost accounting, workspace credit accounting, Blaxel lifecycle
+accounting, workspace resource admission, runtime turn contract guard, web
+typecheck, web build, and the live remote Fly contract with
+`POLYNET_CODEX_WORKER_EXPECT_MULTI_MACHINE=true` (Fly routing, stopped-machine
+wake, Codex boot, Blaxel execution, cancel affinity, minimal public health,
+forged-ingest rejection, lifecycle events).
+
+Dev conveniences (never gates; if one breaks for environmental reasons twice,
+delete it instead of fixing it):
+`check:polynet-codex-worker-service-contract` (local worker iteration),
+`run_polynet_codex_worker_poc.sh`, and ad hoc local smoke loops.
+
 ## Local Config Proof
 
 ```bash
