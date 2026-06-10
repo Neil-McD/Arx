@@ -29,6 +29,21 @@ assert.match(
 );
 assert.match(
   bridge,
+  /inferenceSource[\s\S]*!== "chatgpt"\) return false/,
+  "bridge must only route chatgpt-lane turns to the worker (BYOK)",
+);
+assert.match(
+  bridge,
+  /chatgpt_auth: \{[\s\S]*access_token: params\.chatgptAuth\.accessToken[\s\S]*chatgpt_account_id: params\.chatgptAuth\.accountId/,
+  "bridge must pass the user's own ChatGPT auth tokens per turn",
+);
+assert.match(
+  handlers,
+  /getFreshChatgptAuthForUser\(\{[\s\S]*userId: actor\.dbUserId[\s\S]*provider_connection_required/,
+  "worker path must mint fresh per-user ChatGPT auth and fail closed without a connection",
+);
+assert.match(
+  bridge,
   /event\.event === "delta"[\s\S]*assistantText[\s\S]*event\.event === "done"[\s\S]*event\.event === "run_finalized"/,
   "bridge must parse worker deltas and lifecycle finalization",
 );

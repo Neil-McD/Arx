@@ -120,8 +120,26 @@ HTTPS (200 from example.com), bash, git, Python 3.12.13, Node 24.16.0. `curl`
 and `wget` are not in the sandbox image yet. Timing unchanged
 (`sandbox_ensure_ms` 388, `sandbox_destroy_ms` 67).
 
-Known risk until BYOK per-turn auth: with `approval_policy = "never"`, Codex
-read-only local commands execute without approval and `ReadOnly` has no
-deny-list, so `$CODEX_HOME/auth.json` on the Fly machine is readable by a
-crafted turn. Contained to the staging-only shared token; resolved by moving
-worker Codex auth to per-user credentials.
+## BYOK Per-Turn Auth (release v7, 2026-06-10)
+
+`/v1/codex/turn` requires `chatgpt_auth` in the request body:
+
+- `access_token`: the user's ChatGPT OAuth JWT
+- `chatgpt_account_id`: the user's workspace id
+- `chatgpt_plan_type`: optional
+
+Turns without it return `400 chatgpt_auth_required`. The Convex bridge mints
+fresh tokens per turn via `getFreshChatgptAuthForUser` and only routes
+`chatgpt`-lane turns to the worker; users without a ChatGPT connection fail
+closed with `provider_connection_required`. The worker logs into Codex with
+`account/login/start` (`chatgptAuthTokens`) before each turn and logs out in
+the turn's cleanup, emitting `codex_account_login_finished` /
+`codex_account_logout_finished` events and a `codex_account_login_ms` timing
+bucket. Mid-turn `account/chatgptAuthTokens/refresh` requests are answered
+with an error (no refresh tokens leave Convex); tokens are minted with ~60s
+expiry headroom at turn start.
+
+The machine-level Codex secret (`CODEX_ACCESS_TOKEN` et al.) is now
+probe-only fallback: during any user turn, `$CODEX_HOME/auth.json` holds that
+user's own token, so the prior shared-token read exposure is closed. Removing
+the boot login entirely (probe also carrying auth) is a candidate follow-up.

@@ -278,6 +278,25 @@ async function main() {
   assert.equal(invalidSandbox.status, 400, "probe endpoint must reject invalid sandbox names");
   assert.equal(invalidSandbox.body.code, "invalid_sandbox_name", "invalid sandbox response code mismatch");
 
+  const missingChatgptAuth = await fetchJson(`${baseUrl}/v1/codex/turn`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ prompt: "say hi" }),
+  });
+  assert.equal(
+    missingChatgptAuth.status,
+    400,
+    "turn endpoint must reject turns without per-user chatgpt_auth",
+  );
+  assert.equal(
+    missingChatgptAuth.body.code,
+    "chatgpt_auth_required",
+    "missing chatgpt_auth response code mismatch",
+  );
+
   await assertBusyWhileTurnInFlight({ baseUrl, authToken });
 
   const events = await runStreamedProbe({ baseUrl, authToken });

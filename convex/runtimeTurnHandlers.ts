@@ -73,6 +73,7 @@ import {
 } from "./workspaceRuntimeSession";
 import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames";
 import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
+import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 
 export type {
   SseResponseEvent,
@@ -496,6 +497,7 @@ export async function handleRuntimeTurnRequest(args: {
     const usePolynetCodexWorkerBridge = shouldUsePolynetCodexWorkerBridge({
       runtimeExecutionMode,
       stream,
+      inferenceSource,
     });
     const runtimeEngineId = usePolynetCodexWorkerBridge
       ? POLYNET_CODEX_WORKER_ENGINE_ID
@@ -980,6 +982,42 @@ export async function handleRuntimeTurnRequest(args: {
           });
 
           runtimeTurnStage = "polynet_codex_worker";
+          const workerChatgptAuth = await getFreshChatgptAuthForUser({
+            ctx,
+            userId: actor.dbUserId,
+          });
+          const workerChatgptAccountId = String(workerChatgptAuth?.accountId ?? "").trim();
+          if (!workerChatgptAuth?.accessToken || !workerChatgptAccountId) {
+            const authFailureCode = "provider_connection_required";
+            const authFailureMessage =
+              "Connect ChatGPT to run Codex turns with your own account.";
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: authFailureCode,
+              errorCode: authFailureCode,
+              errorMessage: authFailureMessage,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: authFailureCode,
+              errorCode: authFailureCode,
+              errorMessage: authFailureMessage,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: authFailureCode,
+                error: authFailureMessage,
+                message: authFailureMessage,
+                status: 403,
+                cta: "connect_provider",
+              },
+            });
+            return;
+          }
           let workerWorkspaceSession: RuntimeWorkspaceSession | null = null;
           let workerSandboxName: string | null = null;
           if (runtimeProjectId) {
@@ -1054,6 +1092,11 @@ export async function handleRuntimeTurnRequest(args: {
             prompt: workerPrompt,
             sandboxName: workerSandboxName,
             destroyAfterRun: workerSandboxName ? false : true,
+            chatgptAuth: {
+              accessToken: workerChatgptAuth.accessToken,
+              accountId: workerChatgptAccountId,
+              planType: null,
+            },
             onEvent: async (event) => {
               if (event.event === "delta") {
                 emitDelta(event.data);

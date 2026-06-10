@@ -91,11 +91,19 @@ export function getPolynetCodexWorkerBridgeConfig(): {
 export function shouldUsePolynetCodexWorkerBridge(params: {
   runtimeExecutionMode: "agentic" | "chat";
   stream: boolean;
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
 }): boolean {
   if (params.runtimeExecutionMode !== "agentic") return false;
   if (!params.stream) return false;
+  if (params.inferenceSource !== "chatgpt") return false;
   return getPolynetCodexWorkerBridgeConfig().enabled;
 }
+
+export type PolynetCodexWorkerChatgptAuth = {
+  accessToken: string;
+  accountId: string;
+  planType: string | null;
+};
 
 export function buildPolynetCodexWorkerPrompt(params: {
   conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -192,6 +200,7 @@ export async function streamPolynetCodexWorkerTurn(params: {
   model: string;
   sandboxName?: string | null;
   destroyAfterRun?: boolean;
+  chatgptAuth: PolynetCodexWorkerChatgptAuth;
   onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
 }): Promise<PolynetCodexWorkerBridgeResult> {
   const config = getPolynetCodexWorkerBridgeConfig();
@@ -222,6 +231,11 @@ export async function streamPolynetCodexWorkerTurn(params: {
         ? { sandbox_name: String(params.sandboxName ?? "").trim() }
         : {}),
       destroy_after_run: params.destroyAfterRun ?? true,
+      chatgpt_auth: {
+        access_token: params.chatgptAuth.accessToken,
+        chatgpt_account_id: params.chatgptAuth.accountId,
+        chatgpt_plan_type: params.chatgptAuth.planType,
+      },
     }),
   });
 

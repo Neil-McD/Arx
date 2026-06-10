@@ -50,6 +50,12 @@ type ActiveTurn = {
   turnCompletionResolvers: Map<string, Array<(value: JsonRecord) => void>>;
 };
 
+type WorkerChatgptAuth = {
+  accessToken: string;
+  chatgptAccountId: string;
+  chatgptPlanType: string | null;
+};
+
 type RunTurnParams = {
   runId: string;
   prompt: string;
@@ -59,6 +65,7 @@ type RunTurnParams = {
   commandTimeoutSeconds: number;
   destroyAfterRun: boolean;
   probeMode: boolean;
+  chatgptAuth: WorkerChatgptAuth | null;
   writer: StreamWriter | null;
 };
 
@@ -316,9 +323,27 @@ export class PolynetCodexWorkerRuntime {
       });
 
     let sandboxEnsured = false;
+    let chatgptAuthApplied = false;
     try {
       await this.start();
       if (!this.client) throw new Error("codex_app_server_missing");
+
+      if (params.chatgptAuth) {
+        activeTurn.timing.startBucket("codex_account_login_ms");
+        await this.client.request("account/login/start", {
+          type: "chatgptAuthTokens",
+          accessToken: params.chatgptAuth.accessToken,
+          chatgptAccountId: params.chatgptAuth.chatgptAccountId,
+          chatgptPlanType: params.chatgptAuth.chatgptPlanType,
+        });
+        chatgptAuthApplied = true;
+        const accountLoginMs = activeTurn.timing.endBucket("codex_account_login_ms");
+        emitWorkerEvent("codex_account_login_finished", {
+          auth_mode: "user_chatgpt",
+          chatgpt_account_id: params.chatgptAuth.chatgptAccountId,
+          latency_ms: accountLoginMs,
+        });
+      }
 
       activeTurn.writer?.send("start", {
         run_id: params.runId,
@@ -458,6 +483,18 @@ export class PolynetCodexWorkerRuntime {
     } catch (error) {
       pendingError = error;
     } finally {
+      if (chatgptAuthApplied && this.client) {
+        try {
+          await this.client.request("account/logout", {});
+          emitWorkerEvent("codex_account_logout_finished", { ok: true });
+        } catch (logoutError) {
+          emitWorkerEvent("codex_account_logout_finished", {
+            ok: false,
+            message:
+              logoutError instanceof Error ? logoutError.message : String(logoutError),
+          });
+        }
+      }
       if (params.destroyAfterRun && sandboxEnsured) {
         activeTurn.timing.startBucket("sandbox_destroy_ms");
         const cleanup = await destroyBlaxelSandboxBestEffort(params.sandboxName);
@@ -638,6 +675,14 @@ export class PolynetCodexWorkerRuntime {
     const activeTurn = this.activeTurn;
     const method = String(message.method ?? "");
     if (method !== "item/tool/call") {
+      if (method === "account/chatgptAuthTokens/refresh") {
+        this.client.respondError(
+          message.id,
+          -32000,
+          "chatgpt token refresh is unavailable in the PolyNet worker; restart the turn",
+        );
+        return;
+      }
       if (method === "item/commandExecution/requestApproval") {
         this.client.respond(message.id, { decision: "decline" });
         return;
@@ -785,6 +830,29 @@ async function handleTurnEndpoint(params: {
       ? body.destroy_after_run
       : readBooleanEnv("POLYNET_CODEX_WORKER_DESTROY_AFTER_RUN", true);
 
+  const rawChatgptAuth = asRecord(body.chatgpt_auth);
+  const chatgptAccessToken = String(rawChatgptAuth?.access_token ?? "").trim();
+  const chatgptAccountId = String(rawChatgptAuth?.chatgpt_account_id ?? "").trim();
+  const chatgptPlanType = String(rawChatgptAuth?.chatgpt_plan_type ?? "").trim() || null;
+  const chatgptAuth: WorkerChatgptAuth | null =
+    chatgptAccessToken && chatgptAccountId
+      ? {
+          accessToken: chatgptAccessToken,
+          chatgptAccountId,
+          chatgptPlanType,
+        }
+      : null;
+  if (!params.probeMode && !chatgptAuth) {
+    sendJson(params.res, 400, {
+      ok: false,
+      code: "chatgpt_auth_required",
+      message:
+        "chatgpt_auth with access_token and chatgpt_account_id is required for worker turns.",
+      run_id: runId,
+    });
+    return;
+  }
+
   if (params.runtime.isBusy()) {
     sendWorkerBusy(params.res, runId);
     return;
@@ -807,6 +875,7 @@ async function handleTurnEndpoint(params: {
         commandTimeoutSeconds,
         destroyAfterRun,
         probeMode: params.probeMode,
+        chatgptAuth,
         writer,
       });
     } catch (error) {
@@ -831,6 +900,7 @@ async function handleTurnEndpoint(params: {
       commandTimeoutSeconds,
       destroyAfterRun,
       probeMode: params.probeMode,
+      chatgptAuth,
       writer: null,
     });
     sendJson(params.res, 200, result);
