@@ -17,6 +17,7 @@ export type CodexAppServerClientOptions = {
   onServerRequest: (message: JsonRecord) => Promise<void>;
   onTrace?: (event: string, data?: JsonRecord) => void;
   onStderr?: (line: string) => void;
+  onClosed?: (error: Error) => void;
 };
 
 export type CodexAppServerInitializeResult = {
@@ -104,6 +105,7 @@ export class CodexAppServerClient {
         code: code ?? null,
         signal: signal ?? null,
       });
+      this.options.onClosed?.(error);
     });
     this.proc.stdin.on("error", (error) => {
       this.closed = true;

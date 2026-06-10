@@ -1,6 +1,8 @@
 import { internal } from "./_generated/api";
 import { buildRuntimeRunPersistenceHelpers } from "./httpRuntimeTurnState";
 import { persistRuntimeAssistantMessage } from "./runtimeTurnPersistence";
+import { settleRuntimeWorkspaceSession } from "./workspaceRuntimeSession";
+import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 
 type JsonRecord = Record<string, unknown>;
@@ -216,10 +218,44 @@ export async function handlePolynetCodexWorkerIngest(
       : {}),
   });
 
+  // Settle the workspace lease if the live path never did: the charge is
+  // idempotent by reservation key, so a double settle is a no-op.
+  let leaseSettled = false;
+  const lease = asRecord(body.context && (body.context as JsonRecord).lease);
+  const leaseReservationKey = String(lease?.credit_reservation_key ?? "").trim();
+  const leaseStartedAt = Number(lease?.started_at);
+  if (leaseReservationKey && Number.isFinite(leaseStartedAt)) {
+    try {
+      const settled = await settleRuntimeWorkspaceSession({
+        ctx,
+        userId: context.owner_id,
+        runId: context.run_id,
+        session: {
+          providerId: "blaxel",
+          projectId: String(lease?.project_id ?? ""),
+          projectVolumeId: null,
+          providerSandboxId: String(lease?.provider_sandbox_id ?? ""),
+          workspaceRoot: "/workspace",
+          startedAt: leaseStartedAt,
+          creditReservationKey: leaseReservationKey,
+          sandboxCpu: Number(lease?.sandbox_cpu) || 1,
+          sandboxMemoryGiB: Number(lease?.sandbox_memory_gib) || 2,
+          sandboxDiskGiB: Number(lease?.sandbox_disk_gib) || 8,
+          lifecycleMode: "provider_standby",
+        } as any,
+        providerStandbyGraceSeconds: BLAXEL_AUTO_STANDBY_GRACE_SECONDS,
+      });
+      leaseSettled = settled.ok === true && settled.skipped !== true;
+    } catch {
+      // Best effort: the reservation expiry remains the final backstop.
+    }
+  }
+
   return json(200, {
     ok: true,
     run_id: context.run_id,
     events_appended: eventsAppended,
     assistant_persisted: assistantPersisted,
+    lease_settled: leaseSettled,
   });
 }

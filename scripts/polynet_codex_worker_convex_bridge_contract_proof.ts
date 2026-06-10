@@ -70,6 +70,16 @@ assert.match(
   "ingest must validate the caller-supplied context against the real run record before writing",
 );
 assert.match(
+  ingest,
+  /settleRuntimeWorkspaceSession[\s\S]*credit_reservation_key[\s\S]*lease_settled/,
+  "ingest must settle the workspace lease so a dead live path cannot leave turns unbilled",
+);
+assert.match(
+  handlers,
+  /lease: \{[\s\S]*credit_reservation_key:[\s\S]*workerWorkspaceSession\.creditReservationKey/,
+  "worker ingest context must carry the lease coordinates for backstop settlement",
+);
+assert.match(
   bridge,
   /polynet_codex_worker_unreachable[\s\S]*polynet_codex_worker_stream_failed/,
   "bridge must convert fetch and stream failures into structured results so callers settle leases",

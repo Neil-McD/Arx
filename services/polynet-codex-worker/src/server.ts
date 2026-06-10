@@ -475,7 +475,10 @@ export class PolynetCodexWorkerRuntime {
         codex_turn_id: turnId,
         latency_ms: turnStartAckMs,
       });
-      await waitForTurnCompletion(turnId);
+      const completion = await waitForTurnCompletion(turnId);
+      if (completion.__codex_app_server_exited === true) {
+        throw new Error(String(completion.message ?? "codex_app_server_exited"));
+      }
       activeTurn.timing.setBucket("codex_turn_total_ms", elapsedMs(turnStartedAtMs));
       if (activeTurn.cancelRequested) {
         throw new WorkerTurnCancelledError();
@@ -636,6 +639,9 @@ export class PolynetCodexWorkerRuntime {
       onServerRequest: (message) => this.handleServerRequest(message),
       onStderr: (line) => {
         process.stderr.write(`[codex app-server] ${line}\n`);
+      },
+      onClosed: (error) => {
+        this.handleAppServerClosed(error);
       },
     });
     const startedAtMs = nowMs();
@@ -810,6 +816,26 @@ export class PolynetCodexWorkerRuntime {
       success: result.summary.ok,
       contentItems: [{ type: "inputText", text: result.contentText }],
     });
+  }
+
+  private handleAppServerClosed(error: Error): void {
+    // A dead child must fail the active turn now, not after the 15-minute
+    // completion timeout, and must not poison the next turn: clearing the
+    // cached client lets start() respawn the app-server.
+    this.client = null;
+    this.initializePromise = null;
+    const activeTurn = this.activeTurn;
+    if (!activeTurn) return;
+    this.emitRuntimeEvent("codex_app_server_exited", {
+      message: error.message,
+    });
+    const failure = new Error(`codex_app_server_exited: ${error.message}`);
+    for (const [turnId, waiters] of activeTurn.turnCompletionResolvers) {
+      activeTurn.turnCompletionResolvers.delete(turnId);
+      for (const waiter of waiters) {
+        waiter({ __codex_app_server_exited: true, message: failure.message });
+      }
+    }
   }
 
   async interruptActiveTurnBestEffort(reason: string): Promise<boolean> {

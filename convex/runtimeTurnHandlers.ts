@@ -1190,6 +1190,23 @@ export async function handleRuntimeTurnRequest(args: {
                   model_id: requestedModelId,
                   lane,
                   inference_source: streamedInferenceSource,
+                  // Lease coordinates let the ingest backstop settle billing
+                  // when this action dies before the live settle runs; the
+                  // charge is idempotent by reservation key.
+                  ...(workerWorkspaceSession
+                    ? {
+                        lease: {
+                          credit_reservation_key:
+                            workerWorkspaceSession.creditReservationKey ?? null,
+                          started_at: workerWorkspaceSession.startedAt,
+                          project_id: String(workerWorkspaceSession.projectId),
+                          provider_sandbox_id: workerWorkspaceSession.providerSandboxId,
+                          sandbox_cpu: workerWorkspaceSession.sandboxCpu,
+                          sandbox_memory_gib: workerWorkspaceSession.sandboxMemoryGiB,
+                          sandbox_disk_gib: workerWorkspaceSession.sandboxDiskGiB,
+                        },
+                      }
+                    : {}),
                 },
               };
             })(),

@@ -54,7 +54,9 @@ update every machine in the app. Suspended machines cost rootfs storage only.
 Staging pool: 10 machines.
 
 Concurrency caps (Convex admission, `shared/polynetCodexWorkerLimits.ts`):
-5 concurrent runs per project, 25 per user, counted over a 20-minute
+5 concurrent runs per project, 10 per user (bound to the pool size — each
+run occupies one single-flight machine; raise both together), counted over
+a 20-minute
 startedAt window so zombie runs cannot hold slots. Concurrent runs on one
 project share the project sandbox and its volume — parallel agents in one
 workspace, not parallel sandboxes. Over-limit turns fail fast with

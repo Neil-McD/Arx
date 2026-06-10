@@ -2,7 +2,10 @@
 // same project share the one project sandbox (and its volume), so these caps
 // bound parallel agents per workspace and per user — not sandbox count.
 export const POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT = 5;
-export const POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT = 25;
+// Must not exceed the Fly worker pool size (currently 10 machines) — each
+// concurrent run occupies one single-flight machine. Raise this and the pool
+// together.
+export const POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT = 10;
 
 // A run counts as active when it is still "running" and started within this
 // window. The worker turn timeout is 15 minutes, so anything older is a
