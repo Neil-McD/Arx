@@ -95,6 +95,7 @@ export function readBlaxelEnvStatus(): {
 export async function ensureBlaxelSandbox(params: {
   sandboxName: string;
   labels?: Record<string, string>;
+  requireExisting?: boolean;
 }): Promise<{
   providerSandboxId: string | null;
   workspaceRoot: string | null;
@@ -102,6 +103,7 @@ export async function ensureBlaxelSandbox(params: {
   const ensured = await ensureBlaxelWorkspaceComputer({
     sandboxName: params.sandboxName,
     lifecycleIntent: "agent_run",
+    requireExisting: params.requireExisting === true,
     labels: {
       purpose: "polynet-codex-worker-service",
       ...(params.labels ?? {}),

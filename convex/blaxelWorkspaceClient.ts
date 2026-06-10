@@ -41,6 +41,7 @@ export type BlaxelWorkspaceSandboxSpec = {
   lifecycleIntent?: WorkspaceComputerLifecycleIntent | null;
   ports?: Array<{ name?: string; target: number; protocol?: "HTTP" | "TCP" }>;
   labels?: Record<string, string>;
+  requireExisting?: boolean;
 };
 
 export type BlaxelWorkspaceExpirationPolicy = {
@@ -449,7 +450,7 @@ export function loadBlaxelWorkspaceConfig():
       workspace,
       apiKey,
       image: readEnv("BLAXEL_WORKSPACE_IMAGE") || "blaxel/base-image:latest",
-      memoryMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_MEMORY_MB", 4096),
+      memoryMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_MEMORY_MB", 2048),
       region: readEnv("BLAXEL_WORKSPACE_REGION") || "us-pdx-1",
       volumeSizeMb: readPositiveIntegerEnv("BLAXEL_WORKSPACE_VOLUME_SIZE_MB", 2048),
       providerVolumeLimit: readOptionalPositiveIntegerEnv("BLAXEL_WORKSPACE_VOLUME_LIMIT"),
@@ -669,6 +670,56 @@ export function isBlaxelWorkspaceSandboxTerminalState(value: unknown): boolean {
       "terminating",
     ].includes(state),
   );
+}
+
+export function isBlaxelWorkspaceSandboxTransitionalState(value: unknown): boolean {
+  const state = normalizeBlaxelSandboxState(value);
+  return Boolean(
+    state &&
+    [
+      "building",
+      "creating",
+      "deploying",
+      "pending",
+      "provisioning",
+      "queued",
+      "updating",
+      "uploading",
+    ].includes(state),
+  );
+}
+
+const BLAXEL_SANDBOX_DEPLOY_WAIT_MS = 90_000;
+const BLAXEL_SANDBOX_DEPLOY_POLL_INTERVAL_MS = 2_000;
+
+async function waitForBlaxelSandboxReady(params: {
+  SandboxInstance: any;
+  sandboxName: string;
+  initialSandbox: any;
+  maxWaitMs?: number;
+}): Promise<{ ready: boolean; sandbox: any; state: string | null }> {
+  let sandbox = params.initialSandbox;
+  let state = sandboxStateFrom(sandbox);
+  const deadline = Date.now() + (params.maxWaitMs ?? BLAXEL_SANDBOX_DEPLOY_WAIT_MS);
+  // The SDK's sandbox.wait() is a deprecated no-op and freshly created
+  // instances often carry no status yet, so null/undefined state means
+  // "unknown" and must be re-fetched, never treated as ready.
+  while (state === null || isBlaxelWorkspaceSandboxTransitionalState(state)) {
+    if (Date.now() >= deadline) break;
+    await new Promise((resolve) =>
+      setTimeout(resolve, BLAXEL_SANDBOX_DEPLOY_POLL_INTERVAL_MS),
+    );
+    sandbox = await params.SandboxInstance.get(params.sandboxName);
+    state = sandboxStateFrom(sandbox);
+  }
+  return {
+    ready:
+      state !== null &&
+      !isBlaxelWorkspaceSandboxTransitionalState(state) &&
+      !isBlaxelWorkspaceSandboxTerminalState(state),
+    sandbox,
+    state,
+  };
 }
 
 function terminalBlaxelSandboxFailure(
@@ -1129,12 +1180,25 @@ export async function ensureBlaxelWorkspaceSandbox(
       });
     }
     try {
-      const existingSandbox = await SandboxInstance.get(sandboxName);
-      if (typeof existingSandbox?.wait === "function") {
-        await existingSandbox.wait({ maxWait: 120_000, interval: 2_000 });
-      }
-      const existingState = sandboxStateFrom(existingSandbox);
-      if (isBlaxelWorkspaceSandboxTerminalState(existingState)) {
+      const fetchedSandbox = await SandboxInstance.get(sandboxName);
+      const readiness = await waitForBlaxelSandboxReady({
+        SandboxInstance,
+        sandboxName,
+        initialSandbox: fetchedSandbox,
+      });
+      const existingSandbox = readiness.sandbox;
+      const existingState = readiness.state;
+      if (!readiness.ready) {
+        if (params.requireExisting) {
+          return failure({
+            status: 503,
+            code: "blaxel_sandbox_not_ready",
+            message: "Blaxel sandbox exists but did not become ready.",
+            details: { provider_state: existingState ?? null },
+          });
+        }
+        // Terminal or stuck mid-deploy: replace it. The volume is separate and
+        // survives, so deleting here only discards the wedged compute instance.
         try {
           await SandboxInstance.delete(sandboxName);
         } catch (deleteError) {
@@ -1143,6 +1207,9 @@ export async function ensureBlaxelWorkspaceSandbox(
             return deleteFailure;
           }
         }
+        // Recreating the same name immediately after deletion races provider
+        // teardown ("Unable to create sandbox after 3 attempts"); let it settle.
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
       } else {
         const existingLifecycleState = resolveBlaxelSandboxLifecycleState({
           sandbox: existingSandbox,
@@ -1177,9 +1244,6 @@ export async function ensureBlaxelWorkspaceSandbox(
             config,
             labels: params.labels,
           });
-          if (typeof (updatedSandbox as any)?.wait === "function") {
-            await (updatedSandbox as any).wait({ maxWait: 120_000, interval: 2_000 });
-          }
           await ensureBlaxelWorkspaceRootDirectory(updatedSandbox, workspaceRoot);
           return {
             ok: true,
@@ -1208,21 +1272,42 @@ export async function ensureBlaxelWorkspaceSandbox(
       const failed = classifyBlaxelError(error);
       if (failed.code !== "blaxel_sandbox_not_found") return failed;
     }
+    if (params.requireExisting) {
+      return failure({
+        status: 404,
+        code: "blaxel_sandbox_missing",
+        message: "Blaxel sandbox does not exist and this caller may not create it.",
+      });
+    }
     const sandbox = await SandboxInstance.createIfNotExists(
       buildSandboxCreateSpec(params, config),
     );
-    if (typeof sandbox?.wait === "function") {
-      await sandbox.wait({ maxWait: 120_000, interval: 2_000 });
+    const createdReadiness = await waitForBlaxelSandboxReady({
+      SandboxInstance,
+      sandboxName,
+      initialSandbox: sandbox,
+    });
+    if (isBlaxelWorkspaceSandboxTerminalState(createdReadiness.state)) {
+      return terminalBlaxelSandboxFailure(createdReadiness.state);
     }
-    const createdState = sandboxStateFrom(sandbox);
-    if (isBlaxelWorkspaceSandboxTerminalState(createdState)) {
-      return terminalBlaxelSandboxFailure(createdState);
+    if (!createdReadiness.ready) {
+      try {
+        await SandboxInstance.delete(sandboxName);
+      } catch {
+        // Best effort: leave nothing half-deployed behind for the next ensure.
+      }
+      return failure({
+        status: 503,
+        code: "blaxel_sandbox_deploy_timeout",
+        message: "Blaxel sandbox did not become ready after creation.",
+        details: { provider_state: createdReadiness.state ?? null },
+      });
     }
-    await ensureBlaxelWorkspaceRootDirectory(sandbox, workspaceRoot);
+    await ensureBlaxelWorkspaceRootDirectory(createdReadiness.sandbox, workspaceRoot);
     return {
       ok: true,
       providerId: "blaxel",
-      providerSandboxId: sandboxIdFrom(sandbox, sandboxName),
+      providerSandboxId: sandboxIdFrom(createdReadiness.sandbox, sandboxName),
       projectVolumeId: volumeName,
       workspaceRoot,
       startedAt: Date.now(),
@@ -1361,17 +1446,27 @@ export async function resolveBlaxelWorkspaceSandboxIfReady(params: {
     normalizeOptionalString(params.workspaceRoot) ?? loadedConfig.config.workspaceRoot;
   try {
     const sandbox = await loadedCore.mod.SandboxInstance.get(sandboxName);
-    if (typeof sandbox?.wait === "function") {
-      await sandbox.wait({ maxWait: 120_000, interval: 2_000 });
+    const readiness = await waitForBlaxelSandboxReady({
+      SandboxInstance: loadedCore.mod.SandboxInstance,
+      sandboxName,
+      initialSandbox: sandbox,
+      maxWaitMs: 45_000,
+    });
+    if (isBlaxelWorkspaceSandboxTerminalState(readiness.state)) {
+      return terminalBlaxelSandboxFailure(readiness.state);
     }
-    const state = sandboxStateFrom(sandbox);
-    if (isBlaxelWorkspaceSandboxTerminalState(state)) {
-      return terminalBlaxelSandboxFailure(state);
+    if (!readiness.ready) {
+      return failure({
+        status: 503,
+        code: "blaxel_sandbox_not_ready",
+        message: "Blaxel sandbox is still deploying and cannot run commands yet.",
+        details: { provider_state: readiness.state ?? null },
+      });
     }
     return {
       ok: true,
       providerId: "blaxel",
-      providerSandboxId: sandboxIdFrom(sandbox, sandboxName),
+      providerSandboxId: sandboxIdFrom(readiness.sandbox, sandboxName),
       projectVolumeId: normalizeOptionalString(params.volumeName),
       workspaceRoot,
       startedAt: Date.now(),

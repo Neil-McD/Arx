@@ -32,7 +32,10 @@ export const WORKSPACE_COMPUTER_LIFECYCLE_POLICY = {
     allowActiveRunPastMaxAge: false,
   },
   agent_run: {
-    idleDeleteAfter: "10m",
+    // Blaxel standby (auto after ~15s idle, $0 compute, fast resume) is the
+    // idle state; deletion only reclaims sandboxes after a project goes cold
+    // so everyday turns never pay a cold create-with-volume-attach.
+    idleDeleteAfter: "48h",
     maxAgeDeleteAfter: null,
     allowActiveRunPastMaxAge: true,
   },

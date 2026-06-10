@@ -36,7 +36,7 @@ assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 1);
 assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 10);
 assert.equal(WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS, 500);
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter, "30s");
-assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter, "10m");
+assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter, "48h");
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter, "30m");
 assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 1);
 assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 10);
@@ -595,12 +595,12 @@ assert.match(
 );
 assert.match(
   blaxelEnvExample,
-  /BLAXEL_WORKSPACE_VOLUME_LIMIT=""[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER="1"[\s\S]*BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER="30s"[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER="10m"[\s\S]*BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER="30m"[\s\S]*BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER="1h"/,
+  /BLAXEL_WORKSPACE_VOLUME_LIMIT=""[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER="1"[\s\S]*BLAXEL_WORKSPACE_FILE_INSPECTION_IDLE_DELETE_AFTER="30s"[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER="48h"[\s\S]*BLAXEL_WORKSPACE_INTERACTIVE_IDLE_DELETE_AFTER="30m"[\s\S]*BLAXEL_WORKSPACE_NON_AGENT_MAX_AGE_DELETE_AFTER="1h"/,
   "local Blaxel staging env example must document provider quota and intent-specific lifecycle guards",
 );
 assert.match(
   workspaceProviderContract,
-  /Provider quota is also admission evidence[\s\S]*BLAXEL_WORKSPACE_VOLUME_LIMIT[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER[\s\S]*Existing undeleted project volumes skip the provider inventory check[\s\S]*agent_run[\s\S]*ttl-idle: 10m[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER/,
+  /Provider quota is also admission evidence[\s\S]*BLAXEL_WORKSPACE_VOLUME_LIMIT[\s\S]*BLAXEL_WORKSPACE_VOLUME_SAFETY_BUFFER[\s\S]*Existing undeleted project volumes skip the provider inventory check[\s\S]*agent_run[\s\S]*ttl-idle: 48h[\s\S]*BLAXEL_WORKSPACE_AGENT_RUN_IDLE_DELETE_AFTER/,
   "workspace provider contract must document provider quota admission evidence and agent-run lifecycle policy",
 );
 assert.match(
@@ -682,8 +682,18 @@ assert.match(
 );
 assert.match(
   blaxelWorkspaceClient,
-  /ensureBlaxelWorkspaceSandbox[\s\S]*sandboxStateFrom\(existingSandbox\)[\s\S]*isBlaxelWorkspaceSandboxTerminalState\(existingState\)[\s\S]*SandboxInstance\.delete\(sandboxName\)[\s\S]*SandboxInstance\.createIfNotExists/,
-  "Blaxel ensure must delete terminal sandboxes before provider recreation instead of reporting a dead sandbox as active",
+  /ensureBlaxelWorkspaceSandbox[\s\S]*waitForBlaxelSandboxReady[\s\S]*if \(!readiness\.ready\)[\s\S]*SandboxInstance\.delete\(sandboxName\)[\s\S]*SandboxInstance\.createIfNotExists/,
+  "Blaxel ensure must replace terminal or stuck-deploying sandboxes before provider recreation instead of reusing a dead or wedged sandbox",
+);
+assert.match(
+  blaxelWorkspaceClient,
+  /isBlaxelWorkspaceSandboxTransitionalState[\s\S]*"deploying"[\s\S]*blaxel_sandbox_deploy_timeout/,
+  "Blaxel ensure must treat transitional sandbox states as not-ready and fail loudly when a fresh create never deploys",
+);
+assert.match(
+  blaxelWorkspaceClient,
+  /resolveBlaxelWorkspaceSandboxIfReady[\s\S]*waitForBlaxelSandboxReady[\s\S]*blaxel_sandbox_not_ready/,
+  "Blaxel command execution must gate on sandbox readiness instead of 404ing against a deploying sandbox",
 );
 assert.match(
   blaxelWorkspaceWake,

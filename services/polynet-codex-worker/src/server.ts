@@ -61,6 +61,7 @@ type RunTurnParams = {
   prompt: string;
   model: string;
   sandboxName: string;
+  sandboxProvided: boolean;
   command: string;
   commandTimeoutSeconds: number;
   destroyAfterRun: boolean;
@@ -363,6 +364,7 @@ export class PolynetCodexWorkerRuntime {
       });
       const ensured = await ensureBlaxelSandbox({
         sandboxName: params.sandboxName,
+        requireExisting: params.sandboxProvided,
         labels: {
           run_id: safeResourceName(params.runId) || "unknown-run",
         },
@@ -808,9 +810,10 @@ async function handleTurnEndpoint(params: {
     });
     return;
   }
-  const rawSandboxName = String(
-    body.sandbox_name ?? body.sandboxName ?? `polynet-codex-worker-svc-${randomUUID().slice(0, 8)}`,
-  ).trim();
+  const providedSandboxName = String(body.sandbox_name ?? body.sandboxName ?? "").trim();
+  const sandboxProvided = providedSandboxName.length > 0;
+  const rawSandboxName =
+    providedSandboxName || `polynet-codex-worker-svc-${randomUUID().slice(0, 8)}`;
   const sandboxName = safeResourceName(rawSandboxName);
   if (!sandboxName) {
     sendJson(params.res, 400, {
@@ -871,6 +874,7 @@ async function handleTurnEndpoint(params: {
         prompt,
         model,
         sandboxName,
+        sandboxProvided,
         command,
         commandTimeoutSeconds,
         destroyAfterRun,
@@ -896,6 +900,7 @@ async function handleTurnEndpoint(params: {
       prompt,
       model,
       sandboxName,
+      sandboxProvided,
       command,
       commandTimeoutSeconds,
       destroyAfterRun,

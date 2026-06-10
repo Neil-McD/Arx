@@ -196,7 +196,7 @@ Workspace computer creation must carry an explicit lifecycle intent:
   to `ttl-idle: 5m` and `ttl-max-age: 1h`.
 - `interactive`: terminal, preview, or non-agent workspace usage. Blaxel
   defaults to `ttl-idle: 30m` and `ttl-max-age: 1h`.
-- `agent_run`: active agent/Codex work. Blaxel defaults to `ttl-idle: 10m` and
+- `agent_run`: active agent/Codex work. Blaxel defaults to `ttl-idle: 48h` and
   intentionally omits an unconditional provider `ttl-max-age`; an active run
   should be allowed to finish before cleanup policy cools the workspace down.
 
