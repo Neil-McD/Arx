@@ -15,8 +15,30 @@ load_env_if_present() {
   fi
 }
 
+# Env explicitly set by the caller (e.g. the service contract proof injecting
+# its own auth token and port) must win over values in local env files.
+PRESET_VARS=(
+  POLYNET_CODEX_WORKER_AUTH_TOKEN
+  POLYNET_CODEX_WORKER_PORT
+  POLYNET_CODEX_WORKER_HOST
+  POLYNET_CODEX_WORKER_MODEL
+  POLYNET_CODEX_WORKER_CODEX_BIN
+  CONVEX_DEPLOYMENT
+  POLYNET_DEPLOYMENT_KIND
+)
+declare -A PRESET_VALUES=()
+for var in "${PRESET_VARS[@]}"; do
+  if [[ -n "${!var:-}" ]]; then
+    PRESET_VALUES[$var]="${!var}"
+  fi
+done
+
 load_env_if_present "$STAGING_ENV_FILE"
 load_env_if_present "$BLAXEL_ENV_FILE"
+
+for var in "${!PRESET_VALUES[@]}"; do
+  export "$var"="${PRESET_VALUES[$var]}"
+done
 
 export POLYNET_WORKSPACE_COMPUTER_PROVIDER="${POLYNET_WORKSPACE_COMPUTER_PROVIDER:-blaxel}"
 export POLYNET_ENABLE_BLAXEL_WORKSPACE_PROVIDER="${POLYNET_ENABLE_BLAXEL_WORKSPACE_PROVIDER:-true}"

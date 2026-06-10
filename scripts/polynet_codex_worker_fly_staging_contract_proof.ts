@@ -233,23 +233,32 @@ async function assertPoolServesConcurrentTurns(params: {
   baseUrl: string;
   authToken: string;
 }): Promise<void> {
-  const probe = (label: string) =>
-    fetchJson(
-      `${params.baseUrl}/v1/codex/probe`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${params.authToken}`,
-          "Content-Type": "application/json",
+  const probe = async (label: string) => {
+    // Mirror the bridge contract: 409 means a pool sibling is still waking
+    // (stopped machines cold-boot and log into Codex), so retry with the
+    // same wake-sized backoff before judging the pool.
+    const delays = [1_500, 3_000, 4_500, 6_000];
+    for (let attempt = 0; ; attempt += 1) {
+      const result = await fetchJson(
+        `${params.baseUrl}/v1/codex/probe`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${params.authToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            run_id: `polynet-worker-pool-proof-${label}-${attempt}-${randomUUID().slice(0, 8)}`,
+            destroy_after_run: true,
+            command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && sleep 6",
+          }),
         },
-        body: JSON.stringify({
-          run_id: `polynet-worker-pool-proof-${label}-${randomUUID().slice(0, 8)}`,
-          destroy_after_run: true,
-          command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && sleep 6",
-        }),
-      },
-      180_000,
-    );
+        180_000,
+      );
+      if (result.status !== 409 || attempt >= delays.length) return result;
+      await delay(delays[attempt]);
+    }
+  };
   const [first, second] = await Promise.all([probe("a"), probe("b")]);
   assert.equal(first.body.ok, true, `pool probe A must succeed: ${JSON.stringify(first.body)}`);
   assert.equal(second.body.ok, true, `pool probe B must succeed: ${JSON.stringify(second.body)}`);
@@ -358,7 +367,16 @@ async function main() {
   const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
   if (!authToken) throw new Error("POLYNET_CODEX_WORKER_AUTH_TOKEN is required for remote proof.");
 
-  const health = await fetchJson(`${baseUrl}/healthz`);
+  const publicHealth = await fetchJson(`${baseUrl}/healthz`);
+  assert.equal(publicHealth.status, 200, "public health must be 200");
+  assert.equal(
+    publicHealth.body.machine_id,
+    undefined,
+    "public health must not leak machine ids or runtime diagnostics",
+  );
+  const health = await fetchJson(`${baseUrl}/healthz`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
   assert.equal(health.status, 200, `health status must be 200: ${JSON.stringify(health.body)}`);
   assert.equal(health.body.ok, true, `worker health must be ok: ${JSON.stringify(health.body)}`);
   assert.equal(asRecord(health.body.codex)?.initialized, true, "Codex app-server must be initialized");

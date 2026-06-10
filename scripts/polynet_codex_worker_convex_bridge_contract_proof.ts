@@ -85,6 +85,16 @@ assert.match(
   "bridge must convert fetch and stream failures into structured results so callers settle leases",
 );
 assert.match(
+  bridge,
+  /WORKER_BUSY_RETRY_DELAYS_MS[\s\S]*response\.status === 409[\s\S]*continue/,
+  "bridge must retry worker_busy with wake-sized backoff so pool autostart races do not fail turns",
+);
+assert.match(
+  ingest,
+  /"cancelled"[\s\S]*user_cancelled[\s\S]*status === "cancelled" \? "cancelled" : "error"/,
+  "ingest backstop must preserve cancelled status instead of misclassifying user stops as errors",
+);
+assert.match(
   handlers,
   /\} finally \{[\s\S]*clearInterval\(workerCancelWatcher\);[\s\S]*polynet_codex_worker_stream_failed[\s\S]*cancelPolynetCodexWorkerTurn/,
   "handler must always clear the cancel watcher and stop the remote turn when the stream dies",

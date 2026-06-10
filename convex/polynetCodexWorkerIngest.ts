@@ -107,7 +107,7 @@ export async function handlePolynetCodexWorkerIngest(
     return json(400, { ok: false, code: "invalid_ingest_context" });
   }
   const status = String(body.status ?? "").trim();
-  if (!["ok", "error"].includes(status)) {
+  if (!["ok", "error", "cancelled"].includes(status)) {
     return json(400, { ok: false, code: "invalid_status" });
   }
   const assistantText = typeof body.assistant_text === "string" ? body.assistant_text : "";
@@ -186,15 +186,23 @@ export async function handlePolynetCodexWorkerIngest(
         lane: context.lane,
         runId: context.run_id,
         content: assistantText,
-        ...(status === "error"
+        ...(status === "error" || status === "cancelled"
           ? {
               partialRun: {
-                status: "error" as const,
-                reason: String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
-                errorCode: String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
+                status: status === "cancelled" ? ("cancelled" as const) : ("error" as const),
+                reason:
+                  status === "cancelled"
+                    ? "user_cancelled"
+                    : String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
+                errorCode:
+                  status === "cancelled"
+                    ? "user_cancelled"
+                    : String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
                 errorMessage:
-                  String(errorRecord?.message ?? "").trim() ||
-                  "PolyNet Codex worker turn failed.",
+                  status === "cancelled"
+                    ? "Run cancelled by user."
+                    : String(errorRecord?.message ?? "").trim() ||
+                      "PolyNet Codex worker turn failed.",
               },
             }
           : {}),
@@ -206,16 +214,22 @@ export async function handlePolynetCodexWorkerIngest(
   }
 
   await finishRunBestEffort({
-    status: status === "ok" ? "ok" : "error",
-    ...(status === "error"
+    status: status === "ok" ? "ok" : status === "cancelled" ? "cancelled" : "error",
+    ...(status === "cancelled"
       ? {
-          reason: String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
-          errorCode: String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
-          errorMessage:
-            String(errorRecord?.message ?? "").trim() ||
-            "PolyNet Codex worker turn failed.",
+          reason: "user_cancelled",
+          errorCode: "user_cancelled",
+          errorMessage: "Run cancelled by user.",
         }
-      : {}),
+      : status === "error"
+        ? {
+            reason: String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
+            errorCode: String(errorRecord?.code ?? "polynet_codex_worker_turn_failed"),
+            errorMessage:
+              String(errorRecord?.message ?? "").trim() ||
+              "PolyNet Codex worker turn failed.",
+          }
+        : {}),
   });
 
   // Settle the workspace lease if the live path never did: the charge is

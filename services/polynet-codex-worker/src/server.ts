@@ -610,7 +610,12 @@ export class PolynetCodexWorkerRuntime {
           ingest: params.ingest,
           payload: {
             context: params.ingest.context,
-            status: pendingError ? "error" : "ok",
+            status:
+              pendingError instanceof WorkerTurnCancelledError
+                ? "cancelled"
+                : pendingError
+                  ? "error"
+                  : "ok",
             error: describeError(pendingError),
             assistant_text: activeTurn.assistantText,
             events: activeTurn.eventLog.map((event) => ({
@@ -1137,7 +1142,14 @@ export function createPolynetCodexWorkerServer(runtime: PolynetCodexWorkerRuntim
     void (async () => {
       const url = new URL(req.url ?? "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/healthz") {
-        sendJson(res, 200, runtime.health());
+        const health = runtime.health();
+        // Public health is minimal; machine ids, codex home, and Blaxel
+        // workspace details are diagnostics for authenticated callers only.
+        if (!runtime.isAuthorizedBearer(readBearer(req))) {
+          sendJson(res, 200, { ok: health.ok, status: health.status });
+          return;
+        }
+        sendJson(res, 200, health);
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/codex/turn/cancel") {

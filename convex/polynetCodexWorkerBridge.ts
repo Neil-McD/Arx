@@ -248,7 +248,15 @@ export async function streamPolynetCodexWorkerTurn(params: {
     };
   }
 
+  // A 409 means every awake machine is mid-turn; fly-proxy needs seconds to
+  // boot a stopped pool sibling (cold start + Codex login), so retry with a
+  // wake-sized backoff before declaring the pool full. 409 is always safe to
+  // retry: the turn never started.
+  const WORKER_BUSY_RETRY_DELAYS_MS = [1_500, 3_000, 4_500, 6_000];
+  let busyAttempt = 0;
   let response: Response;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
   try {
     response = await fetch(`${config.baseUrl}/v1/codex/turn?stream=1`, {
     method: "POST",
@@ -291,6 +299,15 @@ export async function streamPolynetCodexWorkerTurn(params: {
       timing: null,
       proof: null,
     };
+  }
+  if (response.status === 409 && busyAttempt < WORKER_BUSY_RETRY_DELAYS_MS.length) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, WORKER_BUSY_RETRY_DELAYS_MS[busyAttempt]),
+    );
+    busyAttempt += 1;
+    continue;
+  }
+  break;
   }
 
   if (!response.ok) {
