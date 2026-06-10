@@ -143,3 +143,28 @@ The machine-level Codex secret (`CODEX_ACCESS_TOKEN` et al.) is now
 probe-only fallback: during any user turn, `$CODEX_HOME/auth.json` holds that
 user's own token, so the prior shared-token read exposure is closed. Removing
 the boot login entirely (probe also carrying auth) is a candidate follow-up.
+
+## Sandbox Readiness and Lifecycle (release v10, 2026-06-10)
+
+Incident evidence: a project sandbox wedged in `DEPLOYING` for 30+ minutes
+because the Blaxel SDK's `sandbox.wait()` is a deprecated no-op, the SDK and
+the Convex client both defaulted to 4096MB (the 2GB slice had only changed
+the worker env), and the 10m agent_run idle-delete forced cold
+create-with-volume into the everyday turn path.
+
+Current contract:
+
+- `waitForBlaxelSandboxReady` polls provider status; null/transitional states
+  are never ready. Ensure replaces terminal or stuck sandboxes (volume
+  survives), settles 5s before recreation, and fails loudly with
+  `blaxel_sandbox_deploy_timeout` if a fresh create never deploys.
+- Command execution gates on readiness (`blaxel_sandbox_not_ready`) instead of
+  404ing into `blaxel_sandbox_not_found`.
+- The worker passes `requireExisting` for Convex-provided sandbox names: Convex
+  is the only creator of project sandboxes.
+- Memory is 2048MB everywhere (code fallback + `BLAXEL_WORKSPACE_MEMORY_MB`
+  on Convex staging and the worker).
+- agent_run idle delete is 48h; Blaxel standby ($0 compute) is the idle state.
+
+Verified E2E: the wedged 4096MB sandbox was detected, replaced, and the
+project volume remounted with all files intact at 2048MB.

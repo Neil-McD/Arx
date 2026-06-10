@@ -95,7 +95,7 @@ if [[ -e "$ROOT_DIR/.vercel" ]] && ! git check-ignore -q .vercel; then
 fi
 ok "local secret/linkage paths are ignored when present"
 
-if git diff --name-only --cached --diff-filter=ACMR | grep -E '(^|/)node_modules(/|$)|(^|/)dist(/|$)|(^|/)\.env(\.|$)|(^|/)\.vercel(/|$)' >/dev/null; then
+if git diff --name-only --cached --diff-filter=ACMR | grep -vE '\.example$' | grep -E '(^|/)node_modules(/|$)|(^|/)dist(/|$)|(^|/)\.env(\.|$)|(^|/)\.vercel(/|$)' >/dev/null; then
   fail "staged generated/secret/linkage files detected"
 fi
 ok "no staged dependency/build/secret/linkage files"
