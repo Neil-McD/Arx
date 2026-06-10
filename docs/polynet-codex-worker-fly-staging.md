@@ -185,3 +185,19 @@ finish is best-effort. If the Convex action dies mid-turn, the worker's push
 still lands the completed turn and the existing UI recovery picks it up.
 
 Worker service log events: `ingest_push_succeeded` / `ingest_push_failed`.
+
+## Cancellation and Turn Lifecycle (release v13, 2026-06-10)
+
+- `POST /v1/codex/turn/cancel` (bearer auth, `run_id`) interrupts the active
+  Codex turn via `turn/interrupt`; mismatched run ids return `409
+  no_matching_turn`. Cancelled turns finalize with `user_cancelled`, settle
+  the sandbox lease, log out, and push ingest like any other turn.
+- The Convex worker path polls run cancellation every 3s while proxying the
+  stream and fires the cancel endpoint when the user stops the turn; cancelled
+  results persist through the partial-cancelled path, not as errors.
+- Turn completion timeout is `POLYNET_CODEX_WORKER_TURN_TIMEOUT_SECONDS`
+  (default 900). On timeout the worker interrupts the orphaned Codex turn
+  before failing so it cannot keep consuming the user's ChatGPT quota.
+- Remote contract proof covers: cancel 409 on unknown run, mid-flight cancel
+  finalizing fast with `user_cancelled`, and the worker accepting the next
+  turn immediately after.

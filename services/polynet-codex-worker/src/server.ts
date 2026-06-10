@@ -34,6 +34,8 @@ type StreamWriter = {
 
 type ActiveTurn = {
   runId: string;
+  codexThreadId: string | null;
+  cancelRequested: boolean;
   sandboxName: string;
   fallbackCommand: string;
   commandTimeoutSeconds: number;
@@ -218,8 +220,14 @@ function getCodexVersion(codexBin: string): string | null {
 
 function describeError(error: unknown): JsonRecord | null {
   if (!error) return null;
+  const code =
+    error instanceof WorkerBusyError
+      ? "worker_busy"
+      : error instanceof Error && error.name === "user_cancelled"
+        ? "user_cancelled"
+        : "polynet_codex_worker_turn_failed";
   return {
-    code: error instanceof WorkerBusyError ? "worker_busy" : "polynet_codex_worker_turn_failed",
+    code,
     message: error instanceof Error ? error.message : String(error),
   };
 }
@@ -281,6 +289,8 @@ export class PolynetCodexWorkerRuntime {
 
     const activeTurn: ActiveTurn = {
       runId: params.runId,
+      codexThreadId: null,
+      cancelRequested: false,
       sandboxName: params.sandboxName,
       fallbackCommand: params.command,
       commandTimeoutSeconds: params.commandTimeoutSeconds,
@@ -318,10 +328,15 @@ export class PolynetCodexWorkerRuntime {
       return event;
     };
 
-    const waitForTurnCompletion = (turnId: string, timeoutMs = 300_000): Promise<JsonRecord> =>
+    const turnTimeoutMs =
+      readIntegerEnv("POLYNET_CODEX_WORKER_TURN_TIMEOUT_SECONDS", 900) * 1000;
+    const waitForTurnCompletion = (turnId: string, timeoutMs = turnTimeoutMs): Promise<JsonRecord> =>
       new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           activeTurn.turnCompletionResolvers.delete(turnId);
+          // Stop the orphaned Codex turn so it cannot keep consuming the
+          // user's ChatGPT quota behind a freed worker slot.
+          void this.interruptActiveTurnBestEffort("turn_timeout");
           reject(new Error(`timed out waiting for turn completion: ${turnId}`));
         }, timeoutMs);
         const wrappedResolve = (value: JsonRecord) => {
@@ -413,6 +428,7 @@ export class PolynetCodexWorkerRuntime {
       const thread = asRecord(threadResponse?.thread);
       const threadId = typeof thread?.id === "string" ? thread.id : null;
       if (!threadId) throw new Error("thread/start did not return a thread id.");
+      activeTurn.codexThreadId = threadId;
       emitWorkerEvent("codex_thread_started", {
         codex_thread_id: threadId,
         latency_ms: codexThreadStartMs,
@@ -441,6 +457,11 @@ export class PolynetCodexWorkerRuntime {
       });
       await waitForTurnCompletion(turnId);
       activeTurn.timing.setBucket("codex_turn_total_ms", elapsedMs(turnStartedAtMs));
+      if (activeTurn.cancelRequested) {
+        const cancelled = new Error("Run cancelled by user.");
+        cancelled.name = "user_cancelled";
+        throw cancelled;
+      }
 
       proof = params.probeMode
         ? validateProbeProof({
@@ -771,6 +792,46 @@ export class PolynetCodexWorkerRuntime {
     });
   }
 
+  async interruptActiveTurnBestEffort(reason: string): Promise<boolean> {
+    const activeTurn = this.activeTurn;
+    const client = this.client;
+    if (!activeTurn || !client) return false;
+    if (!activeTurn.codexThreadId || !activeTurn.turnId) return false;
+    this.emitRuntimeEvent("codex_turn_interrupt_requested", {
+      codex_thread_id: activeTurn.codexThreadId,
+      codex_turn_id: activeTurn.turnId,
+      reason,
+    });
+    try {
+      await client.request("turn/interrupt", {
+        threadId: activeTurn.codexThreadId,
+        turnId: activeTurn.turnId,
+      });
+      this.emitRuntimeEvent("codex_turn_interrupt_finished", { ok: true, reason });
+      return true;
+    } catch (error) {
+      this.emitRuntimeEvent("codex_turn_interrupt_finished", {
+        ok: false,
+        reason,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  async cancelTurn(runId: string): Promise<
+    | { ok: true; runId: string }
+    | { ok: false; code: "no_matching_turn" }
+  > {
+    const activeTurn = this.activeTurn;
+    if (!activeTurn || activeTurn.runId !== runId) {
+      return { ok: false, code: "no_matching_turn" };
+    }
+    activeTurn.cancelRequested = true;
+    await this.interruptActiveTurnBestEffort("user_cancelled");
+    return { ok: true, runId };
+  }
+
   private emitRuntimeEvent(eventType: string, payload: JsonRecord): void {
     const activeTurn = this.activeTurn;
     if (!activeTurn) return;
@@ -966,7 +1027,12 @@ async function handleTurnEndpoint(params: {
     } catch (error) {
       writeSse(params.res, "error", {
         run_id: runId,
-        code: error instanceof WorkerBusyError ? "worker_busy" : "polynet_codex_worker_turn_failed",
+        code:
+          error instanceof WorkerBusyError
+            ? "worker_busy"
+            : error instanceof Error && error.name === "user_cancelled"
+              ? "user_cancelled"
+              : "polynet_codex_worker_turn_failed",
         message: error instanceof Error ? error.message : String(error ?? "unknown error"),
       });
     } finally {
@@ -996,6 +1062,14 @@ async function handleTurnEndpoint(params: {
       sendWorkerBusy(params.res, runId);
       return;
     }
+    if (error instanceof Error && error.name === "user_cancelled") {
+      sendJson(params.res, 200, {
+        ok: false,
+        run_id: runId,
+        error: { code: "user_cancelled", message: error.message },
+      });
+      return;
+    }
     throw error;
   }
 }
@@ -1006,6 +1080,29 @@ export function createPolynetCodexWorkerServer(runtime: PolynetCodexWorkerRuntim
       const url = new URL(req.url ?? "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/healthz") {
         sendJson(res, 200, runtime.health());
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/v1/codex/turn/cancel") {
+        if (!runtime.isAuthorizedBearer(readBearer(req))) {
+          sendJson(res, 401, {
+            ok: false,
+            code: "unauthorized",
+            message: "Missing or invalid bearer token.",
+          });
+          return;
+        }
+        const body = asRecord(await readJsonBody(req)) ?? {};
+        const runId = String(body.run_id ?? body.runId ?? "").trim();
+        if (!runId) {
+          sendJson(res, 400, { ok: false, code: "run_id_required" });
+          return;
+        }
+        const cancelled = await runtime.cancelTurn(runId);
+        if (!cancelled.ok) {
+          sendJson(res, 409, { ok: false, code: cancelled.code, run_id: runId });
+          return;
+        }
+        sendJson(res, 200, { ok: true, run_id: runId });
         return;
       }
       if (req.method === "POST" && (url.pathname === "/v1/codex/probe" || url.pathname === "/v1/codex/turn")) {

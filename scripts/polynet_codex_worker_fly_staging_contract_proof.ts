@@ -159,6 +159,80 @@ async function assertBusyWhileTurnInFlight(params: {
   assert.equal(response.body.ok, true, `blocking probe must succeed: ${JSON.stringify(response.body)}`);
 }
 
+async function assertCancelStopsTurn(params: {
+  baseUrl: string;
+  authToken: string;
+}): Promise<void> {
+  const runId = `polynet-worker-fly-cancel-proof-${randomUUID().slice(0, 8)}`;
+  const longProbe = fetchJson(
+    `${params.baseUrl}/v1/codex/probe`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        run_id: runId,
+        destroy_after_run: true,
+        command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && sleep 25",
+      }),
+    },
+    180_000,
+  );
+
+  await delay(2_500);
+  const mismatch = await fetchJson(`${params.baseUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(mismatch.status, 409, "cancel with unknown run id must 409");
+  assert.equal(mismatch.body.code, "no_matching_turn", "cancel mismatch code");
+
+  const cancelStartedAt = Date.now();
+  const cancelled = await fetchJson(`${params.baseUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: runId }),
+  });
+  assert.equal(cancelled.status, 200, `cancel must succeed: ${JSON.stringify(cancelled.body)}`);
+
+  const finished = await longProbe;
+  const cancelToFinishMs = Date.now() - cancelStartedAt;
+  assert.ok(
+    cancelToFinishMs < 20_000,
+    `cancelled turn must finish well before the sleep completes (took ${cancelToFinishMs}ms)`,
+  );
+  assert.equal(finished.body.ok, false, "cancelled probe must not report ok");
+  const finishedError = asRecord(finished.body.error);
+  assert.equal(
+    String(finishedError?.code ?? finished.body.code ?? ""),
+    "user_cancelled",
+    `cancelled turn must carry user_cancelled: ${JSON.stringify(finished.body)}`,
+  );
+
+  const followUp = await fetchJson(`${params.baseUrl}/v1/codex/probe`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      run_id: `polynet-worker-fly-post-cancel-${randomUUID().slice(0, 8)}`,
+      destroy_after_run: true,
+    }),
+  });
+  assert.equal(followUp.status, 200, "worker must accept a new turn after cancel");
+  assert.equal(followUp.body.ok, true, "post-cancel probe must succeed");
+}
+
 async function runStreamedProbe(params: {
   baseUrl: string;
   authToken: string;
@@ -298,6 +372,8 @@ async function main() {
   );
 
   await assertBusyWhileTurnInFlight({ baseUrl, authToken });
+
+  await assertCancelStopsTurn({ baseUrl, authToken });
 
   const events = await runStreamedProbe({ baseUrl, authToken });
   const timingBuckets = assertProbeEvents(events);

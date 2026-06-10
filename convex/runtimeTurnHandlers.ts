@@ -22,6 +22,7 @@ import {
 import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
 import {
   USER_CANCELLED_RUNTIME_CODE,
+  isRuntimeRunCancelled,
   isRuntimeRunCancelledError,
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
@@ -63,6 +64,7 @@ import {
   POLYNET_CODEX_WORKER_ENGINE_ID,
   shouldUsePolynetCodexWorkerBridge,
   streamPolynetCodexWorkerTurn,
+  cancelPolynetCodexWorkerTurn,
 } from "./polynetCodexWorkerBridge";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
@@ -1087,6 +1089,26 @@ export async function handleRuntimeTurnRequest(args: {
             projectId: runtimeProjectId,
           });
 
+          let workerCancelFired = false;
+          const workerCancelWatcher = setInterval(() => {
+            void (async () => {
+              if (workerCancelFired) return;
+              try {
+                const cancelled = await isRuntimeRunCancelled({
+                  ctx,
+                  ownerId: actor.dbUserId,
+                  runId,
+                });
+                if (!cancelled) return;
+                workerCancelFired = true;
+                clearInterval(workerCancelWatcher);
+                await cancelPolynetCodexWorkerTurn({ runId });
+              } catch {
+                // Best-effort watcher; the worker turn timeout is the backstop.
+              }
+            })();
+          }, 3_000);
+
           const workerResult = await streamPolynetCodexWorkerTurn({
             runId,
             model: requestedModelId,
@@ -1162,6 +1184,7 @@ export async function handleRuntimeTurnRequest(args: {
             },
           });
 
+          clearInterval(workerCancelWatcher);
           streamedContent = workerResult.assistantText || streamedContent;
 
           if (workerWorkspaceSession) {
@@ -1195,6 +1218,21 @@ export async function handleRuntimeTurnRequest(args: {
           }
 
           if (!workerResult.ok) {
+            const workerCancelled =
+              workerCancelFired || workerResult.code === USER_CANCELLED_RUNTIME_CODE;
+            if (workerCancelled) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishCancelledRun();
+              return;
+            }
             await persistPartialAssistantMessageBestEffort({
               content: streamedContent,
               status: "error",

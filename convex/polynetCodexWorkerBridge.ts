@@ -194,6 +194,28 @@ function normalizeWorkerErrorPayload(payload: JsonRecord, fallbackStatus: number
   return { code, message };
 }
 
+export async function cancelPolynetCodexWorkerTurn(params: {
+  runId: string;
+}): Promise<{ ok: boolean; status: number }> {
+  const config = getPolynetCodexWorkerBridgeConfig();
+  if (!config.enabled || !config.baseUrl || !config.authToken) {
+    return { ok: false, status: 503 };
+  }
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/codex/turn/cancel`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ run_id: params.runId }),
+    });
+    return { ok: response.ok, status: response.status };
+  } catch {
+    return { ok: false, status: 502 };
+  }
+}
+
 export async function streamPolynetCodexWorkerTurn(params: {
   runId: string;
   prompt: string;
