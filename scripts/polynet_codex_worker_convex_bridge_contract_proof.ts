@@ -66,6 +66,21 @@ assert.match(
 );
 assert.match(
   ingest,
+  /getRuntimeRunByOwnerRunIdInternal[\s\S]*runRow\.threadId[\s\S]*runRow\.engineId[\s\S]*invalid_run/,
+  "ingest must validate the caller-supplied context against the real run record before writing",
+);
+assert.match(
+  bridge,
+  /polynet_codex_worker_unreachable[\s\S]*polynet_codex_worker_stream_failed/,
+  "bridge must convert fetch and stream failures into structured results so callers settle leases",
+);
+assert.match(
+  handlers,
+  /\} finally \{[\s\S]*clearInterval\(workerCancelWatcher\);[\s\S]*polynet_codex_worker_stream_failed[\s\S]*cancelPolynetCodexWorkerTurn/,
+  "handler must always clear the cancel watcher and stop the remote turn when the stream dies",
+);
+assert.match(
+  ingest,
   /\$\{context\.run_id\}:polynet_codex_worker:\$\{seq\}:\$\{eventType\}/,
   "ingest events must reuse the live path's eventKey scheme so replays dedupe",
 );

@@ -403,6 +403,37 @@ async function main() {
     "missing chatgpt_auth response code mismatch",
   );
 
+  const ingestUrl = readEnv("POLYNET_CODEX_WORKER_INGEST_URL");
+  if (ingestUrl) {
+    const forged = await fetchJson(ingestUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        context: {
+          owner_id: "jx70000000000000000000000000000f",
+          thread_id: "jd70000000000000000000000000000f",
+          run_id: `forged-${randomUUID()}`,
+          assistant_message_key: "forged",
+          model_id: "gpt-5.5",
+          lane: "chatgpt",
+          inference_source: "chatgpt",
+        },
+        status: "ok",
+        assistant_text: "forged",
+        events: [],
+      }),
+    });
+    assert.equal(
+      forged.status,
+      404,
+      `forged ingest context must 404: ${JSON.stringify(forged.body)}`,
+    );
+    assert.equal(forged.body.code, "invalid_run", "forged ingest code mismatch");
+  }
+
   await assertBusyWhileTurnInFlight({ baseUrl, authToken, machineId: pinnedMachineId });
 
   await assertCancelStopsTurn({ baseUrl, authToken, machineId: pinnedMachineId });

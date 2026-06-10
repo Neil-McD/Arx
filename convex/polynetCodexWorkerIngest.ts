@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { buildRuntimeRunPersistenceHelpers } from "./httpRuntimeTurnState";
 import { persistRuntimeAssistantMessage } from "./runtimeTurnPersistence";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
@@ -110,6 +111,29 @@ export async function handlePolynetCodexWorkerIngest(
   const assistantText = typeof body.assistant_text === "string" ? body.assistant_text : "";
   const errorRecord = asRecord(body.error);
   const events = Array.isArray(body.events) ? body.events : [];
+
+  // The context is caller-supplied; only write if it names a real worker run
+  // whose owner, thread, and engine all match. Forging a write requires the
+  // bearer token AND a live run's full server-generated coordinates.
+  let runRow: { threadId?: unknown; engineId?: unknown } | null = null;
+  try {
+    runRow = (await ctx.runQuery(
+      (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
+      {
+        ownerId: context.owner_id,
+        runId: context.run_id,
+      },
+    )) as { threadId?: unknown; engineId?: unknown } | null;
+  } catch {
+    runRow = null;
+  }
+  if (
+    !runRow ||
+    String(runRow.threadId ?? "") !== context.thread_id ||
+    String(runRow.engineId ?? "") !== POLYNET_CODEX_WORKER_ENGINE_ID
+  ) {
+    return json(404, { ok: false, code: "invalid_run" });
+  }
 
   const { appendRunEvent, finishRunBestEffort } = buildRuntimeRunPersistenceHelpers({
     ctx,

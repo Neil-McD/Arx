@@ -248,7 +248,9 @@ export async function streamPolynetCodexWorkerTurn(params: {
     };
   }
 
-  const response = await fetch(`${config.baseUrl}/v1/codex/turn?stream=1`, {
+  let response: Response;
+  try {
+    response = await fetch(`${config.baseUrl}/v1/codex/turn?stream=1`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.authToken}`,
@@ -278,7 +280,18 @@ export async function streamPolynetCodexWorkerTurn(params: {
           }
         : {}),
     }),
-  });
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 502,
+      code: "polynet_codex_worker_unreachable",
+      message: error instanceof Error ? error.message : "PolyNet Codex worker is unreachable.",
+      assistantText: "",
+      timing: null,
+      proof: null,
+    };
+  }
 
   if (!response.ok) {
     const payload = await readResponseJson(response);
@@ -349,22 +362,36 @@ export async function streamPolynetCodexWorkerTurn(params: {
     await params.onEvent(event);
   };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let separatorIndex = buffer.indexOf("\n\n");
-    while (separatorIndex >= 0) {
-      const rawBlock = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
-      const parsed = parseSseBlock(rawBlock);
-      if (parsed) await handleEvent(parsed);
-      separatorIndex = buffer.indexOf("\n\n");
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex >= 0) {
+        const rawBlock = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        const parsed = parseSseBlock(rawBlock);
+        if (parsed) await handleEvent(parsed);
+        separatorIndex = buffer.indexOf("\n\n");
+      }
     }
-  }
-  if (buffer.trim()) {
-    const parsed = parseSseBlock(buffer);
-    if (parsed) await handleEvent(parsed);
+    if (buffer.trim()) {
+      const parsed = parseSseBlock(buffer);
+      if (parsed) await handleEvent(parsed);
+    }
+  } catch (error) {
+    // A dropped stream or a failing event callback must become a structured
+    // result so the caller settles leases and finishes the run.
+    return {
+      ok: false,
+      status: 502,
+      code: "polynet_codex_worker_stream_failed",
+      message: error instanceof Error ? error.message : "Worker stream failed.",
+      assistantText,
+      timing,
+      proof,
+    };
   }
 
   if (streamState.errorPayload) {

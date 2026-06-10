@@ -1163,7 +1163,9 @@ export async function handleRuntimeTurnRequest(args: {
             })();
           }, 3_000);
 
-          const workerResult = await streamPolynetCodexWorkerTurn({
+          let workerResult!: Awaited<ReturnType<typeof streamPolynetCodexWorkerTurn>>;
+          try {
+            workerResult = await streamPolynetCodexWorkerTurn({
             runId,
             model: requestedModelId,
             prompt: workerPrompt,
@@ -1243,7 +1245,23 @@ export async function handleRuntimeTurnRequest(args: {
             },
           });
 
-          clearInterval(workerCancelWatcher);
+          } finally {
+            clearInterval(workerCancelWatcher);
+          }
+          if (
+            !workerResult.ok &&
+            (workerResult.code === "polynet_codex_worker_stream_failed" ||
+              workerResult.code === "polynet_codex_worker_unreachable")
+          ) {
+            // Nobody is watching this turn anymore; stop the remote run so it
+            // cannot keep consuming the user's ChatGPT quota. Its ingest push
+            // will land the cancelled state idempotently.
+            try {
+              await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+            } catch {
+              // Best effort; the worker turn timeout is the backstop.
+            }
+          }
           streamedContent = workerResult.assistantText || streamedContent;
 
           if (workerWorkspaceSession) {

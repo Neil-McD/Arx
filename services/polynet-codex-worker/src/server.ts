@@ -110,6 +110,13 @@ export class WorkerBusyError extends Error {
   }
 }
 
+export class WorkerTurnCancelledError extends Error {
+  constructor() {
+    super("Run cancelled by user.");
+    this.name = "WorkerTurnCancelledError";
+  }
+}
+
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
@@ -214,13 +221,19 @@ function readBearer(req: IncomingMessage): string {
   return raw.slice(7).trim();
 }
 
+let cachedCodexVersion: string | null | undefined;
+
 function getCodexVersion(codexBin: string): string | null {
+  // The binary never changes for the life of the process; healthz is probed
+  // every ~20s and must not spawn a process per probe.
+  if (cachedCodexVersion !== undefined) return cachedCodexVersion;
   const result = spawnSync(codexBin, ["--version"], {
     encoding: "utf8",
     env: process.env,
   });
-  if (result.status !== 0) return null;
-  return String(result.stdout || result.stderr || "").trim() || null;
+  cachedCodexVersion =
+    result.status === 0 ? String(result.stdout || result.stderr || "").trim() || null : null;
+  return cachedCodexVersion;
 }
 
 function describeError(error: unknown): JsonRecord | null {
@@ -228,7 +241,7 @@ function describeError(error: unknown): JsonRecord | null {
   const code =
     error instanceof WorkerBusyError
       ? "worker_busy"
-      : error instanceof Error && error.name === "user_cancelled"
+      : error instanceof WorkerTurnCancelledError
         ? "user_cancelled"
         : "polynet_codex_worker_turn_failed";
   return {
@@ -465,9 +478,7 @@ export class PolynetCodexWorkerRuntime {
       await waitForTurnCompletion(turnId);
       activeTurn.timing.setBucket("codex_turn_total_ms", elapsedMs(turnStartedAtMs));
       if (activeTurn.cancelRequested) {
-        const cancelled = new Error("Run cancelled by user.");
-        cancelled.name = "user_cancelled";
-        throw cancelled;
+        throw new WorkerTurnCancelledError();
       }
 
       proof = params.probeMode
@@ -953,9 +964,21 @@ async function handleTurnEndpoint(params: {
   }
   const providedSandboxName = String(body.sandbox_name ?? body.sandboxName ?? "").trim();
   const sandboxProvided = providedSandboxName.length > 0;
-  const rawSandboxName =
-    providedSandboxName || `polynet-codex-worker-svc-${randomUUID().slice(0, 8)}`;
-  const sandboxName = safeResourceName(rawSandboxName);
+  // Provided names refer to sandboxes Convex already created (requireExisting),
+  // so any transformation here would silently look up the wrong sandbox.
+  // Reject non-canonical names instead of sanitizing them.
+  const sandboxName = sandboxProvided
+    ? providedSandboxName
+    : safeResourceName(`polynet-codex-worker-svc-${randomUUID().slice(0, 8)}`);
+  if (sandboxProvided && safeResourceName(providedSandboxName) !== providedSandboxName) {
+    sendJson(params.res, 400, {
+      ok: false,
+      code: "invalid_sandbox_name",
+      message: "sandbox_name must be a canonical lowercase resource name.",
+      run_id: runId,
+    });
+    return;
+  }
   if (!sandboxName) {
     sendJson(params.res, 400, {
       ok: false,
@@ -1039,7 +1062,7 @@ async function handleTurnEndpoint(params: {
         code:
           error instanceof WorkerBusyError
             ? "worker_busy"
-            : error instanceof Error && error.name === "user_cancelled"
+            : error instanceof WorkerTurnCancelledError
               ? "user_cancelled"
               : "polynet_codex_worker_turn_failed",
         message: error instanceof Error ? error.message : String(error ?? "unknown error"),
@@ -1071,7 +1094,7 @@ async function handleTurnEndpoint(params: {
       sendWorkerBusy(params.res, runId);
       return;
     }
-    if (error instanceof Error && error.name === "user_cancelled") {
+    if (error instanceof WorkerTurnCancelledError) {
       sendJson(params.res, 200, {
         ok: false,
         run_id: runId,
