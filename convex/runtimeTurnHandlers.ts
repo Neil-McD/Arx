@@ -77,6 +77,10 @@ import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames"
 import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
+import {
+  POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
+  POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT,
+} from "../shared/polynetCodexWorkerLimits";
 
 export type {
   SseResponseEvent,
@@ -985,6 +989,55 @@ export async function handleRuntimeTurnRequest(args: {
           });
 
           runtimeTurnStage = "polynet_codex_worker";
+          const activeRunCounts = (await ctx.runQuery(
+            (internal as any).polynetCodexWorkerAdmission
+              .countActivePolynetCodexWorkerRuns as any,
+            {
+              ownerId: actor.dbUserId,
+              ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+            },
+          )) as { userActive: number; projectActive: number };
+          // Counts include this run (already started), so > permits the limit.
+          const runLimitFailure =
+            runtimeProjectId &&
+            activeRunCounts.projectActive > POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT
+              ? {
+                  code: "project_run_limit_reached",
+                  message: `This workspace already has ${POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT} runs in flight. Wait for one to finish or stop one.`,
+                }
+              : activeRunCounts.userActive > POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT
+                ? {
+                    code: "user_run_limit_reached",
+                    message: `You already have ${POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT} runs in flight across your workspaces. Wait for one to finish or stop one.`,
+                  }
+                : null;
+          if (runLimitFailure) {
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: runLimitFailure.code,
+              errorCode: runLimitFailure.code,
+              errorMessage: runLimitFailure.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: runLimitFailure.code,
+              errorCode: runLimitFailure.code,
+              errorMessage: runLimitFailure.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: runLimitFailure.code,
+                error: runLimitFailure.message,
+                message: runLimitFailure.message,
+                status: 429,
+              },
+            });
+            return;
+          }
           const workerChatgptAuth = await getFreshChatgptAuthForUser({
             ctx,
             userId: actor.dbUserId,
@@ -1090,6 +1143,7 @@ export async function handleRuntimeTurnRequest(args: {
           });
 
           let workerCancelFired = false;
+          let workerMachineId: string | null = null;
           const workerCancelWatcher = setInterval(() => {
             void (async () => {
               if (workerCancelFired) return;
@@ -1102,7 +1156,7 @@ export async function handleRuntimeTurnRequest(args: {
                 if (!cancelled) return;
                 workerCancelFired = true;
                 clearInterval(workerCancelWatcher);
-                await cancelPolynetCodexWorkerTurn({ runId });
+                await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
               } catch {
                 // Best-effort watcher; the worker turn timeout is the backstop.
               }
@@ -1138,6 +1192,11 @@ export async function handleRuntimeTurnRequest(args: {
               };
             })(),
             onEvent: async (event) => {
+              if (event.event === "start") {
+                const machineId = String(event.data.machine_id ?? "").trim();
+                if (machineId) workerMachineId = machineId;
+                return;
+              }
               if (event.event === "delta") {
                 emitDelta(event.data);
                 return;

@@ -73,8 +73,8 @@ assert.match(
 );
 assert.match(
   flyToml,
-  /\[http_service\.concurrency\][\s\S]*soft_limit = 8[\s\S]*hard_limit = 16/,
-  "Fly must pass concurrent requests through so the worker can return 409 instead of proxy-queueing",
+  /\[http_service\.concurrency\][\s\S]*soft_limit = 1[\s\S]*hard_limit = 16/,
+  "Fly soft_limit 1 makes busy machines route-away targets so the suspended pool absorbs concurrency; hard_limit stays high for pinned cancels",
 );
 assert.match(flyToml, /memory_mb = 4096/, "Fly staging proof must use 4GB memory");
 assert.match(

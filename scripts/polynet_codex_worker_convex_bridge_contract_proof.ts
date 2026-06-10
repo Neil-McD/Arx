@@ -50,6 +50,16 @@ assert.match(
   "worker path must hand the worker a durable ingest target and assistant message key",
 );
 assert.match(
+  handlers,
+  /countActivePolynetCodexWorkerRuns[\s\S]*PROJECT_CONCURRENT_RUN_LIMIT[\s\S]*project_run_limit_reached[\s\S]*USER_CONCURRENT_RUN_LIMIT[\s\S]*user_run_limit_reached/,
+  "worker path must enforce per-project and per-user concurrent run caps before starting a turn",
+);
+assert.match(
+  handlers,
+  /cancelPolynetCodexWorkerTurn\(\{ runId, machineId: workerMachineId \}\)[\s\S]*event\.event === "start"[\s\S]*workerMachineId = machineId/,
+  "worker cancel must be pinned to the machine that reported the turn start",
+);
+assert.match(
   ingest,
   /POLYNET_CODEX_WORKER_AUTH_TOKEN[\s\S]*bearer !== expectedToken[\s\S]*401/,
   "ingest endpoint must reject requests without the shared worker bearer token",

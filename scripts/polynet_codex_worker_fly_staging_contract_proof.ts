@@ -110,16 +110,25 @@ async function readSseEvents(response: Response, timeoutMs = 420_000): Promise<S
   return events;
 }
 
+function pinnedHeaders(params: {
+  authToken: string;
+  machineId?: string | null;
+}): Record<string, string> {
+  return {
+    Authorization: `Bearer ${params.authToken}`,
+    "Content-Type": "application/json",
+    ...(params.machineId ? { "fly-force-instance-id": params.machineId } : {}),
+  };
+}
+
 async function assertBusyResponse(params: {
   baseUrl: string;
   authToken: string;
+  machineId?: string | null;
 }): Promise<void> {
   const response = await fetchJson(`${params.baseUrl}/v1/codex/probe`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.authToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: pinnedHeaders(params),
     body: JSON.stringify({
       run_id: `polynet-worker-fly-busy-proof-${randomUUID().slice(0, 8)}`,
       destroy_after_run: true,
@@ -133,15 +142,13 @@ async function assertBusyResponse(params: {
 async function assertBusyWhileTurnInFlight(params: {
   baseUrl: string;
   authToken: string;
+  machineId?: string | null;
 }): Promise<void> {
   const blockingProbe = fetchJson(
     `${params.baseUrl}/v1/codex/probe`,
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${params.authToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: pinnedHeaders(params),
       body: JSON.stringify({
         run_id: `polynet-worker-fly-blocking-proof-${randomUUID().slice(0, 8)}`,
         destroy_after_run: true,
@@ -162,16 +169,14 @@ async function assertBusyWhileTurnInFlight(params: {
 async function assertCancelStopsTurn(params: {
   baseUrl: string;
   authToken: string;
+  machineId?: string | null;
 }): Promise<void> {
   const runId = `polynet-worker-fly-cancel-proof-${randomUUID().slice(0, 8)}`;
   const longProbe = fetchJson(
     `${params.baseUrl}/v1/codex/probe`,
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${params.authToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: pinnedHeaders(params),
       body: JSON.stringify({
         run_id: runId,
         destroy_after_run: true,
@@ -184,10 +189,7 @@ async function assertCancelStopsTurn(params: {
   await delay(2_500);
   const mismatch = await fetchJson(`${params.baseUrl}/v1/codex/turn/cancel`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.authToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: pinnedHeaders(params),
     body: JSON.stringify({ run_id: "not-a-real-run" }),
   });
   assert.equal(mismatch.status, 409, "cancel with unknown run id must 409");
@@ -196,10 +198,7 @@ async function assertCancelStopsTurn(params: {
   const cancelStartedAt = Date.now();
   const cancelled = await fetchJson(`${params.baseUrl}/v1/codex/turn/cancel`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.authToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: pinnedHeaders(params),
     body: JSON.stringify({ run_id: runId }),
   });
   assert.equal(cancelled.status, 200, `cancel must succeed: ${JSON.stringify(cancelled.body)}`);
@@ -220,10 +219,7 @@ async function assertCancelStopsTurn(params: {
 
   const followUp = await fetchJson(`${params.baseUrl}/v1/codex/probe`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.authToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: pinnedHeaders(params),
     body: JSON.stringify({
       run_id: `polynet-worker-fly-post-cancel-${randomUUID().slice(0, 8)}`,
       destroy_after_run: true,
@@ -231,6 +227,40 @@ async function assertCancelStopsTurn(params: {
   });
   assert.equal(followUp.status, 200, "worker must accept a new turn after cancel");
   assert.equal(followUp.body.ok, true, "post-cancel probe must succeed");
+}
+
+async function assertPoolServesConcurrentTurns(params: {
+  baseUrl: string;
+  authToken: string;
+}): Promise<void> {
+  const probe = (label: string) =>
+    fetchJson(
+      `${params.baseUrl}/v1/codex/probe`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${params.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          run_id: `polynet-worker-pool-proof-${label}-${randomUUID().slice(0, 8)}`,
+          destroy_after_run: true,
+          command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && sleep 6",
+        }),
+      },
+      180_000,
+    );
+  const [first, second] = await Promise.all([probe("a"), probe("b")]);
+  assert.equal(first.body.ok, true, `pool probe A must succeed: ${JSON.stringify(first.body)}`);
+  assert.equal(second.body.ok, true, `pool probe B must succeed: ${JSON.stringify(second.body)}`);
+  const machineA = String(first.body.machine_id ?? "").trim();
+  const machineB = String(second.body.machine_id ?? "").trim();
+  assert.ok(machineA && machineB, "pool probes must report machine ids");
+  assert.notEqual(
+    machineA,
+    machineB,
+    "concurrent unpinned turns must be served by different pool machines",
+  );
 }
 
 async function runStreamedProbe(params: {
@@ -333,6 +363,8 @@ async function main() {
   assert.equal(health.body.ok, true, `worker health must be ok: ${JSON.stringify(health.body)}`);
   assert.equal(asRecord(health.body.codex)?.initialized, true, "Codex app-server must be initialized");
   assert.equal(asRecord(health.body.blaxel)?.configured, true, "Blaxel env must be configured");
+  const pinnedMachineId = String(health.body.machine_id ?? "").trim() || null;
+  assert.ok(pinnedMachineId, "healthz must report machine_id for pool routing affinity");
 
   const unauth = await fetchJson(`${baseUrl}/v1/codex/probe`, {
     method: "POST",
@@ -371,9 +403,13 @@ async function main() {
     "missing chatgpt_auth response code mismatch",
   );
 
-  await assertBusyWhileTurnInFlight({ baseUrl, authToken });
+  await assertBusyWhileTurnInFlight({ baseUrl, authToken, machineId: pinnedMachineId });
 
-  await assertCancelStopsTurn({ baseUrl, authToken });
+  await assertCancelStopsTurn({ baseUrl, authToken, machineId: pinnedMachineId });
+
+  if (readEnv("POLYNET_CODEX_WORKER_EXPECT_MULTI_MACHINE") === "true") {
+    await assertPoolServesConcurrentTurns({ baseUrl, authToken });
+  }
 
   const events = await runStreamedProbe({ baseUrl, authToken });
   const timingBuckets = assertProbeEvents(events);

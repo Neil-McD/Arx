@@ -196,17 +196,22 @@ function normalizeWorkerErrorPayload(payload: JsonRecord, fallbackStatus: number
 
 export async function cancelPolynetCodexWorkerTurn(params: {
   runId: string;
+  machineId?: string | null;
 }): Promise<{ ok: boolean; status: number }> {
   const config = getPolynetCodexWorkerBridgeConfig();
   if (!config.enabled || !config.baseUrl || !config.authToken) {
     return { ok: false, status: 503 };
   }
+  const machineId = String(params.machineId ?? "").trim();
   try {
     const response = await fetch(`${config.baseUrl}/v1/codex/turn/cancel`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.authToken}`,
         "Content-Type": "application/json",
+        // With a multi-machine pool, the cancel must reach the specific
+        // machine running this turn, not whichever sibling is idle.
+        ...(machineId ? { "fly-force-instance-id": machineId } : {}),
       },
       body: JSON.stringify({ run_id: params.runId }),
     });

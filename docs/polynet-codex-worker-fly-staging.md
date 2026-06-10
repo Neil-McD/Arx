@@ -38,9 +38,28 @@ The worker entrypoint logs into Codex, then unsets `CODEX_ACCESS_TOKEN`, `OPENAI
 
 ## Fly Runtime Shape
 
-The worker is intentionally single-flight for this proof slice. Fly still allows limited concurrent HTTP requests so the app-level guard can return `409 worker_busy` immediately instead of letting fly-proxy queue the request.
+Each machine is single-flight; concurrency comes from a pool of suspended
+machines. `soft_limit = 1` makes a machine running one turn a route-away
+target, so fly-proxy sends new turns to idle machines and autostarts
+suspended pool members on demand — fly-proxy is the scheduler, no queueing
+code exists. `hard_limit` stays high so requests pinned to a busy machine
+(cancel, probes) still reach the app-level `409 worker_busy` guard.
 
-Do not re-enable Fly HA, keep a warm Fly minimum, or set HTTP concurrency back to one until Convex owns queueing/routing for worker turns.
+Cancel affinity: the worker reports its `machine_id` (start event, summary,
+healthz) and the bridge pins `/v1/codex/turn/cancel` to that machine with the
+`fly-force-instance-id` header.
+
+Scale the pool with `fly machine clone` / `fly machine destroy`; deploys
+update every machine in the app. Suspended machines cost rootfs storage only.
+Staging pool: 10 machines.
+
+Concurrency caps (Convex admission, `shared/polynetCodexWorkerLimits.ts`):
+5 concurrent runs per project, 25 per user, counted over a 20-minute
+startedAt window so zombie runs cannot hold slots. Concurrent runs on one
+project share the project sandbox and its volume — parallel agents in one
+workspace, not parallel sandboxes. Over-limit turns fail fast with
+`project_run_limit_reached` / `user_run_limit_reached` (429). The effective
+per-user parallelism ceiling is their own ChatGPT plan's rate limits.
 
 ## Local Config Proof
 

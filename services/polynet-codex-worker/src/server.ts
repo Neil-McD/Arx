@@ -90,6 +90,7 @@ type WorkerRuntimeOptions = {
 type WorkerRuntimeHealth = {
   ok: boolean;
   status: "ok" | "degraded";
+  machine_id: string | null;
   codex: {
     bin: string;
     version: string | null;
@@ -117,6 +118,10 @@ function asRecord(value: unknown): JsonRecord | null {
 
 function readEnv(name: string): string {
   return String(process.env[name] ?? "").trim();
+}
+
+function readMachineId(): string | null {
+  return readEnv("FLY_MACHINE_ID") || null;
 }
 
 function readBooleanEnv(name: string, fallback: boolean): boolean {
@@ -271,6 +276,7 @@ export class PolynetCodexWorkerRuntime {
     return {
       ok: initialized && blaxel.configured,
       status: initialized && blaxel.configured ? "ok" : "degraded",
+      machine_id: readMachineId(),
       codex: {
         bin: this.options.codexBin,
         version: getCodexVersion(this.options.codexBin),
@@ -375,6 +381,7 @@ export class PolynetCodexWorkerRuntime {
         run_id: params.runId,
         engine_id: "polynet_codex_worker",
         model_id: params.model,
+        machine_id: readMachineId(),
         stage: "start",
       });
       activeTurn.timing.mark("worker_turn_started", {
@@ -473,6 +480,7 @@ export class PolynetCodexWorkerRuntime {
         run_id: params.runId,
         engine_id: "polynet_codex_worker",
         model_id: params.model,
+        machine_id: readMachineId(),
         sandbox_name: params.sandboxName,
         codex_turn_id: activeTurn.turnId,
         assistant_text: activeTurn.assistantText,
@@ -552,6 +560,7 @@ export class PolynetCodexWorkerRuntime {
             run_id: params.runId,
             engine_id: "polynet_codex_worker",
             model_id: params.model,
+            machine_id: readMachineId(),
             sandbox_name: params.sandboxName,
             codex_turn_id: activeTurn.turnId,
             assistant_text: activeTurn.assistantText,

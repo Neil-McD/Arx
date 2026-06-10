@@ -128,6 +128,7 @@ import type * as personalMemory from "../personalMemory.js";
 import type * as platformDiagnostics from "../platformDiagnostics.js";
 import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as platformSkillRuntime from "../platformSkillRuntime.js";
+import type * as polynetCodexWorkerAdmission from "../polynetCodexWorkerAdmission.js";
 import type * as polynetCodexWorkerBridge from "../polynetCodexWorkerBridge.js";
 import type * as polynetCodexWorkerIngest from "../polynetCodexWorkerIngest.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
@@ -306,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   platformDiagnostics: typeof platformDiagnostics;
   platformHomeCommunity: typeof platformHomeCommunity;
   platformSkillRuntime: typeof platformSkillRuntime;
+  polynetCodexWorkerAdmission: typeof polynetCodexWorkerAdmission;
   polynetCodexWorkerBridge: typeof polynetCodexWorkerBridge;
   polynetCodexWorkerIngest: typeof polynetCodexWorkerIngest;
   previewProxySessionToken: typeof previewProxySessionToken;

@@ -29,7 +29,11 @@ primary_region = "sjc"
 
   [http_service.concurrency]
     type = "requests"
-    soft_limit = 8
+    # soft_limit 1: a machine running one turn is "full", so fly-proxy routes
+    # new turns to idle machines and autostarts suspended pool members.
+    # hard_limit stays high so pinned cancel/probe requests still reach a
+    # busy machine and hit the app-level guard instead of proxy queueing.
+    soft_limit = 1
     hard_limit = 16
 
   [[http_service.checks]]
