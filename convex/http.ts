@@ -12,6 +12,10 @@ import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
+import {
+  handlePolynetCodexWorkerIngest,
+  POLYNET_CODEX_WORKER_INGEST_PATH,
+} from "./polynetCodexWorkerIngest";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
@@ -365,6 +369,14 @@ registerRuntimeTurnRoutes({
   optionsResponse,
   sseResponse,
   requireAuthenticatedActor,
+});
+
+http.route({
+  path: POLYNET_CODEX_WORKER_INGEST_PATH,
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await handlePolynetCodexWorkerIngest(ctx, req);
+  }),
 });
 
 export default http;

@@ -46,6 +46,7 @@ type ActiveTurn = {
   firstBlaxelToolRequestAtMs: number | null;
   completedAtMs: number | null;
   eventSeq: number;
+  eventLog: RuntimeEvent[];
   writer: StreamWriter | null;
   turnCompletionResolvers: Map<string, Array<(value: JsonRecord) => void>>;
 };
@@ -54,6 +55,12 @@ type WorkerChatgptAuth = {
   accessToken: string;
   chatgptAccountId: string;
   chatgptPlanType: string | null;
+};
+
+type WorkerIngestConfig = {
+  url: string;
+  token: string;
+  context: JsonRecord;
 };
 
 type RunTurnParams = {
@@ -67,6 +74,7 @@ type RunTurnParams = {
   destroyAfterRun: boolean;
   probeMode: boolean;
   chatgptAuth: WorkerChatgptAuth | null;
+  ingest: WorkerIngestConfig | null;
   writer: StreamWriter | null;
 };
 
@@ -285,6 +293,7 @@ export class PolynetCodexWorkerRuntime {
       firstBlaxelToolRequestAtMs: null,
       completedAtMs: null,
       eventSeq: 0,
+      eventLog: [],
       writer: params.writer,
       turnCompletionResolvers: new Map(),
     };
@@ -304,6 +313,7 @@ export class PolynetCodexWorkerRuntime {
         payload,
         created_at: new Date().toISOString(),
       };
+      activeTurn.eventLog.push(event);
       activeTurn.writer?.send("runtime_event", event as unknown as JsonRecord);
       return event;
     };
@@ -551,6 +561,24 @@ export class PolynetCodexWorkerRuntime {
       };
       emitWorkerEvent("run_finalized", finalizedPayload);
       activeTurn.writer?.send("run_finalized", finalizedPayload);
+      if (params.ingest) {
+        await pushIngestPayloadBestEffort({
+          ingest: params.ingest,
+          payload: {
+            context: params.ingest.context,
+            status: pendingError ? "error" : "ok",
+            error: describeError(pendingError),
+            assistant_text: activeTurn.assistantText,
+            events: activeTurn.eventLog.map((event) => ({
+              seq: event.seq,
+              event_type: event.event_type,
+              payload: event.payload,
+              created_at: event.created_at,
+            })),
+            timing: activeTurn.timing.summary(),
+          },
+        });
+      }
       this.activeTurn = null;
     }
     if (pendingError) throw pendingError;
@@ -747,15 +775,57 @@ export class PolynetCodexWorkerRuntime {
     const activeTurn = this.activeTurn;
     if (!activeTurn) return;
     activeTurn.eventSeq += 1;
-    activeTurn.writer?.send("runtime_event", {
+    const event: RuntimeEvent = {
       id: `${activeTurn.runId}:${activeTurn.eventSeq}:${eventType}`,
       run_id: activeTurn.runId,
       seq: activeTurn.eventSeq,
       event_type: eventType,
       payload,
       created_at: new Date().toISOString(),
-    });
+    };
+    activeTurn.eventLog.push(event);
+    activeTurn.writer?.send("runtime_event", event as unknown as JsonRecord);
   }
+}
+
+async function pushIngestPayloadBestEffort(params: {
+  ingest: WorkerIngestConfig;
+  payload: JsonRecord;
+}): Promise<void> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(params.ingest.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${params.ingest.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(params.payload),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (response.ok) {
+        process.stdout.write(
+          `${JSON.stringify({
+            kind: "polynet_codex_worker_service_event",
+            event: "ingest_push_succeeded",
+            attempt,
+          })}\n`,
+        );
+        return;
+      }
+      // 4xx means the payload or auth is wrong; retrying cannot help.
+      if (response.status >= 400 && response.status < 500) break;
+    } catch {
+      // Network failure: retry below.
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
+  }
+  process.stderr.write(
+    `${JSON.stringify({
+      kind: "polynet_codex_worker_service_event",
+      event: "ingest_push_failed",
+    })}\n`,
+  );
 }
 
 function validateProbeProof(params: {
@@ -846,6 +916,15 @@ async function handleTurnEndpoint(params: {
           chatgptPlanType,
         }
       : null;
+  const rawIngest = asRecord(body.ingest);
+  const ingestUrl = String(rawIngest?.url ?? "").trim();
+  const ingestToken = String(rawIngest?.token ?? "").trim();
+  const ingestContext = asRecord(rawIngest?.context);
+  const ingest: WorkerIngestConfig | null =
+    ingestUrl && ingestToken && ingestContext
+      ? { url: ingestUrl, token: ingestToken, context: ingestContext }
+      : null;
+
   if (!params.probeMode && !chatgptAuth) {
     sendJson(params.res, 400, {
       ok: false,
@@ -881,6 +960,7 @@ async function handleTurnEndpoint(params: {
         destroyAfterRun,
         probeMode: params.probeMode,
         chatgptAuth,
+        ingest,
         writer,
       });
     } catch (error) {
@@ -907,6 +987,7 @@ async function handleTurnEndpoint(params: {
       destroyAfterRun,
       probeMode: params.probeMode,
       chatgptAuth,
+      ingest,
       writer: null,
     });
     sendJson(params.res, 200, result);

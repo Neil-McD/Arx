@@ -201,6 +201,11 @@ export async function streamPolynetCodexWorkerTurn(params: {
   sandboxName?: string | null;
   destroyAfterRun?: boolean;
   chatgptAuth: PolynetCodexWorkerChatgptAuth;
+  ingest?: {
+    url: string;
+    token: string;
+    context: Record<string, unknown>;
+  } | null;
   onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
 }): Promise<PolynetCodexWorkerBridgeResult> {
   const config = getPolynetCodexWorkerBridgeConfig();
@@ -236,6 +241,15 @@ export async function streamPolynetCodexWorkerTurn(params: {
         chatgpt_account_id: params.chatgptAuth.accountId,
         chatgpt_plan_type: params.chatgptAuth.planType,
       },
+      ...(params.ingest
+        ? {
+            ingest: {
+              url: params.ingest.url,
+              token: params.ingest.token,
+              context: params.ingest.context,
+            },
+          }
+        : {}),
     }),
   });
 

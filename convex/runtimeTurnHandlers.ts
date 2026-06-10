@@ -74,6 +74,7 @@ import {
 import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames";
 import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
+import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
 
 export type {
   SseResponseEvent,
@@ -1097,6 +1098,23 @@ export async function handleRuntimeTurnRequest(args: {
               accountId: workerChatgptAccountId,
               planType: null,
             },
+            ingest: (() => {
+              const target = buildPolynetCodexWorkerIngestTarget();
+              if (!target) return null;
+              return {
+                url: target.url,
+                token: target.token,
+                context: {
+                  owner_id: String(actor.dbUserId),
+                  thread_id: String(ownedThread._id),
+                  run_id: runId,
+                  assistant_message_key: assistantMessageKeyForRun,
+                  model_id: requestedModelId,
+                  lane,
+                  inference_source: streamedInferenceSource,
+                },
+              };
+            })(),
             onEvent: async (event) => {
               if (event.event === "delta") {
                 emitDelta(event.data);

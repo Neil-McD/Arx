@@ -129,6 +129,7 @@ import type * as platformDiagnostics from "../platformDiagnostics.js";
 import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as platformSkillRuntime from "../platformSkillRuntime.js";
 import type * as polynetCodexWorkerBridge from "../polynetCodexWorkerBridge.js";
+import type * as polynetCodexWorkerIngest from "../polynetCodexWorkerIngest.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
 import type * as profileRelationshipCore from "../profileRelationshipCore.js";
@@ -306,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   platformHomeCommunity: typeof platformHomeCommunity;
   platformSkillRuntime: typeof platformSkillRuntime;
   polynetCodexWorkerBridge: typeof polynetCodexWorkerBridge;
+  polynetCodexWorkerIngest: typeof polynetCodexWorkerIngest;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
   profileRelationshipCore: typeof profileRelationshipCore;

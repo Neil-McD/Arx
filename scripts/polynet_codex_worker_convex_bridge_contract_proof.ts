@@ -7,6 +7,8 @@ function read(relativePath: string): string {
 
 const bridge = read("convex/polynetCodexWorkerBridge.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
+const ingest = read("convex/polynetCodexWorkerIngest.ts");
+const httpRoutes = read("convex/http.ts");
 const persistence = read("convex/runtimeTurnPersistence.ts");
 const attribution = read("shared/modelAttributionUi.ts");
 const projection = read("apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx");
@@ -41,6 +43,31 @@ assert.match(
   handlers,
   /getFreshChatgptAuthForUser\(\{[\s\S]*userId: actor\.dbUserId[\s\S]*provider_connection_required/,
   "worker path must mint fresh per-user ChatGPT auth and fail closed without a connection",
+);
+assert.match(
+  handlers,
+  /buildPolynetCodexWorkerIngestTarget\(\)[\s\S]*assistant_message_key: assistantMessageKeyForRun/,
+  "worker path must hand the worker a durable ingest target and assistant message key",
+);
+assert.match(
+  ingest,
+  /POLYNET_CODEX_WORKER_AUTH_TOKEN[\s\S]*bearer !== expectedToken[\s\S]*401/,
+  "ingest endpoint must reject requests without the shared worker bearer token",
+);
+assert.match(
+  ingest,
+  /\$\{context\.run_id\}:polynet_codex_worker:\$\{seq\}:\$\{eventType\}/,
+  "ingest events must reuse the live path's eventKey scheme so replays dedupe",
+);
+assert.match(
+  ingest,
+  /persistRuntimeAssistantMessage\(\{[\s\S]*messageKey: context\.assistant_message_key[\s\S]*finishRunBestEffort/,
+  "ingest must idempotently persist the assistant message and finish the run",
+);
+assert.match(
+  httpRoutes,
+  /POLYNET_CODEX_WORKER_INGEST_PATH[\s\S]*handlePolynetCodexWorkerIngest/,
+  "ingest endpoint must be registered on the Convex http router",
 );
 assert.match(
   bridge,

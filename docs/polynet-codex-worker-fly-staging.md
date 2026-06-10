@@ -168,3 +168,20 @@ Current contract:
 
 Verified E2E: the wedged 4096MB sandbox was detected, replaced, and the
 project volume remounted with all files intact at 2048MB.
+
+## Durable Ingest Backstop (release v12, 2026-06-10)
+
+The Convex turn action still proxies the worker SSE stream for live UX, but
+durability no longer depends on it. The bridge hands the worker an ingest
+target (`CONVEX_SITE_URL` + `/runtime/polynet_codex_worker_ingest`, shared
+worker bearer token) plus an opaque context (owner/thread/run ids, the
+assistant message key, model/lane). After `run_finalized` the worker posts its
+final payload (all runtime events, assistant text, status, timing) directly to
+Convex with up to 3 retries.
+
+The ingest handler is idempotent against the live path: events dedupe on the
+same eventKey scheme, the assistant message dedupes on messageKey, and run
+finish is best-effort. If the Convex action dies mid-turn, the worker's push
+still lands the completed turn and the existing UI recovery picks it up.
+
+Worker service log events: `ingest_push_succeeded` / `ingest_push_failed`.
