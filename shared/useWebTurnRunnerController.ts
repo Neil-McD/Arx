@@ -1161,7 +1161,6 @@ export function useWebTurnRunnerController<
         message: {
           messageId,
           threadId: params.threadId,
-          seq: 0,
           role: params.role,
           contentJson: params.content_json,
           engineId: params.engine_id ?? null,

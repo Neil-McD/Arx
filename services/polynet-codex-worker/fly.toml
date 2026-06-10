@@ -1,0 +1,45 @@
+app = "polynet-codex-worker-staging"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8787"
+  POLYNET_DEPLOYMENT_KIND = "staging"
+  CONVEX_DEPLOYMENT = "dev:quick-porcupine-949"
+  POLYNET_WORKSPACE_COMPUTER_PROVIDER = "blaxel"
+  POLYNET_ENABLE_BLAXEL_WORKSPACE_PROVIDER = "true"
+  POLYNET_CODEX_WORKER_HOST = "0.0.0.0"
+  POLYNET_CODEX_WORKER_CODEX_BIN = "codex"
+  POLYNET_CODEX_WORKER_MODEL = "gpt-5.5"
+  POLYNET_CODEX_WORKER_DESTROY_AFTER_RUN = "true"
+  POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS = "60"
+  CODEX_HOME = "/data/codex-home"
+  BLAXEL_WORKSPACE_REGION = "us-pdx-1"
+  BLAXEL_WORKSPACE_MEMORY_MB = "2048"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 8
+    hard_limit = 16
+
+  [[http_service.checks]]
+    grace_period = "45s"
+    interval = "20s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 4096

@@ -4,6 +4,34 @@ PolyNet.ai is the first collective intelligence platform that lets anyone build 
 
 This file is the execution contract for agents working in this repository.
 
+## PolyNet Codex Worker Staging Override
+
+For the PolyNet-owned Codex worker slice, the active worktree is:
+`/Users/neilmcdevitt/code/arx-polynet-codex-worker`
+
+The active branch must start with:
+`codex/polynet-owned-codex-worker-`
+
+Always start this slice with:
+
+```bash
+cd /Users/neilmcdevitt/code/arx-polynet-codex-worker
+npm run check:polynet-codex-worker-staging
+```
+
+Staging targets:
+- Convex: `dev:quick-porcupine-949`
+- Web/Vercel, when linked or deployed: `polynet-staging`
+- Public staging URL, when promoted intentionally: `https://polynet-staging.vercel.app`
+
+Never deploy or push this worker slice to:
+- `origin/main`
+- `www.polynet.ai`
+- Convex prod `wry-hawk-715`
+- Vercel project `polynet`
+
+Do not use `/Users/neilmcdevitt/code/arx` for this worker slice.
+
 ## 0) Vision and Philosophy
 
 ### Product Vision

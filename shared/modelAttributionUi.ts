@@ -9,6 +9,7 @@ type ModelToggleLike = {
 type FormatModelAttributionLabelArgs = {
   modelId: string | null | undefined;
   inferenceSource: string | null | undefined;
+  engineId?: string | null | undefined;
   modelToggles: ReadonlyArray<ModelToggleLike>;
   inferenceLaneFallbacks?: ReadonlyArray<InferenceLaneFallbackTraceItem> | null;
   freeModelAllowlist?: ReadonlySet<string>;
@@ -51,7 +52,10 @@ export function formatModelAttributionLabel(args: FormatModelAttributionLabelArg
   const isFreeModel = isFreeModelId(modelId, args.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST);
   const modelLabel = resolveModelLabel(modelId, args.modelToggles, args.freeModelLabels);
   const source = isFreeModel ? "free" : args.inferenceSource;
-  const base = appendInferenceProviderLabel(modelLabel, source);
+  const isCodexWorkerEngine = String(args.engineId ?? "").trim() === "polynet_codex_worker";
+  const base = isCodexWorkerEngine
+    ? `${modelLabel} · Codex`
+    : appendInferenceProviderLabel(modelLabel, source);
   const fallbackSuffix = formatInferenceLaneFallbackSuffix(args.inferenceLaneFallbacks ?? null);
   return `${base}${fallbackSuffix}`;
 }
@@ -98,6 +102,15 @@ export function extractInferenceSourceFromMessageContent(content: unknown): stri
   const meta = extractMetaRecord(content);
   if (!meta) return null;
   const value = meta.inference_source;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function extractRuntimeEngineIdFromMessageContent(content: unknown): string | null {
+  const meta = extractMetaRecord(content);
+  if (!meta) return null;
+  const value = meta.runtime_engine_id ?? meta.engine_id;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;

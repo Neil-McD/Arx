@@ -129,8 +129,10 @@ export async function addCloudThreadMessage(params: {
     threadId: internalThreadId,
     messageKey: String(params.message.messageId ?? "").trim() || undefined,
     seq:
-      typeof params.message.seq === "number" && Number.isFinite(params.message.seq)
-        ? Math.max(0, Math.floor(params.message.seq))
+      typeof params.message.seq === "number" &&
+      Number.isFinite(params.message.seq) &&
+      Math.floor(params.message.seq) > 0
+        ? Math.floor(params.message.seq)
         : undefined,
     role: params.message.role,
     contentJson: params.message.contentJson,

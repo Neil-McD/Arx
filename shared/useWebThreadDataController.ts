@@ -65,10 +65,22 @@ type ThreadMessageRecord = {
   created_at: string;
 };
 
-function compareThreadMessages(a: ThreadMessageRecord, b: ThreadMessageRecord): number {
-  if (a.seq !== b.seq) return a.seq - b.seq;
+function normalizeDisplaySeq(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const seq = Math.floor(parsed);
+  return seq > 0 ? seq : null;
+}
+
+export function compareThreadMessages(a: ThreadMessageRecord, b: ThreadMessageRecord): number {
+  const aSeq = normalizeDisplaySeq(a.seq);
+  const bSeq = normalizeDisplaySeq(b.seq);
+  if (aSeq !== null && bSeq !== null && aSeq !== bSeq) return aSeq - bSeq;
   const createdAtDelta = Date.parse(a.created_at) - Date.parse(b.created_at);
   if (Number.isFinite(createdAtDelta) && createdAtDelta !== 0) return createdAtDelta;
+  if (aSeq !== null && bSeq !== null && aSeq !== bSeq) return aSeq - bSeq;
+  if (aSeq !== null && bSeq === null) return -1;
+  if (aSeq === null && bSeq !== null) return 1;
   return a.id.localeCompare(b.id);
 }
 

@@ -56,8 +56,23 @@ import {
   persistRuntimeAssistantMessage,
   persistRuntimeUserMessage,
 } from "./runtimeTurnPersistence";
+import {
+  buildPolynetCodexWorkerPrompt,
+  POLYNET_CODEX_WORKER_CONTRACT_NAME,
+  POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+  POLYNET_CODEX_WORKER_ENGINE_ID,
+  shouldUsePolynetCodexWorkerBridge,
+  streamPolynetCodexWorkerTurn,
+} from "./polynetCodexWorkerBridge";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
+import {
+  createProjectRuntimeWorkspaceSession,
+  settleRuntimeWorkspaceSession,
+  type RuntimeWorkspaceSession,
+} from "./workspaceRuntimeSession";
+import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames";
+import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
 
 export type {
   SseResponseEvent,
@@ -478,6 +493,13 @@ export async function handleRuntimeTurnRequest(args: {
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
     const runStartedAt = Date.now();
+    const usePolynetCodexWorkerBridge = shouldUsePolynetCodexWorkerBridge({
+      runtimeExecutionMode,
+      stream,
+    });
+    const runtimeEngineId = usePolynetCodexWorkerBridge
+      ? POLYNET_CODEX_WORKER_ENGINE_ID
+      : "runtime_turn";
     runtimeTurnLogContext = {
       runId,
       threadId: String(ownedThread._id),
@@ -488,6 +510,7 @@ export async function handleRuntimeTurnRequest(args: {
       requestedModelId,
       lane,
       inferenceSource,
+      runtimeEngineId,
       executionMode: runtimeExecutionMode,
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
@@ -502,14 +525,18 @@ export async function handleRuntimeTurnRequest(args: {
       communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
       communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
       modelId: requestedModelId,
-      engineId: "runtime_turn",
+      engineId: runtimeEngineId,
       executionMode: runtimeExecutionMode,
       sandboxMode: runtimeSandboxMode,
       contractName:
-        runtimeExecutionMode === "agentic"
+        usePolynetCodexWorkerBridge
+          ? POLYNET_CODEX_WORKER_CONTRACT_NAME
+          : runtimeExecutionMode === "agentic"
           ? "capability_composed_tools_v1"
           : "capability_composed_chat_v1",
-      contractVersion: "v1",
+      contractVersion: usePolynetCodexWorkerBridge
+        ? POLYNET_CODEX_WORKER_CONTRACT_VERSION
+        : "v1",
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
@@ -889,6 +916,329 @@ export async function handleRuntimeTurnRequest(args: {
       },
     });
     if (runtimeExecutionMode === "agentic") {
+      if (stream && usePolynetCodexWorkerBridge) {
+        return runtimeSseResponse(async (writer) => {
+          let streamedContent = "";
+          let streamedInferenceSource = resolvedInferenceSource;
+          let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
+          let assistantMessageId: string | null = null;
+          let assistantMessageKey: string | null = null;
+          let assistantMessageSeq: number | null = null;
+
+          const emitDelta = (data: Record<string, unknown>) => {
+            const full = typeof data.full_content === "string" ? data.full_content : null;
+            const delta = typeof data.delta === "string" ? data.delta : "";
+            if (full !== null) streamedContent = full;
+            else if (delta) streamedContent += delta;
+            writer.send({
+              event: "delta",
+              data: {
+                ...data,
+                run_id: runId,
+                engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                model_id: requestedModelId,
+              },
+            });
+          };
+
+          const streamAppendRunEvent = async (event: {
+            eventType: string;
+            eventKey?: string;
+            payload: Record<string, unknown>;
+          }): Promise<void> => {
+            const created = await appendRunEvent(event);
+            await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
+            const mapped = mapPersistedRuntimeEventRow(created);
+            if (!mapped) return;
+            writer.send({
+              event: "runtime_event",
+              data: mapped,
+            });
+          };
+
+          writer.send({
+            event: "start",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+            },
+          });
+
+          await streamAppendRunEvent({
+            eventType: "polynet_codex_worker_bridge_started",
+            eventKey: `${runId}:polynet_codex_worker_bridge_started:1`,
+            payload: {
+              run_id: runId,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+              fly_worker: true,
+            },
+          });
+
+          runtimeTurnStage = "polynet_codex_worker";
+          let workerWorkspaceSession: RuntimeWorkspaceSession | null = null;
+          let workerSandboxName: string | null = null;
+          if (runtimeProjectId) {
+            const createdWorkspace = await createProjectRuntimeWorkspaceSession({
+              ctx,
+              authSubject: actor.authSubject,
+              userId: actor.dbUserId,
+              projectId: runtimeProjectId,
+              runId,
+            });
+            if (!createdWorkspace.ok) {
+              await persistPartialAssistantMessageBestEffort({
+                content: "",
+                status: "error",
+                reason: createdWorkspace.code,
+                errorCode: createdWorkspace.code,
+                errorMessage: createdWorkspace.message,
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: createdWorkspace.code,
+                errorCode: createdWorkspace.code,
+                errorMessage: createdWorkspace.message,
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  code: createdWorkspace.code,
+                  error: createdWorkspace.message,
+                  message: createdWorkspace.message,
+                  status: createdWorkspace.status,
+                  details: createdWorkspace.details ?? null,
+                },
+              });
+              return;
+            }
+            workerWorkspaceSession = createdWorkspace.session;
+            workerSandboxName = buildBlaxelProjectWorkspaceNames(runtimeProjectId).sandboxName;
+            await streamAppendRunEvent({
+              eventType: "workspace_session_adopted",
+              eventKey: `${runId}:workspace_session_adopted:polynet_codex_worker`,
+              payload: {
+                run_id: runId,
+                sandbox_id: workerWorkspaceSession.providerSandboxId,
+                project_id: runtimeProjectId,
+                source: "polynet_codex_worker",
+                provider_id: workerWorkspaceSession.providerId,
+                toolbox_proxy_url: null,
+              },
+            });
+          }
+          const workerPrompt = buildPolynetCodexWorkerPrompt({
+            conversationMessages,
+            latestUserText,
+            communityName: runtimeCommunityName,
+            communitySlug: runtimeCommunitySlug,
+            communityOneLiner: runtimeCommunityOneLiner,
+            communityAbout: runtimeCommunityAbout,
+            communitySystemPrompt: runtimeCommunitySystemPrompt,
+            agentName: runtimeAgentProfile.agentName,
+            agentSoul: runtimeAgentProfile.agentSoul,
+            threadWorkingState: ownedThread.workingState ?? null,
+            allowedToolNames,
+            projectId: runtimeProjectId,
+          });
+
+          const workerResult = await streamPolynetCodexWorkerTurn({
+            runId,
+            model: requestedModelId,
+            prompt: workerPrompt,
+            sandboxName: workerSandboxName,
+            destroyAfterRun: workerSandboxName ? false : true,
+            onEvent: async (event) => {
+              if (event.event === "delta") {
+                emitDelta(event.data);
+                return;
+              }
+              if (event.event === "runtime_event") {
+                const workerEventType = String(event.data.event_type ?? "").trim();
+                if (!workerEventType) return;
+                const workerSeqRaw = Number(event.data.seq);
+                const workerSeq = Number.isFinite(workerSeqRaw)
+                  ? Math.max(0, Math.floor(workerSeqRaw))
+                  : 0;
+                const workerPayload =
+                  event.data.payload &&
+                  typeof event.data.payload === "object" &&
+                  !Array.isArray(event.data.payload)
+                    ? (event.data.payload as Record<string, unknown>)
+                    : {};
+                await streamAppendRunEvent({
+                  eventType: workerEventType,
+                  eventKey: `${runId}:polynet_codex_worker:${workerSeq}:${workerEventType}`,
+                  payload: {
+                    ...workerPayload,
+                    run_id: runId,
+                    engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                    worker_event_id: event.data.id ?? null,
+                    worker_event_seq: workerSeq,
+                    worker_event_type: workerEventType,
+                    worker_event_created_at: event.data.created_at ?? null,
+                  },
+                });
+                return;
+              }
+              if (event.event === "run_model_finished" || event.event === "run_finalized") {
+                writer.send({
+                  event: event.event,
+                  data: {
+                    ...event.data,
+                    run_id: runId,
+                    engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                    model_id: requestedModelId,
+                  },
+                });
+              }
+            },
+          });
+
+          streamedContent = workerResult.assistantText || streamedContent;
+
+          if (workerWorkspaceSession) {
+            try {
+              const settled = await settleRuntimeWorkspaceSession({
+                ctx,
+                userId: actor.dbUserId,
+                runId,
+                session: workerWorkspaceSession,
+                providerStandbyGraceSeconds: BLAXEL_AUTO_STANDBY_GRACE_SECONDS,
+              });
+              await streamAppendRunEvent({
+                eventType: "workspace_compute_settled",
+                eventKey: `${runId}:workspace_compute_settled:polynet_codex_worker`,
+                payload: {
+                  run_id: runId,
+                  ok: settled.ok,
+                  source: "polynet_codex_worker",
+                  credit_reservation_key: settled.creditReservationKey ?? null,
+                  credits_debited: settled.creditsDebited ?? null,
+                  duration_seconds: settled.durationSeconds ?? null,
+                  error: settled.ok ? null : settled.error,
+                },
+              });
+            } catch (error) {
+              logStructuredError("polynet_codex_worker_workspace_settle_failed", {
+                error,
+                run_id: runId,
+              });
+            }
+          }
+
+          if (!workerResult.ok) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: workerResult.code,
+              errorCode: workerResult.code,
+              errorMessage: workerResult.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: workerResult.code,
+              errorCode: workerResult.code,
+              errorMessage: workerResult.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: workerResult.code,
+                error: workerResult.message,
+                message: workerResult.message,
+                status: workerResult.status,
+              },
+            });
+            return;
+          }
+
+          runtimeTurnStage = "assistant_persist";
+          if (persistVisibleAssistantMessage) {
+            try {
+              await throwIfRunCancelled();
+              ({
+                assistantMessageId,
+                assistantMessageKey,
+                assistantMessageSeq,
+              } = await persistRuntimeAssistantMessage({
+                ctx,
+                ownerId: actor.dbUserId,
+                threadId: ownedThread._id,
+                messageKey: assistantMessageKeyForRun,
+                requestedModelId,
+                engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+                inferenceSource: streamedInferenceSource,
+                lane,
+                inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
+                runId,
+                content: streamedContent,
+              }));
+            } catch (error) {
+              if (isRuntimeRunCancelledError(error)) {
+                await persistPartialAssistantMessageBestEffort({
+                  content: streamedContent,
+                  status: "cancelled",
+                  reason: USER_CANCELLED_RUNTIME_CODE,
+                  errorCode: USER_CANCELLED_RUNTIME_CODE,
+                  errorMessage: "Run cancelled by user.",
+                  inferenceSourceOverride: streamedInferenceSource,
+                  inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+                });
+                await finishCancelledRun();
+                return;
+              }
+              const message =
+                error instanceof Error ? error.message : String(error);
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: "assistant_message_persist_failed",
+                errorCode: "assistant_message_persist_failed",
+                errorMessage: message || "Failed to persist assistant message.",
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  error: message || "Failed to persist assistant message.",
+                },
+              });
+              return;
+            }
+          }
+
+          await finishRunBestEffortForRun({
+            status: "ok",
+          });
+          writer.send({
+            event: "done",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+              full_content: streamedContent,
+              prompt_tokens: null,
+              completion_tokens: null,
+              user_message_id: userMessageId,
+              user_message_key: userMessageKey,
+              user_message_seq: userMessageSeq,
+              assistant_message_id: assistantMessageId,
+              assistant_message_key: assistantMessageKey,
+              assistant_message_seq: assistantMessageSeq,
+            },
+          });
+        });
+      }
       if (stream) {
         return runtimeSseResponse(async (writer) => {
           let streamedContent = "";
