@@ -96,7 +96,7 @@ function normalizeToolCommand(args: unknown, fallbackCommand: string): string {
   const command = raw.trim();
   if (!command) return fallbackCommand;
   if (command.length > 1000) {
-    throw new Error("blaxel_bash command is too long for this POC.");
+    throw new Error("workspace_bash command is too long for this POC.");
   }
   return command;
 }
@@ -451,14 +451,14 @@ async function main(): Promise<void> {
     }
 
     const params = asRecord(message.params);
-    if (!params || String(params.tool ?? "") !== "blaxel_bash") {
+    if (!params || String(params.tool ?? "") !== "workspace_bash") {
       client.respondError(message.id, -32601, "unsupported dynamic tool");
       return;
     }
 
     const command = normalizeToolCommand(params.arguments, toolCommand);
     const toolStartedAt = nowMs();
-    mark("blaxel_bash_requested", {
+    mark("workspace_exec_requested", {
       turn_id: typeof params.turnId === "string" ? params.turnId : null,
       call_id: typeof params.callId === "string" ? params.callId : null,
       sandbox_name: sandboxName,
@@ -496,7 +496,7 @@ async function main(): Promise<void> {
         stdout: "",
         stderr: result.message,
       });
-      mark("blaxel_bash_completed", {
+      mark("workspace_bash_completed", {
         ok: false,
         latency_ms: latencyMs,
         failure_code: result.code,
@@ -521,7 +521,7 @@ async function main(): Promise<void> {
       stdout,
       stderr,
     });
-    mark("blaxel_bash_completed", {
+    mark("workspace_bash_completed", {
       ok,
       latency_ms: latencyMs,
       exit_code: result.exitCode ?? null,
@@ -640,10 +640,10 @@ async function main(): Promise<void> {
         sandbox: "read-only",
         ephemeral: true,
         developerInstructions:
-          "You are running inside the PolyNet Codex worker POC. Do not use local shell commands or local file edits. When you need to run a workspace command, call the dynamic tool named blaxel_bash. Report the tool output concisely.",
+          "You are running inside the PolyNet Codex worker POC. Do not use local shell commands or local file edits. When you need to run a workspace command, call the dynamic tool named workspace_bash. Report the tool output concisely.",
         dynamicTools: [
           {
-            name: "blaxel_bash",
+            name: "workspace_bash",
             description:
               "Run a shell command inside the remote Blaxel workspace sandbox. Use this instead of local shell commands.",
             inputSchema: {
@@ -672,9 +672,9 @@ async function main(): Promise<void> {
     });
 
     const firstPrompt =
-      "Call blaxel_bash exactly once with command `pwd && echo POLYNET_CODEX_WORKER_POC && uname -s`. Then summarize the output and say whether it ran in Blaxel.";
+      "Call workspace_bash exactly once with command `pwd && echo POLYNET_CODEX_WORKER_POC && uname -s`. Then summarize the output and say whether it ran in Blaxel.";
     const secondPrompt =
-      "Call blaxel_bash exactly once with command `pwd && echo POLYNET_CODEX_WORKER_POC_WARM`. Then summarize the output and mention that this is the second turn on the same worker process.";
+      "Call workspace_bash exactly once with command `pwd && echo POLYNET_CODEX_WORKER_POC_WARM`. Then summarize the output and mention that this is the second turn on the same worker process.";
     const firstTurn = await runTurn("first", firstPrompt, threadId);
     const secondTurn = await runTurn("second", secondPrompt, threadId);
 

@@ -140,7 +140,7 @@ export function buildPolynetCodexWorkerPrompt(params: {
       : "";
   return [
     "You are PolyNet's headless Codex runtime for an authenticated workspace thread.",
-    "Use the dynamic Blaxel execution tool when real workspace commands are needed.",
+    "Use the workspace_bash tool when real workspace commands are needed.",
     "Do not claim local PolyNet server state unless tool output or provided context proves it.",
     "Return a concise, user-facing answer when the work is done.",
     "",

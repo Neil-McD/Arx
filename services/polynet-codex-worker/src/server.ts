@@ -388,8 +388,9 @@ export class PolynetCodexWorkerRuntime {
           ephemeral: true,
           developerInstructions: [
             "You are running inside the PolyNet Codex worker service.",
-            "Your workspace is a full-access remote Linux sandbox rooted at /workspace, reached only through the dynamic tool named blaxel_bash.",
-            "blaxel_bash can read, write, install, and run anything in that workspace.",
+            "Your workspace is a full-access remote Linux environment rooted at /workspace, reached only through the dynamic tool named workspace_bash.",
+            "workspace_bash can read, write, install, and run anything in that workspace.",
+            "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
             "The local environment is not your workspace: never use local shell commands, local file edits, or local paths.",
             "Report the tool output concisely.",
           ].join(" "),
@@ -701,7 +702,7 @@ export class PolynetCodexWorkerRuntime {
       return;
     }
     const params = asRecord(message.params);
-    if (!params || String(params.tool ?? "") !== "blaxel_bash") {
+    if (!params || String(params.tool ?? "") !== "workspace_bash") {
       this.client.respondError(message.id, -32601, "unsupported dynamic tool");
       return;
     }
@@ -709,11 +710,11 @@ export class PolynetCodexWorkerRuntime {
     if (activeTurn.firstBlaxelToolRequestAtMs === null) {
       activeTurn.firstBlaxelToolRequestAtMs = nowMs();
       activeTurn.timing.setBucket(
-        "first_blaxel_tool_call_ms",
+        "first_workspace_exec_ms",
         activeTurn.firstBlaxelToolRequestAtMs - activeTurn.timing.startedAtMs,
       );
     }
-    this.emitRuntimeEvent("blaxel_bash_requested", {
+    this.emitRuntimeEvent("workspace_exec_requested", {
       codex_turn_id: typeof params.turnId === "string" ? params.turnId : null,
       call_id: typeof params.callId === "string" ? params.callId : null,
       sandbox_name: activeTurn.sandboxName,
@@ -727,8 +728,8 @@ export class PolynetCodexWorkerRuntime {
       timeoutSeconds: activeTurn.commandTimeoutSeconds,
     });
     activeTurn.toolCalls.push(result.summary);
-    activeTurn.timing.setBucket("latest_blaxel_tool_latency_ms", result.summary.latencyMs);
-    this.emitRuntimeEvent("blaxel_bash_finished", {
+    activeTurn.timing.setBucket("latest_workspace_exec_latency_ms", result.summary.latencyMs);
+    this.emitRuntimeEvent("workspace_exec_finished", {
       ok: result.summary.ok,
       latency_ms: result.summary.latencyMs,
       exit_code: result.summary.exitCode,
@@ -777,8 +778,8 @@ function validateProbeProof(params: {
 
 function buildProbePrompt(command: string): string {
   return [
-    `Call blaxel_bash exactly once with command \`${command}\`.`,
-    "Then summarize the output and say whether it ran in Blaxel.",
+    `Call workspace_bash exactly once with command \`${command}\`.`,
+    "Then summarize the output and say whether it ran in the workspace.",
     "Do not call any other tools.",
   ].join(" ");
 }

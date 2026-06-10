@@ -32,6 +32,10 @@ export function safeResourceName(value: string): string {
     .slice(0, 54);
 }
 
+export function neutralizeWorkspaceText(value: unknown): string {
+  return String(value ?? "").replace(/blaxel/gi, "workspace");
+}
+
 export function previewText(value: unknown, max = 500): string {
   return String(value ?? "")
     .replace(/\s+/g, " ")
@@ -51,22 +55,22 @@ export function normalizeToolCommand(args: unknown, fallbackCommand: string): st
   const command = raw.trim();
   if (!command) return fallbackCommand;
   if (command.length > 1000) {
-    throw new Error("blaxel_bash command is too long.");
+    throw new Error("workspace_bash command is too long.");
   }
   return command;
 }
 
 export function buildBlaxelBashDynamicToolSpec(): Record<string, unknown> {
   return {
-    name: "blaxel_bash",
+    name: "workspace_bash",
     description:
-      "Run a shell command inside the remote Blaxel workspace sandbox. Use this instead of local shell commands.",
+      "Run a shell command in the user's workspace. This is your only execution environment.",
     inputSchema: {
       type: "object",
       properties: {
         command: {
           type: "string",
-          description: "Shell command to run in the Blaxel workspace.",
+          description: "Shell command to run in the workspace.",
         },
       },
       required: ["command"],
@@ -169,16 +173,13 @@ export async function runBlaxelBash(params: {
       summary,
       contentText: JSON.stringify(
         {
-          provider: "blaxel",
-          sandboxName: params.sandboxName,
           command: params.command,
           ok: false,
           exitCode: null,
           stdout: "",
           stderr: "",
-          providerCommandId: null,
-          failureCode: result.code,
-          failureMessage: result.message,
+          failureCode: neutralizeWorkspaceText(result.code),
+          failureMessage: neutralizeWorkspaceText(result.message),
         },
         null,
         2,
@@ -204,15 +205,11 @@ export async function runBlaxelBash(params: {
     summary,
     contentText: JSON.stringify(
       {
-        provider: "blaxel",
-        sandboxName: params.sandboxName,
         command: params.command,
         ok,
         exitCode: result.exitCode ?? null,
-        status: result.status ?? null,
         stdout,
         stderr,
-        providerCommandId: result.providerCommandId,
       },
       null,
       2,
