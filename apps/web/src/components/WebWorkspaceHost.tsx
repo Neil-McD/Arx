@@ -1362,17 +1362,22 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const isOperatorRightPanelTabActive =
     activeRightPanelMode === "operator" && isOperatorInsightTab(activeRightPanelTab);
-  const hadPreviewCapableTerminalsRef = useRef(false);
+  const announcedPreviewTerminalIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const hasPreviews = activePreviewCapableTerminals.length > 0;
-    const hadPreviews = hadPreviewCapableTerminalsRef.current;
-    hadPreviewCapableTerminalsRef.current = hasPreviews;
-    if (!hasPreviews || hadPreviews) return;
+    // Auto-focus fires once per terminal id ("a new app started serving"),
+    // never on re-encounters — thread switches re-list the same ids and must
+    // not override the user's explicit tab choice. Ids are marked announced
+    // even while focus is suppressed so a later panel-open isn't ambushed.
+    const freshIds = activePreviewCapableTerminals
+      .map((terminal) => terminal.id)
+      .filter((id) => !announcedPreviewTerminalIdsRef.current.has(id));
+    for (const id of freshIds) announcedPreviewTerminalIdsRef.current.add(id);
+    if (freshIds.length === 0) return;
     if (!isWorkspaceRightPanelVisible || activeRightPanelMode !== "user") return;
     // Contextual jump when an app starts serving — intentionally not persisted
     // as the user's tab preference.
     setRequestedRightPanelTab("app");
-  }, [activePreviewCapableTerminals.length, activeRightPanelMode, isWorkspaceRightPanelVisible]);
+  }, [activePreviewCapableTerminals, activeRightPanelMode, isWorkspaceRightPanelVisible]);
   const handleWorkspaceRightPanelModeChange = useCallback(
     (mode: WorkspaceRightPanelMode) => {
       const nextMode = resolveWorkspaceRightPanelMode(mode, showOperatorTabs);
@@ -2282,7 +2287,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   };
 
   const workspaceRightPanelAppContent =
-    activePreviewCapableTerminals.length > 0 ? (
+    isWorkspaceRightPanelVisible && activePreviewCapableTerminals.length > 0 ? (
       <WebWorkspaceAppPreview
         terminals={activePreviewCapableTerminals}
         previewStateByTerminalId={previewStateByTerminalId}
