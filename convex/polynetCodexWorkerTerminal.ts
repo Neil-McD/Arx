@@ -153,7 +153,9 @@ export async function handlePolynetCodexWorkerTerminal(
 
   const preview = (await resolveWorkspaceTerminalPreview({
     row: {
+      _id: String(started.terminal_session_id ?? ""),
       previewPort: terminal.previewPort,
+      previewPath: terminal.previewPath,
       previewLabel: terminal.previewLabel,
       providerSandboxId,
     },
