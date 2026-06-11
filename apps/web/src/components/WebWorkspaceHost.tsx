@@ -1309,19 +1309,15 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     const candidates = activeWorkspaceTerminals.filter(
       (terminal) => isTerminalSnapshotStatusActive(terminal.status) && isPreviewCapableTerminal(terminal),
     );
-    // Serve retries leave superseded rows still marked running; one preview per
-    // served app (keyed by cwd), latest start wins.
-    const latestByAppKey = new Map<string, WorkspaceTerminalRecord>();
+    // Serve retries leave the superseded server genuinely running on another
+    // port, and no cwd/command key reliably identifies "the same app" — so the
+    // preview shows exactly one card: the latest active serve. The terminal
+    // rail still lists every row for stopping.
+    let latest: WorkspaceTerminalRecord | null = null;
     for (const terminal of candidates) {
-      const appKey = terminal.cwd ?? terminal.command;
-      const current = latestByAppKey.get(appKey);
-      if (!current || terminal.started_at >= current.started_at) {
-        latestByAppKey.set(appKey, terminal);
-      }
+      if (!latest || terminal.started_at >= latest.started_at) latest = terminal;
     }
-    return candidates.filter(
-      (terminal) => latestByAppKey.get(terminal.cwd ?? terminal.command)?.id === terminal.id,
-    );
+    return latest ? [latest] : [];
   }, [activeWorkspaceTerminals]);
   const visibleBackgroundWorkspaceTerminals = useMemo(
     () =>
