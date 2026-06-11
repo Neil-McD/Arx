@@ -90,6 +90,16 @@ type ProjectSandboxActiveTerminalRefreshStatus =
     checkedCount: number;
     refreshedCount: number;
   };
+type ProjectTerminalReconcileLease = {
+  acquired: boolean;
+  reason:
+    | "acquired"
+    | "fresh"
+    | "project_not_found"
+    | "sandbox_missing"
+    | "sandbox_mismatch";
+  providerSandboxId: string | null;
+};
 
 const workspaceTerminalLifecycleOwnerValidator = v.union(
   v.literal("project_background"),
@@ -164,6 +174,13 @@ function isTerminalActiveStatus(status: string | null | undefined): boolean {
 
 function summarizeTerminalRow(row: any): WorkspaceTerminalSummary {
   return summarizeWorkspaceTerminalRow(row) as WorkspaceTerminalSummary;
+}
+
+function patchChangesRow(row: Record<string, unknown>, patch: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(patch)) {
+    if (row[key] !== value) return true;
+  }
+  return false;
 }
 
 function isInternalDiagnosticTerminal(row: WorkspaceTerminalSummary): boolean {
@@ -647,6 +664,74 @@ export const reconcileStaleWorkspaceTerminalSessionsInternal = internalMutation(
   },
 });
 
+export const acquireProjectTerminalReconcileLeaseInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    projectId: v.id("cloudProjects"),
+    providerSandboxId: v.optional(v.string()),
+    nowMs: v.number(),
+    freshMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<ProjectTerminalReconcileLease> => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || String(project.ownerId ?? "") !== String(args.ownerId)) {
+      return {
+        acquired: false,
+        reason: "project_not_found",
+        providerSandboxId: null,
+      };
+    }
+
+    const currentSandboxId = normalizeOptionalString(project.providerSandboxId);
+    const requestedSandboxId = normalizeOptionalString(args.providerSandboxId);
+    if (currentSandboxId && requestedSandboxId && currentSandboxId !== requestedSandboxId) {
+      return {
+        acquired: false,
+        reason: "sandbox_mismatch",
+        providerSandboxId: currentSandboxId,
+      };
+    }
+    const providerSandboxId = currentSandboxId ?? requestedSandboxId;
+    if (!providerSandboxId) {
+      return {
+        acquired: false,
+        reason: "sandbox_missing",
+        providerSandboxId: null,
+      };
+    }
+
+    const freshMs = Math.max(
+      1_000,
+      Math.min(60_000, Math.floor(args.freshMs ?? PROJECT_TERMINAL_RECONCILE_FRESH_MS)),
+    );
+    const lastSeenAt = Number(project.providerSandboxLastSeenAt ?? 0);
+    if (
+      Number.isFinite(lastSeenAt) &&
+      lastSeenAt > 0 &&
+      Math.max(0, args.nowMs - lastSeenAt) <= freshMs
+    ) {
+      return {
+        acquired: false,
+        reason: "fresh",
+        providerSandboxId,
+      };
+    }
+
+    await ctx.db.patch(args.projectId, {
+      providerSandboxId,
+      providerSandboxProviderId: "blaxel",
+      providerSandboxState: "started",
+      providerSandboxLastSeenAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    return {
+      acquired: true,
+      reason: "acquired",
+      providerSandboxId,
+    };
+  },
+});
+
 export const updateWorkspaceTerminalSessionInternal = internalMutation({
   args: {
     terminalSessionId: v.id("workspaceTerminalSessions"),
@@ -705,8 +790,9 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     if (args.previewTransportStatus !== undefined) patch.previewTransportStatus = args.previewTransportStatus;
     if (args.previewInspectionStatus !== undefined) patch.previewInspectionStatus = args.previewInspectionStatus;
     if (args.previewRenderStatus !== undefined) patch.previewRenderStatus = args.previewRenderStatus;
+    if (!patchChangesRow(row as Record<string, unknown>, patch)) return row;
     await ctx.db.patch(args.terminalSessionId, patch);
-    return await ctx.db.get(args.terminalSessionId);
+    return { ...row, ...patch };
   },
 });
 
@@ -916,6 +1002,19 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
       normalizeOptionalString(project?.providerSandboxId) ??
       normalizeOptionalString(activeRows[0]?.providerSandboxId);
     if (!providerSandboxId) {
+      return buildTerminalSnapshot(rows);
+    }
+    const reconcileLease: ProjectTerminalReconcileLease = await ctx.runMutation(
+      internal.workspaceTerminals.acquireProjectTerminalReconcileLeaseInternal as any,
+      {
+        ownerId: args.ownerId,
+        projectId: args.projectId,
+        providerSandboxId,
+        nowMs,
+        freshMs: PROJECT_TERMINAL_RECONCILE_FRESH_MS,
+      },
+    );
+    if (!reconcileLease.acquired) {
       return buildTerminalSnapshot(rows);
     }
 

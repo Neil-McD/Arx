@@ -111,6 +111,16 @@ assert.match(
   /function isInternalDiagnosticTerminal[\s\S]*\.polynet-smoke/,
   "backend terminal snapshot should hide internal smoke terminals from user-facing recent issues",
 );
+assert.match(
+  workspaceTerminalsSource,
+  /acquireProjectTerminalReconcileLeaseInternal[\s\S]*providerSandboxLastSeenAt: args\.nowMs[\s\S]*reconcileLease[\s\S]*if \(!reconcileLease\.acquired\) \{[\s\S]*return buildTerminalSnapshot\(rows\);/,
+  "terminal snapshot reconciliation must acquire a project-scoped lease before provider-refresh writes",
+);
+assert.match(
+  workspaceTerminalsSource,
+  /function patchChangesRow[\s\S]*if \(!patchChangesRow\(row as Record<string, unknown>, patch\)\) return row;[\s\S]*return \{ \.\.\.row, \.\.\.patch \};/,
+  "terminal session updates should skip no-op writes and avoid a post-patch read",
+);
 assert.doesNotMatch(
   workspaceTerminalsSource,
   /row\.status === "failed"\s*\|\|\s*row\.status === "exited"\s*\|\|\s*row\.status === "stopped"/,
