@@ -1145,16 +1145,26 @@ export async function handleRuntimeTurnRequest(args: {
             projectId: runtimeProjectId,
           });
           const workerIngestTarget = buildPolynetCodexWorkerIngestTarget();
+          const workerTerminalTarget = workerWorkspaceSession
+            ? buildPolynetCodexWorkerTerminalTarget()
+            : null;
+          const workerPlatformTools = buildPolynetPlatformToolSpecs({
+            hasCommunity: Boolean(runtimeCommunityId),
+          });
+          const workerToolTarget =
+            workerPlatformTools.length > 0 ? buildPolynetCodexWorkerToolTarget() : null;
           let workerRunTokens: {
             ingest: string;
-            terminal: string;
-            tool: string;
+            terminal: string | null;
+            tool: string | null;
           } | null = null;
           if (workerIngestTarget) {
             const mintedWorkerRunTokens = await mintPolynetCodexWorkerRunTokenSet({
               ownerId: String(actor.dbUserId),
               threadId: String(ownedThread._id),
               runId,
+              includeTerminal: Boolean(workerTerminalTarget),
+              includeTool: Boolean(workerToolTarget),
             });
             if (!mintedWorkerRunTokens.ok) {
               await persistPartialAssistantMessageBestEffort({
@@ -1263,8 +1273,8 @@ export async function handleRuntimeTurnRequest(args: {
                 run_token: workerRunTokens.ingest,
                 terminal_run_token: workerRunTokens.terminal,
                 tool_run_token: workerRunTokens.tool,
-                terminal_url: buildPolynetCodexWorkerTerminalTarget(),
-                tool_url: buildPolynetCodexWorkerToolTarget(),
+                terminal_url: workerTerminalTarget,
+                tool_url: workerToolTarget,
                 context: {
                   owner_id: String(actor.dbUserId),
                   thread_id: String(ownedThread._id),
@@ -1293,9 +1303,7 @@ export async function handleRuntimeTurnRequest(args: {
                 },
               };
             })(),
-            platformTools: buildPolynetPlatformToolSpecs({
-              hasCommunity: Boolean(runtimeCommunityId),
-            }),
+            platformTools: workerPlatformTools,
             onEvent: async (event) => {
               if (event.event === "start") {
                 const machineId = String(event.data.machine_id ?? "").trim();

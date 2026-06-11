@@ -37,7 +37,10 @@ production-looking URL, the bridge returns
 `POLYNET_CODEX_WORKER_AUTH_TOKEN` is the broad worker-to-Convex transport
 bearer. `POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET` stays only in Convex and signs
 short-lived per-run tokens for `ingest`, `terminal`, and `tool` calls; the
-worker relays those tokens but cannot mint them.
+worker relays those tokens but cannot mint them. Run tokens default to a
+45-minute TTL. Convex always mints `ingest`; it mints `terminal` only for
+project-bound workspace turns, and `tool` only when platform tools are
+actually projected.
 
 ## Static Readiness Gate
 

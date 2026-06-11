@@ -102,9 +102,24 @@ assert.match(
   "worker run tokens must use a Convex-only HMAC secret, endpoint audiences, and expiry",
 );
 assert.match(
+  runToken,
+  /POLYNET_CODEX_WORKER_RUN_TOKEN_TTL_MS = 45 \* 60 \* 1000/,
+  "worker run tokens must default to a short 45-minute lifetime",
+);
+assert.match(
+  runToken,
+  /includeTerminal\?: boolean[\s\S]*includeTool\?: boolean[\s\S]*includeTerminal[\s\S]*Promise\.resolve\(\{ ok: true as const, token: null[\s\S]*includeTool[\s\S]*Promise\.resolve\(\{ ok: true as const, token: null/,
+  "worker run-token minting must leave terminal/tool tokens absent unless those bridge capabilities are projected",
+);
+assert.match(
   handlers,
   /mintPolynetCodexWorkerRunTokenSet\(\{[\s\S]*ownerId: String\(actor\.dbUserId\)[\s\S]*threadId: String\(ownedThread\._id\)[\s\S]*runId[\s\S]*run_token: workerRunTokens\.ingest[\s\S]*terminal_run_token: workerRunTokens\.terminal[\s\S]*tool_run_token: workerRunTokens\.tool/,
   "runtime handler must mint per-run ingest/terminal/tool tokens and hand them to the worker",
+);
+assert.match(
+  handlers,
+  /workerTerminalTarget = workerWorkspaceSession[\s\S]*workerPlatformTools = buildPolynetPlatformToolSpecs[\s\S]*workerToolTarget =[\s\S]*workerPlatformTools\.length > 0[\s\S]*includeTerminal: Boolean\(workerTerminalTarget\)[\s\S]*includeTool: Boolean\(workerToolTarget\)/,
+  "runtime handler must only request terminal/tool tokens when it also projects those bridge URLs",
 );
 assert.match(
   bridge,
@@ -277,8 +292,8 @@ assert.match(
 );
 assert.match(
   handlers,
-  /terminal_url: buildPolynetCodexWorkerTerminalTarget\(\)/,
-  "worker turns must receive the terminal bridge target",
+  /workerTerminalTarget = workerWorkspaceSession[\s\S]*buildPolynetCodexWorkerTerminalTarget\(\)[\s\S]*terminal_url: workerTerminalTarget/,
+  "project-bound worker turns must receive the terminal bridge target",
 );
 assert.match(
   worker,

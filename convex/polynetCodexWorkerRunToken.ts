@@ -2,7 +2,7 @@ import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 
 export const POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET_ENV =
   "POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET";
-export const POLYNET_CODEX_WORKER_RUN_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+export const POLYNET_CODEX_WORKER_RUN_TOKEN_TTL_MS = 45 * 60 * 1000;
 
 export type PolynetCodexWorkerRunTokenAudience = "ingest" | "terminal" | "tool";
 
@@ -224,14 +224,16 @@ export async function mintPolynetCodexWorkerRunTokenSet(params: {
   ownerId: string;
   threadId: string;
   runId: string;
+  includeTerminal?: boolean;
+  includeTool?: boolean;
   nowMs?: number;
 }): Promise<
   | {
       ok: true;
       tokens: {
         ingest: string;
-        terminal: string;
-        tool: string;
+        terminal: string | null;
+        tool: string | null;
       };
     }
   | PolynetCodexWorkerRunTokenFailure
@@ -245,10 +247,16 @@ export async function mintPolynetCodexWorkerRunTokenSet(params: {
       message: "Worker run-token context is missing required coordinates.",
     };
   }
+  const includeTerminal = params.includeTerminal === true;
+  const includeTool = params.includeTool === true;
   const [ingest, terminal, tool] = await Promise.all([
     mintPolynetCodexWorkerRunToken({ audience: "ingest", context, nowMs: params.nowMs }),
-    mintPolynetCodexWorkerRunToken({ audience: "terminal", context, nowMs: params.nowMs }),
-    mintPolynetCodexWorkerRunToken({ audience: "tool", context, nowMs: params.nowMs }),
+    includeTerminal
+      ? mintPolynetCodexWorkerRunToken({ audience: "terminal", context, nowMs: params.nowMs })
+      : Promise.resolve({ ok: true as const, token: null as string | null }),
+    includeTool
+      ? mintPolynetCodexWorkerRunToken({ audience: "tool", context, nowMs: params.nowMs })
+      : Promise.resolve({ ok: true as const, token: null as string | null }),
   ]);
   if (!ingest.ok) return ingest;
   if (!terminal.ok) return terminal;

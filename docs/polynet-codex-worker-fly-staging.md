@@ -47,7 +47,9 @@ The staging Convex deployment must hold:
 - `POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`
 
 The worker receives and relays short-lived run tokens, but only Convex holds
-`POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`.
+`POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`. Run tokens default to a 45-minute
+TTL. Convex always mints `ingest`; it mints `terminal` only for project-bound
+workspace turns, and `tool` only when platform tools are actually projected.
 
 ## Fly Runtime Shape
 
@@ -90,7 +92,8 @@ Project-bound worker turns expose a second dynamic tool, `workspace_serve`
 (`command`, `port`). The worker forwards it to the Convex bridge endpoint
 `/runtime/polynet_codex_worker_terminal` (worker bearer + a short-lived
 Convex-minted `terminal` run token + the same run-record validation as
-ingest), which starts the process through the shared
+ingest). Non-project turns do not receive a terminal token or terminal URL.
+The endpoint starts the process through the shared
 `startWorkspaceTerminalProcess` core. That creates a real terminal row — the
 background-terminal rail and the workspace app preview panel light up natively
 — and returns the access-gated preview proxy URL, never a raw provider URL.
