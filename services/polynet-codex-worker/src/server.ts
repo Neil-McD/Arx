@@ -50,6 +50,7 @@ type ActiveTurn = {
   turnId: string | null;
   firstCodexEventAtMs: number | null;
   firstAssistantDeltaAtMs: number | null;
+  lastAgentMessageItemId: string | null;
   firstBlaxelToolRequestAtMs: number | null;
   completedAtMs: number | null;
   eventSeq: number;
@@ -348,6 +349,7 @@ export class PolynetCodexWorkerRuntime {
       turnId: null,
       firstCodexEventAtMs: null,
       firstAssistantDeltaAtMs: null,
+      lastAgentMessageItemId: null,
       firstBlaxelToolRequestAtMs: null,
       completedAtMs: null,
       eventSeq: 0,
@@ -760,13 +762,47 @@ export class PolynetCodexWorkerRuntime {
           activeTurn.firstAssistantDeltaAtMs - activeTurn.timing.startedAtMs,
         );
       }
-      const delta = String(params.delta ?? "");
+      let delta = String(params.delta ?? "");
       if (!delta) return;
+      // A turn streams several agentMessage ITEMS (narration before each tool
+      // call, then the final answer); without a separator at item boundaries
+      // their sentences glue together ("...a preview URL.This is a static...").
+      const itemId = String(params.itemId ?? "");
+      if (
+        itemId &&
+        activeTurn.lastAgentMessageItemId !== null &&
+        itemId !== activeTurn.lastAgentMessageItemId &&
+        activeTurn.assistantText.length > 0
+      ) {
+        delta = `\n\n${delta}`;
+      }
+      if (itemId) activeTurn.lastAgentMessageItemId = itemId;
       activeTurn.assistantText += delta;
       activeTurn.writer?.send("delta", {
         run_id: activeTurn.runId,
         delta,
         full_content: activeTurn.assistantText,
+      });
+      return;
+    }
+
+    if (method === "item/reasoning/summaryPartAdded" && params) {
+      // Projected in the native loop's event shape so the existing timeline
+      // renders worker thinking identically: sectioned, markdown-formatted.
+      this.emitRuntimeEvent("reasoning_summary_part_added", {
+        summary_stream_id: String(params.itemId ?? "default"),
+        summary_index: Number(params.summaryIndex ?? 0),
+      });
+      return;
+    }
+
+    if (method === "item/reasoning/summaryTextDelta" && params) {
+      const reasoningDelta = String(params.delta ?? "");
+      if (!reasoningDelta) return;
+      this.emitRuntimeEvent("reasoning_summary_text_delta", {
+        summary_stream_id: String(params.itemId ?? "default"),
+        summary_index: Number(params.summaryIndex ?? 0),
+        delta: reasoningDelta,
       });
       return;
     }
