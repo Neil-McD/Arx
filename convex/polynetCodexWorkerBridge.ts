@@ -258,8 +258,14 @@ export async function streamPolynetCodexWorkerTurn(params: {
     url: string;
     token: string;
     terminal_url?: string | null;
+    tool_url?: string | null;
     context: Record<string, unknown>;
   } | null;
+  platformTools?: Array<{
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+  }> | null;
   onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
 }): Promise<PolynetCodexWorkerBridgeResult> {
   const config = getPolynetCodexWorkerBridgeConfig();
@@ -311,9 +317,13 @@ export async function streamPolynetCodexWorkerTurn(params: {
               url: params.ingest.url,
               token: params.ingest.token,
               terminal_url: params.ingest.terminal_url ?? null,
+              tool_url: params.ingest.tool_url ?? null,
               context: params.ingest.context,
             },
           }
+        : {}),
+      ...(Array.isArray(params.platformTools) && params.platformTools.length > 0
+        ? { platform_tools: params.platformTools }
         : {}),
     }),
     });

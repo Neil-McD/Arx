@@ -17,6 +17,10 @@ import {
   POLYNET_CODEX_WORKER_INGEST_PATH,
 } from "./polynetCodexWorkerIngest";
 import {
+  handlePolynetCodexWorkerTool,
+  POLYNET_CODEX_WORKER_TOOL_PATH,
+} from "./polynetCodexWorkerTool";
+import {
   handlePolynetCodexWorkerTerminal,
   POLYNET_CODEX_WORKER_TERMINAL_PATH,
 } from "./polynetCodexWorkerTerminal";
@@ -388,6 +392,14 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     return await handlePolynetCodexWorkerTerminal(ctx, req);
+  }),
+});
+
+http.route({
+  path: POLYNET_CODEX_WORKER_TOOL_PATH,
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await handlePolynetCodexWorkerTool(ctx, req);
   }),
 });
 

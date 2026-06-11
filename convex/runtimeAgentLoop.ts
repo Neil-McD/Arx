@@ -261,7 +261,10 @@ function buildResolveMountedToolsResponsesTool(): ResponsesApiFunctionTool {
 }
 
 
-async function executeRetrievalHarnessTool(params: {
+// Exported as the shared dispatch for BOTH runtimes: the native loop calls it
+// directly, and the Codex worker tool bridge calls it through
+// handlePolynetCodexWorkerTool — one implementation, two adapters.
+export async function executeRetrievalHarnessTool(params: {
   ctx: any;
   userId: string;
   authSubject?: string | null;

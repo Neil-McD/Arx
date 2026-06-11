@@ -132,6 +132,40 @@ assert.match(
   "worker terminal endpoint must be registered on the Convex http router",
 );
 assert.match(
+  httpRoutes,
+  /POLYNET_CODEX_WORKER_TOOL_PATH[\s\S]*handlePolynetCodexWorkerTool/,
+  "worker platform-tool endpoint must be registered on the Convex http router",
+);
+{
+  const tool = read("convex/polynetCodexWorkerTool.ts");
+  assert.match(
+    tool,
+    /getRuntimeRunByOwnerRunIdInternal[\s\S]*invalid_run[\s\S]*findPolynetPlatformToolSurfaceEntry[\s\S]*billingPolicy[\s\S]*executeRetrievalHarnessTool/,
+    "platform-tool bridge must validate the run, resolve the registry entry, pass the billing hook, then dispatch through the shared retrieval tool executor",
+  );
+  const surface = read("shared/polynetPlatformToolSurface.ts");
+  assert.match(
+    surface,
+    /billingPolicy/,
+    "every platform tool surface entry must carry a billing policy",
+  );
+  assert.doesNotMatch(
+    surface,
+    /community_write|community_resource_builder_stage_changeset|community_resource_builder_apply_changeset/,
+    "write/builder tools must not be projected to worker turns in this slice",
+  );
+  assert.match(
+    worker,
+    /platformToolBridge[\s\S]*deferLoading: true/,
+    "worker must project platform tools as deferred polynet-namespace dynamic tools",
+  );
+  assert.match(
+    worker,
+    /platform_tool_requested[\s\S]*platform_tool_finished/,
+    "worker must emit platform tool lifecycle runtime events",
+  );
+}
+assert.match(
   terminal,
   /getRuntimeRunByOwnerRunIdInternal[\s\S]*invalid_run[\s\S]*startWorkspaceTerminalProcess[\s\S]*resolveWorkspaceTerminalPreview/,
   "serve bridge must validate the run then start the served process through the shared terminal core and gated preview proxy",

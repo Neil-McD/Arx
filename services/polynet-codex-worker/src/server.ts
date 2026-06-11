@@ -38,6 +38,8 @@ type ActiveTurn = {
   codexThreadId: string | null;
   cancelRequested: boolean;
   serve: WorkerIngestConfig | null;
+  platformTools: WorkerPlatformToolSpec[];
+  platformToolBridge: { url: string; token: string; context: JsonRecord } | null;
   sandboxName: string;
   fallbackCommand: string;
   commandTimeoutSeconds: number;
@@ -65,7 +67,14 @@ type WorkerIngestConfig = {
   url: string;
   token: string;
   terminalUrl: string | null;
+  toolUrl: string | null;
   context: JsonRecord;
+};
+
+type WorkerPlatformToolSpec = {
+  name: string;
+  description: string;
+  inputSchema: JsonRecord;
 };
 
 type RunTurnParams = {
@@ -80,6 +89,7 @@ type RunTurnParams = {
   probeMode: boolean;
   chatgptAuth: WorkerChatgptAuth | null;
   ingest: WorkerIngestConfig | null;
+  platformTools: WorkerPlatformToolSpec[];
   writer: StreamWriter | null;
 };
 
@@ -317,6 +327,15 @@ export class PolynetCodexWorkerRuntime {
       // and the Convex terminal bridge.
       serve:
         params.sandboxProvided && params.ingest?.terminalUrl ? params.ingest : null,
+      platformTools: params.platformTools,
+      platformToolBridge:
+        params.ingest?.toolUrl && params.platformTools.length > 0
+          ? {
+              url: params.ingest.toolUrl,
+              token: params.ingest.token,
+              context: params.ingest.context,
+            }
+          : null,
       sandboxName: params.sandboxName,
       fallbackCommand: params.command,
       commandTimeoutSeconds: params.commandTimeoutSeconds,
@@ -450,6 +469,11 @@ export class PolynetCodexWorkerRuntime {
                   "To run a server or app the user can see, call workspace_serve with the start command and port; it returns a preview URL and shows the app in the user's preview panel. Never start servers with workspace_bash.",
                 ]
               : []),
+            ...(activeTurn.platformToolBridge
+              ? [
+                  "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform.",
+                ]
+              : []),
             "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
             "The local environment is not your workspace: never use local shell commands, local file edits, or local paths.",
             "Report the tool output concisely.",
@@ -457,6 +481,15 @@ export class PolynetCodexWorkerRuntime {
           dynamicTools: [
             buildBlaxelBashDynamicToolSpec(),
             ...(activeTurn.serve ? [buildWorkspaceServeDynamicToolSpec()] : []),
+            ...(activeTurn.platformToolBridge
+              ? activeTurn.platformTools.map((tool) => ({
+                  namespace: "polynet",
+                  name: tool.name,
+                  description: tool.description,
+                  inputSchema: tool.inputSchema,
+                  deferLoading: true,
+                }))
+              : []),
           ],
           experimentalRawEvents: false,
           persistExtendedHistory: false,
@@ -805,6 +838,17 @@ export class PolynetCodexWorkerRuntime {
       await this.handleWorkspaceServeCall(message.id, activeTurn, params);
       return;
     }
+    const platformToolName = toolName.startsWith("polynet.")
+      ? toolName.slice("polynet.".length)
+      : toolName;
+    if (
+      params &&
+      activeTurn.platformToolBridge &&
+      activeTurn.platformTools.some((tool) => tool.name === platformToolName)
+    ) {
+      await this.handlePlatformToolCall(message.id, activeTurn, platformToolName, params);
+      return;
+    }
     if (!params || toolName !== "workspace_bash") {
       this.client.respondError(message.id, -32601, "unsupported dynamic tool");
       return;
@@ -939,6 +983,78 @@ export class PolynetCodexWorkerRuntime {
     activeTurn.cancelRequested = true;
     await this.interruptActiveTurnBestEffort("user_cancelled");
     return { ok: true, runId };
+  }
+
+  // Relays a polynet.* dynamic tool call to the Convex platform-tool bridge —
+  // the same trust pattern as serve: the bearer plus the run-scoped context
+  // is the credential, and Convex re-validates the run before dispatching.
+  private async handlePlatformToolCall(
+    messageId: unknown,
+    activeTurn: ActiveTurn,
+    toolName: string,
+    params: JsonRecord,
+  ): Promise<void> {
+    const client = this.client;
+    if (!client) return;
+    const bridge = activeTurn.platformToolBridge;
+    if (!bridge) {
+      client.respond(messageId, {
+        success: false,
+        contentItems: [
+          { type: "inputText", text: "Platform tools are not available for this turn." },
+        ],
+      });
+      return;
+    }
+    const startedAtMs = nowMs();
+    this.emitRuntimeEvent("platform_tool_requested", {
+      tool_name: toolName,
+      call_id: typeof params.callId === "string" ? params.callId : null,
+    });
+    let ok = false;
+    let text = "";
+    let failureCode: string | null = null;
+    try {
+      const response = await fetch(bridge.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${bridge.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          context: bridge.context,
+          tool_name: toolName,
+          arguments: asRecord(params.arguments) ?? {},
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const payload = (await response.json().catch(() => ({}))) as JsonRecord;
+      ok = response.ok && payload.ok === true;
+      if (ok) {
+        text = String(payload.output ?? "");
+      } else {
+        failureCode = String(payload.code ?? `http_${response.status}`);
+        text = `${toolName} failed (${failureCode}): ${String(
+          payload.message ?? "Platform tool call failed.",
+        )}`;
+      }
+    } catch (error) {
+      failureCode = "platform_tool_bridge_unreachable";
+      text = `${toolName} failed: ${
+        error instanceof Error ? error.message : "platform tool bridge unreachable"
+      }`;
+    }
+    this.emitRuntimeEvent("platform_tool_finished", {
+      tool_name: toolName,
+      ok,
+      latency_ms: elapsedMs(startedAtMs),
+      failure_code: failureCode,
+      output_preview: previewText(text),
+    });
+    client.respond(messageId, {
+      success: ok,
+      contentItems: [{ type: "inputText", text: text.replace(/blaxel/gi, "workspace") }],
+    });
   }
 
   private async handleWorkspaceServeCall(
@@ -1212,10 +1328,29 @@ async function handleTurnEndpoint(params: {
   const ingestToken = String(rawIngest?.token ?? "").trim();
   const ingestContext = asRecord(rawIngest?.context);
   const ingestTerminalUrl = String(rawIngest?.terminal_url ?? "").trim() || null;
+  const ingestToolUrl = String(rawIngest?.tool_url ?? "").trim() || null;
   const ingest: WorkerIngestConfig | null =
     ingestUrl && ingestToken && ingestContext
-      ? { url: ingestUrl, token: ingestToken, terminalUrl: ingestTerminalUrl, context: ingestContext }
+      ? {
+          url: ingestUrl,
+          token: ingestToken,
+          terminalUrl: ingestTerminalUrl,
+          toolUrl: ingestToolUrl,
+          context: ingestContext,
+        }
       : null;
+  const platformTools: WorkerPlatformToolSpec[] = Array.isArray(body.platform_tools)
+    ? (body.platform_tools as unknown[])
+        .map((raw) => {
+          const record = asRecord(raw);
+          const name = String(record?.name ?? "").trim();
+          const description = String(record?.description ?? "").trim();
+          const inputSchema = asRecord(record?.input_schema);
+          if (!name || !description || !inputSchema) return null;
+          return { name, description, inputSchema };
+        })
+        .filter((spec): spec is WorkerPlatformToolSpec => spec !== null)
+    : [];
 
   if (!params.probeMode && !chatgptAuth) {
     sendJson(params.res, 400, {
@@ -1253,6 +1388,7 @@ async function handleTurnEndpoint(params: {
         probeMode: params.probeMode,
         chatgptAuth,
         ingest,
+        platformTools,
         writer,
       });
     } catch (error) {
@@ -1285,6 +1421,7 @@ async function handleTurnEndpoint(params: {
       probeMode: params.probeMode,
       chatgptAuth,
       ingest,
+      platformTools,
       writer: null,
     });
     sendJson(params.res, 200, result);

@@ -78,6 +78,8 @@ import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerPr
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
 import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
+import { buildPolynetCodexWorkerToolTarget } from "./polynetCodexWorkerTool";
+import { buildPolynetPlatformToolSpecs } from "../shared/polynetPlatformToolSurface";
 import {
   POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
   POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT,
@@ -1210,6 +1212,7 @@ export async function handleRuntimeTurnRequest(args: {
                 url: target.url,
                 token: target.token,
                 terminal_url: buildPolynetCodexWorkerTerminalTarget(),
+                tool_url: buildPolynetCodexWorkerToolTarget(),
                 context: {
                   owner_id: String(actor.dbUserId),
                   thread_id: String(ownedThread._id),
@@ -1218,6 +1221,7 @@ export async function handleRuntimeTurnRequest(args: {
                   model_id: requestedModelId,
                   lane,
                   inference_source: streamedInferenceSource,
+                  community_id: runtimeCommunityId ? String(runtimeCommunityId) : null,
                   // Lease coordinates let the ingest backstop settle billing
                   // when this action dies before the live settle runs; the
                   // charge is idempotent by reservation key.
@@ -1238,6 +1242,9 @@ export async function handleRuntimeTurnRequest(args: {
                 },
               };
             })(),
+            platformTools: buildPolynetPlatformToolSpecs({
+              hasCommunity: Boolean(runtimeCommunityId),
+            }),
             onEvent: async (event) => {
               if (event.event === "start") {
                 const machineId = String(event.data.machine_id ?? "").trim();
