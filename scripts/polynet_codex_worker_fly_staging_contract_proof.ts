@@ -333,7 +333,7 @@ async function assertPlatformToolProbe(params: {
             assistant_message_key: "tool-probe",
             model_id: "probe",
             lane: "chatgpt",
-            inference_source: "byok_chatgpt",
+            inference_source: "chatgpt",
           },
         },
       }),
