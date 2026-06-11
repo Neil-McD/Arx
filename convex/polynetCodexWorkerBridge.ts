@@ -296,6 +296,9 @@ export async function streamPolynetCodexWorkerTurn(params: {
   ingest?: {
     url: string;
     token: string;
+    run_token?: string | null;
+    terminal_run_token?: string | null;
+    tool_run_token?: string | null;
     terminal_url?: string | null;
     tool_url?: string | null;
     context: Record<string, unknown>;
@@ -355,6 +358,9 @@ export async function streamPolynetCodexWorkerTurn(params: {
             ingest: {
               url: params.ingest.url,
               token: params.ingest.token,
+              run_token: params.ingest.run_token ?? null,
+              terminal_run_token: params.ingest.terminal_run_token ?? null,
+              tool_run_token: params.ingest.tool_run_token ?? null,
               terminal_url: params.ingest.terminal_url ?? null,
               tool_url: params.ingest.tool_url ?? null,
               context: params.ingest.context,

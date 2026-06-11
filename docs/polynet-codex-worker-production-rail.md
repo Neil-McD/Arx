@@ -26,12 +26,18 @@ routes a turn to the worker:
 - `POLYNET_DEPLOYMENT_KIND=production`
 - `POLYNET_CODEX_WORKER_URL=https://polynet-codex-worker.fly.dev`
 - `POLYNET_CODEX_WORKER_AUTH_TOKEN`
+- `POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`
 
 If the runtime flag is missing, the bridge returns disabled. If production env
 points at a staging-looking URL, the bridge returns
 `polynet_codex_worker_production_env_mismatch`. If staging env points at a
 production-looking URL, the bridge returns
 `polynet_codex_worker_staging_env_mismatch`.
+
+`POLYNET_CODEX_WORKER_AUTH_TOKEN` is the broad worker-to-Convex transport
+bearer. `POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET` stays only in Convex and signs
+short-lived per-run tokens for `ingest`, `terminal`, and `tool` calls; the
+worker relays those tokens but cannot mint them.
 
 ## Static Readiness Gate
 
@@ -96,7 +102,8 @@ The live stage targets:
 2. Let Vercel project `polynet` deploy from GitHub; do not use local Vercel
    deploy/promote/alias commands.
 3. Deploy the production Fly worker app with the production deploy command.
-4. Set Convex production env for the worker URL, worker token, and runtime flag.
+4. Set Convex production env for the worker URL, worker token, run-token
+   secret, deployment kind, and runtime flag.
 5. Run `npm run check:polynet-codex-worker-production-acceptance`.
 6. Do one real production turn with a low-risk test account and verify run
    events, assistant persistence, billing settlement, and worker logs.

@@ -9,6 +9,8 @@ set -euo pipefail
 #
 # Required env for the remote stage:
 #   POLYNET_CODEX_WORKER_AUTH_TOKEN  (worker bearer)
+# Required on the Convex deployment before real worker turns:
+#   POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET
 # Optional overrides:
 #   POLYNET_CODEX_WORKER_URL         (default: staging Fly app)
 #   POLYNET_CODEX_WORKER_INGEST_URL  (default: staging Convex ingest)

@@ -281,11 +281,11 @@ async function assertPoolServesConcurrentTurns(params: {
 }
 
 // Positive live proof for the platform-tool rail: a probe turn forces a
-// polynet tool call. The forged context cannot pass run validation, so the
-// expected END STATE is the endpoint's invalid_run refusal — which proves the
-// whole chain live: spec projection, namespace routing, worker relay,
-// endpoint auth, and run validation, with platform_tool_requested/finished
-// events emitted on the way.
+// polynet tool call. This worker-only proof intentionally lacks a
+// Convex-minted run token, so the expected END STATE is the endpoint's
+// run-token refusal — which proves the chain live through spec projection,
+// namespace routing, worker relay, endpoint auth, and fail-closed run-token
+// enforcement, with platform_tool_requested/finished events emitted.
 async function assertPlatformToolProbe(params: {
   baseUrl: string;
   authToken: string;
@@ -366,12 +366,12 @@ async function assertPlatformToolProbe(params: {
     assert.equal(
       finishedPayload?.ok,
       false,
-      "forged-context platform tool call must be refused by the endpoint",
+      "worker-only platform tool call must be refused by the endpoint",
     );
     assert.equal(
       String(finishedPayload?.failure_code ?? ""),
-      "invalid_run",
-      `platform tool refusal must be invalid_run: ${JSON.stringify(finishedPayload)}`,
+      "polynet_codex_worker_run_token_required",
+      `platform tool refusal must require a run token: ${JSON.stringify(finishedPayload)}`,
     );
   } finally {
     clearTimeout(timeout);

@@ -4,6 +4,9 @@ import { persistRuntimeAssistantMessage } from "./runtimeTurnPersistence";
 import { disposeRuntimeWorkspaceSession } from "./runtimeWorkspaceSessionDisposal";
 import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
+import {
+  verifyPolynetCodexWorkerRunToken,
+} from "./polynetCodexWorkerRunToken";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -106,6 +109,18 @@ export async function handlePolynetCodexWorkerIngest(
   if (!context) {
     return json(400, { ok: false, code: "invalid_ingest_context" });
   }
+  const runTokenVerification = await verifyPolynetCodexWorkerRunToken({
+    token: String(body.run_token ?? ""),
+    expectedAudience: "ingest",
+    context,
+  });
+  if (!runTokenVerification.ok) {
+    return json(runTokenVerification.status, {
+      ok: false,
+      code: runTokenVerification.code,
+      message: runTokenVerification.message,
+    });
+  }
   const status = String(body.status ?? "").trim();
   if (!["ok", "error", "cancelled"].includes(status)) {
     return json(400, { ok: false, code: "invalid_status" });
@@ -114,9 +129,8 @@ export async function handlePolynetCodexWorkerIngest(
   const errorRecord = asRecord(body.error);
   const events = Array.isArray(body.events) ? body.events : [];
 
-  // The context is caller-supplied; only write if it names a real worker run
-  // whose owner, thread, and engine all match. Forging a write requires the
-  // bearer token AND a live run's full server-generated coordinates.
+  // The signed run token proves Convex minted this short-lived ingest request;
+  // the live run row still remains the authority for owner/thread/engine.
   let runRow: { threadId?: unknown; engineId?: unknown } | null = null;
   try {
     runRow = (await ctx.runQuery(

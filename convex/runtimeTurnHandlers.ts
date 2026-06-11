@@ -78,6 +78,7 @@ import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
 import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
 import { buildPolynetCodexWorkerToolTarget } from "./polynetCodexWorkerTool";
+import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken";
 import { buildPolynetPlatformToolSpecs } from "../shared/polynetPlatformToolSurface";
 import {
   POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
@@ -1143,6 +1144,47 @@ export async function handleRuntimeTurnRequest(args: {
             allowedToolNames,
             projectId: runtimeProjectId,
           });
+          const workerIngestTarget = buildPolynetCodexWorkerIngestTarget();
+          let workerRunTokens: {
+            ingest: string;
+            terminal: string;
+            tool: string;
+          } | null = null;
+          if (workerIngestTarget) {
+            const mintedWorkerRunTokens = await mintPolynetCodexWorkerRunTokenSet({
+              ownerId: String(actor.dbUserId),
+              threadId: String(ownedThread._id),
+              runId,
+            });
+            if (!mintedWorkerRunTokens.ok) {
+              await persistPartialAssistantMessageBestEffort({
+                content: "",
+                status: "error",
+                reason: mintedWorkerRunTokens.code,
+                errorCode: mintedWorkerRunTokens.code,
+                errorMessage: mintedWorkerRunTokens.message,
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: mintedWorkerRunTokens.code,
+                errorCode: mintedWorkerRunTokens.code,
+                errorMessage: mintedWorkerRunTokens.message,
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  code: mintedWorkerRunTokens.code,
+                  error: mintedWorkerRunTokens.message,
+                  message: mintedWorkerRunTokens.message,
+                  status: mintedWorkerRunTokens.status,
+                },
+              });
+              return;
+            }
+            workerRunTokens = mintedWorkerRunTokens.tokens;
+          }
 
           let workerCancelFired = false;
           let workerMachineId: string | null = null;
@@ -1214,11 +1256,13 @@ export async function handleRuntimeTurnRequest(args: {
               planType: null,
             },
             ingest: (() => {
-              const target = buildPolynetCodexWorkerIngestTarget();
-              if (!target) return null;
+              if (!workerIngestTarget || !workerRunTokens) return null;
               return {
-                url: target.url,
-                token: target.token,
+                url: workerIngestTarget.url,
+                token: workerIngestTarget.token,
+                run_token: workerRunTokens.ingest,
+                terminal_run_token: workerRunTokens.terminal,
+                tool_run_token: workerRunTokens.tool,
                 terminal_url: buildPolynetCodexWorkerTerminalTarget(),
                 tool_url: buildPolynetCodexWorkerToolTarget(),
                 context: {

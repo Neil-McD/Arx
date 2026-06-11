@@ -8,6 +8,7 @@ function read(relativePath: string): string {
 const bridge = read("convex/polynetCodexWorkerBridge.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
+const runToken = read("convex/polynetCodexWorkerRunToken.ts");
 const disposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
 const terminal = read("convex/polynetCodexWorkerTerminal.ts");
 const terminalCore = read("convex/workspaceTerminalProcessCore.ts");
@@ -96,9 +97,59 @@ assert.match(
   "ingest endpoint must reject requests without the shared worker bearer token",
 );
 assert.match(
+  runToken,
+  /POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET[\s\S]*"ingest"[\s\S]*"terminal"[\s\S]*"tool"[\s\S]*HMAC[\s\S]*SHA-256[\s\S]*exp[\s\S]*verifyPolynetCodexWorkerRunToken/,
+  "worker run tokens must use a Convex-only HMAC secret, endpoint audiences, and expiry",
+);
+assert.match(
+  handlers,
+  /mintPolynetCodexWorkerRunTokenSet\(\{[\s\S]*ownerId: String\(actor\.dbUserId\)[\s\S]*threadId: String\(ownedThread\._id\)[\s\S]*runId[\s\S]*run_token: workerRunTokens\.ingest[\s\S]*terminal_run_token: workerRunTokens\.terminal[\s\S]*tool_run_token: workerRunTokens\.tool/,
+  "runtime handler must mint per-run ingest/terminal/tool tokens and hand them to the worker",
+);
+assert.match(
+  bridge,
+  /run_token: params\.ingest\.run_token[\s\S]*terminal_run_token: params\.ingest\.terminal_run_token[\s\S]*tool_run_token: params\.ingest\.tool_run_token/,
+  "Convex worker bridge must forward run-token fields in the worker turn payload",
+);
+assert.match(
+  worker,
+  /runToken: ingestRunToken[\s\S]*terminalRunToken: ingestTerminalRunToken[\s\S]*toolRunToken: ingestToolRunToken/,
+  "worker service must parse per-audience worker run tokens from the turn payload",
+);
+assert.match(
+  worker,
+  /run_token: params\.ingest\.runToken/,
+  "worker service must relay the ingest run token to the durable ingest endpoint",
+);
+assert.match(
+  worker,
+  /run_token: serve\.terminalRunToken/,
+  "worker service must relay the terminal run token to the workspace_serve endpoint",
+);
+assert.match(
+  worker,
+  /run_token: bridge\.runToken/,
+  "worker service must relay the tool run token to the platform-tool endpoint",
+);
+assert.match(
+  ingest,
+  /verifyPolynetCodexWorkerRunToken\(\{[\s\S]*expectedAudience: "ingest"/,
+  "ingest must require an ingest-audience worker run token",
+);
+assert.match(
+  terminal,
+  /verifyPolynetCodexWorkerRunToken\(\{[\s\S]*expectedAudience: "terminal"/,
+  "terminal bridge must require a terminal-audience worker run token",
+);
+assert.match(
+  read("convex/polynetCodexWorkerTool.ts"),
+  /verifyPolynetCodexWorkerRunToken\(\{[\s\S]*expectedAudience: "tool"/,
+  "platform-tool bridge must require a tool-audience worker run token",
+);
+assert.match(
   ingest,
   /getRuntimeRunByOwnerRunIdInternal[\s\S]*runRow\.threadId[\s\S]*runRow\.engineId[\s\S]*invalid_run/,
-  "ingest must validate the caller-supplied context against the real run record before writing",
+  "ingest must still validate the signed context against the real run record before writing",
 );
 assert.match(
   disposal,

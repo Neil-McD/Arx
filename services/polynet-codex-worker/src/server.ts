@@ -43,7 +43,12 @@ type ActiveTurn = {
   cancelRequested: boolean;
   serve: WorkerIngestConfig | null;
   platformTools: WorkerPlatformToolSpec[];
-  platformToolBridge: { url: string; token: string; context: JsonRecord } | null;
+  platformToolBridge: {
+    url: string;
+    token: string;
+    runToken: string | null;
+    context: JsonRecord;
+  } | null;
   platformToolProbe: string | null;
   sandboxName: string;
   fallbackCommand: string;
@@ -72,6 +77,9 @@ type WorkerChatgptAuth = {
 type WorkerIngestConfig = {
   url: string;
   token: string;
+  runToken: string | null;
+  terminalRunToken: string | null;
+  toolRunToken: string | null;
   terminalUrl: string | null;
   toolUrl: string | null;
   context: JsonRecord;
@@ -340,6 +348,7 @@ export class PolynetCodexWorkerRuntime {
           ? {
               url: params.ingest.toolUrl,
               token: params.ingest.token,
+              runToken: params.ingest.toolRunToken,
               context: params.ingest.context,
             }
           : null,
@@ -677,6 +686,7 @@ export class PolynetCodexWorkerRuntime {
         await pushIngestPayloadBestEffort({
           ingest: params.ingest,
           payload: {
+            run_token: params.ingest.runToken,
             context: params.ingest.context,
             status:
               pendingError instanceof WorkerTurnCancelledError
@@ -1078,6 +1088,7 @@ export class PolynetCodexWorkerRuntime {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          run_token: bridge.runToken,
           context: bridge.context,
           tool_name: toolName,
           arguments: asRecord(params.arguments) ?? {},
@@ -1168,6 +1179,7 @@ export class PolynetCodexWorkerRuntime {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          run_token: serve.terminalRunToken,
           context: serve.context,
           command,
           port,
@@ -1422,6 +1434,10 @@ async function handleTurnEndpoint(params: {
   const rawIngest = asRecord(body.ingest);
   const ingestUrl = String(rawIngest?.url ?? "").trim();
   const ingestToken = String(rawIngest?.token ?? "").trim();
+  const ingestRunToken = String(rawIngest?.run_token ?? "").trim() || null;
+  const ingestTerminalRunToken =
+    String(rawIngest?.terminal_run_token ?? "").trim() || null;
+  const ingestToolRunToken = String(rawIngest?.tool_run_token ?? "").trim() || null;
   const ingestContext = asRecord(rawIngest?.context);
   const ingestTerminalUrl = String(rawIngest?.terminal_url ?? "").trim() || null;
   const ingestToolUrl = String(rawIngest?.tool_url ?? "").trim() || null;
@@ -1430,6 +1446,9 @@ async function handleTurnEndpoint(params: {
       ? {
           url: ingestUrl,
           token: ingestToken,
+          runToken: ingestRunToken,
+          terminalRunToken: ingestTerminalRunToken,
+          toolRunToken: ingestToolRunToken,
           terminalUrl: ingestTerminalUrl,
           toolUrl: ingestToolUrl,
           context: ingestContext,

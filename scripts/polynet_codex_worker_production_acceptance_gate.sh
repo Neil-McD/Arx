@@ -10,6 +10,8 @@ set -euo pipefail
 # Required env for the live remote stage:
 #   POLYNET_PRODUCTION_ACCEPTANCE_REMOTE=true
 #   POLYNET_CODEX_WORKER_AUTH_TOKEN
+# Required on Convex production before real worker turns:
+#   POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET
 # Optional overrides:
 #   POLYNET_CODEX_WORKER_URL         (default: production Fly app)
 #   POLYNET_CODEX_WORKER_INGEST_URL  (default: production Convex ingest)

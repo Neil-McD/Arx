@@ -3,6 +3,9 @@ import {
   parsePolynetCodexWorkerIngestContext,
 } from "./polynetCodexWorkerIngest";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
+import {
+  verifyPolynetCodexWorkerRunToken,
+} from "./polynetCodexWorkerRunToken";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import {
   findPolynetPlatformToolSurfaceEntry,
@@ -71,9 +74,21 @@ export async function handlePolynetCodexWorkerTool(
   if (!context) {
     return json(400, { ok: false, code: "invalid_ingest_context" });
   }
+  const runTokenVerification = await verifyPolynetCodexWorkerRunToken({
+    token: String(body.run_token ?? ""),
+    expectedAudience: "tool",
+    context,
+  });
+  if (!runTokenVerification.ok) {
+    return json(runTokenVerification.status, {
+      ok: false,
+      code: runTokenVerification.code,
+      message: runTokenVerification.message,
+    });
+  }
 
-  // Same trust boundary as ingest/terminal: only act for a real worker run
-  // whose owner, thread, and engine match the claimed context.
+  // The signed run token proves Convex minted this short-lived tool request;
+  // the live run row still remains the authority for owner/thread/engine.
   let runRow: { threadId?: unknown; engineId?: unknown; communityId?: unknown } | null = null;
   try {
     runRow = (await ctx.runQuery(

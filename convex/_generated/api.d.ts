@@ -131,6 +131,7 @@ import type * as platformSkillRuntime from "../platformSkillRuntime.js";
 import type * as polynetCodexWorkerAdmission from "../polynetCodexWorkerAdmission.js";
 import type * as polynetCodexWorkerBridge from "../polynetCodexWorkerBridge.js";
 import type * as polynetCodexWorkerIngest from "../polynetCodexWorkerIngest.js";
+import type * as polynetCodexWorkerRunToken from "../polynetCodexWorkerRunToken.js";
 import type * as polynetCodexWorkerTerminal from "../polynetCodexWorkerTerminal.js";
 import type * as polynetCodexWorkerTool from "../polynetCodexWorkerTool.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
@@ -313,6 +314,7 @@ declare const fullApi: ApiFromModules<{
   polynetCodexWorkerAdmission: typeof polynetCodexWorkerAdmission;
   polynetCodexWorkerBridge: typeof polynetCodexWorkerBridge;
   polynetCodexWorkerIngest: typeof polynetCodexWorkerIngest;
+  polynetCodexWorkerRunToken: typeof polynetCodexWorkerRunToken;
   polynetCodexWorkerTerminal: typeof polynetCodexWorkerTerminal;
   polynetCodexWorkerTool: typeof polynetCodexWorkerTool;
   previewProxySessionToken: typeof previewProxySessionToken;

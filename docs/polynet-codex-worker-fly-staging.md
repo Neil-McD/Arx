@@ -36,6 +36,19 @@ Optional:
 
 The worker entrypoint logs into Codex, then unsets `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`, and `CODEX_AUTH_JSON_BASE64` before starting the HTTP service.
 
+## Required Convex Env
+
+The staging Convex deployment must hold:
+
+- `POLYNET_CODEX_WORKER_RUNTIME_ENABLED=true`
+- `POLYNET_DEPLOYMENT_KIND=staging`
+- `POLYNET_CODEX_WORKER_URL=https://polynet-codex-worker-staging.fly.dev`
+- `POLYNET_CODEX_WORKER_AUTH_TOKEN`
+- `POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`
+
+The worker receives and relays short-lived run tokens, but only Convex holds
+`POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`.
+
 ## Fly Runtime Shape
 
 Each machine is single-flight; concurrency comes from a pool of suspended
@@ -75,8 +88,9 @@ per-user parallelism ceiling is their own ChatGPT plan's rate limits.
 
 Project-bound worker turns expose a second dynamic tool, `workspace_serve`
 (`command`, `port`). The worker forwards it to the Convex bridge endpoint
-`/runtime/polynet_codex_worker_terminal` (worker bearer + the same run-record
-validation as ingest), which starts the process through the shared
+`/runtime/polynet_codex_worker_terminal` (worker bearer + a short-lived
+Convex-minted `terminal` run token + the same run-record validation as
+ingest), which starts the process through the shared
 `startWorkspaceTerminalProcess` core. That creates a real terminal row — the
 background-terminal rail and the workspace app preview panel light up natively
 — and returns the access-gated preview proxy URL, never a raw provider URL.
@@ -100,7 +114,7 @@ accounting, workspace resource admission, runtime turn contract guard, web
 typecheck, web build, and the live remote Fly contract with
 `POLYNET_CODEX_WORKER_EXPECT_MULTI_MACHINE=true` (Fly routing, stopped-machine
 wake, Codex boot, Blaxel execution, cancel affinity, minimal public health,
-forged-ingest rejection, lifecycle events).
+run-token rejection for worker-only forged platform calls, lifecycle events).
 
 Dev conveniences (never gates; if one breaks for environmental reasons twice,
 delete it instead of fixing it):
@@ -239,15 +253,18 @@ project volume remounted with all files intact at 2048MB.
 The Convex turn action still proxies the worker SSE stream for live UX, but
 durability no longer depends on it. The bridge hands the worker an ingest
 target (`CONVEX_SITE_URL` + `/runtime/polynet_codex_worker_ingest`, shared
-worker bearer token) plus an opaque context (owner/thread/run ids, the
-assistant message key, model/lane). After `run_finalized` the worker posts its
-final payload (all runtime events, assistant text, status, timing) directly to
-Convex with up to 3 retries.
+worker bearer token), short-lived audience tokens signed with
+`POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET`, plus an opaque context
+(owner/thread/run ids, the assistant message key, model/lane). After
+`run_finalized` the worker posts its final payload (all runtime events,
+assistant text, status, timing) directly to Convex with up to 3 retries.
 
 The ingest handler is idempotent against the live path: events dedupe on the
 same eventKey scheme, the assistant message dedupes on messageKey, and run
-finish is best-effort. If the Convex action dies mid-turn, the worker's push
-still lands the completed turn and the existing UI recovery picks it up.
+finish is best-effort. It accepts only the broad worker bearer plus a valid
+`ingest` run token, then validates the live run row before writing. If the
+Convex action dies mid-turn, the worker's push still lands the completed turn
+and the existing UI recovery picks it up.
 
 Worker service log events: `ingest_push_succeeded` / `ingest_push_failed`.
 
