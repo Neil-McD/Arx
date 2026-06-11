@@ -1302,13 +1302,22 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     const candidates = activeWorkspaceTerminals.filter(
       (terminal) => isTerminalSnapshotStatusActive(terminal.status) && isPreviewCapableTerminal(terminal),
     );
-    // Serve retries leave the superseded server genuinely running on another
-    // port, and no cwd/command key reliably identifies "the same app" — so the
-    // preview shows exactly one card: the latest active serve. The terminal
-    // rail still lists every row for stopping.
+    // The preview shows exactly one card: the latest active serve, except a
+    // newer still-starting attempt never steals the surface from a healthy
+    // running app. The terminal rail still lists every row for stopping.
     let latest: WorkspaceTerminalRecord | null = null;
     for (const terminal of candidates) {
-      if (!latest || terminal.started_at >= latest.started_at) latest = terminal;
+      if (!latest) {
+        latest = terminal;
+        continue;
+      }
+      const terminalRunning = terminal.status === "running";
+      const latestRunning = latest.status === "running";
+      if (terminalRunning !== latestRunning) {
+        if (terminalRunning) latest = terminal;
+        continue;
+      }
+      if (terminal.started_at >= latest.started_at) latest = terminal;
     }
     return latest ? [latest] : [];
   }, [activeWorkspaceTerminals]);

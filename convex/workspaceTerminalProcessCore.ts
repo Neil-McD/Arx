@@ -278,25 +278,6 @@ function shellQuote(value: string): string {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function parseNpmRunScriptName(command: string): string | null {
-  const match = /^\s*npm\s+(?:run\s+)?([A-Za-z0-9:_@./-]+)(?:\s|$)/.exec(
-    command,
-  );
-  if (!match) return null;
-  const script = match[1]?.trim() ?? "";
-  if (!script || script === "install" || script === "i") return null;
-  return script;
-}
-
-function isPreviewCommandWorthPreflighting(command: string): boolean {
-  const normalized = command.trim();
-  return (
-    parseNpmRunScriptName(normalized) !== null ||
-    /\bnode_modules\/(?:\.bin\/vite|vite\/bin\/vite\.js)\b/.test(normalized) ||
-    /(^|\s)(vite|npx\s+vite)(\s|$)/.test(normalized)
-  );
-}
-
 export function normalizeWorkspaceTerminalCommand(
   command: string,
   workspaceCwd: string,
@@ -336,13 +317,15 @@ export function buildWorkspaceTerminalSessionId(prefix: string): string {
   return `${prefix}-${randomSuffix}`;
 }
 
-async function findReusableWorkspaceTerminalProcess(params: {
+// One listener per port per sandbox is physics, so the port is the identity
+// key: a serve request lands on whichever active row already owns the port.
+async function findActiveWorkspaceTerminalOnPort(params: {
   ctx: any;
   ownerId: any;
   projectId: string;
   session: WorkspaceTerminalProcessContext;
-  terminal: WorkspaceTerminalStartArgs;
-}): Promise<Record<string, unknown> | null> {
+  previewPort: number;
+}): Promise<any | null> {
   const rows = (await params.ctx.runQuery(
     internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
     {
@@ -350,16 +333,9 @@ async function findReusableWorkspaceTerminalProcess(params: {
       projectId: params.projectId,
     },
   )) as any[];
-  const requestedCommandIdentity = normalizeWorkspaceTerminalIdentityCommand({
-    command: params.terminal.command,
-    cwd: params.terminal.cwd,
-    session: params.session,
-  });
-  const requestedPreviewPath = normalizeOptionalString(params.terminal.previewPath);
   const newestFirst = [...rows].sort(
     (left, right) => Number(right?.updatedAt ?? 0) - Number(left?.updatedAt ?? 0),
   );
-
   for (const row of newestFirst) {
     if (!isWorkspaceTerminalActiveStatus(row?.status)) continue;
     if (
@@ -368,44 +344,12 @@ async function findReusableWorkspaceTerminalProcess(params: {
     ) {
       continue;
     }
-    const rowCommandIdentity = normalizeWorkspaceTerminalIdentityCommand({
-      command: String(row?.command ?? ""),
-      cwd: normalizeOptionalString(row?.cwd),
-      session: params.session,
-    });
     const rowPreviewPort =
       typeof row?.previewPort === "number" && Number.isFinite(row.previewPort)
         ? Math.floor(row.previewPort)
         : null;
-    const rowPreviewPath = normalizeOptionalString(row?.previewPath);
-    if (
-      rowCommandIdentity !== requestedCommandIdentity ||
-      rowPreviewPort !== params.terminal.previewPort ||
-      rowPreviewPath !== requestedPreviewPath
-    ) {
-      continue;
-    }
-
-    const summary = await readWorkspaceTerminalProcess({
-      ctx: params.ctx,
-      row,
-      session: params.session,
-    });
-    if (
-      !isWorkspaceTerminalActiveStatus(
-        (summary as { status?: unknown } | null)?.status,
-      )
-    ) {
-      continue;
-    }
-    return {
-      ok: true,
-      reused_existing: true,
-      provider_session_id: normalizeOptionalString(row?.providerSessionId),
-      ...summary,
-    };
+    if (rowPreviewPort === params.previewPort) return row;
   }
-
   return null;
 }
 
@@ -415,133 +359,46 @@ export function truncateTerminalOutputTail(value: string): string {
   return normalized.slice(normalized.length - TERMINAL_OUTPUT_TAIL_MAX_CHARS);
 }
 
-async function runPreviewStartPreflight(params: {
+// Readiness is decided by us, not the provider SDK: one in-sandbox exec polls
+// the port with bash /dev/tcp (no curl dependency, no HTTP-status opinions —
+// a TCP accept is the bar for "the server started").
+async function probeWorkspaceTerminalPort(params: {
   session: WorkspaceTerminalProcessContext;
-  command: string;
-  workspaceCwd: string;
-}): Promise<{ ok: true } | { ok: false; message: string; output: string }> {
-  const normalizedCommand = params.command.trim();
-  if (!isPreviewCommandWorthPreflighting(normalizedCommand)) return { ok: true };
-
-  const scriptName = parseNpmRunScriptName(normalizedCommand);
-  const nodeScript = `
-const fs = require("fs");
-const scriptName = process.argv[1] || "";
-function fail(message) {
-  console.error(message);
-  process.exit(1);
-}
-if (!fs.existsSync("package.json")) fail("package.json was not found in the preview working directory.");
-let pkg;
-try {
-  pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-} catch (error) {
-  fail("package.json could not be parsed: " + (error && error.message ? error.message : String(error)));
-}
-const scripts = pkg && typeof pkg === "object" && pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
-const scriptCommand = scriptName ? String(scripts[scriptName] || "") : "";
-if (scriptName && !scriptCommand) fail("package.json does not define an npm script named '" + scriptName + "'.");
-const launchCommand = [scriptCommand, ${JSON.stringify(normalizedCommand)}].join(" ");
-if (/\\bvite\\b/.test(launchCommand) || /node_modules\\/vite\\/bin\\/vite\\.js/.test(launchCommand)) {
-  const hasVite =
-    fs.existsSync("node_modules/.bin/vite") ||
-    fs.existsSync("node_modules/vite/bin/vite.js");
-  if (!hasVite) fail("Vite is required for this preview, but node_modules/.bin/vite is missing. Install or repair dependencies before starting the preview.");
-}
-console.log("preview preflight ok");
-`.trim();
-  const command = `node -e ${shellQuote(nodeScript)}${scriptName ? ` ${shellQuote(scriptName)}` : ""}`;
+  port: number;
+  attempts?: number;
+}): Promise<{ ok: boolean }> {
+  const attempts = Math.max(1, Math.min(30, Math.floor(params.attempts ?? 15)));
+  const script = `for i in $(seq 1 ${attempts}); do (exec 3<>/dev/tcp/127.0.0.1/${params.port}) 2>/dev/null && exit 0; sleep 1; done; exit 1`;
   const result = await executeBlaxelWorkspaceCommand({
     sandboxName: params.session.providerSandboxId,
-    command,
-    cwd: params.workspaceCwd,
+    command: `bash -c ${shellQuote(script)}`,
     waitForCompletion: true,
-    timeoutSeconds: 15,
+    timeoutSeconds: attempts + 10,
   });
-  if (!result.ok) {
-    return {
-      ok: false,
-      message: result.message,
-      output: readWorkspaceToolFailureOutputPreview(result.details),
-    };
-  }
-  if (result.exitCode !== 0) {
-    const output = String(result.stdout ?? "").trim();
-    return {
-      ok: false,
-      message: output || `Preview preflight failed with exit code ${result.exitCode}.`,
-      output,
-    };
-  }
-  return { ok: true };
+  return { ok: result.ok === true && result.exitCode === 0 };
 }
 
-async function createFailedWorkspaceTerminalStartRow(params: {
-  ctx: any;
-  ownerId: any;
-  projectId: string;
-  threadId?: any;
-  startedByRunId?: string | null;
+async function readWorkspaceTerminalProcessOutputTail(params: {
   session: WorkspaceTerminalProcessContext;
-  terminal: WorkspaceTerminalStartArgs;
-  providerSessionIdPrefix: string;
-  code: string;
-  message: string;
-  output: string;
-}): Promise<Record<string, unknown>> {
-  const providerSessionId = buildWorkspaceTerminalSessionId(
-    `${params.providerSessionIdPrefix}-preflight`,
-  );
-  const nowMs = Date.now();
-  const createdRow = await params.ctx.runMutation(
-    internal.workspaceTerminals.createWorkspaceTerminalSessionInternal as any,
-    {
-      ownerId: params.ownerId,
-      projectId: params.projectId,
-      threadId: params.threadId ?? undefined,
-      lifecycleOwner: "project_background",
-      startedByThreadId: params.threadId
-        ? String(params.threadId)
-        : undefined,
-      startedByRunId: params.startedByRunId ?? undefined,
-      providerSandboxId: params.session.providerSandboxId,
-      providerSandboxProviderId: "blaxel",
-      providerSessionId,
-      providerCommandId: "preflight",
-      command: params.terminal.command,
-      cwd: params.terminal.cwd ?? undefined,
-      previewPort: params.terminal.previewPort ?? undefined,
-      previewPath: params.terminal.previewPath ?? undefined,
-      previewLabel: params.terminal.previewLabel ?? undefined,
-      status: "failed",
-      startedAt: nowMs,
-      updatedAt: nowMs,
-      finishedAt: nowMs,
-      exitCode: 1,
-      completionRecordedAt: nowMs,
-      completionReason: "preflight_failed",
-      lastHeartbeatAt: nowMs,
-      healthStatus: "unhealthy",
-      healthSummary: params.message || "Preview preflight failed.",
-      previewStatus:
-        params.terminal.previewPort !== null ? "server_exited" : "none",
-      lastOutputTail: truncateTerminalOutputTail(
-        [params.message, params.output].filter(Boolean).join("\n"),
-      ),
-    },
-  );
-  return {
-    ok: false,
-    status: 409,
-    code: params.code,
-    message: params.message,
-    terminal_session_id: String(createdRow?._id ?? "").trim(),
-    output_tail:
-      typeof createdRow?.lastOutputTail === "string"
-        ? createdRow.lastOutputTail
-        : null,
-    ...summarizeWorkspaceTerminalRow(createdRow),
-  };
+  processName: string;
+}): Promise<string> {
+  try {
+    const proc = await readBlaxelWorkspaceProcess({
+      sandboxName: params.session.providerSandboxId,
+      processName: params.processName,
+    });
+    if (proc.ok !== true) return "";
+    return truncateTerminalOutputTail(
+      [
+        typeof (proc as any).stderr === "string" ? (proc as any).stderr : "",
+        typeof (proc as any).stdout === "string" ? (proc as any).stdout : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  } catch {
+    return "";
+  }
 }
 
 export function isWorkspaceTerminalActiveStatus(status: unknown): boolean {
@@ -773,14 +630,54 @@ export async function startWorkspaceTerminalProcess(params: {
   terminal: WorkspaceTerminalStartArgs;
   providerSessionIdPrefix: string;
 }): Promise<Record<string, unknown>> {
-  const reusable = await findReusableWorkspaceTerminalProcess({
-    ctx: params.ctx,
-    ownerId: params.ownerId,
-    projectId: params.projectId,
-    session: params.session,
-    terminal: params.terminal,
-  });
-  if (reusable) return reusable;
+  const requestedPort = params.terminal.previewPort;
+  if (requestedPort !== null) {
+    const portPeer = await findActiveWorkspaceTerminalOnPort({
+      ctx: params.ctx,
+      ownerId: params.ownerId,
+      projectId: params.projectId,
+      session: params.session,
+      previewPort: requestedPort,
+    });
+    if (portPeer) {
+      const summary = await readWorkspaceTerminalProcess({
+        ctx: params.ctx,
+        row: portPeer,
+        session: params.session,
+      });
+      const peerAlive = isWorkspaceTerminalActiveStatus(
+        (summary as { status?: unknown } | null)?.status,
+      );
+      const sameCommand =
+        normalizeWorkspaceTerminalIdentityCommand({
+          command: String(portPeer.command ?? ""),
+          cwd: normalizeOptionalString(portPeer.cwd),
+          session: params.session,
+        }) ===
+        normalizeWorkspaceTerminalIdentityCommand({
+          command: params.terminal.command,
+          cwd: params.terminal.cwd,
+          session: params.session,
+        });
+      if (peerAlive && sameCommand) {
+        return {
+          ok: true,
+          reused_existing: true,
+          provider_session_id: normalizeOptionalString(portPeer.providerSessionId),
+          ...summary,
+        };
+      }
+      if (peerAlive) {
+        // Same port, different command: the new serve supersedes the old one.
+        await stopWorkspaceTerminalProcess({
+          ctx: params.ctx,
+          row: portPeer,
+          session: params.session,
+          forceStoppedStatus: true,
+        });
+      }
+    }
+  }
 
   const providerSessionId = buildWorkspaceTerminalSessionId(
     params.providerSessionIdPrefix,
@@ -789,28 +686,6 @@ export async function startWorkspaceTerminalProcess(params: {
     params.session,
     params.terminal.cwd,
   );
-  if (params.terminal.previewPort !== null) {
-    const preflight = await runPreviewStartPreflight({
-      session: params.session,
-      command: params.terminal.command,
-      workspaceCwd,
-    });
-    if (!preflight.ok) {
-      return await createFailedWorkspaceTerminalStartRow({
-        ctx: params.ctx,
-        ownerId: params.ownerId,
-        projectId: params.projectId,
-        threadId: params.threadId,
-        startedByRunId: params.startedByRunId,
-        session: params.session,
-        terminal: params.terminal,
-        providerSessionIdPrefix: params.providerSessionIdPrefix,
-        code: "preview_preflight_failed",
-        message: preflight.message || "Preview preflight failed.",
-        output: preflight.output,
-      });
-    }
-  }
   const executed = await executeBlaxelWorkspaceCommand({
     sandboxName: params.session.providerSandboxId,
     processName: providerSessionId,
@@ -821,10 +696,18 @@ export async function startWorkspaceTerminalProcess(params: {
     cwd: resolveWorkspaceToolCwdForSession(params.session, params.terminal.cwd),
     waitForCompletion: false,
     timeoutSeconds: 86_400,
-    waitForPorts:
-      params.terminal.previewPort !== null ? [params.terminal.previewPort] : null,
   });
   if (!executed.ok) {
+    // The provider call failed, but the process may still have launched; stop
+    // it by name so a failed start can never leave an untracked listener.
+    try {
+      await stopBlaxelWorkspaceProcess({
+        sandboxName: params.session.providerSandboxId,
+        processName: providerSessionId,
+      });
+    } catch {
+      // Best effort only; reconciliation sweeps anything that survives.
+    }
     return {
       ok: false,
       status: executed.status,
@@ -833,6 +716,8 @@ export async function startWorkspaceTerminalProcess(params: {
     };
   }
 
+  // Every launch gets a row immediately — a row is what makes a process
+  // stoppable, reconcilable, and visible.
   const nowMs = Date.now();
   const createdRow = await params.ctx.runMutation(
     internal.workspaceTerminals.createWorkspaceTerminalSessionInternal as any,
@@ -854,26 +739,96 @@ export async function startWorkspaceTerminalProcess(params: {
       previewPort: params.terminal.previewPort ?? undefined,
       previewPath: params.terminal.previewPath ?? undefined,
       previewLabel: params.terminal.previewLabel ?? undefined,
-      status: "running",
+      status: requestedPort !== null ? "starting" : "running",
       startedAt: nowMs,
       updatedAt: nowMs,
       lastHeartbeatAt: nowMs,
-      healthStatus: "healthy",
-      healthSummary: "Process is running.",
-      previewStatus:
-        params.terminal.previewPort !== null ? "running" : "none",
+      healthStatus: requestedPort !== null ? "starting" : "healthy",
+      healthSummary:
+        requestedPort !== null
+          ? "Waiting for the server to accept connections."
+          : "Process is running.",
+      previewStatus: requestedPort !== null ? "starting" : "none",
       lastOutputTail: truncateTerminalOutputTail(
         [executed.stdout, executed.stderr].filter(Boolean).join("\n"),
       ),
     },
   );
   const terminalSessionId = String(createdRow?._id ?? "").trim();
+  if (requestedPort === null) {
+    return {
+      ok: true,
+      terminal_session_id: terminalSessionId,
+      provider_session_id: providerSessionId,
+      reused_existing: false,
+      ...summarizeWorkspaceTerminalRow(createdRow),
+    };
+  }
+
+  const probe = await probeWorkspaceTerminalPort({
+    session: params.session,
+    port: requestedPort,
+  });
+  if (probe.ok) {
+    const readyMs = Date.now();
+    const patched = await params.ctx.runMutation(
+      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+      {
+        terminalSessionId: createdRow?._id,
+        status: "running",
+        updatedAt: readyMs,
+        lastHeartbeatAt: readyMs,
+        healthStatus: "healthy",
+        healthSummary: "Process is running.",
+        previewStatus: "running",
+      },
+    );
+    return {
+      ok: true,
+      terminal_session_id: terminalSessionId,
+      provider_session_id: providerSessionId,
+      reused_existing: false,
+      ...summarizeWorkspaceTerminalRow(patched ?? createdRow),
+    };
+  }
+
+  // The server never accepted connections: report the truth with the actual
+  // process output, and stop both the process and the row.
+  const outputTail = await readWorkspaceTerminalProcessOutputTail({
+    session: params.session,
+    processName: providerSessionId,
+  });
+  try {
+    await stopBlaxelWorkspaceProcess({
+      sandboxName: params.session.providerSandboxId,
+      processName: providerSessionId,
+    });
+  } catch {
+    // Best effort only; reconciliation sweeps anything that survives.
+  }
+  const failedMs = Date.now();
+  await params.ctx.runMutation(
+    internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+    {
+      terminalSessionId: createdRow?._id,
+      status: "failed",
+      updatedAt: failedMs,
+      finishedAt: failedMs,
+      completionRecordedAt: failedMs,
+      completionReason: "failed",
+      healthStatus: "unhealthy",
+      healthSummary: `The server did not accept connections on port ${requestedPort}.`,
+      previewStatus: "server_exited",
+      ...(outputTail ? { lastOutputTail: outputTail } : {}),
+    },
+  );
   return {
-    ok: true,
+    ok: false,
+    status: 502,
+    code: "server_start_failed",
+    message: `The server did not accept connections on port ${requestedPort} within 15 seconds.`,
     terminal_session_id: terminalSessionId,
-    provider_session_id: providerSessionId,
-    reused_existing: false,
-    ...summarizeWorkspaceTerminalRow(createdRow),
+    output_tail: outputTail || null,
   };
 }
 

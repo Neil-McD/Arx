@@ -1021,6 +1021,15 @@ export class PolynetCodexWorkerRuntime {
         ok: false,
         failureCode: String(payload.code ?? `http_${response.status}`).replace(/blaxel/gi, "workspace"),
         failureMessage: String(payload.message ?? "The app could not be started.").replace(/blaxel/gi, "workspace"),
+        ...(typeof payload.output_tail === "string" && payload.output_tail
+          ? { server_output: String(payload.output_tail).replace(/blaxel/gi, "workspace") }
+          : {}),
+        ...(typeof payload.terminal_session_id === "string" && payload.terminal_session_id
+          ? { terminal_session_id: payload.terminal_session_id }
+          : {}),
+        ...(typeof payload.server_status === "string" && payload.server_status
+          ? { server_status: payload.server_status }
+          : {}),
       });
     } catch (error) {
       this.emitRuntimeEvent("workspace_serve_finished", {

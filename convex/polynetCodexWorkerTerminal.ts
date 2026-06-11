@@ -148,6 +148,12 @@ export async function handlePolynetCodexWorkerTerminal(
       ok: false,
       code: String(started.code ?? "terminal_start_failed"),
       message: String(started.message ?? "Terminal start failed."),
+      ...(typeof started.output_tail === "string" && started.output_tail
+        ? { output_tail: started.output_tail }
+        : {}),
+      ...(typeof started.terminal_session_id === "string" && started.terminal_session_id
+        ? { terminal_session_id: started.terminal_session_id }
+        : {}),
     });
   }
 
@@ -165,11 +171,16 @@ export async function handlePolynetCodexWorkerTerminal(
     workspaceMismatchMessage: "Workspace session changed; restart the app.",
   })) as JsonRecord;
   if (preview.ok !== true) {
+    // The server IS running at this point — only the preview URL failed. Say
+    // so explicitly so the model retries the URL instead of the server.
     return json(200, {
       ok: false,
-      code: String(preview.code ?? "preview_unavailable"),
-      message: String(preview.message ?? "Preview is unavailable."),
+      code: String(preview.code ?? "preview_url_unavailable"),
+      message: `The server is running on port ${terminal.previewPort}, but the preview URL could not be issued: ${String(
+        preview.message ?? "Preview is unavailable.",
+      )} Do not restart the server — call workspace_serve again with the same command and port to retry the preview URL.`,
       terminal_session_id: String(started.terminal_session_id ?? ""),
+      server_status: "running",
     });
   }
 
