@@ -57,7 +57,8 @@ under a live turn. Fly only suspends machines at or below 2GB — larger sizes
 silently fall back to stopped (full cold boot + Codex login on wake, which is
 what the bridge's busy-retry ladder absorbs) — and smaller RAM images resume
 faster from suspend. v20 acceptance: remote multi-machine contract PASS at
-this size.
+this size; measured wake-from-suspend 0.35s (was 0.61s at 4096MB), suspend
+after ~5min idle.
 Staging pool: 10 machines.
 
 Concurrency caps (Convex admission, `shared/polynetCodexWorkerLimits.ts`):
