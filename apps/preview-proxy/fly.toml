@@ -1,5 +1,7 @@
 app = "polynet-preview-proxy"
-primary_region = "iad"
+# Co-located with the worker (sjc) and Blaxel sandboxes (us-pdx-1): previews
+# were doing coast-to-coast round trips from iad.
+primary_region = "sjc"
 
 [env]
   PORT = "8080"
@@ -7,9 +9,11 @@ primary_region = "iad"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  # 256MB is suspend-eligible: scale-to-zero like the rest of the stack,
+  # ~0.3s wake on the first preview after idle.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ["app"]
 
   [[http_service.checks]]
