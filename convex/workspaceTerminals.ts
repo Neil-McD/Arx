@@ -599,6 +599,49 @@ export const clearProjectBackgroundSandboxLeaseInternal = internalMutation({
   },
 });
 
+// Terminal rows can outlive their processes: Blaxel deletes cold sandboxes
+// (48h idle) and nothing else flips the row, so without reconciliation the
+// UI shows phantom "running" apps forever. Heartbeats stop when the process
+// does, so a stale heartbeat window is the truth signal.
+export const reconcileStaleWorkspaceTerminalSessionsInternal = internalMutation({
+  args: {
+    limit: v.optional(v.number()),
+    staleAfterMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 100)));
+    const staleAfterMs = Math.max(
+      60_000,
+      Math.floor(args.staleAfterMs ?? 30 * 60 * 1000),
+    );
+    const cutoff = Date.now() - staleAfterMs;
+    let reconciled = 0;
+    for (const status of ["running", "starting"] as const) {
+      const rows = await ctx.db
+        .query("workspaceTerminalSessions")
+        .withIndex("by_status_updatedAt", (q: any) =>
+          q.eq("status", status).lt("updatedAt", cutoff),
+        )
+        .take(limit - reconciled);
+      for (const row of rows) {
+        await ctx.db.patch(row._id, {
+          status: "stopped",
+          updatedAt: Date.now(),
+          finishedAt: Date.now(),
+          completionRecordedAt: Date.now(),
+          completionReason: "stopped",
+          healthStatus: "unhealthy",
+          healthSummary:
+            "Process heartbeat went stale; reconciled as stopped.",
+        });
+        reconciled += 1;
+      }
+      if (reconciled >= limit) break;
+    }
+    return { reconciled };
+  },
+});
+
 export const updateWorkspaceTerminalSessionInternal = internalMutation({
   args: {
     terminalSessionId: v.id("workspaceTerminalSessions"),

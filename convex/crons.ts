@@ -46,6 +46,15 @@ crons.interval(
 );
 
 crons.interval(
+  "reconcile stale workspace terminal sessions",
+  { minutes: 10 },
+  (internal as any).workspaceTerminals.reconcileStaleWorkspaceTerminalSessionsInternal,
+  {
+    limit: 100,
+  },
+);
+
+crons.interval(
   "finalize expired blaxel project workspace leases",
   { minutes: 15 },
   (internal as any).blaxelWorkspaceWake.finalizeExpiredBlaxelProjectWorkspaceLeasesInternal,

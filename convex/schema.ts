@@ -1068,7 +1068,8 @@ export default defineSchema({
   })
     .index("by_owner_project", ["ownerId", "projectId"])
     .index("by_providerSessionId", ["providerSessionId"])
-    .index("by_providerSandboxId", ["providerSandboxId"]),
+    .index("by_providerSandboxId", ["providerSandboxId"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
 
   communities: defineTable({
     ownerId: v.id("users"),
