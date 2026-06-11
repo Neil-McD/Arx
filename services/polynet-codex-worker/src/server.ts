@@ -438,6 +438,9 @@ export class PolynetCodexWorkerRuntime {
           approvalPolicy: "never",
           sandbox: "read-only",
           ephemeral: true,
+          // Codex's own web search, billed to the user's ChatGPT account
+          // (BYOK) — PolyNet never pays for searches.
+          config: { web_search: "live" },
           developerInstructions: [
             "You are running inside the PolyNet Codex worker service.",
             "Your workspace is a full-access remote Linux environment rooted at /workspace, reached only through the dynamic tool named workspace_bash.",
