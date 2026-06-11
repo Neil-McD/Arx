@@ -79,6 +79,29 @@ export function buildBlaxelBashDynamicToolSpec(): Record<string, unknown> {
   };
 }
 
+export function buildWorkspaceServeDynamicToolSpec(): Record<string, unknown> {
+  return {
+    name: "workspace_serve",
+    description:
+      "Start a long-running server (dev server, app, API) in the user's workspace and get back a preview URL the user can open. Use this for anything that listens on a port; never run servers with workspace_bash.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "Command that starts the server, e.g. `npm run dev` or `node server.js`.",
+        },
+        port: {
+          type: "integer",
+          description: "Port the server listens on.",
+        },
+      },
+      required: ["command", "port"],
+      additionalProperties: false,
+    },
+  };
+}
+
 export function readBlaxelEnvStatus(): {
   configured: boolean;
   missing: string[];

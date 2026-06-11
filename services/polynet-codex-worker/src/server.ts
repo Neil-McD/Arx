@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { CodexAppServerClient } from "./codexAppServerClient.ts";
 import {
   buildBlaxelBashDynamicToolSpec,
+  buildWorkspaceServeDynamicToolSpec,
   destroyBlaxelSandboxBestEffort,
   ensureBlaxelSandbox,
   normalizeToolCommand,
@@ -36,6 +37,7 @@ type ActiveTurn = {
   runId: string;
   codexThreadId: string | null;
   cancelRequested: boolean;
+  serve: WorkerIngestConfig | null;
   sandboxName: string;
   fallbackCommand: string;
   commandTimeoutSeconds: number;
@@ -62,6 +64,7 @@ type WorkerChatgptAuth = {
 type WorkerIngestConfig = {
   url: string;
   token: string;
+  terminalUrl: string | null;
   context: JsonRecord;
 };
 
@@ -310,6 +313,10 @@ export class PolynetCodexWorkerRuntime {
       runId: params.runId,
       codexThreadId: null,
       cancelRequested: false,
+      // Serving requires a project workspace (the sandbox outlives the turn)
+      // and the Convex terminal bridge.
+      serve:
+        params.sandboxProvided && params.ingest?.terminalUrl ? params.ingest : null,
       sandboxName: params.sandboxName,
       fallbackCommand: params.command,
       commandTimeoutSeconds: params.commandTimeoutSeconds,
@@ -435,11 +442,19 @@ export class PolynetCodexWorkerRuntime {
             "You are running inside the PolyNet Codex worker service.",
             "Your workspace is a full-access remote Linux environment rooted at /workspace, reached only through the dynamic tool named workspace_bash.",
             "workspace_bash can read, write, install, and run anything in that workspace.",
+            ...(activeTurn.serve
+              ? [
+                  "To run a server or app the user can see, call workspace_serve with the start command and port; it returns a preview URL and shows the app in the user's preview panel. Never start servers with workspace_bash.",
+                ]
+              : []),
             "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
             "The local environment is not your workspace: never use local shell commands, local file edits, or local paths.",
             "Report the tool output concisely.",
           ].join(" "),
-          dynamicTools: [buildBlaxelBashDynamicToolSpec()],
+          dynamicTools: [
+            buildBlaxelBashDynamicToolSpec(),
+            ...(activeTurn.serve ? [buildWorkspaceServeDynamicToolSpec()] : []),
+          ],
           experimentalRawEvents: false,
           persistExtendedHistory: false,
         }),
@@ -782,7 +797,12 @@ export class PolynetCodexWorkerRuntime {
       return;
     }
     const params = asRecord(message.params);
-    if (!params || String(params.tool ?? "") !== "workspace_bash") {
+    const toolName = String(params?.tool ?? "");
+    if (params && toolName === "workspace_serve") {
+      await this.handleWorkspaceServeCall(message.id, activeTurn, params);
+      return;
+    }
+    if (!params || toolName !== "workspace_bash") {
       this.client.respondError(message.id, -32601, "unsupported dynamic tool");
       return;
     }
@@ -881,6 +901,106 @@ export class PolynetCodexWorkerRuntime {
     activeTurn.cancelRequested = true;
     await this.interruptActiveTurnBestEffort("user_cancelled");
     return { ok: true, runId };
+  }
+
+  private async handleWorkspaceServeCall(
+    messageId: unknown,
+    activeTurn: ActiveTurn,
+    params: JsonRecord,
+  ): Promise<void> {
+    const client = this.client;
+    if (!client) return;
+    const respondTool = (success: boolean, payload: JsonRecord) => {
+      client.respond(messageId, {
+        success,
+        contentItems: [{ type: "inputText", text: JSON.stringify(payload, null, 2) }],
+      });
+    };
+    const serve = activeTurn.serve;
+    if (!serve) {
+      respondTool(false, {
+        ok: false,
+        failureCode: "project_workspace_required",
+        failureMessage:
+          "Serving an app requires a project-bound workspace. Ask the user to open this thread in a project.",
+      });
+      return;
+    }
+    const args = asRecord(params.arguments) ?? {};
+    const command = String(args.command ?? "").trim();
+    const portRaw = Number(args.port);
+    const port =
+      Number.isFinite(portRaw) && portRaw >= 1 && portRaw <= 65535
+        ? Math.floor(portRaw)
+        : null;
+    if (!command || port === null) {
+      respondTool(false, {
+        ok: false,
+        failureCode: "invalid_arguments",
+        failureMessage: "workspace_serve needs a command and a port between 1 and 65535.",
+      });
+      return;
+    }
+    this.emitRuntimeEvent("workspace_serve_requested", { command, port });
+    const startedAtMs = nowMs();
+    try {
+      const response = await fetch(serve.terminalUrl as string, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serve.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          context: serve.context,
+          command,
+          port,
+          label: "codex-serve",
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      const payload = (await response.json().catch(() => ({}))) as JsonRecord;
+      const ok = response.ok && payload.ok === true;
+      const previewUrl = String(payload.preview_url ?? "").trim();
+      this.emitRuntimeEvent("workspace_serve_finished", {
+        ok,
+        port,
+        latency_ms: elapsedMs(startedAtMs),
+        terminal_session_id: payload.terminal_session_id ?? null,
+        failure_code: ok ? null : String(payload.code ?? `http_${response.status}`),
+      });
+      if (ok && previewUrl) {
+        this.emitRuntimeEvent("workspace_preview_ready", {
+          url: previewUrl,
+          port,
+          terminal_session_id: payload.terminal_session_id ?? null,
+        });
+        respondTool(true, {
+          ok: true,
+          preview_url: previewUrl,
+          port,
+          note: "The app is running; the user can open it from the preview panel or this URL.",
+        });
+        return;
+      }
+      respondTool(false, {
+        ok: false,
+        failureCode: String(payload.code ?? `http_${response.status}`).replace(/blaxel/gi, "workspace"),
+        failureMessage: String(payload.message ?? "The app could not be started.").replace(/blaxel/gi, "workspace"),
+      });
+    } catch (error) {
+      this.emitRuntimeEvent("workspace_serve_finished", {
+        ok: false,
+        port,
+        latency_ms: elapsedMs(startedAtMs),
+        failure_code: "serve_bridge_unreachable",
+      });
+      respondTool(false, {
+        ok: false,
+        failureCode: "serve_bridge_unreachable",
+        failureMessage:
+          error instanceof Error ? error.message.replace(/blaxel/gi, "workspace") : "Serve failed.",
+      });
+    }
   }
 
   private emitRuntimeEvent(eventType: string, payload: JsonRecord): void {
@@ -1044,9 +1164,10 @@ async function handleTurnEndpoint(params: {
   const ingestUrl = String(rawIngest?.url ?? "").trim();
   const ingestToken = String(rawIngest?.token ?? "").trim();
   const ingestContext = asRecord(rawIngest?.context);
+  const ingestTerminalUrl = String(rawIngest?.terminal_url ?? "").trim() || null;
   const ingest: WorkerIngestConfig | null =
     ingestUrl && ingestToken && ingestContext
-      ? { url: ingestUrl, token: ingestToken, context: ingestContext }
+      ? { url: ingestUrl, token: ingestToken, terminalUrl: ingestTerminalUrl, context: ingestContext }
       : null;
 
   if (!params.probeMode && !chatgptAuth) {

@@ -8,6 +8,8 @@ function read(relativePath: string): string {
 const bridge = read("convex/polynetCodexWorkerBridge.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
+const terminal = read("convex/polynetCodexWorkerTerminal.ts");
+const worker = read("services/polynet-codex-worker/src/server.ts");
 const httpRoutes = read("convex/http.ts");
 const persistence = read("convex/runtimeTurnPersistence.ts");
 const attribution = read("shared/modelAttributionUi.ts");
@@ -113,6 +115,36 @@ assert.match(
   httpRoutes,
   /POLYNET_CODEX_WORKER_INGEST_PATH[\s\S]*handlePolynetCodexWorkerIngest/,
   "ingest endpoint must be registered on the Convex http router",
+);
+assert.match(
+  httpRoutes,
+  /POLYNET_CODEX_WORKER_TERMINAL_PATH[\s\S]*handlePolynetCodexWorkerTerminal/,
+  "worker terminal endpoint must be registered on the Convex http router",
+);
+assert.match(
+  terminal,
+  /getRuntimeRunByOwnerRunIdInternal[\s\S]*invalid_run[\s\S]*startWorkspaceTerminalProcess[\s\S]*resolveWorkspaceTerminalPreview/,
+  "serve bridge must validate the run then start the served process through the shared terminal core and gated preview proxy",
+);
+assert.match(
+  terminal,
+  /project_workspace_required/,
+  "serve bridge must refuse turns without a project-bound workspace lease",
+);
+assert.match(
+  handlers,
+  /terminal_url: buildPolynetCodexWorkerTerminalTarget\(\)/,
+  "worker turns must receive the terminal bridge target",
+);
+assert.match(
+  worker,
+  /workspace_serve[\s\S]*workspace_preview_ready/,
+  "worker must expose workspace_serve and emit the preview-ready event",
+);
+assert.match(
+  worker,
+  /params\.sandboxProvided && params\.ingest\?\.terminalUrl/,
+  "workspace_serve must only be offered on project-bound turns with the bridge configured",
 );
 assert.match(
   bridge,

@@ -63,6 +63,19 @@ workspace, not parallel sandboxes. Over-limit turns fail fast with
 `project_run_limit_reached` / `user_run_limit_reached` (429). The effective
 per-user parallelism ceiling is their own ChatGPT plan's rate limits.
 
+## Workspace Serve (run apps with live preview)
+
+Project-bound worker turns expose a second dynamic tool, `workspace_serve`
+(`command`, `port`). The worker forwards it to the Convex bridge endpoint
+`/runtime/polynet_codex_worker_terminal` (worker bearer + the same run-record
+validation as ingest), which starts the process through the shared
+`startWorkspaceTerminalProcess` core. That creates a real terminal row — the
+background-terminal rail and the workspace app preview panel light up natively
+— and returns the access-gated preview proxy URL, never a raw provider URL.
+The worker emits `workspace_serve_requested/finished` and
+`workspace_preview_ready` run events. Served apps ride the sandbox standby
+lifecycle: idle apps cost ~nothing and wake on request.
+
 ## Proof Hierarchy
 
 "All proofs green" means exactly one thing: the acceptance gate passes.

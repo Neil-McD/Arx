@@ -16,6 +16,10 @@ import {
   handlePolynetCodexWorkerIngest,
   POLYNET_CODEX_WORKER_INGEST_PATH,
 } from "./polynetCodexWorkerIngest";
+import {
+  handlePolynetCodexWorkerTerminal,
+  POLYNET_CODEX_WORKER_TERMINAL_PATH,
+} from "./polynetCodexWorkerTerminal";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
@@ -376,6 +380,14 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     return await handlePolynetCodexWorkerIngest(ctx, req);
+  }),
+});
+
+http.route({
+  path: POLYNET_CODEX_WORKER_TERMINAL_PATH,
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await handlePolynetCodexWorkerTerminal(ctx, req);
   }),
 });
 

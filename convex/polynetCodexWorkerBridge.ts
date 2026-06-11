@@ -231,6 +231,7 @@ export async function streamPolynetCodexWorkerTurn(params: {
   ingest?: {
     url: string;
     token: string;
+    terminal_url?: string | null;
     context: Record<string, unknown>;
   } | null;
   onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
@@ -283,6 +284,7 @@ export async function streamPolynetCodexWorkerTurn(params: {
             ingest: {
               url: params.ingest.url,
               token: params.ingest.token,
+              terminal_url: params.ingest.terminal_url ?? null,
               context: params.ingest.context,
             },
           }

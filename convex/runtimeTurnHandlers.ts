@@ -77,6 +77,7 @@ import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames"
 import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
+import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
 import {
   POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
   POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT,
@@ -1182,6 +1183,7 @@ export async function handleRuntimeTurnRequest(args: {
               return {
                 url: target.url,
                 token: target.token,
+                terminal_url: buildPolynetCodexWorkerTerminalTarget(),
                 context: {
                   owner_id: String(actor.dbUserId),
                   thread_id: String(ownedThread._id),
