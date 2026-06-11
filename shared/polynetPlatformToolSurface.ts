@@ -33,23 +33,38 @@ export type PolynetPlatformToolSpec = {
 export function findPolynetPlatformToolSurfaceEntry(
   name: string,
 ): PolynetPlatformToolSurfaceEntry | null {
-  const normalized = name.startsWith("polynet.") ? name.slice("polynet.".length) : name;
-  return (
-    POLYNET_PLATFORM_TOOL_SURFACE.find((entry) => entry.toolName === normalized) ?? null
-  );
+  // The wire carries namespace and tool name separately; this always receives
+  // the bare tool name.
+  return POLYNET_PLATFORM_TOOL_SURFACE.find((entry) => entry.toolName === name) ?? null;
 }
 
-export function buildPolynetPlatformToolSpecs(params: {
-  hasCommunity: boolean;
-}): PolynetPlatformToolSpec[] {
+function buildSpecs(params: { hasCommunity: boolean }): PolynetPlatformToolSpec[] {
   return POLYNET_PLATFORM_TOOL_SURFACE.filter(
     (entry) => params.hasCommunity || !entry.requiresCommunity,
   ).map((entry) => {
     const definition = getToolDefinition(entry.toolName);
+    if (!definition) {
+      // Fails the Convex push / worker boot, so a surface row naming an
+      // unregistered tool can never reach a live turn.
+      throw new Error(
+        `polynet platform tool surface names an unregistered tool: ${entry.toolName}`,
+      );
+    }
     return {
       name: definition.name,
       description: definition.description,
       input_schema: definition.inputSchema as Record<string, unknown>,
     };
   });
+}
+
+// Precomputed at module load — this is also the registration guard above
+// running once per deploy instead of per turn.
+const SPECS_WITH_COMMUNITY = buildSpecs({ hasCommunity: true });
+const SPECS_WITHOUT_COMMUNITY = buildSpecs({ hasCommunity: false });
+
+export function buildPolynetPlatformToolSpecs(params: {
+  hasCommunity: boolean;
+}): PolynetPlatformToolSpec[] {
+  return params.hasCommunity ? SPECS_WITH_COMMUNITY : SPECS_WITHOUT_COMMUNITY;
 }

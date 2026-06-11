@@ -838,15 +838,10 @@ export class PolynetCodexWorkerRuntime {
       await this.handleWorkspaceServeCall(message.id, activeTurn, params);
       return;
     }
-    const platformToolName = toolName.startsWith("polynet.")
-      ? toolName.slice("polynet.".length)
-      : toolName;
-    if (
-      params &&
-      activeTurn.platformToolBridge &&
-      activeTurn.platformTools.some((tool) => tool.name === platformToolName)
-    ) {
-      await this.handlePlatformToolCall(message.id, activeTurn, platformToolName, params);
+    // Dynamic tool calls arrive with namespace and tool as separate fields;
+    // everything in the polynet namespace routes to the platform bridge.
+    if (params && String(params.namespace ?? "").trim() === "polynet") {
+      await this.handlePlatformToolCall(message.id, activeTurn, toolName, params);
       return;
     }
     if (!params || toolName !== "workspace_bash") {
@@ -995,13 +990,23 @@ export class PolynetCodexWorkerRuntime {
     params: JsonRecord,
   ): Promise<void> {
     const client = this.client;
-    if (!client) return;
+    if (!client) {
+      // The transport is gone; there is nothing to respond on. The turn is
+      // already failing via handleAppServerClosed — log for observability.
+      process.stderr.write(
+        `[polynet worker] platform tool call ${toolName} arrived with no app-server client\n`,
+      );
+      return;
+    }
     const bridge = activeTurn.platformToolBridge;
-    if (!bridge) {
+    if (!bridge || !activeTurn.platformTools.some((tool) => tool.name === toolName)) {
       client.respond(messageId, {
         success: false,
         contentItems: [
-          { type: "inputText", text: "Platform tools are not available for this turn." },
+          {
+            type: "inputText",
+            text: `"${toolName}" is not an available platform tool for this turn.`,
+          },
         ],
       });
       return;
@@ -1031,18 +1036,19 @@ export class PolynetCodexWorkerRuntime {
       const payload = (await response.json().catch(() => ({}))) as JsonRecord;
       ok = response.ok && payload.ok === true;
       if (ok) {
+        // Success output is community/user content — never scrubbed.
         text = String(payload.output ?? "");
       } else {
         failureCode = String(payload.code ?? `http_${response.status}`);
         text = `${toolName} failed (${failureCode}): ${String(
           payload.message ?? "Platform tool call failed.",
-        )}`;
+        )}`.replace(/blaxel/gi, "workspace");
       }
     } catch (error) {
       failureCode = "platform_tool_bridge_unreachable";
       text = `${toolName} failed: ${
         error instanceof Error ? error.message : "platform tool bridge unreachable"
-      }`;
+      }`.replace(/blaxel/gi, "workspace");
     }
     this.emitRuntimeEvent("platform_tool_finished", {
       tool_name: toolName,
@@ -1053,7 +1059,7 @@ export class PolynetCodexWorkerRuntime {
     });
     client.respond(messageId, {
       success: ok,
-      contentItems: [{ type: "inputText", text: text.replace(/blaxel/gi, "workspace") }],
+      contentItems: [{ type: "inputText", text }],
     });
   }
 
@@ -1063,7 +1069,12 @@ export class PolynetCodexWorkerRuntime {
     params: JsonRecord,
   ): Promise<void> {
     const client = this.client;
-    if (!client) return;
+    if (!client) {
+      process.stderr.write(
+        "[polynet worker] workspace_serve call arrived with no app-server client\n",
+      );
+      return;
+    }
     const respondTool = (success: boolean, payload: JsonRecord) => {
       client.respond(messageId, {
         success,

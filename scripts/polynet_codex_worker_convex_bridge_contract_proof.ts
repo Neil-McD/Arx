@@ -149,6 +149,16 @@ assert.match(
     /billingPolicy/,
     "every platform tool surface entry must carry a billing policy",
   );
+  assert.match(
+    surface,
+    /unregistered tool/,
+    "platform tool surface must fail at load when a row names an unregistered tool",
+  );
+  assert.match(
+    worker,
+    /params\.namespace[\s\S]{0,40}=== "polynet"/,
+    "worker must route platform tool calls by the namespace field, not name prefixes",
+  );
   assert.doesNotMatch(
     surface,
     /community_write|community_resource_builder_stage_changeset|community_resource_builder_apply_changeset/,
