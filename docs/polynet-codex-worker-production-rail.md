@@ -38,12 +38,15 @@ production-looking URL, the bridge returns
 This gate does not deploy, promote, alias, or enable production traffic:
 
 ```bash
-npm run check:polynet-codex-worker-production-acceptance
+npm run check:polynet-codex-worker-production-static-acceptance
 ```
 
 It proves diff hygiene, the production guard, production Fly config, Convex
 bridge contract, production workspace-provider preflights, web typecheck, and
 web build.
+
+This gate is PR-safe and static-only. Passing it does not mean the production
+Fly worker has served a live turn.
 
 ## Production Deploy Command
 
@@ -70,12 +73,16 @@ Required secrets are the same as staging: `POLYNET_CODEX_WORKER_AUTH_TOKEN`,
 ## Live Production Proof
 
 After the production Fly app exists and Convex production env is intentionally
-configured, run:
+configured, run the final production acceptance gate:
 
 ```bash
-POLYNET_PRODUCTION_ACCEPTANCE_REMOTE=true \
 npm run check:polynet-codex-worker-production-acceptance
 ```
+
+This command is non-deploying, but it is not optional or static-only: it runs
+the static readiness gate first, then runs the live production Fly worker
+contract proof. The underlying script fails closed unless
+`POLYNET_PRODUCTION_ACCEPTANCE_REMOTE=true`.
 
 The live stage targets:
 
@@ -90,6 +97,6 @@ The live stage targets:
    deploy/promote/alias commands.
 3. Deploy the production Fly worker app with the production deploy command.
 4. Set Convex production env for the worker URL, worker token, and runtime flag.
-5. Run the live production acceptance gate.
+5. Run `npm run check:polynet-codex-worker-production-acceptance`.
 6. Do one real production turn with a low-risk test account and verify run
    events, assistant persistence, billing settlement, and worker logs.

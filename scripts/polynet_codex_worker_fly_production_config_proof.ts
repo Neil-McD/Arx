@@ -11,6 +11,8 @@ const productionFlyToml = read("services/polynet-codex-worker/fly.production.tom
 const stagingDeployScript = read("scripts/deploy_polynet_codex_worker_fly_staging.sh");
 const productionDeployScript = read("scripts/deploy_polynet_codex_worker_fly_production.sh");
 const productionGuard = read("scripts/polynet_codex_worker_production_guard.sh");
+const productionStaticAcceptance = read("scripts/polynet_codex_worker_production_static_acceptance_gate.sh");
+const productionAcceptance = read("scripts/polynet_codex_worker_production_acceptance_gate.sh");
 const packageJson = read("package.json");
 
 assert.match(
@@ -122,8 +124,28 @@ assert.match(
 );
 assert.match(
   packageJson,
-  /"check:polynet-codex-worker-production"[\s\S]*"check:polynet-codex-worker-fly-production-config"[\s\S]*"deploy:polynet-codex-worker-fly-production"/,
-  "package scripts must expose production guard, config proof, and deploy command",
+  /"check:polynet-codex-worker-production"[\s\S]*"check:polynet-codex-worker-production-static-acceptance"[\s\S]*"check:polynet-codex-worker-production-acceptance"[\s\S]*"check:polynet-codex-worker-fly-production-config"[\s\S]*"deploy:polynet-codex-worker-fly-production"/,
+  "package scripts must expose production guard, static acceptance, final live acceptance, config proof, and deploy command",
+);
+assert.match(
+  productionStaticAcceptance,
+  /production static acceptance[\s\S]*git diff --check[\s\S]*check:polynet-codex-worker-production[\s\S]*check:polynet-codex-worker-fly-production-config[\s\S]*check:polynet-codex-worker-convex-bridge-contract[\s\S]*preflight:workspace-provider-pointers:prod[\s\S]*preflight:workspace-included-credits:prod[\s\S]*check:web-typecheck[\s\S]*npm run --silent build[\s\S]*STATIC STAGES PASS/,
+  "static production acceptance must remain non-live and cover the static release proof set",
+);
+assert.doesNotMatch(
+  productionStaticAcceptance,
+  /check:polynet-codex-worker-fly-production-contract|POLYNET_PRODUCTION_ACCEPTANCE_REMOTE/,
+  "static production acceptance must not run or require the live Fly production proof",
+);
+assert.match(
+  productionAcceptance,
+  /POLYNET_PRODUCTION_ACCEPTANCE_REMOTE:-\}" != "true"[\s\S]*final production acceptance requires live remote proof[\s\S]*check:polynet-codex-worker-production-static-acceptance[\s\S]*check:polynet-codex-worker-fly-production-contract[\s\S]*ALL STATIC AND LIVE STAGES PASS/,
+  "final production acceptance must fail closed unless live remote proof is enabled, then run static plus live Fly proof",
+);
+assert.doesNotMatch(
+  productionAcceptance,
+  /remote stage skipped|STATIC STAGES PASS/,
+  "final production acceptance must not contain a passing path that skips live remote proof",
 );
 
 console.log("polynet_codex_worker_fly_production_config_proof: ok");
