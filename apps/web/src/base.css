@@ -28535,6 +28535,15 @@ button.message-citation-chip:hover {
   scrollbar-width: thin;
 }
 
+.workspace-right-panel__app-preview {
+  padding-top: 14px;
+}
+
+.workspace-right-panel__app-preview .workspace-app-preview-card {
+  width: 100%;
+  max-width: none;
+}
+
 .workspace-right-panel__grid {
   display: grid;
   gap: 12px;

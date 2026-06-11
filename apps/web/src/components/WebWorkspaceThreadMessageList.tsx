@@ -24,14 +24,32 @@ type WebWorkspaceThreadMessageListProps = {
   handleCopyMessage: (messageId: string, text: string) => Promise<void> | void;
   openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
   renderPreviewForRun: (runId: string | null) => ReactNode;
+  streamingRunId: string | null;
 };
 
 export function WebWorkspaceThreadMessageList(
   props: WebWorkspaceThreadMessageListProps,
 ) {
+  // A run can persist several assistant messages; the preview anchors only on
+  // the last one, and never while the streaming view still owns the run.
+  const previewAnchorMessageIdByRunId = new Map<string, string>();
+  for (const message of props.messages) {
+    if (message.role === "user") continue;
+    const runId = String(message.runId ?? "").trim();
+    if (!runId) continue;
+    previewAnchorMessageIdByRunId.set(runId, message.id);
+  }
+  const streamingRunId = String(props.streamingRunId ?? "").trim();
+
   const messageItems = props.messages.map((message) => {
     const isUser = message.role === "user";
     const contextPayload = message.contextPayload;
+    const messageRunId = String(message.runId ?? "").trim();
+    const isPreviewAnchor =
+      !isUser &&
+      messageRunId.length > 0 &&
+      messageRunId !== streamingRunId &&
+      previewAnchorMessageIdByRunId.get(messageRunId) === message.id;
 
     return (
       <div
@@ -111,7 +129,7 @@ export function WebWorkspaceThreadMessageList(
             ) : null}
           </MessageFooter>
         ) : null}
-        {!isUser ? props.renderPreviewForRun(message.runId) : null}
+        {isPreviewAnchor ? props.renderPreviewForRun(message.runId) : null}
         {!isUser && message.runtimeEvents.length > 0 ? (
           <RuntimeWebSources events={message.runtimeEvents} />
         ) : null}

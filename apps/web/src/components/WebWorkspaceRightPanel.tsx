@@ -1,4 +1,4 @@
-import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
+import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { OperatorCommunityRecord } from "../../../../shared/operatorTypes";
 import {
@@ -37,6 +37,7 @@ export function clampWorkspaceRightPanelWidth(width: number): number {
 
 export function WebWorkspaceRightPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
+  appPanelContent: ReactNode;
   workspaceFilesResetNonce: number;
   isCommunityRecentSignalsExpanded: boolean;
   insightTabs: WorkspaceRightPanelTabItem[];
@@ -132,6 +133,12 @@ export function WebWorkspaceRightPanel(props: {
             {...props.workspaceUserDataPanel}
             filesResetNonce={props.workspaceFilesResetNonce}
           />
+        ) : activeInsightTab === "app" ? (
+          <div className="workspace-right-panel__app-preview">
+            {props.appPanelContent ?? (
+              <div className="workspace-right-panel__notice">No app is running yet.</div>
+            )}
+          </div>
         ) : activeInsightTab === "community" ? (
           <CommunityPanelContent
             {...props.workspaceUserDataPanel}

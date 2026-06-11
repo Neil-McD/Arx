@@ -869,6 +869,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
         handleCopyMessage={props.handleCopyMessage}
         openMessageContextModal={props.openMessageContextModal}
         renderPreviewForRun={props.renderPreviewForRun}
+        streamingRunId={props.streamingMessageView?.runId ?? null}
       />
       <WebWorkspaceStreamingMessage
         view={props.streamingMessageView}
@@ -1344,16 +1345,34 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
+        showAppTab: activePreviewCapableTerminals.length > 0,
         showPartnerTab,
         showOperatorTabs,
         communityLabel: workspaceRightPanelCommunityLabel,
         mode: activeRightPanelMode,
       }),
-    [activeRightPanelMode, showOperatorTabs, showPartnerTab, workspaceRightPanelCommunityLabel],
+    [
+      activePreviewCapableTerminals.length,
+      activeRightPanelMode,
+      showOperatorTabs,
+      showPartnerTab,
+      workspaceRightPanelCommunityLabel,
+    ],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const isOperatorRightPanelTabActive =
     activeRightPanelMode === "operator" && isOperatorInsightTab(activeRightPanelTab);
+  const hadPreviewCapableTerminalsRef = useRef(false);
+  useEffect(() => {
+    const hasPreviews = activePreviewCapableTerminals.length > 0;
+    const hadPreviews = hadPreviewCapableTerminalsRef.current;
+    hadPreviewCapableTerminalsRef.current = hasPreviews;
+    if (!hasPreviews || hadPreviews) return;
+    if (!isWorkspaceRightPanelVisible || activeRightPanelMode !== "user") return;
+    // Contextual jump when an app starts serving — intentionally not persisted
+    // as the user's tab preference.
+    setRequestedRightPanelTab("app");
+  }, [activePreviewCapableTerminals.length, activeRightPanelMode, isWorkspaceRightPanelVisible]);
   const handleWorkspaceRightPanelModeChange = useCallback(
     (mode: WorkspaceRightPanelMode) => {
       const nextMode = resolveWorkspaceRightPanelMode(mode, showOperatorTabs);
@@ -2262,6 +2281,24 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     }
   };
 
+  const workspaceRightPanelAppContent =
+    activePreviewCapableTerminals.length > 0 ? (
+      <WebWorkspaceAppPreview
+        terminals={activePreviewCapableTerminals}
+        previewStateByTerminalId={previewStateByTerminalId}
+        busyTerminalIds={busyWorkspaceTerminalIds}
+        mode="inline"
+        allowExpand={isDesktopViewport}
+        onEnsurePreview={handleEnsurePreview}
+        onExpandPreview={handleExpandPreview}
+        onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+        onPreviewMetricsObservation={handlePreviewMetricsObservation}
+        onStopTerminal={(terminalSessionId) => {
+          void handleStopWorkspaceTerminal(terminalSessionId);
+        }}
+      />
+    ) : null;
+
   return (
     <>
       <div
@@ -2466,6 +2503,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebWorkspaceRightPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
+            appPanelContent={workspaceRightPanelAppContent}
             workspaceFilesResetNonce={workspaceFilesResetNonce}
             isCommunityRecentSignalsExpanded={isCommunityRecentSignalsExpanded}
             state={operatorData.state}
