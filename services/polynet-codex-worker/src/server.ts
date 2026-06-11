@@ -40,6 +40,7 @@ type ActiveTurn = {
   serve: WorkerIngestConfig | null;
   platformTools: WorkerPlatformToolSpec[];
   platformToolBridge: { url: string; token: string; context: JsonRecord } | null;
+  platformToolProbe: string | null;
   sandboxName: string;
   fallbackCommand: string;
   commandTimeoutSeconds: number;
@@ -337,6 +338,7 @@ export class PolynetCodexWorkerRuntime {
               context: params.ingest.context,
             }
           : null,
+      platformToolProbe: params.platformToolProbe,
       sandboxName: params.sandboxName,
       fallbackCommand: params.command,
       commandTimeoutSeconds: params.commandTimeoutSeconds,
@@ -488,7 +490,9 @@ export class PolynetCodexWorkerRuntime {
                   name: tool.name,
                   description: tool.description,
                   inputSchema: tool.inputSchema,
-                  deferLoading: true,
+                  // Probe turns project eagerly: the probe asserts the call
+                  // rail, not deferred tool discovery.
+                  deferLoading: !activeTurn.platformToolProbe,
                 }))
               : []),
           ],

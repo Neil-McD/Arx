@@ -166,8 +166,8 @@ assert.match(
   );
   assert.match(
     worker,
-    /platformToolBridge[\s\S]*deferLoading: true/,
-    "worker must project platform tools as deferred polynet-namespace dynamic tools",
+    /platformToolBridge[\s\S]*deferLoading: !activeTurn\.platformToolProbe/,
+    "worker must project platform tools deferred (eager only for the probe rail proof)",
   );
   assert.match(
     worker,
