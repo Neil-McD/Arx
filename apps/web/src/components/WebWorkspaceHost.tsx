@@ -1319,6 +1319,23 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     }
     return latest ? [latest] : [];
   }, [activeWorkspaceTerminals]);
+  const [workspacePanelView, setWorkspacePanelView] = useState<"preview" | "workspace">("workspace");
+  const announcedPreviewTerminalIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    // The Workspace tab has two states: a live app takes over the panel once
+    // per terminal id (so an explicit "back" sticks across thread switches),
+    // and the panel falls back to the workspace state when the app dies.
+    const live = activePreviewCapableTerminals[0] ?? null;
+    if (!live) {
+      setWorkspacePanelView("workspace");
+      return;
+    }
+    if (announcedPreviewTerminalIdsRef.current.has(live.id)) return;
+    announcedPreviewTerminalIdsRef.current.add(live.id);
+    setWorkspacePanelView("preview");
+  }, [activePreviewCapableTerminals]);
+  const enterWorkspacePanelPreview = useCallback(() => setWorkspacePanelView("preview"), []);
+  const exitWorkspacePanelPreview = useCallback(() => setWorkspacePanelView("workspace"), []);
   const visibleBackgroundWorkspaceTerminals = useMemo(
     () =>
       activeWorkspaceTerminals.filter(
@@ -2277,22 +2294,42 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     }
   };
 
-  const workspaceRightPanelAppContent =
-    isWorkspaceRightPanelVisible && activePreviewCapableTerminals.length > 0 ? (
-      <WebWorkspaceAppPreview
-        terminals={activePreviewCapableTerminals}
-        previewStateByTerminalId={previewStateByTerminalId}
-        busyTerminalIds={busyWorkspaceTerminalIds}
-        mode="inline"
-        allowExpand={isDesktopViewport}
-        onEnsurePreview={handleEnsurePreview}
-        onExpandPreview={handleExpandPreview}
-        onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
-        onPreviewMetricsObservation={handlePreviewMetricsObservation}
-        onStopTerminal={(terminalSessionId) => {
-          void handleStopWorkspaceTerminal(terminalSessionId);
-        }}
-      />
+  const livePreviewTerminal = activePreviewCapableTerminals[0] ?? null;
+  const livePreviewSummary = livePreviewTerminal
+    ? {
+        label: livePreviewTerminal.preview_label?.trim() || livePreviewTerminal.command,
+        status: livePreviewTerminal.status,
+      }
+    : null;
+  const workspacePanelPreviewTakeover =
+    isWorkspaceRightPanelVisible && livePreviewTerminal ? (
+      <div className="workspace-panel-preview-takeover">
+        <button
+          type="button"
+          className="workspace-panel-preview-back"
+          onClick={exitWorkspacePanelPreview}
+          aria-label="Back to workspace"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          <span>Workspace</span>
+        </button>
+        <WebWorkspaceAppPreview
+          terminals={[livePreviewTerminal]}
+          previewStateByTerminalId={previewStateByTerminalId}
+          busyTerminalIds={busyWorkspaceTerminalIds}
+          mode="inline"
+          allowExpand={isDesktopViewport}
+          onEnsurePreview={handleEnsurePreview}
+          onExpandPreview={handleExpandPreview}
+          onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+          onPreviewMetricsObservation={handlePreviewMetricsObservation}
+          onStopTerminal={(terminalSessionId) => {
+            void handleStopWorkspaceTerminal(terminalSessionId);
+          }}
+        />
+      </div>
     ) : null;
 
   return (
@@ -2499,7 +2536,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebWorkspaceRightPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
-            appPanelContent={workspaceRightPanelAppContent}
+            workspacePanelView={workspacePanelView}
+            previewTakeoverContent={workspacePanelPreviewTakeover}
+            livePreviewSummary={livePreviewSummary}
+            onEnterPreviewView={enterWorkspacePanelPreview}
             workspaceFilesResetNonce={workspaceFilesResetNonce}
             isCommunityRecentSignalsExpanded={isCommunityRecentSignalsExpanded}
             state={operatorData.state}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronLeft,
@@ -676,7 +676,8 @@ function WorkspaceCommunityOperations(props: {
 
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   filesResetNonce?: number;
-  appPreviewContent?: ReactNode;
+  livePreviewSummary?: { label: string; status: string } | null;
+  onEnterPreviewView?: () => void;
 }) {
   const workspaceBillingActionLabel = props.isStartingWorkspaceCreditTopupCheckout
     ? "Opening"
@@ -1082,10 +1083,28 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         ) : null}
       </section>
 
-      {props.appPreviewContent ? (
+      {props.livePreviewSummary ? (
         <section className="workspace-app-preview-section">
-          <div className="workspace-app-preview-section__title">Preview</div>
-          {props.appPreviewContent}
+          <button
+            type="button"
+            className="workspace-preview-return-row"
+            onClick={props.onEnterPreviewView}
+          >
+            <span className="workspace-preview-return-row__title">Preview</span>
+            <span className="workspace-preview-return-row__meta">
+              {props.livePreviewSummary.label}
+              <span
+                className={`workspace-preview-return-row__status is-${props.livePreviewSummary.status}`}
+              >
+                {props.livePreviewSummary.status === "running" ? "Running" : props.livePreviewSummary.status}
+              </span>
+            </span>
+            <span className="workspace-preview-return-row__chevron" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </span>
+          </button>
         </section>
       ) : null}
 

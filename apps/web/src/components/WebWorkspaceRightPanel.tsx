@@ -37,7 +37,10 @@ export function clampWorkspaceRightPanelWidth(width: number): number {
 
 export function WebWorkspaceRightPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
-  appPanelContent: ReactNode;
+  workspacePanelView: "preview" | "workspace";
+  previewTakeoverContent: ReactNode;
+  livePreviewSummary: { label: string; status: string } | null;
+  onEnterPreviewView: () => void;
   workspaceFilesResetNonce: number;
   isCommunityRecentSignalsExpanded: boolean;
   insightTabs: WorkspaceRightPanelTabItem[];
@@ -67,6 +70,10 @@ export function WebWorkspaceRightPanel(props: {
   const modeSwitcherStyle = buildPlatformSwitcherStyle(WORKSPACE_RIGHT_PANEL_MODES.length, activeModeIndex);
   const insightTabSwitcherStyle = buildPlatformSwitcherStyle(props.insightTabs.length, activeInsightTabIndex);
   const isOperatorTabActive = isOperatorInsightTab(activeInsightTab);
+  const isWorkspacePreviewTakeoverActive =
+    activeInsightTab === "workspace" &&
+    props.workspacePanelView === "preview" &&
+    props.previewTakeoverContent != null;
 
   return (
     <>
@@ -123,17 +130,26 @@ export function WebWorkspaceRightPanel(props: {
         </div>
       </div>
 
-      <div className="workspace-right-panel__content">
+      <div
+        className={`workspace-right-panel__content${
+          isWorkspacePreviewTakeoverActive ? " workspace-right-panel__content--takeover" : ""
+        }`}
+      >
         {isOperatorTabActive && props.error ? <div className="workspace-right-panel__notice">{props.error}</div> : null}
         {isOperatorTabActive && props.isLoading ? (
           <div className="workspace-right-panel__notice">Loading operator data...</div>
         ) : null}
         {activeInsightTab === "workspace" ? (
-          <WorkspacePanelContent
-            {...props.workspaceUserDataPanel}
-            filesResetNonce={props.workspaceFilesResetNonce}
-            appPreviewContent={props.appPanelContent}
-          />
+          isWorkspacePreviewTakeoverActive ? (
+            props.previewTakeoverContent
+          ) : (
+            <WorkspacePanelContent
+              {...props.workspaceUserDataPanel}
+              filesResetNonce={props.workspaceFilesResetNonce}
+              livePreviewSummary={props.livePreviewSummary}
+              onEnterPreviewView={props.onEnterPreviewView}
+            />
+          )
         ) : activeInsightTab === "community" ? (
           <CommunityPanelContent
             {...props.workspaceUserDataPanel}
