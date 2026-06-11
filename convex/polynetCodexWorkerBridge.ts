@@ -221,6 +221,32 @@ export async function cancelPolynetCodexWorkerTurn(params: {
   }
 }
 
+export async function steerPolynetCodexWorkerTurn(params: {
+  runId: string;
+  machineId?: string | null;
+  text: string;
+}): Promise<{ ok: boolean; status: number }> {
+  const config = getPolynetCodexWorkerBridgeConfig();
+  if (!config.enabled || !config.baseUrl || !config.authToken) {
+    return { ok: false, status: 503 };
+  }
+  const machineId = String(params.machineId ?? "").trim();
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/codex/turn/steer`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.authToken}`,
+        "Content-Type": "application/json",
+        ...(machineId ? { "fly-force-instance-id": machineId } : {}),
+      },
+      body: JSON.stringify({ run_id: params.runId, text: params.text }),
+    });
+    return { ok: response.ok, status: response.status };
+  } catch {
+    return { ok: false, status: 502 };
+  }
+}
+
 export async function streamPolynetCodexWorkerTurn(params: {
   runId: string;
   prompt: string;

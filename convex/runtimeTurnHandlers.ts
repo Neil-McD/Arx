@@ -22,7 +22,6 @@ import {
 import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
 import {
   USER_CANCELLED_RUNTIME_CODE,
-  isRuntimeRunCancelled,
   isRuntimeRunCancelledError,
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
@@ -65,6 +64,7 @@ import {
   shouldUsePolynetCodexWorkerBridge,
   streamPolynetCodexWorkerTurn,
   cancelPolynetCodexWorkerTurn,
+  steerPolynetCodexWorkerTurn,
 } from "./polynetCodexWorkerBridge";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
@@ -1145,21 +1145,47 @@ export async function handleRuntimeTurnRequest(args: {
 
           let workerCancelFired = false;
           let workerMachineId: string | null = null;
+          let workerSteeredCount = 0;
+          let workerWatcherBusy = false;
           const workerCancelWatcher = setInterval(() => {
             void (async () => {
-              if (workerCancelFired) return;
+              if (workerCancelFired || workerWatcherBusy) return;
+              workerWatcherBusy = true;
               try {
-                const cancelled = await isRuntimeRunCancelled({
-                  ctx,
-                  ownerId: actor.dbUserId,
-                  runId,
-                });
-                if (!cancelled) return;
-                workerCancelFired = true;
-                clearInterval(workerCancelWatcher);
-                await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+                const row = (await ctx.runQuery(
+                  (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
+                  { ownerId: actor.dbUserId, runId },
+                )) as {
+                  status?: unknown;
+                  pendingUserSteering?: Array<{ text?: unknown }>;
+                } | null;
+                if (!row) return;
+                if (String(row.status ?? "") === "cancelled") {
+                  workerCancelFired = true;
+                  clearInterval(workerCancelWatcher);
+                  await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+                  return;
+                }
+                const steering = Array.isArray(row.pendingUserSteering)
+                  ? row.pendingUserSteering
+                  : [];
+                if (steering.length > workerSteeredCount) {
+                  const fresh = steering.slice(workerSteeredCount);
+                  workerSteeredCount = steering.length;
+                  for (const entry of fresh) {
+                    const text = String(entry?.text ?? "").trim();
+                    if (!text) continue;
+                    await steerPolynetCodexWorkerTurn({
+                      runId,
+                      machineId: workerMachineId,
+                      text,
+                    });
+                  }
+                }
               } catch {
                 // Best-effort watcher; the worker turn timeout is the backstop.
+              } finally {
+                workerWatcherBusy = false;
               }
             })();
           }, 3_000);

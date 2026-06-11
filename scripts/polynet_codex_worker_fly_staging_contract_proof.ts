@@ -195,6 +195,14 @@ async function assertCancelStopsTurn(params: {
   assert.equal(mismatch.status, 409, "cancel with unknown run id must 409");
   assert.equal(mismatch.body.code, "no_matching_turn", "cancel mismatch code");
 
+  const steerMismatch = await fetchJson(`${params.baseUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: pinnedHeaders(params),
+    body: JSON.stringify({ run_id: "not-a-real-run", text: "go faster" }),
+  });
+  assert.equal(steerMismatch.status, 409, "steer with unknown run id must 409");
+  assert.equal(steerMismatch.body.code, "no_matching_turn", "steer mismatch code");
+
   const cancelStartedAt = Date.now();
   const cancelled = await fetchJson(`${params.baseUrl}/v1/codex/turn/cancel`, {
     method: "POST",

@@ -242,6 +242,26 @@ export async function archiveCloudThreadRecord(params: {
   });
 }
 
+export async function steerCloudRuntimeRunByThreadKey(params: {
+  session: AuthSessionLike;
+  threadId: string;
+  runId?: string | null;
+  text: string;
+}): Promise<void> {
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
+  if (!bootstrapped) return;
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadId ?? "").trim();
+  const text = String(params.text ?? "").trim();
+  if (!threadKey || !text) return;
+  await client.mutation("threads:steerCloudRuntimeRunByThreadKey" as any, {
+    authSubject,
+    threadKey,
+    runId: String(params.runId ?? "").trim() || undefined,
+    text,
+  });
+}
+
 export async function cancelCloudRuntimeRunByThreadKey(params: {
   session: AuthSessionLike;
   threadId: string;

@@ -2320,6 +2320,57 @@ export const setCloudRuntimeRunContextSnapshotInternal = internalMutation({
   },
 });
 
+export const steerCloudRuntimeRunByThreadKey = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadKey: v.string(),
+    runId: v.optional(v.string()),
+    text: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const text = String(args.text ?? "").trim();
+    if (!text) return null;
+    const nowMs = args.nowMs ?? Date.now();
+    const threadKey = String(args.threadKey ?? "").trim();
+    if (!threadKey) throw new Error("thread_key_required");
+    const thread = await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId,
+      threadKey,
+    });
+    if (!thread) return null;
+    const explicitRunId = String(args.runId ?? "").trim();
+    const run = explicitRunId
+      ? await getRuntimeRunByOwnerRunId({
+          ctx,
+          ownerId,
+          runId: normalizeRunId(explicitRunId),
+        })
+      : await getRunningRuntimeRunByThread({
+          ctx,
+          threadId: thread._id,
+        });
+    if (!run) return null;
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
+    const existing = Array.isArray(run.pendingUserSteering)
+      ? run.pendingUserSteering
+      : [];
+    await ctx.db.patch(run._id, {
+      pendingUserSteering: [...existing, { text, receivedAt: nowMs }].slice(-8),
+      updatedAt: nowMs,
+    });
+    return (await ctx.db.get(run._id)) as RuntimeRunLike | null;
+  },
+});
+
 export const appendCloudRuntimeRunPendingSteeringInternal = internalMutation({
   args: {
     ownerId: v.id("users"),

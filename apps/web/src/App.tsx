@@ -494,6 +494,7 @@ import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunit
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
 import {
   markCloudThreadAgentAttentionSeen,
+  steerCloudRuntimeRunByThreadKey,
   uploadCloudThreadAttachmentFile,
 } from "../../../shared/cloudThreadsGateway";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
@@ -10379,6 +10380,28 @@ export default function App() {
     onStopStreamingTurn: () => {
       stopStreamingTurn(activeThreadId ?? undefined);
     },
+    onSteerStreamingTurn: (text: string) => {
+      void (async () => {
+        const session = await ensureUsableAuthSession();
+        if (!session || !activeThreadId) return;
+        try {
+          await steerCloudRuntimeRunByThreadKey({
+            session,
+            threadId: activeThreadId,
+            runId: activeThreadStreamingRunId ?? undefined,
+            text,
+          });
+          showAppToastMessage("Steering the current turn");
+        } catch {
+          showAppToastMessage("Could not steer this turn");
+        }
+      })();
+    },
+    canSteerStreamingTurn:
+      String(
+        (activeThreadStreamingState as { meta?: { engine_id?: unknown } } | null)?.meta
+          ?.engine_id ?? "",
+      ) === "polynet_codex_worker",
     resolveWorkspaceSession: ensureUsableAuthSession,
     activeProjectId: currentWorkspaceProjectId,
     showAppToastMessage,

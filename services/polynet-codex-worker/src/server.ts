@@ -890,6 +890,41 @@ export class PolynetCodexWorkerRuntime {
     }
   }
 
+  async steerTurn(
+    runId: string,
+    text: string,
+  ): Promise<
+    | { ok: true; runId: string }
+    | { ok: false; code: "no_matching_turn" | "turn_not_ready" | "steer_failed" }
+  > {
+    const activeTurn = this.activeTurn;
+    const client = this.client;
+    if (!activeTurn || activeTurn.runId !== runId || !client) {
+      return { ok: false, code: "no_matching_turn" };
+    }
+    if (!activeTurn.codexThreadId || !activeTurn.turnId) {
+      return { ok: false, code: "turn_not_ready" };
+    }
+    this.emitRuntimeEvent("turn_steer_requested", {
+      text_preview: previewText(text, 200),
+    });
+    try {
+      await client.request("turn/steer", {
+        threadId: activeTurn.codexThreadId,
+        expectedTurnId: activeTurn.turnId,
+        input: [{ type: "text", text, text_elements: [] }],
+      });
+      this.emitRuntimeEvent("turn_steered", { ok: true });
+      return { ok: true, runId };
+    } catch (error) {
+      this.emitRuntimeEvent("turn_steered", {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return { ok: false, code: "steer_failed" };
+    }
+  }
+
   async cancelTurn(runId: string): Promise<
     | { ok: true; runId: string }
     | { ok: false; code: "no_matching_turn" }
@@ -1271,6 +1306,30 @@ export function createPolynetCodexWorkerServer(runtime: PolynetCodexWorkerRuntim
           return;
         }
         sendJson(res, 200, health);
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/v1/codex/turn/steer") {
+        if (!runtime.isAuthorizedBearer(readBearer(req))) {
+          sendJson(res, 401, {
+            ok: false,
+            code: "unauthorized",
+            message: "Missing or invalid bearer token.",
+          });
+          return;
+        }
+        const body = asRecord(await readJsonBody(req)) ?? {};
+        const runId = String(body.run_id ?? body.runId ?? "").trim();
+        const text = String(body.text ?? "").trim();
+        if (!runId || !text) {
+          sendJson(res, 400, { ok: false, code: "run_id_and_text_required" });
+          return;
+        }
+        const steered = await runtime.steerTurn(runId, text);
+        if (!steered.ok) {
+          sendJson(res, 409, { ok: false, code: steered.code, run_id: runId });
+          return;
+        }
+        sendJson(res, 200, { ok: true, run_id: runId });
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/codex/turn/cancel") {

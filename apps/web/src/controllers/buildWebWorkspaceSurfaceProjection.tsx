@@ -68,6 +68,8 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   setThreadMessages: Dispatch<SetStateAction<any[]>>;
   loadThreadMessages: WebWorkspaceHostProps["loadThreadMessages"];
   onSendMessage: WebWorkspaceHostProps["onSendMessage"];
+  onSteerStreamingTurn?: WebWorkspaceHostProps["onSteerStreamingTurn"];
+  canSteerStreamingTurn?: WebWorkspaceHostProps["canSteerStreamingTurn"];
   onStopStreamingTurn: () => void;
   resolveWorkspaceSession: () => Promise<unknown | null>;
   activeProjectId: string | null;
@@ -300,6 +302,8 @@ export function buildWebWorkspaceSurfaceProjection(
     setThreadMessages: params.setThreadMessages,
     loadThreadMessages: params.loadThreadMessages,
     onSendMessage: params.onSendMessage,
+    onSteerStreamingTurn: params.onSteerStreamingTurn,
+    canSteerStreamingTurn: params.canSteerStreamingTurn,
     onStopStreamingTurn: params.onStopStreamingTurn,
     resolveWorkspaceSession: params.resolveWorkspaceSession,
     activeProjectId: params.activeProjectId,

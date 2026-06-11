@@ -62,6 +62,16 @@ assert.match(
   "worker cancel must be pinned to the machine that reported the turn start",
 );
 assert.match(
+  handlers,
+  /pendingUserSteering[\s\S]*workerSteeredCount[\s\S]*steerPolynetCodexWorkerTurn\(\{[\s\S]*machineId: workerMachineId/,
+  "the stream watcher must deliver pending user steering to the turn's machine",
+);
+assert.match(
+  worker,
+  /turn\/steer[\s\S]*expectedTurnId: activeTurn\.turnId/,
+  "the worker must steer the active Codex turn with the expected-turn precondition",
+);
+assert.match(
   ingest,
   /POLYNET_CODEX_WORKER_AUTH_TOKEN[\s\S]*bearer !== expectedToken[\s\S]*401/,
   "ingest endpoint must reject requests without the shared worker bearer token",

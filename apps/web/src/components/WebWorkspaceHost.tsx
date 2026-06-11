@@ -372,6 +372,8 @@ export type WebWorkspaceHostProps = {
   setLoadingThreadMessagesThreadId: Dispatch<SetStateAction<string | null>>;
   setThreadMessages: Dispatch<SetStateAction<any[]>>;
   loadThreadMessages: (threadId: string, session: unknown) => Promise<void>;
+  onSteerStreamingTurn?: (text: string) => void;
+  canSteerStreamingTurn?: boolean;
   onSendMessage: (payload: {
     text: string;
     attachments: WorkspaceAttachmentView[];
@@ -743,6 +745,10 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   onWorkspaceAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
   onRemoveWorkspaceAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
+  onQueueMessage?: () => void;
+  onSteerMessage?: () => void;
+  canSteerStreamingTurn?: boolean;
+  queuedTurnText?: string | null;
   onSendLandingAction: (prompt: string) => void;
   onStopStreamingTurn: () => void;
   onWorkspaceVoiceClick: () => void;
@@ -1056,6 +1062,10 @@ function WorkspaceComposer(props: {
   onWorkspaceAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
   onRemoveWorkspaceAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
+  onQueueMessage?: () => void;
+  onSteerMessage?: () => void;
+  canSteerStreamingTurn?: boolean;
+  queuedTurnText?: string | null;
   onStopStreamingTurn: () => void;
   onStopTerminal: (terminalSessionId: string) => void;
   onStopAllTerminals: () => void;
@@ -1130,29 +1140,69 @@ function WorkspaceComposer(props: {
             title={props.workspaceVoiceTitle}
             onClick={props.onWorkspaceVoiceClick}
           />
-          <button
-            className="chat-send ask-send-btn ask-send-btn-v2"
-            type="button"
-            onClick={() => (props.isStreamingWorkspaceTurn ? props.onStopStreamingTurn() : props.onSendMessage())}
-            disabled={
-              props.isStreamingWorkspaceTurn
-                ? false
-                : props.isAuthRecoveringSignedIn ||
-                  props.isAccountGraphHydratingCritical ||
-                  props.isActiveWorkspaceThreadBusy ||
-                  (props.messageInput.trim().length === 0 && props.workspaceAttachments.length === 0)
-            }
-            aria-label={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
-            title={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              {props.isStreamingWorkspaceTurn ? (
-                <rect x="7" y="7" width="10" height="10" rx="2" />
-              ) : (
-                <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
-              )}
-            </svg>
-          </button>
+          {props.isStreamingWorkspaceTurn &&
+          (props.messageInput.trim().length > 0 || props.workspaceAttachments.length > 0) ? (
+            <>
+              {props.canSteerStreamingTurn && props.messageInput.trim().length > 0 ? (
+                <button
+                  className="chat-send ask-send-btn ask-send-btn-v2"
+                  type="button"
+                  onClick={props.onSteerMessage}
+                  aria-label="Steer this turn"
+                  title="Steer: guide the model mid-turn"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 12h10M10 7l5 5-5 5M18 5v14" />
+                  </svg>
+                </button>
+              ) : null}
+              <button
+                className="chat-send ask-send-btn ask-send-btn-v2"
+                type="button"
+                onClick={props.onQueueMessage}
+                aria-label="Queue for after this turn"
+                title="Queue: send when the current turn finishes"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M12 8.5V12l2.5 1.5" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <button
+              className="chat-send ask-send-btn ask-send-btn-v2"
+              type="button"
+              onClick={() => (props.isStreamingWorkspaceTurn ? props.onStopStreamingTurn() : props.onSendMessage())}
+              disabled={
+                props.isStreamingWorkspaceTurn
+                  ? false
+                  : props.isAuthRecoveringSignedIn ||
+                    props.isAccountGraphHydratingCritical ||
+                    props.isActiveWorkspaceThreadBusy ||
+                    (props.messageInput.trim().length === 0 && props.workspaceAttachments.length === 0)
+              }
+              aria-label={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
+              title={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                {props.isStreamingWorkspaceTurn ? (
+                  <rect x="7" y="7" width="10" height="10" rx="2" />
+                ) : (
+                  <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+                )}
+              </svg>
+            </button>
+          )}
+          {props.queuedTurnText ? (
+            <span
+              className="ask-queued-chip"
+              style={{ fontSize: 12, opacity: 0.7, alignSelf: "center", whiteSpace: "nowrap" }}
+              title={`Queued: ${props.queuedTurnText}`}
+            >
+              1 queued
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1412,6 +1462,58 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       workspaceFileInputRef.current.value = "";
     }
   }, []);
+
+  const queuedTurnRef = useRef<{
+    text: string;
+    attachments: typeof workspaceAttachments;
+  } | null>(null);
+  const [queuedTurnText, setQueuedTurnText] = useState<string | null>(null);
+  const stopRequestedDuringStreamRef = useRef(false);
+  const wasStreamingTurnRef = useRef(props.isStreamingWorkspaceTurn);
+
+  const queueMessageForNextTurn = useCallback(() => {
+    const text = messageInput.trim();
+    if (!text && workspaceAttachments.length === 0) return;
+    queuedTurnRef.current = { text: messageInput, attachments: workspaceAttachments };
+    setQueuedTurnText(text || "attachments");
+    clearComposer();
+  }, [messageInput, workspaceAttachments, clearComposer]);
+
+  const steerStreamingTurn = useCallback(() => {
+    const text = messageInput.trim();
+    if (!text || !props.onSteerStreamingTurn) return;
+    props.onSteerStreamingTurn(text);
+    clearComposer();
+  }, [messageInput, clearComposer, props]);
+
+  useEffect(() => {
+    const wasStreaming = wasStreamingTurnRef.current;
+    wasStreamingTurnRef.current = props.isStreamingWorkspaceTurn;
+    if (!wasStreaming || props.isStreamingWorkspaceTurn) return;
+    const queued = queuedTurnRef.current;
+    queuedTurnRef.current = null;
+    setQueuedTurnText(null);
+    if (!queued) {
+      stopRequestedDuringStreamRef.current = false;
+      return;
+    }
+    if (stopRequestedDuringStreamRef.current || props.threadErrorView) {
+      // The turn was stopped or failed: restore the draft instead of firing
+      // a queued message into a thread the user just intervened in.
+      stopRequestedDuringStreamRef.current = false;
+      setMessageInput((current) => (current.trim() ? current : queued.text));
+      setWorkspaceAttachments((current) =>
+        current.length > 0 ? current : queued.attachments,
+      );
+      return;
+    }
+    props.onSendMessage({
+      text: queued.text,
+      attachments: queued.attachments,
+      clearComposer: () => {},
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.isStreamingWorkspaceTurn]);
 
   const focusWorkspaceComposerSafely = useCallback((options?: { force?: boolean }) => {
     if (typeof window === "undefined" || typeof document === "undefined") return false;
@@ -2244,6 +2346,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                     clearComposer,
                   })
                 }
+                onQueueMessage={queueMessageForNextTurn}
+                onSteerMessage={steerStreamingTurn}
+                canSteerStreamingTurn={props.canSteerStreamingTurn === true}
+                queuedTurnText={queuedTurnText}
                 onSendLandingAction={(prompt) =>
                   props.onSendMessage({
                     text: prompt,
@@ -2251,7 +2357,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                     clearComposer,
                   })
                 }
-                onStopStreamingTurn={props.onStopStreamingTurn}
+                onStopStreamingTurn={() => { stopRequestedDuringStreamRef.current = true; props.onStopStreamingTurn(); }}
                 onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
                 guestSignupRail={props.guestSignupRail}
                 session={props.session}
@@ -2338,7 +2444,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 clearComposer,
               })
             }
-            onStopStreamingTurn={props.onStopStreamingTurn}
+            onStopStreamingTurn={() => { stopRequestedDuringStreamRef.current = true; props.onStopStreamingTurn(); }}
             onStopTerminal={(terminalSessionId) => {
               void handleStopWorkspaceTerminal(terminalSessionId);
             }}
