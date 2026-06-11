@@ -51,6 +51,13 @@ healthz) and the bridge pins `/v1/codex/turn/cancel` to that machine with the
 
 Scale the pool with `fly machine clone` / `fly machine destroy`; deploys
 update every machine in the app. Suspended machines cost rootfs storage only.
+Machines are shared-cpu-1x with 1024MB. The worker is a single-flight
+I/O-bound broker (inference and execution are remote): measured 142MB peak
+under a live turn. Fly only suspends machines at or below 2GB — larger sizes
+silently fall back to stopped (full cold boot + Codex login on wake, which is
+what the bridge's busy-retry ladder absorbs) — and smaller RAM images resume
+faster from suspend. v20 acceptance: remote multi-machine contract PASS at
+this size.
 Staging pool: 10 machines.
 
 Concurrency caps (Convex admission, `shared/polynetCodexWorkerLimits.ts`):
