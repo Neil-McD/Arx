@@ -1,4 +1,8 @@
 import type { RetrievalToolName } from "./retrievalTools";
+import {
+  WORKSPACE_PREVIEW_PORT_MAX,
+  WORKSPACE_PREVIEW_PORT_MIN,
+} from "./workspacePreviewPort";
 
 type JsonSchema =
   | {
@@ -594,8 +598,8 @@ const TERMINAL_START_TOOL_SCHEMA: JsonSchema = {
     },
     preview_port: {
       type: "integer",
-      minimum: 3000,
-      maximum: 9999,
+      minimum: WORKSPACE_PREVIEW_PORT_MIN,
+      maximum: WORKSPACE_PREVIEW_PORT_MAX,
     },
     preview_path: {
       type: "string",
@@ -1725,9 +1729,15 @@ export function normalizeToolArguments(
     const command = normalizeString(args.command);
     if (!command) throw new Error("terminal_start requires command.");
     const cwd = normalizeString(args.cwd);
-    const previewPort = normalizePositiveInteger(args.preview_port, "preview_port", 9999);
-    if (previewPort !== null && previewPort < 3000) {
-      throw new Error("preview_port must be between 3000 and 9999.");
+    const previewPort = normalizePositiveInteger(
+      args.preview_port,
+      "preview_port",
+      WORKSPACE_PREVIEW_PORT_MAX,
+    );
+    if (previewPort !== null && previewPort < WORKSPACE_PREVIEW_PORT_MIN) {
+      throw new Error(
+        `preview_port must be between ${WORKSPACE_PREVIEW_PORT_MIN} and ${WORKSPACE_PREVIEW_PORT_MAX}.`,
+      );
     }
     const previewPath = normalizeString(args.preview_path);
     if (previewPath && (previewPath.includes("://") || previewPath.startsWith("//"))) {

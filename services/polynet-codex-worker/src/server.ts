@@ -17,6 +17,10 @@ import {
   type BlaxelToolCallSummary,
 } from "./blaxelTool.ts";
 import { TimingCollector, elapsedMs, nowMs } from "./timing.ts";
+import {
+  formatWorkspacePreviewPortRange,
+  normalizeWorkspacePreviewPort,
+} from "../../../shared/workspacePreviewPort.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -1140,16 +1144,17 @@ export class PolynetCodexWorkerRuntime {
     }
     const args = asRecord(params.arguments) ?? {};
     const command = String(args.command ?? "").trim();
-    const portRaw = Number(args.port);
-    const port =
-      Number.isFinite(portRaw) && portRaw >= 1 && portRaw <= 65535
-        ? Math.floor(portRaw)
-        : null;
+    let port: number | null = null;
+    try {
+      port = normalizeWorkspacePreviewPort(args.port);
+    } catch {
+      port = null;
+    }
     if (!command || port === null) {
       respondTool(false, {
         ok: false,
         failureCode: "invalid_arguments",
-        failureMessage: "workspace_serve needs a command and a port between 1 and 65535.",
+        failureMessage: `workspace_serve needs a command and a port between ${formatWorkspacePreviewPortRange()}.`,
       });
       return;
     }

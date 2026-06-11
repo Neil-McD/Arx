@@ -8,6 +8,9 @@ import {
   parsePolynetCodexWorkerIngestContext,
 } from "./polynetCodexWorkerIngest";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
+import {
+  formatWorkspacePreviewPortRange,
+} from "../shared/workspacePreviewPort";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -100,13 +103,30 @@ export async function handlePolynetCodexWorkerTerminal(
     });
   }
 
-  const terminal = normalizeWorkspaceTerminalStartArgs({
-    command: String(body.command ?? ""),
-    cwd: body.cwd,
-    preview_port: body.port,
-    preview_path: body.path,
-    preview_label: body.label ?? "codex-serve",
-  });
+  let terminal: ReturnType<typeof normalizeWorkspaceTerminalStartArgs>;
+  try {
+    terminal = normalizeWorkspaceTerminalStartArgs({
+      command: String(body.command ?? ""),
+      cwd: body.cwd,
+      preview_port: body.port,
+      preview_path: body.path,
+      preview_label: body.label ?? "codex-serve",
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error ?? "");
+    if (errorMessage !== "invalid_preview_port") {
+      return json(400, {
+        ok: false,
+        code: "invalid_terminal_arguments",
+        message: "Terminal arguments are invalid.",
+      });
+    }
+    return json(400, {
+      ok: false,
+      code: "valid_port_required",
+      message: `port must be an integer between ${formatWorkspacePreviewPortRange()}.`,
+    });
+  }
   if (!terminal.command.trim()) {
     return json(400, { ok: false, code: "command_required" });
   }
@@ -114,7 +134,7 @@ export async function handlePolynetCodexWorkerTerminal(
     return json(400, {
       ok: false,
       code: "valid_port_required",
-      message: "port must be an integer between 1 and 65535.",
+      message: `port must be an integer between ${formatWorkspacePreviewPortRange()}.`,
     });
   }
 

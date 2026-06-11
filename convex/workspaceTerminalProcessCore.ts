@@ -7,6 +7,9 @@ import {
 } from "./blaxelWorkspaceComputerProvider.ts";
 import { BLAXEL_WORKSPACE_ROOT } from "./blaxelWorkspaceClient.ts";
 import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
+import {
+  normalizeWorkspacePreviewPort,
+} from "../shared/workspacePreviewPort";
 
 export type WorkspaceTerminalStatus =
   | "starting"
@@ -206,17 +209,7 @@ export function normalizeRelativeWorkspaceCwd(raw: unknown): string | null {
 }
 
 export function normalizePreviewPort(raw: unknown): number | null {
-  if (raw === undefined || raw === null || raw === "") return null;
-  const parsed =
-    typeof raw === "number"
-      ? raw
-      : typeof raw === "string"
-        ? Number(raw)
-        : Number.NaN;
-  if (!Number.isFinite(parsed)) throw new Error("invalid_preview_port");
-  const integer = Math.floor(parsed);
-  if (integer < 3000 || integer > 9999) throw new Error("invalid_preview_port");
-  return integer;
+  return normalizeWorkspacePreviewPort(raw);
 }
 
 export function normalizePreviewPath(raw: unknown): string | null {

@@ -4,6 +4,10 @@ import {
   ensureBlaxelWorkspaceComputer,
   executeBlaxelWorkspaceCommand,
 } from "../../../convex/blaxelWorkspaceComputerProvider.ts";
+import {
+  WORKSPACE_PREVIEW_PORT_MAX,
+  WORKSPACE_PREVIEW_PORT_MIN,
+} from "../../../shared/workspacePreviewPort.ts";
 import { elapsedMs, nowMs } from "./timing.ts";
 
 export type BlaxelToolCallSummary = {
@@ -93,7 +97,9 @@ export function buildWorkspaceServeDynamicToolSpec(): Record<string, unknown> {
         },
         port: {
           type: "integer",
-          description: "Port the server listens on.",
+          minimum: WORKSPACE_PREVIEW_PORT_MIN,
+          maximum: WORKSPACE_PREVIEW_PORT_MAX,
+          description: `Port the server listens on (${WORKSPACE_PREVIEW_PORT_MIN}-${WORKSPACE_PREVIEW_PORT_MAX}).`,
         },
       },
       required: ["command", "port"],

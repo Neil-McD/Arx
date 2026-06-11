@@ -10,7 +10,10 @@ const handlers = read("convex/runtimeTurnHandlers.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
 const disposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
 const terminal = read("convex/polynetCodexWorkerTerminal.ts");
+const terminalCore = read("convex/workspaceTerminalProcessCore.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
+const workerTool = read("services/polynet-codex-worker/src/blaxelTool.ts");
+const previewPort = read("shared/workspacePreviewPort.ts");
 const httpRoutes = read("convex/http.ts");
 const persistence = read("convex/runtimeTurnPersistence.ts");
 const attribution = read("shared/modelAttributionUi.ts");
@@ -230,6 +233,36 @@ assert.match(
   worker,
   /workspace_serve[\s\S]*workspace_preview_ready/,
   "worker must expose workspace_serve and emit the preview-ready event",
+);
+assert.match(
+  previewPort,
+  /WORKSPACE_PREVIEW_PORT_MIN = 3000[\s\S]*WORKSPACE_PREVIEW_PORT_MAX = 9999[\s\S]*normalizeWorkspacePreviewPort/,
+  "workspace preview ports must have one shared 3000-9999 normalization contract",
+);
+assert.match(
+  terminalCore,
+  /normalizePreviewPort[\s\S]*normalizeWorkspacePreviewPort/,
+  "Convex terminal core must use the shared preview port normalizer",
+);
+assert.match(
+  workerTool,
+  /workspace_serve[\s\S]*minimum: WORKSPACE_PREVIEW_PORT_MIN[\s\S]*maximum: WORKSPACE_PREVIEW_PORT_MAX/,
+  "worker workspace_serve schema must advertise the same preview port range as Convex",
+);
+assert.match(
+  worker,
+  /normalizeWorkspacePreviewPort\(args\.port\)[\s\S]*formatWorkspacePreviewPortRange\(\)/,
+  "worker workspace_serve runtime validation must use the shared preview port range",
+);
+assert.match(
+  terminal,
+  /formatWorkspacePreviewPortRange\(\)/,
+  "worker terminal bridge must report the shared preview port range on invalid ports",
+);
+assert.doesNotMatch(
+  `${worker}\n${terminal}\n${workerTool}`,
+  /65535/,
+  "worker serve and terminal bridge must not retain the old 1-65535 port contract",
 );
 assert.match(
   worker,
