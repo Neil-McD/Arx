@@ -1078,9 +1078,10 @@ function WorkspaceComposer(props: {
     props.isAccountGraphHydratingCritical ||
     props.isActiveWorkspaceThreadBusy ||
     props.isStreamingWorkspaceTurn;
+  // The input stays editable while a turn streams so the user can type the
+  // next message and queue/steer it; only the pre-stream submission gap locks.
   const disableComposerInput =
-    props.isActiveWorkspaceThreadBusy ||
-    props.isStreamingWorkspaceTurn;
+    props.isActiveWorkspaceThreadBusy && !props.isStreamingWorkspaceTurn;
   const composerPlaceholder = props.landing
     ? "Describe what you need help with..."
     : props.workspaceComposerPlaceholder;
@@ -1104,6 +1105,12 @@ function WorkspaceComposer(props: {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             if (props.isAuthRecoveringSignedIn || props.isAccountGraphHydratingCritical) return;
+            if (props.isStreamingWorkspaceTurn) {
+              if (props.messageInput.trim().length > 0 || props.workspaceAttachments.length > 0) {
+                props.onQueueMessage?.();
+              }
+              return;
+            }
             props.onSendMessage();
           }
         }}
@@ -1298,13 +1305,24 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       }),
     [props.activeThreadRuntimeEvents, props.activeThreadStreamingRunId, props.runtimeEventsByRunId],
   );
-  const activePreviewCapableTerminals = useMemo(
-    () =>
-      activeWorkspaceTerminals.filter(
-        (terminal) => isTerminalSnapshotStatusActive(terminal.status) && isPreviewCapableTerminal(terminal),
-      ),
-    [activeWorkspaceTerminals],
-  );
+  const activePreviewCapableTerminals = useMemo(() => {
+    const candidates = activeWorkspaceTerminals.filter(
+      (terminal) => isTerminalSnapshotStatusActive(terminal.status) && isPreviewCapableTerminal(terminal),
+    );
+    // Serve retries leave superseded rows still marked running; one preview per
+    // served app (keyed by cwd), latest start wins.
+    const latestByAppKey = new Map<string, WorkspaceTerminalRecord>();
+    for (const terminal of candidates) {
+      const appKey = terminal.cwd ?? terminal.command;
+      const current = latestByAppKey.get(appKey);
+      if (!current || terminal.started_at >= current.started_at) {
+        latestByAppKey.set(appKey, terminal);
+      }
+    }
+    return candidates.filter(
+      (terminal) => latestByAppKey.get(terminal.cwd ?? terminal.command)?.id === terminal.id,
+    );
+  }, [activeWorkspaceTerminals]);
   const visibleBackgroundWorkspaceTerminals = useMemo(
     () =>
       activeWorkspaceTerminals.filter(
@@ -1345,39 +1363,16 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
-        showAppTab: activePreviewCapableTerminals.length > 0,
         showPartnerTab,
         showOperatorTabs,
         communityLabel: workspaceRightPanelCommunityLabel,
         mode: activeRightPanelMode,
       }),
-    [
-      activePreviewCapableTerminals.length,
-      activeRightPanelMode,
-      showOperatorTabs,
-      showPartnerTab,
-      workspaceRightPanelCommunityLabel,
-    ],
+    [activeRightPanelMode, showOperatorTabs, showPartnerTab, workspaceRightPanelCommunityLabel],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const isOperatorRightPanelTabActive =
     activeRightPanelMode === "operator" && isOperatorInsightTab(activeRightPanelTab);
-  const announcedPreviewTerminalIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    // Auto-focus fires once per terminal id ("a new app started serving"),
-    // never on re-encounters — thread switches re-list the same ids and must
-    // not override the user's explicit tab choice. Ids are marked announced
-    // even while focus is suppressed so a later panel-open isn't ambushed.
-    const freshIds = activePreviewCapableTerminals
-      .map((terminal) => terminal.id)
-      .filter((id) => !announcedPreviewTerminalIdsRef.current.has(id));
-    for (const id of freshIds) announcedPreviewTerminalIdsRef.current.add(id);
-    if (freshIds.length === 0) return;
-    if (!isWorkspaceRightPanelVisible || activeRightPanelMode !== "user") return;
-    // Contextual jump when an app starts serving — intentionally not persisted
-    // as the user's tab preference.
-    setRequestedRightPanelTab("app");
-  }, [activePreviewCapableTerminals, activeRightPanelMode, isWorkspaceRightPanelVisible]);
   const handleWorkspaceRightPanelModeChange = useCallback(
     (mode: WorkspaceRightPanelMode) => {
       const nextMode = resolveWorkspaceRightPanelMode(mode, showOperatorTabs);

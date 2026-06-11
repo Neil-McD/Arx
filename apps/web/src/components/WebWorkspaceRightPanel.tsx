@@ -132,13 +132,8 @@ export function WebWorkspaceRightPanel(props: {
           <WorkspacePanelContent
             {...props.workspaceUserDataPanel}
             filesResetNonce={props.workspaceFilesResetNonce}
+            appPreviewContent={props.appPanelContent}
           />
-        ) : activeInsightTab === "app" ? (
-          <div className="workspace-right-panel__app-preview">
-            {props.appPanelContent ?? (
-              <div className="workspace-right-panel__notice">No app is running yet.</div>
-            )}
-          </div>
         ) : activeInsightTab === "community" ? (
           <CommunityPanelContent
             {...props.workspaceUserDataPanel}

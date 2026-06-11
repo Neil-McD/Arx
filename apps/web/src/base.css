@@ -28535,11 +28535,23 @@ button.message-citation-chip:hover {
   scrollbar-width: thin;
 }
 
-.workspace-right-panel__app-preview {
-  padding-top: 14px;
+.workspace-app-preview-section {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 0;
 }
 
-.workspace-right-panel__app-preview .workspace-app-preview-card {
+.workspace-app-preview-section__title {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.workspace-app-preview-section .workspace-app-preview-card {
   width: 100%;
   max-width: none;
 }

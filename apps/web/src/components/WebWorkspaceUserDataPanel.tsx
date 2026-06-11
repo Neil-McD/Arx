@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronLeft,
@@ -676,6 +676,7 @@ function WorkspaceCommunityOperations(props: {
 
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   filesResetNonce?: number;
+  appPreviewContent?: ReactNode;
 }) {
   const workspaceBillingActionLabel = props.isStartingWorkspaceCreditTopupCheckout
     ? "Opening"
@@ -1080,6 +1081,13 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           <p className="workspace-summary-note">{props.workspaceComputerStartError}</p>
         ) : null}
       </section>
+
+      {props.appPreviewContent ? (
+        <section className="workspace-app-preview-section">
+          <div className="workspace-app-preview-section__title">Preview</div>
+          {props.appPreviewContent}
+        </section>
+      ) : null}
 
       <section className="workspace-files-section">
         <button

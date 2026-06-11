@@ -1,5 +1,5 @@
 export type OperatorInsightTab = "platform" | "business" | "email" | "communities";
-export type WorkspaceRightPanelTab = "workspace" | "app" | "community" | "partner" | OperatorInsightTab;
+export type WorkspaceRightPanelTab = "workspace" | "community" | "partner" | OperatorInsightTab;
 export type WorkspaceRightPanelMode = "user" | "operator";
 
 export type WorkspaceRightPanelTabItem = {
@@ -26,7 +26,6 @@ const OPERATOR_INSIGHT_TABS: WorkspaceRightPanelTabItem[] = [
 
 export function parseWorkspaceRightPanelTab(value: string | null): WorkspaceRightPanelTab | null {
   return value === "workspace" ||
-    value === "app" ||
     value === "community" ||
     value === "partner" ||
     value === "platform" ||
@@ -57,7 +56,6 @@ export function resolveWorkspaceRightPanelMode(
 }
 
 export function buildWorkspaceRightPanelTabs(params: {
-  showAppTab: boolean;
   showPartnerTab: boolean;
   showOperatorTabs: boolean;
   communityLabel: string;
@@ -69,7 +67,6 @@ export function buildWorkspaceRightPanelTabs(params: {
   const communityLabel = params.communityLabel.trim() || "Polynet";
   return [
     { id: "workspace", label: "Workspace" },
-    ...(params.showAppTab ? [{ id: "app" as const, label: "App" }] : []),
     { id: "community", label: communityLabel },
     ...(params.showPartnerTab ? [{ id: "partner" as const, label: "Partner" }] : []),
   ];
