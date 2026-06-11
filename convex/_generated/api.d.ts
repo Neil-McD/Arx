@@ -156,6 +156,7 @@ import type * as runtimeTurnContext from "../runtimeTurnContext.js";
 import type * as runtimeTurnHandlers from "../runtimeTurnHandlers.js";
 import type * as runtimeTurnPersistence from "../runtimeTurnPersistence.js";
 import type * as runtimeTurnResolution from "../runtimeTurnResolution.js";
+import type * as runtimeWorkspaceSessionDisposal from "../runtimeWorkspaceSessionDisposal.js";
 import type * as settings from "../settings.js";
 import type * as skillCore from "../skillCore.js";
 import type * as skillPackages from "../skillPackages.js";
@@ -337,6 +338,7 @@ declare const fullApi: ApiFromModules<{
   runtimeTurnHandlers: typeof runtimeTurnHandlers;
   runtimeTurnPersistence: typeof runtimeTurnPersistence;
   runtimeTurnResolution: typeof runtimeTurnResolution;
+  runtimeWorkspaceSessionDisposal: typeof runtimeWorkspaceSessionDisposal;
   settings: typeof settings;
   skillCore: typeof skillCore;
   skillPackages: typeof skillPackages;

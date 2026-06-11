@@ -756,6 +756,10 @@ function testBlaxelRuntimeReservationAndSettlementAreWired() {
     join(process.cwd(), "convex/runtimeExecutionSession.ts"),
     "utf8",
   );
+  const runtimeDisposalSource = readFileSync(
+    join(process.cwd(), "convex/runtimeWorkspaceSessionDisposal.ts"),
+    "utf8",
+  );
   assert.match(blaxelWakeSource, /reserveCreditsInternal/);
   assert.match(blaxelWakeSource, /billing_mode: workspaceBillingMode/);
   assert.match(blaxelWakeSource, /allowUncollectedReservation: hasCardOnFile/);
@@ -790,12 +794,17 @@ function testBlaxelRuntimeReservationAndSettlementAreWired() {
   assert.doesNotMatch(runtimeSessionSource, /reuseExistingLease: true/);
   assert.match(runtimeSessionSource, /recordWorkspaceComputeChargeInternal/);
   assert.match(runtimeExecutionSource, /createProjectRuntimeWorkspaceSession\(\{\s*ctx:[\s\S]*runId: params\.runId/);
-  assert.match(runtimeExecutionSource, /settleRuntimeWorkspaceSession/);
+  assert.match(runtimeExecutionSource, /disposeRuntimeWorkspaceSession/);
+  assert.match(runtimeDisposalSource, /settleRuntimeWorkspaceSession/);
 }
 
 function testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth() {
   const runtimeExecutionSource = readFileSync(
     join(process.cwd(), "convex/runtimeExecutionSession.ts"),
+    "utf8",
+  );
+  const runtimeDisposalSource = readFileSync(
+    join(process.cwd(), "convex/runtimeWorkspaceSessionDisposal.ts"),
     "utf8",
   );
   const workspaceTerminalsSource = readFileSync(
@@ -807,8 +816,8 @@ function testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth() {
     "utf8",
   );
 
-  assert.doesNotMatch(runtimeExecutionSource, /workspaceSessionStartedPersistentTerminal/);
-  assert.doesNotMatch(runtimeExecutionSource, /no_terminal_started/);
+  assert.doesNotMatch(runtimeDisposalSource, /workspaceSessionStartedPersistentTerminal/);
+  assert.doesNotMatch(runtimeDisposalSource, /no_terminal_started/);
   assert.match(
     runtimeExecutionSource,
     /terminal_read[\s\S]*readWorkspaceTerminalProcess/,
@@ -820,13 +829,16 @@ function testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth() {
     "later turns can write to an existing terminal without starting one",
   );
 
-  const decisionStart = runtimeExecutionSource.indexOf(
-    "const resolveWorkspaceSessionAccountingReleaseDecision",
+  const decisionStart = runtimeDisposalSource.indexOf(
+    "export async function resolveWorkspaceSessionAccountingReleaseDecision",
   );
   assert.ok(decisionStart >= 0, "runtime release decision helper must exist");
-  const decisionEnd = runtimeExecutionSource.indexOf("\n  return {", decisionStart);
+  const decisionEnd = runtimeDisposalSource.indexOf(
+    "\nexport async function disposeRuntimeWorkspaceSession",
+    decisionStart,
+  );
   assert.ok(decisionEnd > decisionStart, "runtime release decision helper must be bounded");
-  const decisionSource = runtimeExecutionSource.slice(decisionStart, decisionEnd);
+  const decisionSource = runtimeDisposalSource.slice(decisionStart, decisionEnd);
   assert.match(decisionSource, /refreshProjectSandboxActiveTerminalStatusInternal/);
   assert.match(decisionSource, /active_terminal_still_running/);
   assert.match(decisionSource, /no_active_terminal_remaining/);
@@ -837,15 +849,15 @@ function testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth() {
     "release decision must not depend on whether this turn started a terminal",
   );
 
-  const settlementIndex = runtimeExecutionSource.indexOf("settleRuntimeWorkspaceSession({");
-  const releaseDecisionIndex = runtimeExecutionSource.indexOf(
-    "await resolveWorkspaceSessionAccountingReleaseDecision(workspaceSession)",
+  const settlementIndex = runtimeDisposalSource.indexOf("settleRuntimeWorkspaceSession({");
+  const releaseDecisionIndex = runtimeDisposalSource.indexOf(
+    "await resolveWorkspaceSessionAccountingReleaseDecision({",
   );
-  const keptAliveIndex = runtimeExecutionSource.indexOf(
+  const keptAliveIndex = runtimeDisposalSource.indexOf(
     "workspace_session_accounting_kept_alive",
     releaseDecisionIndex,
   );
-  const releaseIndex = runtimeExecutionSource.indexOf(
+  const releaseIndex = runtimeDisposalSource.indexOf(
     "releaseRuntimeWorkspaceSessionAccountingIfCurrent({",
     settlementIndex,
   );

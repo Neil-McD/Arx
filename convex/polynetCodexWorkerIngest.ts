@@ -1,8 +1,8 @@
 import { internal } from "./_generated/api";
 import { buildRuntimeRunPersistenceHelpers } from "./httpRuntimeTurnState";
 import { persistRuntimeAssistantMessage } from "./runtimeTurnPersistence";
-import { settleRuntimeWorkspaceSession } from "./workspaceRuntimeSession";
-import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
+import { disposeRuntimeWorkspaceSession } from "./runtimeWorkspaceSessionDisposal";
+import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 
 type JsonRecord = Record<string, unknown>;
@@ -232,15 +232,17 @@ export async function handlePolynetCodexWorkerIngest(
         : {}),
   });
 
-  // Settle the workspace lease if the live path never did: the charge is
-  // idempotent by reservation key, so a double settle is a no-op.
+  // Dispose the workspace lease if the live path never did. Disposal is
+  // terminal-aware, so app-preview terminals keep accounting alive instead of
+  // getting prematurely settled by this durable backstop.
   let leaseSettled = false;
+  let leaseDisposalOutcome: string | null = null;
   const lease = asRecord(body.context && (body.context as JsonRecord).lease);
   const leaseReservationKey = String(lease?.credit_reservation_key ?? "").trim();
   const leaseStartedAt = Number(lease?.started_at);
   if (leaseReservationKey && Number.isFinite(leaseStartedAt)) {
     try {
-      const settled = await settleRuntimeWorkspaceSession({
+      const disposal = await disposeRuntimeWorkspaceSession({
         ctx,
         userId: context.owner_id,
         runId: context.run_id,
@@ -256,12 +258,16 @@ export async function handlePolynetCodexWorkerIngest(
           sandboxMemoryGiB: Number(lease?.sandbox_memory_gib) || 2,
           sandboxDiskGiB: Number(lease?.sandbox_disk_gib) || 8,
           lifecycleMode: "provider_standby",
-        } as any,
-        providerStandbyGraceSeconds: BLAXEL_AUTO_STANDBY_GRACE_SECONDS,
+        } satisfies RuntimeWorkspaceSession,
+        finalState: "released",
+        appendRunEvent,
+        source: "polynet_codex_worker_ingest",
       });
-      leaseSettled = settled.ok === true && settled.skipped !== true;
+      leaseDisposalOutcome = disposal.outcome;
+      leaseSettled = disposal.outcome === "settled";
     } catch {
       // Best effort: the reservation expiry remains the final backstop.
+      leaseDisposalOutcome = "disposal_failed";
     }
   }
 
@@ -271,5 +277,6 @@ export async function handlePolynetCodexWorkerIngest(
     events_appended: eventsAppended,
     assistant_persisted: assistantPersisted,
     lease_settled: leaseSettled,
+    lease_disposal_outcome: leaseDisposalOutcome,
   });
 }

@@ -70,11 +70,10 @@ import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryE
 import { logStructuredError } from "./errorLogging";
 import {
   createProjectRuntimeWorkspaceSession,
-  settleRuntimeWorkspaceSession,
   type RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession";
+import { disposeRuntimeWorkspaceSession } from "./runtimeWorkspaceSessionDisposal";
 import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames";
-import { BLAXEL_AUTO_STANDBY_GRACE_SECONDS } from "../shared/workspaceComputerProvider";
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
 import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
@@ -1326,28 +1325,18 @@ export async function handleRuntimeTurnRequest(args: {
 
           if (workerWorkspaceSession) {
             try {
-              const settled = await settleRuntimeWorkspaceSession({
+              await disposeRuntimeWorkspaceSession({
                 ctx,
                 userId: actor.dbUserId,
                 runId,
                 session: workerWorkspaceSession,
-                providerStandbyGraceSeconds: BLAXEL_AUTO_STANDBY_GRACE_SECONDS,
-              });
-              await streamAppendRunEvent({
-                eventType: "workspace_compute_settled",
-                eventKey: `${runId}:workspace_compute_settled:polynet_codex_worker`,
-                payload: {
-                  run_id: runId,
-                  ok: settled.ok,
-                  source: "polynet_codex_worker",
-                  credit_reservation_key: settled.creditReservationKey ?? null,
-                  credits_debited: settled.creditsDebited ?? null,
-                  duration_seconds: settled.durationSeconds ?? null,
-                  error: settled.ok ? null : settled.error,
-                },
+                projectId: runtimeProjectId,
+                finalState: "released",
+                appendRunEvent: streamAppendRunEvent,
+                source: "polynet_codex_worker",
               });
             } catch (error) {
-              logStructuredError("polynet_codex_worker_workspace_settle_failed", {
+              logStructuredError("polynet_codex_worker_workspace_dispose_failed", {
                 error,
                 run_id: runId,
               });

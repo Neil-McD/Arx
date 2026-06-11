@@ -10,14 +10,13 @@ import {
   writeWorkspaceTerminalProcessInput,
 } from "./workspaceTerminalProcessCore";
 import {
-  releaseBlaxelWorkspaceComputerIfIdle,
-} from "./blaxelWorkspaceComputerProvider.ts";
-import {
   createProjectRuntimeWorkspaceSession,
-  releaseRuntimeWorkspaceSessionAccountingIfCurrent,
-  settleRuntimeWorkspaceSession,
   type RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
+import {
+  disposeRuntimeWorkspaceSession,
+  persistRuntimeWorkspaceSessionState,
+} from "./runtimeWorkspaceSessionDisposal.ts";
 import {
   buildWorkspaceCreditBudgetSignal,
   isWorkspaceCreditBudgetExpired,
@@ -45,7 +44,6 @@ import {
 } from "../shared/runtimeToolPolicy";
 
 const WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
-const WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS = 3;
 const TERMINAL_TOOL_NAMES = new Set([
   "terminal_start",
   "terminal_read",
@@ -270,122 +268,6 @@ export function createPolyNetExecutionSession(params: {
     }
   };
 
-  const persistWorkspaceSessionState = async (paramsForPersist: {
-    state: "active" | "released" | "failed";
-    session: RuntimeWorkspaceSession;
-    projectId: string;
-    phase: "create" | "dispose";
-  }): Promise<{ ok: true } | { ok: false; attemptCount: number }> => {
-    let attemptCount = 0;
-    for (
-      let attempt = 1;
-      attempt <= WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS;
-      attempt += 1
-    ) {
-      attemptCount = attempt;
-      try {
-        await params.ctx.runMutation(
-          internal.threads.setCloudRuntimeRunWorkspaceSessionInternal as any,
-          {
-            ownerId: params.userId,
-            runId: params.runId,
-            state: paramsForPersist.state,
-            providerSandboxId: paramsForPersist.session.providerSandboxId,
-            toolboxProxyUrl: undefined,
-            region: undefined,
-          },
-        );
-        return { ok: true };
-      } catch (error) {
-        if (attempt >= WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS) {
-          const message =
-            error instanceof Error ? error.message : String(error ?? "");
-          await emitRunEvent(
-            "workspace_session_state_persist_failed",
-            {
-              run_id: params.runId,
-              sandbox_id: paramsForPersist.session.providerSandboxId,
-              project_id: paramsForPersist.projectId,
-              target_state: paramsForPersist.state,
-              phase: paramsForPersist.phase,
-              attempt_count: attemptCount,
-              error_message: message || null,
-            },
-            `${params.runId}:workspace_session_state_persist_failed:${paramsForPersist.phase}:${paramsForPersist.state}`,
-          );
-          return {
-            ok: false,
-            attemptCount,
-          };
-        }
-      }
-    }
-    return {
-      ok: false,
-      attemptCount,
-    };
-  };
-
-  const resolveWorkspaceSessionAccountingReleaseDecision = async (
-    session: RuntimeWorkspaceSession,
-  ): Promise<{
-    ok: boolean;
-    shouldRelease: boolean;
-    reason: string;
-    activeTerminalCount?: number;
-    checkedTerminalCount?: number;
-    refreshedTerminalCount?: number;
-    errorMessage?: string | null;
-  }> => {
-    try {
-      const activeTerminalStatus = await params.ctx.runAction(
-        internal.workspaceTerminals.refreshProjectSandboxActiveTerminalStatusInternal as any,
-        {
-          ownerId: params.userId,
-          projectId: session.projectId,
-          providerSandboxId: session.providerSandboxId,
-        },
-      ) as {
-        hasActiveTerminal?: boolean;
-        activeCount?: number;
-        checkedCount?: number;
-        refreshedCount?: number;
-      } | null;
-      const activeTerminalCount = Math.max(
-        0,
-        Number(activeTerminalStatus?.activeCount ?? 0) || 0,
-      );
-      const hasActiveTerminal =
-        activeTerminalStatus?.hasActiveTerminal === true ||
-        activeTerminalCount > 0;
-      return {
-        ok: true,
-        shouldRelease: !hasActiveTerminal,
-        reason: hasActiveTerminal
-          ? "active_terminal_still_running"
-          : "no_active_terminal_remaining",
-        activeTerminalCount,
-        checkedTerminalCount: Math.max(
-          0,
-          Number(activeTerminalStatus?.checkedCount ?? 0) || 0,
-        ),
-        refreshedTerminalCount: Math.max(
-          0,
-          Number(activeTerminalStatus?.refreshedCount ?? 0) || 0,
-        ),
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error ?? "");
-      return {
-        ok: false,
-        shouldRelease: false,
-        reason: "active_terminal_refresh_failed",
-        errorMessage,
-      };
-    }
-  };
-
   return {
     buildPromptSuffix(): string {
       return String(params.mountedPromptSuffix ?? "");
@@ -503,11 +385,15 @@ export function createPolyNetExecutionSession(params: {
         },
         `${params.runId}:workspace_session_adopted:project_background`,
       );
-      const persisted = await persistWorkspaceSessionState({
+      const persisted = await persistRuntimeWorkspaceSessionState({
+        ctx: params.ctx,
+        userId: params.userId,
+        runId: params.runId,
         state: "active",
         session: workspaceSession,
         projectId,
         phase: "create",
+        appendRunEvent: params.appendRunEvent,
       });
       if (!persisted.ok) {
         workspaceSessionFailure = {
@@ -558,130 +444,15 @@ export function createPolyNetExecutionSession(params: {
       const finalWorkspaceState: "released" | "failed" =
         workspaceSessionFailure ? "failed" : "released";
       if (workspaceSession) {
-        try {
-          await persistWorkspaceSessionState({
-            state: finalWorkspaceState,
-            session: workspaceSession,
-            projectId: String(
-              params.projectId ?? workspaceSession.projectId ?? "",
-            ).trim(),
-            phase: "dispose",
-          });
-        } catch {
-          // Persistence helper emits explicit runtime evidence for failure paths.
-        }
-        const releaseDecision =
-          await resolveWorkspaceSessionAccountingReleaseDecision(workspaceSession);
-        if (!releaseDecision.shouldRelease) {
-          await emitRunEvent(
-            "workspace_session_accounting_kept_alive",
-            {
-              run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
-              credit_reservation_key: workspaceSession.creditReservationKey ?? null,
-              reason: releaseDecision.reason,
-              active_terminal_count: releaseDecision.activeTerminalCount ?? null,
-              checked_terminal_count: releaseDecision.checkedTerminalCount ?? null,
-              refreshed_terminal_count: releaseDecision.refreshedTerminalCount ?? null,
-              error_message: releaseDecision.errorMessage ?? null,
-            },
-            `${params.runId}:workspace_session_accounting_kept_alive:${workspaceSession.creditReservationKey ?? "none"}`,
-          );
-          return;
-        }
-        const providerRelease = await releaseBlaxelWorkspaceComputerIfIdle({
-          sandboxName: workspaceSession.providerSandboxId,
-        });
-        if (!providerRelease.ok) {
-          await emitRunEvent(
-            "workspace_session_provider_release_failed",
-            {
-              run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
-              credit_reservation_key: workspaceSession.creditReservationKey ?? null,
-              code: providerRelease.code,
-              message: providerRelease.message,
-            },
-            `${params.runId}:workspace_session_provider_release_failed:${workspaceSession.creditReservationKey ?? "none"}`,
-          );
-          return;
-        }
-        const settlement = await settleRuntimeWorkspaceSession({
+        await disposeRuntimeWorkspaceSession({
           ctx: params.ctx,
           userId: params.userId,
           runId: params.runId,
           session: workspaceSession,
-          providerStandbyGraceSeconds: providerRelease.billableGraceSeconds,
-          providerReleaseReason: providerRelease.reason,
-          providerReleaseConfirmed: providerRelease.releaseConfirmed,
+          projectId: String(params.projectId ?? workspaceSession.projectId ?? "").trim(),
+          finalState: finalWorkspaceState,
+          appendRunEvent: params.appendRunEvent,
         });
-        if (settlement.ok && !settlement.skipped) {
-          await emitRunEvent(
-            "workspace_compute_charge_settled",
-            {
-              run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
-              credit_reservation_key: settlement.creditReservationKey ?? null,
-              credits_debited: settlement.creditsDebited ?? null,
-              compute_cost_usd: settlement.computeCostUsd ?? null,
-              duration_seconds: settlement.durationSeconds ?? null,
-              measured_duration_seconds: settlement.measuredDurationSeconds ?? null,
-              provider_standby_grace_seconds:
-                settlement.providerStandbyGraceSeconds ?? null,
-              provider_release_reason: providerRelease.reason,
-              provider_release_confirmed: providerRelease.releaseConfirmed,
-            },
-            `${params.runId}:workspace_compute_charge_settled:${settlement.creditReservationKey ?? "none"}`,
-          );
-          const released = await releaseRuntimeWorkspaceSessionAccountingIfCurrent({
-            ctx: params.ctx,
-            session: workspaceSession,
-          });
-          await emitRunEvent(
-            released.ok
-              ? "workspace_session_accounting_release_checked"
-              : "workspace_session_accounting_release_failed",
-            released.ok
-              ? {
-                  run_id: params.runId,
-                  sandbox_id: workspaceSession.providerSandboxId,
-                  project_id: workspaceSession.projectId,
-                  credit_reservation_key: settlement.creditReservationKey ?? null,
-                  released: released.released,
-                  reason: released.reason,
-                  release_decision_reason: releaseDecision.reason,
-                  active_terminal_count: releaseDecision.activeTerminalCount ?? null,
-                  checked_terminal_count: releaseDecision.checkedTerminalCount ?? null,
-                  refreshed_terminal_count: releaseDecision.refreshedTerminalCount ?? null,
-                }
-              : {
-                  run_id: params.runId,
-                  sandbox_id: workspaceSession.providerSandboxId,
-                  project_id: workspaceSession.projectId,
-                  credit_reservation_key: settlement.creditReservationKey ?? null,
-                  error_message: released.error,
-                },
-            `${params.runId}:workspace_session_accounting_release:${settlement.creditReservationKey ?? "none"}`,
-          );
-        } else if (!settlement.ok) {
-          await emitRunEvent(
-            "workspace_compute_charge_settlement_failed",
-            {
-              run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
-              credit_reservation_key: settlement.creditReservationKey,
-              credits_debited: settlement.creditsDebited,
-              compute_cost_usd: settlement.computeCostUsd,
-              duration_seconds: settlement.durationSeconds,
-              error_message: settlement.error,
-            },
-            `${params.runId}:workspace_compute_charge_settlement_failed:${settlement.creditReservationKey}`,
-          );
-        }
       }
     },
     buildProviderTools<TFixedToolName extends RetrievalToolName, TOpenAiTool, TResponsesTool>(params: {

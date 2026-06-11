@@ -8,6 +8,7 @@ function read(relativePath: string): string {
 const bridge = read("convex/polynetCodexWorkerBridge.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
+const disposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
 const terminal = read("convex/polynetCodexWorkerTerminal.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
 const httpRoutes = read("convex/http.ts");
@@ -97,9 +98,29 @@ assert.match(
   "ingest must validate the caller-supplied context against the real run record before writing",
 );
 assert.match(
+  disposal,
+  /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*workspace_session_accounting_kept_alive[\s\S]*settleRuntimeWorkspaceSession[\s\S]*releaseRuntimeWorkspaceSessionAccountingIfCurrent/,
+  "shared workspace disposal must refresh terminal truth, keep active-preview accounting alive, and only settle/release after terminal truth says release is safe",
+);
+assert.match(
+  handlers,
+  /disposeRuntimeWorkspaceSession\(\{[\s\S]*session: workerWorkspaceSession[\s\S]*source: "polynet_codex_worker"/,
+  "worker live path must dispose workspace leases through the shared terminal-aware disposal helper",
+);
+assert.match(
   ingest,
-  /settleRuntimeWorkspaceSession[\s\S]*credit_reservation_key[\s\S]*lease_settled/,
-  "ingest must settle the workspace lease so a dead live path cannot leave turns unbilled",
+  /credit_reservation_key[\s\S]*disposeRuntimeWorkspaceSession\(\{[\s\S]*source: "polynet_codex_worker_ingest"[\s\S]*leaseDisposalOutcome[\s\S]*lease_disposal_outcome/,
+  "ingest must use shared terminal-aware workspace disposal so a dead live path cannot underbill or stale-lock preview accounting",
+);
+assert.doesNotMatch(
+  handlers,
+  /settleRuntimeWorkspaceSession/,
+  "worker live path must not bypass shared terminal-aware workspace disposal with direct settlement",
+);
+assert.doesNotMatch(
+  ingest,
+  /settleRuntimeWorkspaceSession/,
+  "ingest must not bypass shared terminal-aware workspace disposal with direct settlement",
 );
 assert.match(
   handlers,

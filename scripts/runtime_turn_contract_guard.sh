@@ -13,6 +13,7 @@ RESOLUTION_FILE="convex/runtimeTurnResolution.ts"
 PERSISTENCE_FILE="convex/runtimeTurnPersistence.ts"
 THREADS_FILE="convex/threads.ts"
 EXECUTION_SESSION_FILE="convex/runtimeExecutionSession.ts"
+WORKSPACE_SESSION_DISPOSAL_FILE="convex/runtimeWorkspaceSessionDisposal.ts"
 SEND_FLOW_FILE="shared/useWebSendFlowController.ts"
 SCHEMA_FILE="convex/schema.ts"
 
@@ -42,6 +43,10 @@ if [[ ! -f "$THREADS_FILE" ]]; then
 fi
 if [[ ! -f "$EXECUTION_SESSION_FILE" ]]; then
   echo "FAIL: missing $EXECUTION_SESSION_FILE"
+  exit 1
+fi
+if [[ ! -f "$WORKSPACE_SESSION_DISPOSAL_FILE" ]]; then
+  echo "FAIL: missing $WORKSPACE_SESSION_DISPOSAL_FILE"
   exit 1
 fi
 if [[ ! -f "$SEND_FLOW_FILE" ]]; then
@@ -201,7 +206,7 @@ require_match_in_file "$THREADS_FILE" 'run\.workspaceProviderSandboxId' \
   "live desktop lookup reads runtime run sandbox id"
 require_match_in_file "$THREADS_FILE" 'run\.workspaceToolboxProxyUrl' \
   "live desktop lookup reads runtime run toolbox proxy url"
-require_match_in_file "$EXECUTION_SESSION_FILE" 'workspace_session_state_persist_failed' \
-  "execution session emits explicit session-state persistence failure evidence"
+require_match_in_file "$WORKSPACE_SESSION_DISPOSAL_FILE" 'workspace_session_state_persist_failed' \
+  "workspace session disposal emits explicit session-state persistence failure evidence"
 
 echo "PASS: runtime turn contract markers are present and hardened."

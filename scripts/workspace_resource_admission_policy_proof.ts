@@ -496,6 +496,7 @@ assert.match(
 
 const workspaceRuntimeSession = read("convex/workspaceRuntimeSession.ts");
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
+const runtimeWorkspaceSessionDisposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
 assert.match(
   workspaceRuntimeSession,
   /createBlaxelRuntimeWorkspaceSession[\s\S]*ensureBillableBlaxelWorkspaceComputer/,
@@ -527,27 +528,32 @@ assert.match(
   "terminal-backed runtime release decisions must refresh active terminal rows against Blaxel before reading terminal truth",
 );
 assert.match(
-  runtimeExecutionSession,
+  runtimeWorkspaceSessionDisposal,
   /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*active_terminal_still_running[\s\S]*no_active_terminal_remaining[\s\S]*active_terminal_refresh_failed/,
   "runtime dispose must always refresh terminal truth before deciding whether to release workspace accounting",
 );
 assert.doesNotMatch(
-  runtimeExecutionSession,
+  runtimeWorkspaceSessionDisposal,
   /no_terminal_started/,
   "runtime release decisions must not assume no active terminal just because this turn did not start one",
 );
 assert.match(
-  runtimeExecutionSession,
-  /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*if \(!releaseDecision\.shouldRelease\)[\s\S]*workspace_session_accounting_kept_alive[\s\S]*return;[\s\S]*settleRuntimeWorkspaceSession[\s\S]*releaseRuntimeWorkspaceSessionAccountingIfCurrent[\s\S]*workspace_session_accounting_release_checked/,
+  runtimeWorkspaceSessionDisposal,
+  /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*if \(!releaseDecision\.shouldRelease\)[\s\S]*workspace_session_accounting_kept_alive[\s\S]*outcome: "kept_alive"[\s\S]*settleRuntimeWorkspaceSession[\s\S]*releaseRuntimeWorkspaceSessionAccountingIfCurrent[\s\S]*workspace_session_accounting_release_checked/,
   "runtime dispose must keep active-terminal reservations alive before settlement, and only settle/release after terminal truth says release is safe",
 );
 assert.match(
-  runtimeExecutionSession,
+  runtimeWorkspaceSessionDisposal,
   /workspace_session_accounting_kept_alive[\s\S]*active_terminal_count[\s\S]*checked_terminal_count[\s\S]*refreshed_terminal_count[\s\S]*error_message/,
   "runtime dispose must keep workspace accounting alive only with refreshed active-terminal evidence or failed terminal-truth refresh",
 );
-assert.doesNotMatch(
+assert.match(
   runtimeExecutionSession,
+  /disposeRuntimeWorkspaceSession\(\{[\s\S]*session: workspaceSession[\s\S]*finalState: finalWorkspaceState/,
+  "native runtime dispose must use the shared terminal-aware workspace session disposal helper",
+);
+assert.doesNotMatch(
+  runtimeWorkspaceSessionDisposal,
   /workspaceSessionStartedPersistentTerminal|persistent_terminal_started/,
   "terminal_start alone must not be the reason to skip one-shot project accounting release",
 );

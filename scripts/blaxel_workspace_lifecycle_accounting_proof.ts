@@ -18,6 +18,7 @@ function assertOrdered(source: string, snippets: string[], message: string) {
 }
 
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
+const runtimeWorkspaceSessionDisposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
 const blaxelWorkspaceWake = read("convex/blaxelWorkspaceWake.ts");
 const workspaceTerminals = read("convex/workspaceTerminals.ts");
@@ -27,12 +28,12 @@ const sharedWorkspaceProvider = read("shared/workspaceComputerProvider.ts");
 const crons = read("convex/crons.ts");
 
 assertOrdered(
-  runtimeExecutionSession,
+  runtimeWorkspaceSessionDisposal,
   [
-    "await resolveWorkspaceSessionAccountingReleaseDecision(workspaceSession)",
+    "await resolveWorkspaceSessionAccountingReleaseDecision({",
     "if (!releaseDecision.shouldRelease)",
     "workspace_session_accounting_kept_alive",
-    "return;",
+    'outcome: "kept_alive"',
     "releaseBlaxelWorkspaceComputerIfIdle({",
     "workspace_session_provider_release_failed",
     "settleRuntimeWorkspaceSession({",
@@ -42,14 +43,19 @@ assertOrdered(
   "runtime dispose must keep terminal-backed workspace accounting alive and release provider before settlement",
 );
 assert.match(
-  runtimeExecutionSession,
+  runtimeWorkspaceSessionDisposal,
   /resolveWorkspaceSessionAccountingReleaseDecision[\s\S]*refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*active_terminal_still_running[\s\S]*no_active_terminal_remaining[\s\S]*active_terminal_refresh_failed/,
   "runtime dispose must refresh terminal truth and fail closed before releasing accounting",
 );
 assert.doesNotMatch(
-  runtimeExecutionSession,
+  runtimeWorkspaceSessionDisposal,
   /no_terminal_started|workspaceSessionStartedPersistentTerminal/,
   "runtime release cannot depend on whether the current turn started the terminal",
+);
+assert.match(
+  runtimeExecutionSession,
+  /disposeRuntimeWorkspaceSession\(\{[\s\S]*session: workspaceSession[\s\S]*finalState: finalWorkspaceState/,
+  "native runtime must delegate workspace disposal to the shared terminal-aware helper",
 );
 assert.match(
   workspaceRuntimeSession,
