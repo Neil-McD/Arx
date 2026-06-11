@@ -25993,56 +25993,6 @@ button.message-citation-chip:hover {
   will-change: transform;
 }
 
-.workspace-expanded-preview-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  padding: 12px 16px 8px;
-  display: flex;
-  box-sizing: border-box;
-}
-
-.workspace-expanded-preview-shell .workspace-app-preview-stack {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-}
-
-.workspace-expanded-preview-shell .workspace-app-preview-card {
-  width: 100%;
-  max-width: none;
-  min-height: 0;
-  flex: 1 1 auto;
-  margin: 0;
-  padding: 0;
-  gap: 14px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.workspace-expanded-preview-shell .workspace-app-preview-header {
-  padding: 10px 14px;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 18%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-workspace) 10%);
-  box-shadow:
-    0 10px 26px color-mix(in srgb, #000 12%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-.workspace-expanded-preview-shell .workspace-app-preview-frame-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: auto;
-  max-height: none;
-  aspect-ratio: auto;
-  border-radius: 20px;
-}
-
 .workspace-app-preview-frame {
   display: block;
   width: 100%;
@@ -28617,35 +28567,7 @@ button.message-citation-chip:hover {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
   padding-top: 4px;
-}
-
-.workspace-panel-preview-back {
-  width: fit-content;
-  min-height: 28px;
-  padding: 2px 8px 2px 4px;
-  border: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.workspace-panel-preview-back:hover {
-  color: var(--text-primary);
-}
-
-.workspace-panel-preview-back svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
 }
 
 .workspace-panel-preview-takeover .workspace-app-preview-stack {
@@ -28662,6 +28584,7 @@ button.message-citation-chip:hover {
   flex: 1 1 auto;
   margin: 0;
   padding: 0;
+  gap: 8px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -28674,6 +28597,70 @@ button.message-citation-chip:hover {
   height: auto;
   max-height: none;
   aspect-ratio: auto;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 28%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-workspace) 6%);
+}
+
+.workspace-app-preview-topbar {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.workspace-app-preview-back {
+  margin-left: -6px;
+}
+
+.workspace-app-preview-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary, #8a8f98);
+}
+
+.workspace-app-preview-dot.is-running {
+  background: var(--success, #3ecf8e);
+  animation: workspace-preview-dot-pulse 2.4s ease-in-out infinite;
+}
+
+.workspace-app-preview-dot.is-starting {
+  background: var(--warning, #f5a623);
+}
+
+.workspace-app-preview-dot.is-failed {
+  background: var(--danger, #e5484d);
+}
+
+@keyframes workspace-preview-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success, #3ecf8e) 38%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+.workspace-app-preview-topbar .workspace-app-preview-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.workspace-app-preview-topbar .workspace-app-preview-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .workspace-right-panel__grid {

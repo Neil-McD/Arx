@@ -5,6 +5,21 @@ import {
 } from "../../../../shared/workspaceTerminalsGateway";
 import { buildWorkspacePreviewProxyUrl } from "../lib/workspacePreviewProxy";
 
+function BackGlyph(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M15 18l-6-6 6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function StopGlyph(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -32,46 +47,15 @@ function RefreshGlyph(): JSX.Element {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path
-        d="M20 10 15 5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }
 
-function ExpandGlyph(): JSX.Element {
+function OpenInTabGlyph(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
-        d="M9 5H5v4M15 5h4v4M19 15v4h-4M5 15v4h4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function CollapseGlyph(): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M9 9 5 5M15 9l4-4M15 15l4 4M9 15l-4 4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M8 5H5v3M16 5h3v3M19 16v3h-3M5 16v3h3"
+        d="M14 5h5v5M19 5l-8 8M11 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
@@ -182,28 +166,22 @@ function getPreviewLoadingCopy(
   };
 }
 
-function buildWorkspaceAppPreviewUrl(
-  preview: WorkspaceTerminalPreview,
-  mode: "inline" | "expanded",
-): string {
+function buildWorkspaceAppPreviewUrl(preview: WorkspaceTerminalPreview): string {
   return buildWorkspacePreviewProxyUrl({
     previewProxyToken: preview.preview_proxy_token,
     previewPath: preview.preview_path,
     searchParams: {
-      polynet_preview: mode,
+      polynet_preview: "inline",
       polynet_preview_contract: "surface-v1",
     },
   });
 }
 
-function buildPreviewFrameUrl(
-  baseUrl: string,
-  mode: "inline" | "expanded",
-): string {
-  const url = new URL(baseUrl);
-  url.searchParams.set("polynet_preview", mode);
-  url.searchParams.set("polynet_preview_contract", "surface-v1");
-  return url.toString();
+function buildWorkspaceAppOpenInTabUrl(preview: WorkspaceTerminalPreview): string {
+  return buildWorkspacePreviewProxyUrl({
+    previewProxyToken: preview.preview_proxy_token,
+    previewPath: preview.preview_path,
+  });
 }
 
 function readPreviewDocumentMetrics(
@@ -309,13 +287,11 @@ function readPreviewDocumentMetrics(
 function PreviewFrame({
   previewUrl,
   title,
-  mode,
   onLifecyclePhaseChange,
   onMetricsObservation,
 }: {
   previewUrl: string;
   title: string;
-  mode: "inline" | "expanded";
   onLifecyclePhaseChange?: (phase: "loading" | "ready" | "error") => void;
   onMetricsObservation?: (metrics: WorkspacePreviewMetricsObservation) => void;
 }): JSX.Element {
@@ -333,7 +309,7 @@ function PreviewFrame({
 
   useEffect(() => {
     lifecycleCallbackRef.current?.("loading");
-  }, [previewUrl, mode]);
+  }, [previewUrl]);
 
   useEffect(() => {
     let previewOrigin = "";
@@ -372,11 +348,6 @@ function PreviewFrame({
     return () => window.removeEventListener("message", handleMessage);
   }, [previewUrl]);
 
-  const frameUrl = useMemo(
-    () => buildPreviewFrameUrl(previewUrl, mode),
-    [mode, previewUrl],
-  );
-
   return (
     <div
       className="workspace-app-preview-frame-shell"
@@ -387,7 +358,7 @@ function PreviewFrame({
           <iframe
             ref={iframeRef}
             className="workspace-app-preview-frame"
-            src={frameUrl}
+            src={previewUrl}
             title={title}
             loading="eager"
             referrerPolicy="no-referrer"
@@ -421,11 +392,7 @@ export function WebWorkspaceAppPreview(props: {
     metrics: WorkspacePreviewMetricsObservation;
   }) => void;
   onStopTerminal: (terminalSessionId: string) => void;
-  mode?: "inline" | "expanded";
-  expandedTerminalId?: string | null;
-  allowExpand?: boolean;
-  onExpandPreview?: (terminalSessionId: string) => void;
-  onCollapsePreview?: () => void;
+  onBack?: () => void;
 }): JSX.Element | null {
   const previewTerminals = useMemo(
     () =>
@@ -434,8 +401,6 @@ export function WebWorkspaceAppPreview(props: {
       ),
     [props.terminals],
   );
-  const mode = props.mode ?? "inline";
-  const allowExpand = props.allowExpand ?? true;
   const busySet = useMemo(() => new Set(props.busyTerminalIds ?? []), [props.busyTerminalIds]);
 
   const { previewStateByTerminalId, onEnsurePreview } = props;
@@ -452,19 +417,9 @@ export function WebWorkspaceAppPreview(props: {
 
   if (previewTerminals.length === 0) return null;
 
-  const visibleTerminals =
-    mode === "expanded"
-      ? previewTerminals.filter((terminal) => terminal.id === props.expandedTerminalId)
-      : previewTerminals;
-
-  if (visibleTerminals.length === 0) return null;
-
   return (
-    <section
-      className={`workspace-app-preview-stack${mode === "expanded" ? " expanded-mode" : ""}`}
-      aria-label="Running apps"
-    >
-      {visibleTerminals.map((terminal) => {
+    <section className="workspace-app-preview-stack" aria-label="Running apps">
+      {previewTerminals.map((terminal) => {
         const state = props.previewStateByTerminalId[terminal.id] ?? {
           phase: "idle",
           preview: null,
@@ -472,16 +427,29 @@ export function WebWorkspaceAppPreview(props: {
         };
         const isBusy = busySet.has(terminal.id);
         const canAttachPreview = isRetryablePreviewStatus(terminal.status);
-        const previewUrl = state.preview ? buildWorkspaceAppPreviewUrl(state.preview, mode) : null;
+        const previewUrl = state.preview ? buildWorkspaceAppPreviewUrl(state.preview) : null;
+        const openInTabUrl = state.preview ? buildWorkspaceAppOpenInTabUrl(state.preview) : null;
         return (
-          <article key={terminal.id} className={`workspace-app-preview-card${mode === "expanded" ? " expanded" : ""}`}>
-            <div className="workspace-app-preview-header">
-              <div className="workspace-app-preview-title-row">
-                <div className="workspace-app-preview-title">{formatPreviewLabel(terminal)}</div>
-                <span className={`workspace-app-preview-status ${terminal.status}`}>
-                  {formatTerminalStatus(terminal.status)}
-                </span>
-              </div>
+          <article key={terminal.id} className="workspace-app-preview-card">
+            <div className="workspace-app-preview-topbar">
+              {props.onBack ? (
+                <button
+                  type="button"
+                  className="workspace-app-preview-button icon-only workspace-app-preview-back"
+                  onClick={props.onBack}
+                  aria-label="Back to workspace"
+                  title="Back to workspace"
+                >
+                  <BackGlyph />
+                </button>
+              ) : null}
+              <span
+                className={`workspace-app-preview-dot is-${terminal.status}`}
+                role="status"
+                aria-label={formatTerminalStatus(terminal.status)}
+                title={formatTerminalStatus(terminal.status)}
+              />
+              <div className="workspace-app-preview-title">{formatPreviewLabel(terminal)}</div>
               <div className="workspace-app-preview-actions">
                 <button
                   type="button"
@@ -499,25 +467,17 @@ export function WebWorkspaceAppPreview(props: {
                 >
                   <RefreshGlyph />
                 </button>
-                {mode === "expanded" ? (
+                {openInTabUrl ? (
                   <button
                     type="button"
                     className="workspace-app-preview-button icon-only"
-                    onClick={props.onCollapsePreview}
-                    aria-label="Collapse preview"
-                    title="Back to thread"
+                    onClick={() => {
+                      window.open(openInTabUrl, "_blank", "noopener,noreferrer");
+                    }}
+                    aria-label="Open app in new tab"
+                    title="Open in new tab"
                   >
-                    <CollapseGlyph />
-                  </button>
-                ) : allowExpand ? (
-                  <button
-                    type="button"
-                    className="workspace-app-preview-button icon-only"
-                    onClick={() => props.onExpandPreview?.(terminal.id)}
-                    aria-label="Expand preview"
-                    title="Expand"
-                  >
-                    <ExpandGlyph />
+                    <OpenInTabGlyph />
                   </button>
                 ) : null}
                 {canAttachPreview ? (
@@ -538,7 +498,6 @@ export function WebWorkspaceAppPreview(props: {
               <PreviewFrame
                 previewUrl={previewUrl}
                 title={formatPreviewLabel(terminal)}
-                mode={mode}
                 onLifecyclePhaseChange={(phase) => {
                   props.onPreviewLifecyclePhaseChange?.({ terminal, phase });
                 }}

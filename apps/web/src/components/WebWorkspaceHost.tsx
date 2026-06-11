@@ -1265,7 +1265,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [activeWorkspaceTerminals, setActiveWorkspaceTerminals] = useState<WorkspaceTerminalRecord[]>([]);
   const [busyWorkspaceTerminalIds, setBusyWorkspaceTerminalIds] = useState<string[]>([]);
   const [isStoppingAllWorkspaceTerminals, setIsStoppingAllWorkspaceTerminals] = useState(false);
-  const [expandedPreviewTerminalId, setExpandedPreviewTerminalId] = useState<string | null>(null);
   const [previewStateByTerminalId, setPreviewStateByTerminalId] = useState<Record<string, WorkspacePreviewLifecycleState>>({});
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
@@ -1287,8 +1286,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   );
   const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const wasWorkspaceRightPanelVisibleRef = useRef(false);
-  const savedThreadScrollTopRef = useRef<number | null>(null);
-  const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
   const inflightPreviewIdsRef = useRef<Set<string>>(new Set());
   const lastPreviewObservationSignatureRef = useRef<Map<string, string>>(new Map());
@@ -2190,50 +2187,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     });
   }, [recordPreviewObservation]);
 
-  const expandedPreviewTerminal = useMemo(() => {
-    if (!expandedPreviewTerminalId || !isDesktopViewport) return null;
-    return (
-      activePreviewCapableTerminals.find((terminal) => terminal.id === expandedPreviewTerminalId) ?? null
-    );
-  }, [activePreviewCapableTerminals, expandedPreviewTerminalId, isDesktopViewport]);
-
-  const handleExpandPreview = useCallback(
-    (terminalSessionId: string) => {
-      if (!isDesktopViewport) return;
-      savedThreadScrollTopRef.current = workspaceMessageListRef.current?.scrollTop ?? 0;
-      setExpandedPreviewTerminalId(terminalSessionId);
-    },
-    [isDesktopViewport],
-  );
-
-  const handleCollapsePreview = useCallback(() => {
-    pendingRestoreThreadScrollTopRef.current = savedThreadScrollTopRef.current;
-    setExpandedPreviewTerminalId(null);
-  }, []);
-
-  useEffect(() => {
-    if (!expandedPreviewTerminalId) return;
-    if (!isDesktopViewport || !expandedPreviewTerminal) {
-      pendingRestoreThreadScrollTopRef.current = savedThreadScrollTopRef.current;
-      setExpandedPreviewTerminalId(null);
-    }
-  }, [expandedPreviewTerminal, expandedPreviewTerminalId, isDesktopViewport]);
-
-  useLayoutEffect(() => {
-    if (expandedPreviewTerminalId !== null) return;
-    const nextScrollTop = pendingRestoreThreadScrollTopRef.current;
-    if (nextScrollTop == null) return;
-    const el = workspaceMessageListRef.current;
-    if (!el) return;
-    el.scrollTop = nextScrollTop;
-    const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= 24;
-    workspacePinnedToBottomRef.current = atBottom;
-    setIsWorkspaceAtBottom(atBottom);
-    pendingRestoreThreadScrollTopRef.current = null;
-  }, [expandedPreviewTerminalId]);
-
-  const isDesktopExpandedPreview = isDesktopViewport && expandedPreviewTerminal !== null;
-
   const resizeWorkspaceRightPanelFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     setWorkspaceRightPanelWidth(clampWorkspaceRightPanelWidth(window.innerWidth - event.clientX));
   };
@@ -2264,30 +2217,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const workspacePanelPreviewTakeover =
     isWorkspaceRightPanelVisible && livePreviewTerminal ? (
       <div className="workspace-panel-preview-takeover">
-        <button
-          type="button"
-          className="workspace-panel-preview-back"
-          onClick={exitWorkspacePanelPreview}
-          aria-label="Back to workspace"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          <span>Workspace</span>
-        </button>
         <WebWorkspaceAppPreview
           terminals={[livePreviewTerminal]}
           previewStateByTerminalId={previewStateByTerminalId}
           busyTerminalIds={busyWorkspaceTerminalIds}
-          mode="inline"
-          allowExpand={isDesktopViewport}
           onEnsurePreview={handleEnsurePreview}
-          onExpandPreview={handleExpandPreview}
           onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
           onPreviewMetricsObservation={handlePreviewMetricsObservation}
           onStopTerminal={(terminalSessionId) => {
             void handleStopWorkspaceTerminal(terminalSessionId);
           }}
+          onBack={exitWorkspacePanelPreview}
         />
       </div>
     ) : null;
@@ -2295,7 +2235,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   return (
     <>
       <div
-        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
+        className={`workspace-body workspace-attachment-drop-surface${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
         style={workspaceRightPanelStyle}
         onPointerDown={handleWorkspaceInertPointerDown}
         onDrop={handleWorkspaceAttachmentDrop}
@@ -2314,25 +2254,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         ) : null}
         {props.inferenceToast ? <div className="memory-toast success-toast">{props.inferenceToast}</div> : null}
         {props.memoryToast ? <div className="memory-toast success-toast">{props.memoryToast}</div> : null}
-        {isDesktopExpandedPreview ? (
-          <div className="workspace-expanded-preview-shell">
-            <WebWorkspaceAppPreview
-              terminals={[expandedPreviewTerminal]}
-              previewStateByTerminalId={previewStateByTerminalId}
-              busyTerminalIds={busyWorkspaceTerminalIds}
-              mode="expanded"
-              expandedTerminalId={expandedPreviewTerminal.id}
-              allowExpand={false}
-              onEnsurePreview={handleEnsurePreview}
-              onCollapsePreview={handleCollapsePreview}
-              onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
-              onPreviewMetricsObservation={handlePreviewMetricsObservation}
-              onStopTerminal={(terminalSessionId) => {
-                void handleStopWorkspaceTerminal(terminalSessionId);
-              }}
-            />
-          </div>
-        ) : (
+        {(
           <div
             className={`message-list${props.isEmptyWorkspaceThread ? " message-list-empty-thread" : ""}`}
             ref={workspaceMessageListRef}
@@ -2405,7 +2327,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             </div>
           </div>
         )}
-        {!isDesktopExpandedPreview && !isWorkspaceAtBottom ? (
+        {!isWorkspaceAtBottom ? (
           <button
             className="scroll-to-bottom workspace"
             type="button"
@@ -2428,7 +2350,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       </div>
       {!props.isEmptyWorkspaceThread ? (
         <div
-          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
+          className={`workspace-composer-shell workspace-attachment-drop-surface${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
           style={workspaceRightPanelStyle}
           onPointerDown={handleWorkspaceInertPointerDown}
           onDrop={handleWorkspaceAttachmentDrop}
@@ -2481,7 +2403,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
               void handleStopAllWorkspaceTerminals();
             }}
             onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
-            showTerminalRail={!isDesktopExpandedPreview}
           />
         </div>
       ) : null}
