@@ -280,6 +280,104 @@ async function assertPoolServesConcurrentTurns(params: {
   );
 }
 
+// Positive live proof for the platform-tool rail: a probe turn forces a
+// polynet tool call. The forged context cannot pass run validation, so the
+// expected END STATE is the endpoint's invalid_run refusal — which proves the
+// whole chain live: spec projection, namespace routing, worker relay,
+// endpoint auth, and run validation, with platform_tool_requested/finished
+// events emitted on the way.
+async function assertPlatformToolProbe(params: {
+  baseUrl: string;
+  authToken: string;
+}): Promise<void> {
+  const ingestUrl = readEnv("POLYNET_CODEX_WORKER_INGEST_URL");
+  if (!ingestUrl) return;
+  const toolUrl = ingestUrl.replace(
+    "/runtime/polynet_codex_worker_ingest",
+    "/runtime/polynet_codex_worker_tool",
+  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 450_000);
+  try {
+    const response = await fetch(`${params.baseUrl}/v1/codex/probe?stream=1`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        run_id: `polynet-worker-fly-tool-proof-${randomUUID().slice(0, 8)}`,
+        stream: true,
+        destroy_after_run: true,
+        platform_tool_probe: "search_product_docs",
+        platform_tools: [
+          {
+            name: "search_product_docs",
+            description: "Search PolyNet product documentation.",
+            input_schema: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"],
+              additionalProperties: false,
+            },
+          },
+        ],
+        ingest: {
+          url: ingestUrl,
+          token: params.authToken,
+          tool_url: toolUrl,
+          context: {
+            owner_id: "jx70000000000000000000000000000f",
+            thread_id: "jd70000000000000000000000000000f",
+            run_id: `forged-tool-probe-${randomUUID()}`,
+            assistant_message_key: "tool-probe",
+            model_id: "probe",
+            lane: "chatgpt",
+            inference_source: "byok_chatgpt",
+          },
+        },
+      }),
+      signal: controller.signal,
+    });
+    assert.equal(response.status, 200, `platform tool probe status must be 200, got ${response.status}`);
+    const events = await readSseEvents(response);
+    const finalized = events.find((event) => event.event === "run_finalized");
+    assert.ok(finalized, "platform tool probe must finalize");
+    assert.equal(
+      finalized.data.ok,
+      true,
+      `platform tool probe proof must pass: ${JSON.stringify(finalized.data)}`,
+    );
+    const eventTypes = runtimeEventTypes(events);
+    assert.ok(
+      eventTypes.includes("platform_tool_requested"),
+      "platform tool probe must emit platform_tool_requested",
+    );
+    assert.ok(
+      eventTypes.includes("platform_tool_finished"),
+      "platform tool probe must emit platform_tool_finished",
+    );
+    const finishedEvent = events.find(
+      (event) =>
+        event.event === "runtime_event" &&
+        String(asRecord(event.data)?.event_type ?? "") === "platform_tool_finished",
+    );
+    const finishedPayload = asRecord(asRecord(finishedEvent?.data)?.payload);
+    assert.equal(
+      finishedPayload?.ok,
+      false,
+      "forged-context platform tool call must be refused by the endpoint",
+    );
+    assert.equal(
+      String(finishedPayload?.failure_code ?? ""),
+      "invalid_run",
+      `platform tool refusal must be invalid_run: ${JSON.stringify(finishedPayload)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function runStreamedProbe(params: {
   baseUrl: string;
   authToken: string;
@@ -470,6 +568,8 @@ async function main() {
 
   const events = await runStreamedProbe({ baseUrl, authToken });
   const timingBuckets = assertProbeEvents(events);
+
+  await assertPlatformToolProbe({ baseUrl, authToken });
 
   console.log(
     JSON.stringify(

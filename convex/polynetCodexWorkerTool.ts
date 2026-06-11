@@ -74,12 +74,12 @@ export async function handlePolynetCodexWorkerTool(
 
   // Same trust boundary as ingest/terminal: only act for a real worker run
   // whose owner, thread, and engine match the claimed context.
-  let runRow: { threadId?: unknown; engineId?: unknown } | null = null;
+  let runRow: { threadId?: unknown; engineId?: unknown; communityId?: unknown } | null = null;
   try {
     runRow = (await ctx.runQuery(
       (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
       { ownerId: context.owner_id, runId: context.run_id },
-    )) as { threadId?: unknown; engineId?: unknown } | null;
+    )) as { threadId?: unknown; engineId?: unknown; communityId?: unknown } | null;
   } catch {
     runRow = null;
   }
@@ -101,8 +101,9 @@ export async function handlePolynetCodexWorkerTool(
     });
   }
 
-  const rawContext = asRecord(body.context);
-  const communityId = String(rawContext?.community_id ?? "").trim() || null;
+  // The community lens binds to the CANONICAL run row, never to anything the
+  // worker echoes back — a compromised worker cannot choose the lens.
+  const communityId = String(runRow.communityId ?? "").trim() || null;
   if (surfaceEntry.requiresCommunity && !communityId) {
     return json(200, {
       ok: false,
@@ -122,7 +123,7 @@ export async function handlePolynetCodexWorkerTool(
     });
   }
 
-  const lease = asRecord(rawContext?.lease);
+  const lease = asRecord(asRecord(body.context)?.lease);
   const projectId = String(lease?.project_id ?? "").trim() || null;
   const args = asRecord(body.arguments) ?? {};
 

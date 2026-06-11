@@ -87,6 +87,7 @@ type RunTurnParams = {
   commandTimeoutSeconds: number;
   destroyAfterRun: boolean;
   probeMode: boolean;
+  platformToolProbe: string | null;
   chatgptAuth: WorkerChatgptAuth | null;
   ingest: WorkerIngestConfig | null;
   platformTools: WorkerPlatformToolSpec[];
@@ -536,9 +537,15 @@ export class PolynetCodexWorkerRuntime {
       }
 
       proof = params.probeMode
-        ? validateProbeProof({
-            toolCalls: activeTurn.toolCalls,
-          })
+        ? params.platformToolProbe
+          ? validatePlatformToolProbeProof({
+              eventLog: activeTurn.eventLog,
+              toolCalls: activeTurn.toolCalls,
+              toolName: params.platformToolProbe,
+            })
+          : validateProbeProof({
+              toolCalls: activeTurn.toolCalls,
+            })
         : { ok: true, failures: [] as string[] };
       summary = {
         ok: proof.ok,
@@ -1252,10 +1259,40 @@ function validateProbeProof(params: {
   };
 }
 
+function validatePlatformToolProbeProof(params: {
+  eventLog: RuntimeEvent[];
+  toolCalls: BlaxelToolCallSummary[];
+  toolName: string;
+}): { ok: boolean; failures: string[] } {
+  const failures: string[] = [];
+  const requested = params.eventLog.filter(
+    (event) =>
+      event.event_type === "platform_tool_requested" &&
+      String(event.payload.tool_name ?? "") === params.toolName,
+  );
+  const finished = params.eventLog.filter(
+    (event) =>
+      event.event_type === "platform_tool_finished" &&
+      String(event.payload.tool_name ?? "") === params.toolName,
+  );
+  if (requested.length === 0) failures.push("platform_tool_request_missing");
+  if (finished.length === 0) failures.push("platform_tool_finish_missing");
+  if (params.toolCalls.length !== 0) failures.push("unexpected_workspace_exec");
+  return { ok: failures.length === 0, failures };
+}
+
 function buildProbePrompt(command: string): string {
   return [
     `Call workspace_bash exactly once with command \`${command}\`.`,
     "Then summarize the output and say whether it ran in the workspace.",
+    "Do not call any other tools.",
+  ].join(" ");
+}
+
+function buildPlatformToolProbePrompt(toolName: string): string {
+  return [
+    `Call the ${toolName} tool exactly once with a short test query.`,
+    "Then report the tool's response verbatim, including any error it returned.",
     "Do not call any other tools.",
   ].join(" ");
 }
@@ -1276,8 +1313,11 @@ async function handleTurnEndpoint(params: {
     body.command ??
       "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && uname -s",
   ).trim();
+  const platformToolProbe = String(body.platform_tool_probe ?? "").trim();
   const prompt = params.probeMode
-    ? buildProbePrompt(command)
+    ? platformToolProbe
+      ? buildPlatformToolProbePrompt(platformToolProbe)
+      : buildProbePrompt(command)
     : String(body.prompt ?? "").trim();
   if (!prompt) {
     sendJson(params.res, 400, {
@@ -1397,6 +1437,7 @@ async function handleTurnEndpoint(params: {
         commandTimeoutSeconds,
         destroyAfterRun,
         probeMode: params.probeMode,
+        platformToolProbe: params.probeMode ? platformToolProbe || null : null,
         chatgptAuth,
         ingest,
         platformTools,
@@ -1430,6 +1471,7 @@ async function handleTurnEndpoint(params: {
       commandTimeoutSeconds,
       destroyAfterRun,
       probeMode: params.probeMode,
+      platformToolProbe: params.probeMode ? platformToolProbe || null : null,
       chatgptAuth,
       ingest,
       platformTools,

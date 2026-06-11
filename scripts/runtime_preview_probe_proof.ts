@@ -133,23 +133,43 @@ assert.match(
 );
 assert.match(
   workspaceHostSource,
-  /const runTerminals = activePreviewCapableTerminals\.filter/,
-  "thread preview rendering should not include completed terminal snapshots",
+  /isTerminalSnapshotStatusActive\(terminal\.status\) && isPreviewCapableTerminal\(terminal\)/,
+  "preview candidates must be active preview-capable terminals only",
+);
+assert.match(
+  workspaceHostSource,
+  /if \(terminalRunning !== latestRunning\) \{[\s\S]*if \(terminalRunning\) latest = terminal;/,
+  "the single preview surface must prefer a running terminal over a newer still-starting one",
+);
+assert.match(
+  workspaceHostSource,
+  /return latest \? \[latest\] : \[\];/,
+  "the preview surface shows exactly one card: the latest active serve",
 );
 assert.match(
   workspaceTerminalProcessCoreSource,
-  /async function findReusableWorkspaceTerminalProcess[\s\S]*reused_existing: true/,
-  "terminal process core should reuse identical active workspace terminals",
+  /async function findActiveWorkspaceTerminalOnPort[\s\S]*rowPreviewPort === params\.previewPort/,
+  "terminal identity is the port: serve requests resolve against the active row on that port",
 );
 assert.match(
   workspaceTerminalProcessCoreSource,
-  /rowPreviewPort !== params\.terminal\.previewPort[\s\S]*rowPreviewPath !== requestedPreviewPath/,
-  "terminal reuse identity should include preview port and path",
+  /peerAlive && sameCommand[\s\S]*reused_existing: true[\s\S]*if \(peerAlive\) \{[\s\S]*stopWorkspaceTerminalProcess/,
+  "same-port serves reuse a matching live server and supersede a different one",
 );
 assert.match(
   workspaceTerminalProcessCoreSource,
-  /const reusable = await findReusableWorkspaceTerminalProcess[\s\S]*if \(reusable\) return reusable;/,
-  "terminal start should check reuse before creating a provider process",
+  /async function probeWorkspaceTerminalPort[\s\S]*\/dev\/tcp\/127\.0\.0\.1\//,
+  "serve readiness is decided by our own in-sandbox tcp probe, not the provider SDK",
+);
+assert.match(
+  workspaceTerminalProcessCoreSource,
+  /status: requestedPort !== null \? "starting" : "running"/,
+  "every launch creates a terminal row before the readiness probe runs",
+);
+assert.doesNotMatch(
+  workspaceTerminalProcessCoreSource,
+  /waitForPorts/,
+  "the serve path must not delegate readiness to the provider waitForPorts",
 );
 assert.doesNotMatch(
   runtimeExecutionSessionSource,

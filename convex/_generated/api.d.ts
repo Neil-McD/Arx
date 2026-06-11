@@ -132,6 +132,7 @@ import type * as polynetCodexWorkerAdmission from "../polynetCodexWorkerAdmissio
 import type * as polynetCodexWorkerBridge from "../polynetCodexWorkerBridge.js";
 import type * as polynetCodexWorkerIngest from "../polynetCodexWorkerIngest.js";
 import type * as polynetCodexWorkerTerminal from "../polynetCodexWorkerTerminal.js";
+import type * as polynetCodexWorkerTool from "../polynetCodexWorkerTool.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
 import type * as profileRelationshipCore from "../profileRelationshipCore.js";
@@ -312,6 +313,7 @@ declare const fullApi: ApiFromModules<{
   polynetCodexWorkerBridge: typeof polynetCodexWorkerBridge;
   polynetCodexWorkerIngest: typeof polynetCodexWorkerIngest;
   polynetCodexWorkerTerminal: typeof polynetCodexWorkerTerminal;
+  polynetCodexWorkerTool: typeof polynetCodexWorkerTool;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
   profileRelationshipCore: typeof profileRelationshipCore;

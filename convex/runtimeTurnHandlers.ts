@@ -1171,18 +1171,27 @@ export async function handleRuntimeTurnRequest(args: {
                 const steering = Array.isArray(row.pendingUserSteering)
                   ? row.pendingUserSteering
                   : [];
-                if (steering.length > workerSteeredCount) {
-                  const fresh = steering.slice(workerSteeredCount);
-                  workerSteeredCount = steering.length;
-                  for (const entry of fresh) {
-                    const text = String(entry?.text ?? "").trim();
-                    if (!text) continue;
-                    await steerPolynetCodexWorkerTurn({
-                      runId,
-                      machineId: workerMachineId,
-                      text,
-                    });
+                // Ack-based consumption: an entry is only marked consumed once
+                // the worker accepts it (or definitively cannot — 409 means no
+                // matching turn, so the steer is permanently undeliverable).
+                // Transient failures leave the entry pending for the next tick.
+                while (workerSteeredCount < steering.length) {
+                  const entry = steering[workerSteeredCount];
+                  const text = String(entry?.text ?? "").trim();
+                  if (!text) {
+                    workerSteeredCount += 1;
+                    continue;
                   }
+                  const delivery = await steerPolynetCodexWorkerTurn({
+                    runId,
+                    machineId: workerMachineId,
+                    text,
+                  });
+                  if (delivery.ok || delivery.status === 409) {
+                    workerSteeredCount += 1;
+                    continue;
+                  }
+                  break;
                 }
               } catch {
                 // Best-effort watcher; the worker turn timeout is the backstop.
@@ -1221,7 +1230,6 @@ export async function handleRuntimeTurnRequest(args: {
                   model_id: requestedModelId,
                   lane,
                   inference_source: streamedInferenceSource,
-                  community_id: runtimeCommunityId ? String(runtimeCommunityId) : null,
                   // Lease coordinates let the ingest backstop settle billing
                   // when this action dies before the live settle runs; the
                   // charge is idempotent by reservation key.
