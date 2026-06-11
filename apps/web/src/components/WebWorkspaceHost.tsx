@@ -405,6 +405,7 @@ export type WebWorkspaceHostProps = {
   operatorRightPanelSession?: AuthSessionLike | null;
   builderPartnerProgramPanel?: WebBuilderPartnerProgramPanelProps | null;
   workspaceRightPanelOpen?: boolean;
+  onOpenWorkspaceRightPanel?: () => void;
   workspaceUserDataPanel?: WorkspaceUserDataPanelDataProps | null;
 };
 
@@ -764,7 +765,6 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
   renderMarkdown: WorkspaceMarkdownRenderer;
   copyTextToClipboard: (text: string) => Promise<void> | void;
-  renderPreviewForRun: (runId: string | null) => ReactNode;
 }) {
   return (
     <>
@@ -868,15 +868,12 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
         copyTextToClipboard={props.copyTextToClipboard}
         handleCopyMessage={props.handleCopyMessage}
         openMessageContextModal={props.openMessageContextModal}
-        renderPreviewForRun={props.renderPreviewForRun}
-        streamingRunId={props.streamingMessageView?.runId ?? null}
       />
       <WebWorkspaceStreamingMessage
         view={props.streamingMessageView}
         session={props.session}
         renderMarkdown={props.renderMarkdown}
         copyTextToClipboard={props.copyTextToClipboard}
-        renderPreviewForRun={props.renderPreviewForRun}
       />
     </>
   );
@@ -889,7 +886,6 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasAuthenticatedPresentation !== next.hasAuthenticatedPresentation ||
     prev.isAuthRecoveringSignedIn !== next.isAuthRecoveringSignedIn ||
     prev.isAccountGraphHydratingCritical !== next.isAccountGraphHydratingCritical ||
-    prev.renderPreviewForRun !== next.renderPreviewForRun ||
     prev.onRequireThreadErrorSignIn !== next.onRequireThreadErrorSignIn ||
     prev.onRetryLastThreadError !== next.onRetryLastThreadError ||
     prev.handleCopyMessage !== next.handleCopyMessage ||
@@ -1324,7 +1320,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   useEffect(() => {
     // The Workspace tab has two states: a live app takes over the panel once
     // per terminal id (so an explicit "back" sticks across thread switches),
-    // and the panel falls back to the workspace state when the app dies.
+    // and the panel falls back to the workspace state when the app dies. A
+    // newly served app also opens the panel itself.
     const live = activePreviewCapableTerminals[0] ?? null;
     if (!live) {
       setWorkspacePanelView("workspace");
@@ -1333,7 +1330,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     if (announcedPreviewTerminalIdsRef.current.has(live.id)) return;
     announcedPreviewTerminalIdsRef.current.add(live.id);
     setWorkspacePanelView("preview");
-  }, [activePreviewCapableTerminals]);
+    props.onOpenWorkspaceRightPanel?.();
+  }, [activePreviewCapableTerminals, props.onOpenWorkspaceRightPanel]);
   const enterWorkspacePanelPreview = useCallback(() => setWorkspacePanelView("preview"), []);
   const exitWorkspacePanelPreview = useCallback(() => setWorkspacePanelView("workspace"), []);
   const visibleBackgroundWorkspaceTerminals = useMemo(
@@ -2234,44 +2232,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     pendingRestoreThreadScrollTopRef.current = null;
   }, [expandedPreviewTerminalId]);
 
-  const renderPreviewForRun = useCallback(
-    (runId: string | null): ReactNode => {
-      const normalizedRunId = String(runId ?? "").trim();
-      if (!normalizedRunId) return null;
-      const runTerminals = activePreviewCapableTerminals.filter(
-        (terminal) =>
-          resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId) === normalizedRunId,
-      );
-      if (runTerminals.length === 0) return null;
-      return (
-        <WebWorkspaceAppPreview
-          terminals={runTerminals}
-          previewStateByTerminalId={previewStateByTerminalId}
-          busyTerminalIds={busyWorkspaceTerminalIds}
-          mode="inline"
-          allowExpand={isDesktopViewport}
-          onEnsurePreview={handleEnsurePreview}
-          onExpandPreview={handleExpandPreview}
-          onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
-          onPreviewMetricsObservation={handlePreviewMetricsObservation}
-          onStopTerminal={(terminalSessionId) => {
-            void handleStopWorkspaceTerminal(terminalSessionId);
-          }}
-        />
-      );
-    },
-    [
-      handleExpandPreview,
-      handleEnsurePreview,
-      handlePreviewLifecyclePhaseChange,
-      handlePreviewMetricsObservation,
-      isDesktopViewport,
-      activePreviewCapableTerminals,
-      latestPreviewRunIdByTerminalId,
-      previewStateByTerminalId,
-    ],
-  );
-
   const isDesktopExpandedPreview = isDesktopViewport && expandedPreviewTerminal !== null;
 
   const resizeWorkspaceRightPanelFromPointer = (event: PointerEvent<HTMLDivElement>) => {
@@ -2441,7 +2401,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 openMessageContextModal={props.openMessageContextModal}
                 renderMarkdown={props.renderMarkdown}
                 copyTextToClipboard={props.copyTextToClipboard}
-                renderPreviewForRun={renderPreviewForRun}
               />
             </div>
           </div>

@@ -79,6 +79,10 @@ export function useWorkspaceRightPanelController() {
     setIsWorkspaceRightPanelOpen((value) => !value);
   }, []);
 
+  const handleOpenWorkspaceRightPanel = useCallback(() => {
+    setIsWorkspaceRightPanelOpen(true);
+  }, []);
+
   useEffect(() => {
     storeWorkspaceRightPanelOpen(isWorkspaceRightPanelOpen);
   }, [isWorkspaceRightPanelOpen]);
@@ -88,5 +92,6 @@ export function useWorkspaceRightPanelController() {
     isWorkspaceRightPanelOpen,
     handleWorkspaceRightPanelLayoutChange,
     handleToggleWorkspaceRightPanel,
+    handleOpenWorkspaceRightPanel,
   };
 }

@@ -1796,6 +1796,7 @@ export default function App() {
     isWorkspaceRightPanelOpen,
     handleWorkspaceRightPanelLayoutChange,
     handleToggleWorkspaceRightPanel,
+    handleOpenWorkspaceRightPanel,
   } = useWorkspaceRightPanelController();
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -10726,6 +10727,7 @@ export default function App() {
         workspaceRightPanelOpen: isWorkspaceRightPanelVisible,
         workspaceUserDataPanel,
         onWorkspaceRightPanelLayoutChange: handleWorkspaceRightPanelLayoutChange,
+        onOpenWorkspaceRightPanel: handleOpenWorkspaceRightPanel,
       },
     },
     publicCommunityFunnelProps: {
