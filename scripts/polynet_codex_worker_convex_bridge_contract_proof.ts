@@ -23,8 +23,23 @@ assert.match(
 );
 assert.match(
   bridge,
-  /POLYNET_CODEX_WORKER_RUNTIME_ENABLED[\s\S]*POLYNET_DEPLOYMENT_KIND[\s\S]*staging[\s\S]*POLYNET_CODEX_WORKER_URL[\s\S]*POLYNET_CODEX_WORKER_AUTH_TOKEN/,
-  "bridge must be feature-flagged, staging-only, and configured by server env",
+  /POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS[\s\S]*"staging"[\s\S]*"production"[\s\S]*POLYNET_CODEX_WORKER_RUNTIME_ENABLED[\s\S]*POLYNET_CODEX_WORKER_URL[\s\S]*POLYNET_CODEX_WORKER_AUTH_TOKEN/,
+  "bridge must be feature-flagged, limited to staging/production, and configured by server env",
+);
+assert.match(
+  bridge,
+  /polynet_codex_worker_deployment_kind_invalid/,
+  "bridge must fail closed on invalid deployment kinds",
+);
+assert.match(
+  bridge,
+  /polynet_codex_worker_production_env_mismatch/,
+  "bridge must reject production env that points at staging-looking worker URLs",
+);
+assert.match(
+  bridge,
+  /polynet_codex_worker_staging_env_mismatch/,
+  "bridge must reject staging env that points at production-looking worker URLs",
 );
 assert.match(
   bridge,

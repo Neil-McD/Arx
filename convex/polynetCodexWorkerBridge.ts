@@ -1,8 +1,13 @@
 export const POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker";
 export const POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_worker_fly_bridge_v1";
 export const POLYNET_CODEX_WORKER_CONTRACT_VERSION = "v1";
+const POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS = new Set([
+  "staging",
+  "production",
+] as const);
 
 type JsonRecord = Record<string, unknown>;
+type PolynetCodexWorkerDeploymentKind = "staging" | "production";
 
 export type PolynetCodexWorkerSseEvent = {
   event: string;
@@ -48,6 +53,30 @@ function readBooleanEnv(name: string): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
+function readWorkerDeploymentKind(): PolynetCodexWorkerDeploymentKind | null {
+  const raw = readEnv("POLYNET_DEPLOYMENT_KIND");
+  return POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS.has(
+    raw as PolynetCodexWorkerDeploymentKind,
+  )
+    ? (raw as PolynetCodexWorkerDeploymentKind)
+    : null;
+}
+
+function workerUrlDeploymentMismatch(params: {
+  deploymentKind: PolynetCodexWorkerDeploymentKind;
+  baseUrl: string;
+}): string | null {
+  const normalizedUrl = params.baseUrl.toLowerCase();
+  if (params.deploymentKind === "production") {
+    return /staging|quick-porcupine-949/.test(normalizedUrl)
+      ? "polynet_codex_worker_production_env_mismatch"
+      : null;
+  }
+  return /wry-hawk-715|www\.polynet\.ai|polynet-codex-worker\.fly\.dev/.test(normalizedUrl)
+    ? "polynet_codex_worker_staging_env_mismatch"
+    : null;
+}
+
 export function getPolynetCodexWorkerBridgeConfig(): {
   enabled: boolean;
   baseUrl: string | null;
@@ -62,12 +91,13 @@ export function getPolynetCodexWorkerBridgeConfig(): {
       disabledReason: "polynet_codex_worker_runtime_disabled",
     };
   }
-  if (readEnv("POLYNET_DEPLOYMENT_KIND") !== "staging") {
+  const deploymentKind = readWorkerDeploymentKind();
+  if (!deploymentKind) {
     return {
       enabled: false,
       baseUrl: null,
       authToken: null,
-      disabledReason: "polynet_codex_worker_staging_only",
+      disabledReason: "polynet_codex_worker_deployment_kind_invalid",
     };
   }
   const baseUrl = readEnv("POLYNET_CODEX_WORKER_URL").replace(/\/+$/, "");
@@ -78,6 +108,15 @@ export function getPolynetCodexWorkerBridgeConfig(): {
       baseUrl: baseUrl || null,
       authToken: authToken || null,
       disabledReason: "polynet_codex_worker_env_missing",
+    };
+  }
+  const mismatch = workerUrlDeploymentMismatch({ deploymentKind, baseUrl });
+  if (mismatch) {
+    return {
+      enabled: false,
+      baseUrl,
+      authToken,
+      disabledReason: mismatch,
     };
   }
   return {
