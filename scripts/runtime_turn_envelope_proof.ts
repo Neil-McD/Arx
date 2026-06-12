@@ -175,8 +175,13 @@ assert.match(
 );
 assert.match(
   runtimeAgentLoopSource,
-  /refreshRuntimeContextSnapshot\?\.\("started", runtimeTurnEnvelope\)/,
-  "normal runtime loop should pass the envelope to the snapshot refresh callback",
+  /refreshRuntimeContextSnapshot\?\.\(\s*"started",\s*runtimeTurnEnvelope,\s*runtimeContextCapsule,\s*runtimeContextCapsuleMetadata,/,
+  "normal runtime loop should pass the envelope and context capsule to the snapshot refresh callback",
+);
+assert.match(
+  runtimeAgentLoopSource,
+  /eventType: "runtime_context_capsule_prepared"[\s\S]*capsule_metadata: runtimeContextCapsuleMetadata/,
+  "normal runtime loop should emit bounded context capsule metadata evidence",
 );
 assert.doesNotMatch(
   runtimeAgentLoopSource,
@@ -219,6 +224,16 @@ assert.match(
 );
 assert.match(
   runtimeTurnHandlersSource,
+  /let runtimeContextCapsuleForRun: RuntimeContextCapsuleV1 \| null = null/,
+  "runtime handler should keep the loop-built context capsule in run-local closure state",
+);
+assert.match(
+  runtimeTurnHandlersSource,
+  /runtimeContextCapsule: runtimeContextCapsuleForRun[\s\S]*runtimeContextCapsuleMetadata: runtimeContextCapsuleMetadataForRun/,
+  "runtime handler should persist context capsule metadata inside context snapshots",
+);
+assert.match(
+  runtimeTurnHandlersSource,
   /if \(runtimeTurnEnvelope\) runtimeTurnEnvelopeForRun = runtimeTurnEnvelope/,
   "runtime handler should capture the latest loop-built envelope before snapshot persistence",
 );
@@ -229,8 +244,8 @@ assert.match(
 );
 assert.match(
   runtimeTurnHandlersSource,
-  /persistContextSnapshotBestEffort\(phase, runtimeTurnEnvelope\)/,
-  "runtime handler should forward requested snapshot phase and envelope into persistence",
+  /persistContextSnapshotBestEffort\(\s*phase,\s*runtimeTurnEnvelope,\s*runtimeContextCapsule,\s*runtimeContextCapsuleMetadata,\s*\)/,
+  "runtime handler should forward requested snapshot phase, envelope, and context capsule into persistence",
 );
 
 const threadsSource = readFileSync("convex/threads.ts", "utf8");

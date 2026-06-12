@@ -626,6 +626,83 @@ export type OperatorPaidToolEconomicsLane = {
   latestAt: number | null;
 };
 
+export type OperatorHeadlessCodexRunRecord = {
+  runId: string;
+  threadId: string | null;
+  projectId: string | null;
+  communityId: string | null;
+  status: string;
+  modelId: string | null;
+  engineId: string | null;
+  executionMode: string | null;
+  harnessProfile: string | null;
+  startedAt: number;
+  finishedAt: number | null;
+  durationMs: number | null;
+  activeAgeMs: number | null;
+  firstEventAt: number | null;
+  firstEventLatencyMs: number | null;
+  firstAssistantDeltaAt: number | null;
+  firstAssistantDeltaLatencyMs: number | null;
+  codexTurnCompletedAt: number | null;
+  eventCount: number;
+  worker: {
+    provider: string | null;
+    appName: string | null;
+    machineId: string | null;
+    region: string | null;
+    version: string | null;
+    status: "reported" | "not_reported";
+    latestAt: number | null;
+  };
+  sandbox: {
+    provider: string | null;
+    sandboxId: string | null;
+    status:
+      | "not_started"
+      | "ensuring"
+      | "active"
+      | "failed"
+      | "release_failed"
+      | "teardown_failed"
+      | "released"
+      | "unknown";
+    ensureLatencyMs: number | null;
+    latestAt: number | null;
+  };
+  accounting: {
+    status:
+      | "not_reported"
+      | "kept_alive"
+      | "settled"
+      | "settlement_failed"
+      | "release_checked"
+      | "release_failed";
+    creditsDebited: number | null;
+    durationSeconds: number | null;
+    latestAt: number | null;
+  };
+  failureReason: string | null;
+};
+
+export type OperatorHeadlessCodexOperationsSnapshot = {
+  health: "healthy" | "degraded" | "incident" | "unknown";
+  score: number | null;
+  totals: {
+    runs: number;
+    activeRuns: number;
+    stuckRuns: number;
+    oldestActiveRunAgeMs: number | null;
+    sandboxCreateFailures: number;
+    sandboxReleaseFailures: number;
+    firstEventMissingRuns: number;
+    firstDeltaMissingRuns: number;
+    accountingSettlementFailures: number;
+    accountingPendingRuns: number;
+  };
+  runs: OperatorHeadlessCodexRunRecord[];
+};
+
 export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
@@ -649,6 +726,7 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     topFailureCodes: OperatorRuntimeToolFailureBucket[];
     topFailingTools: OperatorRuntimeToolFailureBucket[];
   };
+  headlessCodexOperations?: OperatorHeadlessCodexOperationsSnapshot;
   totals: {
     turnsStarted: number;
     turnsSucceeded: number;

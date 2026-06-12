@@ -2736,9 +2736,25 @@ export const upsertUserPlatformAppMountInternal = internalMutation({
   },
 });
 
+export const findUserPlatformMountByUserAndAppInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    developerAppId: v.id("developerApps"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("userPlatformAppMounts")
+      .withIndex("by_user_app", (q: any) =>
+        q.eq("userId", args.userId).eq("developerAppId", args.developerAppId),
+      )
+      .first();
+  },
+});
+
 export const ensureUserHarnessAppInternal = internalAction({
   args: {
     userId: v.id("users"),
+    developerAppId: v.optional(v.id("developerApps")),
     catalogAppId: v.optional(v.string()),
     mcpRegistryId: v.optional(v.string()),
     name: v.string(),
@@ -2772,6 +2788,53 @@ export const ensureUserHarnessAppInternal = internalAction({
       communityId: args.communityId,
       communityAppMountId: args.communityAppMountId,
     };
+    if (
+      args.sourceType === "community" &&
+      args.authType === "none" &&
+      args.developerAppId &&
+      args.toolSnapshotId
+    ) {
+      const existingSharedMount = await ctx.runQuery(
+        internal.userPlatformAppMounts.findUserPlatformMountByUserAndAppInternal,
+        {
+          userId: args.userId,
+          developerAppId: args.developerAppId,
+        },
+      );
+      const mountId = (await ctx.runMutation(
+        internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
+        {
+          userId: args.userId,
+          developerAppId: args.developerAppId,
+          toolSnapshotId: args.toolSnapshotId,
+          enabled: args.enabled ?? true,
+          enabledTools: args.enabledTools,
+          nowMs,
+        },
+      )) as any;
+      await recordUserHarnessAppSource({
+        ctx,
+        userId: args.userId,
+        userPlatformAppMountId: mountId,
+        source,
+        nowMs,
+      });
+      const mount = await ctx.runQuery(
+        internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
+        {
+          userId: args.userId,
+          userPlatformAppMountId: mountId,
+        },
+      );
+      return {
+        ok: true,
+        ensured: true,
+        created: !existingSharedMount,
+        reused: Boolean(existingSharedMount),
+        source_type: args.sourceType,
+        mount,
+      };
+    }
     const existing = (await ctx.runQuery(
       internal.userPlatformAppMounts.findExistingUserPlatformMountByIdentityInternal,
       {
@@ -2891,6 +2954,7 @@ export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
       mount: {
         _id: any;
         communityId: any;
+        toolSnapshotId?: any;
         enabled?: boolean;
         enabledTools?: string[];
       };
@@ -2909,12 +2973,14 @@ export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
       internal.userPlatformAppMounts.ensureUserHarnessAppInternal,
       {
         userId: args.userId,
+        developerAppId: seedSource.app._id,
         catalogAppId: seedSource.app.catalogAppId,
         name: seedSource.app.name,
         description: seedSource.app.description,
         endpointUrl: seedSource.app.endpointUrl,
         authType: seedSource.app.authType,
         mcpRegistryId: seedSource.app.mcpRegistryId,
+        toolSnapshotId: seedSource.mount.toolSnapshotId,
         enabled: seedSource.mount.enabled !== false,
         enabledTools: Array.isArray(seedSource.mount.enabledTools)
           ? seedSource.mount.enabledTools
@@ -3018,6 +3084,7 @@ export const seedCommunityAppGrantsForUserInternal = internalAction({
       mount: {
         _id: any;
         communityId: any;
+        toolSnapshotId?: any;
         enabled?: boolean;
         enabledTools?: string[];
       };
@@ -3037,12 +3104,14 @@ export const seedCommunityAppGrantsForUserInternal = internalAction({
           internal.userPlatformAppMounts.ensureUserHarnessAppInternal,
           {
             userId: args.userId,
+            developerAppId: seedSource.app._id,
             catalogAppId: seedSource.app.catalogAppId,
             name: seedSource.app.name,
             description: seedSource.app.description,
             endpointUrl: seedSource.app.endpointUrl,
             authType: seedSource.app.authType,
             mcpRegistryId: seedSource.app.mcpRegistryId,
+            toolSnapshotId: seedSource.mount.toolSnapshotId,
             enabled: seedSource.mount.enabled !== false,
             enabledTools: Array.isArray(seedSource.mount.enabledTools)
               ? seedSource.mount.enabledTools

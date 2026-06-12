@@ -21,7 +21,7 @@ export function appendInferenceSourceLabel(
 function formatInferenceProviderLabel(value: string | null | undefined): string | null {
   const raw = (value ?? "").trim().toLowerCase();
   if (!raw) return null;
-  if (raw === "chatgpt" || raw === "user_chatgpt") return "ChatGPT";
+  if (raw === "chatgpt" || raw === "user_chatgpt") return "Polynet";
   if (raw === "platform") return "OpenRouter";
   if (raw === "user" || raw === "user_key") return "OpenAI key";
   if (raw === "free" || raw === "demo_public") return "OpenRouter free";

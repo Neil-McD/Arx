@@ -2,7 +2,7 @@ export const CODEX_BRIDGE_CONTRACT_VERSION = 1 as const;
 export const CODEX_BRIDGE_TOKEN_ISSUER = "polynet-codex-bridge-v1" as const;
 export const CODEX_BRIDGE_CALLBACK_MAX_BYTES = 64_000;
 
-export type CodexBridgeAllowedOperation = "event" | "finish";
+export type CodexBridgeAllowedOperation = "event" | "finish" | "mcp_tool";
 
 export type CodexBridgeRunTokenClaimsV1 = {
   version: typeof CODEX_BRIDGE_CONTRACT_VERSION;
@@ -25,7 +25,7 @@ export type CodexBridgeRunFinishStatus = "succeeded" | "failed" | "cancelled" | 
 export function isCodexBridgeAllowedOperation(
   value: unknown,
 ): value is CodexBridgeAllowedOperation {
-  return value === "event" || value === "finish";
+  return value === "event" || value === "finish" || value === "mcp_tool";
 }
 
 export function normalizeCodexBridgeEventType(raw: unknown): string {

@@ -1,9 +1,9 @@
 "use node";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   destroyBlaxelWorkspaceComputer,
   ensureBlaxelWorkspaceComputer,
@@ -41,7 +41,24 @@ import {
   buildRuntimeTurnContextSnapshot,
   renderRuntimeTurnContextForPrompt,
 } from "../shared/runtimeTurnContextPacket";
+import {
+  buildRuntimeContextCapsule,
+  buildRuntimeContextCapsuleMetadata,
+  renderRuntimeContextCapsuleForPrompt,
+  type RuntimeContextCapsuleMetadataV1,
+} from "../shared/runtimeContextCapsule.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
+import {
+  composeResolvedRuntimeHarness,
+  type ResolvedEffectiveHarness,
+} from "./runtimeHarnessComposition.ts";
+import {
+  buildMountedAppToolDescription,
+  normalizeRuntimeMountedUserPlatformAppTools,
+  normalizeRuntimeSkillResolution,
+} from "./runtimeHarnessShaping.ts";
+import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
+import { normalizeComputerDisplayName } from "../shared/projectNaming";
 import {
   CODEX_BLAXEL_RUNTIME_COST_MULTIPLIER,
   CODEX_BLAXEL_RUNTIME_PRICING_POLICY,
@@ -56,6 +73,75 @@ type RuntimeTurnFailure = {
   code: string;
   message: string;
 };
+
+type CodexRuntimeMcpMountMode =
+  | "none"
+  | "inherited_base"
+  | "runtime_projected";
+
+type CodexNativeMcpProjectedTool = {
+  name: string;
+  namespacedToolName: string;
+  description: string;
+  inputSchema: unknown;
+  riskLevel: "read" | "write" | "sensitive";
+  appName: string;
+  catalogAppId: string | null;
+};
+
+type CodexNativeMcpProjectionV1 = {
+  version: 1;
+  enabled: boolean;
+  serverName: "polynet_user_harness";
+  fingerprint: string;
+  tools: CodexNativeMcpProjectedTool[];
+};
+
+type CodexRuntimeProjectionV1 = {
+  version: 1;
+  source: "polynet_convex_runtime";
+  bridgeRuntime: "codex_blaxel_app_server";
+  contextCapsuleHash: string;
+  contextCapsuleByteSize: number;
+  developerInstructionsHash: string;
+  developerInstructionsChars: number;
+  mcpMountMode: CodexRuntimeMcpMountMode;
+  codexConfigSource: "base_image_copy";
+  inheritedBaseCodexConfig: boolean;
+  projectedMcpServerCount: number;
+  nativeMcpProjectionFingerprint: string;
+  runtimeMountedToolCount: number;
+  discoveryMountedToolCount: number;
+  shadowedMountedToolCount: number;
+  selectedSkillRefs: Array<{
+    scope: "platform" | "personal" | "community";
+    name: string;
+    mentionToken: string | null;
+  }>;
+  mountedToolCapabilityRefs: Array<{
+    appName: string;
+    catalogAppId: string | null;
+    authType: string | null;
+    scopes: Array<"user" | "community">;
+    defaultScope: "user" | "community";
+    toolCount: number;
+    defaultRuntimeToolNames: string[];
+    executableRuntimeToolNames: string[];
+  }>;
+  defaultMountedRuntimeToolNames: string[];
+  executableMountedRuntimeToolNames: string[];
+  warning: string | null;
+};
+
+const CODEX_APP_SERVER_CONTEXT_TOOL_NAMES = [
+  "bash",
+  "read",
+  "write",
+  "edit",
+  "grep",
+  "glob",
+  "web_search",
+] as const;
 
 type CodexRuntimePhaseEventArgs = {
   ctx: any;
@@ -90,6 +176,189 @@ function readEnv(name: string): string {
 
 function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  const normalized = normalizeString(value);
+  return normalized || null;
+}
+
+function sha256HexText(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableJsonValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, stableJsonValue(child)]),
+  );
+}
+
+function sha256HexJson(value: unknown): string {
+  return sha256HexText(JSON.stringify(stableJsonValue(value)));
+}
+
+function compactProjectionText(value: unknown, maxChars: number): string | null {
+  const normalized = normalizeOptionalString(value);
+  if (!normalized) return null;
+  return normalized.length <= maxChars
+    ? normalized
+    : `${normalized.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+}
+
+function buildCodexRuntimeProjectionInstructions(params: {
+  mcpMountMode: CodexRuntimeMcpMountMode;
+  projectedMcpServerCount: number;
+  runtimeMountedToolCount: number;
+  discoveryMountedToolCount: number;
+}): string {
+  return [
+    "CODEX_RUNTIME_PROJECTION",
+    `mcp_mount_mode: ${params.mcpMountMode}`,
+    `projected_mcp_server_count: ${params.projectedMcpServerCount}`,
+    `polynet_runtime_mounted_tool_count: ${params.runtimeMountedToolCount}`,
+    `polynet_default_discovery_tool_count: ${params.discoveryMountedToolCount}`,
+    params.projectedMcpServerCount === 0
+      ? "Do not claim PolyNet connected app or MCP tools are directly callable inside Codex unless this Codex thread actually exposes them or a tool call proves availability."
+      : "PolyNet connected app tools are available only through the projected `polynet_user_harness` Codex-native MCP server. Only claim and call tools that this Codex thread exposes in its native MCP tool surface.",
+  ].join("\n");
+}
+
+function selectedSkillProjectionRefs(
+  scope: "platform" | "personal" | "community",
+  skills: Array<{ name?: unknown; mention_token?: unknown }>,
+): CodexRuntimeProjectionV1["selectedSkillRefs"] {
+  return skills
+    .map((skill) => {
+      const name =
+        compactProjectionText(skill.name, 100) ??
+        compactProjectionText(skill.mention_token, 80);
+      if (!name) return null;
+      return {
+        scope,
+        name,
+        mentionToken: compactProjectionText(skill.mention_token, 80),
+      };
+    })
+    .filter((skill): skill is CodexRuntimeProjectionV1["selectedSkillRefs"][number] =>
+      Boolean(skill),
+    )
+    .slice(0, 20);
+}
+
+function normalizeProjectedMcpInputSchema(value: unknown): unknown {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  return {
+    type: "object",
+    additionalProperties: true,
+    properties: {},
+  };
+}
+
+function buildCodexNativeMcpProjection(
+  resolvedHarness: ResolvedEffectiveHarness,
+): CodexNativeMcpProjectionV1 {
+  const tools = resolvedHarness.runtimeMountedTools
+    .map((tool) => ({
+      name: tool.runtime_tool_name,
+      namespacedToolName: tool.namespaced_tool_name,
+      description: buildMountedAppToolDescription(tool),
+      inputSchema: normalizeProjectedMcpInputSchema(tool.input_schema),
+      riskLevel: tool.risk_level,
+      appName: tool.app_name,
+      catalogAppId: tool.catalog_app_id,
+    }))
+    .filter((tool) => tool.name && tool.namespacedToolName)
+    .slice(0, 80);
+  const fingerprint = sha256HexJson({
+    serverName: "polynet_user_harness",
+    tools: tools.map((tool) => ({
+      name: tool.name,
+      namespacedToolName: tool.namespacedToolName,
+      inputSchema: tool.inputSchema,
+      riskLevel: tool.riskLevel,
+      catalogAppId: tool.catalogAppId,
+    })),
+  });
+  return {
+    version: 1,
+    enabled: tools.length > 0,
+    serverName: "polynet_user_harness",
+    fingerprint,
+    tools,
+  };
+}
+
+function buildCodexRuntimeProjection(params: {
+  runtimeContextCapsuleMetadata: RuntimeContextCapsuleMetadataV1;
+  developerInstructions: string;
+  resolvedHarness: ResolvedEffectiveHarness;
+  nativeMcpProjection: CodexNativeMcpProjectionV1;
+}): CodexRuntimeProjectionV1 {
+  const projectedMcpServerCount = params.nativeMcpProjection.enabled ? 1 : 0;
+  const mcpMountMode: CodexRuntimeMcpMountMode =
+    projectedMcpServerCount > 0 ? "runtime_projected" : "inherited_base";
+  const runtimeMountedToolCount = params.resolvedHarness.runtimeMountedTools.length;
+  const discoveryMountedToolCount = params.resolvedHarness.discoveryMountedTools.length;
+  const selectedSkillRefs = [
+    ...selectedSkillProjectionRefs(
+      "platform",
+      params.resolvedHarness.selectedPlatformSkills,
+    ),
+    ...selectedSkillProjectionRefs(
+      "personal",
+      params.resolvedHarness.selectedPersonalSkills,
+    ),
+    ...selectedSkillProjectionRefs(
+      "community",
+      params.resolvedHarness.activeCommunityModule?.selectedSkills ?? [],
+    ),
+  ].slice(0, 40);
+  const mountedToolCapabilityRefs = params.resolvedHarness.capabilityGroups
+    .map((group) => ({
+      appName: compactProjectionText(group.app_name, 120) ?? "connected app",
+      catalogAppId: compactProjectionText(group.catalog_app_id, 120),
+      authType: compactProjectionText(group.auth_type, 80),
+      scopes: group.scopes.slice(0, 2),
+      defaultScope: group.default_scope,
+      toolCount: Math.max(0, Math.floor(group.tool_count)),
+      defaultRuntimeToolNames: group.default_runtime_tool_names.slice(0, 12),
+      executableRuntimeToolNames: group.executable_runtime_tool_names.slice(0, 25),
+    }))
+    .slice(0, 20);
+
+  return {
+    version: 1,
+    source: "polynet_convex_runtime",
+    bridgeRuntime: "codex_blaxel_app_server",
+    contextCapsuleHash: params.runtimeContextCapsuleMetadata.hash,
+    contextCapsuleByteSize: params.runtimeContextCapsuleMetadata.byteSize,
+    developerInstructionsHash: sha256HexText(params.developerInstructions),
+    developerInstructionsChars: params.developerInstructions.length,
+    mcpMountMode,
+    codexConfigSource: "base_image_copy",
+    inheritedBaseCodexConfig: true,
+    projectedMcpServerCount,
+    nativeMcpProjectionFingerprint: params.nativeMcpProjection.fingerprint,
+    runtimeMountedToolCount,
+    discoveryMountedToolCount,
+    shadowedMountedToolCount: params.resolvedHarness.shadowedMountedTools.length,
+    selectedSkillRefs,
+    mountedToolCapabilityRefs,
+    defaultMountedRuntimeToolNames: params.resolvedHarness.discoveryMountedTools
+      .map((tool) => tool.runtime_tool_name)
+      .slice(0, 50),
+    executableMountedRuntimeToolNames: params.resolvedHarness.runtimeMountedTools
+      .map((tool) => tool.runtime_tool_name)
+      .slice(0, 100),
+    warning:
+      runtimeMountedToolCount > 0 && projectedMcpServerCount === 0
+        ? "PolyNet mounted app tools are projected as context only for this Codex app-server turn; they are not Codex-native MCP mounts yet."
+        : null,
+  };
 }
 
 function durationMs(startedAt?: number | null, endedAt?: number | null): number | null {
@@ -137,6 +406,39 @@ async function appendCodexRuntimePhaseEventBestEffort(params: CodexRuntimePhaseE
       eventType: params.eventType,
       message: error instanceof Error ? error.message : String(error),
     });
+  }
+}
+
+async function recordHeadlessCodexOperationEvent(params: {
+  ctx: any;
+  ownerId: any;
+  threadId: any;
+  runId: string;
+  projectId?: unknown;
+  communityId?: unknown;
+  eventType: string;
+  eventKey: string;
+  payload: Record<string, unknown>;
+}): Promise<void> {
+  const nowMs = Date.now();
+  try {
+    await params.ctx.runMutation(internal.threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any, {
+      ownerId: params.ownerId,
+      threadId: params.threadId,
+      runId: params.runId,
+      claimProjectId: normalizeString(params.projectId) || undefined,
+      claimCommunityId: normalizeString(params.communityId) || undefined,
+      eventType: params.eventType,
+      eventKey: params.eventKey,
+      payload: {
+        run_id: params.runId,
+        ...params.payload,
+      },
+      createdAt: nowMs,
+      nowMs,
+    });
+  } catch {
+    // Best-effort operator evidence must never fail the user-visible Codex run.
   }
 }
 
@@ -307,12 +609,96 @@ async function resolveActionActor(ctx: any, explicitAuthSubject: string): Promis
   return { ok: true, authSubject, userId };
 }
 
-function buildDeveloperInstructions(contextPrompt: string): string {
+function mapRuntimeMountedUserPlatformAppToolsToMcpTools(
+  value: unknown,
+): RuntimeMountedMcpTool[] {
+  return normalizeRuntimeMountedUserPlatformAppTools(value).map((tool) => ({
+    scope: "user",
+    mount_id: tool.user_platform_app_mount_id,
+    runtime_tool_name: `me__${tool.namespaced_tool_name}`,
+    developer_app_id: tool.developer_app_id,
+    catalog_app_id: tool.catalog_app_id,
+    app_name: tool.app_name,
+    endpoint_url: tool.endpoint_url,
+    auth_type: tool.auth_type,
+    tool_name: tool.tool_name,
+    namespaced_tool_name: tool.namespaced_tool_name,
+    description: tool.description,
+    input_schema: tool.input_schema,
+    risk_level: tool.risk_level,
+  }));
+}
+
+async function resolveCodexRuntimeProjectContext(params: {
+  ctx: any;
+  projectId?: string | null;
+  authSubject: string;
+}): Promise<{ label: string | null; description: string | null }> {
+  if (!params.projectId) return { label: null, description: null };
+  const row = await params.ctx
+    .runQuery(api.projects.getCloudProjectById as any, {
+      projectId: params.projectId as any,
+      authSubject: params.authSubject,
+    })
+    .catch(() => null);
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    return { label: null, description: null };
+  }
+  const record = row as Record<string, unknown>;
+  return {
+    label: normalizeComputerDisplayName(
+      typeof record.name === "string" ? record.name : null,
+    ),
+    description: normalizeOptionalString(record.description),
+  };
+}
+
+async function resolveCodexRuntimeCommunityContext(params: {
+  ctx: any;
+  userId: string;
+  authSubject: string;
+  communityId?: string | null;
+}): Promise<{
+  name: string | null;
+  slug: string | null;
+  oneLiner: string | null;
+  about: string | null;
+  systemPrompt: string | null;
+}> {
+  if (!params.communityId) {
+    return { name: null, slug: null, oneLiner: null, about: null, systemPrompt: null };
+  }
+  const row = await params.ctx
+    .runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextForResolvedUserInternal as any, {
+      userId: params.userId as any,
+      communityId: params.communityId as any,
+    })
+    .catch(() => null);
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    return { name: null, slug: null, oneLiner: null, about: null, systemPrompt: null };
+  }
+  const record = row as Record<string, unknown>;
+  return {
+    name: normalizeOptionalString(record.community_name),
+    slug: normalizeOptionalString(record.community_slug),
+    oneLiner: normalizeOptionalString(record.community_one_liner),
+    about: normalizeOptionalString(record.community_about),
+    systemPrompt:
+      normalizeOptionalString(record.community_system_prompt) ??
+      normalizeOptionalString(record.system_prompt),
+  };
+}
+
+function buildDeveloperInstructions(
+  contextPrompt: string,
+  projectionInstructions: string,
+): string {
   return [
     "You are Codex running headlessly inside a Blaxel sandbox for PolyNet.",
     "Use the PolyNet runtime context as orientation. Do not treat it as a deterministic route; gather additional context with your normal Codex tools when useful.",
     "Default execution posture inside this sandbox is full access with no approval prompts.",
     "Do not include secrets or raw credentials in the final answer.",
+    projectionInstructions,
     contextPrompt ? `POLYNET_RUNTIME_CONTEXT\n${contextPrompt}` : "",
   ].filter(Boolean).join("\n\n");
 }
@@ -529,6 +915,51 @@ export const runBlaxelCodexRuntimeTurn = action({
     })) as { projectId?: unknown; communityId?: unknown } | null;
     const claimProjectId = normalizeString(run?.projectId ?? thread.projectId) || undefined;
     const claimCommunityId = normalizeString(run?.communityId ?? threadCommunityId) || undefined;
+    const [
+      projectContext,
+      communityContext,
+      runtimeMountedUserPlatformAppTools,
+      skillResolution,
+    ] = await Promise.all([
+      resolveCodexRuntimeProjectContext({
+        ctx,
+        projectId: claimProjectId ?? null,
+        authSubject: actor.authSubject,
+      }),
+      resolveCodexRuntimeCommunityContext({
+        ctx,
+        userId: actor.userId,
+        authSubject: actor.authSubject,
+        communityId: claimCommunityId ?? null,
+      }),
+      ctx
+        .runQuery(
+          internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal,
+          {
+            userId: actor.userId as any,
+          },
+        )
+        .then(mapRuntimeMountedUserPlatformAppToolsToMcpTools),
+      ctx
+        .runQuery(
+          internal.runtimeSkillResolution.resolveRuntimeSkillSelectionForResolvedUserInternal,
+          {
+            userId: actor.userId as any,
+            communityId: claimCommunityId ? (claimCommunityId as any) : undefined,
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          },
+        )
+        .then(normalizeRuntimeSkillResolution),
+    ]);
+    const resolvedHarness = composeResolvedRuntimeHarness({
+      personalMountedTools: runtimeMountedUserPlatformAppTools,
+      skillResolution,
+    });
     const phaseTelemetryWrites: Promise<void>[] = [];
     const queueCodexRuntimePhaseEvent = (event: QueuedCodexRuntimePhaseEventArgs): void => {
       phaseTelemetryWrites.push(appendCodexRuntimePhaseEventBestEffort({
@@ -560,9 +991,44 @@ export const runBlaxelCodexRuntimeTurn = action({
       runtimeStop: null,
     });
     const contextLoadedAt = Date.now();
+    const loadedContextPacket = loadedContext.packet;
+    const runtimeContextCapsule = buildRuntimeContextCapsule({
+      latestUserText: prompt,
+      threadId: String(args.threadId),
+      projectId: claimProjectId || null,
+      projectLabel: projectContext.label,
+      projectDescription: projectContext.description,
+      communityId: claimCommunityId || null,
+      communityName: communityContext.name,
+      communitySlug: communityContext.slug,
+      communityOneLiner: communityContext.oneLiner,
+      communityAbout: communityContext.about,
+      communityResourceLane: resolvedHarness.communityResourceLane,
+      allowedToolNames: CODEX_APP_SERVER_CONTEXT_TOOL_NAMES,
+      runtimeTurnContext: loadedContextPacket,
+      mountedToolCapabilityGroups: resolvedHarness.capabilityGroups,
+      runtimeMountedToolCount: resolvedHarness.runtimeMountedTools.length,
+      defaultDiscoveryMountedToolCount: resolvedHarness.discoveryMountedTools.length,
+      shadowedMountedToolCount: resolvedHarness.shadowedMountedTools.length,
+      platformSkillInventory: resolvedHarness.platformSkillInventory,
+      selectedPlatformSkills: resolvedHarness.selectedPlatformSkills,
+      personalSkillInventory: resolvedHarness.personalSkillInventory,
+      selectedPersonalSkills: resolvedHarness.selectedPersonalSkills,
+      communitySkillInventory:
+        resolvedHarness.activeCommunityModule?.attachedSkills ?? [],
+      selectedCommunitySkills:
+        resolvedHarness.activeCommunityModule?.selectedSkills ?? [],
+      requestedSkillMentionTokens: resolvedHarness.requestedSkillMentionTokens,
+      ambiguousSkillMentionTokens: resolvedHarness.ambiguousSkillMentionTokens,
+    });
+    const runtimeContextCapsuleMetadata =
+      buildRuntimeContextCapsuleMetadata(runtimeContextCapsule);
     const contextSnapshot = buildRuntimeTurnContextSnapshot({
-      packet: loadedContext.packet,
+      packet: loadedContextPacket,
       capturedAt: contextLoadedAt,
+      runtimeContextCapsule,
+      runtimeContextCapsuleMetadata,
+      runtimeContextCapsulePhase: "started",
     });
     await ctx.runMutation(internal.threads.setCloudRuntimeRunContextSnapshotInternal as any, {
       ownerId: actor.userId as any,
@@ -580,10 +1046,119 @@ export const runBlaxelCodexRuntimeTurn = action({
       endedAt: contextLoadedAt,
       payload: {
         context_packet_present: Boolean(loadedContext.packet),
+        context_capsule_present: true,
+        capsule_metadata: runtimeContextCapsuleMetadata,
       },
     });
-    const contextPrompt = (renderRuntimeTurnContextForPrompt(loadedContext.packet) ?? "").slice(0, 24_000);
-    const developerInstructions = buildDeveloperInstructions(contextPrompt);
+    queueCodexRuntimePhaseEvent({
+      eventType: "runtime_context_capsule_prepared",
+      eventKey: "runtime_context_capsule_prepared",
+      phase: "context_capsule_prepared",
+      startedAt: contextLoadStartedAt,
+      endedAt: contextLoadedAt,
+      payload: {
+        capsule_metadata: runtimeContextCapsuleMetadata,
+        bridge_runtime: "codex_blaxel_app_server",
+      },
+    });
+    if (
+      resolvedHarness.runtimeMountedTools.length > 0 ||
+      resolvedHarness.personalSkillInventory.length > 0 ||
+      (resolvedHarness.activeCommunityModule?.attachedSkills.length ?? 0) > 0
+    ) {
+      queueCodexRuntimePhaseEvent({
+        eventType: "effective_harness_resolved",
+        eventKey: "effective_harness_resolved",
+        phase: "effective_harness_resolved",
+        startedAt: contextLoadStartedAt,
+        endedAt: contextLoadedAt,
+        payload: {
+          user_scope_id: actor.userId,
+          community_scope_id: claimCommunityId ?? null,
+          requested_skill_mention_tokens:
+            resolvedHarness.requestedSkillMentionTokens,
+          ambiguous_skill_mention_tokens:
+            resolvedHarness.ambiguousSkillMentionTokens,
+          selected_personal_skill_mention_tokens:
+            resolvedHarness.selectedPersonalSkills.map((skill) => skill.mention_token),
+          selected_community_skill_mention_tokens:
+            resolvedHarness.activeCommunityModule?.selectedSkills.map(
+              (skill) => skill.mention_token,
+            ) ?? [],
+          runtime_mounted_tool_names:
+            resolvedHarness.runtimeMountedTools.map((tool) => tool.runtime_tool_name),
+          discovery_mounted_tool_names:
+            resolvedHarness.discoveryMountedTools.map((tool) => tool.runtime_tool_name),
+          shadowed_mounted_tool_names:
+            resolvedHarness.shadowedRuntimeToolNames,
+        },
+      });
+    }
+    const capsulePrompt = renderRuntimeContextCapsuleForPrompt(runtimeContextCapsule) ?? "";
+    const detailedContextPrompt = renderRuntimeTurnContextForPrompt(loadedContextPacket) ?? "";
+    const contextPrompt = [
+      capsulePrompt,
+      resolvedHarness.systemPromptSuffix,
+      communityContext.systemPrompt
+        ? `COMMUNITY_SYSTEM_PROMPT\n${communityContext.systemPrompt}`
+        : "",
+      detailedContextPrompt,
+    ]
+      .filter((block) => block.trim().length > 0)
+      .join("\n\n")
+      .slice(0, 24_000);
+    const codexNativeMcpProjection =
+      buildCodexNativeMcpProjection(resolvedHarness);
+    const projectionInstructions = buildCodexRuntimeProjectionInstructions({
+      mcpMountMode: codexNativeMcpProjection.enabled
+        ? "runtime_projected"
+        : "inherited_base",
+      projectedMcpServerCount: codexNativeMcpProjection.enabled ? 1 : 0,
+      runtimeMountedToolCount: resolvedHarness.runtimeMountedTools.length,
+      discoveryMountedToolCount: resolvedHarness.discoveryMountedTools.length,
+    });
+    const developerInstructions = buildDeveloperInstructions(
+      contextPrompt,
+      projectionInstructions,
+    );
+    const codexRuntimeProjection = buildCodexRuntimeProjection({
+      runtimeContextCapsuleMetadata,
+      developerInstructions,
+      resolvedHarness,
+      nativeMcpProjection: codexNativeMcpProjection,
+    });
+    queueCodexRuntimePhaseEvent({
+      eventType: "codex_runtime_projection_prepared",
+      eventKey: "codex_runtime_projection_prepared",
+      phase: "codex_runtime_projection_prepared",
+      startedAt: contextLoadStartedAt,
+      endedAt: Date.now(),
+      payload: {
+        projection_version: codexRuntimeProjection.version,
+        bridge_runtime: codexRuntimeProjection.bridgeRuntime,
+        mcp_mount_mode: codexRuntimeProjection.mcpMountMode,
+        codex_config_source: codexRuntimeProjection.codexConfigSource,
+        inherited_base_codex_config:
+          codexRuntimeProjection.inheritedBaseCodexConfig,
+        projected_mcp_server_count:
+          codexRuntimeProjection.projectedMcpServerCount,
+        native_mcp_projection_fingerprint:
+          codexRuntimeProjection.nativeMcpProjectionFingerprint,
+        runtime_mounted_tool_count:
+          codexRuntimeProjection.runtimeMountedToolCount,
+        discovery_mounted_tool_count:
+          codexRuntimeProjection.discoveryMountedToolCount,
+        shadowed_mounted_tool_count:
+          codexRuntimeProjection.shadowedMountedToolCount,
+        selected_skill_count: codexRuntimeProjection.selectedSkillRefs.length,
+        mounted_tool_capability_count:
+          codexRuntimeProjection.mountedToolCapabilityRefs.length,
+        context_capsule_hash: codexRuntimeProjection.contextCapsuleHash,
+        developer_instructions_hash:
+          codexRuntimeProjection.developerInstructionsHash,
+        warning: codexRuntimeProjection.warning,
+      },
+    });
 
     const token = await mintCodexBridgeRunToken({
       runId,
@@ -591,7 +1166,7 @@ export const runBlaxelCodexRuntimeTurn = action({
       threadId: String(args.threadId),
       projectId: claimProjectId || null,
       communityId: claimCommunityId || null,
-      operations: ["event", "finish"],
+      operations: ["event", "finish", "mcp_tool"],
       ttlMs: 15 * 60 * 1000,
     });
     if (!token.ok) {
@@ -622,6 +1197,7 @@ export const runBlaxelCodexRuntimeTurn = action({
     const bridgeStatusPath = `${bridgeDir}/bridge-status.out`;
     const eventUrl = `${callbackBaseUrl}/runtime/codex_bridge/event`;
     const finishUrl = `${callbackBaseUrl}/runtime/codex_bridge/finish`;
+    const mcpToolUrl = `${callbackBaseUrl}/runtime/codex_bridge/mcp_tool`;
     let workspaceRoot = "/workspace";
     let webSocketProcessName: string | null = null;
     let clientProcessName: string | null = null;
@@ -632,9 +1208,27 @@ export const runBlaxelCodexRuntimeTurn = action({
     let sandboxStartedAt: number | null = null;
     let costOutcome: "succeeded" | "failed" | "cancelled" = "failed";
     let costFailureCode: string | null = null;
+    let sandboxEnsured = false;
 
     try {
       const sandboxStartRequestedAt = Date.now();
+      await recordHeadlessCodexOperationEvent({
+        ctx,
+        ownerId: actor.userId as any,
+        threadId: args.threadId,
+        runId,
+        projectId: claimProjectId,
+        communityId: claimCommunityId,
+        eventType: "headless_sandbox_ensure_started",
+        eventKey: `${runId}:headless_sandbox_ensure_started:${names.sandboxName}`,
+        payload: {
+          sandbox_id: names.sandboxName,
+          volume_name: runtimeVolumeName,
+          provider_id: "blaxel",
+          status: "started",
+          destroy_after_run: destroyAfterRun,
+        },
+      });
       queueCodexRuntimePhaseEvent({
         eventType: "codex_sandbox_ensure_started",
         eventKey: "codex_sandbox_ensure_started",
@@ -658,6 +1252,24 @@ export const runBlaxelCodexRuntimeTurn = action({
       });
       const sandboxEnsureCompletedAt = Date.now();
       if (!ensured.ok) {
+        await recordHeadlessCodexOperationEvent({
+          ctx,
+          ownerId: actor.userId as any,
+          threadId: args.threadId,
+          runId,
+          projectId: claimProjectId,
+          communityId: claimCommunityId,
+          eventType: "headless_sandbox_ensure_completed",
+          eventKey: `${runId}:headless_sandbox_ensure_completed:error`,
+          payload: {
+            sandbox_id: names.sandboxName,
+            volume_name: runtimeVolumeName,
+            provider_id: "blaxel",
+            status: "error",
+            latency_ms: sandboxEnsureCompletedAt - sandboxStartRequestedAt,
+            code: ensured.code || null,
+          },
+        });
         queueCodexRuntimePhaseEvent({
           eventType: "codex_sandbox_ensure_completed",
           eventKey: "codex_sandbox_ensure_completed",
@@ -684,8 +1296,34 @@ export const runBlaxelCodexRuntimeTurn = action({
           workspace_root_present: Boolean(ensured.workspaceRoot),
         },
       });
+      sandboxEnsured = true;
       sandboxStartedAt = sandboxStartRequestedAt;
       workspaceRoot = ensured.workspaceRoot;
+      await ctx.runMutation(internal.threads.setCloudRuntimeRunWorkspaceSessionInternal as any, {
+        ownerId: actor.userId as any,
+        runId,
+        state: "active",
+        providerSandboxId: names.sandboxName,
+        region: normalizeString((ensured as { region?: unknown }).region) || undefined,
+        nowMs: sandboxEnsureCompletedAt,
+      }).catch(() => null);
+      await recordHeadlessCodexOperationEvent({
+        ctx,
+        ownerId: actor.userId as any,
+        threadId: args.threadId,
+        runId,
+        projectId: claimProjectId,
+        communityId: claimCommunityId,
+        eventType: "headless_sandbox_ensure_completed",
+        eventKey: `${runId}:headless_sandbox_ensure_completed:ok`,
+        payload: {
+          sandbox_id: names.sandboxName,
+          volume_name: runtimeVolumeName,
+          provider_id: "blaxel",
+          status: "ok",
+          latency_ms: sandboxEnsureCompletedAt - sandboxStartRequestedAt,
+        },
+      });
 
       const bridgeFilesStartedAt = Date.now();
       const authPayloadContent = `${JSON.stringify(buildCodexBlaxelExternalAuthPayload({
@@ -698,8 +1336,11 @@ export const runBlaxelCodexRuntimeTurn = action({
         bridgeToken: token.token,
         eventUrl,
         finishUrl,
+        mcpToolUrl,
         prompt,
         developerInstructions,
+        codexRuntimeProjection,
+        codexNativeMcpProjection,
         modelId,
       })}\n`;
       const bridgePrep = await prepareBlaxelWorkspaceBridgeFiles({
@@ -856,6 +1497,24 @@ export const runBlaxelCodexRuntimeTurn = action({
           failure_code: clientStarted.ok ? null : clientStarted.code,
         },
       });
+      await recordHeadlessCodexOperationEvent({
+        ctx,
+        ownerId: actor.userId as any,
+        threadId: args.threadId,
+        runId,
+        projectId: claimProjectId,
+        communityId: claimCommunityId,
+        eventType: "headless_codex_bridge_worker_started",
+        eventKey: `${runId}:headless_codex_bridge_worker_started:${clientProcessName}`,
+        payload: {
+          sandbox_id: names.sandboxName,
+          provider_id: "blaxel",
+          process_name: clientProcessName,
+          websocket_process_name: webSocketProcessName,
+          status: clientStarted.ok ? "ok" : "error",
+          code: clientStarted.ok ? null : clientStarted.code ?? null,
+        },
+      });
       await flushCodexRuntimePhaseTelemetry();
       const commandResult = clientStarted.ok
         ? await waitForBridgeProcessCompletion({
@@ -899,8 +1558,11 @@ export const runBlaxelCodexRuntimeTurn = action({
         runId,
         phase: "finished",
         snapshot: buildRuntimeTurnContextSnapshot({
-          packet: loadedContext.packet,
+          packet: loadedContextPacket,
           capturedAt: Date.now(),
+          runtimeContextCapsule,
+          runtimeContextCapsuleMetadata,
+          runtimeContextCapsulePhase: "started",
         }),
         nowMs: Date.now(),
       }).catch(() => null);
@@ -1041,6 +1703,19 @@ export const runBlaxelCodexRuntimeTurn = action({
             volumeDestroyFailureCode = error instanceof Error ? error.message : String(error ?? "volume_destroy_failed");
           }
         }
+      }
+      if (sandboxEnsured) {
+        await ctx.runMutation(internal.threads.setCloudRuntimeRunWorkspaceSessionInternal as any, {
+          ownerId: actor.userId as any,
+          runId,
+          state: destroyAfterRun
+            ? sandboxDestroySucceeded
+              ? "released"
+              : "failed"
+            : "active",
+          providerSandboxId: names.sandboxName,
+          nowMs: Date.now(),
+        }).catch(() => null);
       }
       await recordTrackedCodexBlaxelRuntimeProviderCostBestEffort({
         ctx,

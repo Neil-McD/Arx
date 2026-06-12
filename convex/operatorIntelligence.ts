@@ -78,6 +78,30 @@ const RUNTIME_TOOL_EVENT_TYPES = [
   "runtime_diagnostics_detected",
   "workspace_session_create_completed",
 ] as const;
+const HEADLESS_CODEX_OPERATION_EVENT_TYPES = [
+  "assistant_text_delta",
+  "codex_app_server_error",
+  "codex_thread_started",
+  "codex_turn_completed",
+  "codex_turn_started",
+  "headless_codex_bridge_worker_started",
+  "headless_sandbox_ensure_completed",
+  "headless_sandbox_ensure_started",
+  "headless_sandbox_teardown_failed",
+  "tool_call_finished",
+  "tool_call_started",
+  "workspace_compute_charge_settled",
+  "workspace_compute_charge_settlement_failed",
+  "workspace_session_accounting_kept_alive",
+  "workspace_session_accounting_release_checked",
+  "workspace_session_accounting_release_failed",
+  "workspace_session_adopted",
+  "workspace_session_create_completed",
+  "workspace_session_create_started",
+  "workspace_session_provider_release_failed",
+] as const;
+const HEADLESS_CODEX_RUN_TABLE_LIMIT = 8;
+const HEADLESS_CODEX_STUCK_RUN_AGE_MS = 8 * 60 * 1000;
 const PAID_TOOL_LEDGER_TOOL_NAME_SET = new Set<string>(PAID_TOOL_LEDGER_TOOL_NAMES as readonly string[]);
 const WEB_DEPLOY_FRONTEND_CRASH_EVENT_TYPES = new Set([
   "deploy.frontend_crash",
@@ -637,6 +661,347 @@ function readToolFailureCode(row: any): string {
 function readToolName(row: any): string {
   const payload = readPayloadRecord(row);
   return normalizeOperatorKey(payload.tool_name ?? payload.toolName, "unknown_tool");
+}
+
+function normalizeOptionalOperatorString(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
+
+function normalizeOptionalOperatorNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value;
+}
+
+function normalizeOptionalOperatorMs(value: unknown): number | null {
+  const numberValue = normalizeOptionalOperatorNumber(value);
+  if (numberValue == null) return null;
+  return Math.max(0, Math.round(numberValue));
+}
+
+function readPayloadString(payload: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = normalizeOptionalOperatorString(payload[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function readPayloadNumber(payload: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = normalizeOptionalOperatorNumber(payload[key]);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+function readEventCreatedAt(row: any): number | null {
+  const createdAt = normalizeOptionalOperatorNumber(row?.createdAt);
+  return createdAt == null ? null : Math.max(0, Math.floor(createdAt));
+}
+
+function rowId(row: any): string {
+  return String(row?._id ?? `${String(row?.runId ?? "")}:${String(row?.seq ?? "")}:${String(row?.eventType ?? "")}`);
+}
+
+function dedupeRowsById(rows: any[]): any[] {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const row of rows) {
+    const id = rowId(row);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(row);
+  }
+  return out;
+}
+
+function isHeadlessCodexRun(row: any, events: any[]): boolean {
+  const fields = [
+    row?.engineId,
+    row?.executionMode,
+    row?.contractName,
+    row?.contractVersion,
+    row?.harnessProfile,
+    row?.harnessProfileSource,
+    ...(Array.isArray(row?.capabilityFamilies) ? row.capabilityFamilies : []),
+  ].map((value) => String(value ?? "").toLowerCase());
+  if (fields.some((value) => value.includes("codex"))) return true;
+  return events.some((event) => String(event?.eventType ?? "").startsWith("codex_"));
+}
+
+function firstEvent(rows: any[], predicate: (row: any) => boolean): any | null {
+  const sorted = rows
+    .filter(predicate)
+    .sort((left, right) => (readEventCreatedAt(left) ?? 0) - (readEventCreatedAt(right) ?? 0));
+  return sorted[0] ?? null;
+}
+
+function latestEvent(rows: any[], predicate: (row: any) => boolean): any | null {
+  const sorted = rows
+    .filter(predicate)
+    .sort((left, right) => (readEventCreatedAt(right) ?? 0) - (readEventCreatedAt(left) ?? 0));
+  return sorted[0] ?? null;
+}
+
+function readHeadlessWorker(events: any[]) {
+  const workerEvent = latestEvent(events, (event) => {
+    if (String(event?.eventType ?? "") === "headless_codex_bridge_worker_started") return true;
+    const payload = readPayloadRecord(event);
+    return Boolean(
+      readPayloadString(payload, [
+        "fly_app",
+        "fly_app_name",
+        "fly_machine_id",
+        "machine_id",
+        "worker_id",
+        "worker_version",
+        "process_name",
+      ]),
+    );
+  });
+  if (!workerEvent) {
+    return {
+      provider: null,
+      appName: null,
+      machineId: null,
+      region: null,
+      version: null,
+      status: "not_reported" as const,
+      latestAt: null,
+    };
+  }
+  const payload = readPayloadRecord(workerEvent);
+  return {
+    provider: readPayloadString(payload, ["worker_provider", "provider_id", "provider"]) ?? "fly",
+    appName: readPayloadString(payload, ["fly_app", "fly_app_name", "app_name"]),
+    machineId: readPayloadString(payload, ["fly_machine_id", "machine_id", "worker_id", "process_name"]),
+    region: readPayloadString(payload, ["fly_region", "region"]),
+    version: readPayloadString(payload, ["worker_version", "version", "release"]),
+    status: "reported" as const,
+    latestAt: readEventCreatedAt(workerEvent),
+  };
+}
+
+function readHeadlessSandbox(row: any, events: any[]) {
+  const sandboxEvent = latestEvent(events, (event) => {
+    const payload = readPayloadRecord(event);
+    return Boolean(
+      readPayloadString(payload, [
+        "sandbox_id",
+        "provider_sandbox_id",
+        "workspace_provider_sandbox_id",
+        "sandboxName",
+      ]),
+    );
+  });
+  const payload = sandboxEvent ? readPayloadRecord(sandboxEvent) : {};
+  const sandboxId =
+    normalizeOptionalOperatorString(row?.workspaceProviderSandboxId) ??
+    readPayloadString(payload, [
+      "sandbox_id",
+      "provider_sandbox_id",
+      "workspace_provider_sandbox_id",
+      "sandboxName",
+    ]);
+  const eventType = String(sandboxEvent?.eventType ?? "");
+  const payloadStatus = normalizeOperatorKey(payload.status, "");
+  const workspaceSessionState = normalizeOperatorKey(row?.workspaceSessionState, "");
+  const status =
+    eventType === "headless_sandbox_ensure_started" || eventType === "workspace_session_create_started"
+      ? "ensuring"
+      : eventType === "workspace_session_provider_release_failed"
+        ? "release_failed"
+        : eventType === "headless_sandbox_teardown_failed"
+          ? "teardown_failed"
+          : eventType === "headless_sandbox_ensure_completed" && payloadStatus === "error"
+            ? "failed"
+            : eventType === "workspace_session_create_completed" && payloadStatus === "error"
+              ? "failed"
+              : eventType === "workspace_session_accounting_release_checked"
+                ? "released"
+                : workspaceSessionState === "released"
+                  ? "released"
+                  : workspaceSessionState === "failed"
+                    ? "release_failed"
+                : sandboxId
+                  ? "active"
+                  : "not_started";
+  return {
+    provider: readPayloadString(payload, ["provider_id", "provider"]) ?? (sandboxId ? "blaxel" : null),
+    sandboxId,
+    status,
+    ensureLatencyMs: normalizeOptionalOperatorMs(
+      readPayloadNumber(payload, ["latency_ms", "ensure_latency_ms", "sandbox_start_latency_ms"]),
+    ),
+    latestAt: readEventCreatedAt(sandboxEvent),
+  };
+}
+
+function readHeadlessAccounting(events: any[]) {
+  const event = latestEvent(events, (row) =>
+    [
+      "workspace_compute_charge_settled",
+      "workspace_compute_charge_settlement_failed",
+      "workspace_session_accounting_kept_alive",
+      "workspace_session_accounting_release_checked",
+      "workspace_session_accounting_release_failed",
+      "workspace_session_provider_release_failed",
+    ].includes(String(row?.eventType ?? "")),
+  );
+  if (!event) {
+    return {
+      status: "not_reported" as const,
+      creditsDebited: null,
+      durationSeconds: null,
+      latestAt: null,
+    };
+  }
+  const payload = readPayloadRecord(event);
+  const eventType = String(event.eventType ?? "");
+  const status =
+    eventType === "workspace_compute_charge_settled"
+      ? "settled"
+      : eventType === "workspace_compute_charge_settlement_failed"
+        ? "settlement_failed"
+        : eventType === "workspace_session_accounting_kept_alive"
+          ? "kept_alive"
+          : eventType === "workspace_session_accounting_release_checked"
+            ? "release_checked"
+            : "release_failed";
+  return {
+    status,
+    creditsDebited: readPayloadNumber(payload, ["credits_debited", "creditsDebited"]),
+    durationSeconds: readPayloadNumber(payload, ["duration_seconds", "durationSeconds"]),
+    latestAt: readEventCreatedAt(event),
+  };
+}
+
+function buildHeadlessCodexOperationsSnapshot(params: {
+  runs: any[];
+  events: any[];
+  nowMs: number;
+}) {
+  const eventsByRun = new Map<string, any[]>();
+  for (const event of params.events) {
+    const runId = normalizeOptionalOperatorString(event?.runId);
+    if (!runId) continue;
+    const list = eventsByRun.get(runId) ?? [];
+    list.push(event);
+    eventsByRun.set(runId, list);
+  }
+  const headlessRuns = params.runs
+    .filter((run) => isHeadlessCodexRun(run, eventsByRun.get(String(run.runId ?? "")) ?? []))
+    .sort((left, right) => (readRowCreatedAt(right) || 0) - (readRowCreatedAt(left) || 0))
+    .slice(0, HEADLESS_CODEX_RUN_TABLE_LIMIT);
+
+  const runs = headlessRuns.map((run) => {
+    const runId = String(run.runId ?? "");
+    const events = (eventsByRun.get(runId) ?? []).sort((left, right) => (readEventCreatedAt(left) ?? 0) - (readEventCreatedAt(right) ?? 0));
+    const firstOperationalEvent = firstEvent(events, (event) => {
+      const eventType = String(event?.eventType ?? "");
+      return eventType !== "run_started";
+    });
+    const firstAssistantDelta = firstEvent(events, (event) => String(event?.eventType ?? "") === "assistant_text_delta");
+    const codexTurnCompleted = latestEvent(events, (event) => String(event?.eventType ?? "") === "codex_turn_completed");
+    const startedAt = Math.max(0, Math.floor(Number(run.startedAt ?? run.createdAt ?? 0)));
+    const finishedAt = normalizeOptionalOperatorNumber(run.finishedAt);
+    const status = String(run.status ?? "unknown");
+    const durationMs =
+      finishedAt != null
+        ? Math.max(0, Math.floor(finishedAt - startedAt))
+        : status === "running"
+          ? Math.max(0, Math.floor(params.nowMs - startedAt))
+          : null;
+    const activeAgeMs = status === "running" ? Math.max(0, Math.floor(params.nowMs - startedAt)) : null;
+    const worker = readHeadlessWorker(events);
+    const sandbox = readHeadlessSandbox(run, events);
+    const accounting = readHeadlessAccounting(events);
+    const failureReason =
+      normalizeOptionalOperatorString(run.errorCode) ??
+      normalizeOptionalOperatorString(run.reason) ??
+      normalizeOptionalOperatorString(readPayloadRecord(latestEvent(events, (event) => String(event?.eventType ?? "").includes("failed")) ?? {}).error_code) ??
+      null;
+    const firstEventAt = readEventCreatedAt(firstOperationalEvent);
+    const firstAssistantDeltaAt = readEventCreatedAt(firstAssistantDelta);
+    const codexTurnCompletedAt = readEventCreatedAt(codexTurnCompleted);
+    return {
+      runId,
+      threadId: run.threadId ? String(run.threadId) : null,
+      projectId: run.projectId ? String(run.projectId) : null,
+      communityId: run.communityId ? String(run.communityId) : null,
+      status,
+      modelId: normalizeOptionalOperatorString(run.modelId),
+      engineId: normalizeOptionalOperatorString(run.engineId),
+      executionMode: normalizeOptionalOperatorString(run.executionMode),
+      harnessProfile: normalizeOptionalOperatorString(run.harnessProfile),
+      startedAt,
+      finishedAt: finishedAt == null ? null : Math.max(0, Math.floor(finishedAt)),
+      durationMs,
+      activeAgeMs,
+      firstEventAt,
+      firstEventLatencyMs: firstEventAt == null ? null : Math.max(0, Math.floor(firstEventAt - startedAt)),
+      firstAssistantDeltaAt,
+      firstAssistantDeltaLatencyMs:
+        firstAssistantDeltaAt == null ? null : Math.max(0, Math.floor(firstAssistantDeltaAt - startedAt)),
+      codexTurnCompletedAt,
+      eventCount: events.length,
+      worker,
+      sandbox,
+      accounting,
+      failureReason,
+    };
+  });
+
+  const activeRuns = runs.filter((run) => run.status === "running").length;
+  const stuckRuns = runs.filter((run) => (run.activeAgeMs ?? 0) >= HEADLESS_CODEX_STUCK_RUN_AGE_MS).length;
+  const oldestActiveRunAgeMs = runs.reduce<number | null>((max, run) => {
+    if (run.activeAgeMs == null) return max;
+    return max == null ? run.activeAgeMs : Math.max(max, run.activeAgeMs);
+  }, null);
+  const sandboxCreateFailures = runs.filter((run) => run.sandbox.status === "failed").length;
+  const sandboxReleaseFailures = runs.filter((run) =>
+    run.sandbox.status === "release_failed" || run.sandbox.status === "teardown_failed",
+  ).length;
+  const accountingSettlementFailures = runs.filter((run) =>
+    run.accounting.status === "settlement_failed" || run.accounting.status === "release_failed",
+  ).length;
+  const accountingPendingRuns = runs.filter((run) =>
+    run.status !== "running" &&
+    run.accounting.status !== "settled" &&
+    run.accounting.status !== "release_checked" &&
+    run.accounting.status !== "kept_alive",
+  ).length;
+  const firstEventMissingRuns = runs.filter((run) => run.firstEventAt == null).length;
+  const firstDeltaMissingRuns = runs.filter((run) => run.status === "ok" && run.firstAssistantDeltaAt == null).length;
+  const score = runs.length > 0
+    ? clampOperatorScore(
+        100 -
+          Math.min(32, stuckRuns * 16) -
+          Math.min(30, sandboxCreateFailures * 15) -
+          Math.min(24, sandboxReleaseFailures * 12) -
+          Math.min(30, accountingSettlementFailures * 15) -
+          Math.min(18, firstEventMissingRuns * 6) -
+          Math.min(18, firstDeltaMissingRuns * 6),
+      )
+    : null;
+  return {
+    health: buildOperatorHealthFromScore(score),
+    score,
+    totals: {
+      runs: runs.length,
+      activeRuns,
+      stuckRuns,
+      oldestActiveRunAgeMs,
+      sandboxCreateFailures,
+      sandboxReleaseFailures,
+      firstEventMissingRuns,
+      firstDeltaMissingRuns,
+      accountingSettlementFailures,
+      accountingPendingRuns,
+    },
+    runs,
+  };
 }
 
 function readRowCreatedAt(row: any): number {
@@ -2559,6 +2924,7 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
     const [
       runtimeRunGroups,
       runtimeEventGroups,
+      headlessEventGroups,
       diagnosticGroups,
     ] = await Promise.all([
       Promise.all(
@@ -2572,6 +2938,11 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
         ),
       ),
       Promise.all(
+        HEADLESS_CODEX_OPERATION_EVENT_TYPES.map((eventType) =>
+          readRuntimeEventsByType(ctx, eventType, rangeStart, scannedEventLimit),
+        ),
+      ),
+      Promise.all(
         (["runtime", "tool", "mcp", "billing"] as const).map((subsystem) =>
           readDiagnosticEventsBySubsystem(ctx, subsystem, rangeStart, scannedEventLimit),
         ),
@@ -2580,6 +2951,10 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
 
     const runs: any[] = runtimeRunGroups.flat();
     const runtimeEvents: any[] = runtimeEventGroups.flat();
+    const headlessEvents: any[] = dedupeRowsById([
+      ...runtimeEvents,
+      ...headlessEventGroups.flat(),
+    ]);
     const diagnosticRows: any[] = diagnosticGroups.flat().sort((a: any, b: any) => b.createdAt - a.createdAt);
     const toolStartedRows = runtimeEvents.filter((row: any) => row.eventType === "tool_call_started");
     const toolFinishedRows = runtimeEvents.filter((row: any) => row.eventType === "tool_call_finished");
@@ -2713,6 +3088,11 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
       : null;
     const health = buildOperatorHealthFromScore(executionAvailabilityScore);
     const executionErrorKeys = new Set(["provider_failed", "sandbox_create_failed"]);
+    const headlessCodexOperations = buildHeadlessCodexOperationsSnapshot({
+      runs,
+      events: headlessEvents,
+      nowMs,
+    });
 
     return {
       computedAt: nowMs,
@@ -2743,6 +3123,7 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
           errorKeys: new Set(executionToolFailureRows.map(readToolName)),
         }),
       },
+      headlessCodexOperations,
       totals: {
         turnsStarted: runs.length,
         turnsSucceeded,
@@ -2780,6 +3161,7 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
         isTruncated:
           runtimeRunGroups.some((group: any[]) => group.length >= scannedRunLimit) ||
           runtimeEventGroups.some((group: any[]) => group.length >= scannedEventLimit) ||
+          headlessEventGroups.some((group: any[]) => group.length >= scannedEventLimit) ||
           diagnosticGroups.some((group: any[]) => group.length >= scannedEventLimit),
       },
     };

@@ -5,6 +5,10 @@ import {
   type RuntimeTurnContextPacket,
 } from "./runtimeTurnContextPacket.ts";
 import {
+  renderRuntimeContextCapsuleForPrompt,
+  type RuntimeContextCapsuleV1,
+} from "./runtimeContextCapsule.ts";
+import {
   normalizeCommunityResourceRuntimeLaneState,
   type CommunityResourceRuntimeLaneState,
 } from "./communityResourceLane.ts";
@@ -523,6 +527,7 @@ export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunity
   harnessName: "chat_tools";
   projectLabel?: string | null;
   projectDescription?: string | null;
+  runtimeContextCapsule?: RuntimeContextCapsuleV1 | null;
   runtimeTurnContext: RuntimeTurnContextPacket;
   currentDateTimeIso?: string | null;
   currentDateLabel?: string | null;
@@ -561,6 +566,7 @@ export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunity
     }),
   ];
   const volatilePromptBlocks = [
+    renderRuntimeContextCapsuleForPrompt(params.runtimeContextCapsule),
     renderRuntimeTurnContextForPrompt(params.runtimeTurnContext),
     buildRuntimeTemporalContextPrompt({
       currentDateTimeIso: params.currentDateTimeIso,

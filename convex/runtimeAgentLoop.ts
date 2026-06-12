@@ -83,6 +83,12 @@ import {
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
 import {
+  buildRuntimeContextCapsule,
+  buildRuntimeContextCapsuleMetadata,
+  type RuntimeContextCapsuleMetadataV1,
+  type RuntimeContextCapsuleV1,
+} from "../shared/runtimeContextCapsule.ts";
+import {
   buildRuntimeTurnEnvelope,
   type RuntimeTurnEnvelopeV1,
 } from "../shared/runtimeTurnEnvelope";
@@ -1361,6 +1367,8 @@ async function executeRetrievalAgentLoop(
     refreshRuntimeContextSnapshot?: (
       phase?: "started" | "active",
       runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null,
+      runtimeContextCapsule?: RuntimeContextCapsuleV1 | null,
+      runtimeContextCapsuleMetadata?: RuntimeContextCapsuleMetadataV1 | null,
     ) => Promise<void>;
     touchRunHeartbeat?: () => Promise<void>;
   },
@@ -1470,11 +1478,6 @@ async function executeRetrievalAgentLoop(
     communityResourceLane: resolvedHarness.communityResourceLane,
     allowedToolNames: effectiveAllowedToolNames,
   });
-  try {
-    await params.refreshRuntimeContextSnapshot?.("started", runtimeTurnEnvelope);
-  } catch {
-    // Best-effort snapshot persistence; the explicit prompt envelope below remains canonical.
-  }
   const runtimeTurnContext = (
     await loadRuntimeTurnContextPacketForRun({
       ctx: params.ctx,
@@ -1487,6 +1490,58 @@ async function executeRetrievalAgentLoop(
       threadWorkingState: params.threadWorkingState,
     })
   ).packet;
+  const runtimeContextCapsule = buildRuntimeContextCapsule({
+    latestUserText: latestUserTextForRuntimeContext,
+    threadId: params.threadId ?? null,
+    projectId: params.projectId ?? null,
+    projectLabel: projectContext.label,
+    projectDescription: projectContext.description,
+    communityId: params.communityId ?? null,
+    communityName: params.communityName,
+    communitySlug: params.communitySlug,
+    communityOneLiner: params.communityOneLiner,
+    communityAbout: params.communityAbout,
+    communityResourceLane: resolvedHarness.communityResourceLane,
+    allowedToolNames: effectiveAllowedToolNames,
+    runtimeTurnContext,
+    mountedToolCapabilityGroups: resolvedHarness.capabilityGroups,
+    runtimeMountedToolCount: resolvedHarness.runtimeMountedTools.length,
+    defaultDiscoveryMountedToolCount: resolvedHarness.discoveryMountedTools.length,
+    shadowedMountedToolCount: resolvedHarness.shadowedMountedTools.length,
+    platformSkillInventory: resolvedHarness.platformSkillInventory,
+    selectedPlatformSkills: resolvedHarness.selectedPlatformSkills,
+    personalSkillInventory: resolvedHarness.personalSkillInventory,
+    selectedPersonalSkills: resolvedHarness.selectedPersonalSkills,
+    communitySkillInventory:
+      resolvedHarness.activeCommunityModule?.attachedSkills ?? [],
+    selectedCommunitySkills:
+      resolvedHarness.activeCommunityModule?.selectedSkills ?? [],
+    requestedSkillMentionTokens: resolvedHarness.requestedSkillMentionTokens,
+    ambiguousSkillMentionTokens: resolvedHarness.ambiguousSkillMentionTokens,
+  });
+  const runtimeContextCapsuleMetadata =
+    buildRuntimeContextCapsuleMetadata(runtimeContextCapsule);
+  try {
+    await params.appendRunEvent({
+      eventType: "runtime_context_capsule_prepared",
+      eventKey: `${params.runId}:runtime_context_capsule_prepared`,
+      payload: {
+        capsule_metadata: runtimeContextCapsuleMetadata,
+      },
+    });
+  } catch {
+    // Best-effort context evidence only.
+  }
+  try {
+    await params.refreshRuntimeContextSnapshot?.(
+      "started",
+      runtimeTurnEnvelope,
+      runtimeContextCapsule,
+      runtimeContextCapsuleMetadata,
+    );
+  } catch {
+    // Best-effort snapshot persistence; the explicit prompt capsule below remains canonical.
+  }
   const baseSystemPrompt = buildPlatformHarnessRuntimeSystemPrompt({
     loopBudget: params.loopBudget,
     allowedToolNames: effectiveAllowedToolNames,
@@ -1502,6 +1557,7 @@ async function executeRetrievalAgentLoop(
     agentSoul: params.agentSoul,
     projectLabel: projectContext.label,
     projectDescription: projectContext.description,
+    runtimeContextCapsule,
     runtimeTurnContext,
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
@@ -2559,6 +2615,8 @@ async function executeChatToolsAgentLoop(
     refreshRuntimeContextSnapshot?: (
       phase?: "started" | "active",
       runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null,
+      runtimeContextCapsule?: RuntimeContextCapsuleV1 | null,
+      runtimeContextCapsuleMetadata?: RuntimeContextCapsuleMetadataV1 | null,
     ) => Promise<void>;
     touchRunHeartbeat?: () => Promise<void>;
   },

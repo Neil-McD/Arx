@@ -2310,6 +2310,7 @@ async function appendRuntimeRunEventByBridgeClaims(args: {
     claimProjectId: args.claimProjectId,
     claimCommunityId: args.claimCommunityId,
   });
+  if (!run) throw new Error("runtime_run_not_found");
 
   const eventType = String(args.eventType ?? "").trim();
   if (!eventType) throw new Error("runtime_event_type_required");
@@ -2483,6 +2484,7 @@ export const finishCloudRuntimeRunByBridgeClaimsInternal = internalMutation({
       claimProjectId: args.claimProjectId,
       claimCommunityId: args.claimCommunityId,
     });
+    if (!run) throw new Error("runtime_run_not_found");
     if (run.status !== "running") return run;
     await upsertBridgeAssistantMessage({
       ctx,

@@ -7,6 +7,10 @@ import {
   renderRuntimeTurnEnvelopeForPrompt,
   type RuntimeTurnEnvelopeV1,
 } from "./runtimeTurnEnvelope.ts";
+import type {
+  RuntimeContextCapsuleMetadataV1,
+  RuntimeContextCapsuleV1,
+} from "./runtimeContextCapsule.ts";
 
 export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
@@ -27,6 +31,9 @@ export type RuntimeTurnContextSnapshotV1 = {
   version: 1;
   capturedAt: number;
   latestUserText: string | null;
+  runtimeContextCapsule?: RuntimeContextCapsuleV1 | null;
+  runtimeContextCapsuleMetadata?: RuntimeContextCapsuleMetadataV1 | null;
+  runtimeContextCapsulePhase?: "started" | "active" | "finished" | null;
   runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null;
   threadWorkingState: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
@@ -570,6 +577,9 @@ function compactBackgroundProcessEventSnapshot(
 export function buildRuntimeTurnContextSnapshot(params: {
   packet: RuntimeTurnContextPacket;
   capturedAt?: number | null;
+  runtimeContextCapsule?: RuntimeContextCapsuleV1 | null;
+  runtimeContextCapsuleMetadata?: RuntimeContextCapsuleMetadataV1 | null;
+  runtimeContextCapsulePhase?: "started" | "active" | "finished" | null;
 }): RuntimeTurnContextSnapshotV1 {
   const capturedAt =
     typeof params.capturedAt === "number" && Number.isFinite(params.capturedAt)
@@ -579,6 +589,11 @@ export function buildRuntimeTurnContextSnapshot(params: {
     version: 1,
     capturedAt,
     latestUserText: compactSnapshotString(params.packet.latestUserText, 500),
+    runtimeContextCapsule: params.runtimeContextCapsule ?? null,
+    runtimeContextCapsuleMetadata: params.runtimeContextCapsuleMetadata ?? null,
+    runtimeContextCapsulePhase: params.runtimeContextCapsule
+      ? params.runtimeContextCapsulePhase ?? null
+      : null,
     runtimeTurnEnvelope: params.packet.runtimeTurnEnvelope ?? null,
     threadWorkingState: compactThreadWorkingStateSnapshot(
       params.packet.threadWorkingState,

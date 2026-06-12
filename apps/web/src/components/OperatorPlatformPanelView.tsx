@@ -17,6 +17,25 @@ import {
   formatPlatformScore,
 } from "./workspaceRightPanelOperatorShared";
 
+function formatDurationMs(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  const totalMs = Math.max(0, Math.round(value));
+  if (totalMs < 1000) return `${totalMs} ms`;
+  const totalSeconds = Math.max(1, Math.round(totalMs / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
+function formatShortId(value: string | null | undefined): string {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized.slice(0, 12) : "Unknown";
+}
+
 export function OperatorPlatformPanelView(props: {
   webDeploy: OperatorWebDeployDiagnosticsSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
@@ -30,6 +49,7 @@ export function OperatorPlatformPanelView(props: {
   const securityAttentionItems = securityTrust?.attentionItems ?? props.securityAudit?.attentionItems ?? [];
   const runtimeExecution = props.runtimeTools?.executionAvailability ?? null;
   const runtimeTopFailureCodes = runtimeExecution?.topFailureCodes ?? props.runtimeTools?.topFailureCodes ?? [];
+  const headlessOps = props.runtimeTools?.headlessCodexOperations ?? null;
   return (
     <div className="workspace-right-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Platform health overview">
@@ -383,6 +403,73 @@ export function OperatorPlatformPanelView(props: {
           {props.runtimeTools?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Runtime diagnostics are sampled for this window.</div>
           ) : null}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel operator-dashboard__panel--full">
+        <h2>Headless Codex operations</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{formatHealth(headlessOps?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Active runs</span>
+            <strong>{headlessOps?.totals.activeRuns ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Stuck runs</span>
+            <strong>{headlessOps?.totals.stuckRuns ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Oldest active</span>
+            <strong>{formatDurationMs(headlessOps?.totals.oldestActiveRunAgeMs)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Sandbox failures</span>
+            <strong>{(headlessOps?.totals.sandboxCreateFailures ?? 0) + (headlessOps?.totals.sandboxReleaseFailures ?? 0)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Accounting pending</span>
+            <strong>{headlessOps?.totals.accountingPendingRuns ?? 0}</strong>
+          </div>
+          {headlessOps?.runs.length ? (
+            headlessOps.runs.map((run) => (
+              <div className="operator-dashboard__row operator-dashboard__community-row" key={run.runId}>
+                <div className="operator-dashboard__community-main">
+                  <strong>{formatShortId(run.runId)}</strong>
+                  <span>
+                    {[
+                      run.status,
+                      run.projectId ? `workspace ${formatShortId(run.projectId)}` : "workspace unknown",
+                      run.worker.status === "reported"
+                        ? `worker ${formatShortId(run.worker.machineId ?? run.worker.appName)}`
+                        : "worker not reported",
+                      run.sandbox.sandboxId ? `sandbox ${formatShortId(run.sandbox.sandboxId)}` : "sandbox unknown",
+                    ].join(" · ")}
+                  </span>
+                  <span>
+                    {[
+                      `first event ${formatDurationMs(run.firstEventLatencyMs)}`,
+                      `first delta ${formatDurationMs(run.firstAssistantDeltaLatencyMs)}`,
+                      `duration ${formatDurationMs(run.durationMs)}`,
+                      `accounting ${run.accounting.status}`,
+                    ].join(" · ")}
+                  </span>
+                  {run.failureReason ? <span>{run.failureReason}</span> : null}
+                </div>
+                <span>{formatEventTime(run.startedAt)}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No Headless Codex run evidence returned.</div>
+          )}
+          {props.runtimeTools?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Headless Codex operations are sampled for this window.</div>
+          ) : null}
+          <div className="operator-dashboard__empty">
+            Convex is the run ledger; Fly, Blaxel, Sentry, and PostHog remain evidence surfaces.
+          </div>
         </div>
       </section>
 

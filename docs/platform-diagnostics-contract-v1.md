@@ -129,6 +129,9 @@ Each diagnostic signal should be classified with one of these statuses:
 | Provider failures | Model/provider failures by provider/error code | Runtime logs/events | Sentry, Convex | now |
 | Rate-limit failures | Provider or platform rate-limit events | Runtime logs/events | Sentry, Convex | now |
 | Cost per successful turn | Credits/cost divided by successful turns | Convex credits/compute records | Convex | later |
+| Headless Codex run trace | Per-run evidence chain from request through worker, sandbox, Codex event stream, accounting milestone, and completion | `runtimeRuns` plus normalized `runtimeRunEvents` | Convex, Sentry drill-out | now |
+| First Codex event latency | Time from run start to first persisted runtime/Codex milestone | `runtimeRunEvents` | Convex | now |
+| First assistant delta latency | Time from run start to first assistant text delta | `runtimeRunEvents` | Convex | now |
 
 ### Tools, MCP, and workspace runtime
 
@@ -141,6 +144,26 @@ Each diagnostic signal should be classified with one of these statuses:
 | Sandbox create failures | Blaxel sandbox create/start failures | Blaxel client logs and structured errors | Blaxel, Convex, Sentry | now |
 | Workspace command failures | Failed terminal/process commands and exit code | workspace command logs and runtime events | Blaxel, Convex | now |
 | Stuck sandbox/process age | Oldest active sandbox/process past expected lifetime | workspace reconciliation state | Blaxel, Convex | later |
+| Sandbox release/teardown failures | Run sandbox could not be released or teardown evidence is missing after a terminal run | normalized sandbox lifecycle events | Convex, Blaxel | now |
+| Runtime accounting milestone | Per-run workspace compute settlement/release status, without replacing the finance ledger | normalized accounting runtime events | Convex | now |
+
+### Headless Codex Operations v1
+
+The operator panel should track the headless run path as an evidence chain:
+
+`workspace request -> Convex run ledger -> worker evidence -> Blaxel sandbox -> Codex events/tools -> accounting milestone -> completion`
+
+Keep Convex as the ledger. The panel should show a bounded recent-run table with:
+
+- run id, workspace/project id, status, model/engine where available
+- worker provider/app/machine/version if the worker reports it
+- Blaxel sandbox id, ensure status, and ensure latency
+- first persisted event latency and first assistant delta latency
+- total duration or active age
+- accounting milestone status from normalized runtime events
+- normalized failure reason
+
+Do not duplicate raw external logs into Convex. Store scalar, normalized evidence and drill-out identifiers only. Fly logs/metrics, Blaxel process logs, Sentry traces, and PostHog behavior events remain external evidence surfaces. PostHog must not become runtime correctness truth; Sentry must not become product or billing truth.
 
 ### Discover and Harness
 

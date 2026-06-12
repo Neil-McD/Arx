@@ -62,6 +62,16 @@ assert.match(
   "runtime workspace settlement must persist measured/grace/release metadata into the charge writer",
 );
 assert.match(
+  workspaceRuntimeSession,
+  /ensureBillableBlaxelRuntimeWorkspaceComputer[\s\S]*reuseExistingLease[\s\S]*probeBlaxelRuntimeWorkspaceSession[\s\S]*isBlaxelSandboxNotFoundFailure[\s\S]*ensureOnce\(false\)/,
+  "runtime workspace session creation must reuse valid project leases, probe execution readiness, and fresh-wake once on sandbox-not-found",
+);
+assert.match(
+  workspaceRuntimeSession,
+  /executeBlaxelWorkspaceCommand\({[\s\S]*command: "pwd >\/dev\/null"[\s\S]*processName: `polynet-runtime-probe-/,
+  "runtime workspace session creation must prove command execution before exposing workspace tools",
+);
+assert.match(
   workspaceCredits,
   /recordWorkspaceComputeChargeInternal[\s\S]*measuredDurationSeconds: v\.optional\(v\.number\(\)\)[\s\S]*providerStandbyGraceSeconds: v\.optional\(v\.number\(\)\)[\s\S]*providerReleaseReason: v\.optional\(v\.union\(v\.string\(\), v\.null\(\)\)\)[\s\S]*providerReleaseConfirmed: v\.optional\(v\.union\(v\.boolean\(\), v\.null\(\)\)\)/,
   "workspace compute charge writer must accept provider lifecycle split metadata",

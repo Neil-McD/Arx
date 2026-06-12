@@ -39,6 +39,10 @@ import {
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
 import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
+import type {
+  RuntimeContextCapsuleMetadataV1,
+  RuntimeContextCapsuleV1,
+} from "../shared/runtimeContextCapsule";
 import {
   buildRuntimeFailureFinalAnswer,
   hasConnectedAppFailureEvidence,
@@ -537,11 +541,17 @@ export async function handleRuntimeTurnRequest(args: {
       runId,
     });
     let runtimeTurnEnvelopeForRun: RuntimeTurnEnvelopeV1 | null = null;
+    let runtimeContextCapsuleForRun: RuntimeContextCapsuleV1 | null = null;
+    let runtimeContextCapsuleMetadataForRun: RuntimeContextCapsuleMetadataV1 | null = null;
     const persistContextSnapshotBestEffort = async (
       phase: "started" | "active" | "finished",
       runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null,
+      runtimeContextCapsule?: RuntimeContextCapsuleV1 | null,
+      runtimeContextCapsuleMetadata?: RuntimeContextCapsuleMetadataV1 | null,
     ): Promise<void> => {
       if (runtimeTurnEnvelope) runtimeTurnEnvelopeForRun = runtimeTurnEnvelope;
+      if (runtimeContextCapsule) runtimeContextCapsuleForRun = runtimeContextCapsule;
+      if (runtimeContextCapsuleMetadata) runtimeContextCapsuleMetadataForRun = runtimeContextCapsuleMetadata;
       try {
         const nowMs = Date.now();
         const loadedContext = await loadRuntimeTurnContextPacketForRun({
@@ -566,6 +576,9 @@ export async function handleRuntimeTurnRequest(args: {
             snapshot: buildRuntimeTurnContextSnapshot({
               packet: loadedContext.packet,
               capturedAt: nowMs,
+              runtimeContextCapsule: runtimeContextCapsuleForRun,
+              runtimeContextCapsuleMetadata: runtimeContextCapsuleMetadataForRun,
+              runtimeContextCapsulePhase: runtimeContextCapsuleForRun ? "started" : null,
             }),
             nowMs,
           },
@@ -628,6 +641,9 @@ export async function handleRuntimeTurnRequest(args: {
           contextSnapshot = buildRuntimeTurnContextSnapshot({
             packet: loadedContext.packet,
             capturedAt: Date.now(),
+            runtimeContextCapsule: runtimeContextCapsuleForRun,
+            runtimeContextCapsuleMetadata: runtimeContextCapsuleMetadataForRun,
+            runtimeContextCapsulePhase: runtimeContextCapsuleForRun ? "started" : null,
           });
         } catch {
           contextSnapshot = null;
@@ -967,8 +983,15 @@ export async function handleRuntimeTurnRequest(args: {
               refreshRuntimeContextSnapshot: async (
                 phase: "started" | "active" = "active",
                 runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
+                runtimeContextCapsule: RuntimeContextCapsuleV1 | null = null,
+                runtimeContextCapsuleMetadata: RuntimeContextCapsuleMetadataV1 | null = null,
               ): Promise<void> => {
-                await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
+                await persistContextSnapshotBestEffort(
+                  phase,
+                  runtimeTurnEnvelope,
+                  runtimeContextCapsule,
+                  runtimeContextCapsuleMetadata,
+                );
               },
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
             });
@@ -1261,8 +1284,15 @@ export async function handleRuntimeTurnRequest(args: {
           refreshRuntimeContextSnapshot: async (
             phase: "started" | "active" = "active",
             runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
+            runtimeContextCapsule: RuntimeContextCapsuleV1 | null = null,
+            runtimeContextCapsuleMetadata: RuntimeContextCapsuleMetadataV1 | null = null,
           ): Promise<void> => {
-            await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
+            await persistContextSnapshotBestEffort(
+              phase,
+              runtimeTurnEnvelope,
+              runtimeContextCapsule,
+              runtimeContextCapsuleMetadata,
+            );
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
         });

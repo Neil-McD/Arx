@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 
 import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import {
+  buildRuntimeContextCapsule,
+  buildRuntimeContextCapsuleMetadata,
+} from "../shared/runtimeContextCapsule.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import { buildRuntimeTurnEnvelope } from "../shared/runtimeTurnEnvelope.ts";
 
@@ -39,6 +43,11 @@ const allowedToolNames = [
   "grep",
   "bash",
 ] as const;
+const longCommunityAbout = [
+  "Founder Circle shares launch playbooks, member examples, and practical operating knowledge.",
+  Array.from({ length: 180 }, () => "community-context-filler").join(" "),
+  "DO_NOT_RENDER_LONG_COMMUNITY_TAIL",
+].join(" ");
 
 const runtimeTurnEnvelope = buildRuntimeTurnEnvelope({
   latestUserText,
@@ -53,6 +62,68 @@ const runtimeTurnEnvelope = buildRuntimeTurnEnvelope({
   },
   allowedToolNames,
 });
+const runtimeTurnContext = buildRuntimeTurnContextPacket({
+  latestUserText,
+  runtimeTurnEnvelope,
+  threadWorkingState,
+  recentToolAttempts: [
+    {
+      toolName: "community_search",
+      status: "ok",
+      commandOrTarget: "launch playbooks",
+      outputPreview: "RAW_TOOL_OUTPUT_SHOULD_NOT_RENDER",
+    },
+  ],
+});
+const runtimeContextCapsule = buildRuntimeContextCapsule({
+  latestUserText,
+  threadId: "thread_context_coherence",
+  communityId: "community_founders",
+  projectId: "project_launch",
+  projectLabel: "Launch workspace",
+  projectDescription: "Workspace context for the launch plan.",
+  communityName: "Founder Circle",
+  communitySlug: "founder-circle",
+  communityOneLiner: "A community for founders building AI-native companies.",
+  communityAbout: longCommunityAbout,
+  communityResourceLane: {
+    lane: "member",
+    can_read_live_resources: true,
+    can_use_resource_builder: false,
+  },
+  allowedToolNames,
+  runtimeTurnContext,
+  mountedToolCapabilityGroups: [
+    {
+      app_name: "Docs MCP",
+      auth_type: "none",
+      scopes: ["user"],
+      default_scope: "user",
+      tool_count: 2,
+      default_runtime_tool_names: ["me__docs_search"],
+      executable_runtime_tool_names: ["me__docs_search", "me__docs_read"],
+    },
+  ],
+  runtimeMountedToolCount: 2,
+  defaultDiscoveryMountedToolCount: 1,
+  shadowedMountedToolCount: 0,
+  platformSkillInventory: [
+    {
+      name: "Launch Planner",
+      mention_token: "launch-planner",
+      description: "FULL_SKILL_BODY_SHOULD_NOT_RENDER",
+    },
+  ],
+  selectedPlatformSkills: [
+    {
+      name: "Launch Planner",
+      mention_token: "launch-planner",
+      description: "FULL_SELECTED_SKILL_BODY_SHOULD_NOT_RENDER",
+    },
+  ],
+});
+const runtimeContextCapsuleMetadata =
+  buildRuntimeContextCapsuleMetadata(runtimeContextCapsule);
 
 const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   loopBudget: {
@@ -74,28 +145,77 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   communityName: "Founder Circle",
   communitySlug: "founder-circle",
   communityOneLiner: "A community for founders building AI-native companies.",
-  communityAbout: "Founder Circle shares launch playbooks, member examples, and practical operating knowledge.",
+  communityAbout: longCommunityAbout,
   communitySystemPrompt: "Be useful to founders without forcing every answer into community-specific framing.",
   agentName: "James",
   agentSoul: "Prefer first-principles launch planning over generic marketing checklists.",
-  runtimeTurnContext: buildRuntimeTurnContextPacket({
-    latestUserText,
-    runtimeTurnEnvelope,
-    threadWorkingState,
-  }),
+  runtimeContextCapsule,
+  runtimeTurnContext,
   currentDateTimeIso: "2026-06-03T16:00:00.000Z",
   currentDateLabel: "Wednesday, June 3, 2026 at 12:00:00 PM EDT",
   currentTimeZone: "America/New_York",
 });
 
+const capsuleIndex = prompt.indexOf("RUNTIME_CONTEXT_CAPSULE");
 const envelopeIndex = prompt.indexOf("RUNTIME_TURN_ENVELOPE");
 const workingStateIndex = prompt.indexOf("THREAD_WORKING_STATE");
+assert.ok(capsuleIndex >= 0, "rendered prompt should include the context capsule");
 assert.ok(envelopeIndex >= 0, "rendered prompt should include the runtime turn envelope");
 assert.ok(workingStateIndex >= 0, "rendered prompt should include thread working state");
+assert.ok(
+  capsuleIndex < envelopeIndex,
+  "context capsule should render before the detailed runtime packet",
+);
 assert.ok(
   envelopeIndex < workingStateIndex,
   "runtime turn envelope should render before detailed working state",
 );
+
+const contextCapsuleBlock = blockBetween(prompt, "RUNTIME_CONTEXT_CAPSULE", "RUNTIME_TURN_ENVELOPE");
+assert.match(contextCapsuleBlock, /Current request: Help me plan this launch\./);
+assert.match(
+  contextCapsuleBlock,
+  /Continuity goal: Create a coherent launch plan for the founder community\./,
+);
+assert.match(contextCapsuleBlock, /Mounted tools: executable=2; default_discovery=1; shadowed=0/);
+assert.match(contextCapsuleBlock, /Skills: platform: inventory=1; selected=1 \(\$launch-planner\)/);
+assert.match(contextCapsuleBlock, /Omissions: large_text=yes; raw_tool_output=yes;/);
+assert.match(contextCapsuleBlock, /selected_skill_bodies_omitted_from_capsule=1/);
+assert.match(contextCapsuleBlock, /unexposed_tools=1/);
+assert.doesNotMatch(
+  contextCapsuleBlock,
+  /thread_context_coherence|community_founders|project_launch|thread=|community=|project=/,
+  "context capsule should not expose raw internal ids",
+);
+assert.doesNotMatch(
+  contextCapsuleBlock,
+  /DO_NOT_RENDER_LONG_COMMUNITY_TAIL|RAW_TOOL_OUTPUT_SHOULD_NOT_RENDER|FULL_SKILL_BODY_SHOULD_NOT_RENDER|FULL_SELECTED_SKILL_BODY_SHOULD_NOT_RENDER/,
+  "context capsule should omit long text, raw output, and skill bodies",
+);
+assert.equal(runtimeContextCapsuleMetadata.version, 1);
+assert.match(runtimeContextCapsuleMetadata.hash, /^fnv1a32:[a-f0-9]{8}$/);
+assert.equal(runtimeContextCapsuleMetadata.currentRequestPresent, true);
+assert.equal(runtimeContextCapsuleMetadata.continuityGoalPresent, true);
+assert.equal(runtimeContextCapsuleMetadata.sectionCounts.mountedToolCapabilities, 1);
+assert.equal(runtimeContextCapsuleMetadata.sectionCounts.selectedSkills, 1);
+
+const requestOnlyContext = buildRuntimeTurnContextPacket({
+  latestUserText: "Fix the bridge.",
+});
+const requestOnlyCapsule = buildRuntimeContextCapsule({
+  latestUserText: "Fix the bridge.",
+  runtimeTurnContext: requestOnlyContext,
+});
+const requestOnlyCapsuleMetadata =
+  buildRuntimeContextCapsuleMetadata(requestOnlyCapsule);
+assert.equal(requestOnlyCapsule.currentRequest, "Fix the bridge.");
+assert.equal(
+  requestOnlyCapsule.continuity.goal,
+  null,
+  "current request must not masquerade as durable continuity",
+);
+assert.equal(requestOnlyCapsuleMetadata.currentRequestPresent, true);
+assert.equal(requestOnlyCapsuleMetadata.continuityGoalPresent, false);
 
 assert.match(prompt, /Current request: Help me plan this launch\./);
 assert.match(

@@ -39,6 +39,7 @@ import {
   buildDiscoverAppPersonalConnectRequirements,
   buildDiscoverAppSupportedModesLabel,
   isDiscoverAppPersonallyConnectable,
+  resolveDiscoverAppCatalogConnectPolicy,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
 import {
@@ -265,17 +266,37 @@ function buildDiscoverAppIdentitySource(
   };
 }
 
-function catalogKnownAppMatchesMount(
+function isDiscoverAppMountAuthType(value: unknown): value is DeveloperAppAuthType {
+  return (
+    value === "none" ||
+    value === "api_key" ||
+    value === "bearer" ||
+    value === "oauth"
+  );
+}
+
+function customCatalogAppMatchesMount(
   app: DiscoverAppCatalogEntry,
   mount: DiscoverAppMountCandidate,
 ): boolean {
-  const source = buildDiscoverAppIdentitySource(app);
-  return Boolean(source && mcpAppIdentitySourcesOverlap(source, mount));
+  if (app.personalConnect.connectionKind !== "custom") return false;
+  const mountedCatalogAppId = String(mount.app.catalog_app_id ?? "")
+    .trim()
+    .toLowerCase();
+  if (mountedCatalogAppId && mountedCatalogAppId !== app.id) return false;
+  if (!mount.app.endpoint_url || !isDiscoverAppMountAuthType(mount.app.auth_type)) {
+    return false;
+  }
+  return resolveDiscoverAppCatalogConnectPolicy({
+    catalogAppId: app.id,
+    name: mount.app.name ?? app.name,
+    endpointUrl: mount.app.endpoint_url,
+    authType: mount.app.auth_type,
+  }).ok;
 }
 
 function findMatchingDiscoverAppMount<TMount extends DiscoverAppMountCandidate>(
   app: DiscoverAppCatalogEntry,
-  catalogApps: DiscoverAppCatalogEntry[],
   mounts: TMount[],
 ): TMount | null {
   const source = buildDiscoverAppIdentitySource(app);
@@ -285,17 +306,7 @@ function findMatchingDiscoverAppMount<TMount extends DiscoverAppMountCandidate>(
   if (identityMatch) return identityMatch;
   if (app.personalConnect.connectionKind !== "custom") return null;
 
-  // Custom MCP apps can represent endpoints outside the first-party catalog.
-  return (
-    mounts.find(
-      (mount) =>
-        !catalogApps.some(
-          (entry) =>
-            entry.personalConnect.connectionKind === "known" &&
-            catalogKnownAppMatchesMount(entry, mount),
-        ),
-    ) ?? null
-  );
+  return mounts.find((mount) => customCatalogAppMatchesMount(app, mount)) ?? null;
 }
 
 function findMatchingOwnedSkillPackage(
@@ -468,20 +479,12 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   const selectedPersonalMount = useMemo(() => {
     if (!selectedApp) return null;
-    return findMatchingDiscoverAppMount(
-      selectedApp,
-      discoverApps,
-      userPlatformAppMounts,
-    );
-  }, [discoverApps, selectedApp, userPlatformAppMounts]);
+    return findMatchingDiscoverAppMount(selectedApp, userPlatformAppMounts);
+  }, [selectedApp, userPlatformAppMounts]);
   const selectedCommunityMount = useMemo(() => {
     if (!selectedApp) return null;
-    return findMatchingDiscoverAppMount(
-      selectedApp,
-      discoverApps,
-      communityAppMounts,
-    );
-  }, [communityAppMounts, discoverApps, selectedApp]);
+    return findMatchingDiscoverAppMount(selectedApp, communityAppMounts);
+  }, [communityAppMounts, selectedApp]);
   const selectedAppPrimaryRelatedSkill = useMemo(() => {
     if (!selectedApp) return null;
     return findRelatedDiscoverSkillForApp(selectedApp, discoverSkills);

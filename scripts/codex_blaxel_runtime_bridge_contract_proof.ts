@@ -356,7 +356,7 @@ const token = await mintCodexBridgeRunToken({
   runId: "run_1",
   ownerId: "owner_1",
   threadId: "thread_1",
-  operations: ["event"],
+  operations: ["event", "mcp_tool"],
   nowMs: 10_000,
   ttlMs: 60_000,
   secret,
@@ -370,6 +370,13 @@ const verifiedEvent = await verifyCodexBridgeRunToken({
   secret,
 });
 assert.equal(verifiedEvent.ok, true);
+const verifiedMcpTool = await verifyCodexBridgeRunToken({
+  token: token.token,
+  requiredOperation: "mcp_tool",
+  nowMs: 20_000,
+  secret,
+});
+assert.equal(verifiedMcpTool.ok, true);
 const deniedFinish = await verifyCodexBridgeRunToken({
   token: token.token,
   requiredOperation: "finish",
@@ -402,10 +409,15 @@ assert.equal(tampered.code, "codex_bridge_token_invalid");
 const httpBridge = read("convex/httpCodexBridge.ts");
 assertIncludes(httpBridge, 'path: "/runtime/codex_bridge/event"', "event callback route must be registered");
 assertIncludes(httpBridge, 'path: "/runtime/codex_bridge/finish"', "finish callback route must be registered");
+assertIncludes(httpBridge, 'path: "/runtime/codex_bridge/mcp_tool"', "native MCP tool callback route must be registered");
 assertIncludes(httpBridge, "verifyCodexBridgeRunToken", "callbacks must verify bridge tokens");
+assertIncludes(httpBridge, 'requiredOperation: "mcp_tool"', "native MCP tool callback must require the mcp_tool token operation");
 assertIncludes(httpBridge, "normalizeCodexAppServerNotification", "event callback must normalize Codex messages server-side");
 assertIncludes(httpBridge, "appendCloudRuntimeRunEventByBridgeClaimsInternal", "events must append through bridge-claim mutation");
 assertIncludes(httpBridge, "finishCloudRuntimeRunByBridgeClaimsInternal", "finish must go through bridge-claim finalizer");
+assertIncludes(httpBridge, "executeUserPlatformMountedAppToolInternal", "native MCP callback must route through user-owned harness execution");
+assertIncludes(httpBridge, "codex_native_mcp_tool_call_started", "native MCP callback must audit tool call starts");
+assertIncludes(httpBridge, "codex_native_mcp_tool_call_completed", "native MCP callback must audit tool call completions");
 assertIncludes(httpBridge, "detail: redactSensitiveText(message)", "bridge callback failures must return sanitized diagnostic detail");
 
 const runtimeTimelineUi = read("shared/runtimeTimelineUi.ts");
@@ -455,12 +467,69 @@ assertIncludes(bridge, "buildCodexWebSocketRuntimeBridgeClientCommand", "runtime
 assertIncludes(bridge, "codexMessage: message", "runtime bridge client must post raw Codex notifications for server normalization");
 assertIncludes(bridge, "finishBridge('succeeded'", "runtime bridge client must finish successful runs");
 assertIncludes(bridge, "POLYNET_CODEX_RUNTIME_PAYLOADS_REMOVED", "runtime bridge client must remove auth/runtime payloads");
+assertIncludes(bridge, "POLYNET_CODEX_BASE_CONFIG_INHERITED", "runtime app-server start must label inherited Codex base config");
+assertIncludes(bridge, "POLYNET_CODEX_BASE_CONFIG_EMPTY", "runtime app-server start must label generated empty Codex config fallback");
+assertIncludes(bridge, "codexRuntimeProjection", "runtime payload must carry Codex projection metadata");
+assertIncludes(bridge, "buildProjectionTelemetry", "bridge worker must summarize projection metadata before thread start");
+assertIncludes(bridge, "codexNativeMcpProjection", "runtime payload must carry native MCP projection metadata separately from prompt context");
+assertIncludes(bridge, "startPolyNetNativeMcpServer", "bridge worker must start a PolyNet loopback MCP server for Codex-native mounts");
+assertIncludes(bridge, "polynet_user_harness", "native MCP server must use the canonical PolyNet user harness server name");
+assertIncludes(bridge, "mcp_servers", "bridge worker must pass Codex-native MCP server config into thread/start");
+assertIncludes(bridge, "threadStartParams.config = nativeMcpServer.config", "thread/start must receive native MCP config when projection is active");
+assertIncludes(bridge, "runtimePayload.mcpToolUrl", "loopback MCP tools must call back through the scoped bridge URL");
+assertIncludes(bridge, "default_tools_approval_mode: 'auto'", "native loopback MCP tools must not rely on interactive approvals inside headless runs");
+assertIncludes(bridge, "codex_runtime_projection_received", "bridge worker must emit projection receipt evidence");
+assertIncludes(bridge, "codex_app_server_config_provenance", "bridge worker must emit Codex config provenance evidence");
+assertIncludes(bridge, "codex_runtime_projection_missing", "bridge worker must fail closed when projection metadata is missing");
+assertIncludes(bridge, "codex_native_mcp_loopback_started", "bridge worker must emit native MCP loopback startup evidence");
+assertIncludes(
+  bridge,
+  "mcp_mount_mode: runtimeProjectionTelemetry.mcp_mount_mode",
+  "bridge start event must expose MCP mount mode provenance",
+);
 
 const action = read("convex/blaxelCodexRuntimeTurn.ts");
 assertIncludes(action, "runBlaxelCodexRuntimeTurn", "productized Blaxel Codex runtime action must exist");
 assertIncludes(action, "ensureCloudRuntimeRunStartedByOwnerInternal", "action must create a real runtime run");
 assertIncludes(action, "mintCodexBridgeRunToken", "action must mint a scoped bridge token");
 assertIncludes(action, "setCloudRuntimeRunContextSnapshotInternal", "action must persist context snapshots");
+assertIncludes(action, "buildRuntimeContextCapsule", "action must build the shared context capsule for Codex");
+assertIncludes(action, "renderRuntimeContextCapsuleForPrompt", "action must render the shared context capsule into Codex instructions");
+assertIncludes(action, "buildRuntimeContextCapsuleMetadata", "action must emit bounded capsule metadata evidence");
+assertIncludes(action, "composeResolvedRuntimeHarness", "Codex bridge must resolve the same effective harness projection as native Polynet");
+assertIncludes(action, "type CodexRuntimeProjectionV1", "action must model Codex runtime projection metadata explicitly");
+assertIncludes(action, "type CodexNativeMcpProjectionV1", "action must model Codex-native MCP projection explicitly");
+assertIncludes(action, "buildCodexNativeMcpProjection", "action must build a native MCP projection from the effective harness");
+assertIncludes(action, "buildMountedAppToolDescription", "native Codex MCP projection must preserve mounted app risk wording");
+assertIncludes(action, "buildCodexRuntimeProjectionInstructions", "action must add Codex-specific projection instructions");
+assertIncludes(action, "buildCodexRuntimeProjection({", "action must build projection metadata for the runtime payload");
+assertIncludes(
+  action,
+  "CODEX_APP_SERVER_CONTEXT_TOOL_NAMES",
+  "Codex capsule must use explicit Codex-native context tool families",
+);
+assertIncludes(
+  action,
+  "allowedToolNames: CODEX_APP_SERVER_CONTEXT_TOOL_NAMES",
+  "Codex capsule must not derive core allowed tool families from mounted app names",
+);
+assertIncludes(
+  action,
+  "PolyNet connected app tools are available only through the projected `polynet_user_harness` Codex-native MCP server.",
+  "Codex instructions must bind PolyNet mounted app claims to the native loopback MCP projection",
+);
+assertIncludes(action, 'mcpToolUrl = `${callbackBaseUrl}/runtime/codex_bridge/mcp_tool`', "runtime payload must include the scoped MCP tool callback URL");
+assertIncludes(action, 'operations: ["event", "finish", "mcp_tool"]', "bridge token must allow scoped native MCP tool callbacks");
+assertIncludes(action, "codexNativeMcpProjection,", "runtime payload must include native MCP projection metadata");
+assertIncludes(
+  action,
+  'eventType: "codex_runtime_projection_prepared"',
+  "action must emit server-side projection evidence before bridge launch",
+);
+assertIncludes(action, "codexRuntimeProjection,", "runtime payload must include projection metadata");
+assertIncludes(action, "listRuntimeUserPlatformMountedToolsInternal", "Codex bridge must load personal mounted MCP apps for context parity");
+assertIncludes(action, "resolveRuntimeSkillSelectionForResolvedUserInternal", "Codex bridge must load effective skill selection after actor validation");
+assertIncludes(action, "resolveRuntimeCommunityPromptContextForResolvedUserInternal", "Codex bridge must hydrate community identity after actor validation");
 assertIncludes(action, "eventSummary", "action must return a runtime event summary for staging verification");
 assertIncludes(action, "isWorkspaceProcessTerminalStatus", "runtime action must gate Blaxel process completion on terminal status");
 assertIncludes(action, "throwIfRuntimeRunCancelled", "runtime action must observe user cancellation while waiting on Blaxel");
@@ -480,6 +549,38 @@ assertIncludes(
   action,
   "communityContextVersion: threadCommunityId && Number.isFinite(Number(thread.contextVersion))",
   "action must not send community context version without a community lens",
+);
+assertOrderWithin(
+  action,
+  "const claimCommunityId = normalizeString(run?.communityId ?? threadCommunityId) || undefined;",
+  [
+    "runtimeMountedUserPlatformAppTools",
+    "skillResolution",
+    "const resolvedHarness = composeResolvedRuntimeHarness({",
+    "const contextLoadStartedAt = Date.now();",
+    "const loadedContextPacket = loadedContext.packet;",
+    "const runtimeContextCapsule = buildRuntimeContextCapsule({",
+    "mountedToolCapabilityGroups: resolvedHarness.capabilityGroups",
+    "selectedPersonalSkills: resolvedHarness.selectedPersonalSkills",
+    "selectedCommunitySkills:",
+    "const runtimeContextCapsuleMetadata =",
+    "buildRuntimeTurnContextSnapshot({",
+    "runtimeContextCapsule,",
+    'eventType: "runtime_context_capsule_prepared"',
+    'eventType: "effective_harness_resolved"',
+    "const capsulePrompt = renderRuntimeContextCapsuleForPrompt(runtimeContextCapsule)",
+    "const detailedContextPrompt = renderRuntimeTurnContextForPrompt(loadedContextPacket)",
+    "const contextPrompt = [",
+    "resolvedHarness.systemPromptSuffix",
+    "const codexNativeMcpProjection =",
+    "const projectionInstructions = buildCodexRuntimeProjectionInstructions({",
+    "const developerInstructions = buildDeveloperInstructions(",
+    "const codexRuntimeProjection = buildCodexRuntimeProjection({",
+    'eventType: "codex_runtime_projection_prepared"',
+    "codexRuntimeProjection,",
+    "codexNativeMcpProjection,",
+  ],
+  "headless Codex bridge must resolve the effective harness before building, persisting, emitting, rendering, and projecting the Codex runtime capsule",
 );
 assertOrderWithin(
   action,
@@ -506,6 +607,31 @@ assertOrderWithin(
   "runtime wait loop must check cancellation before and after sleeping",
 );
 assertIncludes(action, "let clientProcessName: string | null = null;", "runtime action must track the Codex client process for cleanup");
+assertIncludes(
+  action,
+  "recordHeadlessCodexOperationEvent",
+  "runtime action must emit normalized headless operation evidence",
+);
+assertIncludes(
+  action,
+  'eventType: "headless_sandbox_ensure_started"',
+  "runtime action must record sandbox ensure start evidence",
+);
+assertIncludes(
+  action,
+  'eventType: "headless_sandbox_ensure_completed"',
+  "runtime action must record sandbox ensure completion evidence",
+);
+assertIncludes(
+  action,
+  'eventType: "headless_codex_bridge_worker_started"',
+  "runtime action must record bridge worker start evidence",
+);
+assertIncludes(
+  action,
+  "setCloudRuntimeRunWorkspaceSessionInternal",
+  "runtime action must persist workspace sandbox state onto the run record",
+);
 assertIncludes(
   action,
   "ownerId: actor.userId as any,\n            runId,\n            sandboxName: names.sandboxName",
@@ -547,5 +673,29 @@ assertIncludes(stagingSmoke, "hasRunFinished", "staging smoke must verify run co
 
 const packageJson = read("package.json");
 assertIncludes(packageJson, "smoke:codex-blaxel-runtime-bridge-staging", "package scripts must expose the staging bridge smoke");
+
+const runtimeSkillResolution = read("convex/runtimeSkillResolution.ts");
+assertIncludes(
+  runtimeSkillResolution,
+  "resolveRuntimeSkillSelectionForResolvedUserInternal",
+  "runtime skill resolver must expose a resolved-user entrypoint for bridge actions",
+);
+assertIncludes(
+  runtimeSkillResolution,
+  "resolveRuntimeSkillSelectionForUser({",
+  "authenticated and resolved-user skill resolvers must share implementation",
+);
+
+const communityAgent = read("convex/communityAgent.ts");
+assertIncludes(
+  communityAgent,
+  "resolveRuntimeCommunityPromptContextForResolvedUserInternal",
+  "community runtime context must expose a resolved-user entrypoint for bridge actions",
+);
+assertIncludes(
+  communityAgent,
+  "resolveRuntimeCommunityPromptContextForUser({",
+  "authenticated and resolved-user community context resolvers must share implementation",
+);
 
 console.log("codex_blaxel_runtime_bridge_contract_proof: ok");

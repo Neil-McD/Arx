@@ -171,6 +171,34 @@ function main() {
   );
   assertIncludes(
     userPlatformAppMounts,
+    `args.sourceType === "community" &&
+      args.authType === "none" &&
+      args.developerAppId &&
+      args.toolSnapshotId`,
+    "no-auth community app grants use shared validated app projection",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "developerAppId: args.developerAppId,",
+    "no-auth community app grants mount the shared community developer app",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "findUserPlatformMountByUserAndAppInternal",
+    "no-auth community app projection checks shared mount existence before upsert",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "created: !existingSharedMount",
+    "no-auth community app projection reports idempotent seed reuse accurately",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "toolSnapshotId: mount.toolSnapshotId",
+    "community app seed sources include validated tool snapshot ids",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
     "findExistingUserPlatformMountByIdentityInternal",
     "community app seeding reuses existing personal app identity",
   );
@@ -201,6 +229,17 @@ function main() {
   );
   assertIncludes(
     userPlatformAppMounts,
+    `developerAppId: seedSource.app._id,
+        catalogAppId: seedSource.app.catalogAppId`,
+    "single community app seed passes through the shared source app id",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "toolSnapshotId: seedSource.mount.toolSnapshotId",
+    "community app seed passes through the community validation snapshot",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
     `sourceType: "community",
         communityId: seedSource.mount.communityId,
         communityAppMountId: seedSource.mount._id,`,
@@ -212,6 +251,12 @@ function main() {
             communityId: seedSource.mount.communityId,
             communityAppMountId: seedSource.mount._id,`,
     "community join bulk-add records community source provenance",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    `developerAppId: seedSource.app._id,
+            catalogAppId: seedSource.app.catalogAppId`,
+    "community join bulk-add passes through the shared source app id",
   );
   assertNotIncludes(
     userPlatformAppMounts,

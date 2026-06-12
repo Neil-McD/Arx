@@ -106,9 +106,41 @@ function safeOptionalText(raw: unknown, maxLength: number): string | undefined {
   return value ? value.slice(0, maxLength) : undefined;
 }
 
+function safeRequiredText(raw: unknown, maxLength: number): string {
+  const value = String(raw ?? "").trim();
+  if (!value) throw new Error("codex_bridge_required_text_missing");
+  return value.slice(0, maxLength);
+}
+
 function normalizeBridgeEventSource(raw: unknown): CodexBridgeRunEventSource {
   const value = String(raw ?? "").trim();
   return value === "codex_app_server_ws" || value === "bridge_worker" ? value : "bridge_worker";
+}
+
+function normalizeRuntimeMcpToolName(raw: unknown): {
+  runtimeToolName: string;
+  namespacedToolName: string;
+} {
+  const runtimeToolName = safeRequiredText(raw, 240);
+  const namespacedToolName = runtimeToolName.startsWith("me__")
+    ? runtimeToolName.slice(4)
+    : runtimeToolName;
+  if (!namespacedToolName || namespacedToolName.length > 220) {
+    throw new Error("codex_bridge_mcp_tool_name_invalid");
+  }
+  return { runtimeToolName, namespacedToolName };
+}
+
+function normalizeMcpToolArguments(raw: unknown): Record<string, unknown> {
+  const record = asRecord(raw);
+  return record ?? {};
+}
+
+function summarizeMcpToolArguments(args: Record<string, unknown>): Record<string, unknown> {
+  return {
+    arg_keys: Object.keys(args).sort().slice(0, 50),
+    arg_count: Object.keys(args).length,
+  };
 }
 
 function redactSensitiveText(value: string): string {
@@ -199,6 +231,12 @@ export function registerCodexBridgeRoutes(args: RegisterCodexBridgeRoutesArgs): 
 
   http.route({
     path: "/runtime/codex_bridge/finish",
+    method: "OPTIONS",
+    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
+  });
+
+  http.route({
+    path: "/runtime/codex_bridge/mcp_tool",
     method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)),
   });
@@ -303,6 +341,144 @@ export function registerCodexBridgeRoutes(args: RegisterCodexBridgeRoutesArgs): 
           },
         });
       } catch (error) {
+        return mutationErrorResponse(req, jsonResponse, error);
+      }
+    }),
+  });
+
+  http.route({
+    path: "/runtime/codex_bridge/mcp_tool",
+    method: "POST",
+    handler: httpAction(async (ctx, req) => {
+      const verified = await verifyCodexBridgeRunToken({
+        token: readBearerToken(req),
+        requiredOperation: "mcp_tool",
+      });
+      if (!verified.ok) {
+        return jsonResponse(req, verified.status, {
+          ok: false,
+          code: verified.code,
+          error: verified.code,
+          message: verified.message,
+        });
+      }
+      const parsed = await readJsonRequestBody(req);
+      if (!parsed.ok) {
+        return jsonResponse(req, parsed.status, {
+          ok: false,
+          code: parsed.code,
+          error: parsed.code,
+          message: parsed.message,
+        });
+      }
+
+      let request: {
+        runId: string;
+        runtimeToolName: string;
+        namespacedToolName: string;
+        argumentsObject: Record<string, unknown>;
+      } = {
+        runId: "",
+        runtimeToolName: "",
+        namespacedToolName: "",
+        argumentsObject: {},
+      };
+      try {
+        assertBridgeRequestVersion(parsed.body);
+        const runId = String(parsed.body.runId ?? "").trim();
+        if (runId !== verified.claims.runId) throw new Error("codex_bridge_run_scope_mismatch");
+        const toolName = normalizeRuntimeMcpToolName(parsed.body.runtimeToolName ?? parsed.body.toolName);
+        request = {
+          runId,
+          ...toolName,
+          argumentsObject: normalizeMcpToolArguments(parsed.body.arguments),
+        };
+      } catch (error) {
+        const code = error instanceof Error && error.message ? error.message : "codex_bridge_payload_invalid";
+        return jsonResponse(req, code === "codex_bridge_run_scope_mismatch" ? 403 : 400, {
+          ok: false,
+          code,
+          error: code,
+          message: "Codex bridge MCP tool payload is invalid.",
+        });
+      }
+
+      const eventBase = {
+        ownerId: verified.claims.ownerId as any,
+        threadId: verified.claims.threadId as any,
+        runId: verified.claims.runId,
+        claimProjectId: verified.claims.projectId ?? undefined,
+        claimCommunityId: verified.claims.communityId ?? undefined,
+        nowMs: Date.now(),
+      };
+      try {
+        await (ctx as any).runMutation(
+          (internal as any).threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any,
+          {
+            ...eventBase,
+            eventType: "codex_native_mcp_tool_call_started",
+            eventKey: `${verified.claims.runId}:mcp:${request.runtimeToolName}:started:${Date.now()}`,
+            payload: {
+              bridge_source: "bridge_worker",
+              mcp_server_name: "polynet_user_harness",
+              runtime_tool_name: request.runtimeToolName,
+              namespaced_tool_name: request.namespacedToolName,
+              ...summarizeMcpToolArguments(request.argumentsObject),
+            },
+          },
+        );
+        const result = (await (ctx as any).runAction(
+          (internal as any).userPlatformAppMounts.executeUserPlatformMountedAppToolInternal as any,
+          {
+            userId: verified.claims.ownerId as any,
+            namespacedToolName: request.namespacedToolName,
+            argsJson: request.argumentsObject,
+          },
+        )) as Record<string, unknown>;
+        const status = String(result?.status ?? "") === "ok" ? "ok" : "error";
+        const errorCode = safeOptionalText(result?.errorCode, 160) ?? null;
+        await (ctx as any).runMutation(
+          (internal as any).threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any,
+          {
+            ...eventBase,
+            eventType: "codex_native_mcp_tool_call_completed",
+            eventKey: `${verified.claims.runId}:mcp:${request.runtimeToolName}:completed:${Date.now()}`,
+            payload: {
+              bridge_source: "bridge_worker",
+              mcp_server_name: "polynet_user_harness",
+              runtime_tool_name: request.runtimeToolName,
+              namespaced_tool_name: request.namespacedToolName,
+              status,
+              error_code: errorCode,
+              output_chars: String(result?.outputText ?? "").length,
+            },
+          },
+        );
+        return jsonResponse(req, 200, {
+          ok: true,
+          result: sanitizeBridgePayload(result),
+        });
+      } catch (error) {
+        const message = redactSensitiveText(error instanceof Error ? error.message : String(error));
+        try {
+          await (ctx as any).runMutation(
+            (internal as any).threads.appendCloudRuntimeRunEventByBridgeClaimsInternal as any,
+            {
+              ...eventBase,
+              eventType: "codex_native_mcp_tool_call_failed",
+              eventKey: `${verified.claims.runId}:mcp:${request.runtimeToolName}:failed:${Date.now()}`,
+              payload: {
+                bridge_source: "bridge_worker",
+                mcp_server_name: "polynet_user_harness",
+                runtime_tool_name: request.runtimeToolName,
+                namespaced_tool_name: request.namespacedToolName,
+                error_message: message,
+              },
+            },
+          );
+        } catch {
+          // Best-effort evidence only.
+        }
         return mutationErrorResponse(req, jsonResponse, error);
       }
     }),

@@ -514,42 +514,30 @@ function filterCommunitySkillScopeAgainstPlatform(args: {
   };
 }
 
-export const resolveRuntimeSkillSelectionInternal = internalQuery({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.optional(v.id("communities")),
-    messages: v.array(
-      v.object({
-        role: v.string(),
-        content: v.string(),
-      }),
-    ),
-  },
-  handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
+async function resolveRuntimeSkillSelectionForUser(args: {
+  ctx: any;
+  userId: any;
+  communityId?: any;
+  messages: RuntimeSkillInferenceMessage[];
+}): Promise<RuntimeSkillResolutionResult> {
     const requestedMentionTokens = extractExplicitSkillMentions(
-      args.messages as RuntimeSkillInferenceMessage[],
+      args.messages,
     );
     const includeSelectedData = requestedMentionTokens.length > 0;
     const communityResourceLane = await resolveCommunityResourceRuntimeLane({
-      ctx,
+      ctx: args.ctx,
       communityId: args.communityId ?? null,
-      userId,
+      userId: args.userId,
     });
     let userPlatformSkillScope = await resolveRuntimeUserPlatformSkillScope({
-      ctx,
-      userId,
+      ctx: args.ctx,
+      userId: args.userId,
       includeSelectedData,
     });
     const platformSkillScope = await resolveRuntimePlatformSkillScope({
-      ctx,
+      ctx: args.ctx,
       communityId: args.communityId ?? null,
-      userId,
+      userId: args.userId,
       includeSelectedData,
       communityResourceLane,
     });
@@ -564,7 +552,7 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
     >[] = [];
     if (args.communityId) {
       const communitySkillScope = await resolveRuntimeCommunitySkillScope({
-        ctx,
+        ctx: args.ctx,
         communityId: args.communityId,
         includeSelectedData,
       });
@@ -643,5 +631,52 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       community_skill_inventory: communitySkillInventory,
       selected_community_skills: selectedCommunitySkills,
     };
+}
+
+export const resolveRuntimeSkillSelectionInternal = internalQuery({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.optional(v.id("communities")),
+    messages: v.array(
+      v.object({
+        role: v.string(),
+        content: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    return await resolveRuntimeSkillSelectionForUser({
+      ctx,
+      userId,
+      communityId: args.communityId,
+      messages: args.messages as RuntimeSkillInferenceMessage[],
+    });
+  },
+});
+
+export const resolveRuntimeSkillSelectionForResolvedUserInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.optional(v.id("communities")),
+    messages: v.array(
+      v.object({
+        role: v.string(),
+        content: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
+    return await resolveRuntimeSkillSelectionForUser({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      messages: args.messages as RuntimeSkillInferenceMessage[],
+    });
   },
 });

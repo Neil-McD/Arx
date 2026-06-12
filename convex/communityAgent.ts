@@ -147,6 +147,37 @@ export const getActiveCommunityAgentSystemPrompt = query({
   },
 });
 
+async function resolveRuntimeCommunityPromptContextForUser(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+}) {
+  const { community } = await requireCommunityChatAccess({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const config = selectPrimaryCommunityAgentConfigRow(
+    await listCommunityAgentConfigRows(args.ctx, args.communityId),
+  );
+  const communityName =
+    String(community.name ?? "").trim() ||
+    String(community.slug ?? "").trim() ||
+    null;
+  const communitySlug = String(community.slug ?? "").trim() || null;
+  const communityOneLiner = String(community.oneLiner ?? "").trim() || null;
+  const communityAbout = String(community.about ?? "").trim() || null;
+  return {
+    community_id: String(args.communityId),
+    community_name: communityName,
+    community_slug: communitySlug,
+    community_one_liner: communityOneLiner,
+    community_about: communityAbout,
+    community_system_prompt: config?.systemPrompt ?? null,
+    system_prompt: config?.systemPrompt ?? null,
+  };
+}
+
 export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
   args: {
     userId: v.optional(v.id("users")),
@@ -159,25 +190,25 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const { community } = await requireCommunityChatAccess({
+    return await resolveRuntimeCommunityPromptContextForUser({
       ctx,
-      communityId: args.communityId,
       userId,
+      communityId: args.communityId,
     });
-    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
-    const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;
-    const communitySlug = String(community.slug ?? "").trim() || null;
-    const communityOneLiner = String(community.oneLiner ?? "").trim() || null;
-    const communityAbout = String(community.about ?? "").trim() || null;
-    return {
-      community_id: String(args.communityId),
-      community_name: communityName,
-      community_slug: communitySlug,
-      community_one_liner: communityOneLiner,
-      community_about: communityAbout,
-      community_system_prompt: config?.systemPrompt ?? null,
-      system_prompt: config?.systemPrompt ?? null,
-    };
+  },
+});
+
+export const resolveRuntimeCommunityPromptContextForResolvedUserInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    return await resolveRuntimeCommunityPromptContextForUser({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+    });
   },
 });
 

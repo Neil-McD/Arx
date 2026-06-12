@@ -313,6 +313,13 @@ assertIncludes(
   "Codex runtime attribution must override ChatGPT funding-source footer labels",
 );
 
+const inferenceSourceUi = read("shared/inferenceSourceUi.ts");
+assertIncludes(
+  inferenceSourceUi,
+  'if (raw === "chatgpt" || raw === "user_chatgpt") return "Polynet";',
+  "native Polynet turns must render Polynet, not ChatGPT, in assistant footers",
+);
+
 const app = read("apps/web/src/App.tsx");
 assertIncludes(app, "extractRuntimeEngineIdFromMessageContent", "workspace projection must receive runtime engine extractor");
 assertIncludes(app, "engineId,", "formatModelSignature must pass runtime engine id into attribution formatter");

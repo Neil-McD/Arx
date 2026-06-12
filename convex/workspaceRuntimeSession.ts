@@ -3,6 +3,9 @@ import {
   ensureBillableBlaxelWorkspaceComputer,
 } from "./blaxelWorkspaceWake.ts";
 import {
+  executeBlaxelWorkspaceCommand,
+} from "./blaxelWorkspaceComputerProvider.ts";
+import {
   buildBlaxelProjectWorkspaceNames,
 } from "./blaxelWorkspaceProjectNames.ts";
 import {
@@ -103,6 +106,110 @@ function mapProviderFailure(result: {
   };
 }
 
+function isBlaxelSandboxNotFoundFailure(result: {
+  ok?: boolean;
+  code?: unknown;
+  message?: unknown;
+}): boolean {
+  if (result.ok !== false) return false;
+  const code = String(result.code ?? "").trim();
+  const message = String(result.message ?? "").trim();
+  return code === "blaxel_sandbox_not_found" || /sandbox.*not found|not found.*sandbox/i.test(message);
+}
+
+async function probeBlaxelRuntimeWorkspaceSession(params: {
+  providerSandboxId: string;
+  workspaceRoot: string;
+}): Promise<{ ok: true } | WorkspaceRuntimeSessionFailure> {
+  const result = await executeBlaxelWorkspaceCommand({
+    sandboxName: params.providerSandboxId,
+    cwd: params.workspaceRoot,
+    command: "pwd >/dev/null",
+    processName: `polynet-runtime-probe-${crypto.randomUUID().slice(0, 8)}`,
+    waitForCompletion: true,
+    timeoutSeconds: 15,
+  });
+  if (!result.ok) return mapProviderFailure(result);
+  const exitCode = typeof result.exitCode === "number" ? result.exitCode : 0;
+  if (exitCode !== 0) {
+    return {
+      ok: false,
+      status: 503,
+      code: "workspace_session_probe_failed",
+      message: "Workspace computer started, but the runtime readiness probe failed.",
+      details: {
+        exit_code: exitCode,
+        output_preview: [result.stdout, result.stderr]
+          .filter(Boolean)
+          .join("\n")
+          .trim()
+          .slice(0, 2000),
+      },
+    };
+  }
+  return { ok: true };
+}
+
+async function ensureBillableBlaxelRuntimeWorkspaceComputer(params: {
+  ctx: any;
+  userId: any;
+  projectId: string;
+  runId?: string | null;
+}): Promise<
+  | {
+      ok: true;
+      providerId: "blaxel";
+      projectId: string;
+      projectVolumeId: string;
+      providerSandboxId: string;
+      workspaceRoot: string;
+      startedAt: number;
+      creditReservationKey: string;
+      creditBudgetCredits: number;
+      creditBudgetExpiresAt: number;
+      sandboxCpu: number;
+      sandboxMemoryGiB: number;
+      sandboxDiskGiB: number;
+      lifecycleMode: "provider_standby";
+    }
+  | WorkspaceRuntimeSessionFailure
+> {
+  const ensureOnce = async (reuseExistingLease: boolean) =>
+    await ensureBillableBlaxelWorkspaceComputer({
+      ctx: params.ctx,
+      projectId: params.projectId,
+      ownerId: params.userId,
+      runId: params.runId ?? null,
+      lifecycleIntent: "agent_run",
+      reservationAction: "runtime_workspace_session",
+      reuseExistingLease,
+      labels: {
+        purpose: "workspace-agent-tools",
+        project_id: String(params.projectId),
+        owner_id: String(params.userId),
+      },
+      clearSandboxAccounting: true,
+    });
+
+  let ensured = await ensureOnce(true);
+  if (!ensured.ok) return mapProviderFailure(ensured);
+  let probe = await probeBlaxelRuntimeWorkspaceSession({
+    providerSandboxId: ensured.providerSandboxId,
+    workspaceRoot: ensured.workspaceRoot,
+  });
+  if (probe.ok) return ensured;
+  if (!isBlaxelSandboxNotFoundFailure(probe)) return probe;
+
+  ensured = await ensureOnce(false);
+  if (!ensured.ok) return mapProviderFailure(ensured);
+  probe = await probeBlaxelRuntimeWorkspaceSession({
+    providerSandboxId: ensured.providerSandboxId,
+    workspaceRoot: ensured.workspaceRoot,
+  });
+  if (!probe.ok) return probe;
+  return ensured;
+}
+
 async function createBlaxelRuntimeWorkspaceSession(params: {
   ctx: any;
   authSubject: string;
@@ -170,22 +277,14 @@ async function createBlaxelRuntimeWorkspaceSession(params: {
     });
   }
 
-  const ensured = await ensureBillableBlaxelWorkspaceComputer({
+  const ensured = await ensureBillableBlaxelRuntimeWorkspaceComputer({
     ctx: params.ctx,
     projectId: params.projectId,
-    ownerId: params.userId,
+    userId: params.userId,
     runId: params.runId ?? null,
-    lifecycleIntent: "agent_run",
-    reservationAction: "runtime_workspace_session",
-    labels: {
-      purpose: "workspace-agent-tools",
-      project_id: String(params.projectId),
-      owner_id: String(params.userId),
-    },
-    clearSandboxAccounting: true,
   });
   if (!ensured.ok) {
-    return mapProviderFailure(ensured);
+    return ensured;
   }
 
   return {

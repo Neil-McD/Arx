@@ -514,6 +514,7 @@ export const listCommunityAppGrantSeedSourcesInternal = internalQuery({
         mount: {
           _id: mount._id,
           communityId: mount.communityId,
+          toolSnapshotId: mount.toolSnapshotId,
           enabled: mount.enabled,
           enabledTools: mount.enabledTools,
         },

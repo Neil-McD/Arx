@@ -103,6 +103,21 @@ assert.match(
   /executionAvailability\?:[\s\S]*turnSuccessRate: number \| null[\s\S]*toolFailureRate: number \| null[\s\S]*topFailingTools: OperatorRuntimeToolFailureBucket\[\]/,
   "runtime/tool diagnostics must expose execution availability separately",
 );
+assert.match(
+  operatorTypes,
+  /export type OperatorHeadlessCodexOperationsSnapshot = [\s\S]*activeRuns: number[\s\S]*stuckRuns: number[\s\S]*oldestActiveRunAgeMs: number \| null[\s\S]*accountingPendingRuns: number[\s\S]*runs: OperatorHeadlessCodexRunRecord\[\]/,
+  "runtime/tool diagnostics must expose headless Codex operations separately",
+);
+assert.match(
+  operatorTypes,
+  /export type OperatorHeadlessCodexRunRecord = [\s\S]*firstEventLatencyMs: number \| null[\s\S]*firstAssistantDeltaLatencyMs: number \| null[\s\S]*worker:[\s\S]*sandbox:[\s\S]*accounting:/,
+  "headless Codex run records must expose worker, sandbox, Codex timing, and accounting milestones",
+);
+assert.match(
+  operatorTypes,
+  /headlessCodexOperations\?: OperatorHeadlessCodexOperationsSnapshot/,
+  "runtime/tool diagnostics snapshot must include headless Codex operations",
+);
 assert.doesNotMatch(
   operatorTypes,
   /export type OperatorRuntimeToolDiagnosticsSnapshot = \{(?:(?!export type OperatorToolEconomicsSnapshot)[\s\S])*paidToolEconomics|export type OperatorRuntimeToolDiagnosticsSnapshot = \{(?:(?!export type OperatorToolEconomicsSnapshot)[\s\S])*paidTools:|export type OperatorRuntimeToolDiagnosticsSnapshot = \{(?:(?!export type OperatorToolEconomicsSnapshot)[\s\S])*usageIntegrity\?:/,
@@ -185,6 +200,26 @@ assert.match(
   runtimeDiagnosticsBlock,
   /executionAvailability:[\s\S]*turnSuccessRate[\s\S]*toolFailureRate[\s\S]*providerFailures[\s\S]*sandboxCreateFailures[\s\S]*topFailureCodes/,
   "runtime/tool diagnostics must return execution availability fields",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /HEADLESS_CODEX_OPERATION_EVENT_TYPES[\s\S]*headlessEventGroups[\s\S]*buildHeadlessCodexOperationsSnapshot[\s\S]*headlessCodexOperations/,
+  "runtime/tool diagnostics must project bounded headless Codex operation evidence",
+);
+assert.match(
+  operatorIntelligence,
+  /workspaceSessionState[\s\S]*workspaceSessionState === "released"[\s\S]*workspaceSessionState === "failed"/,
+  "headless Codex sandbox diagnostics must honor persisted workspace session state",
+);
+assert.match(
+  operatorIntelligence,
+  /headless_codex_bridge_worker_started[\s\S]*process_name[\s\S]*machineId: readPayloadString\(payload, \["fly_machine_id", "machine_id", "worker_id", "process_name"\]\)/,
+  "headless Codex worker diagnostics must recognize bridge process worker evidence",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /dedupeRowsById\(\[[\s\S]*runtimeEvents[\s\S]*headlessEventGroups\.flat\(\)[\s\S]*\]\)/,
+  "headless Codex diagnostics must reuse bounded runtime event scans without duplicate rows",
 );
 assert.match(
   runtimeDiagnosticsBlock,
@@ -361,6 +396,16 @@ assert.match(
   operatorPanel,
   /Runtime execution/,
   "operator panel must render the runtime/tool diagnostics section",
+);
+assert.match(
+  operatorPanel,
+  /Headless Codex operations[\s\S]*Active runs[\s\S]*Stuck runs[\s\S]*Oldest active[\s\S]*Accounting pending[\s\S]*first event[\s\S]*first delta/,
+  "operator panel must render the headless Codex operations section",
+);
+assert.doesNotMatch(
+  operatorPanel,
+  /assistantText|prompt|output_text|output_delta|developerInstructions|authPayload|runtimePayload/,
+  "operator panel must not render raw headless Codex content or bridge payloads",
 );
 assert.doesNotMatch(
   operatorPanel,

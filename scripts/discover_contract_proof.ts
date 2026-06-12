@@ -504,6 +504,26 @@ function main() {
     "Discover panel does not read the static skill catalog directly",
   );
   assertIncludes(
+    discoverPanel,
+    "customCatalogAppMatchesMount",
+    "Discover custom app matching uses a catalog-specific matcher",
+  );
+  assertIncludes(
+    discoverPanel,
+    "resolveDiscoverAppCatalogConnectPolicy({",
+    "Discover custom app matching validates custom endpoints through catalog policy",
+  );
+  assertIncludes(
+    discoverPanel,
+    "mountedCatalogAppId && mountedCatalogAppId !== app.id",
+    "Discover custom app matching rejects different catalog ids",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    "Custom MCP apps can represent endpoints outside the first-party catalog.",
+    "Discover custom app matching no longer treats every unknown custom endpoint as a match",
+  );
+  assertIncludes(
     webDiscoverAppCatalog.trim(),
     'export * from "../../../../shared/discoverCatalog";',
     "web app catalog module delegates to shared canonical catalog",
