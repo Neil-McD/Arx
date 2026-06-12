@@ -1473,6 +1473,85 @@ export const getCloudThreadMessageByOwnerMessageKey = query({
   },
 });
 
+async function addCloudThreadMessageForOwner(args: {
+  ctx: any;
+  ownerId: any;
+  threadId: any;
+  messageKey?: string;
+  seq?: number;
+  role: CloudMessageLike["role"];
+  contentJson: unknown;
+  engineId?: string;
+  modelId?: string;
+  runId?: string;
+  createdAt?: number;
+  nowMs?: number;
+}): Promise<CloudMessageLike> {
+  const nowMs = args.nowMs ?? Date.now();
+  const thread = await requireOwnedCloudThread({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    threadId: args.threadId,
+  });
+
+  const explicitSeq =
+    typeof args.seq === "number" && Number.isFinite(args.seq) ? Math.max(0, Math.floor(args.seq)) : null;
+  const seq = explicitSeq ?? Math.max(0, Math.floor((thread.lastSeq ?? 0) + 1));
+  const explicitMessageKey = String(args.messageKey ?? "").trim();
+  const messageKey = explicitMessageKey || `${String(thread._id)}:${seq}`;
+
+  if (explicitMessageKey) {
+    const existingByMessageKey = (await args.ctx.db
+      .query("cloudMessages")
+      .withIndex("by_owner_messageKey", (q: any) => q.eq("ownerId", args.ownerId).eq("messageKey", explicitMessageKey))
+      .first()) as CloudMessageLike | null;
+    if (existingByMessageKey) {
+      if (existingByMessageKey.threadId !== thread._id) {
+        throw new Error("message_key_conflict");
+      }
+      return existingByMessageKey;
+    }
+  }
+
+  const existingBySeq = (await args.ctx.db
+    .query("cloudMessages")
+    .withIndex("by_thread_seq", (q: any) => q.eq("threadId", thread._id).eq("seq", seq))
+    .first()) as CloudMessageLike | null;
+  if (existingBySeq) {
+    return existingBySeq;
+  }
+
+  const createdAt =
+    typeof args.createdAt === "number" && Number.isFinite(args.createdAt) ? Math.floor(args.createdAt) : nowMs;
+  const id = await args.ctx.db.insert("cloudMessages", {
+    ownerId: args.ownerId,
+    threadId: thread._id,
+    messageKey,
+    seq,
+    role: args.role,
+    contentJson: args.contentJson,
+    engineId: String(args.engineId ?? "").trim() || undefined,
+    modelId: String(args.modelId ?? "").trim() || undefined,
+    runId: String(args.runId ?? "").trim() || undefined,
+    createdAt,
+  });
+
+  const nextLastSeq = Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, seq)));
+  const patch: Record<string, unknown> = {
+    updatedAt: nowMs,
+    lastSeq: nextLastSeq,
+  };
+  if ((thread.titleSource ?? "auto") === "auto" && (!thread.title || !thread.title.trim()) && args.role === "user") {
+    const derivedTitle = deriveTitleFromContent(args.contentJson);
+    if (derivedTitle) patch.title = derivedTitle;
+  }
+  await args.ctx.db.patch(thread._id, patch);
+
+  const created = (await args.ctx.db.get(id)) as CloudMessageLike | null;
+  if (!created) throw new Error("message_create_failed");
+  return created;
+}
+
 export const addCloudThreadMessage = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1494,70 +1573,52 @@ export const addCloudThreadMessage = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
+    return await addCloudThreadMessageForOwner({
       ctx,
       ownerId,
       threadId: args.threadId,
-    });
-
-    const explicitSeq =
-      typeof args.seq === "number" && Number.isFinite(args.seq) ? Math.max(0, Math.floor(args.seq)) : null;
-    const seq = explicitSeq ?? Math.max(0, Math.floor((thread.lastSeq ?? 0) + 1));
-    const explicitMessageKey = String(args.messageKey ?? "").trim();
-    const messageKey = explicitMessageKey || `${String(thread._id)}:${seq}`;
-
-    if (explicitMessageKey) {
-      const existingByMessageKey = (await ctx.db
-        .query("cloudMessages")
-        .withIndex("by_owner_messageKey", (q) => q.eq("ownerId", ownerId).eq("messageKey", explicitMessageKey))
-        .first()) as CloudMessageLike | null;
-      if (existingByMessageKey) {
-        if (existingByMessageKey.threadId !== thread._id) {
-          throw new Error("message_key_conflict");
-        }
-        return existingByMessageKey;
-      }
-    }
-
-    const existingBySeq = (await ctx.db
-      .query("cloudMessages")
-      .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id).eq("seq", seq))
-      .first()) as CloudMessageLike | null;
-    if (existingBySeq) {
-      return existingBySeq;
-    }
-
-    const createdAt =
-      typeof args.createdAt === "number" && Number.isFinite(args.createdAt) ? Math.floor(args.createdAt) : nowMs;
-    const id = await ctx.db.insert("cloudMessages", {
-      ownerId,
-      threadId: thread._id,
-      messageKey,
-      seq,
+      messageKey: args.messageKey,
+      seq: args.seq,
       role: args.role,
       contentJson: args.contentJson,
-      engineId: String(args.engineId ?? "").trim() || undefined,
-      modelId: String(args.modelId ?? "").trim() || undefined,
-      runId: String(args.runId ?? "").trim() || undefined,
-      createdAt,
+      engineId: args.engineId,
+      modelId: args.modelId,
+      runId: args.runId,
+      createdAt: args.createdAt,
+      nowMs: args.nowMs,
     });
-
-    const nextLastSeq = Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, seq)));
-    const patch: Record<string, unknown> = {
-      updatedAt: nowMs,
-      lastSeq: nextLastSeq,
-    };
-    if ((thread.titleSource ?? "auto") === "auto" && (!thread.title || !thread.title.trim()) && args.role === "user") {
-      const derivedTitle = deriveTitleFromContent(args.contentJson);
-      if (derivedTitle) patch.title = derivedTitle;
-    }
-    await ctx.db.patch(thread._id, patch);
-
-    const created = (await ctx.db.get(id)) as CloudMessageLike | null;
-    if (!created) throw new Error("message_create_failed");
-    return created;
   },
+});
+
+export const addCloudThreadMessageByOwnerInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    messageKey: v.optional(v.string()),
+    seq: v.optional(v.number()),
+    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+    contentJson: v.any(),
+    engineId: v.optional(v.string()),
+    modelId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await addCloudThreadMessageForOwner({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+      messageKey: args.messageKey,
+      seq: args.seq,
+      role: args.role,
+      contentJson: args.contentJson,
+      engineId: args.engineId,
+      modelId: args.modelId,
+      runId: args.runId,
+      createdAt: args.createdAt,
+      nowMs: args.nowMs,
+    }),
 });
 
 export const upsertCloudThreadMessageByMessageKey = mutation({

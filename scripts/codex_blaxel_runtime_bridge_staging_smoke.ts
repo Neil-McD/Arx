@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 
 const EXPECTED_CONVEX_DEPLOYMENT = "dev:quick-porcupine-949";
@@ -93,6 +94,14 @@ function main() {
     readArgValue("--prompt") ||
     String(process.env.POLYNET_CODEX_RUNTIME_SMOKE_PROMPT ?? "").trim() ||
     "Reply with exactly POLYNET_CODEX_RUNTIME_BRIDGE_OK.";
+  const runId =
+    readArgValue("--run-id") ||
+    String(process.env.POLYNET_CODEX_RUNTIME_SMOKE_RUN_ID ?? "").trim() ||
+    `codex_blaxel:${randomUUID()}`;
+  const userMessageKey =
+    readArgValue("--user-message-key") ||
+    String(process.env.POLYNET_CODEX_RUNTIME_SMOKE_USER_MESSAGE_KEY ?? "").trim() ||
+    `user:${threadId}:${runId}`;
   const shouldPush =
     hasFlag("--push") ||
     String(process.env.POLYNET_CODEX_RUNTIME_SMOKE_PUSH ?? "").trim() === "1";
@@ -114,7 +123,10 @@ function main() {
       authSubject,
       threadId,
       prompt,
+      runId,
       destroyAfterRun,
+      persistUserPrompt: true,
+      userMessageKey,
     }),
   ];
 
@@ -154,6 +166,7 @@ function main() {
     probe: "codex_blaxel_runtime_bridge_staging_smoke",
     pushed: shouldPush,
     destroyAfterRun,
+    userMessageKey,
     smoke,
   });
 }

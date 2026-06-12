@@ -812,6 +812,8 @@ export const runBlaxelCodexRuntimeTurn = action({
     runId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     destroyAfterRun: v.optional(v.boolean()),
+    persistUserPrompt: v.optional(v.boolean()),
+    userMessageKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const prompt = normalizeString(args.prompt);
@@ -915,6 +917,45 @@ export const runBlaxelCodexRuntimeTurn = action({
     })) as { projectId?: unknown; communityId?: unknown } | null;
     const claimProjectId = normalizeString(run?.projectId ?? thread.projectId) || undefined;
     const claimCommunityId = normalizeString(run?.communityId ?? threadCommunityId) || undefined;
+    if (args.persistUserPrompt === true) {
+      const userMessageKey =
+        normalizeString(args.userMessageKey) ||
+        `user:${normalizeString(thread.threadKey) || String(args.threadId)}:${runId}`;
+      try {
+        await ctx.runMutation((internal as any).threads.addCloudThreadMessageByOwnerInternal as any, {
+          ownerId: actor.userId as any,
+          threadId: args.threadId,
+          messageKey: userMessageKey,
+          role: "user",
+          contentJson: { text: prompt },
+          engineId: "codex_blaxel_app_server",
+          modelId,
+          runId,
+          nowMs: startedAt,
+        });
+      } catch {
+        await ctx.runMutation(internal.threads.finishCloudRuntimeRunByBridgeClaimsInternal as any, {
+          ownerId: actor.userId as any,
+          threadId: args.threadId,
+          runId,
+          claimProjectId,
+          claimCommunityId,
+          status: "error",
+          reason: "user_message_persist_failed",
+          errorCode: "user_message_persist_failed",
+          errorMessage: "Failed to persist the Codex runtime user prompt.",
+          nowMs: Date.now(),
+        }).catch(() => null);
+        return {
+          ok: false,
+          runId,
+          failure: safeFailure(
+            "user_message_persist_failed",
+            "Failed to persist the Codex runtime user prompt.",
+          ),
+        };
+      }
+    }
     const [
       projectContext,
       communityContext,

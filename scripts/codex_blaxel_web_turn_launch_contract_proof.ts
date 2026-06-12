@@ -48,6 +48,11 @@ assertIncludes(
   "gateway must call the productized Codex Blaxel action",
 );
 assertIncludes(gateway, "destroyAfterRun: params.destroyAfterRun !== false", "web launch must default to destroying sandboxes");
+assert.doesNotMatch(
+  gateway,
+  /persistUserPrompt:\s*true/,
+  "web launch must not ask the Codex action to duplicate the already-persisted user message",
+);
 assertIncludes(gateway, "CODEX_BLAXEL_DEFAULT_MODEL_ID", "gateway must expose the Codex runtime model identity");
 assertIncludes(gateway, 'CODEX_BLAXEL_DEFAULT_MODEL_ID = "gpt-5.5"', "Codex runtime default model must match the app default model");
 assert.doesNotMatch(gateway, /gpt-5\.3-codex-spark/, "Codex runtime gateway must not keep the old Codex Spark default");

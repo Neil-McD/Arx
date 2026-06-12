@@ -441,6 +441,8 @@ assertIncludes(
 assertIncludes(runtimeTimelineUi, 'if (toolName === "web_search") {', "Codex webSearch must get a clear UI label");
 
 const threads = read("convex/threads.ts");
+assertIncludes(threads, "addCloudThreadMessageByOwnerInternal", "direct runtime actions need an internal prompt persistence path");
+assertIncludes(threads, "addCloudThreadMessageForOwner", "public and internal message writes must share sequencing/idempotency logic");
 assertIncludes(threads, "appendCloudRuntimeRunEventByBridgeClaimsInternal", "bridge event internal mutation must exist");
 assertIncludes(threads, "finishCloudRuntimeRunByBridgeClaimsInternal", "bridge finish internal mutation must exist");
 assertIncludes(threads, "assertRuntimeRunMatchesBridgeClaims", "bridge mutations must validate run claims");
@@ -497,6 +499,9 @@ assertIncludes(
 const action = read("convex/blaxelCodexRuntimeTurn.ts");
 assertIncludes(action, "runBlaxelCodexRuntimeTurn", "productized Blaxel Codex runtime action must exist");
 assertIncludes(action, "ensureCloudRuntimeRunStartedByOwnerInternal", "action must create a real runtime run");
+assertIncludes(action, "persistUserPrompt", "direct Codex runtime launches must be able to persist the visible user prompt");
+assertIncludes(action, "addCloudThreadMessageByOwnerInternal", "direct prompt persistence must not require spoofed public auth context");
+assertIncludes(action, "user_message_persist_failed", "prompt persistence failure must close the runtime run before execution");
 assertIncludes(action, "mintCodexBridgeRunToken", "action must mint a scoped bridge token");
 assertIncludes(action, "setCloudRuntimeRunContextSnapshotInternal", "action must persist context snapshots");
 assertIncludes(action, "buildRuntimeContextCapsule", "action must build the shared context capsule for Codex");
@@ -674,6 +679,8 @@ assertIncludes(uiRecovery, "readAssistantTextDelta", "recovery polling must asse
 
 const stagingSmoke = read("scripts/codex_blaxel_runtime_bridge_staging_smoke.ts");
 assertIncludes(stagingSmoke, "blaxelCodexRuntimeTurn:runBlaxelCodexRuntimeTurn", "staging smoke must call the productized action");
+assertIncludes(stagingSmoke, "persistUserPrompt: true", "staging smoke must not create orphan assistant turns");
+assertIncludes(stagingSmoke, "userMessageKey", "staging smoke must pin the persisted prompt message key");
 assertIncludes(stagingSmoke, "hasAssistantTextDelta", "staging smoke must verify assistant delta events");
 assertIncludes(stagingSmoke, "hasRunFinished", "staging smoke must verify run completion events");
 
