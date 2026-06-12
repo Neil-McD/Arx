@@ -10,6 +10,7 @@ import { registerCodexRunEventsStreamRoutes } from "./httpCodexRunEventsStream";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
+import { registerStagingMcpCanaryRoutes } from "./httpStagingMcpCanary";
 import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
@@ -358,6 +359,13 @@ registerRuntimeMcpRoutes({
   jsonResponse,
   optionsResponse,
   requireAuthenticatedActor,
+});
+
+registerStagingMcpCanaryRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
 });
 
 registerCodexBridgeRoutes({

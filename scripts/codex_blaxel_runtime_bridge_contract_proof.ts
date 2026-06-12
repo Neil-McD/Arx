@@ -395,7 +395,13 @@ const expired = await verifyCodexBridgeRunToken({
 assert.equal(expired.ok, false);
 if (expired.ok) throw new Error("expired token should fail");
 assert.equal(expired.code, "codex_bridge_token_expired");
-const tamperedToken = `${token.token.slice(0, -1)}${token.token.endsWith("x") ? "y" : "x"}`;
+const tokenParts = token.token.split(".");
+assert.equal(tokenParts.length, 3);
+const payloadSegment = tokenParts[1] ?? "";
+const tamperIndex = Math.min(8, Math.max(0, payloadSegment.length - 2));
+const replacement = payloadSegment[tamperIndex] === "a" ? "b" : "a";
+const tamperedPayload = `${payloadSegment.slice(0, tamperIndex)}${replacement}${payloadSegment.slice(tamperIndex + 1)}`;
+const tamperedToken = `${tokenParts[0]}.${tamperedPayload}.${tokenParts[2]}`;
 const tampered = await verifyCodexBridgeRunToken({
   token: tamperedToken,
   requiredOperation: "event",
@@ -673,6 +679,16 @@ assertIncludes(stagingSmoke, "hasRunFinished", "staging smoke must verify run co
 
 const packageJson = read("package.json");
 assertIncludes(packageJson, "smoke:codex-blaxel-runtime-bridge-staging", "package scripts must expose the staging bridge smoke");
+
+const httpRoot = read("convex/http.ts");
+assertIncludes(httpRoot, "registerStagingMcpCanaryRoutes", "HTTP router must register the staging MCP canary used by native MCP smoke");
+
+const stagingMcpCanary = read("convex/httpStagingMcpCanary.ts");
+assertIncludes(stagingMcpCanary, 'path: "/staging/mcp_canary"', "staging MCP canary route must match the mounted app endpoint");
+assertIncludes(stagingMcpCanary, 'name: "read_canary_record"', "staging MCP canary must expose the mounted canary tool name");
+assertIncludes(stagingMcpCanary, "POLYNET_DEPLOYMENT_KIND", "staging MCP canary must be gated to staging deployments");
+assertIncludes(stagingMcpCanary, "tools/list", "staging MCP canary must support MCP tool discovery");
+assertIncludes(stagingMcpCanary, "tools/call", "staging MCP canary must support MCP tool calls");
 
 const runtimeSkillResolution = read("convex/runtimeSkillResolution.ts");
 assertIncludes(
