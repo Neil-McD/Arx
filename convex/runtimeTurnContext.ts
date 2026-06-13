@@ -9,6 +9,7 @@ import {
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
+import type { RuntimeContextRunEvent } from "../shared/runtimeContextFragments";
 import type {
   RuntimeWorkspaceTerminalPrompt,
   ThreadWorkingStatePrompt,
@@ -99,15 +100,18 @@ async function loadWorkingStateForRun(params: {
   latestUserText?: string | null;
   fallbackWorkingState?: ThreadWorkingStatePrompt | null;
   runtimeStop?: RuntimeStopContext | null;
+  events?: RuntimeContextRunEvent[] | null;
 }): Promise<ThreadWorkingStatePrompt | null> {
   try {
-    const runEvents = await params.ctx.runQuery(
-      internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
-      {
-        ownerId: params.ownerId as any,
-        runId: params.runId,
-      },
-    );
+    const runEvents =
+      params.events ??
+      (await params.ctx.runQuery(
+        internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
+        {
+          ownerId: params.ownerId as any,
+          runId: params.runId,
+        },
+      ));
     const currentWorkingState = summarizeRuntimeWorkingStateFromEvents({
       latestUserText: params.latestUserText ?? null,
       runStatus: params.runtimeStop?.status ?? "ok",
@@ -130,6 +134,37 @@ async function loadWorkingStateForRun(params: {
     });
   } catch {
     return params.fallbackWorkingState ?? null;
+  }
+}
+
+async function loadRuntimeRunEventsForContext(params: {
+  ctx: any;
+  ownerId: unknown;
+  runId?: string | null;
+}): Promise<RuntimeContextRunEvent[]> {
+  const runId = String(params.runId ?? "").trim();
+  if (!runId) return [];
+  try {
+    const rows = await params.ctx.runQuery(
+      internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
+      {
+        ownerId: params.ownerId as any,
+        runId,
+      },
+    );
+    if (!Array.isArray(rows)) return [];
+    return rows.map((row: unknown) => {
+      const record = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+      return {
+        seq: typeof record.seq === "number" ? record.seq : null,
+        eventType: String(record.eventType ?? ""),
+        eventKey: typeof record.eventKey === "string" ? record.eventKey : null,
+        payload: record.payload,
+        createdAt: typeof record.createdAt === "number" ? record.createdAt : null,
+      };
+    }).filter((event) => event.eventType);
+  } catch {
+    return [];
   }
 }
 
@@ -183,18 +218,25 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
   summarizeCurrentRunEvents?: boolean;
 }): Promise<LoadedRuntimeTurnContext> {
   const runtimeStop = params.runtimeStop ?? null;
+  const currentRunId = String(params.runId ?? "").trim();
+  const runtimeRunEvents = await loadRuntimeRunEventsForContext({
+    ctx: params.ctx,
+    ownerId: params.ownerId,
+    runId: currentRunId || null,
+  });
   const shouldSummarizeRunEvents =
     Boolean(params.summarizeCurrentRunEvents) &&
-    Boolean(String(params.runId ?? "").trim());
+    Boolean(currentRunId);
   const threadWorkingState =
     shouldSummarizeRunEvents && runtimeStop
       ? await loadWorkingStateForRun({
           ctx: params.ctx,
           ownerId: params.ownerId,
-          runId: String(params.runId ?? "").trim(),
+          runId: currentRunId,
           latestUserText: params.latestUserText ?? null,
           fallbackWorkingState: params.threadWorkingState ?? null,
           runtimeStop,
+          events: runtimeRunEvents,
         })
       : params.threadWorkingState ?? null;
   const {
@@ -218,6 +260,7 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
     activeBackgroundTerminals,
     recentBackgroundProcessEvents,
     recentToolAttempts,
+    runtimeRunEvents,
     runtimeStop,
   });
   return {

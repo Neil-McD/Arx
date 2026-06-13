@@ -20,6 +20,7 @@ const resolution = readText("convex/runtimeTurnResolution.ts");
 const handlers = readText("convex/runtimeTurnHandlers.ts");
 const prompt = readText("shared/runtimePrompt.ts");
 const contextPacket = readText("shared/runtimeTurnContextPacket.ts");
+const contextFragments = readText("shared/runtimeContextFragments.ts");
 
 for (const field of [
   "version: v.optional(v.number())",
@@ -259,7 +260,11 @@ for (const promptLine of [
   "Blocker:",
   "Next action:",
 ]) {
-  assertContains(contextPacket, promptLine, `prompt projects ${promptLine}`);
+  assertContains(
+    `${contextPacket}\n${contextFragments}`,
+    promptLine,
+    `prompt projects ${promptLine}`,
+  );
 }
 assertContains(
   prompt,

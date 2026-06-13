@@ -295,6 +295,10 @@ const runtimeTurnContextPacketSource = readFileSync(
   "shared/runtimeTurnContextPacket.ts",
   "utf8",
 );
+const runtimeContextFragmentsSource = readFileSync(
+  "shared/runtimeContextFragments.ts",
+  "utf8",
+);
 const runtimeAgentLoopSource = readFileSync(
   "convex/runtimeAgentLoop.ts",
   "utf8",
@@ -365,8 +369,33 @@ assert.match(
 );
 assert.match(
   runtimeTurnContextPacketSource,
+  /fragments\?: RuntimeContextFragmentV1\[\]/,
+  "runtime context packet should carry canonical context fragments",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
+  /fragments: buildRuntimeContextFragmentsFromParts\(\{/,
+  "runtime context packet builder should emit canonical context fragments",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
+  /renderRuntimeContextFragmentsForPrompt\(fragments\)/,
+  "runtime context packet prompt renderer should delegate to fragments",
+);
+assert.match(
+  runtimeContextFragmentsSource,
   /RECENT_BACKGROUND_PROCESS_EVENTS/,
-  "runtime context prompt should render recent process lifecycle events",
+  "runtime context fragments should render recent process lifecycle events",
+);
+assert.match(
+  runtimeContextFragmentsSource,
+  /ACTION_LEDGER/,
+  "runtime context fragments should render deterministic action ledger context",
+);
+assert.match(
+  runtimeContextFragmentsSource,
+  /redactRuntimeContextText/,
+  "runtime context fragments should own prompt-context redaction",
 );
 assert.match(
   runtimeTurnContextPacketSource,

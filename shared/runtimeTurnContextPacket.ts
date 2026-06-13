@@ -4,9 +4,13 @@ import type {
 } from "./runtimePrompt.ts";
 import { deriveRuntimePreviewDiagnosis } from "./runtimePreviewDiagnostics.ts";
 import {
-  renderRuntimeTurnEnvelopeForPrompt,
-  type RuntimeTurnEnvelopeV1,
-} from "./runtimeTurnEnvelope.ts";
+  buildRuntimeContextFragmentsFromParts,
+  compactRuntimeContextFragmentsForSnapshot,
+  renderRuntimeContextFragmentsForPrompt,
+  type RuntimeContextFragmentV1,
+  type RuntimeContextRunEvent,
+} from "./runtimeContextFragments.ts";
+import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
 
 export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
@@ -15,6 +19,7 @@ export type RuntimeTurnContextPacket = {
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
   recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
   recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
+  fragments?: RuntimeContextFragmentV1[];
   runtimeStop?: {
     status: "error" | "cancelled";
     reason?: string | null;
@@ -32,6 +37,7 @@ export type RuntimeTurnContextSnapshotV1 = {
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
   recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
   recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
+  fragments?: RuntimeContextFragmentV1[];
   runtimeStop: RuntimeTurnContextPacket["runtimeStop"];
 };
 
@@ -429,34 +435,48 @@ export function buildRuntimeTurnContextPacket(params: {
   activeBackgroundTerminals?: Array<RuntimeWorkspaceTerminalPrompt | null | undefined> | null;
   recentBackgroundProcessEvents?: Array<RuntimeBackgroundProcessEventPrompt | null | undefined> | null;
   recentToolAttempts?: Array<RuntimeRecentToolAttemptPrompt | null | undefined> | null;
+  runtimeRunEvents?: Array<RuntimeContextRunEvent | null | undefined> | null;
   runtimeStop?: RuntimeTurnContextPacket["runtimeStop"];
 }): RuntimeTurnContextPacket {
+  const activeBackgroundTerminals = Array.isArray(params.activeBackgroundTerminals)
+    ? params.activeBackgroundTerminals.filter(
+        (terminal): terminal is RuntimeWorkspaceTerminalPrompt =>
+          Boolean(terminal && terminal.command),
+      ).map((terminal) => withRuntimePreviewDiagnosis(terminal))
+    : [];
+  const recentBackgroundProcessEvents = Array.isArray(params.recentBackgroundProcessEvents)
+    ? params.recentBackgroundProcessEvents
+        .filter(
+          (event): event is RuntimeBackgroundProcessEventPrompt =>
+            Boolean(event && event.terminalId && event.command),
+        )
+        .slice(0, 6)
+    : [];
+  const recentToolAttempts = Array.isArray(params.recentToolAttempts)
+    ? params.recentToolAttempts
+        .filter(
+          (attempt): attempt is RuntimeRecentToolAttemptPrompt =>
+            Boolean(attempt && attempt.toolName),
+        )
+        .slice(0, 8)
+    : [];
   return {
     latestUserText: params.latestUserText ?? null,
     runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
     threadWorkingState: params.threadWorkingState ?? null,
-    activeBackgroundTerminals: Array.isArray(params.activeBackgroundTerminals)
-      ? params.activeBackgroundTerminals.filter(
-          (terminal): terminal is RuntimeWorkspaceTerminalPrompt =>
-            Boolean(terminal && terminal.command),
-        ).map((terminal) => withRuntimePreviewDiagnosis(terminal))
-      : [],
-    recentBackgroundProcessEvents: Array.isArray(params.recentBackgroundProcessEvents)
-      ? params.recentBackgroundProcessEvents
-          .filter(
-            (event): event is RuntimeBackgroundProcessEventPrompt =>
-              Boolean(event && event.terminalId && event.command),
-          )
-          .slice(0, 6)
-      : [],
-    recentToolAttempts: Array.isArray(params.recentToolAttempts)
-      ? params.recentToolAttempts
-          .filter(
-            (attempt): attempt is RuntimeRecentToolAttemptPrompt =>
-              Boolean(attempt && attempt.toolName),
-          )
-          .slice(0, 8)
-      : [],
+    activeBackgroundTerminals,
+    recentBackgroundProcessEvents,
+    recentToolAttempts,
+    fragments: buildRuntimeContextFragmentsFromParts({
+      latestUserText: params.latestUserText ?? null,
+      runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
+      threadWorkingState: params.threadWorkingState ?? null,
+      activeBackgroundTerminals,
+      recentBackgroundProcessEvents,
+      recentToolAttempts,
+      runtimeRunEvents: params.runtimeRunEvents ?? [],
+      runtimeStop: params.runtimeStop ?? null,
+    }),
     runtimeStop: params.runtimeStop ?? null,
   };
 }
@@ -598,233 +618,27 @@ export function buildRuntimeTurnContextSnapshot(params: {
       failureSummary: compactSnapshotString(attempt.failureSummary, 200),
       suggestedRecovery: compactSnapshotString(attempt.suggestedRecovery, 200),
     })),
+    fragments: compactRuntimeContextFragmentsForSnapshot(params.packet.fragments),
     runtimeStop: params.packet.runtimeStop ?? null,
   };
-}
-
-function buildThreadWorkingStatePrompt(packet: RuntimeTurnContextPacket): string | null {
-  const raw = packet.threadWorkingState;
-  if (!raw || typeof raw !== "object") return null;
-  const goal = truncatePromptSnippet(raw.goal, 240);
-  const status = truncatePromptSnippet(raw.status, 80);
-  const currentStep = truncatePromptSnippet(raw.currentStep, 240);
-  const plan = Array.isArray(raw.plan)
-    ? raw.plan.map((value) => truncatePromptSnippet(value, 180)).filter(Boolean)
-    : [];
-  const completedSteps = Array.isArray(raw.completedSteps)
-    ? raw.completedSteps.map((value) => truncatePromptSnippet(value, 180)).filter(Boolean)
-    : [];
-  const decisions = Array.isArray(raw.decisions)
-    ? raw.decisions.map((value) => truncatePromptSnippet(value, 200)).filter(Boolean)
-    : [];
-  const openQuestions = Array.isArray(raw.openQuestions)
-    ? raw.openQuestions.map((value) => truncatePromptSnippet(value, 200)).filter(Boolean)
-    : [];
-  const focusFiles = Array.isArray(raw.focusFiles)
-    ? raw.focusFiles.map((value) => truncatePromptSnippet(value, 120)).filter(Boolean)
-    : [];
-  const lastResult = truncatePromptSnippet(raw.lastResult, 260);
-  const verificationStatus = truncatePromptSnippet(raw.verificationStatus, 80);
-  const filesTouched = Array.isArray(raw.filesTouched)
-    ? raw.filesTouched.map((value) => truncatePromptSnippet(value, 120)).filter(Boolean)
-    : [];
-  const filesChanged = Array.isArray(raw.filesChanged)
-    ? raw.filesChanged.map((value) => truncatePromptSnippet(value, 120)).filter(Boolean)
-    : [];
-  const verifiedFindings = Array.isArray(raw.verifiedFindings)
-    ? raw.verifiedFindings.map((value) => truncatePromptSnippet(value, 180)).filter(Boolean)
-    : [];
-  const recentActions = Array.isArray(raw.recentActions)
-    ? raw.recentActions.slice(-6).map((value) => truncatePromptSnippet(value, 180)).filter(Boolean)
-    : [];
-  const lastDiagnostic = truncatePromptSnippet(raw.lastDiagnostic, 260);
-  const openIssue = truncatePromptSnippet(raw.openIssue ?? raw.blocker, 260);
-  const nextAction = truncatePromptSnippet(raw.nextAction, 240);
-  if (
-    !goal &&
-    !status &&
-    !currentStep &&
-    plan.length === 0 &&
-    completedSteps.length === 0 &&
-    decisions.length === 0 &&
-    openQuestions.length === 0 &&
-    focusFiles.length === 0 &&
-    !lastResult &&
-    !verificationStatus &&
-    filesTouched.length === 0 &&
-    filesChanged.length === 0 &&
-    verifiedFindings.length === 0 &&
-    recentActions.length === 0 &&
-    !lastDiagnostic &&
-    !openIssue &&
-    !nextAction
-  ) {
-    return null;
-  }
-  return [
-    "THREAD_WORKING_STATE",
-    `Goal: ${goal || "(none)"}`,
-    `Status: ${status || "(none)"}`,
-    `Current step: ${currentStep || "(none)"}`,
-    `Plan: ${plan.length > 0 ? plan.join(" | ") : "(none)"}`,
-    `Completed steps: ${completedSteps.length > 0 ? completedSteps.join(" | ") : "(none)"}`,
-    `Decisions: ${decisions.length > 0 ? decisions.join(" | ") : "(none)"}`,
-    `Open questions: ${openQuestions.length > 0 ? openQuestions.join(" | ") : "(none)"}`,
-    `Focus files: ${focusFiles.length > 0 ? focusFiles.join(", ") : "(none)"}`,
-    `Last verified result: ${lastResult || "(none)"}`,
-    `Verification: ${verificationStatus || "(none)"}`,
-    `Files touched: ${filesTouched.length > 0 ? filesTouched.join(", ") : "(none)"}`,
-    `Files changed: ${filesChanged.length > 0 ? filesChanged.join(", ") : "(none)"}`,
-    `Verified findings: ${verifiedFindings.length > 0 ? verifiedFindings.join(" | ") : "(none)"}`,
-    `Last diagnostic: ${lastDiagnostic || "(none)"}`,
-    `Recent actions: ${recentActions.length > 0 ? recentActions.join(" | ") : "(none)"}`,
-    `Blocker: ${openIssue || "(none)"}`,
-    `Next action: ${nextAction || "(none)"}`,
-    "Treat this as compact continuity from prior verified work. Re-read files when exact current contents matter.",
-  ].join("\n");
-}
-
-function buildWorkspaceProcessContextPrompt(packet: RuntimeTurnContextPacket): string | null {
-  const active = packet.activeBackgroundTerminals.filter(
-    (row) => row && typeof row.command === "string",
-  );
-  if (active.length === 0) return null;
-  const lines: string[] = ["WORKSPACE_PROCESS_CONTEXT", "Active background processes:"];
-  for (const terminal of active.slice(0, 3)) {
-    const command = truncatePromptSnippet(terminal.command, 120) ?? "(unknown command)";
-    const cwd = truncatePromptSnippet(terminal.cwd, 80);
-    const tail = truncatePromptSnippet(terminal.outputTail, 140);
-    const lifecycleOwner = truncatePromptSnippet(terminal.lifecycleOwner, 40);
-    const healthStatus = truncatePromptSnippet(terminal.healthStatus, 40);
-    const healthSummary = truncatePromptSnippet(terminal.healthSummary, 120);
-    const previewProcessStatus = truncatePromptSnippet(terminal.previewStatus, 60);
-    const previewTransportStatus = truncatePromptSnippet(
-      terminal.previewTransportStatus,
-      40,
-    );
-    const previewInspectionStatus = truncatePromptSnippet(
-      terminal.previewInspectionStatus,
-      60,
-    );
-    const previewRenderStatus = truncatePromptSnippet(
-      terminal.previewRenderStatus,
-      60,
-    );
-    const previewParts = [
-      typeof terminal.previewPort === "number" ? `port=${terminal.previewPort}` : null,
-      terminal.previewPath ? `path=${truncatePromptSnippet(terminal.previewPath, 80)}` : null,
-      terminal.previewLabel ? `label=${truncatePromptSnippet(terminal.previewLabel, 80)}` : null,
-      previewTransportStatus ? `transport=${previewTransportStatus}` : null,
-      previewInspectionStatus ? `inspection=${previewInspectionStatus}` : null,
-      previewRenderStatus ? `render=${previewRenderStatus}` : null,
-    ].filter(Boolean);
-    const previewProbe = truncatePromptSnippet(terminal.lastPreviewProbeSummary, 120);
-    const browserObservation = truncatePromptSnippet(terminal.lastBrowserObservationSummary, 120);
-    const previewDiagnosis = truncatePromptSnippet(terminal.previewDiagnosis, 80);
-    const recommendedPreviewDebugAction = truncatePromptSnippet(
-      terminal.recommendedPreviewDebugAction,
-      160,
-    );
-    lines.push(
-      `- ${terminal.id}: ${terminal.status}${lifecycleOwner ? `; lifecycle=${lifecycleOwner}` : ""}${healthStatus ? `; health=${healthStatus}` : ""}${healthSummary ? `; health_summary=${healthSummary}` : ""}; command=${command}${cwd ? `; cwd=${cwd}` : ""}${previewProcessStatus ? `; preview_process=${previewProcessStatus}` : ""}${previewParts.length > 0 ? `; ${previewParts.join("; ")}` : ""}${previewDiagnosis ? `; preview_diagnosis=${previewDiagnosis}` : ""}${recommendedPreviewDebugAction ? `; recommended_preview_debug_action=${recommendedPreviewDebugAction}` : ""}${browserObservation ? `; browser_observation=${browserObservation}` : ""}${previewProbe ? `; preview_probe=${previewProbe}` : ""}${tail ? `; recent_output=${tail}` : ""}`,
-    );
-  }
-  lines.push(
-    "Treat active background process rows as canonical live workspace truth. Reuse an existing process when it is still relevant, and stop idle processes when the task no longer needs them.",
-    "For preview debugging, follow the evidence order: terminal health, preview transport/render probe, browser/computer observation, then app root/runtime/CSS diagnosis.",
-    "Treat preview_process as process/transport availability only; app render truth comes from transport, inspection, render, preview_diagnosis, browser_observation, and preview_probe fields.",
-    "If the process is still running but render is blank_suspected or preview_diagnosis is runtime_error_suspected, inspect frontend render/console/root-mount/import/CSS causes before restarting the terminal.",
-  );
-  return lines.join("\n");
-}
-
-function buildRecentToolAttemptsPrompt(packet: RuntimeTurnContextPacket): string | null {
-  const attempts = packet.recentToolAttempts.filter((attempt) => attempt.toolName);
-  if (attempts.length === 0) return null;
-  const lines = ["RECENT_TOOL_ATTEMPTS"];
-  for (const attempt of attempts.slice(0, 8)) {
-    const parts = [
-      attempt.commandOrTarget
-        ? `target=${truncatePromptSnippet(attempt.commandOrTarget, 140)}`
-        : null,
-      attempt.cwd ? `cwd=${truncatePromptSnippet(attempt.cwd, 80)}` : null,
-      typeof attempt.exitCode === "number" ? `exit=${attempt.exitCode}` : null,
-      attempt.errorCode ? `error_code=${truncatePromptSnippet(attempt.errorCode, 80)}` : null,
-      attempt.failureKind ? `failure_kind=${truncatePromptSnippet(attempt.failureKind, 80)}` : null,
-      attempt.connectedAppName
-        ? `app=${truncatePromptSnippet(attempt.connectedAppName, 80)}`
-        : null,
-      attempt.connectedAppToolName
-        ? `app_tool=${truncatePromptSnippet(attempt.connectedAppToolName, 100)}`
-        : null,
-      attempt.errorMessage
-        ? `error=${truncatePromptSnippet(attempt.errorMessage, 140)}`
-        : null,
-      attempt.failureSummary
-        ? `failure=${truncatePromptSnippet(attempt.failureSummary, 180)}`
-        : null,
-      attempt.suggestedRecovery
-        ? `recovery=${truncatePromptSnippet(attempt.suggestedRecovery, 180)}`
-        : null,
-      attempt.outputPreview
-        ? `output=${truncatePromptSnippet(attempt.outputPreview, 220)}`
-        : null,
-    ].filter(Boolean);
-    lines.push(
-      `- ${attempt.toolName} ${attempt.status}${parts.length > 0 ? `; ${parts.join("; ")}` : ""}`,
-    );
-  }
-  lines.push(
-    "Treat these as recent operational evidence from actual tool calls. Do not say exact failed tool calls are unavailable when they are listed here.",
-  );
-  return lines.join("\n");
-}
-
-function buildRecentBackgroundProcessEventsPrompt(
-  packet: RuntimeTurnContextPacket,
-): string | null {
-  const events = packet.recentBackgroundProcessEvents.filter(
-    (event) => event.terminalId && event.command,
-  );
-  if (events.length === 0) return null;
-  const lines = ["RECENT_BACKGROUND_PROCESS_EVENTS"];
-  for (const event of events.slice(0, 6)) {
-    const parts = [
-      event.completionReason
-        ? `reason=${truncatePromptSnippet(event.completionReason, 80)}`
-        : null,
-      event.cwd ? `cwd=${truncatePromptSnippet(event.cwd, 80)}` : null,
-      typeof event.previewPort === "number" ? `port=${event.previewPort}` : null,
-      event.previewStatus
-        ? `preview=${truncatePromptSnippet(event.previewStatus, 80)}`
-        : null,
-      typeof event.exitCode === "number" ? `exit=${event.exitCode}` : null,
-      event.healthSummary
-        ? `health=${truncatePromptSnippet(event.healthSummary, 140)}`
-        : null,
-      event.outputTail ? `output=${truncatePromptSnippet(event.outputTail, 220)}` : null,
-    ].filter(Boolean);
-    lines.push(
-      `- ${event.terminalId}: ${event.status}; command=${truncatePromptSnippet(event.command, 140) ?? "(unknown command)"}${parts.length > 0 ? `; ${parts.join("; ")}` : ""}`,
-    );
-  }
-  lines.push(
-    "Treat these as recent lifecycle events from managed background terminals. A completed preview server invalidates older live-preview assumptions unless a newer active process for the same app exists.",
-  );
-  return lines.join("\n");
 }
 
 export function renderRuntimeTurnContextForPrompt(
   packet: RuntimeTurnContextPacket | null | undefined,
 ): string | null {
   if (!packet) return null;
-  return joinPromptBlocks([
-    renderRuntimeTurnEnvelopeForPrompt(packet.runtimeTurnEnvelope),
-    buildThreadWorkingStatePrompt(packet),
-    buildWorkspaceProcessContextPrompt(packet),
-    buildRecentBackgroundProcessEventsPrompt(packet),
-    buildRecentToolAttemptsPrompt(packet),
-  ]);
+  const fragments = Array.isArray(packet.fragments) && packet.fragments.length > 0
+    ? packet.fragments
+    : buildRuntimeContextFragmentsFromParts({
+        latestUserText: packet.latestUserText ?? null,
+        runtimeTurnEnvelope: packet.runtimeTurnEnvelope ?? null,
+        threadWorkingState: packet.threadWorkingState ?? null,
+        activeBackgroundTerminals: packet.activeBackgroundTerminals,
+        recentBackgroundProcessEvents: packet.recentBackgroundProcessEvents,
+        recentToolAttempts: packet.recentToolAttempts,
+        runtimeStop: packet.runtimeStop ?? null,
+      });
+  return renderRuntimeContextFragmentsForPrompt(fragments);
 }
 
 export function renderRuntimeTurnContextForFailureFinalizer(
@@ -832,17 +646,8 @@ export function renderRuntimeTurnContextForFailureFinalizer(
 ): string {
   if (!packet) return "(none)";
   const rendered = joinPromptBlocks([
-    packet.latestUserText
+    packet.latestUserText && !packet.runtimeStop
       ? `Latest user message: ${truncatePromptSnippet(packet.latestUserText, 500)}`
-      : null,
-    packet.runtimeStop
-      ? [
-          "RUNTIME_STOP",
-          `Status: ${packet.runtimeStop.status}`,
-          `Reason: ${truncatePromptSnippet(packet.runtimeStop.reason, 160) ?? "(none)"}`,
-          `Error code: ${truncatePromptSnippet(packet.runtimeStop.errorCode, 160) ?? "(none)"}`,
-          `Error message: ${truncatePromptSnippet(packet.runtimeStop.errorMessage, 260) ?? "(none)"}`,
-        ].join("\n")
       : null,
     renderRuntimeTurnContextForPrompt(packet),
   ]);
