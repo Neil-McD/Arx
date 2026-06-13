@@ -31,6 +31,7 @@ type ThreadMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content_json: unknown;
+  engine_id: string | null;
   model_id: string | null;
   run_id: string | null;
 };
@@ -111,9 +112,11 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   setContextModal: Dispatch<SetStateAction<ContextModalPayload | null>>;
   extractInferenceSourceFromMessageContent: (contentJson: unknown) => string | null;
   extractModelIdFromMessageContent: (contentJson: unknown) => string | null;
+  extractRuntimeEngineIdFromMessageContent: (contentJson: unknown) => string | null;
   formatModelSignature: (
     modelId: string | null,
     inferenceSource: string | null,
+    engineId: string | null,
     toggles: ModelToggle[],
   ) => string | null;
   renderMarkdown: (
@@ -199,10 +202,20 @@ export function buildWebWorkspaceSurfaceProjection(
             ? params.activeThreadStreamingState.runtimeEvents
             : params.runtimeEventsByRunId[message.run_id] ?? []
           : [];
+      const messageEngineId = !isUser
+        ? (
+            message.run_id === params.activeThreadStreamingRunId
+              ? params.activeThreadStreamingState?.meta?.engine_id ?? null
+              : null
+          ) ||
+          message.engine_id ||
+          params.extractRuntimeEngineIdFromMessageContent(message.content_json)
+        : null;
       const modelLabel = !isUser
         ? params.formatModelSignature(
             messageModelId,
             inferenceSource,
+            messageEngineId,
             params.modelToggles,
           )
         : null;

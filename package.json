@@ -15,6 +15,7 @@
     "operator:seed-owner": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/seed_operator_owner.ts",
     "check:web-typecheck": "npm --prefix apps/web run typecheck",
     "check:web-bundle-budget": "npm --prefix apps/web run check:bundle-budget",
+    "check:model-attribution-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/model_attribution_ui_proof.ts",
     "check:convex-cut-runtime-guard": "bash scripts/convex_cut_runtime_guard.sh",
     "check:legacy-route-surface-guard": "bash scripts/legacy_route_surface_guard.sh",
     "check:no-compat-rpc-primitive-guard": "bash scripts/no_compat_rpc_primitive_guard.sh",

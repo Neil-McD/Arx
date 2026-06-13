@@ -1,5 +1,5 @@
-import { appendInferenceProviderLabel } from "./inferenceSourceUi";
-import { FREE_MODEL_ALLOWLIST, FREE_MODEL_LABELS, isFreeModelId } from "./modelCatalog";
+import { appendInferenceProviderLabel } from "./inferenceSourceUi.ts";
+import { FREE_MODEL_ALLOWLIST, FREE_MODEL_LABELS, isFreeModelId } from "./modelCatalog.ts";
 
 type ModelToggleLike = {
   id: string;
@@ -9,6 +9,7 @@ type ModelToggleLike = {
 type FormatModelAttributionLabelArgs = {
   modelId: string | null | undefined;
   inferenceSource: string | null | undefined;
+  engineId?: string | null | undefined;
   modelToggles: ReadonlyArray<ModelToggleLike>;
   inferenceLaneFallbacks?: ReadonlyArray<InferenceLaneFallbackTraceItem> | null;
   freeModelAllowlist?: ReadonlySet<string>;
@@ -45,13 +46,32 @@ function resolveModelLabel(
   return fallbackModelLabel(modelId);
 }
 
+function formatRuntimeEngineProviderLabel(value: string | null | undefined): string | null {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (
+    raw === "runtime_turn" ||
+    raw === "runtime_convex" ||
+    raw === "agent_web" ||
+    raw === "public_web" ||
+    raw === "public_convex" ||
+    raw === "public_openrouter"
+  ) {
+    return "PolyNet";
+  }
+  return null;
+}
+
 export function formatModelAttributionLabel(args: FormatModelAttributionLabelArgs): string | null {
   const modelId = (args.modelId ?? "").trim();
-  if (!modelId) return null;
+  const runtimeProvider = formatRuntimeEngineProviderLabel(args.engineId);
+  if (!modelId) return runtimeProvider;
   const isFreeModel = isFreeModelId(modelId, args.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST);
   const modelLabel = resolveModelLabel(modelId, args.modelToggles, args.freeModelLabels);
   const source = isFreeModel ? "free" : args.inferenceSource;
-  const base = appendInferenceProviderLabel(modelLabel, source);
+  const base = runtimeProvider
+    ? `${modelLabel} · ${runtimeProvider}`
+    : appendInferenceProviderLabel(modelLabel, source);
   const fallbackSuffix = formatInferenceLaneFallbackSuffix(args.inferenceLaneFallbacks ?? null);
   return `${base}${fallbackSuffix}`;
 }
@@ -107,6 +127,15 @@ export function extractModelIdFromMessageContent(content: unknown): string | nul
   const meta = extractMetaRecord(content);
   if (!meta) return null;
   const value = meta.model_id;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function extractRuntimeEngineIdFromMessageContent(content: unknown): string | null {
+  const meta = extractMetaRecord(content);
+  if (!meta) return null;
+  const value = meta.runtime_engine_id ?? meta.engine_id;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;

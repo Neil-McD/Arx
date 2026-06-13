@@ -396,6 +396,7 @@ import {
 import {
   extractInferenceSourceFromMessageContent,
   extractModelIdFromMessageContent,
+  extractRuntimeEngineIdFromMessageContent,
   formatModelAttributionLabel,
 } from "../../../shared/modelAttributionUi";
 import {
@@ -1202,11 +1203,13 @@ function clearAppOAuthFinalizeSessionGuard(key: string): void {
 function formatModelSignature(
   modelId: string | null | undefined,
   inferenceSource: string | null | undefined,
+  engineId: string | null | undefined,
   modelToggles: ModelToggle[],
 ): string | null {
   return formatModelAttributionLabel({
     modelId,
     inferenceSource,
+    engineId,
     modelToggles,
     freeModelAllowlist: GUEST_MODEL_ALLOWLIST,
     freeModelLabels: GUEST_MODEL_LABELS,
@@ -10417,6 +10420,7 @@ export default function App() {
     setContextModal,
     extractInferenceSourceFromMessageContent,
     extractModelIdFromMessageContent,
+    extractRuntimeEngineIdFromMessageContent,
     formatModelSignature,
     renderMarkdown,
   });
