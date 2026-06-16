@@ -34,6 +34,16 @@ assert.match(section, /community-polynet-detail/, "PolyNet section should render
 assert.match(section, /selectedNodeId/, "PolyNet section should support local node selection");
 assert.match(section, /overview\.graph\.nodes\.map/, "PolyNet graph should render backend-projected nodes");
 assert.match(section, /overview\.graph\.edges\.map/, "PolyNet graph should render backend-projected edges");
+assert.match(
+  section,
+  /community-polynet-root-label/,
+  "PolyNet root label should be annotation around the root node, not the node body",
+);
+assert.match(
+  section,
+  /<span className="community-polynet-node-dot" aria-hidden="true" \/>/,
+  "PolyNet graph nodes should render as dot primitives",
+);
 assert.doesNotMatch(
   section,
   /Backfill archive|Process pending|Retry failed|Total docs|Embedded|PDF docs|archive health|archive memory/i,
@@ -43,6 +53,18 @@ assert.doesNotMatch(
   section,
   /textarea|contentEditable|onSubmit|mutation|createCommunityIntelligence|applyCommunityIntelligence|decideCommunityIntelligence/,
   "PolyNet tab should remain read-only in this slice",
+);
+
+const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+assert.match(
+  css,
+  /\.community-polynet-node\.root \{[\s\S]*width: 34px;[\s\S]*height: 34px;[\s\S]*#f7478f/,
+  "PolyNet root node should be a compact logo-pink dot",
+);
+assert.doesNotMatch(
+  css,
+  /\.community-polynet-node\.root \{[\s\S]*min-width: 92px;[\s\S]*padding: 0 14px;/,
+  "PolyNet root node should not regress to the old rectangular pill shape",
 );
 
 assert.match(

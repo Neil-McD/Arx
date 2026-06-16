@@ -15155,18 +15155,18 @@ button.chat-reply-quote:hover {
 }
 
 .community-polynet-node.root {
-  width: min(160px, 38%);
-  min-width: 92px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 650;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--accent-gold) 45%, var(--border-default));
+  overflow: visible;
+  color: color-mix(in srgb, #f7478f 86%, white);
+  background:
+    radial-gradient(circle at 34% 26%, color-mix(in srgb, white 36%, #f7478f) 0 18%, transparent 19%),
+    linear-gradient(145deg, color-mix(in srgb, #f7478f 88%, white), color-mix(in srgb, #f7478f 92%, black));
+  border-color: color-mix(in srgb, #f7478f 74%, var(--border-default));
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, #f7478f 10%, transparent),
+    0 10px 28px color-mix(in srgb, #f7478f 18%, transparent);
 }
 
 .community-polynet-node-dot {
@@ -15174,6 +15174,25 @@ button.chat-reply-quote:hover {
   height: 8px;
   border-radius: inherit;
   background: currentColor;
+}
+
+.community-polynet-node.root .community-polynet-node-dot {
+  width: 14px;
+  height: 14px;
+  box-shadow: inset 0 1px 2px color-mix(in srgb, white 26%, transparent);
+}
+
+.community-polynet-root-label {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .community-polynet-node.validated {

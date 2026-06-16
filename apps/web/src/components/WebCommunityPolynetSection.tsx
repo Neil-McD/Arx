@@ -240,11 +240,10 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     onClick={() => setSelectedNodeId(node.id)}
                     title={node.label}
                   >
+                    <span className="community-polynet-node-dot" aria-hidden="true" />
                     {isRoot ? (
-                      <span>{shortNodeLabel(node.label)}</span>
-                    ) : (
-                      <span className="community-polynet-node-dot" aria-hidden="true" />
-                    )}
+                      <span className="community-polynet-root-label">{shortNodeLabel(node.label)}</span>
+                    ) : null}
                   </button>
                 );
               })}
