@@ -102,13 +102,7 @@ async function fetchMappedCloudProjectsViaConvex<TSession>(params: {
   const rows = (await client.query("projects:listCloudProjectsForOwner" as any, {
     authSubject,
   })) as ConvexCloudProjectRow[];
-  if (Array.isArray(rows) && rows.length > 0) {
-    return rows.map((row) => mapConvexProjectRowToRecord(row));
-  }
-  const row = (await client.mutation("projects:ensureDefaultCloudProjectForOwner" as any, {
-    authSubject,
-  })) as ConvexCloudProjectRow | null;
-  return row ? [mapConvexProjectRowToRecord(row)] : [];
+  return Array.isArray(rows) ? rows.map((row) => mapConvexProjectRowToRecord(row)) : [];
 }
 
 export async function fetchMappedCloudProjects<TSession>(params: {

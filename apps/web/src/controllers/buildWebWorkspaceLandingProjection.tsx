@@ -66,20 +66,18 @@ export function buildWebWorkspaceLandingProjection(
     params.emptyThreadLandingTitle
   );
 
-  const emptyThreadSubtitle =
-    params.activeCommunity && params.resolvedActiveProjectName ? (
-      <div className="web-empty-thread-subtitle">
-        You are in{" "}
-        <button
-          type="button"
-          className="web-empty-thread-link web-empty-thread-subtitle-accent"
-          onClick={params.onOpenLandingProject}
-        >
-          {params.resolvedActiveProjectName}
-        </button>{" "}
-        workspace
-      </div>
-    ) : null;
+  const activeProjectName = String(params.resolvedActiveProjectName ?? "").trim();
+  const emptyThreadSubtitle = activeProjectName ? (
+    <div className="web-empty-thread-subtitle">
+      <button
+        type="button"
+        className="web-empty-thread-link web-empty-thread-subtitle-accent"
+        onClick={params.onOpenLandingProject}
+      >
+        {activeProjectName}
+      </button>
+    </div>
+  ) : null;
 
   const emptyThreadSetupCard =
     params.shouldShowAccountSetupCard && params.accountSetupStatus ? (

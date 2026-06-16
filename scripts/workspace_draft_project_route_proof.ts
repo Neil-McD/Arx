@@ -9,7 +9,18 @@ const routeState = read("shared/webAppRouteState.ts");
 const routeController = read("apps/web/src/controllers/useWebWorkspaceRouteController.ts");
 const coreController = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
 const projectStateController = read("apps/web/src/controllers/useWebWorkspaceProjectStateController.ts");
+const cloudProjectsGateway = read("shared/cloudProjectsGateway.ts");
 const app = read("apps/web/src/App.tsx");
+
+const projectListStart = cloudProjectsGateway.indexOf(
+  "async function fetchMappedCloudProjectsViaConvex",
+);
+const projectListEnd = cloudProjectsGateway.indexOf(
+  "export async function fetchMappedCloudProjects",
+  projectListStart,
+);
+assert.ok(projectListStart >= 0 && projectListEnd > projectListStart);
+const projectListBody = cloudProjectsGateway.slice(projectListStart, projectListEnd);
 
 assert.match(
   routeState,
@@ -87,6 +98,26 @@ assert.match(
   projectStateController,
   /useState<string \| null>\(\(\) =>[\s\S]*normalizeWorkspaceDraftProjectId\(params\.initialActiveProjectId\)/,
   "workspace project controller must normalize initial project route state",
+);
+assert.match(
+  projectStateController,
+  /const resolvedActiveProjectId = useMemo\([\s\S]*resolveExistingCloudProjectId\(projects, activeProjectId\)/,
+  "workspace project controller must resolve active project from explicit state only",
+);
+assert.doesNotMatch(
+  projectStateController,
+  /resolvePreferredCloudProjectId\(projects, activeProjectId\)/,
+  "workspace project controller must not resolve active project by falling back to the first project",
+);
+assert.match(
+  projectListBody,
+  /client\.query\("projects:listCloudProjectsForOwner"/,
+  "project list load must query existing projects",
+);
+assert.doesNotMatch(
+  projectListBody,
+  /ensureDefaultCloudProjectForOwner/,
+  "project list load must not create a default project as a side effect",
 );
 assert.match(
   app,

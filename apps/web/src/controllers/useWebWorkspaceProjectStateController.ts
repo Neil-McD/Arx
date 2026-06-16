@@ -5,7 +5,6 @@ import {
   resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared,
   resolveDefaultWorkspaceProjectId,
   resolveExistingCloudProjectId,
-  resolvePreferredCloudProjectId,
 } from "../../../../shared/threadSidebarSelectors";
 import { fetchMappedCloudProjects } from "../../../../shared/cloudProjectsGateway";
 import { normalizeWorkspaceDraftProjectId } from "../../../../shared/webAppRouteState";
@@ -41,7 +40,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
   const hasObservedInitialProjectSelectionRef = useRef(false);
 
   const resolvedActiveProjectId = useMemo(
-    () => resolvePreferredCloudProjectId(projects, activeProjectId),
+    () => resolveExistingCloudProjectId(projects, activeProjectId),
     [activeProjectId, projects],
   );
 
@@ -52,10 +51,8 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
     const activeName = resolvedActiveProjectId
       ? String(projectById.get(resolvedActiveProjectId)?.name ?? "").trim()
       : "";
-    if (activeName) return activeName;
-    if (!defaultProjectId) return "";
-    return String(projectById.get(defaultProjectId)?.name ?? "").trim();
-  }, [defaultProjectId, projectById, resolvedActiveProjectId]);
+    return activeName;
+  }, [projectById, resolvedActiveProjectId]);
 
   const resolveThreadProjectId = useCallback(
     (thread: ThreadT): string | null =>

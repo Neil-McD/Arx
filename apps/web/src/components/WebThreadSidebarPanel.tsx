@@ -251,7 +251,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                           type="button"
                           className="project-group-new"
                           onClick={() => actions.onStartDraftInProject(project)}
-                          title="Start a new thread in this project"
+                          title="New thread in this project"
                         >
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />

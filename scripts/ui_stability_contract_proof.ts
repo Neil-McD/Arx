@@ -21,6 +21,8 @@ const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
 const workspaceActiveProjectSelector = read("shared/workspaceActiveProjectSelector.ts");
 const workspaceProjectStateController = read("apps/web/src/controllers/useWebWorkspaceProjectStateController.ts");
 const workspaceSidebarStateHost = read("apps/web/src/components/WebWorkspaceSidebarStateHost.tsx");
+const workspaceLandingProjection = read("apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx");
+const threadSidebarPanel = read("apps/web/src/components/WebThreadSidebarPanel.tsx");
 
 assert.match(
   app,
@@ -138,6 +140,16 @@ assert.match(
   /const requestedActiveProjectId = activeProjectId;[\s\S]*setActiveProjectId\(\(current\) =>[\s\S]*resolveExistingCloudProjectId\(next, current \?\? requestedActiveProjectId\)/,
   "project reloads must preserve the newest explicit draft project instead of clobbering it or defaulting it from provider rows",
 );
+assert.match(
+  workspaceProjectStateController,
+  /const resolvedActiveProjectId = useMemo\([\s\S]*resolveExistingCloudProjectId\(projects, activeProjectId\)/,
+  "project state must resolve the active project from explicit state only",
+);
+assert.doesNotMatch(
+  workspaceProjectStateController,
+  /resolvePreferredCloudProjectId\(projects, activeProjectId\)/,
+  "project state must not treat the first project as ambient active context",
+);
 assert.doesNotMatch(
   app + workspaceSidebarStateHost,
   /onProjectToggled|props\.onProjectToggled|setActiveProjectId\}\s*$/m,
@@ -157,6 +169,26 @@ assert.match(
   app,
   /buildWorkspaceRightPanelUserData\(\{[\s\S]*activeProjectId: currentWorkspaceProjectId[\s\S]*activeProjectName: currentWorkspaceProjectName/,
   "right panel computer summary and files must use the same current workspace project authority",
+);
+assert.match(
+  workspaceLandingProjection,
+  /const activeProjectName = String\(params\.resolvedActiveProjectName \?\? ""\)\.trim\(\);[\s\S]*const emptyThreadSubtitle = activeProjectName \?/,
+  "empty workspace landing must render project identity only when explicit project scope exists",
+);
+assert.doesNotMatch(
+  workspaceLandingProjection,
+  /Loose chat/,
+  "empty workspace landing must not label standalone drafts as Loose chat",
+);
+assert.doesNotMatch(
+  workspaceLandingProjection,
+  /You are in/,
+  "empty workspace landing project cue should show the project name without explanatory scope text",
+);
+assert.match(
+  threadSidebarPanel,
+  /className="project-group-new"[\s\S]*title="New thread in this project"/,
+  "project new-thread affordance must make project scope explicit",
 );
 assert.match(
   app,

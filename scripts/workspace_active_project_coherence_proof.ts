@@ -62,7 +62,7 @@ assert.equal(draftSelectionFeedsRightPanel.currentProjectName, "Test");
 assert.equal(draftSelectionFeedsRightPanel.source, "draft_selection");
 assert.equal(draftSelectionFeedsRightPanel.isFromActiveThread, false);
 
-const upstreamDefaultSelectionFeedsDraft = resolveWorkspaceActiveProject({
+const explicitDraftSelectionFeedsRightPanel = resolveWorkspaceActiveProject({
   activeThread: null,
   activeThreadId: null,
   workspaceWantsNewChat: true,
@@ -71,9 +71,9 @@ const upstreamDefaultSelectionFeedsDraft = resolveWorkspaceActiveProject({
   projectById,
   resolveThreadProjectId,
 });
-assert.equal(upstreamDefaultSelectionFeedsDraft.currentProjectId, "general");
-assert.equal(upstreamDefaultSelectionFeedsDraft.currentProjectName, "General");
-assert.equal(upstreamDefaultSelectionFeedsDraft.source, "draft_selection");
+assert.equal(explicitDraftSelectionFeedsRightPanel.currentProjectId, "general");
+assert.equal(explicitDraftSelectionFeedsRightPanel.currentProjectName, "General");
+assert.equal(explicitDraftSelectionFeedsRightPanel.source, "draft_selection");
 
 const missingActiveThreadProjectDoesNotBecomeDefault = resolveWorkspaceActiveProject({
   activeThread: { id: "thread_missing", project_id: "deleted_project" },
