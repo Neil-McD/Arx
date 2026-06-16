@@ -29,7 +29,6 @@ assert.doesNotMatch(
 );
 
 assert.match(section, /community-polynet-graph/, "PolyNet section should render the memory graph workspace");
-assert.match(section, /community-polynet-agent/, "PolyNet section should render the community-agent status panel");
 assert.match(section, /community-polynet-detail/, "PolyNet section should render selected node details");
 assert.match(section, /selectedNodeId/, "PolyNet section should support local node selection");
 assert.match(section, /overview\.graph\.nodes\.map/, "PolyNet graph should render backend-projected nodes");

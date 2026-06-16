@@ -36,18 +36,6 @@ function formatPercent(raw: unknown): string {
   return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
-function formatDateTime(raw: string | null | undefined): string {
-  if (!raw) return "Never";
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
 function shortNodeLabel(raw: string | null | undefined): string {
   const value = formatLabel(raw);
   return value.length > 34 ? `${value.slice(0, 31).trim()}...` : value;
@@ -69,26 +57,6 @@ function edgeClass(raw: string | null | undefined): string {
   if (edgeType === "has_example") return "has-example";
   if (edgeType === "applies_to_workflow") return "applies-to-workflow";
   return "default";
-}
-
-function activityLabel(raw: string | null | undefined): string {
-  switch (String(raw ?? "").trim()) {
-    case "running":
-      return "Running";
-    case "updated_directory":
-      return "Updated memory";
-    case "reviewed_candidates":
-      return "Reviewed candidates";
-    case "proposed_candidates":
-      return "Proposed candidates";
-    case "error":
-      return "Needs attention";
-    case "not_started":
-      return "Not started";
-    case "resting":
-    default:
-      return "Resting";
-  }
 }
 
 function selectInitialNode(overview: CloudCommunityPolynetOverview | null): string | null {
@@ -136,11 +104,6 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
-  const topTypeCounts = Object.entries(overview?.memory.counts_by_type ?? {})
-    .filter(([, count]) => count > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4);
-  const recentRuns = overview?.agent.recent_runs ?? [];
 
   if (!hasActiveCommunity) {
     return <div className="settings-panel community-settings-panel"><div className="chat-empty">Select a community to open Polynet.</div></div>;
@@ -292,6 +255,16 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                 <button type="button" onClick={viewportActions.resetView} aria-label="Reset view">Reset</button>
                 <button type="button" onClick={viewportActions.zoomIn} aria-label="Zoom in">+</button>
               </div>
+              {selectedNode && selectedNode.kind !== "community" ? (
+                <div className="community-polynet-detail">
+                  <div className="community-polynet-detail-title">{selectedNode.title ?? selectedNode.label}</div>
+                  <div className="community-polynet-detail-meta">
+                    <span>{formatLabel(selectedNode.type)}</span>
+                    <span>{formatLabel(selectedNode.status)}</span>
+                    <span>{formatPercent(selectedNode.confidence)} confidence</span>
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="community-polynet-graph-footer">
               <span>{directoryNodeCount} memory nodes</span>
@@ -299,116 +272,6 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
               {overview.graph.has_more_nodes || overview.graph.has_more_edges ? <span>Bounded view</span> : null}
             </div>
           </section>
-
-          <aside className="community-polynet-side">
-            <section className="community-polynet-agent">
-              <div className="community-polynet-section-label">Community agent</div>
-              <div className={`community-polynet-agent-state ${statusClass(overview.agent.activity_state)}`}>
-                {activityLabel(overview.agent.activity_state)}
-              </div>
-              <div className="community-polynet-agent-meta">
-                <span>Last run</span>
-                <strong>{formatDateTime(overview.agent.last_run_at)}</strong>
-              </div>
-              <div className="community-polynet-agent-meta">
-                <span>Wake reason</span>
-                <strong>{formatLabel(overview.agent.last_wake_reason ?? "none")}</strong>
-              </div>
-              <div className="community-polynet-action-grid">
-                <div>
-                  <span>Proposed</span>
-                  <strong>{overview.agent.recent_actions_summary.proposed}</strong>
-                </div>
-                <div>
-                  <span>Accepted</span>
-                  <strong>{overview.agent.recent_actions_summary.accepted}</strong>
-                </div>
-                <div>
-                  <span>Applied</span>
-                  <strong>{overview.agent.recent_actions_summary.applied}</strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="community-polynet-detail">
-              <div className="community-polynet-section-label">Selected node</div>
-              {!selectedNode ? (
-                <div className="community-polynet-muted">Select a node to inspect it.</div>
-              ) : selectedNode.kind === "community" ? (
-                <>
-                  <h3>{selectedNode.label}</h3>
-                  <dl>
-                    <div>
-                      <dt>Visible memory</dt>
-                      <dd>{overview.memory.total_visible_nodes}</dd>
-                    </div>
-                    <div>
-                      <dt>Contested</dt>
-                      <dd>{overview.memory.contested_count}</dd>
-                    </div>
-                    <div>
-                      <dt>Stale</dt>
-                      <dd>{overview.memory.stale_count}</dd>
-                    </div>
-                  </dl>
-                </>
-              ) : (
-                <>
-                  <h3>{selectedNode.title ?? selectedNode.label}</h3>
-                  <dl>
-                    <div>
-                      <dt>Type</dt>
-                      <dd>{formatLabel(selectedNode.type)}</dd>
-                    </div>
-                    <div>
-                      <dt>Status</dt>
-                      <dd>{formatLabel(selectedNode.status)}</dd>
-                    </div>
-                    <div>
-                      <dt>Confidence</dt>
-                      <dd>{formatPercent(selectedNode.confidence)}</dd>
-                    </div>
-                    <div>
-                      <dt>Evidence</dt>
-                      <dd>{formatLabel(selectedNode.evidence_strength)}</dd>
-                    </div>
-                    <div>
-                      <dt>Updated</dt>
-                      <dd>{formatDateTime(selectedNode.updated_at)}</dd>
-                    </div>
-                  </dl>
-                </>
-              )}
-            </section>
-
-            <section className="community-polynet-memory">
-              <div className="community-polynet-section-label">Memory mix</div>
-              {topTypeCounts.length ? (
-                <div className="community-polynet-type-list">
-                  {topTypeCounts.map(([type, count]) => (
-                    <div key={type}>
-                      <span>{formatLabel(type)}</span>
-                      <strong>{count}</strong>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="community-polynet-muted">No promoted memory nodes yet.</div>
-              )}
-            </section>
-
-            {recentRuns.length ? (
-              <section className="community-polynet-runs">
-                <div className="community-polynet-section-label">Recent runs</div>
-                {recentRuns.slice(0, 3).map((run) => (
-                  <div key={run.id} className="community-polynet-run-row">
-                    <span>{activityLabel(run.activity_state)}</span>
-                    <strong>{formatDateTime(run.started_at)}</strong>
-                  </div>
-                ))}
-              </section>
-            ) : null}
-          </aside>
         </div>
       )}
     </div>
