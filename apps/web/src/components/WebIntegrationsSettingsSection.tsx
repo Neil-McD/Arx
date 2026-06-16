@@ -11,12 +11,16 @@ import type {
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
 } from "../../../../shared/userPlatformAppMountTypes";
+import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { isDiscoverAppPersonallyConnectable } from "../lib/discoverCatalog";
 import { buildIntegrationSurfaceRowFromEffectiveApp } from "../lib/integrationSurfaceRows";
 import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
+
+const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
+const POLYMCP_TOOL_COUNT_LABEL = "6 workspace tools";
 
 type SessionLike = {
   user: {
@@ -201,6 +205,9 @@ export function WebIntegrationsSettingsSection(
     useState<CreateSkillPackageInput>(buildInitialSkillDraft);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
+  const [polyMcpCopyState, setPolyMcpCopyState] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
 
   const busyMountIds = useMemo(
     () =>
@@ -261,6 +268,12 @@ export function WebIntegrationsSettingsSection(
   }, [openMountMenuId]);
 
   useEffect(() => {
+    if (polyMcpCopyState === "idle") return;
+    const timeout = window.setTimeout(() => setPolyMcpCopyState("idle"), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [polyMcpCopyState]);
+
+  useEffect(() => {
     if (!shouldOpenCreateSkillComposer) return;
     setEditingUserPlatformSkillInstallId(null);
     setEditingSkillDraft(buildInitialSkillDraft());
@@ -287,6 +300,15 @@ export function WebIntegrationsSettingsSection(
     setEditingSkillDraft(buildInitialSkillDraft());
   };
 
+  const handleCopyPolyMcpUrl = async () => {
+    try {
+      const copied = await tryCopyTextToClipboard(POLYMCP_ENDPOINT_URL);
+      setPolyMcpCopyState(copied ? "copied" : "error");
+    } catch {
+      setPolyMcpCopyState("error");
+    }
+  };
+
   return (
     <>
       <div className="integrations-header">
@@ -299,6 +321,63 @@ export function WebIntegrationsSettingsSection(
           {session ? "Connect apps" : "Sign in to connect"}
         </button>
       </div>
+
+      {session ? (
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 4v16" />
+              <path d="M4 12h16" />
+              <path d="M7 7h10v10H7z" />
+            </svg>
+            PolyMCP
+          </div>
+          <div className="settings-section-desc">
+            Connect external AI clients to your PolyNet workspace memory.
+          </div>
+          <div className="integrations-app-list">
+            <div className="integration-mounted-row polymcp-access-row">
+              <div className="integration-mounted-top">
+                <div className="integration-mounted-identity">
+                  <DiscoverCatalogLogo
+                    name="PolyMCP"
+                    logoUrl="/landing-polynet/logo.png"
+                  />
+                  <div className="integration-mounted-main">
+                    <div className="integration-mounted-title-row">
+                      <strong>PolyMCP</strong>
+                      <span className="integration-status-pill">
+                        {POLYMCP_TOOL_COUNT_LABEL}
+                      </span>
+                      <span className="integration-status-pill">
+                        OAuth protected
+                      </span>
+                    </div>
+                    <div className="integration-mounted-detail">
+                      Use accepted community memory and workspace context from
+                      clients that support remote MCP.
+                    </div>
+                  </div>
+                </div>
+                <div className="integration-mounted-rail">
+                  <button
+                    type="button"
+                    className="settings-cta polymcp-copy-action"
+                    onClick={handleCopyPolyMcpUrl}
+                    aria-label="Copy PolyMCP endpoint URL"
+                  >
+                    {polyMcpCopyState === "copied"
+                      ? "Copied"
+                      : polyMcpCopyState === "error"
+                        ? "Copy failed"
+                        : "Copy MCP URL"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="settings-section">
         <div className="settings-section-title">

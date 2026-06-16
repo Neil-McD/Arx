@@ -28639,6 +28639,11 @@ button.message-citation-chip:hover {
   flex: 1;
 }
 
+.app-root.mobile-shell .polymcp-copy-action {
+  width: 100%;
+  justify-content: center;
+}
+
 .app-root.mobile-shell .integration-mounted-menu {
   right: 0;
 }

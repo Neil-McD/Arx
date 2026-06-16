@@ -107,17 +107,18 @@ export function downloadTextFile(filename: string, content: string, mime = "text
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export async function copyTextToClipboard(text: string): Promise<void> {
+export async function tryCopyTextToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
-      return;
+      return true;
     }
   } catch {
     // Fall back below.
   }
+  let textarea: HTMLTextAreaElement | null = null;
   try {
-    const textarea = document.createElement("textarea");
+    textarea = document.createElement("textarea");
     textarea.value = text;
     textarea.setAttribute("readonly", "true");
     textarea.style.position = "fixed";
@@ -125,11 +126,16 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     textarea.style.left = "-9999px";
     document.body.appendChild(textarea);
     textarea.select();
-    document.execCommand("copy");
-    document.body.removeChild(textarea);
+    return document.execCommand("copy");
   } catch {
-    // Ignore clipboard fallback failures.
+    return false;
+  } finally {
+    textarea?.remove();
   }
+}
+
+export async function copyTextToClipboard(text: string): Promise<void> {
+  await tryCopyTextToClipboard(text);
 }
 
 export function formatCommandPreview(command: string): { preview: string; truncated: boolean; cmdCount: number } {
