@@ -83,8 +83,8 @@ assert.doesNotMatch(
 
 assert.match(section, /function edgeClass/, "tab should classify edges by edge type");
 assert.doesNotMatch(section, /statusClass\(edge\.type\)/, "tab should not classify typed edges as node statuses");
-assert.match(css, /\.community-polynet-edge\.supports/, "CSS should style support edges directly");
-assert.match(css, /\.community-polynet-edge\.contradicts/, "CSS should style contradiction edges directly");
+assert.match(css, /\.cp-edge\.supports/, "CSS should style support edges directly");
+assert.match(css, /\.cp-edge\.contradicts/, "CSS should style contradiction edges directly");
 assert.doesNotMatch(css, /\.community-polynet-meta\b|\.community-polynet-meta-error\b/, "old archive-panel CSS leftovers should be removed");
 
 console.log("Community PolyNet seeded overview fixture proof passed");

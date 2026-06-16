@@ -15096,119 +15096,160 @@ button.chat-reply-quote:hover {
 }
 
 .community-polynet-graph {
+  /* Dark neural field in both themes so the pink community node and synaptic
+     edges read like the PolyNet logo. */
+  --polynet-pink: #ff5c9d;
+  --polynet-pink-soft: #e57ba8;
+  --polynet-rose: #d66a8a;
+  --polynet-label: rgba(235, 238, 245, 0.82);
   position: relative;
   min-height: 420px;
   overflow: hidden;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--border-default) 32%, transparent) 1px, transparent 1px),
-    linear-gradient(color-mix(in srgb, var(--border-default) 28%, transparent) 1px, transparent 1px);
-  background-size: 42px 42px;
+    radial-gradient(120% 120% at 50% 42%, rgba(255, 92, 157, 0.08) 0%, transparent 46%),
+    radial-gradient(140% 140% at 50% 50%, #171a23 0%, #0c0e14 72%);
 }
 
-.community-polynet-graph-lines {
+/* Single SVG canvas: one user unit == one CSS pixel, so pan/zoom is one <g>
+   transform and pointer math stays 1:1. */
+.community-polynet-graph-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  display: block;
+  cursor: grab;
+  touch-action: none;
 }
 
-.community-polynet-edge {
-  stroke: color-mix(in srgb, var(--text-secondary) 38%, transparent);
-  stroke-width: 0.42;
+.community-polynet-graph.panning .community-polynet-graph-canvas,
+.community-polynet-graph.dragging .community-polynet-graph-canvas {
+  cursor: grabbing;
+}
+
+/* Synaptic edges: thin, typed by operational relationship, crisp at any zoom. */
+.cp-edge {
+  stroke: rgba(244, 180, 210, 0.22);
+  stroke-width: 1.1;
   vector-effect: non-scaling-stroke;
 }
 
-.community-polynet-edge.supports,
-.community-polynet-edge.has-example,
-.community-polynet-edge.applies-to-workflow {
-  stroke: color-mix(in srgb, #059669 46%, transparent);
+.cp-edge.supports,
+.cp-edge.has-example,
+.cp-edge.applies-to-workflow {
+  stroke: rgba(52, 211, 153, 0.34);
 }
 
-.community-polynet-edge.contradicts {
-  stroke: color-mix(in srgb, #b45309 58%, transparent);
+.cp-edge.contradicts {
+  stroke: rgba(245, 158, 11, 0.42);
 }
 
-.community-polynet-node {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  transform: translate(-50%, -50%);
-  display: grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--text-secondary) 30%, var(--border-default));
-  border-radius: 999px;
-  padding: 0;
-  background: var(--bg-card);
-  color: var(--text-primary);
+/* The circle IS the node. No box, no inner hotspot, label annotates outside. */
+.cp-node {
   cursor: pointer;
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease;
 }
 
-.community-polynet-node:hover,
-.community-polynet-node.selected {
-  transform: translate(-50%, -50%) scale(1.16);
-  border-color: var(--text-primary);
+.cp-node:focus {
+  outline: none;
 }
 
-.community-polynet-node.root {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  overflow: visible;
-  color: color-mix(in srgb, #f7478f 86%, white);
-  background:
-    radial-gradient(circle at 34% 26%, color-mix(in srgb, white 36%, #f7478f) 0 18%, transparent 19%),
-    linear-gradient(145deg, color-mix(in srgb, #f7478f 88%, white), color-mix(in srgb, #f7478f 92%, black));
-  border-color: color-mix(in srgb, #f7478f 74%, var(--border-default));
-  box-shadow:
-    0 0 0 6px color-mix(in srgb, #f7478f 10%, transparent),
-    0 10px 28px color-mix(in srgb, #f7478f 18%, transparent);
+.cp-node-circle {
+  fill: var(--polynet-rose);
+  stroke: rgba(12, 14, 20, 0.55);
+  stroke-width: 1;
+  transition: fill 160ms ease;
 }
 
-.community-polynet-node-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: inherit;
-  background: currentColor;
+.cp-node-circle.validated {
+  fill: #34d399;
 }
 
-.community-polynet-node.root .community-polynet-node-dot {
-  width: 14px;
-  height: 14px;
-  box-shadow: inset 0 1px 2px color-mix(in srgb, white 26%, transparent);
+.cp-node-circle.promising {
+  fill: var(--polynet-pink-soft);
 }
 
-.community-polynet-root-label {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  color: var(--text-secondary);
+.cp-node-circle.contested {
+  fill: #f59e0b;
+}
+
+.cp-node-circle.stale {
+  fill: #8b93a7;
+}
+
+/* The seed neuron: a clean solid pink dot, soft outer glow, no white center. */
+.cp-root-circle {
+  fill: var(--polynet-pink);
+  stroke: rgba(12, 14, 20, 0.5);
+  stroke-width: 1;
+  transform-origin: center;
+  animation: community-polynet-pulse 3.4s ease-in-out infinite;
+}
+
+.cp-node-ring {
+  fill: none;
+  stroke: currentColor;
+  color: var(--polynet-pink-soft);
+  stroke-width: 1.5;
+  opacity: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.cp-node.root .cp-node-ring {
+  color: var(--polynet-pink);
+}
+
+.cp-node-label {
+  fill: var(--polynet-label);
   font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
-  white-space: nowrap;
+  font-weight: 550;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 3px;
   pointer-events: none;
 }
 
-.community-polynet-node.validated {
-  color: color-mix(in srgb, #059669 76%, var(--text-primary));
+.cp-node-label.root {
+  fill: #fff;
+  font-size: 14px;
+  font-weight: 650;
 }
 
-.community-polynet-node.promising {
-  color: color-mix(in srgb, var(--accent-gold) 78%, var(--text-primary));
+/* Pulse the seed via opacity so the core stays solid pink (no bright hotspot). */
+@keyframes community-polynet-pulse {
+  0%,
+  100% {
+    opacity: 0.92;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
-.community-polynet-node.contested {
-  color: color-mix(in srgb, #b45309 72%, var(--text-primary));
+.community-polynet-graph-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 3;
 }
 
-.community-polynet-node.stale {
-  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
+.community-polynet-graph-controls button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(244, 180, 210, 0.28);
+  border-radius: 8px;
+  background: rgba(12, 14, 20, 0.66);
+  color: var(--polynet-label);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.community-polynet-graph-controls button:hover {
+  border-color: var(--polynet-pink);
+  color: #fff;
 }
 
 .community-polynet-empty-graph {
@@ -15218,9 +15259,10 @@ button.chat-reply-quote:hover {
   transform: translateX(-50%);
   width: min(320px, calc(100% - 40px));
   text-align: center;
-  color: var(--text-secondary);
+  color: var(--polynet-label);
   font-size: 13px;
   line-height: 1.5;
+  pointer-events: none;
 }
 
 .community-polynet-graph-footer {

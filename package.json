@@ -177,6 +177,7 @@
     "check:community-polynet-overview-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_polynet_overview_contract_proof.ts",
     "check:community-polynet-seeded-overview-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_polynet_seeded_overview_fixture_proof.ts",
     "check:community-polynet-tab-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_polynet_tab_ui_contract_proof.ts",
+    "check:community-polynet-graph-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_polynet_graph_layout_proof.ts",
     "check:community-ai-feed-scaling-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_ai_feed_scaling_contract_proof.ts",
     "check:community-compiler-inputs-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_inputs_contract_proof.ts",
     "check:community-compiler-window-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_window_contract_proof.ts",

@@ -36,13 +36,13 @@ assert.match(section, /overview\.graph\.nodes\.map/, "PolyNet graph should rende
 assert.match(section, /overview\.graph\.edges\.map/, "PolyNet graph should render backend-projected edges");
 assert.match(
   section,
-  /community-polynet-root-label/,
-  "PolyNet root label should be annotation around the root node, not the node body",
+  /className=\{`cp-node-label/,
+  "PolyNet node label should be a text annotation around the node, not the node body",
 );
 assert.match(
   section,
-  /<span className="community-polynet-node-dot" aria-hidden="true" \/>/,
-  "PolyNet graph nodes should render as dot primitives",
+  /cp-node-circle|cp-root-circle/,
+  "PolyNet graph nodes should render as circle dot primitives",
 );
 assert.doesNotMatch(
   section,
@@ -58,12 +58,12 @@ assert.doesNotMatch(
 const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
 assert.match(
   css,
-  /\.community-polynet-node\.root \{[\s\S]*width: 34px;[\s\S]*height: 34px;[\s\S]*#f7478f/,
+  /\.cp-root-circle \{[\s\S]*fill: var\(--polynet-pink\)/,
   "PolyNet root node should be a compact logo-pink dot",
 );
 assert.doesNotMatch(
   css,
-  /\.community-polynet-node\.root \{[\s\S]*min-width: 92px;[\s\S]*padding: 0 14px;/,
+  /min-width: 92px;[\s\S]{0,80}padding: 0 14px;/,
   "PolyNet root node should not regress to the old rectangular pill shape",
 );
 

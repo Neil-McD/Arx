@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CloudCommunityPolynetOverview,
-  CloudCommunityPolynetOverviewNode,
 } from "../../../../shared/cloudCommunityPolynetGateway";
+import { computePolynetLayout } from "../../../../shared/communityPolynetGraphLayout";
+import { useWebPolynetGraphViewport } from "../controllers/useWebPolynetGraphViewport";
 
 type WebCommunityPolynetSectionProps = {
   hasActiveCommunity: boolean;
@@ -20,10 +21,8 @@ type WebCommunityPolynetSectionProps = {
   };
 };
 
-type GraphPosition = {
-  x: number;
-  y: number;
-};
+// Labels stay readable regardless of zoom once the viewport passes this scale.
+const SHOW_ALL_LABELS_SCALE = 1.4;
 
 function formatLabel(raw: string | null | undefined): string {
   const value = String(raw ?? "").trim();
@@ -92,28 +91,6 @@ function activityLabel(raw: string | null | undefined): string {
   }
 }
 
-function buildGraphPositions(nodes: CloudCommunityPolynetOverviewNode[], rootNodeId: string): Map<string, GraphPosition> {
-  const positions = new Map<string, GraphPosition>();
-  positions.set(rootNodeId, { x: 50, y: 50 });
-  const directoryNodes = nodes.filter((node) => node.kind === "directory_node");
-  const innerCount = Math.min(directoryNodes.length, directoryNodes.length > 18 ? 12 : directoryNodes.length);
-  const outerCount = Math.max(0, directoryNodes.length - innerCount);
-
-  directoryNodes.forEach((node, index) => {
-    const isOuter = outerCount > 0 && index >= innerCount;
-    const ringIndex = isOuter ? index - innerCount : index;
-    const ringCount = isOuter ? outerCount : Math.max(1, innerCount);
-    const radius = isOuter ? 43 : directoryNodes.length > 8 ? 31 : 35;
-    const angle = -Math.PI / 2 + (ringIndex / Math.max(1, ringCount)) * Math.PI * 2;
-    positions.set(node.id, {
-      x: 50 + Math.cos(angle) * radius,
-      y: 50 + Math.sin(angle) * radius,
-    });
-  });
-
-  return positions;
-}
-
 function selectInitialNode(overview: CloudCommunityPolynetOverview | null): string | null {
   if (!overview) return null;
   const firstDirectoryNode = overview.graph.nodes.find((node) => node.kind === "directory_node");
@@ -132,6 +109,8 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   } = props;
   const overview = state.overview;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
     if (!overview) {
@@ -144,10 +123,17 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
     if (!nodeExists) setSelectedNodeId(selectInitialNode(overview));
   }, [overview, selectedNodeId]);
 
-  const positions = useMemo(
-    () => buildGraphPositions(overview?.graph.nodes ?? [], overview?.graph.root_node_id ?? "community:pending"),
+  const layout = useMemo(
+    () => computePolynetLayout(overview?.graph.nodes ?? [], overview?.graph.root_node_id ?? "community:pending"),
     [overview],
   );
+  const nodeIds = useMemo(
+    () => new Set((overview?.graph.nodes ?? []).map((node) => node.id)),
+    [overview],
+  );
+  const { transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
+    useWebPolynetGraphViewport({ svgRef, onSelectNode: setSelectedNodeId });
+  const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
   const topTypeCounts = Object.entries(overview?.memory.counts_by_type ?? {})
@@ -209,49 +195,100 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
       ) : (
         <div className="community-polynet-layout">
           <section className="community-polynet-graph-shell" aria-label="Community memory graph">
-            <div className="community-polynet-graph">
-              <svg className="community-polynet-graph-lines" viewBox="0 0 100 100" aria-hidden="true">
-                {overview.graph.edges.map((edge) => {
-                  const from = positions.get(edge.from);
-                  const to = positions.get(edge.to);
-                  if (!from || !to) return null;
-                  return (
-                    <line
-                      key={edge.id}
-                      x1={from.x}
-                      y1={from.y}
-                      x2={to.x}
-                      y2={to.y}
-                      className={`community-polynet-edge ${edgeClass(edge.type)}`}
-                    />
-                  );
-                })}
+            <div className={`community-polynet-graph${isPanning ? " panning" : ""}${draggingNodeId ? " dragging" : ""}`}>
+              <svg
+                ref={svgRef}
+                className="community-polynet-graph-canvas"
+                role="application"
+                aria-label="Community memory graph canvas"
+                onPointerDown={handlers.onBackgroundPointerDown}
+                onPointerMove={handlers.onPointerMove}
+                onPointerUp={handlers.onPointerUp}
+                onPointerCancel={handlers.onPointerCancel}
+              >
+                <defs>
+                  <filter id="cp-node-glow" x="-120%" y="-120%" width="340%" height="340%">
+                    <feGaussianBlur stdDeviation="3.4" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                <g transform={`translate(${transform.tx} ${transform.ty}) scale(${transform.scale})`}>
+                  {overview.graph.edges.map((edge) => {
+                    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) return null;
+                    const from = worldPositionFor(edge.from, layout.get(edge.from));
+                    const to = worldPositionFor(edge.to, layout.get(edge.to));
+                    return (
+                      <line
+                        key={edge.id}
+                        x1={from.x}
+                        y1={from.y}
+                        x2={to.x}
+                        y2={to.y}
+                        className={`cp-edge ${edgeClass(edge.type)}`}
+                      />
+                    );
+                  })}
+                  {overview.graph.nodes.map((node) => {
+                    const layoutPos = layout.get(node.id) ?? { x: 0, y: 0 };
+                    const pos = worldPositionFor(node.id, layoutPos);
+                    const isRoot = node.kind === "community";
+                    const isSelected = selectedNodeId === node.id;
+                    const isHovered = hoveredNodeId === node.id;
+                    const showLabel = isRoot || isSelected || isHovered || showAllLabels;
+                    return (
+                      <g
+                        key={node.id}
+                        className={`cp-node ${isRoot ? "root" : statusClass(node.status)}${isSelected ? " selected" : ""}`}
+                        transform={`translate(${pos.x} ${pos.y})`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={node.label}
+                        onPointerDown={handlers.makeNodePointerDownHandler(node.id, layoutPos)}
+                        onMouseEnter={() => setHoveredNodeId(node.id)}
+                        onMouseLeave={() => setHoveredNodeId((current) => (current === node.id ? null : current))}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedNodeId(node.id);
+                          }
+                        }}
+                      >
+                        {isSelected ? <circle className="cp-node-ring" r={isRoot ? 36 : 18} /> : null}
+                        <circle
+                          className={isRoot ? "cp-root-circle" : `cp-node-circle ${statusClass(node.status)}`}
+                          r={isRoot ? 26 : 11}
+                          filter="url(#cp-node-glow)"
+                        />
+                        {showLabel ? (
+                          <g transform={`scale(${1 / transform.scale})`}>
+                            <text
+                              className={`cp-node-label${isRoot ? " root" : ""}`}
+                              x={0}
+                              y={isRoot ? 50 : 28}
+                              textAnchor="middle"
+                            >
+                              {isRoot ? node.label : shortNodeLabel(node.label)}
+                            </text>
+                          </g>
+                        ) : null}
+                      </g>
+                    );
+                  })}
+                </g>
               </svg>
-              {overview.graph.nodes.map((node) => {
-                const position = positions.get(node.id) ?? { x: 50, y: 50 };
-                const isRoot = node.kind === "community";
-                const isSelected = selectedNodeId === node.id;
-                return (
-                  <button
-                    key={node.id}
-                    type="button"
-                    className={`community-polynet-node ${isRoot ? "root" : statusClass(node.status)}${isSelected ? " selected" : ""}`}
-                    style={{ left: `${position.x}%`, top: `${position.y}%` }}
-                    onClick={() => setSelectedNodeId(node.id)}
-                    title={node.label}
-                  >
-                    <span className="community-polynet-node-dot" aria-hidden="true" />
-                    {isRoot ? (
-                      <span className="community-polynet-root-label">{shortNodeLabel(node.label)}</span>
-                    ) : null}
-                  </button>
-                );
-              })}
               {directoryNodeCount === 0 ? (
                 <div className="community-polynet-empty-graph">
                   Community memory starts as the agent promotes real patterns.
                 </div>
               ) : null}
+              <div className="community-polynet-graph-controls">
+                <button type="button" onClick={viewportActions.zoomOut} aria-label="Zoom out">&minus;</button>
+                <button type="button" onClick={viewportActions.resetView} aria-label="Reset view">Reset</button>
+                <button type="button" onClick={viewportActions.zoomIn} aria-label="Zoom in">+</button>
+              </div>
             </div>
             <div className="community-polynet-graph-footer">
               <span>{directoryNodeCount} memory nodes</span>
