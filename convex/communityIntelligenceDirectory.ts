@@ -47,6 +47,12 @@ type MutationOperation =
   | "update_confidence"
   | "update_visibility";
 type ChangeRequestStatus = "pending_decision" | "accepted" | "rejected" | "applied";
+type PolicyDecisionActor = {
+  actorType: "admin" | "agent" | "compiler" | "system";
+  actorUserId?: any;
+  actorAgentKey?: string;
+};
+type OutcomeResultStatus = "worked" | "failed" | "mixed" | "unknown";
 type SourceTraceType =
   | "chat"
   | "ai_feed"
@@ -156,9 +162,19 @@ type OutcomeObservationRow = {
   communityId: any;
   nodeId?: any;
   retrievalLogId?: any;
+  workflowId?: string;
+  metricName?: string;
+  metricValue?: number;
+  baselineValue?: number;
+  resultStatus: OutcomeResultStatus;
+  evidenceStrength: EvidenceStrength;
+  notes?: string;
   observedByActorType: ActorType;
   observedByUserId?: any;
   observedByAgentKey?: string;
+  observedAt: number;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type IntelligenceChangeRequestRow = {
@@ -198,6 +214,11 @@ const ACTIVE_RETRIEVAL_STATUSES: NodeStatus[] = [
   "contested",
   "stale",
 ];
+const ACCEPTED_MEMBER_MEMORY_STATUSES: NodeStatus[] = [
+  "promising",
+  "validated",
+  "canonical",
+];
 const POLYNET_OVERVIEW_STATUSES: NodeStatus[] = [
   "promising",
   "validated",
@@ -205,6 +226,8 @@ const POLYNET_OVERVIEW_STATUSES: NodeStatus[] = [
   "contested",
   "stale",
 ];
+const ACCEPTED_MEMORY_MAX_CANDIDATE_ROWS = 240;
+const ACCEPTED_MEMORY_MIN_CANDIDATE_ROWS = 48;
 const POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT = 80;
 const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
 const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
@@ -663,6 +686,28 @@ function mapRetrievalLogRow(row: RetrievalLogRow) {
   };
 }
 
+function mapOutcomeObservationRow(row: OutcomeObservationRow) {
+  return {
+    id: normalizeIdValue(row._id),
+    community_id: normalizeIdValue(row.communityId),
+    node_id: row.nodeId ? normalizeIdValue(row.nodeId) : null,
+    retrieval_log_id: row.retrievalLogId ? normalizeIdValue(row.retrievalLogId) : null,
+    workflow_id: row.workflowId ?? null,
+    metric_name: row.metricName ?? null,
+    metric_value: typeof row.metricValue === "number" ? row.metricValue : null,
+    baseline_value: typeof row.baselineValue === "number" ? row.baselineValue : null,
+    result_status: row.resultStatus,
+    evidence_strength: row.evidenceStrength,
+    notes: row.notes ?? null,
+    observed_by_actor_type: row.observedByActorType,
+    observed_by_user_id: row.observedByUserId ? normalizeIdValue(row.observedByUserId) : null,
+    observed_by_agent_key: row.observedByAgentKey ?? null,
+    observed_at: toIsoString(row.observedAt),
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
 function directoryGraphNodeId(nodeId: any): string {
   return `directory_node:${normalizeIdValue(nodeId)}`;
 }
@@ -857,6 +902,39 @@ function summarizePolynetOverviewMemory(nodes: IntelligenceNodeRow[], hasMoreNod
     contested_count: contestedCount,
     node_counts_are_lower_bound: hasMoreNodes,
     edge_counts_are_lower_bound: hasMoreEdges,
+  };
+}
+
+function communityMemoryGrade(status: NodeStatus): "validated" | "promising" | "unproven" | "contested" | "stale" {
+  if (status === "canonical" || status === "validated") return "validated";
+  if (status === "promising") return "promising";
+  if (status === "contested") return "contested";
+  if (status === "stale") return "stale";
+  return "unproven";
+}
+
+function mapCompactMemoryNode(row: IntelligenceNodeRow) {
+  return {
+    id: normalizeIdValue(row._id),
+    type: row.type,
+    title: row.title,
+    status: row.status,
+    grade: communityMemoryGrade(row.status),
+    confidence: row.confidence,
+    evidence_strength: row.evidenceStrength,
+    applies_when: row.appliesWhen ?? null,
+    tags: row.tags ?? [],
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function memoryToolError(error: unknown, fallbackCode: string) {
+  const message = error instanceof Error ? error.message : String(error);
+  const reasonCode = /^[a-z0-9_]+$/.test(message) ? message : fallbackCode;
+  return {
+    ok: false,
+    reason_code: reasonCode || fallbackCode,
+    message: message || "Community memory tool failed.",
   };
 }
 
@@ -1720,6 +1798,33 @@ async function resolvePolicyDecisionActor(args: {
   };
 }
 
+function normalizePolicyDecisionActor(actor: PolicyDecisionActor): PolicyDecisionActor {
+  if (actor.actorType === "admin") {
+    if (!actor.actorUserId) throw new Error("community_intelligence_admin_actor_user_required");
+    return {
+      actorType: "admin",
+      actorUserId: actor.actorUserId,
+    };
+  }
+  const actorAgentKey = normalizeActorKey(actor.actorAgentKey) ?? actor.actorType;
+  return {
+    actorType: actor.actorType,
+    actorAgentKey,
+  };
+}
+
+function actorUserPatch(actor: PolicyDecisionActor, userField: string, agentField: string) {
+  return actor.actorType === "admin"
+    ? {
+        [userField]: actor.actorUserId,
+        [agentField]: undefined,
+      }
+    : {
+        [userField]: undefined,
+        [agentField]: actor.actorAgentKey,
+      };
+}
+
 function typeMatchesView(type: NodeType, view: string): boolean {
   if (view === "all" || view === "workflow_context") return true;
   if (view === "playbooks") return type === "playbook";
@@ -1801,6 +1906,74 @@ async function retrieveNodesForWorkflow(args: {
   return rows
     .filter((row) => statusSet.has(row.status))
     .filter((row) => typeSet.size === 0 || typeSet.has(row.type))
+    .filter((row) => canViewerReadNode(row, args.isManager))
+    .filter((row) => {
+      if (!args.workflowId) return true;
+      if ((row.workflowIds ?? []).length === 0) return true;
+      return (row.workflowIds ?? []).includes(args.workflowId);
+    })
+    .map((node) => ({ node, score: retrievalScore({ node, workflowId: args.workflowId, query: args.query }) }))
+    .filter((entry) => entry.score > -0.5)
+    .sort((a, b) => b.score - a.score || b.node.updatedAt - a.node.updatedAt)
+    .slice(0, args.limit)
+    .map((entry) => entry.node);
+}
+
+async function retrieveAcceptedCommunityMemoryNodes(args: {
+  ctx: any;
+  communityId: any;
+  isManager: boolean;
+  workflowId?: string;
+  query?: string;
+  types?: NodeType[];
+  limit: number;
+}): Promise<IntelligenceNodeRow[]> {
+  const typeSet = new Set((args.types ?? []).filter((type) => NODE_TYPES.has(type)));
+  const statuses = ACCEPTED_MEMBER_MEMORY_STATUSES;
+  const bucketCount = statuses.length * Math.max(1, typeSet.size || 1);
+  const maxCandidateRows = Math.max(
+    ACCEPTED_MEMORY_MIN_CANDIDATE_ROWS,
+    Math.min(ACCEPTED_MEMORY_MAX_CANDIDATE_ROWS, args.limit * 24),
+  );
+  const perBucketLimit = Math.max(4, Math.ceil(maxCandidateRows / bucketCount));
+  const queries: Array<Promise<IntelligenceNodeRow[]>> = [];
+
+  if (typeSet.size > 0) {
+    for (const type of typeSet) {
+      for (const status of statuses) {
+        queries.push(
+          args.ctx.db
+            .query("communityIntelligenceNodes" as any)
+            .withIndex("by_community_type_status_updatedAt", (q: any) =>
+              q.eq("communityId", args.communityId).eq("type", type).eq("status", status),
+            )
+            .order("desc")
+            .take(perBucketLimit) as Promise<IntelligenceNodeRow[]>,
+        );
+      }
+    }
+  } else {
+    for (const status of statuses) {
+      queries.push(
+        args.ctx.db
+          .query("communityIntelligenceNodes" as any)
+          .withIndex("by_community_status_updatedAt", (q: any) =>
+            q.eq("communityId", args.communityId).eq("status", status),
+          )
+          .order("desc")
+          .take(perBucketLimit) as Promise<IntelligenceNodeRow[]>,
+      );
+    }
+  }
+
+  const deduped = new Map<string, IntelligenceNodeRow>();
+  for (const row of (await Promise.all(queries)).flat()) {
+    const rowId = normalizeIdValue(row._id);
+    if (!rowId || deduped.has(rowId)) continue;
+    deduped.set(rowId, row);
+  }
+
+  return Array.from(deduped.values())
     .filter((row) => canViewerReadNode(row, args.isManager))
     .filter((row) => {
       if (!args.workflowId) return true;
@@ -2436,6 +2609,31 @@ export const listCommunityIntelligenceChangeRequests = query({
   },
 });
 
+export async function decideTrustedCommunityIntelligenceChangeRequestCore(args: {
+  ctx: any;
+  changeRequestId: any;
+  status: "accepted" | "rejected";
+  decisionReason?: string;
+  actor: PolicyDecisionActor;
+  nowMs?: number;
+}): Promise<ReturnType<typeof mapChangeRequestRow>> {
+  const changeRequest = await getChangeRequestOrThrow(args.ctx, args.changeRequestId);
+  if (changeRequest.status === "applied") {
+    throw new Error("community_intelligence_change_request_already_applied");
+  }
+  const actor = normalizePolicyDecisionActor(args.actor);
+  const nowMs = args.nowMs ?? Date.now();
+  await args.ctx.db.patch(changeRequest._id as any, {
+    status: args.status,
+    decidedByActorType: actor.actorType,
+    ...actorUserPatch(actor, "decidedByUserId", "decidedByAgentKey"),
+    decisionReason: normalizeOptionalLongText(args.decisionReason, 2000),
+    decidedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return mapChangeRequestRow(await getChangeRequestOrThrow(args.ctx, changeRequest._id));
+}
+
 export const decideCommunityIntelligenceChangeRequest = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -2456,22 +2654,271 @@ export const decideCommunityIntelligenceChangeRequest = mutation({
       communityId: changeRequest.communityId,
       userId,
     });
-    if (changeRequest.status === "applied") {
-      throw new Error("community_intelligence_change_request_already_applied");
-    }
-    const nowMs = Date.now();
-    await ctx.db.patch(changeRequest._id as any, {
+    return await decideTrustedCommunityIntelligenceChangeRequestCore({
+      ctx,
+      changeRequestId: changeRequest._id,
       status: args.status,
-      decidedByActorType: actor.actorType,
-      ...(actor.actorUserId ? { decidedByUserId: actor.actorUserId } : { decidedByUserId: undefined }),
-      decidedByAgentKey: undefined,
+      actor,
       decisionReason: normalizeOptionalLongText(args.decisionReason, 2000),
-      decidedAt: nowMs,
-      updatedAt: nowMs,
     });
-    return mapChangeRequestRow(await getChangeRequestOrThrow(ctx, changeRequest._id));
   },
 });
+
+export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
+  ctx: any;
+  changeRequestId: any;
+  actor: PolicyDecisionActor;
+  reason?: string;
+  nowMs?: number;
+}): Promise<ReturnType<typeof mapChangeRequestRow>> {
+  const changeRequest = await getChangeRequestOrThrow(args.ctx, args.changeRequestId);
+  if (changeRequest.status !== "accepted") {
+    throw new Error("community_intelligence_change_request_must_be_accepted");
+  }
+  const actor = normalizePolicyDecisionActor(args.actor);
+  await requireChangeRequestReferencesAllowedForApply(args.ctx, changeRequest);
+  await requireChangeRequestTargetsCurrent(args.ctx, changeRequest);
+
+  const nowMs = args.nowMs ?? Date.now();
+  const payload = payloadObject(changeRequest.requestedPayload);
+  let appliedMutationId: any = undefined;
+  let appliedNodeIds = changeRequest.targetNodeIds ?? [];
+  let appliedEdgeIds = changeRequest.targetEdgeIds ?? [];
+
+  if (changeRequest.operation === "create_node") {
+    const status = payloadNodeStatus(payload.status, "candidate");
+    const nodeVisibility = resolveNodeVisibility({
+      status,
+      requestedVisibility: payloadVisibility(payload.visibilityScope),
+      requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility),
+    });
+    const nodeId = await args.ctx.db.insert("communityIntelligenceNodes" as any, {
+      communityId: changeRequest.communityId,
+      type: payloadNodeType(payload.type),
+      title: normalizeBoundedText(payload.title, 240, "community_intelligence_title_required"),
+      bodyMd: normalizeBody(payload.bodyMd),
+      status,
+      visibilityScope: nodeVisibility.visibilityScope,
+      sourceVisibility: nodeVisibility.sourceVisibility,
+      confidence: clampScore(payload.confidence, changeRequest.confidence),
+      evidenceStrength: payloadEvidenceStrength(payload.evidenceStrength, "none"),
+      appliesWhen: normalizeOptionalLongText(payload.appliesWhen, 4000),
+      doesNotApplyWhen: normalizeOptionalLongText(payload.doesNotApplyWhen, 4000),
+      workflowIds: normalizeStringList(payload.workflowIds, 50, 256),
+      tags: normalizeStringList(payload.tags, 50, 80),
+      sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      outcomeObservationIds: changeRequest.outcomeObservationIds ?? [],
+      stalenessScore: clampScore(payload.stalenessScore, 0),
+      retrievalUsefulnessScore: clampScore(payload.retrievalUsefulnessScore, 0),
+      outcomeImpactScore: clampScore(payload.outcomeImpactScore, 0),
+      createdByActorType: actor.actorType,
+      ...actorUserPatch(actor, "createdByUserId", "createdByAgentKey"),
+      lastUpdatedByActorType: actor.actorType,
+      ...actorUserPatch(actor, "lastUpdatedByUserId", "lastUpdatedByAgentKey"),
+      ...(changeRequest.outcomeObservationIds?.length ? { lastValidatedAt: nowMs } : {}),
+      version: 1,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const node = await getIntelligenceNodeOrThrow(args.ctx, nodeId);
+    appliedNodeIds = [node._id];
+    appliedMutationId = await insertMutationLog({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      operation: "create_node",
+      actorType: actor.actorType,
+      actorUserId: actor.actorUserId,
+      actorAgentKey: actor.actorAgentKey,
+      targetNodeIds: appliedNodeIds,
+      afterSnapshot: mapNodeRow(node),
+      sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      policyDecisionId: normalizeIdValue(changeRequest._id),
+      reason: args.reason ?? "accepted_change_request_create_node",
+      nowMs,
+    });
+  } else if (changeRequest.operation === "create_edge") {
+    const fromNodeId = changeRequest.primaryTargetNodeId;
+    if (!fromNodeId) throw new Error("community_intelligence_edge_from_node_required");
+    if (payload.fromNodeId && normalizeIdValue(payload.fromNodeId) !== normalizeIdValue(fromNodeId)) {
+      throw new Error("community_intelligence_edge_from_node_mismatch");
+    }
+    const fromNode = await getIntelligenceNodeOrThrow(args.ctx, fromNodeId);
+    if (normalizeIdValue(fromNode.communityId) !== normalizeIdValue(changeRequest.communityId)) {
+      throw new Error("community_intelligence_from_node_not_found");
+    }
+    const toNodeId = payload.toNodeId as any;
+    const toReferenceType =
+      typeof payload.toReferenceType === "string" && EDGE_REFERENCE_TYPES.has(payload.toReferenceType)
+        ? payload.toReferenceType
+        : undefined;
+    const toReferenceId = normalizeOptionalLongText(payload.toReferenceId, 512);
+    const hasNodeTarget = Boolean(toNodeId);
+    const hasReferenceTarget = Boolean(toReferenceType && toReferenceId);
+    if (hasNodeTarget === hasReferenceTarget) {
+      throw new Error("community_intelligence_edge_target_invalid");
+    }
+    if (toNodeId) {
+      const targetNodeIds = new Set((changeRequest.targetNodeIds ?? []).map(normalizeIdValue));
+      if (!targetNodeIds.has(normalizeIdValue(toNodeId))) {
+        throw new Error("community_intelligence_edge_to_node_target_required");
+      }
+      const toNode = await getIntelligenceNodeOrThrow(args.ctx, toNodeId);
+      if (normalizeIdValue(toNode.communityId) !== normalizeIdValue(changeRequest.communityId)) {
+        throw new Error("community_intelligence_to_node_not_found");
+      }
+    }
+    await requireReferenceBelongsToCommunity(args.ctx, changeRequest.communityId, toReferenceType, toReferenceId);
+    const edgeType =
+      typeof payload.type === "string" && EDGE_TYPES.has(payload.type) ? payload.type : undefined;
+    if (!edgeType) throw new Error("community_intelligence_edge_type_required");
+    const edgeId = await args.ctx.db.insert("communityIntelligenceEdges" as any, {
+      communityId: changeRequest.communityId,
+      fromNodeId,
+      ...(toNodeId ? { toNodeId } : {}),
+      ...(toReferenceType ? { toReferenceType } : {}),
+      ...(toReferenceId ? { toReferenceId } : {}),
+      type: edgeType,
+      confidence: clampScore(payload.confidence, changeRequest.confidence),
+      evidenceTraceIds: changeRequest.sourceTraceIds ?? [],
+      visibilityScope: payloadVisibility(payload.visibilityScope) ?? "community",
+      createdByActorType: actor.actorType,
+      ...actorUserPatch(actor, "createdByUserId", "createdByAgentKey"),
+      ...(typeof payload.compilerRunId === "string"
+        ? { compilerRunId: normalizeBoundedText(payload.compilerRunId, 512, "compiler_run_id_required") }
+        : {}),
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const edge = (await args.ctx.db.get(edgeId as any)) as IntelligenceEdgeRow | null;
+    if (!edge) throw new Error("community_intelligence_edge_create_failed");
+    appliedNodeIds = [fromNodeId, ...(toNodeId ? [toNodeId] : [])];
+    appliedEdgeIds = [edge._id];
+    appliedMutationId = await insertMutationLog({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      operation: "create_edge",
+      actorType: actor.actorType,
+      actorUserId: actor.actorUserId,
+      actorAgentKey: actor.actorAgentKey,
+      targetNodeIds: appliedNodeIds,
+      targetEdgeIds: appliedEdgeIds,
+      afterSnapshot: mapEdgeRow(edge),
+      sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      policyDecisionId: normalizeIdValue(changeRequest._id),
+      reason: args.reason ?? "accepted_change_request_create_edge",
+      nowMs,
+    });
+  } else {
+    const targetNodeId = changeRequest.primaryTargetNodeId ?? changeRequest.targetNodeIds?.[0];
+    if (!targetNodeId) throw new Error("community_intelligence_change_request_target_node_required");
+    const existing = await getIntelligenceNodeOrThrow(args.ctx, targetNodeId);
+    if (normalizeIdValue(existing.communityId) !== normalizeIdValue(changeRequest.communityId)) {
+      throw new Error("community_intelligence_node_not_found");
+    }
+    const nextSourceTraceIds =
+      changeRequest.operation === "attach_evidence"
+        ? Array.from(new Set([...(existing.sourceTraceIds ?? []), ...(changeRequest.sourceTraceIds ?? [])]))
+        : existing.sourceTraceIds ?? [];
+    const nextOutcomeIds =
+      changeRequest.operation === "attach_outcome"
+        ? Array.from(new Set([...(existing.outcomeObservationIds ?? []), ...(changeRequest.outcomeObservationIds ?? [])]))
+        : existing.outcomeObservationIds ?? [];
+    const inferredStatus: NodeStatus | undefined =
+      changeRequest.operation === "mark_contested"
+        ? "contested"
+        : changeRequest.operation === "mark_stale"
+          ? "stale"
+          : changeRequest.operation === "deprecate_node"
+            ? "deprecated"
+            : undefined;
+    const nextStatus = payloadNodeStatus(payload.status, inferredStatus ?? existing.status);
+    const nodeVisibility = resolveNodeVisibility({
+      status: nextStatus,
+      requestedVisibility: payloadVisibility(payload.visibilityScope) ?? existing.visibilityScope,
+      requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility) ?? existing.sourceVisibility,
+    });
+    const patch: Record<string, unknown> = {
+      updatedAt: nowMs,
+      version: Number(existing.version ?? 1) + 1,
+      lastUpdatedByActorType: actor.actorType,
+      ...actorUserPatch(actor, "lastUpdatedByUserId", "lastUpdatedByAgentKey"),
+      sourceTraceIds: nextSourceTraceIds,
+      outcomeObservationIds: nextOutcomeIds,
+    };
+    if (payload.title !== undefined) {
+      patch.title = normalizeBoundedText(payload.title, 240, "community_intelligence_title_required");
+    }
+    if (payload.bodyMd !== undefined) patch.bodyMd = normalizeBody(payload.bodyMd);
+    if (payload.status !== undefined || inferredStatus) patch.status = nextStatus;
+    if (
+      payload.status !== undefined ||
+      inferredStatus ||
+      payload.visibilityScope !== undefined ||
+      payload.sourceVisibility !== undefined ||
+      DRAFT_STATUSES.has(nextStatus)
+    ) {
+      patch.visibilityScope = nodeVisibility.visibilityScope;
+      patch.sourceVisibility = nodeVisibility.sourceVisibility;
+    }
+    if (payload.confidence !== undefined || changeRequest.operation === "update_confidence") {
+      patch.confidence = clampScore(payload.confidence, changeRequest.confidence);
+    }
+    if (payload.evidenceStrength !== undefined) {
+      patch.evidenceStrength = payloadEvidenceStrength(payload.evidenceStrength, existing.evidenceStrength);
+    }
+    if (payload.appliesWhen !== undefined) patch.appliesWhen = normalizeOptionalLongText(payload.appliesWhen, 4000);
+    if (payload.doesNotApplyWhen !== undefined) {
+      patch.doesNotApplyWhen = normalizeOptionalLongText(payload.doesNotApplyWhen, 4000);
+    }
+    if (payload.workflowIds !== undefined) patch.workflowIds = normalizeStringList(payload.workflowIds, 50, 256);
+    if (payload.tags !== undefined) patch.tags = normalizeStringList(payload.tags, 50, 80);
+    if (payload.stalenessScore !== undefined) patch.stalenessScore = clampScore(payload.stalenessScore);
+    if (payload.retrievalUsefulnessScore !== undefined) {
+      patch.retrievalUsefulnessScore = clampScore(payload.retrievalUsefulnessScore);
+    }
+    if (payload.outcomeImpactScore !== undefined) patch.outcomeImpactScore = clampScore(payload.outcomeImpactScore);
+    if (payload.deprecatedByNodeId !== undefined) {
+      const deprecatedBy = await getIntelligenceNodeOrThrow(args.ctx, payload.deprecatedByNodeId as any);
+      if (normalizeIdValue(deprecatedBy.communityId) !== normalizeIdValue(changeRequest.communityId)) {
+        throw new Error("community_intelligence_deprecated_by_node_not_found");
+      }
+      patch.deprecatedByNodeId = payload.deprecatedByNodeId;
+    }
+    if (changeRequest.operation === "attach_outcome" && changeRequest.outcomeObservationIds?.length) {
+      patch.lastValidatedAt = nowMs;
+    }
+    await args.ctx.db.patch(existing._id as any, patch);
+    const updated = await getIntelligenceNodeOrThrow(args.ctx, existing._id);
+    appliedNodeIds = [existing._id];
+    appliedMutationId = await insertMutationLog({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      operation: changeRequest.operation,
+      actorType: actor.actorType,
+      actorUserId: actor.actorUserId,
+      actorAgentKey: actor.actorAgentKey,
+      targetNodeIds: appliedNodeIds,
+      beforeSnapshot: mapNodeRow(existing),
+      afterSnapshot: mapNodeRow(updated),
+      sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      policyDecisionId: normalizeIdValue(changeRequest._id),
+      reason: args.reason ?? "accepted_change_request_apply",
+      nowMs,
+    });
+  }
+
+  await args.ctx.db.patch(changeRequest._id as any, {
+    status: "applied",
+    appliedMutationId,
+    targetNodeIds: appliedNodeIds,
+    targetEdgeIds: appliedEdgeIds,
+    primaryTargetNodeId: appliedNodeIds[0],
+    primaryTargetEdgeId: appliedEdgeIds[0],
+    appliedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return mapChangeRequestRow(await getChangeRequestOrThrow(args.ctx, changeRequest._id));
+}
 
 export const applyCommunityIntelligenceChangeRequest = mutation({
   args: {
@@ -2487,253 +2934,17 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    if (changeRequest.status !== "accepted") {
-      throw new Error("community_intelligence_change_request_must_be_accepted");
-    }
     const actor = await resolvePolicyDecisionActor({
       ctx,
       communityId: changeRequest.communityId,
       userId,
     });
-    await requireChangeRequestReferencesAllowedForApply(ctx, changeRequest);
-    await requireChangeRequestTargetsCurrent(ctx, changeRequest);
-
-    const nowMs = Date.now();
-    const payload = payloadObject(changeRequest.requestedPayload);
-    let appliedMutationId: any = undefined;
-    let appliedNodeIds = changeRequest.targetNodeIds ?? [];
-    let appliedEdgeIds = changeRequest.targetEdgeIds ?? [];
-
-    if (changeRequest.operation === "create_node") {
-      const status = payloadNodeStatus(payload.status, "candidate");
-      const nodeVisibility = resolveNodeVisibility({
-        status,
-        requestedVisibility: payloadVisibility(payload.visibilityScope),
-        requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility),
-      });
-      const nodeId = await ctx.db.insert("communityIntelligenceNodes" as any, {
-        communityId: changeRequest.communityId,
-        type: payloadNodeType(payload.type),
-        title: normalizeBoundedText(payload.title, 240, "community_intelligence_title_required"),
-        bodyMd: normalizeBody(payload.bodyMd),
-        status,
-        visibilityScope: nodeVisibility.visibilityScope,
-        sourceVisibility: nodeVisibility.sourceVisibility,
-        confidence: clampScore(payload.confidence, changeRequest.confidence),
-        evidenceStrength: payloadEvidenceStrength(payload.evidenceStrength, "none"),
-        appliesWhen: normalizeOptionalLongText(payload.appliesWhen, 4000),
-        doesNotApplyWhen: normalizeOptionalLongText(payload.doesNotApplyWhen, 4000),
-        workflowIds: normalizeStringList(payload.workflowIds, 50, 256),
-        tags: normalizeStringList(payload.tags, 50, 80),
-        sourceTraceIds: changeRequest.sourceTraceIds ?? [],
-        outcomeObservationIds: changeRequest.outcomeObservationIds ?? [],
-        stalenessScore: clampScore(payload.stalenessScore, 0),
-        retrievalUsefulnessScore: clampScore(payload.retrievalUsefulnessScore, 0),
-        outcomeImpactScore: clampScore(payload.outcomeImpactScore, 0),
-        createdByActorType: actor.actorType,
-        ...(actor.actorUserId ? { createdByUserId: actor.actorUserId } : {}),
-        lastUpdatedByActorType: actor.actorType,
-        ...(actor.actorUserId ? { lastUpdatedByUserId: actor.actorUserId } : {}),
-        ...(changeRequest.outcomeObservationIds?.length ? { lastValidatedAt: nowMs } : {}),
-        version: 1,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      const node = await getIntelligenceNodeOrThrow(ctx, nodeId);
-      appliedNodeIds = [node._id];
-      appliedMutationId = await insertMutationLog({
-        ctx,
-        communityId: changeRequest.communityId,
-        operation: "create_node",
-        actorType: actor.actorType,
-        actorUserId: actor.actorUserId,
-        targetNodeIds: appliedNodeIds,
-        afterSnapshot: mapNodeRow(node),
-        sourceTraceIds: changeRequest.sourceTraceIds ?? [],
-        policyDecisionId: normalizeIdValue(changeRequest._id),
-        reason: args.reason ?? "accepted_change_request_create_node",
-        nowMs,
-      });
-    } else if (changeRequest.operation === "create_edge") {
-      const fromNodeId = changeRequest.primaryTargetNodeId;
-      if (!fromNodeId) throw new Error("community_intelligence_edge_from_node_required");
-      if (payload.fromNodeId && normalizeIdValue(payload.fromNodeId) !== normalizeIdValue(fromNodeId)) {
-        throw new Error("community_intelligence_edge_from_node_mismatch");
-      }
-      const fromNode = await getIntelligenceNodeOrThrow(ctx, fromNodeId);
-      if (normalizeIdValue(fromNode.communityId) !== normalizeIdValue(changeRequest.communityId)) {
-        throw new Error("community_intelligence_from_node_not_found");
-      }
-      const toNodeId = payload.toNodeId as any;
-      const toReferenceType =
-        typeof payload.toReferenceType === "string" && EDGE_REFERENCE_TYPES.has(payload.toReferenceType)
-          ? payload.toReferenceType
-          : undefined;
-      const toReferenceId = normalizeOptionalLongText(payload.toReferenceId, 512);
-      const hasNodeTarget = Boolean(toNodeId);
-      const hasReferenceTarget = Boolean(toReferenceType && toReferenceId);
-      if (hasNodeTarget === hasReferenceTarget) {
-        throw new Error("community_intelligence_edge_target_invalid");
-      }
-      if (toNodeId) {
-        const targetNodeIds = new Set((changeRequest.targetNodeIds ?? []).map(normalizeIdValue));
-        if (!targetNodeIds.has(normalizeIdValue(toNodeId))) {
-          throw new Error("community_intelligence_edge_to_node_target_required");
-        }
-        const toNode = await getIntelligenceNodeOrThrow(ctx, toNodeId);
-        if (normalizeIdValue(toNode.communityId) !== normalizeIdValue(changeRequest.communityId)) {
-          throw new Error("community_intelligence_to_node_not_found");
-        }
-      }
-      await requireReferenceBelongsToCommunity(ctx, changeRequest.communityId, toReferenceType, toReferenceId);
-      const edgeType =
-        typeof payload.type === "string" && EDGE_TYPES.has(payload.type) ? payload.type : undefined;
-      if (!edgeType) throw new Error("community_intelligence_edge_type_required");
-      const edgeId = await ctx.db.insert("communityIntelligenceEdges" as any, {
-        communityId: changeRequest.communityId,
-        fromNodeId,
-        ...(toNodeId ? { toNodeId } : {}),
-        ...(toReferenceType ? { toReferenceType } : {}),
-        ...(toReferenceId ? { toReferenceId } : {}),
-        type: edgeType,
-        confidence: clampScore(payload.confidence, changeRequest.confidence),
-        evidenceTraceIds: changeRequest.sourceTraceIds ?? [],
-        visibilityScope: payloadVisibility(payload.visibilityScope) ?? "community",
-        createdByActorType: actor.actorType,
-        ...(actor.actorUserId ? { createdByUserId: actor.actorUserId } : {}),
-        ...(typeof payload.compilerRunId === "string"
-          ? { compilerRunId: normalizeBoundedText(payload.compilerRunId, 512, "compiler_run_id_required") }
-          : {}),
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      const edge = (await ctx.db.get(edgeId as any)) as IntelligenceEdgeRow | null;
-      if (!edge) throw new Error("community_intelligence_edge_create_failed");
-      appliedNodeIds = [fromNodeId, ...(toNodeId ? [toNodeId] : [])];
-      appliedEdgeIds = [edge._id];
-      appliedMutationId = await insertMutationLog({
-        ctx,
-        communityId: changeRequest.communityId,
-        operation: "create_edge",
-        actorType: actor.actorType,
-        actorUserId: actor.actorUserId,
-        targetNodeIds: appliedNodeIds,
-        targetEdgeIds: appliedEdgeIds,
-        afterSnapshot: mapEdgeRow(edge),
-        sourceTraceIds: changeRequest.sourceTraceIds ?? [],
-        policyDecisionId: normalizeIdValue(changeRequest._id),
-        reason: args.reason ?? "accepted_change_request_create_edge",
-        nowMs,
-      });
-    } else {
-      const targetNodeId = changeRequest.primaryTargetNodeId ?? changeRequest.targetNodeIds?.[0];
-      if (!targetNodeId) throw new Error("community_intelligence_change_request_target_node_required");
-      const existing = await getIntelligenceNodeOrThrow(ctx, targetNodeId);
-      if (normalizeIdValue(existing.communityId) !== normalizeIdValue(changeRequest.communityId)) {
-        throw new Error("community_intelligence_node_not_found");
-      }
-      const nextSourceTraceIds =
-        changeRequest.operation === "attach_evidence"
-          ? Array.from(new Set([...(existing.sourceTraceIds ?? []), ...(changeRequest.sourceTraceIds ?? [])]))
-          : existing.sourceTraceIds ?? [];
-      const nextOutcomeIds =
-        changeRequest.operation === "attach_outcome"
-          ? Array.from(new Set([...(existing.outcomeObservationIds ?? []), ...(changeRequest.outcomeObservationIds ?? [])]))
-          : existing.outcomeObservationIds ?? [];
-      const inferredStatus: NodeStatus | undefined =
-        changeRequest.operation === "mark_contested"
-          ? "contested"
-          : changeRequest.operation === "mark_stale"
-            ? "stale"
-            : changeRequest.operation === "deprecate_node"
-              ? "deprecated"
-              : undefined;
-      const nextStatus = payloadNodeStatus(payload.status, inferredStatus ?? existing.status);
-      const nodeVisibility = resolveNodeVisibility({
-        status: nextStatus,
-        requestedVisibility: payloadVisibility(payload.visibilityScope) ?? existing.visibilityScope,
-        requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility) ?? existing.sourceVisibility,
-      });
-      const patch: Record<string, unknown> = {
-        updatedAt: nowMs,
-        version: Number(existing.version ?? 1) + 1,
-        lastUpdatedByActorType: actor.actorType,
-        lastUpdatedByUserId: actor.actorUserId,
-        sourceTraceIds: nextSourceTraceIds,
-        outcomeObservationIds: nextOutcomeIds,
-      };
-      if (payload.title !== undefined) {
-        patch.title = normalizeBoundedText(payload.title, 240, "community_intelligence_title_required");
-      }
-      if (payload.bodyMd !== undefined) patch.bodyMd = normalizeBody(payload.bodyMd);
-      if (payload.status !== undefined || inferredStatus) patch.status = nextStatus;
-      if (
-        payload.status !== undefined ||
-        inferredStatus ||
-        payload.visibilityScope !== undefined ||
-        payload.sourceVisibility !== undefined ||
-        DRAFT_STATUSES.has(nextStatus)
-      ) {
-        patch.visibilityScope = nodeVisibility.visibilityScope;
-        patch.sourceVisibility = nodeVisibility.sourceVisibility;
-      }
-      if (payload.confidence !== undefined || changeRequest.operation === "update_confidence") {
-        patch.confidence = clampScore(payload.confidence, changeRequest.confidence);
-      }
-      if (payload.evidenceStrength !== undefined) {
-        patch.evidenceStrength = payloadEvidenceStrength(payload.evidenceStrength, existing.evidenceStrength);
-      }
-      if (payload.appliesWhen !== undefined) patch.appliesWhen = normalizeOptionalLongText(payload.appliesWhen, 4000);
-      if (payload.doesNotApplyWhen !== undefined) {
-        patch.doesNotApplyWhen = normalizeOptionalLongText(payload.doesNotApplyWhen, 4000);
-      }
-      if (payload.workflowIds !== undefined) patch.workflowIds = normalizeStringList(payload.workflowIds, 50, 256);
-      if (payload.tags !== undefined) patch.tags = normalizeStringList(payload.tags, 50, 80);
-      if (payload.stalenessScore !== undefined) patch.stalenessScore = clampScore(payload.stalenessScore);
-      if (payload.retrievalUsefulnessScore !== undefined) {
-        patch.retrievalUsefulnessScore = clampScore(payload.retrievalUsefulnessScore);
-      }
-      if (payload.outcomeImpactScore !== undefined) patch.outcomeImpactScore = clampScore(payload.outcomeImpactScore);
-      if (payload.deprecatedByNodeId !== undefined) {
-        const deprecatedBy = await getIntelligenceNodeOrThrow(ctx, payload.deprecatedByNodeId as any);
-        if (normalizeIdValue(deprecatedBy.communityId) !== normalizeIdValue(changeRequest.communityId)) {
-          throw new Error("community_intelligence_deprecated_by_node_not_found");
-        }
-        patch.deprecatedByNodeId = payload.deprecatedByNodeId;
-      }
-      if (changeRequest.operation === "attach_outcome" && changeRequest.outcomeObservationIds?.length) {
-        patch.lastValidatedAt = nowMs;
-      }
-      await ctx.db.patch(existing._id as any, patch);
-      const updated = await getIntelligenceNodeOrThrow(ctx, existing._id);
-      appliedNodeIds = [existing._id];
-      appliedMutationId = await insertMutationLog({
-        ctx,
-        communityId: changeRequest.communityId,
-        operation: changeRequest.operation,
-        actorType: actor.actorType,
-        actorUserId: actor.actorUserId,
-        targetNodeIds: appliedNodeIds,
-        beforeSnapshot: mapNodeRow(existing),
-        afterSnapshot: mapNodeRow(updated),
-        sourceTraceIds: changeRequest.sourceTraceIds ?? [],
-        policyDecisionId: normalizeIdValue(changeRequest._id),
-        reason: args.reason ?? "accepted_change_request_apply",
-        nowMs,
-      });
-    }
-
-    await ctx.db.patch(changeRequest._id as any, {
-      status: "applied",
-      appliedMutationId,
-      targetNodeIds: appliedNodeIds,
-      targetEdgeIds: appliedEdgeIds,
-      primaryTargetNodeId: appliedNodeIds[0],
-      primaryTargetEdgeId: appliedEdgeIds[0],
-      appliedAt: nowMs,
-      updatedAt: nowMs,
+    return await applyTrustedCommunityIntelligenceChangeRequestCore({
+      ctx,
+      changeRequestId: changeRequest._id,
+      actor,
+      reason: args.reason,
     });
-    return mapChangeRequestRow(await getChangeRequestOrThrow(ctx, changeRequest._id));
   },
 });
 
@@ -3004,6 +3215,353 @@ export const retrieveCommunityIntelligenceForWorkflow = mutation({
   },
 });
 
+export const searchCommunityMemoryInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    query: v.optional(v.string()),
+    types: v.optional(
+      v.array(
+        v.union(
+          v.literal("playbook"),
+          v.literal("insight"),
+          v.literal("example"),
+          v.literal("warning_failure"),
+          v.literal("decision_judgment"),
+          v.literal("open_question"),
+        ),
+      ),
+    ),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const userId = await resolveUserIdForAuthenticatedRequest({
+        ctx,
+        userId: args.userId,
+        authSubject: args.authSubject ?? null,
+      });
+      await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+      const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
+      const limit = Math.max(1, Math.min(12, Math.floor(args.limit ?? 5)));
+      const queryText = normalizeOptionalLongText(args.query, 512);
+      const nodes = await retrieveAcceptedCommunityMemoryNodes({
+        ctx,
+        communityId: args.communityId,
+        isManager,
+        query: queryText,
+        types: args.types,
+        limit,
+      });
+      const nowMs = Date.now();
+      const logId = await ctx.db.insert("communityIntelligenceRetrievalLogs" as any, {
+        communityId: args.communityId,
+        userId,
+        query: queryText,
+        retrievedNodeIds: nodes.map((node) => node._id),
+        injectedNodeIds: [],
+        outcomeObservationIds: [],
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return {
+        ok: true,
+        retrieval_log_id: normalizeIdValue(logId),
+        epistemic_note: "community_memory_search returns accepted community intelligence from the directory. Use community_search for raw archive evidence.",
+        nodes: nodes.map(mapCompactMemoryNode),
+      };
+    } catch (error) {
+      return memoryToolError(error, "community_memory_search_failed");
+    }
+  },
+});
+
+export const readCommunityMemoryInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    nodeId: v.id("communityIntelligenceNodes"),
+    retrievalLogId: v.optional(v.id("communityIntelligenceRetrievalLogs")),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const userId = await resolveUserIdForAuthenticatedRequest({
+        ctx,
+        userId: args.userId,
+        authSubject: args.authSubject ?? null,
+      });
+      await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+      const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
+      const node = await getIntelligenceNodeOrThrow(ctx, args.nodeId);
+      if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
+        throw new Error("community_intelligence_node_not_found");
+      }
+      if (!canViewerReadNode(node, isManager)) {
+        throw new Error("community_intelligence_node_not_readable");
+      }
+
+      const [outgoingEdges, incomingEdges] = await Promise.all([
+        ctx.db
+          .query("communityIntelligenceEdges" as any)
+          .withIndex("by_fromNode", (q: any) => q.eq("fromNodeId", args.nodeId))
+          .take(24) as Promise<IntelligenceEdgeRow[]>,
+        ctx.db
+          .query("communityIntelligenceEdges" as any)
+          .withIndex("by_toNode", (q: any) => q.eq("toNodeId", args.nodeId))
+          .take(24) as Promise<IntelligenceEdgeRow[]>,
+      ]);
+      const edgeCandidates = [
+        ...outgoingEdges.map((edge) => ({ edge, direction: "outgoing" as const })),
+        ...incomingEdges.map((edge) => ({ edge, direction: "incoming" as const })),
+      ];
+      const readableEdges: Array<{
+        edge: IntelligenceEdgeRow;
+        direction: "incoming" | "outgoing";
+      }> = [];
+      const seenEdgeIds = new Set<string>();
+      for (const candidate of edgeCandidates) {
+        const edgeId = normalizeIdValue(candidate.edge._id);
+        if (!edgeId || seenEdgeIds.has(edgeId)) continue;
+        seenEdgeIds.add(edgeId);
+        if (normalizeIdValue(candidate.edge.communityId) !== normalizeIdValue(args.communityId)) continue;
+        if (!(await canViewerReadEdge({
+          ctx,
+          communityId: args.communityId,
+          edge: candidate.edge,
+          userId,
+          isManager,
+        }))) {
+          continue;
+        }
+        readableEdges.push(candidate);
+      }
+      const edges = [];
+      for (const candidate of readableEdges
+        .sort((a, b) => {
+          const aContradicts = a.edge.type === "contradicts" ? 1 : 0;
+          const bContradicts = b.edge.type === "contradicts" ? 1 : 0;
+          return bContradicts - aContradicts || b.edge.updatedAt - a.edge.updatedAt;
+        })
+        .slice(0, 12)) {
+        let neighbor: ReturnType<typeof mapCompactMemoryNode> | null = null;
+        const neighborNodeId = candidate.direction === "outgoing" ? candidate.edge.toNodeId : candidate.edge.fromNodeId;
+        if (neighborNodeId) {
+          try {
+            const neighborNode = await getIntelligenceNodeOrThrow(ctx, neighborNodeId);
+            if (
+              normalizeIdValue(neighborNode.communityId) === normalizeIdValue(args.communityId) &&
+              canViewerReadNode(neighborNode, isManager)
+            ) {
+              neighbor = mapCompactMemoryNode(neighborNode);
+            }
+          } catch {
+            neighbor = null;
+          }
+        }
+        edges.push({
+          direction: candidate.direction,
+          edge: mapEdgeRow(candidate.edge),
+          neighbor,
+        });
+      }
+
+      const nowMs = Date.now();
+      let retrievalLog: RetrievalLogRow | null = null;
+      if (args.retrievalLogId) {
+        retrievalLog = (await ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
+        if (!retrievalLog || normalizeIdValue(retrievalLog.communityId) !== normalizeIdValue(args.communityId)) {
+          throw new Error("community_intelligence_retrieval_log_not_found");
+        }
+        if (normalizeIdValue(retrievalLog.userId) !== normalizeIdValue(userId)) {
+          throw new Error("community_intelligence_retrieval_log_forbidden");
+        }
+        const injectedNodeIds = Array.from(
+          new Map(
+            [...(retrievalLog.injectedNodeIds ?? []), node._id].map((id) => [normalizeIdValue(id), id]),
+          ).values(),
+        );
+        await ctx.db.patch(retrievalLog._id as any, {
+          injectedNodeIds,
+          updatedAt: nowMs,
+        });
+        retrievalLog = (await ctx.db.get(retrievalLog._id as any)) as RetrievalLogRow | null;
+      } else {
+        const logId = await ctx.db.insert("communityIntelligenceRetrievalLogs" as any, {
+          communityId: args.communityId,
+          userId,
+          query: node.title,
+          retrievedNodeIds: [node._id],
+          injectedNodeIds: [node._id],
+          outcomeObservationIds: [],
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+        retrievalLog = (await ctx.db.get(logId as any)) as RetrievalLogRow | null;
+      }
+      if (!retrievalLog) throw new Error("community_intelligence_retrieval_log_not_found");
+      return {
+        ok: true,
+        retrieval_log_id: normalizeIdValue(retrievalLog._id),
+        node: {
+          ...mapNodeRow(node),
+          grade: communityMemoryGrade(node.status),
+        },
+        edges,
+      };
+    } catch (error) {
+      return memoryToolError(error, "community_memory_read_failed");
+    }
+  },
+});
+
+async function recordCommunityOutcomeObservationCore(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  nodeId?: any;
+  retrievalLogId?: any;
+  workflowId?: string;
+  metricName?: string;
+  metricValue?: number;
+  baselineValue?: number;
+  resultStatus: OutcomeResultStatus;
+  evidenceStrength: EvidenceStrength;
+  notes?: string;
+  actorType?: "member" | "admin";
+}) {
+  await requireCommunityChatAccess({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
+  const actor = await resolveWriteActor({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+    requestedActorType: args.actorType,
+  });
+  let node: IntelligenceNodeRow | null = null;
+  if (args.nodeId) {
+    node = await getIntelligenceNodeOrThrow(args.ctx, args.nodeId);
+    if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_intelligence_node_not_found");
+    }
+  }
+  let retrievalLog: RetrievalLogRow | null = null;
+  if (args.retrievalLogId) {
+    retrievalLog = (await args.ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
+    if (!retrievalLog || normalizeIdValue(retrievalLog.communityId) !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_intelligence_retrieval_log_not_found");
+    }
+  }
+  if (!actor.isManager) {
+    if (!retrievalLog) {
+      throw new Error("community_intelligence_outcome_retrieval_required");
+    }
+    if (!retrievalLogBelongsToUser(retrievalLog, args.userId, actor.isManager)) {
+      throw new Error("community_intelligence_outcome_retrieval_forbidden");
+    }
+    if (node) {
+      const retrievalNodeIds = new Set(
+        [...(retrievalLog.retrievedNodeIds ?? []), ...(retrievalLog.injectedNodeIds ?? [])].map(normalizeIdValue),
+      );
+      if (!retrievalNodeIds.has(normalizeIdValue(node._id))) {
+        throw new Error("community_intelligence_outcome_node_not_retrieved");
+      }
+    }
+  }
+  const nowMs = Date.now();
+  const observedAt = nowMs;
+  const outcomeId = await args.ctx.db.insert("communityOutcomeObservations" as any, {
+    communityId: args.communityId,
+    ...(args.nodeId ? { nodeId: args.nodeId } : {}),
+    ...(args.retrievalLogId ? { retrievalLogId: args.retrievalLogId } : {}),
+    workflowId: normalizeWorkflowId(args.workflowId),
+    metricName: normalizeOptionalText(args.metricName, 120),
+    ...(typeof args.metricValue === "number" ? { metricValue: args.metricValue } : {}),
+    ...(typeof args.baselineValue === "number" ? { baselineValue: args.baselineValue } : {}),
+    resultStatus: args.resultStatus,
+    evidenceStrength: args.evidenceStrength,
+    notes: normalizeOptionalLongText(args.notes, 4000),
+    observedByActorType: actor.actorType,
+    ...(actor.actorUserId ? { observedByUserId: actor.actorUserId } : {}),
+    observedAt,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  if (node) {
+    await insertChangeRequest({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      operation: "attach_outcome",
+      outcomeObservationIds: [outcomeId],
+      targetNodeIds: [node._id],
+      requestedPayload: {
+        outcomeObservationId: normalizeIdValue(outcomeId),
+        retrievalLogId: args.retrievalLogId ? normalizeIdValue(args.retrievalLogId) : null,
+        resultStatus: args.resultStatus,
+        evidenceStrength: args.evidenceStrength,
+        workflowId: normalizeWorkflowId(args.workflowId) ?? null,
+        notes: normalizeOptionalLongText(args.notes, 1000) ?? null,
+      },
+      confidence: args.resultStatus === "worked" ? 0.55 : args.resultStatus === "failed" ? 0.45 : 0.35,
+      privacyRisk: 0.2,
+      actorType: actor.actorType,
+      actorUserId: actor.actorUserId,
+      nowMs,
+    });
+  }
+  if (retrievalLog) {
+    await args.ctx.db.patch(retrievalLog._id as any, {
+      outcomeObservationIds: [...(retrievalLog.outcomeObservationIds ?? []), outcomeId],
+      updatedAt: nowMs,
+    });
+  }
+  const outcome = (await args.ctx.db.get(outcomeId as any)) as OutcomeObservationRow | null;
+  if (!outcome) throw new Error("community_outcome_observation_not_found");
+  return mapOutcomeObservationRow(outcome);
+}
+
+export const recordCommunityOutcomeObservationInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    nodeId: v.optional(v.id("communityIntelligenceNodes")),
+    retrievalLogId: v.id("communityIntelligenceRetrievalLogs"),
+    resultStatus: v.union(
+      v.literal("worked"),
+      v.literal("failed"),
+      v.literal("mixed"),
+    ),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const userId = await resolveUserIdForAuthenticatedRequest({
+        ctx,
+        userId: args.userId,
+        authSubject: args.authSubject ?? null,
+      });
+      const outcome = await recordCommunityOutcomeObservationCore({
+        ctx,
+        userId,
+        communityId: args.communityId,
+        nodeId: args.nodeId,
+        retrievalLogId: args.retrievalLogId,
+        resultStatus: args.resultStatus,
+        evidenceStrength: "observed",
+        notes: args.notes,
+      });
+      return {
+        ok: true,
+        outcome_observation_id: outcome.id,
+        outcome,
+      };
+    } catch (error) {
+      return memoryToolError(error, "community_record_outcome_failed");
+    }
+  },
+});
+
 export const recordCommunityIntelligenceRetrievalFeedback = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -3080,110 +3638,21 @@ export const recordCommunityOutcomeObservation = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const actor = await resolveWriteActor({
+    return await recordCommunityOutcomeObservationCore({
       ctx,
-      communityId: args.communityId,
       userId,
-      requestedActorType: args.actorType,
-    });
-    let node: IntelligenceNodeRow | null = null;
-    if (args.nodeId) {
-      node = await getIntelligenceNodeOrThrow(ctx, args.nodeId);
-      if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
-        throw new Error("community_intelligence_node_not_found");
-      }
-    }
-    let retrievalLog: RetrievalLogRow | null = null;
-    if (args.retrievalLogId) {
-      retrievalLog = (await ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
-      if (!retrievalLog || normalizeIdValue(retrievalLog.communityId) !== normalizeIdValue(args.communityId)) {
-        throw new Error("community_intelligence_retrieval_log_not_found");
-      }
-    }
-    if (!actor.isManager) {
-      if (!retrievalLog) {
-        throw new Error("community_intelligence_outcome_retrieval_required");
-      }
-      if (!retrievalLogBelongsToUser(retrievalLog, userId, actor.isManager)) {
-        throw new Error("community_intelligence_outcome_retrieval_forbidden");
-      }
-      if (node) {
-        const retrievalNodeIds = new Set(
-          [...(retrievalLog.retrievedNodeIds ?? []), ...(retrievalLog.injectedNodeIds ?? [])].map(normalizeIdValue),
-        );
-        if (!retrievalNodeIds.has(normalizeIdValue(node._id))) {
-          throw new Error("community_intelligence_outcome_node_not_retrieved");
-        }
-      }
-    }
-    const nowMs = Date.now();
-    const observedAt = nowMs;
-    const outcomeId = await ctx.db.insert("communityOutcomeObservations" as any, {
       communityId: args.communityId,
-      ...(args.nodeId ? { nodeId: args.nodeId } : {}),
-      ...(args.retrievalLogId ? { retrievalLogId: args.retrievalLogId } : {}),
-      workflowId: normalizeWorkflowId(args.workflowId),
-      metricName: normalizeOptionalText(args.metricName, 120),
-      ...(typeof args.metricValue === "number" ? { metricValue: args.metricValue } : {}),
-      ...(typeof args.baselineValue === "number" ? { baselineValue: args.baselineValue } : {}),
+      nodeId: args.nodeId,
+      retrievalLogId: args.retrievalLogId,
+      workflowId: args.workflowId,
+      metricName: args.metricName,
+      metricValue: args.metricValue,
+      baselineValue: args.baselineValue,
       resultStatus: args.resultStatus,
       evidenceStrength: args.evidenceStrength,
-      notes: normalizeOptionalLongText(args.notes, 4000),
-      observedByActorType: actor.actorType,
-      ...(actor.actorUserId ? { observedByUserId: actor.actorUserId } : {}),
-      observedAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      notes: args.notes,
+      actorType: args.actorType,
     });
-    if (node) {
-      await insertChangeRequest({
-        ctx,
-        communityId: args.communityId,
-        operation: "attach_outcome",
-        outcomeObservationIds: [outcomeId],
-        targetNodeIds: [node._id],
-        requestedPayload: {
-          outcomeObservationId: normalizeIdValue(outcomeId),
-          retrievalLogId: args.retrievalLogId ? normalizeIdValue(args.retrievalLogId) : null,
-          resultStatus: args.resultStatus,
-          evidenceStrength: args.evidenceStrength,
-          workflowId: normalizeWorkflowId(args.workflowId) ?? null,
-          notes: normalizeOptionalLongText(args.notes, 1000) ?? null,
-        },
-        confidence: args.resultStatus === "worked" ? 0.55 : args.resultStatus === "failed" ? 0.45 : 0.35,
-        privacyRisk: 0.2,
-        actorType: actor.actorType,
-        actorUserId: actor.actorUserId,
-        nowMs,
-      });
-    }
-    if (retrievalLog) {
-      await ctx.db.patch(retrievalLog._id as any, {
-        outcomeObservationIds: [...(retrievalLog.outcomeObservationIds ?? []), outcomeId],
-        updatedAt: nowMs,
-      });
-    }
-    const outcome = (await ctx.db.get(outcomeId as any)) as any;
-    return {
-      id: normalizeIdValue(outcome._id),
-      community_id: normalizeIdValue(outcome.communityId),
-      node_id: outcome.nodeId ? normalizeIdValue(outcome.nodeId) : null,
-      retrieval_log_id: outcome.retrievalLogId ? normalizeIdValue(outcome.retrievalLogId) : null,
-      workflow_id: outcome.workflowId ?? null,
-      metric_name: outcome.metricName ?? null,
-      metric_value: typeof outcome.metricValue === "number" ? outcome.metricValue : null,
-      baseline_value: typeof outcome.baselineValue === "number" ? outcome.baselineValue : null,
-      result_status: outcome.resultStatus,
-      evidence_strength: outcome.evidenceStrength,
-      notes: outcome.notes ?? null,
-      observed_by_actor_type: outcome.observedByActorType,
-      observed_by_user_id: outcome.observedByUserId ? normalizeIdValue(outcome.observedByUserId) : null,
-      observed_by_agent_key: outcome.observedByAgentKey ?? null,
-      observed_at: toIsoString(outcome.observedAt),
-      created_at: toIsoString(outcome.createdAt),
-      updated_at: toIsoString(outcome.updatedAt),
-    };
   },
 });
 

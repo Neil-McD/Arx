@@ -2148,6 +2148,7 @@ export default defineSchema({
     .index("by_community_type", ["communityId", "type"])
     .index("by_community_status", ["communityId", "status"])
     .index("by_community_type_status", ["communityId", "type", "status"])
+    .index("by_community_type_status_updatedAt", ["communityId", "type", "status", "updatedAt"])
     .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"]),
 
   communityIntelligenceEdges: defineTable({

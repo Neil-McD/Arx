@@ -172,8 +172,14 @@ require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_JWT_ISSUER=' \
   "root env template declares ARX_AUTH_JWT_ISSUER"
 require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_JWT_JWKS_URL=' \
   "root env template declares ARX_AUTH_JWT_JWKS_URL"
+require_match_in_file "$ROOT_ENV_FILE" '^ARX_MCP_RESOURCE_URL=' \
+  "root env template declares canonical MCP resource URL"
+require_match_in_file "$ROOT_ENV_FILE" '^ARX_MCP_AUTH_JWT_AUDIENCE=' \
+  "root env template declares MCP JWT audience"
 require_match_in_file "$ROOT_ENV_FILE" '^ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=' \
   "root env template declares verified-identity fallback toggle"
+forbid_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_JWT_ADDITIONAL_AUDIENCES=' \
+  "root env template must not include generic JWT audience list"
 forbid_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_MAGIC_LINK_URL=' \
   "root env template must not include deleted magic-link env"
 forbid_match_in_file "$ROOT_ENV_FILE" '^VITE_AUTH_URL=|^VITE_AUTH_PUBLIC_KEY=|^ARX_AUTH_BASE_URL=|^ARX_AUTH_PUBLIC_KEY=' \

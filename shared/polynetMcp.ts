@@ -18,7 +18,13 @@ type JsonSchema =
 export type PolynetMcpToolName =
   | "polynet_list_communities"
   | "polynet_get_community"
-  | "polynet_community_search";
+  | "polynet_community_search"
+  | "polynet_list_workspaces"
+  | "polynet_open_workspace"
+  | "polynet_get_workspace_context"
+  | "polynet_workspace_memory_search"
+  | "polynet_workspace_memory_read"
+  | "polynet_workspace_record_outcome";
 
 export type PolynetMcpToolDefinition = {
   name: PolynetMcpToolName;
@@ -56,6 +62,49 @@ const COMMUNITY_SUMMARY_SCHEMA: JsonSchema = {
       enum: ["owner", "admin", "moderator", "member", "pending", "visitor"],
     },
   },
+};
+
+const WORKSPACE_SUMMARY_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["workspace_context_id", "workspace_type", "slug", "name", "relation"],
+  properties: {
+    workspace_context_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 200,
+      description: "Opaque external selector for this PolyNet workspace context.",
+    },
+    workspace_type: { type: "string", enum: ["community"] },
+    slug: { type: "string", minLength: 1, maxLength: 160 },
+    name: { type: "string", minLength: 1, maxLength: 180 },
+    one_liner: { type: ["string", "null"], maxLength: 280 },
+    visibility: { type: "string", enum: ["published", "unlisted"] },
+    entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
+    relation: {
+      type: "string",
+      enum: ["owner", "admin", "moderator", "member", "pending", "visitor"],
+    },
+  },
+};
+
+const WORKSPACE_CONTEXT_ID_SCHEMA: JsonSchema = {
+  type: "string",
+  minLength: 1,
+  maxLength: 200,
+  description: "Workspace context selector returned by polynet_open_workspace.",
+};
+
+const COMMUNITY_MEMORY_TYPE_SCHEMA: JsonSchema = {
+  type: "string",
+  enum: [
+    "playbook",
+    "insight",
+    "example",
+    "warning_failure",
+    "decision_judgment",
+    "open_question",
+  ],
 };
 
 const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
@@ -228,6 +277,229 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
             type: "object",
             additionalProperties: true,
           },
+        },
+      },
+    },
+  },
+  polynet_list_workspaces: {
+    name: "polynet_list_workspaces",
+    title: "List PolyNet Workspaces",
+    description:
+      "List the authenticated user's accessible PolyNet workspaces. In v0, workspaces are community contexts.",
+    annotations: {
+      title: "List PolyNet Workspaces",
+      readOnlyHint: true,
+    },
+    inputSchema: EMPTY_OBJECT_SCHEMA,
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspaces"],
+      properties: {
+        workspaces: {
+          type: "array",
+          items: WORKSPACE_SUMMARY_SCHEMA,
+        },
+      },
+    },
+  },
+  polynet_open_workspace: {
+    name: "polynet_open_workspace",
+    title: "Open PolyNet Workspace",
+    description:
+      "Open one accessible PolyNet community workspace by slug and return a portable workspace context selector.",
+    annotations: {
+      title: "Open PolyNet Workspace",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["community_slug"],
+      properties: {
+        community_slug: {
+          type: "string",
+          minLength: 1,
+          maxLength: 160,
+          description: "The canonical community slug.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace"],
+      properties: {
+        workspace: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_get_workspace_context: {
+    name: "polynet_get_workspace_context",
+    title: "Get PolyNet Workspace Context",
+    description:
+      "Read bounded identity, access, and memory-orientation context for an opened PolyNet workspace.",
+    annotations: {
+      title: "Get PolyNet Workspace Context",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace"],
+      properties: {
+        workspace: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_memory_search: {
+    name: "polynet_workspace_memory_search",
+    title: "Search PolyNet Workspace Memory",
+    description:
+      "Search accepted community intelligence in an opened PolyNet workspace. This returns learned memory, not raw archive evidence.",
+    annotations: {
+      title: "Search PolyNet Workspace Memory",
+      readOnlyHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        query: {
+          type: "string",
+          minLength: 1,
+          maxLength: 512,
+          description: "Optional focused topic or question to search in accepted community memory.",
+        },
+        types: {
+          type: "array",
+          maxItems: 6,
+          items: COMMUNITY_MEMORY_TYPE_SCHEMA,
+        },
+        limit: {
+          type: "number",
+          description: "Maximum memory entries to return, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "memory"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        memory: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_memory_read: {
+    name: "polynet_workspace_memory_read",
+    title: "Read PolyNet Workspace Memory",
+    description:
+      "Read one accepted community memory node plus a bounded visibility-filtered subgraph bundle.",
+    annotations: {
+      title: "Read PolyNet Workspace Memory",
+      readOnlyHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "node_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        node_id: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          description: "Accepted community memory node id returned by memory search.",
+        },
+        retrieval_log_id: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          description: "Optional retrieval log id returned by memory search.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "memory"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        memory: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_record_outcome: {
+    name: "polynet_workspace_record_outcome",
+    title: "Record PolyNet Workspace Memory Outcome",
+    description:
+      "Record whether accepted community memory retrieved through an opened PolyNet workspace worked, failed, or was mixed.",
+    annotations: {
+      title: "Record PolyNet Workspace Memory Outcome",
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "retrieval_log_id", "result_status"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        retrieval_log_id: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          description: "Retrieval log id returned by memory search or read.",
+        },
+        node_id: {
+          type: "string",
+          minLength: 1,
+          maxLength: 128,
+          description: "Optional memory node id the outcome applies to.",
+        },
+        result_status: {
+          type: "string",
+          enum: ["worked", "failed", "mixed"],
+        },
+        notes: {
+          type: "string",
+          maxLength: 1000,
+          description: "Optional concise outcome note.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "outcome"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        outcome: {
+          type: "object",
+          additionalProperties: true,
         },
       },
     },

@@ -68,6 +68,24 @@ type CommunityMembershipProjection = {
   };
 };
 
+type ResolvedWorkspaceContext = {
+  communityId: string;
+  communitySlug: string;
+  row: CommunityMembershipProjection;
+  access: Record<string, unknown>;
+  workspace: Record<string, unknown>;
+};
+
+const WORKSPACE_CONTEXT_PREFIX = "community:";
+const COMMUNITY_MEMORY_TYPES = new Set([
+  "playbook",
+  "insight",
+  "example",
+  "warning_failure",
+  "decision_judgment",
+  "open_question",
+]);
+
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -108,14 +126,61 @@ function resolveRequestOrigin(req: Request): string | null {
   }
 }
 
-function resolveMcpServerUrl(req: Request): string | null {
+function normalizeMcpResourceUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (parsed.pathname.replace(/\/+$/, "") !== "/runtime/mcp") return null;
+    parsed.pathname = "/runtime/mcp";
+    parsed.search = "";
+    parsed.hash = "";
+    return trimTrailingSlash(parsed.toString());
+  } catch {
+    return null;
+  }
+}
+
+function resolveConfiguredMcpResourceUrl():
+  | { ok: true; value: string | null }
+  | { ok: false; message: string } {
+  const explicit = readEnv("ARX_MCP_RESOURCE_URL");
+  if (!explicit) return { ok: true, value: null };
+  const normalized = normalizeMcpResourceUrl(explicit);
+  if (!normalized) {
+    return {
+      ok: false,
+      message: "ARX_MCP_RESOURCE_URL must be an absolute http(s) URL ending in /runtime/mcp.",
+    };
+  }
+  return { ok: true, value: normalized };
+}
+
+function resolveRequestMcpServerUrl(req: Request): string | null {
   const origin = resolveRequestOrigin(req);
   return origin ? `${origin}/runtime/mcp` : null;
 }
 
+function resolveMcpServerUrl(req: Request): string | null {
+  const configured = resolveConfiguredMcpResourceUrl();
+  if (!configured.ok) return null;
+  return configured.value ?? resolveRequestMcpServerUrl(req);
+}
+
+function buildProtectedResourceMetadataUrl(resourceServerUrl: string): string | null {
+  try {
+    const parsed = new URL(resourceServerUrl);
+    parsed.pathname = "/.well-known/oauth-protected-resource";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function resolveProtectedResourceMetadataUrl(req: Request): string | null {
-  const origin = resolveRequestOrigin(req);
-  return origin ? `${origin}/.well-known/oauth-protected-resource` : null;
+  const resourceServerUrl = resolveMcpServerUrl(req);
+  return resourceServerUrl ? buildProtectedResourceMetadataUrl(resourceServerUrl) : null;
 }
 
 function resolveOAuthIssuer(): string {
@@ -137,6 +202,10 @@ function resolveOAuthJwksUrl(): string {
   return issuer ? `${issuer}/.well-known/jwks.json` : "";
 }
 
+function resolveOAuthRegistrationUrl(): string {
+  return readEnv("ARX_AUTH_REGISTRATION_URL");
+}
+
 function resolveOAuthScopes(): string[] {
   const raw = readEnv("ARX_AUTH_SCOPE") || "openid profile email offline_access";
   return raw
@@ -154,6 +223,7 @@ type McpResolvedAuthMetadata =
       issuer: string;
       authorizationEndpoint: string;
       tokenEndpoint: string;
+      registrationEndpoint: string | null;
       jwksUri: string | null;
       scopesSupported: string[];
     }
@@ -163,11 +233,21 @@ type McpResolvedAuthMetadata =
     };
 
 function resolveMcpAuthMetadata(req: Request): McpResolvedAuthMetadata {
-  const resourceServerUrl = resolveMcpServerUrl(req);
-  const protectedResourceMetadataUrl = resolveProtectedResourceMetadataUrl(req);
+  const configuredResource = resolveConfiguredMcpResourceUrl();
+  if (!configuredResource.ok) {
+    return {
+      ok: false,
+      message: configuredResource.message,
+    };
+  }
+  const resourceServerUrl = configuredResource.value ?? resolveRequestMcpServerUrl(req);
+  const protectedResourceMetadataUrl = resourceServerUrl
+    ? buildProtectedResourceMetadataUrl(resourceServerUrl)
+    : null;
   const issuer = resolveOAuthIssuer();
   const authorizationEndpoint = resolveOAuthAuthorizeUrl();
   const tokenEndpoint = resolveOAuthTokenUrl();
+  const registrationEndpoint = resolveOAuthRegistrationUrl();
   const jwksUri = resolveOAuthJwksUrl();
   const scopesSupported = resolveOAuthScopes();
 
@@ -191,6 +271,7 @@ function resolveMcpAuthMetadata(req: Request): McpResolvedAuthMetadata {
     issuer,
     authorizationEndpoint,
     tokenEndpoint,
+    registrationEndpoint: registrationEndpoint || null,
     jwksUri: jwksUri || null,
     scopesSupported,
   };
@@ -324,7 +405,11 @@ function mcpUnauthorizedResponse(
   const headers = new Headers(template.headers);
   headers.set(
     "WWW-Authenticate",
-    `Bearer resource_metadata="${authMetadata.protectedResourceMetadataUrl}"`,
+    [
+      'Bearer error="invalid_token"',
+      `error_description="${errorDescription.replace(/["\\]/g, "")}"`,
+      `resource_metadata="${authMetadata.protectedResourceMetadataUrl}"`,
+    ].join(", "),
   );
   return new Response(template.body, {
     status: 401,
@@ -364,6 +449,83 @@ function sanitizeCommunitySummary(row: CommunityMembershipProjection) {
             ? "moderator"
             : "member",
   };
+}
+
+function sanitizeCommunityAccessCapabilities(access: Record<string, unknown>) {
+  return {
+    can_view: access.can_view === true,
+    can_enter_community: access.can_enter_community === true,
+    can_read_chat: access.can_read_chat === true,
+    can_post_chat: access.can_post_chat === true,
+    can_post_message: access.can_post_message === true,
+    can_manage_resources: access.can_manage_resources === true,
+    can_moderate_content: access.can_moderate_content === true,
+    can_manage_members: access.can_manage_members === true,
+    can_review_join_requests: access.can_review_join_requests === true,
+    can_manage_pricing: access.can_manage_pricing === true,
+    can_manage_branding: access.can_manage_branding === true,
+    can_manage_publishing: access.can_manage_publishing === true,
+    can_manage_payouts: access.can_manage_payouts === true,
+  };
+}
+
+function buildWorkspaceContextId(communitySlug: string | null | undefined): string | null {
+  const slug = normalizeSlug(communitySlug);
+  return slug ? `${WORKSPACE_CONTEXT_PREFIX}${slug}` : null;
+}
+
+function parseWorkspaceContextId(value: unknown): string | null {
+  const raw = normalizeString(value, 200);
+  if (!raw || !raw.startsWith(WORKSPACE_CONTEXT_PREFIX)) return null;
+  return normalizeSlug(raw.slice(WORKSPACE_CONTEXT_PREFIX.length));
+}
+
+function sanitizeWorkspaceSummary(row: CommunityMembershipProjection) {
+  const community = sanitizeCommunitySummary(row);
+  return {
+    workspace_context_id: buildWorkspaceContextId(community.slug) ?? "",
+    workspace_type: "community",
+    ...community,
+  };
+}
+
+function buildWorkspaceContext(
+  row: CommunityMembershipProjection,
+  access: Record<string, unknown>,
+) {
+  const summary = sanitizeWorkspaceSummary(row);
+  const capabilities = sanitizeCommunityAccessCapabilities(access);
+  return {
+    ...summary,
+    community: {
+      slug: summary.slug,
+      name: summary.name,
+      one_liner: summary.one_liner,
+      about: normalizeString(row.communities?.about, 4000),
+      visibility: summary.visibility,
+      entry_policy: summary.entry_policy,
+    },
+    access: {
+      relation: normalizeString(access.relation, 32) ?? summary.relation,
+      is_entitled: access.is_entitled === true,
+      capabilities,
+    },
+    memory: {
+      accepted_memory_tool: "polynet_workspace_memory_search",
+      accepted_memory_read_tool: "polynet_workspace_memory_read",
+      outcome_tool: "polynet_workspace_record_outcome",
+    },
+    epistemic_policy: {
+      accepted_memory:
+        "Use polynet_workspace_memory_search for accepted community intelligence.",
+      raw_evidence:
+        "Use polynet_community_search for raw recent/archive evidence; do not treat raw evidence as community-endorsed memory.",
+    },
+  };
+}
+
+function workspaceAccessIsOpen(access: Record<string, unknown>): boolean {
+  return access.can_enter_community === true || access.can_read_chat === true;
 }
 
 function sanitizeCommunitySearchItem(raw: unknown) {
@@ -417,6 +579,72 @@ function findCommunityBySlug(
   );
 }
 
+async function resolveWorkspaceContext(args: {
+  ctx: any;
+  authSubject: string;
+  workspaceContextId: unknown;
+}): Promise<
+  | { ok: true; context: ResolvedWorkspaceContext }
+  | { ok: false; message: string }
+> {
+  const communitySlug = parseWorkspaceContextId(args.workspaceContextId);
+  if (!communitySlug) {
+    return { ok: false, message: "workspace_context_id must use the community:<slug> shape." };
+  }
+  const rows = await listAccessibleCommunities(args.ctx, args.authSubject);
+  const row = findCommunityBySlug(rows, communitySlug);
+  if (!row) {
+    return { ok: false, message: "Workspace not found or not accessible." };
+  }
+  const access = (await args.ctx.runQuery(api.community.getMyCommunityAccessBySlug as any, {
+    authSubject: args.authSubject,
+    communitySlug,
+  })) as Record<string, unknown> | null;
+  if (!access) {
+    return { ok: false, message: "Workspace access could not be resolved." };
+  }
+  if (!workspaceAccessIsOpen(access)) {
+    return { ok: false, message: "Workspace is not accessible for this user." };
+  }
+  return {
+    ok: true,
+    context: {
+      communityId: row.community_id,
+      communitySlug,
+      row,
+      access,
+      workspace: buildWorkspaceContext(row, access),
+    },
+  };
+}
+
+function normalizeWorkspaceMemoryTypes(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const types = value
+    .map((item) => normalizeString(item, 64))
+    .filter((item): item is string => Boolean(item && COMMUNITY_MEMORY_TYPES.has(item)))
+    .slice(0, 6);
+  return types.length > 0 ? types : undefined;
+}
+
+function normalizeWorkspaceMemoryLimit(value: unknown): number | undefined {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : NaN;
+  if (!Number.isFinite(numeric)) return undefined;
+  return Math.max(1, Math.min(12, Math.floor(numeric)));
+}
+
+function memoryToolErrorMessage(raw: unknown, fallback: string): string | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback;
+  const row = raw as Record<string, unknown>;
+  if (row.ok === true) return null;
+  return normalizeString(row.message, 500) ?? normalizeString(row.reason_code, 120) ?? fallback;
+}
+
 async function handleToolCall(args: {
   ctx: any;
   authSubject: string;
@@ -436,6 +664,19 @@ async function handleToolCall(args: {
       result: {
         content: buildToolTextContent({ communities }),
         structuredContent: { communities },
+        isError: false,
+      },
+    };
+  }
+
+  if (toolName === "polynet_list_workspaces") {
+    const rows = await listAccessibleCommunities(ctx, authSubject);
+    const workspaces = rows.map(sanitizeWorkspaceSummary);
+    return {
+      ok: true,
+      result: {
+        content: buildToolTextContent({ workspaces }),
+        structuredContent: { workspaces },
         isError: false,
       },
     };
@@ -475,27 +716,58 @@ async function handleToolCall(args: {
             : "open",
       relation: normalizeString(access.relation, 32) ?? "member",
       is_entitled: access.is_entitled === true,
-      capabilities: {
-        can_view: access.can_view === true,
-        can_enter_community: access.can_enter_community === true,
-        can_read_chat: access.can_read_chat === true,
-        can_post_chat: access.can_post_chat === true,
-        can_post_message: access.can_post_message === true,
-        can_manage_resources: access.can_manage_resources === true,
-        can_moderate_content: access.can_moderate_content === true,
-        can_manage_members: access.can_manage_members === true,
-        can_review_join_requests: access.can_review_join_requests === true,
-        can_manage_pricing: access.can_manage_pricing === true,
-        can_manage_branding: access.can_manage_branding === true,
-        can_manage_publishing: access.can_manage_publishing === true,
-        can_manage_payouts: access.can_manage_payouts === true,
-      },
+      capabilities: sanitizeCommunityAccessCapabilities(access),
     };
     return {
       ok: true,
       result: {
         content: buildToolTextContent({ community }),
         structuredContent: { community },
+        isError: false,
+      },
+    };
+  }
+
+  if (toolName === "polynet_open_workspace") {
+    const communitySlug = normalizeString(toolArgs.community_slug, 160);
+    if (!communitySlug) {
+      return { ok: false, type: "tool", message: "community_slug is required." };
+    }
+    const workspaceContextId = buildWorkspaceContextId(communitySlug);
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const structuredContent = { workspace: resolved.context.workspace };
+    return {
+      ok: true,
+      result: {
+        content: buildToolTextContent(structuredContent),
+        structuredContent,
+        isError: false,
+      },
+    };
+  }
+
+  if (toolName === "polynet_get_workspace_context") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const structuredContent = { workspace: resolved.context.workspace };
+    return {
+      ok: true,
+      result: {
+        content: buildToolTextContent(structuredContent),
+        structuredContent,
         isError: false,
       },
     };
@@ -564,6 +836,154 @@ async function handleToolCall(args: {
         isError: false,
       },
     };
+  }
+
+  if (toolName === "polynet_workspace_memory_search") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    try {
+      const memory = (await ctx.runMutation(
+        internal.communityIntelligenceDirectory.searchCommunityMemoryInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          query: normalizeString(toolArgs.query, 512) ?? undefined,
+          types: normalizeWorkspaceMemoryTypes(toolArgs.types),
+          limit: normalizeWorkspaceMemoryLimit(toolArgs.limit),
+        },
+      )) as Record<string, unknown> | null;
+      const errorMessage = memoryToolErrorMessage(memory, "Workspace memory search failed.");
+      if (errorMessage) {
+        return { ok: false, type: "tool", message: errorMessage };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        memory,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace memory search failed." };
+    }
+  }
+
+  if (toolName === "polynet_workspace_memory_read") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const nodeId = normalizeString(toolArgs.node_id, 128);
+    if (!nodeId) {
+      return { ok: false, type: "tool", message: "node_id is required." };
+    }
+    const retrievalLogId = normalizeString(toolArgs.retrieval_log_id, 128);
+    try {
+      const memory = (await ctx.runMutation(
+        internal.communityIntelligenceDirectory.readCommunityMemoryInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          nodeId,
+          ...(retrievalLogId ? { retrievalLogId } : null),
+        },
+      )) as Record<string, unknown> | null;
+      const errorMessage = memoryToolErrorMessage(memory, "Workspace memory read failed.");
+      if (errorMessage) {
+        return { ok: false, type: "tool", message: errorMessage };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        memory,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace memory read failed." };
+    }
+  }
+
+  if (toolName === "polynet_workspace_record_outcome") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const retrievalLogId = normalizeString(toolArgs.retrieval_log_id, 128);
+    if (!retrievalLogId) {
+      return { ok: false, type: "tool", message: "retrieval_log_id is required." };
+    }
+    const resultStatus = normalizeString(toolArgs.result_status, 32);
+    if (resultStatus !== "worked" && resultStatus !== "failed" && resultStatus !== "mixed") {
+      return { ok: false, type: "tool", message: "result_status must be worked, failed, or mixed." };
+    }
+    const nodeId = normalizeString(toolArgs.node_id, 128);
+    const notes = normalizeString(toolArgs.notes, 1000);
+    try {
+      const outcome = (await ctx.runMutation(
+        internal.communityIntelligenceDirectory.recordCommunityOutcomeObservationInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          retrievalLogId,
+          ...(nodeId ? { nodeId } : null),
+          resultStatus,
+          ...(notes ? { notes } : null),
+        },
+      )) as Record<string, unknown> | null;
+      const errorMessage = memoryToolErrorMessage(outcome, "Workspace memory outcome recording failed.");
+      if (errorMessage) {
+        return { ok: false, type: "tool", message: errorMessage };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        outcome,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        type: "tool",
+        message: message || "Workspace memory outcome recording failed.",
+      };
+    }
   }
 
   return {
@@ -668,7 +1088,7 @@ async function handleMcpPost(args: {
           version: "0.1.0-alpha",
         },
         instructions:
-          "PolyNet MCP alpha exposes read-only community discovery and search tools over remote HTTP. Tool discovery is public; tool calls require PolyNet authentication.",
+          "PolyNet MCP alpha exposes provider-side workspace tools over remote HTTP. Tool discovery is public; tool calls require PolyNet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
       },
       {
         "MCP-Protocol-Version": requestedVersion ?? POLYNET_MCP_PROTOCOL_VERSION,
@@ -758,13 +1178,9 @@ export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): vo
           error_description: authMetadata.message,
         });
       }
-      const authorizationBaseUrl = resolveRequestOrigin(req) ?? authMetadata.issuer;
       return jsonResponse(req, 200, {
         resource: authMetadata.resourceServerUrl,
-        // PolyNet delegates auth to an upstream issuer, but publishes OAuth discovery
-        // metadata at the MCP server origin so remote hosts can discover a stable,
-        // MCP-friendly metadata document from the resource server base URL.
-        authorization_servers: [authorizationBaseUrl],
+        authorization_servers: [authMetadata.issuer],
         bearer_methods_supported: ["header"],
         scopes_supported: authMetadata.scopesSupported,
       });
@@ -786,6 +1202,9 @@ export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): vo
         issuer: authMetadata.issuer,
         authorization_endpoint: authMetadata.authorizationEndpoint,
         token_endpoint: authMetadata.tokenEndpoint,
+        ...(authMetadata.registrationEndpoint
+          ? { registration_endpoint: authMetadata.registrationEndpoint }
+          : null),
         ...(authMetadata.jwksUri ? { jwks_uri: authMetadata.jwksUri } : null),
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],

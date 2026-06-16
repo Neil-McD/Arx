@@ -14,26 +14,39 @@ const issuer = readEnv("ARX_AUTH_JWT_ISSUER");
 const explicitJwks = readEnv("ARX_AUTH_JWT_JWKS_URL");
 const jwks = explicitJwks || (issuer ? `${trimTrailingSlash(issuer)}/.well-known/jwks.json` : "");
 
-const applicationID =
+const primaryApplicationID =
   readEnv("ARX_AUTH_JWT_AUDIENCE") || readEnv("ARX_AUTH_JWT_APPLICATION_ID") || readEnv("ARX_AUTH_CLIENT_ID");
-const workOsClientId = readEnv("ARX_AUTH_CLIENT_ID") || applicationID;
+const mcpApplicationID = readEnv("ARX_MCP_AUTH_JWT_AUDIENCE");
+const applicationIDs = Array.from(
+  new Set([
+    primaryApplicationID,
+    mcpApplicationID,
+  ].filter(Boolean)),
+);
+const workOsClientId = readEnv("ARX_AUTH_CLIENT_ID") || primaryApplicationID;
 const algorithmRaw = readEnv("ARX_AUTH_JWT_ALGORITHM").toUpperCase();
 const algorithm: "RS256" | "ES256" = algorithmRaw === "ES256" ? "ES256" : "RS256";
 
-if (issuer && jwks && !applicationID) {
+if (issuer && jwks && applicationIDs.length === 0) {
   throw new Error("ARX_AUTH_JWT_AUDIENCE or ARX_AUTH_CLIENT_ID is required for JWT audience binding.");
+}
+
+if (issuer && jwks && !mcpApplicationID) {
+  throw new Error("ARX_MCP_AUTH_JWT_AUDIENCE is required for hosted MCP JWT audience binding.");
 }
 
 const providers: AuthConfig["providers"] = [];
 
 if (issuer && jwks) {
-  providers.push({
-    type: "customJwt",
-    issuer,
-    jwks,
-    algorithm,
-    applicationID,
-  });
+  for (const applicationID of applicationIDs) {
+    providers.push({
+      type: "customJwt",
+      issuer,
+      jwks,
+      algorithm,
+      applicationID,
+    });
+  }
 }
 
 if (workOsClientId) {

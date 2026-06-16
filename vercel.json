@@ -16,6 +16,9 @@
       },
       "continue": true
     },
+    { "src": "/runtime/mcp", "dest": "/api/mcp/runtime" },
+    { "src": "/\\.well-known/oauth-protected-resource", "dest": "/api/mcp/oauth-protected-resource" },
+    { "src": "/\\.well-known/oauth-authorization-server", "dest": "/api/mcp/oauth-authorization-server" },
     { "src": "/api/preview(/.*)?", "status": 404 },
     { "src": "/_preview/start(/.*)?", "status": 404 },
     { "handle": "filesystem" },

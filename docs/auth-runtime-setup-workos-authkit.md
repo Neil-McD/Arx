@@ -19,9 +19,15 @@ The current desktop auth posture has three layers:
    - `ARX_AUTH_AUTHORIZE_URL`
    - `ARX_AUTH_TOKEN_URL`
 
+Required before hosted MCP auth cutover:
+
+1. `ARX_AUTH_JWT_AUDIENCE=<AuthKit client id or primary JWT audience>`
+2. `ARX_MCP_RESOURCE_URL=<canonical MCP resource URL, including /runtime/mcp>`
+3. `ARX_MCP_AUTH_JWT_AUDIENCE=<canonical MCP resource URL, including /runtime/mcp>`
+
 Optional:
 
-1. `ARX_AUTH_JWT_AUDIENCE=<AuthKit client id>`
+1. `ARX_AUTH_REGISTRATION_URL=<verified OAuth dynamic registration endpoint>`
 2. `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false`
 3. `ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS=<seconds>`
 
@@ -46,6 +52,16 @@ Given `AUTHKIT_DOMAIN`:
 4. `ARX_AUTH_AUTHORIZE_URL=https://<AUTHKIT_DOMAIN>/oauth2/authorize`
 5. `ARX_AUTH_TOKEN_URL=https://<AUTHKIT_DOMAIN>/oauth2/token`
 6. `ARX_AUTH_BRIDGE_SECRET=<opaque bridge signing secret>`
+
+For hosted MCP auth, configure the WorkOS/AuthKit Resource Indicator to the same canonical value returned by `/.well-known/oauth-protected-resource`:
+
+```text
+https://<POLYNET_ORIGIN>/runtime/mcp
+```
+
+Set `ARX_MCP_RESOURCE_URL` to that exact value in production so OAuth protected-resource metadata does not drift when requests pass through Vercel, Convex, or another proxy origin. Set `ARX_MCP_AUTH_JWT_AUDIENCE` to the same value when MCP access tokens carry the resource URL as their `aud` claim. Keep `ARX_AUTH_JWT_AUDIENCE` for the primary web/session JWT audience if it differs.
+
+Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dynamic registration endpoint. PolyNet must not infer one from the token endpoint.
 
 ## 4) Redirect URI
 
