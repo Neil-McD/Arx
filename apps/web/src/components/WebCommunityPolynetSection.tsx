@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
@@ -111,8 +111,6 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   const overview = state.overview;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const graphContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!overview) {
@@ -133,8 +131,8 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
     () => new Set((overview?.graph.nodes ?? []).map((node) => node.id)),
     [overview],
   );
-  const { transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
-    useWebPolynetGraphViewport({ containerRef: graphContainerRef, svgRef, layout, onSelectNode: setSelectedNodeId });
+  const { containerRef, svgRef, transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
+    useWebPolynetGraphViewport({ layout, onSelectNode: setSelectedNodeId });
   const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
@@ -198,7 +196,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
         <div className="community-polynet-layout">
           <section className="community-polynet-graph-shell" aria-label="Community memory graph">
             <div
-              ref={graphContainerRef}
+              ref={containerRef}
               className={`community-polynet-graph${isPanning ? " panning" : ""}${draggingNodeId ? " dragging" : ""}`}
             >
               <svg

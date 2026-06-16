@@ -8,9 +8,13 @@ import {
 
 // Interactive viewport for the PolyNet memory graph: pan, zoom-about-cursor, and
 // per-node drag. World coordinates come from the deterministic layout (root at
-// origin). The viewport is sized from the graph CONTAINER element (block boxes
-// report their size reliably through ResizeObserver, unlike inline SVG), and one
-// SVG user unit equals one CSS pixel, so pointer math stays 1:1.
+// origin). One SVG user unit equals one CSS pixel, so pointer math stays 1:1.
+//
+// The graph DOM is rendered conditionally (only once the overview loads), so the
+// container/SVG mount *after* this hook first runs. We therefore attach the
+// ResizeObserver and the wheel listener through callback refs — they fire when the
+// element actually mounts — instead of effects keyed to a ref object that would
+// run once (while the element is still null) and never re-run.
 //
 // A node at world (wx, wy) renders at user-space (tx + wx*scale, ty + wy*scale).
 
@@ -42,8 +46,6 @@ type DragState = {
 };
 
 type UseWebPolynetGraphViewportArgs = {
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  svgRef: React.RefObject<SVGSVGElement | null>;
   layout: ReadonlyMap<string, PolynetLayoutPosition>;
   onSelectNode: (nodeId: string) => void;
 };
@@ -53,7 +55,7 @@ function clampScale(scale: number): number {
 }
 
 export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs) {
-  const { containerRef, svgRef, layout, onSelectNode } = args;
+  const { layout, onSelectNode } = args;
   const onSelectNodeRef = useRef(onSelectNode);
   onSelectNodeRef.current = onSelectNode;
   const layoutRef = useRef(layout);
@@ -73,7 +75,28 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
   // Once the user manually pans/zooms/drags, stop auto-fitting their view.
   const userAdjustedRef = useRef(false);
 
-  // Frame the whole graph: center the content bounding box and scale it to fit.
+  // Live element + listener handles owned by the callback refs below.
+  const containerElRef = useRef<HTMLDivElement | null>(null);
+  const svgElRef = useRef<SVGSVGElement | null>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const wheelCleanupRef = useRef<(() => void) | null>(null);
+
+  // Measure the container and auto-fit until the user takes over.
+  const applyMeasure = useCallback((width: number, height: number) => {
+    setViewport({ width, height });
+    if (!userAdjustedRef.current && width > 0 && height > 0) {
+      const bounds = computePolynetBounds(layoutRef.current);
+      setTransform(
+        computeFitTransform(bounds, { width, height }, {
+          padding: FIT_PADDING,
+          minScale: MIN_SCALE,
+          maxScale: MAX_SCALE,
+          defaultScale: 1,
+        }),
+      );
+    }
+  }, []);
+
   const fitView = useCallback(() => {
     const vp = viewportRef.current;
     if (vp.width <= 0 || vp.height <= 0) return;
@@ -88,56 +111,33 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     );
   }, []);
 
-  // Measure the container (reliable contentRect) and auto-fit until the user
-  // takes over. Re-fit on resize / layout change while still auto-framing.
-  useEffect(() => {
-    const el = containerRef.current;
+  // Callback ref: attach the ResizeObserver + initial fit when the container mounts.
+  const containerRef = useCallback((el: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    containerElRef.current = el;
     if (!el) return;
-    const apply = (width: number, height: number) => {
-      setViewport({ width, height });
-      if (!userAdjustedRef.current && width > 0 && height > 0) {
-        const bounds = computePolynetBounds(layoutRef.current);
-        setTransform(
-          computeFitTransform(bounds, { width, height }, {
-            padding: FIT_PADDING,
-            minScale: MIN_SCALE,
-            maxScale: MAX_SCALE,
-            defaultScale: 1,
-          }),
-        );
-      }
-    };
     const rect = el.getBoundingClientRect();
-    apply(rect.width, rect.height);
+    applyMeasure(rect.width, rect.height);
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
+    observerRef.current = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const { width, height } = entry.contentRect;
-      apply(width, height);
+      applyMeasure(entry.contentRect.width, entry.contentRect.height);
     });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [containerRef]);
+    observerRef.current.observe(el);
+  }, [applyMeasure]);
 
-  // Re-fit when the node set changes (until the user has taken over).
-  useEffect(() => {
-    if (!userAdjustedRef.current) fitView();
-  }, [layout, fitView]);
-
-  const pointerToViewport = useCallback(
-    (clientX: number, clientY: number) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return { x: 0, y: 0 };
-      return { x: clientX - rect.left, y: clientY - rect.top };
-    },
-    [containerRef],
-  );
-
-  // Wheel zoom must preventDefault, so attach a non-passive listener directly.
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
+  // Callback ref: attach the non-passive wheel listener when the SVG mounts.
+  const svgRef = useCallback((el: SVGSVGElement | null) => {
+    if (wheelCleanupRef.current) {
+      wheelCleanupRef.current();
+      wheelCleanupRef.current = null;
+    }
+    svgElRef.current = el;
+    if (!el) return;
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       const current = transformRef.current;
@@ -145,18 +145,34 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
       const nextScale = clampScale(current.scale * factor);
       if (nextScale === current.scale) return;
       userAdjustedRef.current = true;
-      const point = pointerToViewport(event.clientX, event.clientY);
-      // Keep the point under the cursor fixed while scaling.
+      const rect = containerElRef.current?.getBoundingClientRect();
+      const px = rect ? event.clientX - rect.left : 0;
+      const py = rect ? event.clientY - rect.top : 0;
       const ratio = nextScale / current.scale;
       setTransform({
         scale: nextScale,
-        tx: point.x - (point.x - current.tx) * ratio,
-        ty: point.y - (point.y - current.ty) * ratio,
+        tx: px - (px - current.tx) * ratio,
+        ty: py - (py - current.ty) * ratio,
       });
     };
-    svg.addEventListener("wheel", handleWheel, { passive: false });
-    return () => svg.removeEventListener("wheel", handleWheel);
-  }, [svgRef, pointerToViewport]);
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    wheelCleanupRef.current = () => el.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  // Disconnect listeners on unmount.
+  useEffect(() => () => {
+    observerRef.current?.disconnect();
+    wheelCleanupRef.current?.();
+  }, []);
+
+  // Re-fit when the node set changes (until the user has taken over).
+  useEffect(() => {
+    if (userAdjustedRef.current) return;
+    const el = containerElRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    applyMeasure(rect.width, rect.height);
+  }, [layout, applyMeasure]);
 
   const endDrag = useCallback((event: React.PointerEvent) => {
     const drag = dragRef.current;
@@ -238,9 +254,9 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
         };
         setDraggingNodeId(nodeId);
         // Capture on the SVG so the shared move/up handlers keep receiving events.
-        svgRef.current?.setPointerCapture(event.pointerId);
+        svgElRef.current?.setPointerCapture(event.pointerId);
       },
-    [dragOverrides, svgRef],
+    [dragOverrides],
   );
 
   const worldPositionFor = useCallback(
@@ -276,6 +292,8 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
   }, [fitView]);
 
   return {
+    containerRef,
+    svgRef,
     viewport,
     transform,
     isPanning,
