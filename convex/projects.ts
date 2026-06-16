@@ -17,6 +17,10 @@ import {
 } from "./blaxelWorkspaceProjectNames.ts";
 import { buildNextDefaultComputerName, formatDefaultComputerName } from "../shared/projectNaming";
 import {
+  normalizeProjectContextLinks,
+  normalizeProjectInstructions,
+} from "../shared/projectContext";
+import {
   resolveRecordedWorkspaceResourceProviderId,
 } from "../shared/workspaceComputerProvider";
 import {
@@ -941,6 +945,11 @@ export const createCloudProjectForOwner = mutation({
     authSubject: v.optional(v.string()),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
+    instructions: v.optional(v.string()),
+    contextLinks: v.optional(v.array(v.object({
+      title: v.optional(v.string()),
+      url: v.string(),
+    }))),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -969,10 +978,14 @@ export const createCloudProjectForOwner = mutation({
     const projectName = normalizeOptionalProjectString(args.name) ??
       buildNextProjectName(existingRows.filter(isWorkspaceProjectDisplayable));
     const description = normalizeOptionalProjectString(args.description);
+    const instructions = normalizeProjectInstructions(args.instructions);
+    const contextLinks = normalizeProjectContextLinks(args.contextLinks ?? []);
     const id = await ctx.db.insert("cloudProjects", {
       ownerId,
       name: projectName,
       description,
+      instructions,
+      contextLinks,
       status: "active",
       providerVolumeId: undefined,
       workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
@@ -992,6 +1005,11 @@ export const updateCloudProjectForOwner = mutation({
     projectId: v.id("cloudProjects"),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
+    instructions: v.optional(v.string()),
+    contextLinks: v.optional(v.array(v.object({
+      title: v.optional(v.string()),
+      url: v.string(),
+    }))),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -1008,11 +1026,18 @@ export const updateCloudProjectForOwner = mutation({
     const name = normalizeOptionalProjectString(args.name);
     if (!name) throw new Error("project_name_required");
     const description = normalizeOptionalProjectString(args.description);
-    await ctx.db.patch(existing._id, {
+    const patch: any = {
       name,
       description,
       updatedAt: nowMs,
-    });
+    };
+    if (typeof args.instructions === "string") {
+      patch.instructions = normalizeProjectInstructions(args.instructions);
+    }
+    if (Array.isArray(args.contextLinks)) {
+      patch.contextLinks = normalizeProjectContextLinks(args.contextLinks);
+    }
+    await ctx.db.patch(existing._id, patch);
     const updated = await ctx.db.get(existing._id);
     if (!updated) throw new Error("project_not_found");
     return updated;

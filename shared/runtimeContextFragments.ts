@@ -3,6 +3,10 @@ import type {
   ThreadWorkingStatePrompt,
 } from "./runtimePrompt.ts";
 import {
+  renderProjectContextForPrompt,
+  type RuntimeProjectContextPrompt,
+} from "./projectContext.ts";
+import {
   renderRuntimeTurnEnvelopeForPrompt,
   type RuntimeTurnEnvelopeV1,
 } from "./runtimeTurnEnvelope.ts";
@@ -11,6 +15,7 @@ export const RUNTIME_CONTEXT_FRAGMENT_RENDER_BUDGET_CHARS = 12_000;
 
 export type RuntimeContextFragmentKind =
   | "turn_envelope"
+  | "project_context"
   | "working_state"
   | "action_ledger"
   | "active_terminals"
@@ -20,6 +25,7 @@ export type RuntimeContextFragmentKind =
 
 export type RuntimeContextFragmentSource =
   | "runtime_turn_envelope"
+  | "cloud_project"
   | "thread_working_state"
   | "runtime_run_events"
   | "workspace_terminals";
@@ -589,6 +595,7 @@ export function buildActionLedgerPromptFromRuntimeRunEvents(params: {
 export function buildRuntimeContextFragmentsFromParts(params: {
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
+  projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
   recentBackgroundProcessEvents?: Array<{
@@ -631,6 +638,16 @@ export function buildRuntimeContextFragmentsFromParts(params: {
       title: "Runtime turn envelope",
       body: renderRuntimeTurnEnvelopeForPrompt(params.runtimeTurnEnvelope),
       maxChars: 1_600,
+    }),
+    createRuntimeContextFragment({
+      id: "project_context:v1",
+      kind: "project_context",
+      source: "cloud_project",
+      ordinal: 15,
+      priority: "high",
+      title: "Project context",
+      body: renderProjectContextForPrompt(params.projectContext),
+      maxChars: 5_000,
     }),
     createRuntimeContextFragment({
       id: "thread_working_state:v1",
@@ -703,6 +720,7 @@ export function buildRuntimeContextFragmentsFromParts(params: {
 
 const fragmentKindOrder: RuntimeContextFragmentKind[] = [
   "turn_envelope",
+  "project_context",
   "working_state",
   "action_ledger",
   "active_terminals",

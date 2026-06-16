@@ -1,5 +1,11 @@
 import type { ChangeEvent } from "react";
 
+import {
+  PROJECT_CONTEXT_LINKS_MAX,
+  PROJECT_CONTEXT_LINK_URL_MAX_CHARS,
+  PROJECT_INSTRUCTIONS_MAX_CHARS,
+} from "../../../../shared/projectContext";
+
 type WebCreateProjectModalProps = {
   isOpen: boolean;
   title?: string;
@@ -7,6 +13,8 @@ type WebCreateProjectModalProps = {
   submitLabel?: string;
   projectName: string;
   projectDescription: string;
+  projectInstructions: string;
+  projectLinksText: string;
   importFileName?: string | null;
   importHint?: string;
   showImportSection?: boolean;
@@ -15,6 +23,8 @@ type WebCreateProjectModalProps = {
   onClose: () => void;
   onChangeName: (value: string) => void;
   onChangeDescription: (value: string) => void;
+  onChangeInstructions: (value: string) => void;
+  onChangeLinksText: (value: string) => void;
   onImportFilesChange: (files: FileList | null) => void;
   onSubmit: () => void | Promise<void>;
 };
@@ -27,6 +37,8 @@ export function WebCreateProjectModal(props: WebCreateProjectModalProps) {
     submitLabel = "Create project",
     projectName,
     projectDescription,
+    projectInstructions,
+    projectLinksText,
     importFileName = null,
     importHint = "Upload a .zip of an existing repo or workspace folder.",
     showImportSection = true,
@@ -35,6 +47,8 @@ export function WebCreateProjectModal(props: WebCreateProjectModalProps) {
     onClose,
     onChangeName,
     onChangeDescription,
+    onChangeInstructions,
+    onChangeLinksText,
     onImportFilesChange,
     onSubmit,
   } = props;
@@ -79,6 +93,27 @@ export function WebCreateProjectModal(props: WebCreateProjectModalProps) {
                 onChange={(event) => onChangeDescription(event.target.value)}
                 maxLength={600}
               />
+            </label>
+            <label className="create-project-field">
+              <span>Project instructions</span>
+              <textarea
+                placeholder="Persistent context and working preferences for threads in this project"
+                rows={5}
+                value={projectInstructions}
+                onChange={(event) => onChangeInstructions(event.target.value)}
+                maxLength={PROJECT_INSTRUCTIONS_MAX_CHARS}
+              />
+            </label>
+            <label className="create-project-field">
+              <span>Project links</span>
+              <textarea
+                placeholder={`https://example.com\nDocs - https://example.com/docs`}
+                rows={4}
+                value={projectLinksText}
+                onChange={(event) => onChangeLinksText(event.target.value)}
+                maxLength={(PROJECT_CONTEXT_LINK_URL_MAX_CHARS + 130) * PROJECT_CONTEXT_LINKS_MAX}
+              />
+              <div className="create-project-hint">One link per line. Use a bare URL or Title - URL.</div>
             </label>
             {showImportSection ? (
               <div className="create-project-field">

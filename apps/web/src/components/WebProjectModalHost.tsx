@@ -15,6 +15,8 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
           submitLabel="Create project"
           projectName={createModal.projectName}
           projectDescription={createModal.projectDescription}
+          projectInstructions={createModal.projectInstructions}
+          projectLinksText={createModal.projectLinksText}
           importFileName={createModal.importFileName}
           importHint="Upload a single .zip file. Workspace files like .env can be imported; personal credential material like SSH keys and cloud CLI creds is blocked."
           showImportSection
@@ -23,6 +25,8 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
           onClose={createModal.onClose}
           onChangeName={createModal.onChangeName}
           onChangeDescription={createModal.onChangeDescription}
+          onChangeInstructions={createModal.onChangeInstructions}
+          onChangeLinksText={createModal.onChangeLinksText}
           onImportFilesChange={createModal.onImportFilesChange}
           onSubmit={createModal.onSubmit}
         />
@@ -36,6 +40,8 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
           submitLabel="Save project"
           projectName={editModal.projectName}
           projectDescription={editModal.projectDescription}
+          projectInstructions={editModal.projectInstructions}
+          projectLinksText={editModal.projectLinksText}
           importFileName={editModal.importFileName}
           importHint="Upload a single .zip file to merge it into this workspace. Personal credential material like SSH keys and cloud CLI creds is blocked."
           showImportSection
@@ -44,6 +50,8 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
           onClose={editModal.onClose}
           onChangeName={editModal.onChangeName}
           onChangeDescription={editModal.onChangeDescription}
+          onChangeInstructions={editModal.onChangeInstructions}
+          onChangeLinksText={editModal.onChangeLinksText}
           onImportFilesChange={editModal.onImportFilesChange}
           onSubmit={editModal.onSubmit}
         />

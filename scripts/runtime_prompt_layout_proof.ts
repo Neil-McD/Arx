@@ -81,6 +81,12 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   agentName: "James",
   agentSoul: "Keep proofs tight.",
   runtimeTurnContext: buildRuntimeTurnContextPacket({
+    projectContext: {
+      label: "Prompt proof",
+      description: "Prompt ordering test project",
+      instructions: "Prefer the project README before making structural claims.",
+      links: [{ title: "Docs", url: "https://example.com/docs" }],
+    },
     threadWorkingState: {
       version: 3,
       goal: "Improve the harness",
@@ -191,6 +197,7 @@ const explanationIndex = indexOfBlock(prompt, "EXPLANATION_CONTRACT");
 const policyIndex = indexOfBlock(prompt, "AGENT_OPERATING_POLICY");
 const communityIndex = indexOfBlock(prompt, "COMMUNITY_LENS");
 const platformHarnessContextIndex = indexOfBlock(prompt, "PLATFORM_HARNESS_CONTEXT");
+const projectContextIndex = indexOfBlock(prompt, "PROJECT_CONTEXT");
 const workingStateIndex = indexOfBlock(prompt, "THREAD_WORKING_STATE");
 const processContextIndex = indexOfBlock(prompt, "WORKSPACE_PROCESS_CONTEXT");
 const recentProcessEventsIndex = indexOfBlock(prompt, "RECENT_BACKGROUND_PROCESS_EVENTS");
@@ -202,7 +209,8 @@ assert.ok(soulIndex < explanationIndex, "agent behavior should stay in stable pr
 assert.ok(explanationIndex < policyIndex, "explanation contract should precede operating policy");
 assert.ok(policyIndex < communityIndex, "stable policy should precede semi-stable context");
 assert.ok(communityIndex < platformHarnessContextIndex, "community identity should precede platform harness context");
-assert.ok(platformHarnessContextIndex < workingStateIndex, "working state should be volatile after platform harness context");
+assert.ok(platformHarnessContextIndex < projectContextIndex, "project context should be volatile after platform harness context");
+assert.ok(projectContextIndex < workingStateIndex, "working state should follow project context");
 assert.ok(workingStateIndex < processContextIndex, "process context should follow thread working state");
 assert.ok(processContextIndex < recentProcessEventsIndex, "recent process events should follow process context");
 assert.ok(recentProcessEventsIndex < recentToolAttemptsIndex, "tool attempts should follow process lifecycle events");
@@ -212,6 +220,16 @@ assert.equal(
   1,
   "working state should render once",
 );
+assert.equal(
+  prompt.match(/PROJECT_CONTEXT/g)?.length ?? 0,
+  1,
+  "project context should render once",
+);
+assert.match(prompt, /Project: Prompt proof/);
+assert.match(prompt, /PROJECT_INSTRUCTIONS/);
+assert.match(prompt, /Prefer the project README before making structural claims/);
+assert.match(prompt, /PROJECT_LINKS/);
+assert.match(prompt, /Docs: https:\/\/example\.com\/docs/);
 assert.match(prompt, /Verification: needed/);
 assert.match(prompt, /Plan: Inspect the app \| Patch the issue \| Verify the build/);
 assert.match(prompt, /Completed steps: Inspected src\/App\.tsx/);
@@ -374,8 +392,18 @@ assert.match(
 );
 assert.match(
   runtimeTurnContextPacketSource,
+  /projectContext\?: RuntimeProjectContextPrompt \| null/,
+  "runtime context packet should carry resolved project context",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
   /fragments: buildRuntimeContextFragmentsFromParts\(\{/,
   "runtime context packet builder should emit canonical context fragments",
+);
+assert.match(
+  runtimeContextFragmentsSource,
+  /project_context:v1/,
+  "runtime context fragments should render auditable project context",
 );
 assert.match(
   runtimeTurnContextPacketSource,
@@ -421,6 +449,11 @@ assert.match(
   runtimeTurnContextLoaderSource,
   /buildRuntimeTurnContextPacket\(\{/,
   "canonical context loader should be the server-side packet builder",
+);
+assert.match(
+  runtimeTurnContextLoaderSource,
+  /loadRuntimeProjectContext/,
+  "canonical context loader should load project context server-side",
 );
 assert.match(
   runtimeTurnContextLoaderSource,

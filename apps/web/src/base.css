@@ -19743,6 +19743,8 @@ button.message-citation-chip:hover {
 
 .create-project-modal .modal-body {
   padding: 6px 24px 12px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .create-project-form {

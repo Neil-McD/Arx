@@ -2,6 +2,10 @@ import type {
   RuntimeWorkspaceTerminalPrompt,
   ThreadWorkingStatePrompt,
 } from "./runtimePrompt.ts";
+import {
+  normalizeRuntimeProjectContext,
+  type RuntimeProjectContextPrompt,
+} from "./projectContext.ts";
 import { deriveRuntimePreviewDiagnosis } from "./runtimePreviewDiagnostics.ts";
 import {
   buildRuntimeContextFragmentsFromParts,
@@ -15,6 +19,7 @@ import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
 export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
+  projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
   recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
@@ -33,6 +38,7 @@ export type RuntimeTurnContextSnapshotV1 = {
   capturedAt: number;
   latestUserText: string | null;
   runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null;
+  projectContext: RuntimeProjectContextPrompt | null;
   threadWorkingState: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
   recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
@@ -431,6 +437,7 @@ function withRuntimePreviewDiagnosis(
 export function buildRuntimeTurnContextPacket(params: {
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
+  projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals?: Array<RuntimeWorkspaceTerminalPrompt | null | undefined> | null;
   recentBackgroundProcessEvents?: Array<RuntimeBackgroundProcessEventPrompt | null | undefined> | null;
@@ -460,9 +467,11 @@ export function buildRuntimeTurnContextPacket(params: {
         )
         .slice(0, 8)
     : [];
+  const projectContext = normalizeRuntimeProjectContext(params.projectContext ?? null);
   return {
     latestUserText: params.latestUserText ?? null,
     runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
+    projectContext,
     threadWorkingState: params.threadWorkingState ?? null,
     activeBackgroundTerminals,
     recentBackgroundProcessEvents,
@@ -470,6 +479,7 @@ export function buildRuntimeTurnContextPacket(params: {
     fragments: buildRuntimeContextFragmentsFromParts({
       latestUserText: params.latestUserText ?? null,
       runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
+      projectContext,
       threadWorkingState: params.threadWorkingState ?? null,
       activeBackgroundTerminals,
       recentBackgroundProcessEvents,
@@ -600,6 +610,7 @@ export function buildRuntimeTurnContextSnapshot(params: {
     capturedAt,
     latestUserText: compactSnapshotString(params.packet.latestUserText, 500),
     runtimeTurnEnvelope: params.packet.runtimeTurnEnvelope ?? null,
+    projectContext: normalizeRuntimeProjectContext(params.packet.projectContext ?? null),
     threadWorkingState: compactThreadWorkingStateSnapshot(
       params.packet.threadWorkingState,
     ),
@@ -632,6 +643,7 @@ export function renderRuntimeTurnContextForPrompt(
     : buildRuntimeContextFragmentsFromParts({
         latestUserText: packet.latestUserText ?? null,
         runtimeTurnEnvelope: packet.runtimeTurnEnvelope ?? null,
+        projectContext: packet.projectContext ?? null,
         threadWorkingState: packet.threadWorkingState ?? null,
         activeBackgroundTerminals: packet.activeBackgroundTerminals,
         recentBackgroundProcessEvents: packet.recentBackgroundProcessEvents,

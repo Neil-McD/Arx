@@ -43,7 +43,10 @@ import {
   buildRuntimeFailureFinalAnswer,
   hasConnectedAppFailureEvidence,
 } from "../shared/runtimeFailureFinalizer";
-import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
+import {
+  loadRuntimeProjectContext,
+  loadRuntimeTurnContextPacketForRun,
+} from "./runtimeTurnContext";
 import {
   PublicTurnInput,
   RequireAuthenticatedActor,
@@ -549,6 +552,7 @@ export async function handleRuntimeTurnRequest(args: {
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
           projectId: runtimeProjectId,
+          authSubject: actor.authSubject,
           runId,
           latestUserText,
           runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
@@ -610,6 +614,7 @@ export async function handleRuntimeTurnRequest(args: {
             ownerId: actor.dbUserId,
             threadId: ownedThread._id,
             projectId: runtimeProjectId,
+            authSubject: actor.authSubject,
             runId,
             latestUserText,
             runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
@@ -757,6 +762,7 @@ export async function handleRuntimeTurnRequest(args: {
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
           projectId: runtimeProjectId,
+          authSubject: actor.authSubject,
           runId,
           latestUserText,
           runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
@@ -1402,6 +1408,11 @@ export async function handleRuntimeTurnRequest(args: {
     } else {
       const now = new Date();
       const runtimeTimeZone = "UTC";
+      const runtimeProjectContext = await loadRuntimeProjectContext({
+        ctx,
+        projectId: runtimeProjectId,
+        authSubject: actor.authSubject,
+      });
       const authenticatedScopedSystemPrompt =
         composePlatformChatRuntimeSystemPrompt({
           communityId: runtimeCommunityId,
@@ -1412,6 +1423,7 @@ export async function handleRuntimeTurnRequest(args: {
           communitySystemPrompt: runtimeCommunitySystemPrompt,
           agentName: runtimeAgentProfile.agentName,
           agentSoul: runtimeAgentProfile.agentSoul,
+          projectContext: runtimeProjectContext,
           currentDateTimeIso: now.toISOString(),
           currentDateLabel: new Intl.DateTimeFormat("en-US", {
             dateStyle: "full",

@@ -8,6 +8,10 @@ import {
   normalizeCommunityResourceRuntimeLaneState,
   type CommunityResourceRuntimeLaneState,
 } from "./communityResourceLane.ts";
+import {
+  renderProjectContextForPrompt,
+  type RuntimeProjectContextPrompt,
+} from "./projectContext.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -614,7 +618,9 @@ export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunity
 }
 
 export function composePlatformChatRuntimeSystemPrompt(
-  params: RuntimeCommunityPromptFields & RuntimeTemporalContextPromptFields,
+  params: RuntimeCommunityPromptFields & RuntimeTemporalContextPromptFields & {
+    projectContext?: RuntimeProjectContextPrompt | null;
+  },
 ): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
@@ -628,6 +634,7 @@ export function composePlatformChatRuntimeSystemPrompt(
       communitySystemPrompt: params.communitySystemPrompt,
     }),
     buildPlatformChatHarnessContextPrompt(),
+    renderProjectContextForPrompt(params.projectContext ?? null),
     buildRuntimeTemporalContextPrompt({
       currentDateTimeIso: params.currentDateTimeIso,
       currentDateLabel: params.currentDateLabel,
