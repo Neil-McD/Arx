@@ -3053,10 +3053,10 @@ export const getCommunityPolynetOverview = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
     const community = (await ctx.db.get(args.communityId)) as any | null;
     if (!community) throw new Error("community_not_found");
-    const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
+    const isManager = true;
     const nodeLimit = Math.max(
       1,
       Math.min(POLYNET_OVERVIEW_MAX_NODE_LIMIT, Math.floor(args.nodeLimit ?? POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT)),

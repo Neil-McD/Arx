@@ -12,10 +12,24 @@ assert.doesNotMatch(directory, /communityIntelligenceProposals|reviewCommunityIn
 assert.doesNotMatch(communityExports, /CommunityIntelligenceProposal|reviewCommunityIntelligenceProposal/, "community exports should expose change request APIs, not legacy queue APIs");
 
 function exportedFunctionBlock(source: string, exportName: string): string {
-  const startToken = `export const ${exportName}`;
+  const startToken = `export const ${exportName} =`;
   const start = source.indexOf(startToken);
   assert.notEqual(start, -1, `${exportName} should exist`);
-  const next = source.indexOf("\nexport const ", start + startToken.length);
+  const nextConst = source.indexOf("\nexport const ", start + startToken.length);
+  const nextAsync = source.indexOf("\nexport async function ", start + startToken.length);
+  const nextCandidates = [nextConst, nextAsync].filter((index) => index !== -1);
+  const next = nextCandidates.length ? Math.min(...nextCandidates) : -1;
+  return source.slice(start, next === -1 ? source.length : next);
+}
+
+function exportedAsyncFunctionBlock(source: string, exportName: string): string {
+  const startToken = `export async function ${exportName}`;
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `${exportName} should exist`);
+  const nextConst = source.indexOf("\nexport const ", start + startToken.length);
+  const nextAsync = source.indexOf("\nexport async function ", start + startToken.length);
+  const nextCandidates = [nextConst, nextAsync].filter((index) => index !== -1);
+  const next = nextCandidates.length ? Math.min(...nextCandidates) : -1;
   return source.slice(start, next === -1 ? source.length : next);
 }
 
@@ -30,13 +44,15 @@ function assertInternalCanonicalRepairFunction(functionName: string) {
 
 function assertPolicyGatedApply(functionName: string) {
   const block = exportedFunctionBlock(directory, functionName);
+  const trustedCore = exportedAsyncFunctionBlock(directory, "applyTrustedCommunityIntelligenceChangeRequestCore");
   assert.match(block, /resolvePolicyDecisionActor/, `${functionName} should use policy decision actor resolution`);
   assert.doesNotMatch(block, /actorAgentKey/, `${functionName} should not accept or write caller-supplied agent attribution`);
   assert.doesNotMatch(block, /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/, `${functionName} should not allow public autonomous policy actors`);
-  assert.match(block, /changeRequest\.status !== "accepted"/, `${functionName} should require an accepted change request`);
-  assert.match(block, /requireChangeRequestTargetsCurrent/, `${functionName} should reject stale targets`);
-  assert.match(block, /insertMutationLog/, `${functionName} should still write audited mutations`);
-  assert.match(block, /policyDecisionId: normalizeIdValue\(changeRequest\._id\)/, `${functionName} should link mutations to the accepted change request`);
+  assert.match(block, /applyTrustedCommunityIntelligenceChangeRequestCore/, `${functionName} should delegate canonical writes to the trusted apply core`);
+  assert.match(trustedCore, /changeRequest\.status !== "accepted"/, `${functionName} should require an accepted change request`);
+  assert.match(trustedCore, /requireChangeRequestTargetsCurrent/, `${functionName} should reject stale targets`);
+  assert.match(trustedCore, /insertMutationLog/, `${functionName} should still write audited mutations`);
+  assert.match(trustedCore, /policyDecisionId: normalizeIdValue\(changeRequest\._id\)/, `${functionName} should link mutations to the accepted change request`);
 }
 
 for (const tableName of [
@@ -253,9 +269,15 @@ assert.match(
 );
 {
   const block = exportedFunctionBlock(directory, "decideCommunityIntelligenceChangeRequest");
+  const trustedCore = exportedAsyncFunctionBlock(directory, "decideTrustedCommunityIntelligenceChangeRequestCore");
   assert.match(
     block,
-    /resolvePolicyDecisionActor[\s\S]*status: args\.status[\s\S]*decidedByActorType/,
+    /resolvePolicyDecisionActor[\s\S]*decideTrustedCommunityIntelligenceChangeRequestCore/,
+    "change request decisions should resolve a policy actor before delegating to the trusted decision core",
+  );
+  assert.match(
+    trustedCore,
+    /status: args\.status[\s\S]*decidedByActorType: actor\.actorType/,
     "change request decisions should be attributed to a policy actor",
   );
   assert.doesNotMatch(
