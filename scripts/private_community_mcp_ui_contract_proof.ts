@@ -46,6 +46,9 @@ function main() {
   const editor = readText("apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx");
   const app = readText("apps/web/src/App.tsx");
   const css = readText("apps/web/src/base.css");
+  const registry = readText("shared/communityWorkflowImportMcpRegistry.ts");
+  const posthogLogo = readText("apps/web/public/app-logos/posthog.svg");
+  const sentryLogo = readText("apps/web/public/app-logos/sentry.svg");
   const packageJson = readText("package.json");
 
   const listGateway = extractBetween(
@@ -186,6 +189,21 @@ function main() {
     "logoUrl={option.logo_url}",
     "private MCP picker uses reviewed option logos",
   );
+  for (const expectedLogoUrl of [
+    "/app-logos/github.svg",
+    "/app-logos/posthog.svg",
+    "/app-logos/sentry.svg",
+    "/app-logos/supabase.svg",
+    "/app-logos/vercel.svg",
+  ]) {
+    assertIncludes(
+      registry,
+      `reviewLogoUrl: "${expectedLogoUrl}"`,
+      `reviewed MCP registry includes ${expectedLogoUrl}`,
+    );
+  }
+  assertIncludes(posthogLogo, "<svg", "PostHog reviewed MCP logo asset exists");
+  assertIncludes(sentryLogo, "<svg", "Sentry reviewed MCP logo asset exists");
   assertIncludes(
     editor,
     "!hasLoadedPrivateMcpOptionsForActiveCommunity",
