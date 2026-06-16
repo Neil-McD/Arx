@@ -180,10 +180,10 @@ assert.doesNotMatch(
   /Loose chat/,
   "empty workspace landing must not label standalone drafts as Loose chat",
 );
-assert.doesNotMatch(
+assert.match(
   workspaceLandingProjection,
-  /You are in/,
-  "empty workspace landing project cue should show the project name without explanatory scope text",
+  /You are in[\s\S]*\{activeProjectName\}[\s\S]*workspace/,
+  "empty workspace landing project cue should show explanatory project workspace text only when explicit project scope exists",
 );
 assert.match(
   threadSidebarPanel,

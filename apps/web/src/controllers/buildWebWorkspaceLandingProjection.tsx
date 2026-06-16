@@ -69,13 +69,15 @@ export function buildWebWorkspaceLandingProjection(
   const activeProjectName = String(params.resolvedActiveProjectName ?? "").trim();
   const emptyThreadSubtitle = activeProjectName ? (
     <div className="web-empty-thread-subtitle">
+      You are in{" "}
       <button
         type="button"
         className="web-empty-thread-link web-empty-thread-subtitle-accent"
         onClick={params.onOpenLandingProject}
       >
         {activeProjectName}
-      </button>
+      </button>{" "}
+      workspace
     </div>
   ) : null;
 
