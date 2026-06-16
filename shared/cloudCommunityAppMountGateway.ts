@@ -1,9 +1,7 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type {
-  AddPrivateCommunityMcpAppResult,
   CommunityMountedApp,
   ConnectCommunityAppInput,
-  PrivateCommunityMcpOption,
   SetupImportedCommunityMcpAppInput,
 } from "./communityAppMountTypes";
 
@@ -33,33 +31,6 @@ export async function listCloudCommunityAppMounts<SessionT>(
     communityId: params.communityId,
   });
   return coerceObjectRows<CommunityMountedApp>(payload);
-}
-
-export async function listCloudPrivateCommunityMcpOptions<SessionT>(
-  params: CloudCommunityAppMountGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<PrivateCommunityMcpOption[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listPrivateCommunityMcpOptions" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return coerceObjectRows<PrivateCommunityMcpOption>(payload);
-}
-
-export async function addCloudPrivateCommunityMcpApp<SessionT>(
-  params: CloudCommunityAppMountGatewayParams<SessionT> & {
-    communityId: string;
-    mcpRegistryId: string;
-  },
-): Promise<AddPrivateCommunityMcpAppResult> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return (await client.action("community:addPrivateCommunityMcpApp" as any, {
-    authSubject,
-    communityId: params.communityId,
-    mcpRegistryId: params.mcpRegistryId,
-  })) as AddPrivateCommunityMcpAppResult;
 }
 
 export async function connectCloudCommunityApp<SessionT>(

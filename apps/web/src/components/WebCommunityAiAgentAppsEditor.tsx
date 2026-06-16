@@ -1,10 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import type {
-  AddPrivateCommunityMcpAppResult,
-  CommunityMountedApp,
-  PrivateCommunityMcpOption,
-} from "../../../../shared/communityAppMountTypes";
+import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import { buildIntegrationSurfaceRowFromCommunityMount } from "../lib/integrationSurfaceRows";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
@@ -19,47 +15,19 @@ function toStatusLabel(value: string | null | undefined): string {
     .join(" ");
 }
 
-function formatPrivateMcpOptionStatus(option: PrivateCommunityMcpOption): string {
-  if (!option.addable) return "Not available";
-  if (option.add_status === "needs_auth") return "Needs auth";
-  if (option.add_status === "needs_config") return "Needs config";
-  return "Ready";
-}
-
-function formatPrivateMcpOptionActionLabel(args: {
-  option: PrivateCommunityMcpOption;
-  alreadyMounted: boolean;
-  isAdding: boolean;
-}): string {
-  if (args.isAdding) return "Adding...";
-  if (args.alreadyMounted) return "Added";
-  if (!args.option.addable) return "Unavailable";
-  return "Add";
-}
-
 export type WebCommunityAiAgentAppsEditorProps = {
   intro: string;
   emptyState: string;
-  addButtonLabel: string;
   mounts: CommunityMountedApp[];
   effectiveMcpApps: EffectiveMcpApp[];
   isLoading: boolean;
   isLoadingEffectiveMcpApps: boolean;
   error: string | null;
   mutationError: string | null;
-  isConnecting: boolean;
-  privateMcpOptions: PrivateCommunityMcpOption[];
-  isLoadingPrivateMcpOptions: boolean;
-  hasLoadedPrivateMcpOptionsForActiveCommunity: boolean;
-  privateMcpOptionsError: string | null;
-  addingPrivateMcpRegistryId: string | null;
   updatingMountId: string | null;
   refreshingMountId: string | null;
   removingMountId: string | null;
-  onLoadPrivateMcpOptions: () => Promise<boolean> | boolean;
-  onAddPrivateMcpApp: (
-    mcpRegistryId: string,
-  ) => Promise<AddPrivateCommunityMcpAppResult | null> | AddPrivateCommunityMcpAppResult | null;
+  onOpenDiscoverApps: () => void;
   onUpdateMount: (
     communityAppMountId: string,
     patch: {
@@ -77,81 +45,21 @@ export function WebCommunityAiAgentAppsEditor(
   const {
     intro,
     emptyState,
-    addButtonLabel,
     mounts,
     effectiveMcpApps,
     isLoading,
     isLoadingEffectiveMcpApps,
     error,
     mutationError,
-    isConnecting,
-    privateMcpOptions,
-    isLoadingPrivateMcpOptions,
-    hasLoadedPrivateMcpOptionsForActiveCommunity,
-    privateMcpOptionsError,
-    addingPrivateMcpRegistryId,
     updatingMountId,
     refreshingMountId,
     removingMountId,
-    onLoadPrivateMcpOptions,
-    onAddPrivateMcpApp,
+    onOpenDiscoverApps,
     onUpdateMount,
     onRefreshApp,
     onUnmountApp,
   } = props;
   const [editingMountId, setEditingMountId] = useState<string | null>(null);
-  const [isPrivateMcpPickerOpen, setIsPrivateMcpPickerOpen] = useState(false);
-  const [privateMcpPickerMessage, setPrivateMcpPickerMessage] = useState<string | null>(null);
-  const mountedMcpRegistryIds = new Set(
-    mounts
-      .map((mount) => mount.app.mcp_registry_id)
-      .filter((value): value is string => Boolean(value)),
-  );
-
-  const handleTogglePrivateMcpPicker = () => {
-    const nextOpen = !isPrivateMcpPickerOpen;
-    setIsPrivateMcpPickerOpen(nextOpen);
-    setPrivateMcpPickerMessage(null);
-  };
-
-  useEffect(() => {
-    if (
-      !isPrivateMcpPickerOpen ||
-      isLoadingPrivateMcpOptions ||
-      hasLoadedPrivateMcpOptionsForActiveCommunity
-    ) {
-      return;
-    }
-    void onLoadPrivateMcpOptions();
-  }, [
-    hasLoadedPrivateMcpOptionsForActiveCommunity,
-    isLoadingPrivateMcpOptions,
-    isPrivateMcpPickerOpen,
-    onLoadPrivateMcpOptions,
-  ]);
-
-  useEffect(() => {
-    if (!hasLoadedPrivateMcpOptionsForActiveCommunity) {
-      setPrivateMcpPickerMessage(null);
-    }
-  }, [hasLoadedPrivateMcpOptionsForActiveCommunity]);
-
-  const handleAddPrivateMcp = async (option: PrivateCommunityMcpOption) => {
-    if (!option.addable || mountedMcpRegistryIds.has(option.mcp_registry_id)) return;
-    setPrivateMcpPickerMessage(null);
-    const result = await onAddPrivateMcpApp(option.mcp_registry_id);
-    if (!result?.ok) {
-      setPrivateMcpPickerMessage(
-        result?.error_message ?? `Couldn't add ${option.name} right now.`,
-      );
-      return;
-    }
-    setPrivateMcpPickerMessage(`${result.name ?? option.name} added.`);
-  };
-
-  const shouldShowPrivateMcpLoading =
-    isLoadingPrivateMcpOptions ||
-    (isPrivateMcpPickerOpen && !hasLoadedPrivateMcpOptionsForActiveCommunity);
 
   return (
     <div className="settings-section">
@@ -160,114 +68,11 @@ export function WebCommunityAiAgentAppsEditor(
       <div className="agent-capability-toolbar">
         <button
           type="button"
-          onClick={handleTogglePrivateMcpPicker}
-          disabled={isConnecting || addingPrivateMcpRegistryId !== null}
-          aria-expanded={isPrivateMcpPickerOpen}
+          onClick={onOpenDiscoverApps}
         >
-          {isPrivateMcpPickerOpen ? `${addButtonLabel} ▴` : addButtonLabel}
+          Discover apps
         </button>
       </div>
-
-      {isPrivateMcpPickerOpen ? (
-        <div className="community-private-mcp-picker">
-          <div className="community-private-mcp-picker-header">
-            <div>
-              <div className="settings-section-subtitle">Add trusted MCP</div>
-              <div className="model-note">
-                Attach MCPs this community can offer to members. Members use their own accounts when setup is required.
-              </div>
-            </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void onLoadPrivateMcpOptions()}
-              disabled={shouldShowPrivateMcpLoading}
-            >
-              {shouldShowPrivateMcpLoading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-          {privateMcpOptionsError ? (
-            <div className="auth-error">{privateMcpOptionsError}</div>
-          ) : null}
-          {privateMcpPickerMessage ? (
-            <div className="model-note">{privateMcpPickerMessage}</div>
-          ) : null}
-          {shouldShowPrivateMcpLoading ? (
-            <div className="model-note">Loading MCPs...</div>
-          ) : privateMcpOptions.length === 0 ? (
-            <div className="model-note">No reviewed MCPs are available yet.</div>
-          ) : (
-            <div
-              className="community-private-mcp-option-list"
-              role="list"
-              aria-label="Reviewed MCP options"
-            >
-              {privateMcpOptions.map((option) => {
-                const alreadyMounted = mountedMcpRegistryIds.has(option.mcp_registry_id);
-                const isAdding = addingPrivateMcpRegistryId === option.mcp_registry_id;
-                const disabled =
-                  alreadyMounted ||
-                  !option.addable ||
-                  Boolean(addingPrivateMcpRegistryId) ||
-                  isConnecting;
-                return (
-                  <div
-                    key={option.mcp_registry_id}
-                    className="community-private-mcp-option"
-                    role="listitem"
-                  >
-                    <DiscoverCatalogLogo
-                      name={option.name}
-                      logoUrl={option.logo_url}
-                    />
-                    <div className="community-private-mcp-option-copy">
-                      <div className="community-private-mcp-option-title-row">
-                        <strong>{option.name}</strong>
-                      </div>
-                      {option.description ? (
-                        <div className="community-private-mcp-option-description">
-                          {option.description}
-                        </div>
-                      ) : null}
-                      {!option.addable && option.add_blocked_reason ? (
-                        <div className="community-private-mcp-option-description is-muted">
-                          {option.add_blocked_reason}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="community-private-mcp-option-actions">
-                      <span
-                        className={`community-app-status-badge${
-                          option.addable ? "" : " is-muted"
-                        }`}
-                      >
-                        {formatPrivateMcpOptionStatus(option)}
-                      </span>
-                      <button
-                        type="button"
-                        className="community-private-mcp-option-action"
-                        onClick={() => void handleAddPrivateMcp(option)}
-                        disabled={disabled}
-                        aria-label={`${formatPrivateMcpOptionActionLabel({
-                          option,
-                          alreadyMounted,
-                          isAdding,
-                        })} ${option.name}`}
-                      >
-                        {formatPrivateMcpOptionActionLabel({
-                          option,
-                          alreadyMounted,
-                          isAdding,
-                        })}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : null}
 
       {error ? <div className="auth-error">{error}</div> : null}
       {mutationError ? <div className="auth-error">{mutationError}</div> : null}

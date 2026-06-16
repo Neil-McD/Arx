@@ -56,35 +56,3 @@ export type SetupImportedCommunityMcpAppInput = {
   endpoint_url: string;
   auth_type: DeveloperAppAuthType;
 };
-
-export type PrivateCommunityMcpOptionAddStatus =
-  | "ready"
-  | "needs_auth"
-  | "needs_config"
-  | "not_available";
-
-export type PrivateCommunityMcpOption = {
-  mcp_registry_id: string;
-  catalog_app_id: string | null;
-  name: string;
-  description: string | null;
-  logo_url: string | null;
-  docs_urls: string[];
-  add_status: PrivateCommunityMcpOptionAddStatus;
-  setup_kind: string;
-  addable: boolean;
-  add_blocked_reason: string | null;
-  requires_member_auth: boolean;
-  requires_nonsecret_config: boolean;
-};
-
-export type AddPrivateCommunityMcpAppResult = {
-  ok: boolean;
-  status: "connected" | "staged" | "reused" | "rejected" | "failed";
-  mcp_registry_id: string | null;
-  name: string | null;
-  community_app_mount_id: string | null;
-  setup_required: boolean;
-  setup_reason: "needs_auth" | "needs_config" | null;
-  error_message: string | null;
-};

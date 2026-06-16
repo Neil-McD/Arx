@@ -2785,13 +2785,6 @@ export default function App() {
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     connectCommunityApp,
-    privateCommunityMcpOptions,
-    isLoadingPrivateCommunityMcpOptions,
-    hasLoadedPrivateCommunityMcpOptionsForActiveCommunity,
-    privateCommunityMcpOptionsError,
-    addingPrivateCommunityMcpRegistryId,
-    loadPrivateCommunityMcpOptions,
-    addPrivateCommunityMcpApp,
     updateCommunityAppMount,
     refreshCommunityApp,
     setupImportedCommunityMcpApp,
@@ -4045,27 +4038,6 @@ export default function App() {
     },
     [
       connectCommunityApp,
-      loadUserPlatformAppMounts,
-      reloadEffectiveMcpApps,
-      session,
-      userPlatformAppMountsLoadedUserIdRef,
-    ],
-  );
-
-  const handleAddPrivateCommunityMcpApp = useCallback(
-    async (mcpRegistryId: string) => {
-      const result = await addPrivateCommunityMcpApp(mcpRegistryId);
-      if (result?.ok) {
-        if (session) {
-          userPlatformAppMountsLoadedUserIdRef.current = null;
-          void loadUserPlatformAppMounts(session);
-        }
-        void reloadEffectiveMcpApps();
-      }
-      return result;
-    },
-    [
-      addPrivateCommunityMcpApp,
       loadUserPlatformAppMounts,
       reloadEffectiveMcpApps,
       session,
@@ -9602,27 +9574,18 @@ export default function App() {
         previewProjectName: workspace.derived.resolvedActiveProjectName,
       },
       aiAgentAppsEditorProps: {
-        intro: "Add reviewed MCPs here. Polynet seeds or reuses each member's personal harness app.",
-        emptyState: "Add the first reviewed MCP for this community. Members use their own credentials when setup is required.",
-        addButtonLabel: "Add MCP",
+        intro: "Manage apps attached to this community.",
+        emptyState: "Discover apps to attach trusted tools to this community.",
         mounts: communityAppMounts,
         effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
         isLoadingEffectiveMcpApps,
         error: communityAppMountError,
         mutationError: communityAppMutationError,
-        isConnecting: isConnectingCommunityApp,
-        privateMcpOptions: privateCommunityMcpOptions,
-        isLoadingPrivateMcpOptions: isLoadingPrivateCommunityMcpOptions,
-        hasLoadedPrivateMcpOptionsForActiveCommunity:
-          hasLoadedPrivateCommunityMcpOptionsForActiveCommunity,
-        privateMcpOptionsError: privateCommunityMcpOptionsError,
-        addingPrivateMcpRegistryId: addingPrivateCommunityMcpRegistryId,
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
-        onLoadPrivateMcpOptions: loadPrivateCommunityMcpOptions,
-        onAddPrivateMcpApp: handleAddPrivateCommunityMcpApp,
+        onOpenDiscoverApps: handleOpenDiscoverApps,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
