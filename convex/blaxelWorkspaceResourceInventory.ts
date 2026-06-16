@@ -309,14 +309,6 @@ export const diagnoseBlaxelWorkspaceResourceInventory = action({
   handler: async (ctx, args): Promise<unknown> => {
     const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
     const policy = resolveWorkspaceComputerProviderFromServerEnv();
-    if (deploymentKind !== "staging") {
-      return {
-        ok: false,
-        code: "blaxel_resource_inventory_staging_only",
-        deploymentKind,
-        policy,
-      };
-    }
     const operatorAccess = await ctx.runQuery(
       (api as any).operatorAccess.getMyOperatorAccessOptional,
       {
@@ -342,6 +334,16 @@ export const diagnoseBlaxelWorkspaceResourceInventoryInternal = internalAction({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<unknown> => {
+    const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
+    const policy = resolveWorkspaceComputerProviderFromServerEnv();
+    if (deploymentKind !== "staging") {
+      return {
+        ok: false,
+        code: "blaxel_resource_inventory_internal_staging_only",
+        deploymentKind,
+        policy,
+      };
+    }
     return await diagnoseBlaxelWorkspaceResourceInventoryCore(ctx, args);
   },
 });
@@ -558,14 +560,6 @@ async function diagnoseBlaxelWorkspaceResourceInventoryCore(
 ): Promise<unknown> {
   const deploymentKind = normalizeDeploymentKind(readEnv("POLYNET_DEPLOYMENT_KIND"));
   const policy = resolveWorkspaceComputerProviderFromServerEnv();
-  if (deploymentKind !== "staging") {
-    return {
-      ok: false,
-      code: "blaxel_resource_inventory_staging_only",
-      deploymentKind,
-      policy,
-    };
-  }
 
   const [projectRows, sandboxesResult, volumesResult] = await Promise.all([
     ctx.runQuery(

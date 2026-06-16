@@ -5,11 +5,36 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
+function sliceBetween(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `missing start marker: ${start}`);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `missing end marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
 const client = read("convex/blaxelWorkspaceClient.ts");
 const inventory = read("convex/blaxelWorkspaceResourceInventory.ts");
+const operatorAccess = read("convex/operatorAccess.ts");
+const authIdentity = read("convex/authIdentity.ts");
 const projects = read("convex/projects.ts");
 const docs = read("docs/workspace-computer-provider-contract.md");
 const packageJson = read("package.json");
+const publicDiagnosticAction = sliceBetween(
+  inventory,
+  "export const diagnoseBlaxelWorkspaceResourceInventory = action",
+  "export const diagnoseBlaxelWorkspaceResourceInventoryInternal = internalAction",
+);
+const internalDiagnosticAction = sliceBetween(
+  inventory,
+  "export const diagnoseBlaxelWorkspaceResourceInventoryInternal = internalAction",
+  "export const reconcileBlaxelWorkspaceSandboxPointersInternal = internalAction",
+);
+const diagnosticCoreStart = inventory.indexOf(
+  "async function diagnoseBlaxelWorkspaceResourceInventoryCore",
+);
+assert.notEqual(diagnosticCoreStart, -1, "missing diagnostic core");
+const diagnosticCore = inventory.slice(diagnosticCoreStart);
 
 assert.match(
   client,
@@ -37,10 +62,25 @@ assert.match(
   /"use node";/,
   "provider inventory diagnostic must run in the Node runtime",
 );
+assert.doesNotMatch(
+  publicDiagnosticAction,
+  /deploymentKind !== "staging"|blaxel_resource_inventory_staging_only/,
+  "public provider inventory diagnostic must not be staging-only because production quota failures need read-only diagnosis",
+);
 assert.match(
-  inventory,
-  /deploymentKind !== "staging"/,
-  "provider inventory diagnostic must be staging-only",
+  publicDiagnosticAction,
+  /operatorAccess\.getMyOperatorAccessOptional[\s\S]*return await diagnoseBlaxelWorkspaceResourceInventoryCore/,
+  "public provider inventory diagnostic must remain operator-gated before running provider inventory",
+);
+assert.match(
+  internalDiagnosticAction,
+  /deploymentKind !== "staging"[\s\S]*blaxel_resource_inventory_internal_staging_only/,
+  "internal provider inventory diagnostic must remain staging-only because it has no operator auth subject",
+);
+assert.doesNotMatch(
+  diagnosticCore,
+  /deploymentKind !== "staging"|blaxel_resource_inventory_staging_only/,
+  "shared provider inventory diagnostic core must be deployment-agnostic and read-only",
 );
 assert.match(
   inventory,
@@ -51,6 +91,16 @@ assert.match(
   inventory,
   /operatorAccess\.getMyOperatorAccessOptional/,
   "provider inventory diagnostic must check operator access",
+);
+assert.match(
+  operatorAccess,
+  /resolveAuthenticatedActor[\s\S]*readOperatorRole/,
+  "operator access must resolve the authenticated actor before reading operator roles",
+);
+assert.match(
+  authIdentity,
+  /ctx\.auth\.getUserIdentity\(\)[\s\S]*auth_subject_mismatch[\s\S]*verified_identity_required/,
+  "operator auth subjects must be tied to the verified Convex identity in production",
 );
 assert.match(
   inventory,

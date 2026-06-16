@@ -250,12 +250,13 @@ staging workspace path, these checks must stay true:
   chat uses.
 - The Blaxel resource inventory diagnostic can list provider volumes/sandboxes
   and classify them against PolyNet `cloudProjects` rows without creating,
-  mutating, or deleting provider resources. The diagnostic is staging-only and
-  the public action is operator-gated because provider resource names and labels
-  are operational infrastructure data. A staging-only internal action exists for
-  admin CLI inventory checks when the staging operator-role table has not been
-  bootstrapped. It must include `attached_mismatch` and `quota_risk`
-  classifications so provider attachment drift and Blaxel workspace quota
-  headroom are visible before cleanup automation runs.
+  mutating, or deleting provider resources. The public diagnostic action is
+  production-allowed but operator-gated because provider resource names and
+  labels are operational infrastructure data. The unauthenticated internal
+  action remains staging-only for admin CLI inventory checks when the staging
+  operator-role table has not been bootstrapped. It must include
+  `attached_mismatch` and `quota_risk` classifications so provider attachment
+  drift and Blaxel workspace quota headroom are visible before cleanup
+  automation runs.
 - Provider policy resolves to Blaxel only.
 - The deployment target is the staging path until this branch is promoted.
