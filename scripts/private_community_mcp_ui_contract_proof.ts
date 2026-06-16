@@ -168,6 +168,26 @@ function main() {
   );
   assertIncludes(
     editor,
+    "Add trusted MCP",
+    "community apps editor uses trusted MCP picker title",
+  );
+  assertIncludes(
+    editor,
+    "Attach MCPs this community can offer to members.",
+    "community apps editor explains community attach scope",
+  );
+  assertIncludes(
+    pickerBlock,
+    "<DiscoverCatalogLogo",
+    "private MCP picker uses Discover catalog logo treatment",
+  );
+  assertIncludes(
+    pickerBlock,
+    "logoUrl={option.logo_url}",
+    "private MCP picker uses reviewed option logos",
+  );
+  assertIncludes(
+    editor,
     "!hasLoadedPrivateMcpOptionsForActiveCommunity",
     "community apps editor reloads private MCP options for the active community",
   );
@@ -185,6 +205,11 @@ function main() {
     editor,
     "onAddPrivateMcpApp(option.mcp_registry_id)",
     "community apps editor adds private MCPs by registry id only",
+  );
+  assertIncludes(
+    pickerBlock,
+    "community-private-mcp-option-actions",
+    "private MCP picker separates status and add action rail",
   );
   for (const forbiddenPickerCopy of [
     "endpoint_url",
@@ -212,6 +237,9 @@ function main() {
 
   assertIncludes(css, ".community-private-mcp-picker", "private MCP picker CSS exists");
   assertIncludes(css, ".community-private-mcp-option", "private MCP option CSS exists");
+  assertIncludes(css, ".community-private-mcp-option-title-row", "private MCP option title CSS exists");
+  assertIncludes(css, ".community-private-mcp-option-actions", "private MCP option action rail CSS exists");
+  assertIncludes(css, ".settings-panel button.community-private-mcp-option-action", "private MCP option action button overrides settings button chrome");
 
   assertIncludes(
     packageJson,

@@ -27401,24 +27401,97 @@ button.message-citation-chip:hover {
 
 .community-private-mcp-option-list {
   display: grid;
-  gap: 10px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 86%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 58%, transparent);
 }
 
 .community-private-mcp-option {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
   align-items: center;
-  padding: 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
+  padding: 16px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
+  background: transparent;
+}
+
+.community-private-mcp-option:last-child {
+  border-bottom: 0;
+}
+
+.community-private-mcp-option:hover {
+  background: color-mix(in srgb, var(--bg-card) 54%, transparent);
 }
 
 .community-private-mcp-option-copy {
-  display: grid;
-  gap: 6px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.community-private-mcp-option-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.community-private-mcp-option-title-row strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-private-mcp-option-description {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-private-mcp-option-description.is-muted {
+  color: var(--text-faint);
+}
+
+.community-private-mcp-option-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.settings-panel button.community-private-mcp-option-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-panel button.community-private-mcp-option-action:hover:not(:disabled),
+.settings-panel button.community-private-mcp-option-action:focus-visible {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  color: var(--text-primary);
 }
 
 .community-app-status-badge {
@@ -27526,14 +27599,27 @@ button.message-citation-chip:hover {
     flex-direction: column;
   }
 
-  .community-private-mcp-picker-header button,
-  .community-private-mcp-option button {
+  .community-private-mcp-picker-header button {
     width: 100%;
   }
 
   .community-private-mcp-option {
-    align-items: stretch;
-    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .community-private-mcp-option-description {
+    white-space: normal;
+  }
+
+  .community-private-mcp-option-actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .community-private-mcp-option-action {
+    min-width: 88px;
   }
 
   .community-app-mount-identity {

@@ -172,9 +172,9 @@ export function WebCommunityAiAgentAppsEditor(
         <div className="community-private-mcp-picker">
           <div className="community-private-mcp-picker-header">
             <div>
-              <div className="settings-section-subtitle">Add MCP to this community</div>
+              <div className="settings-section-subtitle">Add trusted MCP</div>
               <div className="model-note">
-                Choose a reviewed MCP. Members use their own accounts when setup is required.
+                Attach MCPs this community can offer to members. Members use their own accounts when setup is required.
               </div>
             </div>
             <button
@@ -216,35 +216,51 @@ export function WebCommunityAiAgentAppsEditor(
                     className="community-private-mcp-option"
                     role="listitem"
                   >
+                    <DiscoverCatalogLogo
+                      name={option.name}
+                      logoUrl={option.logo_url}
+                    />
                     <div className="community-private-mcp-option-copy">
-                      <div className="agent-capability-card-title-row">
+                      <div className="community-private-mcp-option-title-row">
                         <strong>{option.name}</strong>
-                        <span
-                          className={`community-app-status-badge${
-                            option.addable ? "" : " is-muted"
-                          }`}
-                        >
-                          {formatPrivateMcpOptionStatus(option)}
-                        </span>
                       </div>
                       {option.description ? (
-                        <div className="model-note">{option.description}</div>
+                        <div className="community-private-mcp-option-description">
+                          {option.description}
+                        </div>
                       ) : null}
                       {!option.addable && option.add_blocked_reason ? (
-                        <div className="model-note">{option.add_blocked_reason}</div>
+                        <div className="community-private-mcp-option-description is-muted">
+                          {option.add_blocked_reason}
+                        </div>
                       ) : null}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleAddPrivateMcp(option)}
-                      disabled={disabled}
-                    >
-                      {formatPrivateMcpOptionActionLabel({
-                        option,
-                        alreadyMounted,
-                        isAdding,
-                      })}
-                    </button>
+                    <div className="community-private-mcp-option-actions">
+                      <span
+                        className={`community-app-status-badge${
+                          option.addable ? "" : " is-muted"
+                        }`}
+                      >
+                        {formatPrivateMcpOptionStatus(option)}
+                      </span>
+                      <button
+                        type="button"
+                        className="community-private-mcp-option-action"
+                        onClick={() => void handleAddPrivateMcp(option)}
+                        disabled={disabled}
+                        aria-label={`${formatPrivateMcpOptionActionLabel({
+                          option,
+                          alreadyMounted,
+                          isAdding,
+                        })} ${option.name}`}
+                      >
+                        {formatPrivateMcpOptionActionLabel({
+                          option,
+                          alreadyMounted,
+                          isAdding,
+                        })}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
