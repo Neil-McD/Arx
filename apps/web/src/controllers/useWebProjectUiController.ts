@@ -9,6 +9,10 @@ import {
   updateMappedCloudProject,
 } from "../../../../shared/cloudProjectsGateway";
 import type { WorkspaceStorageBillingAction } from "../../../../shared/paidUsageBilling";
+import {
+  formatProjectContextLinksText,
+  parseProjectContextLinksText,
+} from "../../../../shared/projectContext";
 import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
 import {
   countWorkspaceProjectsForAdmission,
@@ -22,12 +26,16 @@ type CreateProjectModalState = {
   isOpen: boolean;
   projectName: string;
   projectDescription: string;
+  projectInstructions: string;
+  projectLinksText: string;
   importFileName: string | null;
   isSubmitting: boolean;
   error: string | null;
   onClose: () => void;
   onChangeName: (value: string) => void;
   onChangeDescription: (value: string) => void;
+  onChangeInstructions: (value: string) => void;
+  onChangeLinksText: (value: string) => void;
   onImportFilesChange: (files: FileList | null) => void;
   onSubmit: () => void | Promise<void>;
 };
@@ -36,12 +44,16 @@ type EditProjectModalState = {
   isOpen: boolean;
   projectName: string;
   projectDescription: string;
+  projectInstructions: string;
+  projectLinksText: string;
   importFileName: string | null;
   isSubmitting: boolean;
   error: string | null;
   onClose: () => void;
   onChangeName: (value: string) => void;
   onChangeDescription: (value: string) => void;
+  onChangeInstructions: (value: string) => void;
+  onChangeLinksText: (value: string) => void;
   onImportFilesChange: (files: FileList | null) => void;
   onSubmit: () => void | Promise<void>;
 };
@@ -187,10 +199,14 @@ export function useWebProjectUiController<TSession>(
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [createProjectName, setCreateProjectName] = useState("");
   const [createProjectDescription, setCreateProjectDescription] = useState("");
+  const [createProjectInstructions, setCreateProjectInstructions] = useState("");
+  const [createProjectLinksText, setCreateProjectLinksText] = useState("");
   const [createProjectImportFile, setCreateProjectImportFile] = useState<File | null>(null);
   const [createProjectError, setCreateProjectError] = useState<string | null>(null);
   const [editProjectName, setEditProjectName] = useState("");
   const [editProjectDescription, setEditProjectDescription] = useState("");
+  const [editProjectInstructions, setEditProjectInstructions] = useState("");
+  const [editProjectLinksText, setEditProjectLinksText] = useState("");
   const [editProjectImportFile, setEditProjectImportFile] = useState<File | null>(null);
   const [editProjectError, setEditProjectError] = useState<string | null>(null);
   const [deleteProjectConfirmationValue, setDeleteProjectConfirmationValue] = useState("");
@@ -216,6 +232,8 @@ export function useWebProjectUiController<TSession>(
     setIsCreateProjectModalOpen(false);
     setCreateProjectName("");
     setCreateProjectDescription("");
+    setCreateProjectInstructions("");
+    setCreateProjectLinksText("");
     setCreateProjectImportFile(null);
     setCreateProjectError(null);
   }, []);
@@ -225,6 +243,8 @@ export function useWebProjectUiController<TSession>(
     setEditingProjectId(null);
     setEditProjectName("");
     setEditProjectDescription("");
+    setEditProjectInstructions("");
+    setEditProjectLinksText("");
     setEditProjectImportFile(null);
     setEditProjectError(null);
   }, []);
@@ -281,6 +301,8 @@ export function useWebProjectUiController<TSession>(
     setEditingProjectId(project.id);
     setEditProjectName(normalizeComputerDisplayName(project.name));
     setEditProjectDescription(project.description ?? "");
+    setEditProjectInstructions(project.instructions ?? "");
+    setEditProjectLinksText(formatProjectContextLinksText(project.context_links));
     setEditProjectImportFile(null);
     setEditProjectError(null);
     setIsEditProjectModalOpen(true);
@@ -308,6 +330,11 @@ export function useWebProjectUiController<TSession>(
       setCreateProjectError(importFileError);
       return;
     }
+    const parsedProjectLinks = parseProjectContextLinksText(createProjectLinksText);
+    if (parsedProjectLinks.errors.length > 0) {
+      setCreateProjectError(parsedProjectLinks.errors[0] ?? "Fix the project links.");
+      return;
+    }
     setCreateProjectError(null);
     setIsCreatingProject(true);
     let createdProject: WebCloudProjectRecord | null = null;
@@ -316,6 +343,8 @@ export function useWebProjectUiController<TSession>(
         session: usableSession,
         name: createProjectName.trim() || undefined,
         description: createProjectDescription.trim() || undefined,
+        instructions: createProjectInstructions.trim(),
+        contextLinks: parsedProjectLinks.links,
       });
       const nextProject: WebCloudProjectRecord = created;
       createdProject = nextProject;
@@ -338,6 +367,8 @@ export function useWebProjectUiController<TSession>(
         setEditingProjectId(createdProject.id);
         setEditProjectName(normalizeComputerDisplayName(createdProject.name));
         setEditProjectDescription(createdProject.description ?? "");
+        setEditProjectInstructions(createdProject.instructions ?? "");
+        setEditProjectLinksText(formatProjectContextLinksText(createdProject.context_links));
         setEditProjectImportFile(createProjectImportFile);
         setEditProjectError("Project created, but the zip import failed. You can try the import again here.");
         setIsEditProjectModalOpen(true);
@@ -368,7 +399,9 @@ export function useWebProjectUiController<TSession>(
     projectQuotaReached,
     session,
     createProjectDescription,
+    createProjectInstructions,
     createProjectImportFile,
+    createProjectLinksText,
     createProjectName,
     ensureSession,
     isCreatingProject,
@@ -390,6 +423,11 @@ export function useWebProjectUiController<TSession>(
       setEditProjectError(importFileError);
       return;
     }
+    const parsedProjectLinks = parseProjectContextLinksText(editProjectLinksText);
+    if (parsedProjectLinks.errors.length > 0) {
+      setEditProjectError(parsedProjectLinks.errors[0] ?? "Fix the project links.");
+      return;
+    }
     setEditProjectError(null);
     setIsUpdatingProject(true);
     let metadataUpdated = false;
@@ -399,6 +437,8 @@ export function useWebProjectUiController<TSession>(
         projectId: editingProjectId,
         name: editProjectName.trim(),
         description: editProjectDescription.trim(),
+        instructions: editProjectInstructions.trim(),
+        contextLinks: parsedProjectLinks.links,
       });
       metadataUpdated = true;
       onProjectUpdated(updated);
@@ -427,7 +467,9 @@ export function useWebProjectUiController<TSession>(
   }, [
     session,
     editProjectDescription,
+    editProjectInstructions,
     editProjectImportFile,
+    editProjectLinksText,
     editProjectName,
     editingProjectId,
     ensureSession,
@@ -502,12 +544,22 @@ export function useWebProjectUiController<TSession>(
         isOpen: isCreateProjectModalOpen,
         projectName: createProjectName,
         projectDescription: createProjectDescription,
+        projectInstructions: createProjectInstructions,
+        projectLinksText: createProjectLinksText,
         importFileName: createProjectImportFile?.name ?? null,
         isSubmitting: isCreatingProject,
         error: createProjectError,
         onClose: closeCreateProjectModal,
         onChangeName: setCreateProjectName,
         onChangeDescription: setCreateProjectDescription,
+        onChangeInstructions: (value) => {
+          setCreateProjectInstructions(value);
+          if (createProjectError) setCreateProjectError(null);
+        },
+        onChangeLinksText: (value) => {
+          setCreateProjectLinksText(value);
+          if (createProjectError) setCreateProjectError(null);
+        },
         onImportFilesChange: (files) => {
           setCreateProjectImportFile(toSelectedFile(files));
           if (createProjectError) setCreateProjectError(null);
@@ -518,12 +570,22 @@ export function useWebProjectUiController<TSession>(
         isOpen: isEditProjectModalOpen,
         projectName: editProjectName,
         projectDescription: editProjectDescription,
+        projectInstructions: editProjectInstructions,
+        projectLinksText: editProjectLinksText,
         importFileName: editProjectImportFile?.name ?? null,
         isSubmitting: isUpdatingProject || isDeletingProject,
         error: editProjectError,
         onClose: closeEditProjectModal,
         onChangeName: setEditProjectName,
         onChangeDescription: setEditProjectDescription,
+        onChangeInstructions: (value) => {
+          setEditProjectInstructions(value);
+          if (editProjectError) setEditProjectError(null);
+        },
+        onChangeLinksText: (value) => {
+          setEditProjectLinksText(value);
+          if (editProjectError) setEditProjectError(null);
+        },
         onImportFilesChange: (files) => {
           setEditProjectImportFile(toSelectedFile(files));
           if (editProjectError) setEditProjectError(null);

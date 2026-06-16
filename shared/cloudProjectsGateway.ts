@@ -1,5 +1,10 @@
 import { type AuthSessionLike } from "./authSession";
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
+import {
+  normalizeProjectContextLinks,
+  normalizeProjectInstructions,
+  type ProjectContextLink,
+} from "./projectContext";
 import { normalizeComputerDisplayName } from "./projectNaming";
 import {
   DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
@@ -14,6 +19,8 @@ export type CloudProjectRecord = {
   id: string;
   name: string | null;
   description: string | null;
+  instructions: string | null;
+  context_links: ProjectContextLink[];
   slug: string | null;
   status: string;
   provider_volume_id: string | null;
@@ -39,6 +46,8 @@ type ConvexCloudProjectRow = {
   name?: string | null;
   slug?: string | null;
   description?: string | null;
+  instructions?: string | null;
+  contextLinks?: ProjectContextLink[] | null;
   status?: string | null;
   providerVolumeId?: string | null;
   providerVolumeName?: string | null;
@@ -61,6 +70,22 @@ type ConvexCloudProjectRow = {
 
 // Gateway class: authenticated read/mutation/action bridge, caller-hardened session, fail-closed.
 
+function readProjectInstructions(row: ConvexCloudProjectRow): string | null {
+  try {
+    return normalizeProjectInstructions(row.instructions) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readProjectContextLinks(row: ConvexCloudProjectRow): ProjectContextLink[] {
+  try {
+    return normalizeProjectContextLinks(row.contextLinks ?? []);
+  } catch {
+    return [];
+  }
+}
+
 function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): CloudProjectRecord {
   const id = String(row._id ?? "").trim();
   const createdAtMs = Number(row.createdAt ?? Date.now());
@@ -72,6 +97,8 @@ function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): CloudProjectRe
     id,
     name,
     description: typeof row.description === "string" && row.description.trim() ? row.description.trim() : null,
+    instructions: readProjectInstructions(row),
+    context_links: readProjectContextLinks(row),
     slug,
     status: typeof row.status === "string" && row.status.trim() ? row.status.trim() : "active",
     provider_volume_id: resourceTruth.volume.resourceId,
@@ -136,12 +163,19 @@ export async function createMappedCloudProject<TSession>(params: {
   session: TSession;
   name?: string | null;
   description?: string | null;
+  instructions?: string | null;
+  contextLinks?: ProjectContextLink[] | null;
 }): Promise<CloudProjectRecord> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
+  const contextLinks = Array.isArray(params.contextLinks)
+    ? normalizeProjectContextLinks(params.contextLinks)
+    : [];
   const row = (await client.mutation("projects:createCloudProjectForOwner" as any, {
     authSubject,
     ...(typeof params.name === "string" ? { name: params.name } : null),
     ...(typeof params.description === "string" ? { description: params.description } : null),
+    ...(typeof params.instructions === "string" ? { instructions: params.instructions } : null),
+    contextLinks,
   })) as ConvexCloudProjectRow | null;
   if (!row) throw new Error("project_create_failed");
   return mapConvexProjectRowToRecord(row);
@@ -191,6 +225,8 @@ export async function updateMappedCloudProject<TSession>(params: {
   projectId: string;
   name: string;
   description?: string | null;
+  instructions?: string | null;
+  contextLinks?: ProjectContextLink[] | null;
 }): Promise<CloudProjectRecord> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const row = (await client.mutation("projects:updateCloudProjectForOwner" as any, {
@@ -198,6 +234,10 @@ export async function updateMappedCloudProject<TSession>(params: {
     projectId: params.projectId,
     name: params.name,
     ...(typeof params.description === "string" ? { description: params.description } : null),
+    ...(typeof params.instructions === "string" ? { instructions: params.instructions } : null),
+    ...(Array.isArray(params.contextLinks)
+      ? { contextLinks: normalizeProjectContextLinks(params.contextLinks) }
+      : null),
   })) as ConvexCloudProjectRow | null;
   if (!row) throw new Error("project_update_failed");
   return mapConvexProjectRowToRecord(row);

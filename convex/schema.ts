@@ -913,6 +913,11 @@ export default defineSchema({
     name: v.optional(v.string()),
     slug: v.optional(v.string()),
     description: v.optional(v.string()),
+    instructions: v.optional(v.string()),
+    contextLinks: v.optional(v.array(v.object({
+      title: v.optional(v.string()),
+      url: v.string(),
+    }))),
     status: v.optional(v.string()),
     providerSandboxId: v.optional(v.string()),
     providerSandboxProviderId: v.optional(

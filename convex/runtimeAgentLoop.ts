@@ -127,7 +127,6 @@ import {
   buildPlatformSkillToolNamesForSelection,
   type PlatformSkillSelectionSummary,
 } from "../shared/platformSkills";
-import { normalizeComputerDisplayName } from "../shared/projectNaming";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -167,28 +166,6 @@ function buildEffectiveAllowedToolNames(params: {
 
 function newCreditKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-async function resolveWorkspaceProjectContext(params: {
-  ctx: any;
-  projectId?: string | null;
-  authSubject?: string | null;
-}): Promise<{ label: string | null; description: string | null }> {
-  if (!params.projectId || !params.authSubject) {
-    return { label: null, description: null };
-  }
-  const row = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
-    projectId: params.projectId,
-    authSubject: params.authSubject,
-  });
-  if (!row) {
-    return { label: null, description: null };
-  }
-  const label = normalizeComputerDisplayName(
-    typeof row.name === "string" ? row.name : null,
-  );
-  const description = String(row.description ?? "").trim() || null;
-  return { label, description };
 }
 
 function buildWebResearchSettlementMetadata(params: {
@@ -1362,11 +1339,6 @@ async function executeRetrievalAgentLoop(
     touchRunHeartbeat?: () => Promise<void>;
   },
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
-  const projectContext = await resolveWorkspaceProjectContext({
-    ctx: params.ctx,
-    projectId: params.projectId,
-    authSubject: params.authSubject,
-  });
   const now = new Date();
   const runtimeTimeZone = "UTC";
   const runtimeDateTimeIso = now.toISOString();
@@ -1478,12 +1450,14 @@ async function executeRetrievalAgentLoop(
       ownerId: params.userId,
       threadId: params.threadId ?? undefined,
       projectId: params.projectId ?? null,
+      authSubject: params.authSubject ?? null,
       runId: params.runId,
       latestUserText: latestUserTextForRuntimeContext,
       runtimeTurnEnvelope,
       threadWorkingState: params.threadWorkingState,
     })
   ).packet;
+  const projectContext = runtimeTurnContext.projectContext ?? null;
   const baseSystemPrompt = buildPlatformHarnessRuntimeSystemPrompt({
     loopBudget: params.loopBudget,
     allowedToolNames: effectiveAllowedToolNames,
@@ -1497,8 +1471,8 @@ async function executeRetrievalAgentLoop(
     communitySystemPrompt: params.communitySystemPrompt,
     agentName: params.agentName,
     agentSoul: params.agentSoul,
-    projectLabel: projectContext.label,
-    projectDescription: projectContext.description,
+    projectLabel: projectContext?.label ?? null,
+    projectDescription: projectContext?.description ?? null,
     runtimeTurnContext,
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,

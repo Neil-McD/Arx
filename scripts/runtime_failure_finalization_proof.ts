@@ -59,7 +59,7 @@ assertContains(
 );
 assertContains(
   handler,
-  'import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";',
+  "loadRuntimeTurnContextPacketForRun,",
   "runtime handler imports canonical context loader",
 );
 assertContains(

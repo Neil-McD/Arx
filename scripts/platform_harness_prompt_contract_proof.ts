@@ -121,6 +121,12 @@ function proveCapabilityContract() {
 
 function provePromptEntrypoints() {
   const runtimeTurnContext = buildRuntimeTurnContextPacket({
+    projectContext: {
+      label: "Unified project",
+      description: "Project context activates workspace tools.",
+      instructions: "Use project context when answering project-scoped work.",
+      links: [{ title: "Spec", url: "https://example.com/spec" }],
+    },
     threadWorkingState: {
       version: 1,
       goal: "Prove the platform harness prompt contract.",
@@ -172,6 +178,10 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /Configured agent name: James/);
   assert.match(platformHarnessPrompt, /COMMUNITY_LENS/);
   assert.match(platformHarnessPrompt, /PLATFORM_HARNESS_CONTEXT/);
+  assert.match(platformHarnessPrompt, /PROJECT_CONTEXT/);
+  assert.match(platformHarnessPrompt, /PROJECT_INSTRUCTIONS/);
+  assert.match(platformHarnessPrompt, /Use project context when answering project-scoped work/);
+  assert.match(platformHarnessPrompt, /Spec: https:\/\/example\.com\/spec/);
   assert.match(platformHarnessPrompt, /AGENT_OPERATING_POLICY/);
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);

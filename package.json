@@ -126,6 +126,7 @@
     "check:runtime-workspace-state-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_state_proof.ts",
     "check:workspace-active-project-coherence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_active_project_coherence_proof.ts",
     "check:workspace-draft-project-route-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_draft_project_route_proof.ts",
+    "check:project-context-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/project_context_contract_proof.ts",
     "check:workspace-resource-truth-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_truth_proof.ts",
     "check:workspace-resource-admission-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_admission_policy_proof.ts",
     "check:workspace-resource-inventory-diagnostic-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_inventory_diagnostic_proof.ts",
