@@ -1334,6 +1334,175 @@ Rules:
 - `wakeReason` is diagnostic context for the run, not canonical directory truth.
 - Directory mutation still requires the filesystem write airlock and candidate/review path.
 
+## Fourteenth Implementation Slice
+
+The fourteenth backend slice closes the first member-agent consumption loop:
+
+```txt
+Accepted directory intelligence
+  -> member-agent community memory tools
+  -> cited guidance inside a community-lensed turn
+  -> outcome feedback from the member
+  -> communityOutcomeObservations
+  -> future compiler/directory updates
+```
+
+Rules:
+
+- Member-agent memory tools are exposed only through the existing `community_tools` capability family.
+- The tools derive community scope from the active server-validated community lens. They must not accept a loose `communityId` argument from the model.
+- `community_memory_search` searches accepted community intelligence in `communityIntelligenceNodes`; it is not archive RAG and it does not use embeddings as truth.
+- `community_memory_search` defaults to `promising`, `validated`, and `canonical` statuses. Draft and candidate entries remain in the airlock.
+- `community_memory_read` reads one node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the retrieval log.
+- `community_record_outcome` records whether retrieved community memory worked, failed, or was mixed. Non-manager member paths still require a same-user retrieval log, and node-linked outcomes require the node to have been retrieved or injected in that log.
+- These tools may write retrieval logs and outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
+- The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.
+- Runtime prompt policy must distinguish accepted community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
+- If community memory is used in prose, the agent should cite the entry title and status.
+
+## Fifteenth Implementation Slice
+
+The fifteenth backend slice makes member-agent directory reads bounded and index-backed:
+
+```txt
+Accepted directory intelligence
+  -> bounded indexed buckets by status/type
+  -> deterministic local rerank over a small candidate set
+  -> member-agent retrieval log
+```
+
+Rules:
+
+- `community_memory_search` must use `retrieveAcceptedCommunityMemoryNodes`, not the broader workflow helper that can collect all nodes for a community.
+- Accepted member memory search is limited to `promising`, `validated`, and `canonical`.
+- Retrieval should use freshness-aware directory indexes: `by_community_status_updatedAt` for normal search and `by_community_type_status_updatedAt` when the model supplies type filters.
+- Runtime memory lookup remains deterministic and non-LLM. Embeddings and archive search may assist other flows later, but they are not canonical directory truth.
+
+## Sixteenth Implementation Slice
+
+The sixteenth backend slice closes the first community-agent airlock decision loop:
+
+```txt
+Compiler-derived pending candidate
+  -> community-agent filesystem write
+  -> agent decision
+  -> accepted/rejected airlock state
+  -> accepted change request apply
+  -> directory mutation log
+```
+
+Rules:
+
+- The community agent still uses the same four filesystem tools: `list`, `read`, `search`, and `write`.
+- The tool surface is not expanded with separate review tools. Decision and apply are narrow `write` operations.
+- The new write operations are:
+  - `decide_change_request`
+  - `apply_accepted_change_request`
+- These writes still inherit `communityId` from the single-community filesystem context. They must not accept a loose community id.
+- Decision/apply must first resolve the target change request inside the same community.
+- Decision/apply must reject non-compiler change requests with `community_agent_filesystem_compiler_candidate_required`.
+- The community agent may only decide/apply compiler-derived candidates. It must not autonomously review member-authored, admin-authored, manual, or arbitrary same-community change requests.
+- Decision/apply must reuse the canonical directory change-request validation and apply path.
+- Applying an accepted change request may create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`, but only through the existing accepted-change-request apply core.
+- Filesystem writes themselves must not directly insert or patch directory truth.
+- Agent decisions are attributed to `createdByAgentKey` / `decidedByAgentKey` / mutation `actorAgentKey`, not to an admin user.
+- The community agent may accept, reject, and apply existing pending compiler candidates.
+- The community agent must not decide or apply a candidate it proposed in the same runtime run.
+- Digest-derived candidates proposed through the community-agent filesystem carry `proposedByCommunityAgentRunId` and optional `proposedByCommunityAgentHeartbeatId` in their payload metadata.
+- Same-run self-review must fail closed with `community_agent_filesystem_same_run_self_review_forbidden`.
+- This is the community organism acting as librarian/front gate, not a human admin review queue and not direct prompt mutation of truth.
+
+## Seventeenth Implementation Slice
+
+The seventeenth backend slice makes the community-agent heartbeat auditable before adding a UI projection:
+
+```txt
+Community-agent write tool result
+  -> runtime action collector
+  -> communityAgentRuns ledger
+  -> later community-agent activity surface
+```
+
+Rules:
+
+- `communityAgentRuns` is the canonical run ledger. The operator panel, community panel, sleep report, or other UI surfaces are projections of this ledger, not the source of truth.
+- Each run should preserve compact ids for the write actions the community agent successfully performed:
+  - `candidateProposalIds`
+  - `acceptedChangeRequestIds`
+  - `rejectedChangeRequestIds`
+  - `appliedChangeRequestIds`
+- The runtime should collect these ids only from successful `write` tool outputs.
+- Skipped runs should persist empty action arrays.
+- Existing historical run rows may not have every action-array field, so readers must default missing arrays to empty arrays.
+- No operator panel in this slice. Make the organism auditable in the backend first.
+
+The eighteenth backend slice adds the first read-only PolyNet overview projection for the future community tab:
+
+```txt
+Accepted directory intelligence
+  -> bounded graph projection
+  -> compact community-agent status
+  -> future PolyNet tab
+```
+
+Rules:
+
+- `getCommunityPolynetOverview` is a read-only query.
+- The query is scoped to exactly one explicit `communityId` and requires community access.
+- The graph contains one synthetic community root node plus real visible directory nodes.
+- Directory graph edges are real node-to-node `communityIntelligenceEdges`; the projection does not invent memory edges.
+- The projection does not expose raw activity, source traces, compiler digests, compiler windows, or pending change requests.
+- The projection exposes accepted-memory statuses only: `promising`, `validated`, `canonical`, `contested`, and `stale`.
+- Draft, candidate, archived, and deprecated nodes stay out of the PolyNet overview.
+- Node reads use bounded status/time indexes, and edge reads are bounded from selected nodes.
+- The agent panel data comes from the `communityAgentRuns` ledger and is compact: status, activity state, wake reason, recent action counts, and recent run summaries.
+- The overview is product read-model infrastructure. It is not a write surface, not a compiler dashboard, and not an admin review queue.
+
+## Nineteenth Implementation Slice
+
+The nineteenth slice makes the first read-only PolyNet community tab visible:
+
+```txt
+getCommunityPolynetOverview
+  -> PolyNet tab shell
+  -> memory graph
+  -> community-agent status
+  -> selected node detail
+```
+
+Rules:
+
+- The tab consumes `community:getCommunityPolynetOverview`; it does not call archive health APIs.
+- The tab is read-only in this slice. It must not expose write buttons, prompt boxes, review queues, candidate decisions, or directory mutation controls.
+- The graph renders backend-projected nodes and edges only. It may include the synthetic community root node returned by the overview, but it must not create fake memory nodes.
+- The tab shows the community agent as status/activity derived from the `communityAgentRuns` ledger.
+- The tab shows selected-node metadata from the overview projection, not raw traces or compiler internals.
+- PolyNet tab visibility follows community view access because this is now a member-safe memory surface, not a manager-only archive operations panel.
+- Archive backfill, processing, retry, and embedding-health controls are not part of the PolyNet memory tab.
+
+## Twentieth Implementation Slice
+
+The twentieth slice adds a deterministic seeded overview fixture for validating the first real PolyNet tab state without writing live community memory:
+
+```txt
+Seeded overview fixture
+  -> real accepted directory nodes
+  -> real typed node-to-node edges
+  -> community-agent heartbeat runs
+  -> tab contract validation
+```
+
+Rules:
+
+- The seeded overview fixture is not a runtime seed command and must not create production rows.
+- The fixture models the exact shape returned by `getCommunityPolynetOverview`.
+- The fixture contains one synthetic community root, several real directory nodes, and real directory edges between directory nodes.
+- Directory nodes in the fixture use accepted memory statuses only: `promising`, `validated`, `canonical`, `contested`, and `stale`.
+- The fixture must not expose raw traces, compiler windows, compiler digests, change requests, source bodies, source trace ids, or outcome observation ids.
+- Community-agent activity in the fixture is heartbeat-driven and uses the canonical `community_agent` key.
+- The UI styles edges by typed edge semantics, not by node status classes.
+- This fixture is a product-readiness check for the visible memory surface. It does not weaken the airlock rule: live directory mutations still flow through the community-agent filesystem and typed write gates.
+
 ## What Not To Build Yet
 
 Do not start with:

@@ -198,6 +198,18 @@ const ACTIVE_RETRIEVAL_STATUSES: NodeStatus[] = [
   "contested",
   "stale",
 ];
+const POLYNET_OVERVIEW_STATUSES: NodeStatus[] = [
+  "promising",
+  "validated",
+  "canonical",
+  "contested",
+  "stale",
+];
+const POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT = 80;
+const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
+const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
+const POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT = 8;
+const POLYNET_OVERVIEW_RUN_LIMIT = 6;
 const NODE_TYPES = new Set<NodeType>([
   "playbook",
   "insight",
@@ -287,6 +299,20 @@ function normalizeStringList(raw: unknown, maxItems: number, maxLen: number): st
 function normalizeWorkflowId(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim().slice(0, 256);
   return value || undefined;
+}
+
+function normalizeIdList(raw: unknown, maxItems = 20): string[] {
+  if (!Array.isArray(raw)) return [];
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const id = normalizeIdValue(entry);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+    if (result.length >= maxItems) break;
+  }
+  return result;
 }
 
 function normalizeActorKey(raw: unknown): string | undefined {
@@ -634,6 +660,203 @@ function mapRetrievalLogRow(row: RetrievalLogRow) {
     outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function directoryGraphNodeId(nodeId: any): string {
+  return `directory_node:${normalizeIdValue(nodeId)}`;
+}
+
+function communityGraphRootId(communityId: any): string {
+  return `community:${normalizeIdValue(communityId)}`;
+}
+
+function nodeStatusRank(status: NodeStatus): number {
+  if (status === "canonical") return 5;
+  if (status === "validated") return 4;
+  if (status === "promising") return 3;
+  if (status === "contested") return 2;
+  if (status === "stale") return 1;
+  return 0;
+}
+
+function overviewNodeScore(row: IntelligenceNodeRow): number {
+  return (
+    nodeStatusRank(row.status) +
+    clampScore(row.confidence) +
+    clampScore(row.outcomeImpactScore) * 0.6 +
+    clampScore(row.retrievalUsefulnessScore) * 0.4 -
+    clampScore(row.stalenessScore) * 0.5
+  );
+}
+
+function emptyCountMap<T extends string>(values: readonly T[]): Record<T, number> {
+  const result = {} as Record<T, number>;
+  for (const value of values) result[value] = 0;
+  return result;
+}
+
+function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
+  return {
+    id: directoryGraphNodeId(row._id),
+    kind: "directory_node",
+    node_id: normalizeIdValue(row._id),
+    type: row.type,
+    label: row.title,
+    title: row.title,
+    status: row.status,
+    confidence: row.confidence,
+    evidence_strength: row.evidenceStrength,
+    staleness_score: row.stalenessScore,
+    retrieval_usefulness_score: row.retrievalUsefulnessScore,
+    outcome_impact_score: row.outcomeImpactScore,
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function mapPolynetOverviewEdge(row: IntelligenceEdgeRow) {
+  return {
+    id: `directory_edge:${normalizeIdValue(row._id)}`,
+    kind: "directory_edge",
+    edge_id: normalizeIdValue(row._id),
+    from: directoryGraphNodeId(row.fromNodeId),
+    to: directoryGraphNodeId(row.toNodeId),
+    type: row.type,
+    confidence: row.confidence,
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function communityAgentActivityState(row: Record<string, any> | null): string {
+  if (!row) return "not_started";
+  if (row.status === "running") return "running";
+  if (row.status === "error") return "error";
+  if (row.status === "skipped") return "resting";
+  if (normalizeIdList(row.appliedChangeRequestIds).length > 0) return "updated_directory";
+  if (
+    normalizeIdList(row.acceptedChangeRequestIds).length > 0 ||
+    normalizeIdList(row.rejectedChangeRequestIds).length > 0
+  ) {
+    return "reviewed_candidates";
+  }
+  if (normalizeIdList(row.candidateProposalIds).length > 0) return "proposed_candidates";
+  return "resting";
+}
+
+function mapPolynetOverviewRun(row: Record<string, any>) {
+  return {
+    id: normalizeIdValue(row._id),
+    status: row.status,
+    activity_state: communityAgentActivityState(row),
+    trigger_type: row.triggerType,
+    heartbeat_id: row.heartbeatId ?? null,
+    wake_reason: row.wakeReason ?? null,
+    stop_reason: row.stopReason ?? null,
+    tool_step_count: typeof row.toolStepCount === "number" ? row.toolStepCount : 0,
+    candidate_proposal_count: normalizeIdList(row.candidateProposalIds).length,
+    accepted_change_request_count: normalizeIdList(row.acceptedChangeRequestIds).length,
+    rejected_change_request_count: normalizeIdList(row.rejectedChangeRequestIds).length,
+    applied_change_request_count: normalizeIdList(row.appliedChangeRequestIds).length,
+    started_at: typeof row.startedAt === "number" ? toIsoString(row.startedAt) : null,
+    finished_at: typeof row.finishedAt === "number" ? toIsoString(row.finishedAt) : null,
+  };
+}
+
+async function readPolynetOverviewNodes(args: {
+  ctx: any;
+  communityId: any;
+  isManager: boolean;
+  limit: number;
+}): Promise<{ nodes: IntelligenceNodeRow[]; hasMoreNodes: boolean }> {
+  const rows: IntelligenceNodeRow[] = [];
+  let hasMoreNodes = false;
+  for (const status of POLYNET_OVERVIEW_STATUSES) {
+    const bucket = (await args.ctx.db
+      .query("communityIntelligenceNodes" as any)
+      .withIndex("by_community_status_updatedAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", status),
+      )
+      .order("desc")
+      .take(args.limit)) as IntelligenceNodeRow[];
+    if (bucket.length >= args.limit) hasMoreNodes = true;
+    rows.push(...bucket);
+  }
+
+  const deduped = new Map<string, IntelligenceNodeRow>();
+  for (const row of rows) {
+    if (!canViewerReadNode(row, args.isManager)) continue;
+    const rowId = normalizeIdValue(row._id);
+    if (!rowId || deduped.has(rowId)) continue;
+    deduped.set(rowId, row);
+  }
+
+  return {
+    nodes: Array.from(deduped.values())
+      .sort((a, b) => overviewNodeScore(b) - overviewNodeScore(a) || b.updatedAt - a.updatedAt)
+      .slice(0, args.limit),
+    hasMoreNodes,
+  };
+}
+
+async function readPolynetOverviewEdges(args: {
+  ctx: any;
+  communityId: any;
+  nodes: IntelligenceNodeRow[];
+  isManager: boolean;
+}): Promise<{ edges: IntelligenceEdgeRow[]; hasMoreEdges: boolean }> {
+  const nodeIds = new Set(args.nodes.map((node) => normalizeIdValue(node._id)));
+  const deduped = new Map<string, IntelligenceEdgeRow>();
+  let hasMoreEdges = false;
+
+  for (const node of args.nodes) {
+    const bucket = (await args.ctx.db
+      .query("communityIntelligenceEdges" as any)
+      .withIndex("by_fromNode", (q: any) => q.eq("fromNodeId", node._id))
+      .take(POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT)) as IntelligenceEdgeRow[];
+    if (bucket.length >= POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT) hasMoreEdges = true;
+    for (const edge of bucket) {
+      const edgeId = normalizeIdValue(edge._id);
+      if (!edgeId || deduped.has(edgeId)) continue;
+      if (normalizeIdValue(edge.communityId) !== normalizeIdValue(args.communityId)) continue;
+      if (!edge.toNodeId) continue;
+      if (!nodeIds.has(normalizeIdValue(edge.fromNodeId)) || !nodeIds.has(normalizeIdValue(edge.toNodeId))) continue;
+      if (!canViewerReadVisibility(edge.visibilityScope, args.isManager)) continue;
+      deduped.set(edgeId, edge);
+      if (deduped.size >= POLYNET_OVERVIEW_EDGE_LIMIT) {
+        hasMoreEdges = true;
+        break;
+      }
+    }
+    if (deduped.size >= POLYNET_OVERVIEW_EDGE_LIMIT) break;
+  }
+
+  return {
+    edges: Array.from(deduped.values())
+      .sort((a, b) => b.confidence - a.confidence || b.updatedAt - a.updatedAt)
+      .slice(0, POLYNET_OVERVIEW_EDGE_LIMIT),
+    hasMoreEdges,
+  };
+}
+
+function summarizePolynetOverviewMemory(nodes: IntelligenceNodeRow[], hasMoreNodes: boolean, hasMoreEdges: boolean) {
+  const countsByType = emptyCountMap(Array.from(NODE_TYPES).sort() as NodeType[]);
+  const countsByStatus = emptyCountMap(POLYNET_OVERVIEW_STATUSES);
+  let staleCount = 0;
+  let contestedCount = 0;
+  for (const node of nodes) {
+    countsByType[node.type] += 1;
+    countsByStatus[node.status] += 1;
+    if (node.status === "stale") staleCount += 1;
+    if (node.status === "contested") contestedCount += 1;
+  }
+  return {
+    total_visible_nodes: nodes.length,
+    counts_by_type: countsByType,
+    counts_by_status: countsByStatus,
+    stale_count: staleCount,
+    contested_count: contestedCount,
+    node_counts_are_lower_bound: hasMoreNodes,
+    edge_counts_are_lower_bound: hasMoreEdges,
   };
 }
 
@@ -2603,6 +2826,102 @@ export const listCommunityIntelligenceEdges = query({
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, limit)
       .map(mapEdgeRow);
+  },
+});
+
+export const getCommunityPolynetOverview = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    nodeLimit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const community = (await ctx.db.get(args.communityId)) as any | null;
+    if (!community) throw new Error("community_not_found");
+    const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
+    const nodeLimit = Math.max(
+      1,
+      Math.min(POLYNET_OVERVIEW_MAX_NODE_LIMIT, Math.floor(args.nodeLimit ?? POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT)),
+    );
+
+    const { nodes, hasMoreNodes } = await readPolynetOverviewNodes({
+      ctx,
+      communityId: args.communityId,
+      isManager,
+      limit: nodeLimit,
+    });
+    const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
+      ctx,
+      communityId: args.communityId,
+      nodes,
+      isManager,
+    });
+    const recentRunRows = ((await ctx.db
+      .query("communityAgentRuns" as any)
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+      .order("desc")
+      .take(POLYNET_OVERVIEW_RUN_LIMIT * 2)) as Record<string, any>[])
+      .filter((row) => row.agentKey === "community_agent")
+      .slice(0, POLYNET_OVERVIEW_RUN_LIMIT);
+    const latestRun = recentRunRows[0] ?? null;
+    const recentRuns = recentRunRows.map(mapPolynetOverviewRun);
+    const recentActionSummary = recentRunRows.reduce(
+      (acc, row) => {
+        acc.proposed += normalizeIdList(row.candidateProposalIds).length;
+        acc.accepted += normalizeIdList(row.acceptedChangeRequestIds).length;
+        acc.rejected += normalizeIdList(row.rejectedChangeRequestIds).length;
+        acc.applied += normalizeIdList(row.appliedChangeRequestIds).length;
+        return acc;
+      },
+      { proposed: 0, accepted: 0, rejected: 0, applied: 0 },
+    );
+
+    return {
+      community: {
+        id: normalizeIdValue(community._id),
+        name: community.name,
+        slug: community.slug,
+      },
+      viewer: {
+        is_manager: isManager,
+      },
+      agent: {
+        key: "community_agent",
+        status: latestRun?.status ?? "not_started",
+        activity_state: communityAgentActivityState(latestRun),
+        last_run_at: typeof latestRun?.startedAt === "number" ? toIsoString(latestRun.startedAt) : null,
+        last_run_status: latestRun?.status ?? null,
+        last_wake_reason: latestRun?.wakeReason ?? null,
+        recent_actions_summary: recentActionSummary,
+        recent_runs: recentRuns,
+      },
+      graph: {
+        root_node_id: communityGraphRootId(args.communityId),
+        nodes: [
+          {
+            id: communityGraphRootId(args.communityId),
+            kind: "community",
+            community_id: normalizeIdValue(args.communityId),
+            label: community.name,
+            type: "community",
+          },
+          ...nodes.map(mapPolynetOverviewNode),
+        ],
+        edges: edges.map(mapPolynetOverviewEdge),
+        node_limit: nodeLimit,
+        edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
+        has_more_nodes: hasMoreNodes,
+        has_more_edges: hasMoreEdges,
+      },
+      memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
+    };
   },
 });
 

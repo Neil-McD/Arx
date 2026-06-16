@@ -5148,7 +5148,7 @@ export default function App() {
     session: session,
     ensureSession: ensureUsableAuthSession,
     requireSignIn: () => requireSignIn(),
-    canManagePolynet: canViewActiveCommunityPolynet,
+    canViewPolynet: canViewActiveCommunityPolynet,
   });
 
   useWebPathRouteLifecycle({

@@ -171,7 +171,9 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const canManageCommunitySettings =
     communitySettingsLayer === "admin" || communitySettingsLayer === "owner";
   const canDeleteActiveCommunity = communitySettingsLayer === "owner";
-  const canViewActiveCommunityPolynet = isActiveCommunityOwner || isActiveCommunityAdmin;
+  const canViewActiveCommunityPolynet = Boolean(
+    currentActiveCommunityAccess && communityAccessCapabilities.canViewCommunity,
+  );
   const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
   const canViewMembersActiveCommunity = communityNavVisibility.canViewMembers;
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;

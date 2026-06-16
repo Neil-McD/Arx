@@ -2,18 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
-  fetchCloudCommunityArchiveHealth,
-  processCloudCommunityArchivePending,
-  requestCloudCommunityArchiveBackfill,
-  retryCloudCommunityArchiveFailures,
-  type CloudCommunityArchiveHealthRow,
-} from "../../../../shared/cloudCommunityAdminGateway";
+  fetchCloudCommunityPolynetOverview,
+  type CloudCommunityPolynetOverview,
+} from "../../../../shared/cloudCommunityPolynetGateway";
 
-function formatCommunityArchiveError(raw: unknown): string {
+function formatCommunityPolynetError(raw: unknown): string {
   const value = String(raw ?? "").trim();
-  if (!value) return "Unable to load Polynet health.";
+  if (!value) return "Unable to load Polynet.";
+  if (value.includes("Could not find public function")) return "Polynet backend changes are not live in Convex yet.";
   if (value.includes("community_not_found")) return "Community not found.";
-  if (value.includes("community_manage_access_required")) return "Only owners and admins can access Polynet.";
+  if (value.includes("community_access_required") || value.includes("community_chat_access_required")) {
+    return "You do not have access to this community.";
+  }
   return value;
 }
 
@@ -26,7 +26,7 @@ type UseWebCommunityPolynetControllerArgs<SessionT> = {
   session: SessionT | null;
   ensureSession: EnsureSessionFn<SessionT>;
   requireSignIn: () => void;
-  canManagePolynet: boolean;
+  canViewPolynet: boolean;
 };
 
 export function useWebCommunityPolynetController<SessionT>(
@@ -35,12 +35,9 @@ export function useWebCommunityPolynetController<SessionT>(
   const argsRef = useRef(args);
   argsRef.current = args;
 
-  const [communityArchiveHealth, setCommunityArchiveHealth] = useState<CloudCommunityArchiveHealthRow | null>(null);
-  const [isLoadingCommunityArchiveHealth, setIsLoadingCommunityArchiveHealth] = useState(false);
-  const [communityArchiveHealthError, setCommunityArchiveHealthError] = useState<string | null>(null);
-  const [isBackfillingCommunityArchive, setIsBackfillingCommunityArchive] = useState(false);
-  const [isProcessingCommunityArchive, setIsProcessingCommunityArchive] = useState(false);
-  const [isRetryingCommunityArchive, setIsRetryingCommunityArchive] = useState(false);
+  const [overview, setOverview] = useState<CloudCommunityPolynetOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
 
   const isStaleRequest = useCallback((requestSeq: number, communityId: string) => {
@@ -50,63 +47,46 @@ export function useWebCommunityPolynetController<SessionT>(
       || current.activePage !== "community"
       || current.communityTab !== "polynet"
       || current.activeCommunityId !== communityId
-      || !current.canManagePolynet
-    );
-  }, []);
-
-  const isActivePolynetContext = useCallback((communityId: string) => {
-    const current = argsRef.current;
-    return (
-      current.activePage === "community"
-      && current.communityTab === "polynet"
-      && current.activeCommunityId === communityId
-      && current.canManagePolynet
+      || !current.canViewPolynet
     );
   }, []);
 
   const resetPolynetState = useCallback(() => {
     requestSeqRef.current += 1;
-    setCommunityArchiveHealth(null);
-    setCommunityArchiveHealthError(null);
-    setIsLoadingCommunityArchiveHealth(false);
-    setIsBackfillingCommunityArchive(false);
-    setIsProcessingCommunityArchive(false);
-    setIsRetryingCommunityArchive(false);
+    setOverview(null);
+    setError(null);
+    setIsLoading(false);
   }, []);
 
-  const loadCommunityArchiveHealth = useCallback(async (
+  const loadOverview = useCallback(async (
     communityId: string,
     sessionInput?: SessionT | null,
   ) => {
     const requestSeq = ++requestSeqRef.current;
-    setIsLoadingCommunityArchiveHealth(true);
-    setCommunityArchiveHealthError(null);
+    setIsLoading(true);
+    setError(null);
     try {
-      const usableSession = await argsRef.current.ensureSession(
-        sessionInput ?? argsRef.current.session,
-      );
+      const usableSession = await argsRef.current.ensureSession(sessionInput ?? argsRef.current.session);
       if (isStaleRequest(requestSeq, communityId)) return null;
       if (!usableSession) {
-        setCommunityArchiveHealth(null);
+        setOverview(null);
         return null;
       }
-      const health = await fetchCloudCommunityArchiveHealth<SessionT>({
+      const nextOverview = await fetchCloudCommunityPolynetOverview<SessionT>({
         session: usableSession,
         communityId,
       });
       if (isStaleRequest(requestSeq, communityId)) return null;
-      setCommunityArchiveHealth(health ?? null);
-      return health ?? null;
-    } catch (error) {
+      setOverview(nextOverview ?? null);
+      return nextOverview ?? null;
+    } catch (err) {
       if (isStaleRequest(requestSeq, communityId)) return null;
-      setCommunityArchiveHealth(null);
-      setCommunityArchiveHealthError(
-        formatCommunityArchiveError(error instanceof Error ? error.message : error),
-      );
+      setOverview(null);
+      setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
       return null;
     } finally {
       if (!isStaleRequest(requestSeq, communityId)) {
-        setIsLoadingCommunityArchiveHealth(false);
+        setIsLoading(false);
       }
     }
   }, [isStaleRequest]);
@@ -120,140 +100,38 @@ export function useWebCommunityPolynetController<SessionT>(
       current.requireSignIn();
       return;
     }
-    await loadCommunityArchiveHealth(activeCommunityId, usableSession);
-  }, [loadCommunityArchiveHealth]);
-
-  const backfill = useCallback(async () => {
-    const current = argsRef.current;
-    const activeCommunityId = current.activeCommunityId;
-    if (!activeCommunityId) return;
-    const usableSession = await current.ensureSession();
-    if (!usableSession) {
-      current.requireSignIn();
-      return;
-    }
-    setIsBackfillingCommunityArchive(true);
-    setCommunityArchiveHealthError(null);
-    try {
-      await requestCloudCommunityArchiveBackfill<SessionT>({
-        session: usableSession,
-        communityId: activeCommunityId,
-      });
-      await loadCommunityArchiveHealth(activeCommunityId, usableSession);
-    } catch (error) {
-      if (isActivePolynetContext(activeCommunityId)) {
-        setCommunityArchiveHealthError(
-          formatCommunityArchiveError(error instanceof Error ? error.message : error),
-        );
-      }
-    } finally {
-      setIsBackfillingCommunityArchive(false);
-    }
-  }, [isActivePolynetContext, loadCommunityArchiveHealth]);
-
-  const processPending = useCallback(async () => {
-    const current = argsRef.current;
-    const activeCommunityId = current.activeCommunityId;
-    if (!activeCommunityId) return;
-    const usableSession = await current.ensureSession();
-    if (!usableSession) {
-      current.requireSignIn();
-      return;
-    }
-    setIsProcessingCommunityArchive(true);
-    setCommunityArchiveHealthError(null);
-    try {
-      const result = await processCloudCommunityArchivePending<SessionT>({
-        session: usableSession,
-        communityId: activeCommunityId,
-      });
-      await loadCommunityArchiveHealth(activeCommunityId, usableSession);
-      if (result?.error && isActivePolynetContext(activeCommunityId)) {
-        setCommunityArchiveHealthError(formatCommunityArchiveError(result.error));
-      }
-    } catch (error) {
-      if (isActivePolynetContext(activeCommunityId)) {
-        setCommunityArchiveHealthError(
-          formatCommunityArchiveError(error instanceof Error ? error.message : error),
-        );
-      }
-    } finally {
-      setIsProcessingCommunityArchive(false);
-    }
-  }, [isActivePolynetContext, loadCommunityArchiveHealth]);
-
-  const retryFailed = useCallback(async () => {
-    const current = argsRef.current;
-    const activeCommunityId = current.activeCommunityId;
-    if (!activeCommunityId) return;
-    const usableSession = await current.ensureSession();
-    if (!usableSession) {
-      current.requireSignIn();
-      return;
-    }
-    setIsRetryingCommunityArchive(true);
-    setCommunityArchiveHealthError(null);
-    try {
-      const result = await retryCloudCommunityArchiveFailures<SessionT>({
-        session: usableSession,
-        communityId: activeCommunityId,
-      });
-      await loadCommunityArchiveHealth(activeCommunityId, usableSession);
-      if (result?.error && isActivePolynetContext(activeCommunityId)) {
-        setCommunityArchiveHealthError(formatCommunityArchiveError(result.error));
-      }
-    } catch (error) {
-      if (isActivePolynetContext(activeCommunityId)) {
-        setCommunityArchiveHealthError(
-          formatCommunityArchiveError(error instanceof Error ? error.message : error),
-        );
-      }
-    } finally {
-      setIsRetryingCommunityArchive(false);
-    }
-  }, [isActivePolynetContext, loadCommunityArchiveHealth]);
+    await loadOverview(activeCommunityId, usableSession);
+  }, [loadOverview]);
 
   useEffect(() => {
     if (args.activePage !== "community" || args.communityTab !== "polynet" || !args.activeCommunityId) {
       resetPolynetState();
       return;
     }
-    if (!args.session || !args.canManagePolynet) {
+    if (!args.session || !args.canViewPolynet) {
       resetPolynetState();
       return;
     }
-    void loadCommunityArchiveHealth(args.activeCommunityId, args.session);
+    void loadOverview(args.activeCommunityId, args.session);
   }, [
     args.activeCommunityId,
     args.activePage,
-    args.canManagePolynet,
+    args.canViewPolynet,
     args.communityTab,
     args.session,
-    loadCommunityArchiveHealth,
+    loadOverview,
     resetPolynetState,
   ]);
 
   return {
     state: {
-      health: communityArchiveHealth,
-      isLoading: isLoadingCommunityArchiveHealth,
-      error: communityArchiveHealthError,
-      isBackfilling: isBackfillingCommunityArchive,
-      isProcessingPending: isProcessingCommunityArchive,
-      isRetrying: isRetryingCommunityArchive,
+      overview,
+      isLoading,
+      error,
     },
     actions: {
       refresh: () => {
         void refresh();
-      },
-      backfill: () => {
-        void backfill();
-      },
-      processPending: () => {
-        void processPending();
-      },
-      retryFailed: () => {
-        void retryFailed();
       },
     },
   };

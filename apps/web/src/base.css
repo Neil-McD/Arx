@@ -15032,12 +15032,15 @@ button.chat-reply-quote:hover {
 }
 
 .community-polynet-panel {
-  gap: 20px;
+  gap: 18px;
+  max-width: 1180px;
 }
 
 .community-polynet-header {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .community-polynet-kicker {
@@ -15058,65 +15061,284 @@ button.chat-reply-quote:hover {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
-}
-
-.community-polynet-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  max-width: 620px;
 }
 
 .community-polynet-note {
+  border: 1px solid color-mix(in srgb, #dc2626 32%, var(--border-default));
+  border-radius: 8px;
+  padding: 10px 12px;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
+  background: color-mix(in srgb, #dc2626 7%, transparent);
 }
 
-.community-polynet-stat-grid {
+.community-polynet-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 18px;
+  align-items: stretch;
 }
 
-.community-polynet-stat-grid-secondary {
-  margin-top: 4px;
-}
-
-.community-polynet-stat-card {
+.community-polynet-graph-shell,
+.community-polynet-side section {
   border: 1px solid var(--border-default);
-  border-radius: 16px;
-  padding: 14px;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--accent-gold) 8%, transparent), transparent 46%),
-    color-mix(in srgb, var(--bg-card-alt) 62%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
 }
 
-.community-polynet-stat-label {
+.community-polynet-graph-shell {
+  display: grid;
+  grid-template-rows: minmax(420px, 1fr) auto;
+  min-height: 520px;
+  overflow: hidden;
+}
+
+.community-polynet-graph {
+  position: relative;
+  min-height: 420px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--border-default) 32%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--border-default) 28%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.community-polynet-graph-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.community-polynet-edge {
+  stroke: color-mix(in srgb, var(--text-secondary) 38%, transparent);
+  stroke-width: 0.42;
+  vector-effect: non-scaling-stroke;
+}
+
+.community-polynet-edge.supports,
+.community-polynet-edge.has-example,
+.community-polynet-edge.applies-to-workflow {
+  stroke: color-mix(in srgb, #059669 46%, transparent);
+}
+
+.community-polynet-edge.contradicts {
+  stroke: color-mix(in srgb, #b45309 58%, transparent);
+}
+
+.community-polynet-node {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 30%, var(--border-default));
+  border-radius: 999px;
+  padding: 0;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.community-polynet-node:hover,
+.community-polynet-node.selected {
+  transform: translate(-50%, -50%) scale(1.16);
+  border-color: var(--text-primary);
+}
+
+.community-polynet-node.root {
+  width: min(160px, 38%);
+  min-width: 92px;
+  height: 42px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent-gold) 45%, var(--border-default));
+}
+
+.community-polynet-node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.community-polynet-node.validated {
+  color: color-mix(in srgb, #059669 76%, var(--text-primary));
+}
+
+.community-polynet-node.promising {
+  color: color-mix(in srgb, var(--accent-gold) 78%, var(--text-primary));
+}
+
+.community-polynet-node.contested {
+  color: color-mix(in srgb, #b45309 72%, var(--text-primary));
+}
+
+.community-polynet-node.stale {
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
+}
+
+.community-polynet-empty-graph {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  width: min(320px, calc(100% - 40px));
+  text-align: center;
   color: var(--text-secondary);
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.community-polynet-stat-value {
+.community-polynet-graph-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.community-polynet-side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.community-polynet-side section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.community-polynet-section-label {
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.community-polynet-agent-state {
   color: var(--text-primary);
   font-size: 22px;
-  font-weight: 600;
-  margin-top: 6px;
-}
-
-.community-polynet-stat-value-lg {
-  font-size: 28px;
   font-weight: 650;
 }
 
-.community-polynet-meta {
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.55;
+.community-polynet-agent-state.validated,
+.community-polynet-agent-state.promising {
+  color: color-mix(in srgb, #059669 70%, var(--text-primary));
 }
 
-.community-polynet-meta-error {
-  margin-top: 8px;
-  color: color-mix(in srgb, #dc2626 76%, var(--text-primary));
+.community-polynet-agent-state.contested,
+.community-polynet-agent-state.stale {
+  color: color-mix(in srgb, #b45309 70%, var(--text-primary));
+}
+
+.community-polynet-agent-meta,
+.community-polynet-action-grid,
+.community-polynet-type-list,
+.community-polynet-run-row,
+.community-polynet-detail dl {
+  display: grid;
+  gap: 8px;
+}
+
+.community-polynet-agent-meta,
+.community-polynet-run-row,
+.community-polynet-type-list > div,
+.community-polynet-detail dl > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+}
+
+.community-polynet-agent-meta span,
+.community-polynet-action-grid span,
+.community-polynet-type-list span,
+.community-polynet-detail dt,
+.community-polynet-run-row span,
+.community-polynet-muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.community-polynet-agent-meta strong,
+.community-polynet-type-list strong,
+.community-polynet-detail dd,
+.community-polynet-run-row strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.community-polynet-action-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.community-polynet-action-grid > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.community-polynet-action-grid strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.community-polynet-detail h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.community-polynet-detail dl {
+  margin: 0;
+}
+
+.community-polynet-detail dt,
+.community-polynet-detail dd {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .community-polynet-header,
+  .community-polynet-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-polynet-header {
+    display: grid;
+  }
+
+  .community-polynet-graph-shell {
+    min-height: 420px;
+  }
+
+  .community-polynet-graph {
+    min-height: 340px;
+  }
 }
 
 .invite-create-shell {

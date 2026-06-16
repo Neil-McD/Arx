@@ -178,6 +178,7 @@ import { readCommunityCompilerWindow as readCommunityCompilerWindowImpl } from "
 import {
   applyCommunityIntelligenceChangeRequest as applyCommunityIntelligenceChangeRequestImpl,
   createCommunityIntelligenceChangeRequest as createCommunityIntelligenceChangeRequestImpl,
+  getCommunityPolynetOverview as getCommunityPolynetOverviewImpl,
   listCommunityIntelligenceDirectoryView as listCommunityIntelligenceDirectoryViewImpl,
   listCommunityIntelligenceEdges as listCommunityIntelligenceEdgesImpl,
   listCommunityIntelligenceMutations as listCommunityIntelligenceMutationsImpl,
@@ -329,6 +330,7 @@ export const listMyCommunityAttention = listMyCommunityAttentionImpl;
 export const markCommunitySurfaceSeen = markCommunitySurfaceSeenImpl;
 export const recordCommunitySourceTrace = recordCommunitySourceTraceImpl;
 export const createCommunityIntelligenceChangeRequest = createCommunityIntelligenceChangeRequestImpl;
+export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl;
 export const listCommunityIntelligenceChangeRequests = listCommunityIntelligenceChangeRequestsImpl;
 export const decideCommunityIntelligenceChangeRequest = decideCommunityIntelligenceChangeRequestImpl;
 export const applyCommunityIntelligenceChangeRequest = applyCommunityIntelligenceChangeRequestImpl;

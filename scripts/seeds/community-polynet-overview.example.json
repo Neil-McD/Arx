@@ -1,0 +1,213 @@
+{
+  "community": {
+    "id": "community_distribution_engine_fixture",
+    "name": "Distribution Engineer",
+    "slug": "distribution-engine"
+  },
+  "viewer": {
+    "is_manager": false
+  },
+  "agent": {
+    "key": "community_agent",
+    "status": "ok",
+    "activity_state": "updated_directory",
+    "last_run_at": "2026-06-16T09:00:00.000Z",
+    "last_run_status": "ok",
+    "last_wake_reason": "daily_heartbeat",
+    "recent_actions_summary": {
+      "proposed": 5,
+      "accepted": 3,
+      "rejected": 1,
+      "applied": 2
+    },
+    "recent_runs": [
+      {
+        "id": "run_distribution_engine_20260616",
+        "status": "ok",
+        "activity_state": "updated_directory",
+        "trigger_type": "heartbeat",
+        "heartbeat_id": "heartbeat_distribution_engine_20260616",
+        "wake_reason": "daily_heartbeat",
+        "stop_reason": "completed",
+        "tool_step_count": 7,
+        "candidate_proposal_count": 3,
+        "accepted_change_request_count": 2,
+        "rejected_change_request_count": 1,
+        "applied_change_request_count": 2,
+        "started_at": "2026-06-16T09:00:00.000Z",
+        "finished_at": "2026-06-16T09:03:14.000Z"
+      },
+      {
+        "id": "run_distribution_engine_20260615",
+        "status": "ok",
+        "activity_state": "proposed_candidates",
+        "trigger_type": "heartbeat",
+        "heartbeat_id": "heartbeat_distribution_engine_20260615",
+        "wake_reason": "daily_heartbeat",
+        "stop_reason": "completed",
+        "tool_step_count": 4,
+        "candidate_proposal_count": 2,
+        "accepted_change_request_count": 0,
+        "rejected_change_request_count": 0,
+        "applied_change_request_count": 0,
+        "started_at": "2026-06-15T09:00:00.000Z",
+        "finished_at": "2026-06-15T09:01:49.000Z"
+      }
+    ]
+  },
+  "graph": {
+    "root_node_id": "community:community_distribution_engine_fixture",
+    "node_limit": 80,
+    "edge_limit": 160,
+    "has_more_nodes": false,
+    "has_more_edges": false,
+    "nodes": [
+      {
+        "id": "community:community_distribution_engine_fixture",
+        "kind": "community",
+        "community_id": "community_distribution_engine_fixture",
+        "type": "community",
+        "label": "Distribution Engineer"
+      },
+      {
+        "id": "directory_node:node_creator_outreach_playbook",
+        "kind": "directory_node",
+        "node_id": "node_creator_outreach_playbook",
+        "type": "playbook",
+        "label": "Creator outreach starts with one concrete offer workflow",
+        "title": "Creator outreach starts with one concrete offer workflow",
+        "status": "canonical",
+        "confidence": 0.84,
+        "evidence_strength": "validated",
+        "staleness_score": 0.08,
+        "retrieval_usefulness_score": 0.76,
+        "outcome_impact_score": 0.72,
+        "updated_at": "2026-06-16T08:58:00.000Z"
+      },
+      {
+        "id": "directory_node:node_direct_outcome_hooks",
+        "kind": "directory_node",
+        "node_id": "node_direct_outcome_hooks",
+        "type": "insight",
+        "label": "Direct outcome hooks beat founder-story hooks for early outreach",
+        "title": "Direct outcome hooks beat founder-story hooks for early outreach",
+        "status": "validated",
+        "confidence": 0.78,
+        "evidence_strength": "measured",
+        "staleness_score": 0.12,
+        "retrieval_usefulness_score": 0.7,
+        "outcome_impact_score": 0.66,
+        "updated_at": "2026-06-16T08:54:00.000Z"
+      },
+      {
+        "id": "directory_node:node_sarah_dm_example",
+        "kind": "directory_node",
+        "node_id": "node_sarah_dm_example",
+        "type": "example",
+        "label": "Sarah's low-friction DM sequence",
+        "title": "Sarah's low-friction DM sequence",
+        "status": "promising",
+        "confidence": 0.69,
+        "evidence_strength": "observed",
+        "staleness_score": 0.05,
+        "retrieval_usefulness_score": 0.63,
+        "outcome_impact_score": 0.51,
+        "updated_at": "2026-06-15T19:20:00.000Z"
+      },
+      {
+        "id": "directory_node:node_founder_story_warning",
+        "kind": "directory_node",
+        "node_id": "node_founder_story_warning",
+        "type": "warning_failure",
+        "label": "Founder-story hooks underperform when trust is low",
+        "title": "Founder-story hooks underperform when trust is low",
+        "status": "validated",
+        "confidence": 0.74,
+        "evidence_strength": "observed",
+        "staleness_score": 0.1,
+        "retrieval_usefulness_score": 0.59,
+        "outcome_impact_score": 0.48,
+        "updated_at": "2026-06-15T17:36:00.000Z"
+      },
+      {
+        "id": "directory_node:node_offer_context_open_question",
+        "kind": "directory_node",
+        "node_id": "node_offer_context_open_question",
+        "type": "open_question",
+        "label": "Does the hook pattern transfer to B2C creator offers?",
+        "title": "Does the hook pattern transfer to B2C creator offers?",
+        "status": "promising",
+        "confidence": 0.42,
+        "evidence_strength": "anecdotal",
+        "staleness_score": 0.18,
+        "retrieval_usefulness_score": 0.28,
+        "outcome_impact_score": 0.35,
+        "updated_at": "2026-06-14T21:10:00.000Z"
+      }
+    ],
+    "edges": [
+      {
+        "id": "directory_edge:edge_playbook_supported_by_hooks",
+        "kind": "directory_edge",
+        "edge_id": "edge_playbook_supported_by_hooks",
+        "from": "directory_node:node_direct_outcome_hooks",
+        "to": "directory_node:node_creator_outreach_playbook",
+        "type": "supports",
+        "confidence": 0.82,
+        "updated_at": "2026-06-16T08:58:00.000Z"
+      },
+      {
+        "id": "directory_edge:edge_playbook_has_example",
+        "kind": "directory_edge",
+        "edge_id": "edge_playbook_has_example",
+        "from": "directory_node:node_creator_outreach_playbook",
+        "to": "directory_node:node_sarah_dm_example",
+        "type": "has_example",
+        "confidence": 0.76,
+        "updated_at": "2026-06-15T19:22:00.000Z"
+      },
+      {
+        "id": "directory_edge:edge_hooks_contradict_story",
+        "kind": "directory_edge",
+        "edge_id": "edge_hooks_contradict_story",
+        "from": "directory_node:node_direct_outcome_hooks",
+        "to": "directory_node:node_founder_story_warning",
+        "type": "contradicts",
+        "confidence": 0.71,
+        "updated_at": "2026-06-15T17:40:00.000Z"
+      },
+      {
+        "id": "directory_edge:edge_open_question_applies_to_playbook",
+        "kind": "directory_edge",
+        "edge_id": "edge_open_question_applies_to_playbook",
+        "from": "directory_node:node_offer_context_open_question",
+        "to": "directory_node:node_creator_outreach_playbook",
+        "type": "applies_to_workflow",
+        "confidence": 0.54,
+        "updated_at": "2026-06-14T21:12:00.000Z"
+      }
+    ]
+  },
+  "memory": {
+    "total_visible_nodes": 5,
+    "counts_by_type": {
+      "decision_judgment": 0,
+      "example": 1,
+      "insight": 1,
+      "open_question": 1,
+      "playbook": 1,
+      "warning_failure": 1
+    },
+    "counts_by_status": {
+      "promising": 2,
+      "validated": 2,
+      "canonical": 1,
+      "contested": 0,
+      "stale": 0
+    },
+    "stale_count": 0,
+    "contested_count": 0,
+    "node_counts_are_lower_bound": false,
+    "edge_counts_are_lower_bound": false
+  }
+}
