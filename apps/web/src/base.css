@@ -15078,31 +15078,27 @@ button.chat-reply-quote:hover {
   display: block;
 }
 
-.community-polynet-graph-shell,
 .community-polynet-side section {
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
 }
 
+/* Boxless: the graph is the page surface (Obsidian-style), no card frame. */
 .community-polynet-graph-shell {
   display: grid;
-  grid-template-rows: minmax(620px, 1fr) auto;
+  grid-template-rows: 1fr;
   min-height: 680px;
   overflow: hidden;
 }
 
 .community-polynet-graph {
-  /* Flat near-black field (Obsidian-style) so the pink seed and synaptic edges
-     are the only thing on it — the network grows on raw background, no gradient. */
-  --polynet-pink: #ff5c9d;
-  --polynet-pink-soft: #e57ba8;
-  --polynet-rose: #d66a8a;
-  --polynet-label: rgba(235, 238, 245, 0.82);
+  /* Boxless + theme-native: the network sits directly on the active theme's
+     page background (Obsidian-style) — no gradient, no card. */
   position: relative;
   min-height: 620px;
   overflow: hidden;
-  background: #0c0e14;
+  background: transparent;
 }
 
 /* Single SVG canvas: one user unit == one CSS pixel, so pan/zoom is one <g>
@@ -15124,7 +15120,7 @@ button.chat-reply-quote:hover {
 
 /* Synaptic edges: thin, typed by operational relationship, crisp at any zoom. */
 .cp-edge {
-  stroke: rgba(244, 180, 210, 0.22);
+  stroke: color-mix(in srgb, var(--text-secondary) 36%, transparent);
   stroke-width: 1.1;
   vector-effect: non-scaling-stroke;
 }
@@ -15149,8 +15145,8 @@ button.chat-reply-quote:hover {
 }
 
 .cp-node-circle {
-  fill: var(--polynet-rose);
-  stroke: rgba(12, 14, 20, 0.55);
+  fill: var(--text-secondary);
+  stroke: color-mix(in srgb, var(--bg-app) 70%, transparent);
   stroke-width: 1;
   transition: fill 160ms ease;
 }
@@ -15160,7 +15156,7 @@ button.chat-reply-quote:hover {
 }
 
 .cp-node-circle.promising {
-  fill: var(--polynet-pink-soft);
+  fill: color-mix(in srgb, var(--accent-gold) 70%, var(--text-primary));
 }
 
 .cp-node-circle.contested {
@@ -15171,10 +15167,10 @@ button.chat-reply-quote:hover {
   fill: #8b93a7;
 }
 
-/* The seed neuron: a clean solid pink dot, soft outer glow, no white center. */
+/* The seed neuron: a clean solid dot in the theme accent, soft outer glow. */
 .cp-root-circle {
-  fill: var(--polynet-pink);
-  stroke: rgba(12, 14, 20, 0.5);
+  fill: var(--accent-gold);
+  stroke: color-mix(in srgb, var(--bg-app) 60%, transparent);
   stroke-width: 1;
   transform-origin: center;
   animation: community-polynet-pulse 3.4s ease-in-out infinite;
@@ -15183,28 +15179,24 @@ button.chat-reply-quote:hover {
 .cp-node-ring {
   fill: none;
   stroke: currentColor;
-  color: var(--polynet-pink-soft);
+  color: var(--accent-gold);
   stroke-width: 1.5;
   opacity: 0.7;
   vector-effect: non-scaling-stroke;
 }
 
-.cp-node.root .cp-node-ring {
-  color: var(--polynet-pink);
-}
-
 .cp-node-label {
-  fill: var(--polynet-label);
+  fill: var(--text-primary);
   font-size: 12px;
   font-weight: 550;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.75);
+  stroke: color-mix(in srgb, var(--bg-app) 78%, transparent);
   stroke-width: 3px;
   pointer-events: none;
 }
 
 .cp-node-label.root {
-  fill: #fff;
+  fill: var(--text-primary);
   font-size: 14px;
   font-weight: 650;
 }
@@ -15233,18 +15225,18 @@ button.chat-reply-quote:hover {
   min-width: 30px;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid rgba(244, 180, 210, 0.28);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: rgba(12, 14, 20, 0.66);
-  color: var(--polynet-label);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-app));
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
 }
 
 .community-polynet-graph-controls button:hover {
-  border-color: var(--polynet-pink);
-  color: #fff;
+  border-color: var(--accent-gold);
+  color: var(--text-primary);
 }
 
 /* Minimal floating inspector for the selected node — replaces the old side panel. */
@@ -15255,15 +15247,15 @@ button.chat-reply-quote:hover {
   z-index: 3;
   max-width: min(320px, calc(100% - 120px));
   padding: 10px 12px;
-  border: 1px solid rgba(244, 180, 210, 0.22);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: rgba(12, 14, 20, 0.82);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-app));
   backdrop-filter: blur(6px);
   pointer-events: none;
 }
 
 .community-polynet-detail-title {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
@@ -15274,7 +15266,7 @@ button.chat-reply-quote:hover {
   flex-wrap: wrap;
   gap: 4px 10px;
   margin-top: 6px;
-  color: var(--polynet-label);
+  color: var(--text-secondary);
   font-size: 11px;
   text-transform: capitalize;
 }
@@ -15286,20 +15278,10 @@ button.chat-reply-quote:hover {
   transform: translateX(-50%);
   width: min(320px, calc(100% - 40px));
   text-align: center;
-  color: var(--polynet-label);
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
   pointer-events: none;
-}
-
-.community-polynet-graph-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 
 .community-polynet-side {

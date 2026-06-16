@@ -266,11 +266,6 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                 </div>
               ) : null}
             </div>
-            <div className="community-polynet-graph-footer">
-              <span>{directoryNodeCount} memory nodes</span>
-              <span>{overview.graph.edges.length} edges</span>
-              {overview.graph.has_more_nodes || overview.graph.has_more_edges ? <span>Bounded view</span> : null}
-            </div>
           </section>
         </div>
       )}

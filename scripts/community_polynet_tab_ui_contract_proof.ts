@@ -57,8 +57,8 @@ assert.doesNotMatch(
 const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
 assert.match(
   css,
-  /\.cp-root-circle \{[\s\S]*fill: var\(--polynet-pink\)/,
-  "PolyNet root node should be a compact logo-pink dot",
+  /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
+  "PolyNet root node should be a compact dot in the theme accent",
 );
 assert.doesNotMatch(
   css,
