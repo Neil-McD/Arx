@@ -2,7 +2,7 @@ const DEFAULT_COMPUTER_NAME_PATTERN = /^(?:project|computer)\s+([1-9]\d*)$/i;
 
 export function formatDefaultComputerName(index: number): string {
   const safeIndex = Number.isInteger(index) && index > 0 ? index : 1;
-  return `Computer ${safeIndex}`;
+  return `Project ${safeIndex}`;
 }
 
 export function readDefaultComputerNameIndex(raw: string | null | undefined): number | null {

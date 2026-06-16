@@ -1,5 +1,4 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
-import { ensureDefaultCloudProjectId } from "./cloudProjectsGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import {
   getConvexCloudThreadRowByThreadKey,
@@ -76,11 +75,7 @@ export function useWebThreadMutationController<SessionT>(
       enabled.find((toggle) => toggle.id === current.defaultActiveModelId)?.id ||
       enabled[0]?.id ||
       current.defaultActiveModelId;
-    const preferredProjectId = (current.activeProjectId ?? "").trim() || null;
-    const projectId = preferredProjectId
-      ?? (await ensureDefaultCloudProjectId({
-        session: usableSession,
-      }));
+    const projectId = (current.activeProjectId ?? "").trim() || null;
     try {
       await ensureCloudThreadRecord({
         session: usableSession as any,

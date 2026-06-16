@@ -131,7 +131,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
         hasProjectToolbar &&
         (threadLaneFilter === "agent" || (threadLaneFilter === "chat" && !showChatSignInPrompt)) && (
           <div className="project-toolbar">
-            <div className="project-toolbar-label">Computers</div>
+            <div className="project-toolbar-label">Projects</div>
             {projectToolbarAction ? (
               <div className="project-toolbar-actions">{projectToolbarAction}</div>
             ) : null}
@@ -182,7 +182,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                           className="project-group-label"
                           onClick={() => actions.onToggleProjectExpanded(project.id)}
                           aria-expanded={expanded}
-                          title={expanded ? "Collapse computer" : "Expand computer"}
+                          title={expanded ? "Collapse project" : "Expand project"}
                         >
                           <span className="project-group-icon-wrap" aria-hidden="true">
                             <svg className="project-group-icon project-group-icon-folder" viewBox="0 0 24 24">
@@ -204,7 +204,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                               type="button"
                               className="project-group-menu-trigger"
                               aria-expanded={openProjectMenuId === project.id}
-                              title="Computer options"
+                              title="Project options"
                               onClick={() =>
                                 setOpenProjectMenuId((current) =>
                                   current === project.id ? null : project.id,
@@ -228,7 +228,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                                       void actions.onEditProject?.(project);
                                     }}
                                   >
-                                    Edit computer
+                                    Edit project
                                   </button>
                                 ) : null}
                                 {actions.onDeleteProject ? (
@@ -240,7 +240,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                                       void actions.onDeleteProject?.(project);
                                     }}
                                   >
-                                    Delete computer
+                                    Delete project
                                   </button>
                                 ) : null}
                               </div>
@@ -251,7 +251,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                           type="button"
                           className="project-group-new"
                           onClick={() => actions.onStartDraftInProject(project)}
-                          title="Start a new thread in this computer"
+                          title="Start a new thread in this project"
                         >
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -307,7 +307,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                 })}
                 {generalThreads.length > 0 && (
                   <div className="session-group">
-                    <div className="session-group-label">Unassigned</div>
+                    <div className="session-group-label">Chats</div>
                     {generalThreads.map((thread) => actions.renderSessionItem(thread))}
                   </div>
                 )}
@@ -315,14 +315,14 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                   ? agentThreadsCount === 0 && (
                       <div className="empty-state">
                         {projectThreadGroups.length > 0
-                          ? "No local threads yet. Pick a computer and start one."
+                          ? "No local threads yet. Pick a project and start one."
                           : "No local threads yet. Start one after your workspace is ready."}
                       </div>
                     )
                   : chatThreadsCount === 0 && (
                       <div className="empty-state">
                         {projectThreadGroups.length > 0
-                          ? "No cloud chats yet. Pick a computer and start one."
+                          ? "No cloud chats yet. Pick a project and start one."
                           : "No cloud chats yet. Start one."}
                       </div>
                     )}

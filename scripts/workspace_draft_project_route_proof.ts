@@ -50,28 +50,38 @@ assert.match(
 assert.match(
   routeController,
   /activeProjectId\?: string \| null/,
-  "draft route controller must receive the current draft computer id",
+  "draft route controller must receive the current explicit draft project id",
 );
 assert.match(
   routeController,
-  /setActiveProjectId\?\.\(normalizeWorkspaceDraftProjectId\(opts\.projectId\)\)/,
+  /const requestedProjectId = normalizeWorkspaceDraftProjectId\([\s\S]*opts\?\.projectId !== undefined \? opts\.projectId : null,[\s\S]*current\.setActiveProjectId\?\.\(requestedProjectId\)/,
   "explicit draft project changes must be normalized before reaching project state",
+);
+assert.doesNotMatch(
+  routeController,
+  /opts\?\.projectId !== undefined \? opts\.projectId : current\.activeProjectId/,
+  "workspace drafts must not implicitly reuse the previously selected project",
 );
 assert.match(
   routeController,
   /buildWorkspaceCommunityDraftPath\(requestedSlug, requestedProjectId\)[\s\S]*buildWorkspaceDraftPath\(requestedProjectId\)/,
-  "opening a workspace draft must persist the selected computer into the route",
+  "opening a project draft must persist only the explicit project into the route",
+);
+assert.match(
+  routeController,
+  /current\.setActiveProjectId\?\.\(null\);[\s\S]*buildWorkspaceCommunityDraftPath\(current\.activeCommunitySlug, null\)[\s\S]*buildWorkspaceDraftPath\(null\)/,
+  "global new chat must clear project intent instead of inheriting the current project",
 );
 assert.match(
   coreController,
-  /activeProjectId: params\.project\.state\.activeProjectId \?\? params\.project\.derived\.resolvedActiveProjectId/,
-  "draft route controller must receive raw route project state while project rows are still loading",
+  /activeProjectId: params\.project\.state\.activeProjectId/,
+  "thread creation and draft routing must receive raw explicit project state, not the resolved default project",
 );
 
 assert.match(
   app,
   /initialActiveProjectId: initialAppRoute\?\.projectId \?\? null/,
-  "initial draft computer route state must seed the workspace project controller",
+  "initial draft project route state must seed the workspace project controller",
 );
 assert.match(
   projectStateController,
@@ -85,13 +95,13 @@ assert.match(
 );
 assert.match(
   app,
-  /projectId:[\s\S]*activePage === "workspace" && activeView === "home" && !activeThreadId[\s\S]*workspaceProject\.state\.activeProjectId \?\? workspaceProject\.derived\.resolvedActiveProjectId/,
-  "navigation snapshots must preserve draft computer identity",
+  /projectId:[\s\S]*activePage === "workspace" && activeView === "home" && !activeThreadId[\s\S]*workspaceProject\.state\.activeProjectId/,
+  "navigation snapshots must preserve only explicit draft project identity",
 );
 assert.match(
   app,
-  /if \(activePage !== "workspace" \|\| activeView !== "home" \|\| activeThreadId\) return;[\s\S]*const draftProjectId = workspaceProject\.state\.activeProjectId \?\? currentWorkspaceProjectId;[\s\S]*window\.history\.replaceState/,
-  "draft route URLs must be reconciled when the selected draft computer changes",
+  /if \(activePage !== "workspace" \|\| activeView !== "home" \|\| activeThreadId\) return;[\s\S]*const draftProjectId = workspaceProject\.state\.activeProjectId;[\s\S]*window\.history\.replaceState/,
+  "draft route URLs must be reconciled from explicit draft project state only",
 );
 
 console.log("workspace_draft_project_route_proof: ok");

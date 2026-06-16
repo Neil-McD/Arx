@@ -4,6 +4,7 @@ import {
   buildProjectByIdMap,
   resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared,
   resolveDefaultWorkspaceProjectId,
+  resolveExistingCloudProjectId,
   resolvePreferredCloudProjectId,
 } from "../../../../shared/threadSidebarSelectors";
 import { fetchMappedCloudProjects } from "../../../../shared/cloudProjectsGateway";
@@ -90,10 +91,10 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
         const next = (await fetchMappedCloudProjects({
           session: usableSession,
         })).map((project) => project satisfies WebCloudProjectRecord);
-        const nextActiveProjectId = resolvePreferredCloudProjectId(next, requestedActiveProjectId);
+        const nextActiveProjectId = resolveExistingCloudProjectId(next, requestedActiveProjectId);
         setProjects(next);
         setActiveProjectId((current) =>
-          resolvePreferredCloudProjectId(next, current ?? requestedActiveProjectId),
+          resolveExistingCloudProjectId(next, current ?? requestedActiveProjectId),
         );
         emitWorkspaceEvent({
           scope: "project",
@@ -111,7 +112,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
           name: "projects_load",
           status: "failure",
           error: formatWorkspaceInstrumentationError(
-            formatWorkspaceRestoreErrorMessage(error, "Couldn't load your computers right now."),
+            formatWorkspaceRestoreErrorMessage(error, "Couldn't load your projects right now."),
           ),
         });
       }
@@ -171,13 +172,13 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
       const nextProjects = projects.filter((entry) => entry.id !== project.id);
       const activeThread = params.threads.find((thread) => thread.id === params.activeThreadId) ?? null;
       const activeThreadCleared = activeThread?.project_id === project.id;
-      const nextActiveProjectId = resolvePreferredCloudProjectId(
+      const nextActiveProjectId = resolveExistingCloudProjectId(
         nextProjects,
         activeProjectId === project.id ? null : activeProjectId,
       );
       setProjects((prev) => {
         setActiveProjectId((current) =>
-          resolvePreferredCloudProjectId(nextProjects, current === project.id ? null : current),
+          resolveExistingCloudProjectId(nextProjects, current === project.id ? null : current),
         );
         return nextProjects;
       });

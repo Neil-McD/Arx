@@ -100,7 +100,7 @@ function getProjectImportFileError(file: File | null): string | null {
     return "Upload a single .zip file.";
   }
   if (file.size > PROJECT_IMPORT_MAX_BYTES) {
-    return "Computer imports are limited to 150 MB zipped.";
+    return "Project imports are limited to 150 MB zipped.";
   }
   return null;
 }
@@ -262,7 +262,7 @@ export function useWebProjectUiController<TSession>(
     ) {
       onWorkspaceBillingRequired?.({
         action: "card_required",
-        message: "Extra computers require a card on file.",
+        message: "Extra projects require a card on file.",
       });
       return;
     }
@@ -339,7 +339,7 @@ export function useWebProjectUiController<TSession>(
         setEditProjectName(normalizeComputerDisplayName(createdProject.name));
         setEditProjectDescription(createdProject.description ?? "");
         setEditProjectImportFile(createProjectImportFile);
-        setEditProjectError("Computer created, but the zip import failed. You can try the import again here.");
+        setEditProjectError("Project created, but the zip import failed. You can try the import again here.");
         setIsEditProjectModalOpen(true);
       } else {
         const billingAction = readWorkspaceBillingActionFromError(error);
@@ -415,7 +415,7 @@ export function useWebProjectUiController<TSession>(
       console.warn("Failed to update cloud project:", error);
       setEditProjectError(
         metadataUpdated && editProjectImportFile
-          ? "Computer details were saved, but the zip import failed."
+          ? "Project details were saved, but the zip import failed."
           : formatProjectOperationErrorMessage(error, {
               operation: "update",
               ...projectErrorMessageOptions,
@@ -442,12 +442,12 @@ export function useWebProjectUiController<TSession>(
     if (!session || !deletingProjectId || isDeletingProject) return;
     const project = cloudProjects.find((entry) => entry.id === deletingProjectId) ?? null;
     if (!project) {
-      setDeleteProjectError("Computer no longer exists.");
+      setDeleteProjectError("Project no longer exists.");
       return;
     }
     const expectedName = normalizeComputerDisplayName(project.name);
     if (!expectedName || deleteProjectConfirmationValue.trim() !== expectedName) {
-      setDeleteProjectError("Type the exact computer name to confirm deletion.");
+      setDeleteProjectError("Type the exact project name to confirm deletion.");
       return;
     }
     const usableSession = await ensureSession(session);

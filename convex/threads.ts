@@ -13,10 +13,6 @@ import {
   mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
 } from "../shared/runtimeWorkingStateLedger";
-import { formatDefaultComputerName } from "../shared/projectNaming";
-import {
-  DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
-} from "../shared/workspaceProjectResources";
 import { requireCommunityChatAccess } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 
@@ -763,27 +759,17 @@ function normalizeRunLane(raw: unknown): string {
   return value.slice(0, 64);
 }
 
-async function ensureDefaultProjectId(args: {
+async function validateOwnedCloudProjectId(args: {
   ctx: any;
   ownerId: any;
-  authSubject?: string | null;
-  nowMs: number;
-}): Promise<any | null> {
-  const existing = await args.ctx.db
-    .query("cloudProjects")
-    .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))
-    .first();
-  if (existing) return existing._id;
-
-  return await args.ctx.db.insert("cloudProjects", {
-    ownerId: args.ownerId,
-    name: formatDefaultComputerName(1),
-    status: "active",
-    providerVolumeId: undefined,
-    workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
+  projectId: any;
+}): Promise<any> {
+  const row = await args.ctx.db.get(args.projectId);
+  if (!row) throw new Error("project_not_found");
+  if (row.ownerId !== args.ownerId) throw new Error("project_forbidden");
+  const status = String(row.status ?? "active").trim().toLowerCase();
+  if (status === "archived" || status === "deleted") throw new Error("project_not_found");
+  return args.projectId;
 }
 
 async function getCloudThreadByThreadKeyInternal(args: {
@@ -1249,6 +1235,13 @@ export const ensureCloudThread = mutation({
     });
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
+    const requestedProjectId = args.projectId
+      ? await validateOwnedCloudProjectId({
+          ctx,
+          ownerId,
+          projectId: args.projectId,
+        })
+      : null;
     const existing = await getCloudThreadByThreadKeyInternal({
       ctx,
       ownerId,
@@ -1256,8 +1249,8 @@ export const ensureCloudThread = mutation({
     });
     if (existing) {
       const patch: Record<string, unknown> = { updatedAt: nowMs };
-      if (args.projectId && existing.projectId !== args.projectId) {
-        patch.projectId = args.projectId;
+      if (requestedProjectId && existing.projectId !== requestedProjectId) {
+        patch.projectId = requestedProjectId;
       }
       if (typeof args.modelId === "string" && args.modelId.trim() && existing.modelId !== args.modelId.trim()) {
         patch.modelId = args.modelId.trim();
@@ -1276,14 +1269,6 @@ export const ensureCloudThread = mutation({
       return refreshed ?? existing;
     }
 
-    const projectId =
-      args.projectId ??
-      (await ensureDefaultProjectId({
-        ctx,
-        ownerId,
-        authSubject: args.authSubject ?? null,
-        nowMs,
-      }));
     const initialCommunityId = await validateThreadCommunityLensAccess({
       ctx,
       communityId: args.communityId,
@@ -1294,7 +1279,7 @@ export const ensureCloudThread = mutation({
       threadKey,
       title: normalizeThreadTitle(args.title) ?? "New thread",
       titleSource: args.titleSource ?? "auto",
-      projectId,
+      ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
       communityId: initialCommunityId,
       modelId: String(args.modelId ?? "").trim() || undefined,
       contextVersion:
@@ -1336,6 +1321,13 @@ export const updateCloudThread = mutation({
       ownerId,
       threadId: args.threadId,
     });
+    const requestedProjectId = args.projectId
+      ? await validateOwnedCloudProjectId({
+          ctx,
+          ownerId,
+          projectId: args.projectId,
+        })
+      : null;
     const patch: Record<string, unknown> = {
       updatedAt: nowMs,
     };
@@ -1344,7 +1336,7 @@ export const updateCloudThread = mutation({
     }
     if (args.titleSource) patch.titleSource = args.titleSource;
     if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
-    if (args.projectId) patch.projectId = args.projectId;
+    if (requestedProjectId) patch.projectId = requestedProjectId;
     if (typeof args.lastSeq === "number" && Number.isFinite(args.lastSeq)) {
       patch.lastSeq = Math.max(0, Math.floor(args.lastSeq));
     }

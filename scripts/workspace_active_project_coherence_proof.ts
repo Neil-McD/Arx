@@ -18,7 +18,7 @@ const projects: Project[] = [
 ];
 const projectById = new Map(projects.map((project) => [project.id, project]));
 const resolveThreadProjectId = (thread: Thread): string | null =>
-  String(thread.project_id ?? "").trim() || "general";
+  String(thread.project_id ?? "").trim() || null;
 
 const activeThreadBeatsDraftSelection = resolveWorkspaceActiveProject({
   activeThread: { id: "thread_test", project_id: "test" },
@@ -86,10 +86,10 @@ const missingActiveThreadProjectDoesNotBecomeDefault = resolveWorkspaceActivePro
 });
 assert.equal(missingActiveThreadProjectDoesNotBecomeDefault.currentProjectId, "deleted_project");
 assert.equal(missingActiveThreadProjectDoesNotBecomeDefault.currentProject, null);
-assert.equal(missingActiveThreadProjectDoesNotBecomeDefault.currentProjectName, "Loading computer");
+assert.equal(missingActiveThreadProjectDoesNotBecomeDefault.currentProjectName, "Loading project");
 assert.equal(missingActiveThreadProjectDoesNotBecomeDefault.source, "active_thread");
 
-const threadWithoutExplicitProjectUsesThreadResolver = resolveWorkspaceActiveProject({
+const threadWithoutExplicitProjectStaysStandalone = resolveWorkspaceActiveProject({
   activeThread: { id: "thread_legacy", project_id: null },
   activeThreadId: "thread_legacy",
   workspaceWantsNewChat: false,
@@ -98,9 +98,9 @@ const threadWithoutExplicitProjectUsesThreadResolver = resolveWorkspaceActivePro
   projectById,
   resolveThreadProjectId,
 });
-assert.equal(threadWithoutExplicitProjectUsesThreadResolver.currentProjectId, "general");
-assert.equal(threadWithoutExplicitProjectUsesThreadResolver.currentProjectName, "General");
-assert.equal(threadWithoutExplicitProjectUsesThreadResolver.source, "active_thread");
+assert.equal(threadWithoutExplicitProjectStaysStandalone.currentProjectId, null);
+assert.equal(threadWithoutExplicitProjectStaysStandalone.currentProjectName, "");
+assert.equal(threadWithoutExplicitProjectStaysStandalone.source, "none");
 
 const noWorkspaceSelectionStaysEmpty = resolveWorkspaceActiveProject({
   activeThread: null,

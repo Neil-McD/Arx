@@ -167,8 +167,8 @@ export function evaluateWorkspaceProjectCreateAdmission(params: {
       requestedCount,
       message:
         params.accountTier === "free"
-          ? "Free workspace accounts are limited to one computer."
-          : `Workspace accounts are limited to ${limit} computers.`,
+          ? "Free workspace accounts are limited to one project."
+          : `Workspace accounts are limited to ${limit} projects.`,
     });
   }
   return admissionOk({
@@ -206,7 +206,7 @@ export function evaluateWorkspaceVolumeMaterializationAdmission(params: {
       limit: WORKSPACE_FREE_PROJECT_VOLUME_LIMIT,
       currentCount,
       requestedCount,
-      message: "Extra workspace computers require a card on file.",
+      message: "Extra workspace projects require a card on file.",
     });
   }
 

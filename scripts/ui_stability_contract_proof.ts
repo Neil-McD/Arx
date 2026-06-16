@@ -115,28 +115,28 @@ assert.match(
 );
 assert.match(
   app,
-  /const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject\(\{[\s\S]*activeThread,[\s\S]*activeThreadId,[\s\S]*workspaceWantsNewChat,[\s\S]*resolvedActiveProjectId: workspace\.derived\.resolvedActiveProjectId,[\s\S]*resolvedActiveProjectName: workspace\.derived\.resolvedActiveProjectName,[\s\S]*projectById: workspace\.derived\.projectById,[\s\S]*resolveThreadProjectId: workspace\.derived\.resolveThreadProjectId/,
+  /const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject\(\{[\s\S]*activeThread,[\s\S]*activeThreadId,[\s\S]*workspaceWantsNewChat,[\s\S]*resolvedActiveProjectId: workspaceProject\.state\.activeProjectId,[\s\S]*resolvedActiveProjectName: workspace\.derived\.resolvedActiveProjectName,[\s\S]*projectById: workspace\.derived\.projectById,[\s\S]*resolveThreadProjectId: workspace\.derived\.resolveThreadProjectId/,
   "workspace current project authority must be centralized in the active project selector",
 );
 assert.match(
   workspaceActiveProjectSelector,
-  /const activeThreadProjectId =[\s\S]*params\.activeThread && !params\.workspaceWantsNewChat[\s\S]*params\.resolveThreadProjectId\(params\.activeThread\)[\s\S]*const isPendingThreadProject =[\s\S]*Boolean\(params\.activeThreadId\)[\s\S]*!params\.workspaceWantsNewChat[\s\S]*!params\.activeThread[\s\S]*const currentProjectId = isPendingThreadProject[\s\S]*activeThreadProjectId \?\? params\.resolvedActiveProjectId/,
-  "workspace current project must prefer the active thread project and avoid default-project flash while the thread is loading",
+  /const hasActiveThread = Boolean\(params\.activeThread\) && !params\.workspaceWantsNewChat;[\s\S]*const activeThreadProjectId =[\s\S]*params\.resolveThreadProjectId\(params\.activeThread\)[\s\S]*const currentProjectId = isPendingThreadProject[\s\S]*hasActiveThread[\s\S]*\? activeThreadProjectId[\s\S]*: params\.resolvedActiveProjectId/,
+  "workspace current project must prefer explicit active thread projects, keep standalone threads standalone, and avoid default-project flash while the thread is loading",
 );
 assert.match(
   workspaceActiveProjectSelector,
-  /const isFromActiveThread =[\s\S]*currentProjectId === activeThreadProjectId[\s\S]*const currentProjectName =[\s\S]*isFromActiveThread[\s\S]*"Loading computer"[\s\S]*params\.resolvedActiveProjectName/,
-  "right panel computer name must not fall back to the default computer while an active thread project row is still loading",
+  /const isFromActiveThread =[\s\S]*currentProjectId === activeThreadProjectId[\s\S]*const currentProjectName =[\s\S]*isFromActiveThread[\s\S]*"Loading project"[\s\S]*params\.resolvedActiveProjectName/,
+  "right panel project name must not fall back to the default project while an active thread project row is still loading",
 );
 assert.match(
   threadSidebarSelectors,
-  /const direct = String\(thread\.project_id \?\? ""\)\.trim\(\);[\s\S]*if \(direct\) return direct;[\s\S]*return defaultWorkspaceProjectId;/,
-  "thread project ids must be authoritative and must not silently fall back to the default computer while project rows lag",
+  /const direct = String\(thread\.project_id \?\? ""\)\.trim\(\);[\s\S]*if \(direct\) return direct;[\s\S]*return null;/,
+  "thread project ids must be authoritative and missing project ids must remain standalone chats",
 );
 assert.match(
   workspaceProjectStateController,
-  /const requestedActiveProjectId = activeProjectId;[\s\S]*setActiveProjectId\(\(current\) =>[\s\S]*resolvePreferredCloudProjectId\(next, current \?\? requestedActiveProjectId\)/,
-  "project reloads must preserve the newest selected draft computer instead of clobbering it with a stale closure",
+  /const requestedActiveProjectId = activeProjectId;[\s\S]*setActiveProjectId\(\(current\) =>[\s\S]*resolveExistingCloudProjectId\(next, current \?\? requestedActiveProjectId\)/,
+  "project reloads must preserve the newest explicit draft project instead of clobbering it or defaulting it from provider rows",
 );
 assert.doesNotMatch(
   app + workspaceSidebarStateHost,

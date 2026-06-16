@@ -252,17 +252,17 @@ function buildPlatformHarnessContextPrompt(params: {
     "PLATFORM_HARNESS_CONTEXT",
     `Active harness: ${params.harnessName}.`,
     hasWorkspaceTools
-      ? "This run can inspect and modify files in the active computer workspace when needed."
-      : "This run does not have active computer workspace file tools.",
+      ? "This run can inspect and modify files in the active project workspace when needed."
+      : "This run does not have active project workspace file tools.",
     hasWorkspaceTools
-      ? `Active computer: ${String(params.projectLabel ?? "").trim() || "current computer"}.`
-      : "Active computer: none.",
+      ? `Active project: ${String(params.projectLabel ?? "").trim() || "current project"}.`
+      : "Active project: none.",
     hasWorkspaceTools && String(params.projectDescription ?? "").trim()
-      ? `Computer description: ${String(params.projectDescription ?? "").trim()}.`
+      ? `Project description: ${String(params.projectDescription ?? "").trim()}.`
       : null,
-    hasWorkspaceTools ? "Computer workspace root: current computer workspace root." : null,
+    hasWorkspaceTools ? "Project workspace root: current project workspace root." : null,
     `Allowed tools: ${params.allowedToolNames.join(",") || "(none)"}.`,
-    hasWorkspaceTools ? "All file paths are relative to the computer workspace root." : null,
+    hasWorkspaceTools ? "All file paths are relative to the project workspace root." : null,
     "Only the listed tools are available in this run.",
   ]
     .filter(Boolean)

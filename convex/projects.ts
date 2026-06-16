@@ -185,18 +185,18 @@ function workspaceResourceAdmissionStatus(code: string): number {
 }
 
 function workspaceResourceAdmissionMessage(code: string): string {
-  if (code === "project_not_found") return "Computer not found.";
+  if (code === "project_not_found") return "Project not found.";
   if (code === "project_volume_provider_mismatch") {
-    return "This computer volume is managed by a different provider.";
+    return "This project volume is managed by a different provider.";
   }
   if (code === "project_volume_resource_mismatch") {
-    return "This computer volume is bound to a different provider resource.";
+    return "This project volume is bound to a different provider resource.";
   }
   if (code === "workspace_volume_funding_required") {
     return "Add prepaid credits or a card before creating workspace storage.";
   }
   if (code === "workspace_card_required_for_additional_volume") {
-    return "Extra workspace computers require a card on file.";
+    return "Extra workspace projects require a card on file.";
   }
   if (code === "workspace_volume_limit_reached") {
     return "Workspace project volume limit reached.";

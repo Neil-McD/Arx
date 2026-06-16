@@ -10,9 +10,9 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
       {createModal.isOpen ? (
         <WebCreateProjectModal
           isOpen={createModal.isOpen}
-          title="New computer"
-          subtitle="Create a fresh workspace computer and optionally import a zipped repo or workspace folder."
-          submitLabel="Create computer"
+          title="New project"
+          subtitle="Create a durable project workspace and optionally import a zipped repo or workspace folder."
+          submitLabel="Create project"
           projectName={createModal.projectName}
           projectDescription={createModal.projectDescription}
           importFileName={createModal.importFileName}
@@ -31,9 +31,9 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
       {editModal.isOpen ? (
         <WebCreateProjectModal
           isOpen={editModal.isOpen}
-          title="Edit computer"
-          subtitle="Update the computer details and optionally import a zipped repo or workspace folder into this workspace."
-          submitLabel="Save computer"
+          title="Edit project"
+          subtitle="Update the project details and optionally import a zipped repo or workspace folder."
+          submitLabel="Save project"
           projectName={editModal.projectName}
           projectDescription={editModal.projectDescription}
           importFileName={editModal.importFileName}

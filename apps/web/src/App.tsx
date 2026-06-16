@@ -3535,7 +3535,7 @@ export default function App() {
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
           activePage === "workspace" && activeView === "home" && !activeThreadId
-            ? workspaceProject.state.activeProjectId ?? workspaceProject.derived.resolvedActiveProjectId
+            ? workspaceProject.state.activeProjectId
             : null,
       }) ?? "",
       shellVariant,
@@ -7616,7 +7616,7 @@ export default function App() {
     activeThread,
     activeThreadId,
     workspaceWantsNewChat,
-    resolvedActiveProjectId: workspace.derived.resolvedActiveProjectId,
+    resolvedActiveProjectId: workspaceProject.state.activeProjectId,
     resolvedActiveProjectName: workspace.derived.resolvedActiveProjectName,
     projectById: workspace.derived.projectById,
     resolveThreadProjectId: workspace.derived.resolveThreadProjectId,
@@ -7625,7 +7625,7 @@ export default function App() {
   const currentWorkspaceProjectName = currentWorkspaceProjectSelection.currentProjectName;
   useEffect(() => {
     if (activePage !== "workspace" || activeView !== "home" || activeThreadId) return;
-    const draftProjectId = workspaceProject.state.activeProjectId ?? currentWorkspaceProjectId;
+    const draftProjectId = workspaceProject.state.activeProjectId;
     const routePath = buildAppRoutePath({
       page: "workspace",
       view: "home",
@@ -7663,7 +7663,7 @@ export default function App() {
         ok: false,
         status: 401,
         code: "auth_required",
-        message: "Sign in to turn on computer.",
+        message: "Sign in to open project files.",
         required_credits: null,
         paidUsageBillingMode: null,
       };
@@ -7675,7 +7675,7 @@ export default function App() {
         ok: false,
         status: 404,
         code: "project_not_found",
-        message: "Select a computer first.",
+        message: "Select a project first.",
         required_credits: null,
         paidUsageBillingMode: null,
       };
@@ -7726,7 +7726,7 @@ export default function App() {
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to turn on computer.";
+            : "Failed to start the project workspace.";
       setWorkspaceComputerStartError(message);
       return {
         ok: false,
@@ -7775,7 +7775,7 @@ export default function App() {
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to turn off computer.";
+            : "Failed to stop the project workspace.";
       setWorkspaceComputerStartError(message);
       return false;
     } finally {
@@ -7819,12 +7819,12 @@ export default function App() {
         disabled={projectUiController.isCreatingProject || projectUiController.projectQuotaReached}
         title={
           projectUiController.projectQuotaReached
-            ? `Computers are capped at ${projectUiController.maxProjects}.`
+            ? `Projects are capped at ${projectUiController.maxProjects}.`
             : projectUiController.isCreatingProject
-              ? "Creating computer…"
-              : "Create a new computer"
+              ? "Creating project…"
+              : "Create a new project"
         }
-        aria-label="Create a new computer"
+        aria-label="Create a new project"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 5v14" />

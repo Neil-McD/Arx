@@ -76,9 +76,10 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       focusComposer?: () => void;
     }) => {
       const current = argsRef.current;
-      if (opts?.projectId !== undefined) {
-        current.setActiveProjectId?.(normalizeWorkspaceDraftProjectId(opts.projectId));
-      }
+      const requestedProjectId = normalizeWorkspaceDraftProjectId(
+        opts?.projectId !== undefined ? opts.projectId : null,
+      );
+      current.setActiveProjectId?.(requestedProjectId);
       current.setActivePage("workspace");
       current.setActiveView("home");
       current.setWorkspaceWantsNewChatMode(true);
@@ -87,9 +88,6 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
         opts?.communitySlug !== undefined
           ? String(opts.communitySlug ?? "").trim() || null
           : String(current.activeCommunitySlug ?? "").trim() || null;
-      const requestedProjectId = normalizeWorkspaceDraftProjectId(
-        opts?.projectId !== undefined ? opts.projectId : current.activeProjectId,
-      );
       current.navigateTo(
         buildWorkspaceCommunityDraftPath(requestedSlug, requestedProjectId) ??
           buildWorkspaceDraftPath(requestedProjectId),
@@ -158,10 +156,10 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       }
       if (!current.activeThreadId && current.activePage === "workspace" && current.activeView === "home") {
         current.setWorkspaceWantsNewChatMode(true);
-        const requestedProjectId = normalizeWorkspaceDraftProjectId(current.activeProjectId);
+        current.setActiveProjectId?.(null);
         current.navigateTo(
-          buildWorkspaceCommunityDraftPath(current.activeCommunitySlug, requestedProjectId) ??
-            buildWorkspaceDraftPath(requestedProjectId),
+          buildWorkspaceCommunityDraftPath(current.activeCommunitySlug, null) ??
+            buildWorkspaceDraftPath(null),
           { replace: true },
         );
         opts.focusComposer?.();

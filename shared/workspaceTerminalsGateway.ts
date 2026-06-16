@@ -214,7 +214,7 @@ function normalizeComputerStartResult(value: unknown): WorkspaceComputerStartRes
     ok: false,
     status: Number.isFinite(Number(row.status)) ? Number(row.status) : 503,
     code: String(row.code ?? "workspace_computer_unavailable"),
-    message: String(row.message ?? "Computer is unavailable."),
+    message: String(row.message ?? "Project workspace is unavailable."),
     required_credits: Number.isFinite(Number(details.required_credits))
       ? Number(details.required_credits)
       : null,

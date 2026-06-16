@@ -62,17 +62,28 @@ export function resolvePreferredCloudProjectId<TProject extends CloudProjectLike
   return projects[0]?.id ?? null;
 }
 
+export function resolveExistingCloudProjectId<TProject extends CloudProjectLike>(
+  projects: readonly TProject[],
+  preferredProjectId: string | null | undefined,
+): string | null {
+  const preferred = String(preferredProjectId ?? "").trim();
+  if (preferred && projects.some((project) => project.id === preferred)) {
+    return preferred;
+  }
+  return null;
+}
+
 export function resolveCloudThreadProjectId<
   TThread extends { project_id?: string | null },
   TProject extends CloudProjectLike,
 >(
   thread: TThread,
   _projectById: Map<string, TProject>,
-  defaultWorkspaceProjectId: string | null,
+  _defaultWorkspaceProjectId: string | null,
 ): string | null {
   const direct = String(thread.project_id ?? "").trim();
   if (direct) return direct;
-  return defaultWorkspaceProjectId;
+  return null;
 }
 
 export function searchThreads<TThread>(

@@ -36,8 +36,9 @@ export function resolveWorkspaceActiveProject<
   resolveThreadProjectId: (thread: TThread) => string | null;
   pendingThreadProjectName?: string;
 }): WorkspaceActiveProjectSelection<TProject> {
+  const hasActiveThread = Boolean(params.activeThread) && !params.workspaceWantsNewChat;
   const activeThreadProjectId =
-    params.activeThread && !params.workspaceWantsNewChat
+    hasActiveThread && params.activeThread
       ? params.resolveThreadProjectId(params.activeThread)
       : null;
   const isPendingThreadProject =
@@ -46,7 +47,9 @@ export function resolveWorkspaceActiveProject<
     !params.activeThread;
   const currentProjectId = isPendingThreadProject
     ? null
-    : activeThreadProjectId ?? params.resolvedActiveProjectId;
+    : hasActiveThread
+      ? activeThreadProjectId
+      : params.resolvedActiveProjectId;
   const currentProject = currentProjectId
     ? params.projectById.get(currentProjectId) ?? null
     : null;
@@ -57,8 +60,8 @@ export function resolveWorkspaceActiveProject<
   const currentProjectName = currentProjectId
     ? String(currentProject?.name ?? "").trim() ||
       (isFromActiveThread
-        ? String(params.pendingThreadProjectName ?? "Loading computer").trim() ||
-          "Loading computer"
+        ? String(params.pendingThreadProjectName ?? "Loading project").trim() ||
+          "Loading project"
         : params.resolvedActiveProjectName)
     : "";
   const source: WorkspaceActiveProjectSource = isPendingThreadProject

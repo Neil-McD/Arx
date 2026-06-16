@@ -402,7 +402,7 @@ function formatCommunityRole(value: WorkspaceUserPanelCommunity["role"]): string
 
 function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): string {
   if (result.code === "background_sandbox_not_found" || result.code === "sandbox_not_found") {
-    return "Turn on computer to view files.";
+    return "Open project files to wake the workspace.";
   }
   if (
     result.code === "blaxel_sandbox_not_found" ||
@@ -411,24 +411,24 @@ function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): str
     return "Workspace is waking up. Try again in a moment.";
   }
   if (result.code === "blaxel_volume_quota_exceeded") {
-    return "Workspace storage quota is full. Delete an unused computer or volume, then try again.";
+    return "Workspace storage quota is full. Delete an unused project or volume, then try again.";
   }
   if (
     result.code === "workspace_volume_limit_reached" ||
     result.code === "workspace_provider_volume_quota_headroom_exhausted"
   ) {
-    return "Workspace storage quota is full. Delete an unused computer, then try again.";
+    return "Workspace storage quota is full. Delete an unused project, then try again.";
   }
   if (result.code === "workspace_volume_funding_required") {
     return "Add prepaid credits or a card before creating workspace storage.";
   }
   if (result.code === "workspace_card_required_for_additional_volume") {
-    return "Extra computers require a card on file.";
+    return "Extra projects require a card on file.";
   }
   if (result.code === "workspace_uncollected_usage_blocked") {
-    return "Clear prior workspace usage before turning on this computer.";
+    return "Clear prior workspace usage before opening this project workspace.";
   }
-  if (result.code === "workspace_credits_exhausted") return "Turn on computer to view files.";
+  if (result.code === "workspace_credits_exhausted") return "Open project files to wake the workspace.";
   return result.message;
 }
 
@@ -936,14 +936,14 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     !isComputerOnForFiles &&
     Boolean(directoryError || isStartingComputerForFiles);
   const computerStateMessage = isStartingComputerForFiles
-    ? "Computer turning on"
-    : directoryError ?? "Turn on computer to view files.";
+    ? "Workspace starting"
+    : directoryError ?? "Open project files to wake the workspace.";
 
   const handleTurnOnComputer = useCallback(async () => {
     if (!canTurnOnComputer) return;
     filePreviewRequestId.current += 1;
     setDirectoryEntries([]);
-    setDirectoryError("Computer turning on");
+    setDirectoryError("Workspace starting");
     setDirectoryErrorCode("computer_starting");
     setDirectoryCheckedAt(null);
     setDirectoryIsCached(false);
@@ -961,7 +961,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       result = await props.onTurnOnComputer();
     } catch (error) {
       setDirectoryEntries([]);
-      setDirectoryError(error instanceof Error ? error.message : "Computer could not turn on.");
+      setDirectoryError(error instanceof Error ? error.message : "Project workspace could not start.");
       setDirectoryErrorCode("computer_start_failed");
       setDirectoryCheckedAt(null);
       setDirectoryIsCached(false);
@@ -1005,7 +1005,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     if (!stopped) return;
     filePreviewRequestId.current += 1;
     setDirectoryEntries([]);
-    setDirectoryError("Turn on computer to view files.");
+    setDirectoryError("Open project files to wake the workspace.");
     setDirectoryErrorCode("background_sandbox_not_found");
     setDirectoryCheckedAt(null);
     setDirectoryIsCached(false);
@@ -1048,7 +1048,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       <section className="workspace-summary-block">
         <dl className="workspace-summary-list">
           <div>
-            <dt>Computer</dt>
+            <dt>Project</dt>
             <dd>{props.activeProjectName?.trim() || "Personal workspace"}</dd>
           </div>
           <div>
@@ -1093,7 +1093,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           <span className={`workspace-files-chevron${filesExpanded ? " is-open" : ""}`} aria-hidden="true" />
         </button>
         {!canInspectFiles ? (
-          <p className="workspace-files-note">Turn on computer to view files.</p>
+          <p className="workspace-files-note">Open project files to wake the workspace.</p>
         ) : shouldShowComputerState ? (
           <div className="workspace-files-empty-state">
             <div className="workspace-files-computer-row">
@@ -1113,13 +1113,13 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
                     isStartingComputerForFiles ? " is-disabled" : ""
                   }`}
-                  title={isStartingComputerForFiles ? "Computer turning on" : "Turn on computer"}
+                  title={isStartingComputerForFiles ? "Workspace starting" : "Open project files"}
                 >
                   <input
                     type="checkbox"
                     checked={isStartingComputerForFiles}
                     disabled={isStartingComputerForFiles}
-                    aria-label="Turn on computer"
+                    aria-label="Open project files"
                     onChange={(event) => {
                       if (event.target.checked) void handleTurnOnComputer();
                     }}
@@ -1190,13 +1190,13 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
                     props.isStoppingWorkspaceComputer ? " is-disabled" : ""
                   }`}
-                  title="Turn off computer"
+                  title="Stop project workspace"
                 >
                   <input
                     type="checkbox"
                     checked
                     disabled={props.isStoppingWorkspaceComputer}
-                    aria-label="Turn off computer"
+                    aria-label="Stop project workspace"
                     onChange={(event) => {
                       if (!event.target.checked) void handleTurnOffComputer();
                     }}
@@ -1238,7 +1238,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                 ))
               ) : (
                 <div className="workspace-files-empty">
-                  This computer has no files yet.
+                  This project has no files yet.
                   <br />
                   Upload files or ask your Polynet agent to create something.
                 </div>
