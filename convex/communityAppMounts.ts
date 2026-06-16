@@ -32,8 +32,16 @@ import {
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog";
 import {
+  COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY,
+  findCommunityWorkflowImportMcpRegistryEntryById,
   resolveCommunityWorkflowImportMcpRegistryConnectPolicy,
+  type CommunityWorkflowImportMcpRegistryEntry,
 } from "../shared/communityWorkflowImportMcpRegistry";
+import {
+  compilePrivateCommunityPluginManifest,
+  PRIVATE_COMMUNITY_PLUGIN_SCHEMA,
+  type PrivateCommunityPluginMcpAppPlan,
+} from "../shared/privateCommunityPluginManifest";
 
 type CommunityAppMountRow = {
   _id: any;
@@ -69,6 +77,21 @@ type CommunityAppMountNotLiveReason =
   | "no_tools_discovered"
   | "missing_snapshot";
 
+type PrivateCommunityMcpAddStatus =
+  | "ready"
+  | "needs_auth"
+  | "needs_config"
+  | "not_available";
+
+type PrivateCommunityMcpProductAddStatus =
+  | "connected"
+  | "staged"
+  | "reused"
+  | "rejected"
+  | "failed";
+
+type PrivateCommunityMcpProductSetupReason = "needs_auth" | "needs_config" | null;
+
 function normalizeSetupStatus(value: unknown): DeveloperAppSetupStatus | null {
   if (
     value === "needs_auth" ||
@@ -91,6 +114,203 @@ function normalizeStringList(input: unknown): string[] {
     values.push(value);
   }
   return values;
+}
+
+function derivePrivateCommunityPluginMcpSetupStatus(
+  appPlan: PrivateCommunityPluginMcpAppPlan,
+): DeveloperAppSetupStatus | null {
+  if (appPlan.authType !== "none") return "needs_auth";
+  if (
+    appPlan.setupKind === "needs_nonsecret_config" ||
+    appPlan.registryStatus === "needs_config"
+  ) {
+    return "needs_config";
+  }
+  if (appPlan.setupKind === "needs_managed_runtime") return "needs_runtime";
+  return null;
+}
+
+function summarizePrivateCommunityPluginMcpApplyResult(args: {
+  appPlan: PrivateCommunityPluginMcpAppPlan;
+  status: "staged" | "connected" | "reused";
+  mount: unknown;
+}) {
+  const mountRecord =
+    args.mount && typeof args.mount === "object" && !Array.isArray(args.mount)
+      ? (args.mount as Record<string, unknown>)
+      : {};
+  return {
+    source_index: args.appPlan.sourceIndex,
+    status: args.status,
+    mcp_registry_id: args.appPlan.mcpRegistryId,
+    catalog_app_id: args.appPlan.catalogAppId,
+    name: args.appPlan.name,
+    endpoint_url: args.appPlan.endpointUrl,
+    auth_type: args.appPlan.authType,
+    setup_kind: args.appPlan.setupKind,
+    community_app_mount_id:
+      typeof mountRecord.id === "string" ? mountRecord.id : null,
+    live_status:
+      typeof mountRecord.live_status === "string" ? mountRecord.live_status : null,
+    not_live_reason:
+      typeof mountRecord.not_live_reason === "string"
+        ? mountRecord.not_live_reason
+        : null,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function firstRecordFromField(
+  record: Record<string, unknown>,
+  field: string,
+): Record<string, unknown> | null {
+  const value = record[field];
+  if (!Array.isArray(value)) return null;
+  const first = value[0];
+  return first && typeof first === "object" && !Array.isArray(first)
+    ? (first as Record<string, unknown>)
+    : null;
+}
+
+function derivePrivateCommunityMcpProductSetupReason(
+  item: Record<string, unknown> | null,
+): PrivateCommunityMcpProductSetupReason {
+  const notLiveReason = normalizeString(item?.not_live_reason, 80);
+  if (notLiveReason === "needs_auth") return "needs_auth";
+  if (notLiveReason === "needs_config") return "needs_config";
+
+  const setupKind = normalizeString(item?.setup_kind, 80);
+  if (setupKind === "needs_user_auth") return "needs_auth";
+  if (setupKind === "needs_nonsecret_config") return "needs_config";
+  return null;
+}
+
+function mapPrivateCommunityMcpProductAddResult(args: {
+  mcpRegistryId: string;
+  result: unknown;
+}) {
+  const result = asRecord(args.result);
+  const registryEntry = findCommunityWorkflowImportMcpRegistryEntryById(
+    args.mcpRegistryId,
+  );
+  const fallbackName =
+    (registryEntry?.name ?? normalizeString(args.mcpRegistryId, 120)) || null;
+  const rejection = firstRecordFromField(result, "rejections");
+  const failure = firstRecordFromField(result, "failures");
+  const connected = firstRecordFromField(result, "connected");
+  const staged = firstRecordFromField(result, "staged");
+  const reused = firstRecordFromField(result, "reused");
+  const item = connected ?? staged ?? reused ?? failure;
+  let status: PrivateCommunityMcpProductAddStatus = "failed";
+  if (rejection) {
+    status = "rejected";
+  } else if (connected) {
+    status = "connected";
+  } else if (staged) {
+    status = "staged";
+  } else if (reused) {
+    status = "reused";
+  }
+
+  const setupReason =
+    status === "failed" || status === "rejected"
+      ? null
+      : derivePrivateCommunityMcpProductSetupReason(item);
+  const errorMessage =
+    normalizeString(rejection?.message, 500) ||
+    normalizeString(failure?.error, 500) ||
+    (status === "failed" ? "Private MCP could not be added." : null);
+
+  return {
+    ok: status !== "failed" && status !== "rejected",
+    status,
+    mcp_registry_id:
+      normalizeString(item?.mcp_registry_id, 120) ||
+      normalizeString(args.mcpRegistryId, 120) ||
+      null,
+    name: normalizeString(item?.name, 200) || fallbackName,
+    community_app_mount_id:
+      normalizeString(item?.community_app_mount_id, 120) || null,
+    setup_required: setupReason !== null,
+    setup_reason: setupReason,
+    error_message: errorMessage,
+  };
+}
+
+function buildPrivateCommunityMcpRegistryManifest(args: {
+  mcpRegistryId: string;
+}) {
+  const registryEntry = findCommunityWorkflowImportMcpRegistryEntryById(
+    args.mcpRegistryId,
+  );
+  const name =
+    (registryEntry?.name ?? normalizeString(args.mcpRegistryId, 120)) ||
+    "Private MCP";
+  return {
+    schema: PRIVATE_COMMUNITY_PLUGIN_SCHEMA,
+    name: `${name} Private MCP`,
+    visibility: "private_community",
+    mcpServers: [{ mcpRegistryId: args.mcpRegistryId }],
+  };
+}
+
+function mapPrivateCommunityMcpOption(
+  entry: CommunityWorkflowImportMcpRegistryEntry,
+) {
+  if (entry.connectionClass !== "hosted_remote") return null;
+
+  const defaultEndpointUrl = normalizeString(entry.defaultEndpointUrl, 500);
+  const defaultAuthType = entry.defaultAuthType;
+  const policy =
+    defaultEndpointUrl && defaultAuthType
+      ? resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+          mcpRegistryId: entry.id,
+          name: entry.name,
+          endpointUrl: defaultEndpointUrl,
+          authType: defaultAuthType,
+        })
+      : {
+          ok: false as const,
+          message: "This MCP does not have a reviewed hosted setup path yet.",
+        };
+  const addable = policy.ok === true;
+  let addStatus: PrivateCommunityMcpAddStatus = "not_available";
+  if (addable) {
+    if (
+      entry.setupKind === "needs_nonsecret_config" ||
+      entry.status === "needs_config"
+    ) {
+      addStatus = "needs_config";
+    } else if (
+      entry.setupKind === "needs_user_auth" ||
+      entry.status === "needs_auth" ||
+      defaultAuthType !== "none"
+    ) {
+      addStatus = "needs_auth";
+    } else {
+      addStatus = "ready";
+    }
+  }
+
+  return {
+    mcp_registry_id: entry.id,
+    catalog_app_id: entry.catalogAppId,
+    name: entry.name,
+    description: entry.reason,
+    logo_url: entry.reviewLogoUrl,
+    docs_urls: entry.docsUrls,
+    add_status: addStatus,
+    setup_kind: entry.setupKind,
+    addable,
+    add_blocked_reason: addable ? null : policy.message,
+    requires_member_auth: addStatus === "needs_auth",
+    requires_nonsecret_config: addStatus === "needs_config",
+  };
 }
 
 function normalizeSnapshotTools(
@@ -845,6 +1065,7 @@ export const connectImportedCommunityMcpAppInternal = internalAction({
   args: {
     userId: v.id("users"),
     communityId: v.id("communities"),
+    catalogAppId: v.optional(v.string()),
     name: v.string(),
     endpointUrl: v.string(),
     authType: v.union(
@@ -884,7 +1105,7 @@ export const connectImportedCommunityMcpAppInternal = internalAction({
       internal.communityAppMounts.findExistingCommunityAppMountByIdentityInternal,
       {
         communityId: args.communityId,
-        catalogAppId: undefined,
+        catalogAppId: args.catalogAppId,
         endpointUrl: policy.endpointUrl,
         authType: policy.authType,
       },
@@ -908,7 +1129,7 @@ export const connectImportedCommunityMcpAppInternal = internalAction({
       internal.developerApps.createDeveloperAppInternal,
       {
         ownerUserId: args.userId,
-        catalogAppId: undefined,
+        catalogAppId: args.catalogAppId,
         mcpRegistryId: policy.mcpRegistryId,
         name: policy.name,
         slug: undefined,
@@ -961,6 +1182,245 @@ export const connectImportedCommunityMcpAppInternal = internalAction({
       toolSnapshotId: app.activeSnapshotId,
       enabledTools,
       nowMs,
+    });
+  },
+});
+
+async function applyPrivateCommunityPluginManifestForManager(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  manifest: unknown;
+  nowMs?: number;
+}): Promise<unknown> {
+  const plan = compilePrivateCommunityPluginManifest(args.manifest);
+  const warnings = [...plan.warnings];
+  if (plan.skillsToAttach.length > 0) {
+    warnings.push({
+      code: "private_plugin_skills_ignored",
+      path: "$.skills",
+      message:
+        "Skill attachment writes are not part of this apply path yet; only MCP apps are applied.",
+    });
+  }
+
+  if (plan.rejections.length > 0) {
+    return {
+      ok: false,
+      applied: false,
+      plugin: plan.normalizedPlugin,
+      rejections: plan.rejections,
+      warnings,
+      skills_ignored_count: plan.skillsToAttach.length,
+      mcp_app_count: plan.mcpAppsToStage.length,
+      staged_count: 0,
+      reused_count: 0,
+      connected_count: 0,
+      failed_count: 0,
+      staged: [],
+      reused: [],
+      connected: [],
+      failures: [],
+    };
+  }
+
+  const nowMs = args.nowMs ?? Date.now();
+  const staged = [];
+  const reused = [];
+  const connected = [];
+  const failures = [];
+
+  for (const appPlan of plan.mcpAppsToStage) {
+    const existingMount = (await args.ctx.runQuery(
+      internal.communityAppMounts.findExistingCommunityAppMountByIdentityInternal,
+      {
+        communityId: args.communityId,
+        catalogAppId: appPlan.catalogAppId ?? undefined,
+        endpointUrl: appPlan.endpointUrl,
+        authType: appPlan.authType,
+      },
+    )) as {
+      mount: CommunityAppMountRow;
+      app: DeveloperAppRow;
+    } | null;
+    if (existingMount) {
+      const mount = await mountDeveloperAppForCommunity({
+        ctx: args.ctx,
+        userId: args.userId,
+        communityId: args.communityId,
+        developerAppId: existingMount.app._id,
+        toolSnapshotId: existingMount.mount.toolSnapshotId,
+        enabledTools: existingMount.mount.enabledTools,
+        nowMs,
+      });
+      reused.push(
+        summarizePrivateCommunityPluginMcpApplyResult({
+          appPlan,
+          status: "reused",
+          mount,
+        }),
+      );
+      continue;
+    }
+
+    const setupStatus = derivePrivateCommunityPluginMcpSetupStatus(appPlan);
+    try {
+      if (setupStatus) {
+        const mount = await args.ctx.runAction(
+          internal.communityAppMounts.stageCommunityMcpAppForSetupInternal,
+          {
+            userId: args.userId,
+            communityId: args.communityId,
+            catalogAppId: appPlan.catalogAppId ?? undefined,
+            name: appPlan.name,
+            endpointUrl: appPlan.endpointUrl,
+            authType: appPlan.authType,
+            setupStatus,
+            setupReason: appPlan.reason,
+            mcpRegistryId: appPlan.mcpRegistryId,
+            nowMs,
+          },
+        );
+        staged.push(
+          summarizePrivateCommunityPluginMcpApplyResult({
+            appPlan,
+            status: "staged",
+            mount,
+          }),
+        );
+        continue;
+      }
+
+      const mount = await args.ctx.runAction(
+        internal.communityAppMounts.connectImportedCommunityMcpAppInternal,
+        {
+          userId: args.userId,
+          communityId: args.communityId,
+          catalogAppId: appPlan.catalogAppId ?? undefined,
+          name: appPlan.name,
+          endpointUrl: appPlan.endpointUrl,
+          authType: appPlan.authType,
+          description: appPlan.reason,
+          mcpRegistryId: appPlan.mcpRegistryId,
+          nowMs,
+        },
+      );
+      connected.push(
+        summarizePrivateCommunityPluginMcpApplyResult({
+          appPlan,
+          status: "connected",
+          mount,
+        }),
+      );
+    } catch (error) {
+      failures.push({
+        source_index: appPlan.sourceIndex,
+        mcp_registry_id: appPlan.mcpRegistryId,
+        name: appPlan.name,
+        endpoint_url: appPlan.endpointUrl,
+        auth_type: appPlan.authType,
+        error: error instanceof Error ? error.message : String(error ?? ""),
+      });
+    }
+  }
+
+  return {
+    ok: failures.length === 0,
+    applied: staged.length > 0 || reused.length > 0 || connected.length > 0,
+    plugin: plan.normalizedPlugin,
+    rejections: [],
+    warnings,
+    skills_ignored_count: plan.skillsToAttach.length,
+    mcp_app_count: plan.mcpAppsToStage.length,
+    staged_count: staged.length,
+    reused_count: reused.length,
+    connected_count: connected.length,
+    failed_count: failures.length,
+    staged,
+    reused,
+    connected,
+    failures,
+  };
+}
+
+export const listPrivateCommunityMcpOptions = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    return COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY
+      .map(mapPrivateCommunityMcpOption)
+      .filter((option): option is NonNullable<typeof option> => Boolean(option))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+export const addPrivateCommunityMcpApp = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    mcpRegistryId: v.string(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveAuthenticatedActionUser({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await ctx.runQuery(
+      internal.communityAppMounts.assertCommunityManagerAccessInternal,
+      {
+        userId,
+        communityId: args.communityId,
+      },
+    );
+    const result = await applyPrivateCommunityPluginManifestForManager({
+      ctx,
+      userId,
+      communityId: args.communityId,
+      manifest: buildPrivateCommunityMcpRegistryManifest({
+        mcpRegistryId: args.mcpRegistryId,
+      }),
+    });
+    return mapPrivateCommunityMcpProductAddResult({
+      mcpRegistryId: args.mcpRegistryId,
+      result,
+    });
+  },
+});
+
+export const applyPrivateCommunityPluginManifest = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    manifest: v.any(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveAuthenticatedActionUser({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await ctx.runQuery(
+      internal.communityAppMounts.assertCommunityManagerAccessInternal,
+      {
+        userId,
+        communityId: args.communityId,
+      },
+    );
+    return await applyPrivateCommunityPluginManifestForManager({
+      ctx,
+      userId,
+      communityId: args.communityId,
+      manifest: args.manifest,
     });
   },
 });

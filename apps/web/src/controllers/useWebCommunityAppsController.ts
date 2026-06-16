@@ -1,13 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 
 import type {
+  AddPrivateCommunityMcpAppResult,
   ConnectCommunityAppInput,
   CommunityMountedApp,
+  PrivateCommunityMcpOption,
   SetupImportedCommunityMcpAppInput,
 } from "../../../../shared/communityAppMountTypes";
 import {
+  addCloudPrivateCommunityMcpApp,
   connectCloudCommunityApp,
   listCloudCommunityAppMounts,
+  listCloudPrivateCommunityMcpOptions,
   refreshCloudCommunityApp,
   setupCloudImportedCommunityMcpApp,
   unmountCloudCommunityApp,
@@ -47,8 +51,14 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
   const [updatingCommunityAppMountId, setUpdatingCommunityAppMountId] = useState<string | null>(null);
   const [refreshingCommunityAppMountId, setRefreshingCommunityAppMountId] = useState<string | null>(null);
   const [removingCommunityAppMountId, setRemovingCommunityAppMountId] = useState<string | null>(null);
+  const [privateCommunityMcpOptions, setPrivateCommunityMcpOptions] = useState<PrivateCommunityMcpOption[]>([]);
+  const [isLoadingPrivateCommunityMcpOptions, setIsLoadingPrivateCommunityMcpOptions] = useState(false);
+  const [privateCommunityMcpOptionsError, setPrivateCommunityMcpOptionsError] = useState<string | null>(null);
+  const [addingPrivateCommunityMcpRegistryId, setAddingPrivateCommunityMcpRegistryId] = useState<string | null>(null);
   const communityAppMountsLoadedCommunityIdRef = useRef<string | null>(null);
   const communityAppMountsLoadRequestIdRef = useRef(0);
+  const privateCommunityMcpOptionsLoadedCommunityIdRef = useRef<string | null>(null);
+  const privateCommunityMcpOptionsLoadRequestIdRef = useRef(0);
 
   const isCurrentCommunitySession = useCallback(
     (usableSession: SessionT, communityId: string) => {
@@ -63,6 +73,7 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
 
   const clearCommunityAppMounts = useCallback(() => {
     communityAppMountsLoadRequestIdRef.current += 1;
+    privateCommunityMcpOptionsLoadRequestIdRef.current += 1;
     setCommunityAppMounts([]);
     setIsLoadingCommunityAppMounts(false);
     setCommunityAppMountError(null);
@@ -70,7 +81,12 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
     setUpdatingCommunityAppMountId(null);
     setRefreshingCommunityAppMountId(null);
     setRemovingCommunityAppMountId(null);
+    setPrivateCommunityMcpOptions([]);
+    setIsLoadingPrivateCommunityMcpOptions(false);
+    setPrivateCommunityMcpOptionsError(null);
+    setAddingPrivateCommunityMcpRegistryId(null);
     communityAppMountsLoadedCommunityIdRef.current = null;
+    privateCommunityMcpOptionsLoadedCommunityIdRef.current = null;
   }, []);
 
   const loadCommunityAppMounts = useCallback(async (communityId: string, session: SessionT) => {
@@ -143,6 +159,107 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
       setIsConnectingCommunityApp(false);
     }
   }, [isCurrentCommunitySession]);
+
+  const loadPrivateCommunityMcpOptions = useCallback(async (): Promise<boolean> => {
+    const requestId = privateCommunityMcpOptionsLoadRequestIdRef.current + 1;
+    privateCommunityMcpOptionsLoadRequestIdRef.current = requestId;
+    const current = argsRef.current;
+    const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+    const communityId = current.activeCommunityId;
+    if (!usableSession || !communityId) {
+      if (privateCommunityMcpOptionsLoadRequestIdRef.current === requestId) {
+        setIsLoadingPrivateCommunityMcpOptions(false);
+      }
+      return false;
+    }
+    const loadedUserId = usableSession.user.id;
+    const loadedCommunityId = communityId;
+    const isCurrentRequest = () => {
+      if (privateCommunityMcpOptionsLoadRequestIdRef.current !== requestId) return false;
+      const latest = argsRef.current;
+      if (latest.session?.user.id !== loadedUserId) return false;
+      return latest.activeCommunityId === loadedCommunityId;
+    };
+    setIsLoadingPrivateCommunityMcpOptions(true);
+    setPrivateCommunityMcpOptionsError(null);
+    if (privateCommunityMcpOptionsLoadedCommunityIdRef.current !== loadedCommunityId) {
+      setPrivateCommunityMcpOptions([]);
+    }
+    try {
+      const rows = await listCloudPrivateCommunityMcpOptions({
+        session: usableSession,
+        communityId: loadedCommunityId,
+      });
+      if (!isCurrentRequest()) return true;
+      setPrivateCommunityMcpOptions(rows);
+      privateCommunityMcpOptionsLoadedCommunityIdRef.current = loadedCommunityId;
+      return true;
+    } catch (error) {
+      if (!isCurrentRequest()) return false;
+      setPrivateCommunityMcpOptionsError(
+        toErrorMessage(error, "Failed to load reviewed MCP options."),
+      );
+      privateCommunityMcpOptionsLoadedCommunityIdRef.current = loadedCommunityId;
+      return false;
+    } finally {
+      if (privateCommunityMcpOptionsLoadRequestIdRef.current === requestId) {
+        setIsLoadingPrivateCommunityMcpOptions(false);
+      }
+    }
+  }, []);
+
+  const addPrivateCommunityMcpApp = useCallback(
+    async (mcpRegistryId: string): Promise<AddPrivateCommunityMcpAppResult | null> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+      const communityId = current.activeCommunityId;
+      if (!usableSession || !communityId) return null;
+      setAddingPrivateCommunityMcpRegistryId(mcpRegistryId);
+      setCommunityAppMutationError(null);
+      try {
+        const result = await addCloudPrivateCommunityMcpApp({
+          session: usableSession,
+          communityId,
+          mcpRegistryId,
+        });
+        if (!isCurrentCommunitySession(usableSession, communityId)) return result;
+        if (!result.ok) {
+          setCommunityAppMutationError(
+            result.error_message ?? `Failed to add ${result.name ?? "MCP"}.`,
+          );
+          return result;
+        }
+        try {
+          const rows = await listCloudCommunityAppMounts({
+            session: usableSession,
+            communityId,
+          });
+          if (isCurrentCommunitySession(usableSession, communityId)) {
+            setCommunityAppMounts(rows);
+            communityAppMountsLoadedCommunityIdRef.current = communityId;
+          }
+        } catch {
+          if (isCurrentCommunitySession(usableSession, communityId)) {
+            communityAppMountsLoadedCommunityIdRef.current = null;
+            setCommunityAppMutationError(
+              "Added, but couldn't refresh the community app list. Refresh to see latest state.",
+            );
+          }
+        }
+        return result;
+      } catch (error) {
+        if (isCurrentCommunitySession(usableSession, communityId)) {
+          setCommunityAppMutationError(
+            toErrorMessage(error, "Failed to add reviewed MCP."),
+          );
+        }
+        return null;
+      } finally {
+        setAddingPrivateCommunityMcpRegistryId(null);
+      }
+    },
+    [isCurrentCommunitySession],
+  );
 
   const updateCommunityAppMount = useCallback(
     async (communityAppMountId: string, patch: {
@@ -271,6 +388,10 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
     }
   }, [isCurrentCommunitySession]);
 
+  const hasLoadedPrivateCommunityMcpOptionsForActiveCommunity =
+    Boolean(args.activeCommunityId) &&
+    privateCommunityMcpOptionsLoadedCommunityIdRef.current === args.activeCommunityId;
+
   return {
     communityAppMounts,
     setCommunityAppMounts,
@@ -281,10 +402,18 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
     updatingCommunityAppMountId,
     refreshingCommunityAppMountId,
     removingCommunityAppMountId,
+    privateCommunityMcpOptions,
+    isLoadingPrivateCommunityMcpOptions,
+    privateCommunityMcpOptionsError,
+    addingPrivateCommunityMcpRegistryId,
+    hasLoadedPrivateCommunityMcpOptionsForActiveCommunity,
     communityAppMountsLoadedCommunityIdRef,
+    privateCommunityMcpOptionsLoadedCommunityIdRef,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     connectCommunityApp,
+    loadPrivateCommunityMcpOptions,
+    addPrivateCommunityMcpApp,
     updateCommunityAppMount,
     refreshCommunityApp,
     setupImportedCommunityMcpApp,

@@ -2785,6 +2785,13 @@ export default function App() {
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     connectCommunityApp,
+    privateCommunityMcpOptions,
+    isLoadingPrivateCommunityMcpOptions,
+    hasLoadedPrivateCommunityMcpOptionsForActiveCommunity,
+    privateCommunityMcpOptionsError,
+    addingPrivateCommunityMcpRegistryId,
+    loadPrivateCommunityMcpOptions,
+    addPrivateCommunityMcpApp,
     updateCommunityAppMount,
     refreshCommunityApp,
     setupImportedCommunityMcpApp,
@@ -4038,6 +4045,27 @@ export default function App() {
     },
     [
       connectCommunityApp,
+      loadUserPlatformAppMounts,
+      reloadEffectiveMcpApps,
+      session,
+      userPlatformAppMountsLoadedUserIdRef,
+    ],
+  );
+
+  const handleAddPrivateCommunityMcpApp = useCallback(
+    async (mcpRegistryId: string) => {
+      const result = await addPrivateCommunityMcpApp(mcpRegistryId);
+      if (result?.ok) {
+        if (session) {
+          userPlatformAppMountsLoadedUserIdRef.current = null;
+          void loadUserPlatformAppMounts(session);
+        }
+        void reloadEffectiveMcpApps();
+      }
+      return result;
+    },
+    [
+      addPrivateCommunityMcpApp,
       loadUserPlatformAppMounts,
       reloadEffectiveMcpApps,
       session,
@@ -9574,9 +9602,9 @@ export default function App() {
         previewProjectName: workspace.derived.resolvedActiveProjectName,
       },
       aiAgentAppsEditorProps: {
-        intro: "Recommend hosted MCP apps here. Polynet seeds or reuses each member's personal harness app.",
-        emptyState: "Recommend the first hosted MCP app for this community. Members use their own credentials when an app requires authentication.",
-        addButtonLabel: "Browse apps",
+        intro: "Add reviewed MCPs here. Polynet seeds or reuses each member's personal harness app.",
+        emptyState: "Add the first reviewed MCP for this community. Members use their own credentials when setup is required.",
+        addButtonLabel: "Add MCP",
         mounts: communityAppMounts,
         effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
@@ -9584,13 +9612,20 @@ export default function App() {
         error: communityAppMountError,
         mutationError: communityAppMutationError,
         isConnecting: isConnectingCommunityApp,
+        privateMcpOptions: privateCommunityMcpOptions,
+        isLoadingPrivateMcpOptions: isLoadingPrivateCommunityMcpOptions,
+        hasLoadedPrivateMcpOptionsForActiveCommunity:
+          hasLoadedPrivateCommunityMcpOptionsForActiveCommunity,
+        privateMcpOptionsError: privateCommunityMcpOptionsError,
+        addingPrivateMcpRegistryId: addingPrivateCommunityMcpRegistryId,
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
+        onLoadPrivateMcpOptions: loadPrivateCommunityMcpOptions,
+        onAddPrivateMcpApp: handleAddPrivateCommunityMcpApp,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
-        onBrowseCatalog: handleOpenDiscoverApps,
       },
       aiAgentSkillsEditorProps: {
         intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",

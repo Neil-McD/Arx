@@ -34,8 +34,11 @@ import {
   getCommunityFunnelConfig as getCommunityFunnelConfigImpl,
 } from "./communityFunnel";
 import {
+  addPrivateCommunityMcpApp as addPrivateCommunityMcpAppImpl,
+  applyPrivateCommunityPluginManifest as applyPrivateCommunityPluginManifestImpl,
   connectCommunityApp as connectCommunityAppImpl,
   listCommunityAppMounts as listCommunityAppMountsImpl,
+  listPrivateCommunityMcpOptions as listPrivateCommunityMcpOptionsImpl,
   refreshCommunityApp as refreshCommunityAppImpl,
   setupImportedCommunityMcpApp as setupImportedCommunityMcpAppImpl,
   unmountCommunityApp as unmountCommunityAppImpl,
@@ -308,6 +311,9 @@ export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystem
 export const getActiveCommunityAgentLanding = getActiveCommunityAgentLandingImpl;
 export const listCommunityAppMounts = listCommunityAppMountsImpl;
 export const connectCommunityApp = connectCommunityAppImpl;
+export const listPrivateCommunityMcpOptions = listPrivateCommunityMcpOptionsImpl;
+export const addPrivateCommunityMcpApp = addPrivateCommunityMcpAppImpl;
+export const applyPrivateCommunityPluginManifest = applyPrivateCommunityPluginManifestImpl;
 export const refreshCommunityApp = refreshCommunityAppImpl;
 export const setupImportedCommunityMcpApp = setupImportedCommunityMcpAppImpl;
 export const updateCommunityAppMount = updateCommunityAppMountImpl;

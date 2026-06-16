@@ -27382,6 +27382,45 @@ button.message-citation-chip:hover {
   font-size: 13px;
 }
 
+.community-private-mcp-picker {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-muted);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+}
+
+.community-private-mcp-picker-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-private-mcp-option-list {
+  display: grid;
+  gap: 10px;
+}
+
+.community-private-mcp-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
+}
+
+.community-private-mcp-option-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .community-app-status-badge {
   display: inline-flex;
   align-items: center;
@@ -27481,6 +27520,20 @@ button.message-citation-chip:hover {
   .community-app-mount-actions,
   .agent-onboarding-reset {
     width: 100%;
+  }
+
+  .community-private-mcp-picker-header {
+    flex-direction: column;
+  }
+
+  .community-private-mcp-picker-header button,
+  .community-private-mcp-option button {
+    width: 100%;
+  }
+
+  .community-private-mcp-option {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .community-app-mount-identity {
