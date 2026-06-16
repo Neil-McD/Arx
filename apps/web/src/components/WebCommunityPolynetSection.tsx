@@ -93,8 +93,9 @@ function activityLabel(raw: string | null | undefined): string {
 
 function selectInitialNode(overview: CloudCommunityPolynetOverview | null): string | null {
   if (!overview) return null;
+  // Prefer a real memory node; never auto-select the seed, so it stays a bare dot.
   const firstDirectoryNode = overview.graph.nodes.find((node) => node.kind === "directory_node");
-  return firstDirectoryNode?.id ?? overview.graph.root_node_id;
+  return firstDirectoryNode?.id ?? null;
 }
 
 export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProps) {
@@ -111,6 +112,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const graphContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!overview) {
@@ -132,7 +134,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
     [overview],
   );
   const { transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
-    useWebPolynetGraphViewport({ svgRef, onSelectNode: setSelectedNodeId });
+    useWebPolynetGraphViewport({ containerRef: graphContainerRef, svgRef, layout, onSelectNode: setSelectedNodeId });
   const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
@@ -195,7 +197,10 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
       ) : (
         <div className="community-polynet-layout">
           <section className="community-polynet-graph-shell" aria-label="Community memory graph">
-            <div className={`community-polynet-graph${isPanning ? " panning" : ""}${draggingNodeId ? " dragging" : ""}`}>
+            <div
+              ref={graphContainerRef}
+              className={`community-polynet-graph${isPanning ? " panning" : ""}${draggingNodeId ? " dragging" : ""}`}
+            >
               <svg
                 ref={svgRef}
                 className="community-polynet-graph-canvas"
@@ -256,7 +261,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                           }
                         }}
                       >
-                        {isSelected ? <circle className="cp-node-ring" r={isRoot ? 36 : 18} /> : null}
+                        {isSelected && !isRoot ? <circle className="cp-node-ring" r={18} /> : null}
                         <circle
                           className={isRoot ? "cp-root-circle" : `cp-node-circle ${statusClass(node.status)}`}
                           r={isRoot ? 26 : 11}

@@ -81,3 +81,85 @@ export function computePolynetLayout(
 
   return positions;
 }
+
+export type PolynetBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+export type PolynetViewport = {
+  width: number;
+  height: number;
+};
+
+export type PolynetFitTransform = {
+  scale: number;
+  tx: number;
+  ty: number;
+};
+
+// Axis-aligned bounding box of all placed node positions. A single seed at the
+// origin yields a zero-size box centered on the origin.
+export function computePolynetBounds(
+  positions: ReadonlyArray<PolynetLayoutPosition> | ReadonlyMap<string, PolynetLayoutPosition>,
+): PolynetBounds {
+  const list = positions instanceof Map ? Array.from(positions.values()) : (positions as ReadonlyArray<PolynetLayoutPosition>);
+  if (!list.length) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of list) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+// Viewport transform (1 unit == 1 CSS px) that centers `bounds` and scales it to
+// fit `viewport` with `padding` px of margin, clamped to [minScale, maxScale].
+// A point at world (wx, wy) renders at (tx + wx*scale, ty + wy*scale).
+export function computeFitTransform(
+  bounds: PolynetBounds,
+  viewport: PolynetViewport,
+  options: { padding?: number; minScale?: number; maxScale?: number; defaultScale?: number } = {},
+): PolynetFitTransform {
+  const padding = options.padding ?? 64;
+  const minScale = options.minScale ?? 0.4;
+  const maxScale = options.maxScale ?? 3;
+  const defaultScale = options.defaultScale ?? 1;
+  const vw = Math.max(0, viewport.width);
+  const vh = Math.max(0, viewport.height);
+
+  const contentW = bounds.maxX - bounds.minX;
+  const contentH = bounds.maxY - bounds.minY;
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+
+  const availW = Math.max(1, vw - padding * 2);
+  const availH = Math.max(1, vh - padding * 2);
+
+  let scale: number;
+  if (contentW <= 0 && contentH <= 0) {
+    // Single seed (or coincident points): no content extent to fit.
+    scale = defaultScale;
+  } else {
+    const fitW = contentW > 0 ? availW / contentW : Infinity;
+    const fitH = contentH > 0 ? availH / contentH : Infinity;
+    scale = Math.min(fitW, fitH);
+  }
+  scale = Math.max(minScale, Math.min(maxScale, scale));
+
+  // Place the content center at the viewport center.
+  return {
+    scale,
+    tx: vw / 2 - centerX * scale,
+    ty: vh / 2 - centerY * scale,
+  };
+}

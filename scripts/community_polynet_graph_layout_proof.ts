@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 
 import {
+  computeFitTransform,
+  computePolynetBounds,
   computePolynetLayout,
   type PolynetLayoutNodeInput,
 } from "../shared/communityPolynetGraphLayout.ts";
@@ -65,5 +67,42 @@ const withNoise = computePolynetLayout(
 assert.equal(withNoise.size, 2, "only root + directory nodes should be placed");
 assert.ok(withNoise.has("node:a"), "directory node should be placed");
 assert.ok(!withNoise.has("chat:1"), "non-directory activity should not be placed");
+
+// --- bounds ---
+const seedBounds = computePolynetBounds(computePolynetLayout(makeNodes(0), ROOT_ID));
+assert.deepEqual(
+  seedBounds,
+  { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+  "lone seed bounds should collapse to the origin",
+);
+const popBounds = computePolynetBounds(populated);
+assert.ok(popBounds.minX < 0 && popBounds.maxX > 0, "populated bounds should span the origin on x");
+assert.ok(popBounds.minY < 0 && popBounds.maxY > 0, "populated bounds should span the origin on y");
+for (const [, pos] of populated) {
+  assert.ok(pos.x >= popBounds.minX - 1e-6 && pos.x <= popBounds.maxX + 1e-6, "x within bounds");
+  assert.ok(pos.y >= popBounds.minY - 1e-6 && pos.y <= popBounds.maxY + 1e-6, "y within bounds");
+}
+
+// --- fit transform ---
+const VP = { width: 800, height: 500 };
+// Lone seed: centered at viewport center, default scale, clamped.
+const seedFit = computeFitTransform(seedBounds, VP, { padding: 72, minScale: 0.4, maxScale: 3, defaultScale: 1 });
+assert.equal(seedFit.scale, 1, "lone seed should use the default scale");
+assert.equal(seedFit.tx, 400, "lone seed should center x at viewport center");
+assert.equal(seedFit.ty, 250, "lone seed should center y at viewport center");
+
+// Populated: content center maps to viewport center; scale within clamp range.
+const popFit = computeFitTransform(popBounds, VP, { padding: 72, minScale: 0.4, maxScale: 3, defaultScale: 1 });
+assert.ok(popFit.scale >= 0.4 && popFit.scale <= 3, "fit scale stays clamped");
+const cx = (popBounds.minX + popBounds.maxX) / 2;
+const cy = (popBounds.minY + popBounds.maxY) / 2;
+assert.ok(Math.abs(popFit.tx + cx * popFit.scale - VP.width / 2) < 1e-6, "content center maps to viewport center x");
+assert.ok(Math.abs(popFit.ty + cy * popFit.scale - VP.height / 2) < 1e-6, "content center maps to viewport center y");
+
+// Clamp: enormous content floors at minScale; tiny content caps at maxScale.
+const hugeFit = computeFitTransform({ minX: -100000, minY: -100000, maxX: 100000, maxY: 100000 }, VP, { padding: 72, minScale: 0.4, maxScale: 3 });
+assert.equal(hugeFit.scale, 0.4, "huge content should floor at minScale");
+const tinyFit = computeFitTransform({ minX: -1, minY: -1, maxX: 1, maxY: 1 }, VP, { padding: 72, minScale: 0.4, maxScale: 3 });
+assert.equal(tinyFit.scale, 3, "tiny content should cap at maxScale");
 
 console.log("Community PolyNet graph layout proof passed");

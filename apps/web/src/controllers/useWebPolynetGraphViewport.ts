@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { PolynetLayoutPosition } from "../../../../shared/communityPolynetGraphLayout";
+import {
+  computeFitTransform,
+  computePolynetBounds,
+  type PolynetLayoutPosition,
+} from "../../../../shared/communityPolynetGraphLayout";
 
 // Interactive viewport for the PolyNet memory graph: pan, zoom-about-cursor, and
 // per-node drag. World coordinates come from the deterministic layout (root at
-// origin). The SVG viewBox is sized to match the shell in CSS pixels, so one SVG
-// user unit equals one CSS pixel and pointer math stays 1:1 for panning.
+// origin). The viewport is sized from the graph CONTAINER element (block boxes
+// report their size reliably through ResizeObserver, unlike inline SVG), and one
+// SVG user unit equals one CSS pixel, so pointer math stays 1:1.
 //
 // A node at world (wx, wy) renders at user-space (tx + wx*scale, ty + wy*scale).
 
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 3;
 const ZOOM_STEP = 1.2;
+const FIT_PADDING = 72;
 // Pointer travel (CSS px) below which a press counts as a click, not a drag.
 const CLICK_MOVE_THRESHOLD = 3;
 
@@ -36,7 +42,9 @@ type DragState = {
 };
 
 type UseWebPolynetGraphViewportArgs = {
+  containerRef: React.RefObject<HTMLDivElement | null>;
   svgRef: React.RefObject<SVGSVGElement | null>;
+  layout: ReadonlyMap<string, PolynetLayoutPosition>;
   onSelectNode: (nodeId: string) => void;
 };
 
@@ -45,9 +53,11 @@ function clampScale(scale: number): number {
 }
 
 export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs) {
-  const { svgRef, onSelectNode } = args;
+  const { containerRef, svgRef, layout, onSelectNode } = args;
   const onSelectNodeRef = useRef(onSelectNode);
   onSelectNodeRef.current = onSelectNode;
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
 
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [transform, setTransform] = useState<PolynetViewportTransform>({ scale: 1, tx: 0, ty: 0 });
@@ -57,35 +67,71 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
 
   const transformRef = useRef(transform);
   transformRef.current = transform;
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
   const dragRef = useRef<DragState | null>(null);
-  // Once the viewport has a size we center the world origin once.
-  const centeredRef = useRef(false);
+  // Once the user manually pans/zooms/drags, stop auto-fitting their view.
+  const userAdjustedRef = useRef(false);
 
-  // Keep the SVG user space equal to its CSS pixel box and center the seed once.
+  // Frame the whole graph: center the content bounding box and scale it to fit.
+  const fitView = useCallback(() => {
+    const vp = viewportRef.current;
+    if (vp.width <= 0 || vp.height <= 0) return;
+    const bounds = computePolynetBounds(layoutRef.current);
+    setTransform(
+      computeFitTransform(bounds, vp, {
+        padding: FIT_PADDING,
+        minScale: MIN_SCALE,
+        maxScale: MAX_SCALE,
+        defaultScale: 1,
+      }),
+    );
+  }, []);
+
+  // Measure the container (reliable contentRect) and auto-fit until the user
+  // takes over. Re-fit on resize / layout change while still auto-framing.
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg || typeof ResizeObserver === "undefined") return;
+    const el = containerRef.current;
+    if (!el) return;
+    const apply = (width: number, height: number) => {
+      setViewport({ width, height });
+      if (!userAdjustedRef.current && width > 0 && height > 0) {
+        const bounds = computePolynetBounds(layoutRef.current);
+        setTransform(
+          computeFitTransform(bounds, { width, height }, {
+            padding: FIT_PADDING,
+            minScale: MIN_SCALE,
+            maxScale: MAX_SCALE,
+            defaultScale: 1,
+          }),
+        );
+      }
+    };
+    const rect = el.getBoundingClientRect();
+    apply(rect.width, rect.height);
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;
-      setViewport({ width, height });
-      if (!centeredRef.current && width > 0 && height > 0) {
-        centeredRef.current = true;
-        setTransform({ scale: 1, tx: width / 2, ty: height / 2 });
-      }
+      apply(width, height);
     });
-    observer.observe(svg);
+    observer.observe(el);
     return () => observer.disconnect();
-  }, [svgRef]);
+  }, [containerRef]);
 
-  const pointerToUserSpace = useCallback(
+  // Re-fit when the node set changes (until the user has taken over).
+  useEffect(() => {
+    if (!userAdjustedRef.current) fitView();
+  }, [layout, fitView]);
+
+  const pointerToViewport = useCallback(
     (clientX: number, clientY: number) => {
-      const rect = svgRef.current?.getBoundingClientRect();
+      const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
       return { x: clientX - rect.left, y: clientY - rect.top };
     },
-    [svgRef],
+    [containerRef],
   );
 
   // Wheel zoom must preventDefault, so attach a non-passive listener directly.
@@ -98,7 +144,8 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
       const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
       const nextScale = clampScale(current.scale * factor);
       if (nextScale === current.scale) return;
-      const point = pointerToUserSpace(event.clientX, event.clientY);
+      userAdjustedRef.current = true;
+      const point = pointerToViewport(event.clientX, event.clientY);
       // Keep the point under the cursor fixed while scaling.
       const ratio = nextScale / current.scale;
       setTransform({
@@ -109,7 +156,7 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     };
     svg.addEventListener("wheel", handleWheel, { passive: false });
     return () => svg.removeEventListener("wheel", handleWheel);
-  }, [svgRef, pointerToUserSpace]);
+  }, [svgRef, pointerToViewport]);
 
   const endDrag = useCallback((event: React.PointerEvent) => {
     const drag = dragRef.current;
@@ -130,6 +177,8 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     const dy = event.clientY - drag.startClientY;
     if (!drag.moved && Math.hypot(dx, dy) > CLICK_MOVE_THRESHOLD) {
       drag.moved = true;
+      // A real pan or node move counts as the user taking over the view.
+      userAdjustedRef.current = true;
     }
     if (drag.kind === "pan") {
       setTransform((prev) => ({ ...prev, tx: drag.startTx + dx, ty: drag.startTy + dy }));
@@ -204,23 +253,27 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     const current = transformRef.current;
     const nextScale = clampScale(current.scale * factor);
     if (nextScale === current.scale) return;
+    userAdjustedRef.current = true;
     // Zoom about the viewport center for button-driven zoom.
-    const cx = viewport.width / 2;
-    const cy = viewport.height / 2;
+    const vp = viewportRef.current;
+    const cx = vp.width / 2;
+    const cy = vp.height / 2;
     const ratio = nextScale / current.scale;
     setTransform({
       scale: nextScale,
       tx: cx - (cx - current.tx) * ratio,
       ty: cy - (cy - current.ty) * ratio,
     });
-  }, [viewport.width, viewport.height]);
+  }, []);
 
   const zoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy]);
   const zoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy]);
+  // Reset hands the view back to auto-fit framing and drops manual node moves.
   const resetView = useCallback(() => {
+    userAdjustedRef.current = false;
     setDragOverrides(new Map());
-    setTransform({ scale: 1, tx: viewport.width / 2, ty: viewport.height / 2 });
-  }, [viewport.width, viewport.height]);
+    fitView();
+  }, [fitView]);
 
   return {
     viewport,
