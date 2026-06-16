@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Copy } from "lucide-react";
 
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
@@ -366,11 +367,12 @@ export function WebIntegrationsSettingsSection(
                     onClick={handleCopyPolyMcpUrl}
                     aria-label="Copy PolyMCP endpoint URL"
                   >
+                    <Copy aria-hidden="true" />
                     {polyMcpCopyState === "copied"
                       ? "Copied"
                       : polyMcpCopyState === "error"
                         ? "Copy failed"
-                        : "Copy MCP URL"}
+                        : "Copy"}
                   </button>
                 </div>
               </div>
