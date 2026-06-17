@@ -9,8 +9,8 @@ import {
   normalizeWorkspaceVolumeRetentionState,
 } from "./workspaceProjectResources.ts";
 
-export const WORKSPACE_FREE_PROJECT_VOLUME_LIMIT = 1;
-export const WORKSPACE_PAID_PROJECT_VOLUME_LIMIT = 10;
+export const WORKSPACE_FREE_PROJECT_VOLUME_LIMIT = 5;
+export const WORKSPACE_PAID_PROJECT_VOLUME_LIMIT = 5;
 
 export type WorkspaceResourceAccountTier = "free" | "paid";
 
@@ -165,10 +165,7 @@ export function evaluateWorkspaceProjectCreateAdmission(params: {
       limit,
       currentCount,
       requestedCount,
-      message:
-        params.accountTier === "free"
-          ? "Free workspace accounts are limited to one project."
-          : `Workspace accounts are limited to ${limit} projects.`,
+      message: `Workspace accounts are limited to ${limit} projects.`,
     });
   }
   return admissionOk({
@@ -199,17 +196,6 @@ export function evaluateWorkspaceVolumeMaterializationAdmission(params: {
   const hasFunding = hasCardOnFile ||
     hasPurchasedWorkspaceCredits(params.workspaceCreditBalance);
 
-  if (!hasCardOnFile && currentCount + requestedCount > WORKSPACE_FREE_PROJECT_VOLUME_LIMIT) {
-    return admissionBlocked({
-      code: "workspace_card_required_for_additional_volume",
-      accountTier,
-      limit: WORKSPACE_FREE_PROJECT_VOLUME_LIMIT,
-      currentCount,
-      requestedCount,
-      message: "Extra workspace projects require a card on file.",
-    });
-  }
-
   if (!hasFunding) {
     return admissionBlocked({
       code: "workspace_volume_funding_required",
@@ -228,10 +214,7 @@ export function evaluateWorkspaceVolumeMaterializationAdmission(params: {
       limit,
       currentCount,
       requestedCount,
-      message:
-        accountTier === "free"
-          ? "Free workspace accounts are limited to one project volume."
-          : `Workspace accounts are limited to ${limit} project volumes.`,
+      message: `Workspace accounts are limited to ${limit} project volumes.`,
     });
   }
 

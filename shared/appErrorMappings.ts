@@ -104,7 +104,7 @@ export function formatProjectOperationErrorMessage(
     return "Add prepaid credits or a card before using workspace storage.";
   }
   if (code === "workspace_card_required_for_additional_volume") {
-    return "Extra projects require a card on file.";
+    return "Additional workspace storage requires a card on file.";
   }
   if (code === "workspace_volume_limit_reached") {
     return `Project volumes are capped at ${options.maxProjects}.`;
