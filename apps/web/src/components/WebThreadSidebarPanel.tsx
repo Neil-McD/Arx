@@ -4,7 +4,7 @@ import type {
   ThreadSidebarPanelActions,
   ThreadSidebarPanelState,
 } from "./threadSidebarContracts";
-import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
+import { normalizeProjectDisplayName } from "../../../../shared/projectNaming";
 
 const PROJECT_THREAD_PREVIEW_LIMIT = 7;
 
@@ -165,7 +165,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
               <>
                 {projectThreadGroups.map(({ project, threads }) => {
                   const expanded = projectExpandedById[project.id] ?? true;
-                  const label = normalizeComputerDisplayName(
+                  const label = normalizeProjectDisplayName(
                     (project.name ?? "").trim() ||
                       (project.root_path.split("/").pop() ?? project.root_path),
                   );

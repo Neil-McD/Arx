@@ -1,31 +1,31 @@
-const DEFAULT_COMPUTER_NAME_PATTERN = /^(?:project|computer)\s+([1-9]\d*)$/i;
+const DEFAULT_PROJECT_NAME_PATTERN = /^(?:project|computer)\s+([1-9]\d*)$/i;
 
-export function formatDefaultComputerName(index: number): string {
+export function formatDefaultProjectName(index: number): string {
   const safeIndex = Number.isInteger(index) && index > 0 ? index : 1;
   return `Project ${safeIndex}`;
 }
 
-export function readDefaultComputerNameIndex(raw: string | null | undefined): number | null {
+export function readDefaultProjectNameIndex(raw: string | null | undefined): number | null {
   const normalized = String(raw ?? "").trim();
-  const match = normalized.match(DEFAULT_COMPUTER_NAME_PATTERN);
+  const match = normalized.match(DEFAULT_PROJECT_NAME_PATTERN);
   if (!match) return null;
   const index = Number(match[1]);
   return Number.isSafeInteger(index) && index > 0 ? index : null;
 }
 
-export function normalizeComputerDisplayName(raw: string | null | undefined): string {
+export function normalizeProjectDisplayName(raw: string | null | undefined): string {
   const normalized = String(raw ?? "").trim();
   if (!normalized || normalized.toLowerCase() === "workspace") {
-    return formatDefaultComputerName(1);
+    return formatDefaultProjectName(1);
   }
-  const defaultIndex = readDefaultComputerNameIndex(normalized);
-  return defaultIndex ? formatDefaultComputerName(defaultIndex) : normalized;
+  const defaultIndex = readDefaultProjectNameIndex(normalized);
+  return defaultIndex ? formatDefaultProjectName(defaultIndex) : normalized;
 }
 
-export function buildNextDefaultComputerName(existingNames: Array<string | null | undefined>): string {
+export function buildNextDefaultProjectName(existingNames: Array<string | null | undefined>): string {
   const usedIndexes = new Set<number>();
   for (const name of existingNames) {
-    const index = readDefaultComputerNameIndex(name);
+    const index = readDefaultProjectNameIndex(name);
     if (index) usedIndexes.add(index);
   }
 
@@ -33,5 +33,5 @@ export function buildNextDefaultComputerName(existingNames: Array<string | null 
   while (usedIndexes.has(nextIndex)) {
     nextIndex += 1;
   }
-  return formatDefaultComputerName(nextIndex);
+  return formatDefaultProjectName(nextIndex);
 }

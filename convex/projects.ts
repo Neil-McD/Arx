@@ -15,7 +15,7 @@ import {
 import {
   buildBlaxelProjectWorkspaceNames,
 } from "./blaxelWorkspaceProjectNames.ts";
-import { buildNextDefaultComputerName, formatDefaultComputerName } from "../shared/projectNaming";
+import { buildNextDefaultProjectName, formatDefaultProjectName } from "../shared/projectNaming";
 import {
   normalizeProjectContextLinks,
   normalizeProjectInstructions,
@@ -89,7 +89,7 @@ async function ensureDefaultProjectInternal(args: {
 
   const id = await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
-    name: formatDefaultComputerName(1),
+    name: formatDefaultProjectName(1),
     status: "active",
     providerVolumeId: undefined,
     workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
@@ -118,7 +118,7 @@ function normalizeOptionalProjectString(raw: unknown): string | undefined {
 }
 
 function buildNextProjectName(existingProjects: Array<{ name?: string | null }>): string {
-  return buildNextDefaultComputerName(existingProjects.map((project) => project.name ?? null));
+  return buildNextDefaultProjectName(existingProjects.map((project) => project.name ?? null));
 }
 
 async function readWorkspaceCreditBalanceForProjectOwner(args: {

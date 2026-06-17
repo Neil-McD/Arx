@@ -5,7 +5,7 @@ import {
   normalizeProjectInstructions,
   type ProjectContextLink,
 } from "./projectContext";
-import { normalizeComputerDisplayName } from "./projectNaming";
+import { normalizeProjectDisplayName } from "./projectNaming";
 import {
   DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE,
   normalizeWorkspaceVolumeRetentionState,
@@ -91,7 +91,7 @@ function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): CloudProjectRe
   const createdAtMs = Number(row.createdAt ?? Date.now());
   const updatedAtMs = Number(row.updatedAt ?? Date.now());
   const slug = typeof row.slug === "string" && row.slug.trim() ? row.slug.trim() : null;
-  const name = normalizeComputerDisplayName(typeof row.name === "string" ? row.name : null);
+  const name = normalizeProjectDisplayName(typeof row.name === "string" ? row.name : null);
   const resourceTruth = resolveWorkspaceProjectResourceTruth(row);
   return {
     id,

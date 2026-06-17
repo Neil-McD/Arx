@@ -13,7 +13,7 @@ import {
   formatProjectContextLinksText,
   parseProjectContextLinksText,
 } from "../../../../shared/projectContext";
-import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
+import { normalizeProjectDisplayName } from "../../../../shared/projectNaming";
 import {
   countWorkspaceProjectsForAdmission,
   getWorkspaceProjectVolumeLimitForTier,
@@ -284,7 +284,7 @@ export function useWebProjectUiController<TSession>(
 
   const openEditProjectModal = useCallback((project: WebCloudProjectRecord) => {
     setEditingProjectId(project.id);
-    setEditProjectName(normalizeComputerDisplayName(project.name));
+    setEditProjectName(normalizeProjectDisplayName(project.name));
     setEditProjectDescription(project.description ?? "");
     setEditProjectInstructions(project.instructions ?? "");
     setEditProjectLinksText(formatProjectContextLinksText(project.context_links));
@@ -350,7 +350,7 @@ export function useWebProjectUiController<TSession>(
         onProjectCreated(createdProject);
         resetCreateProjectModal();
         setEditingProjectId(createdProject.id);
-        setEditProjectName(normalizeComputerDisplayName(createdProject.name));
+        setEditProjectName(normalizeProjectDisplayName(createdProject.name));
         setEditProjectDescription(createdProject.description ?? "");
         setEditProjectInstructions(createdProject.instructions ?? "");
         setEditProjectLinksText(formatProjectContextLinksText(createdProject.context_links));
@@ -472,7 +472,7 @@ export function useWebProjectUiController<TSession>(
       setDeleteProjectError("Project no longer exists.");
       return;
     }
-    const expectedName = normalizeComputerDisplayName(project.name);
+    const expectedName = normalizeProjectDisplayName(project.name);
     if (!expectedName || deleteProjectConfirmationValue.trim() !== expectedName) {
       setDeleteProjectError("Type the exact project name to confirm deletion.");
       return;
@@ -579,7 +579,7 @@ export function useWebProjectUiController<TSession>(
       },
       deleteModal: {
         isOpen: isDeleteProjectModalOpen,
-        projectName: deletingProject ? normalizeComputerDisplayName(deletingProject.name) : "",
+        projectName: deletingProject ? normalizeProjectDisplayName(deletingProject.name) : "",
         confirmationValue: deleteProjectConfirmationValue,
         error: deleteProjectError,
         isDeleting: isDeletingProject,

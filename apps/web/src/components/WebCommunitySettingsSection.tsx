@@ -422,7 +422,7 @@ function CommunityMemberOnboardingSettingsSection({
                     {activeCommunity.name.slice(0, 1).toUpperCase()}
                   </div>
                   <strong>Welcome to {activeCommunity.name}</strong>
-                  <span>You are in Computer 1 workspace</span>
+                  <span>You are in Project 1 workspace</span>
                 </div>
                 <div className="member-onboarding-preview-composer">
                   Describe what you need help with...

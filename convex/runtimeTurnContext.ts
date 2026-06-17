@@ -21,7 +21,7 @@ import {
   type ProjectContextLink,
   type RuntimeProjectContextPrompt,
 } from "../shared/projectContext";
-import { normalizeComputerDisplayName } from "../shared/projectNaming";
+import { normalizeProjectDisplayName } from "../shared/projectNaming";
 import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
 import {
   mergeRuntimeWorkingStateTaskLedger,
@@ -45,7 +45,7 @@ export async function loadRuntimeProjectContext(params: {
     });
     if (!row || typeof row !== "object") return null;
     const record = row as Record<string, unknown>;
-    const label = normalizeComputerDisplayName(
+    const label = normalizeProjectDisplayName(
       typeof record.name === "string" ? record.name : null,
     );
     const description =
