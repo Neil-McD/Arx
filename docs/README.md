@@ -26,9 +26,6 @@
 3. `schema-data-migration-discipline.md`
 4. `alpha-release-workflow.md`
 
-## Parked future-facing plans
-1. `system-surface-reduction-plan-v1.md`
-
 ## Archived historical evidence
 1. `archive/production-baseline-fingerprint-worksheet.md`
 2. legacy alpha deploy manifest

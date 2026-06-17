@@ -8,7 +8,6 @@ TARGETS=(convex apps shared scripts docs package.json)
 EXCLUDES=(
   --glob '!scripts/no_legacy_community_policy_mirrors_guard.sh'
   --glob '!docs/archive/**'
-  --glob '!docs/system-surface-reduction-plan-v1.md'
   --glob '!docs/product/generated/**'
   --glob '!docs/product/llms*.txt'
 )
