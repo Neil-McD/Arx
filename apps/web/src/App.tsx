@@ -412,10 +412,14 @@ import {
 } from "../../../shared/builderPartnerProgramGateway";
 import type { WebBuilderPartnerProgramPanelProps } from "./components/WebBuilderPartnerProgramPanel";
 import {
+  disableCloudWorkspaceAutoRechargeSettings,
   loadCloudWorkspaceCardOnFileStatus,
+  loadCloudWorkspaceAutoRechargeSettings,
   refreshCloudWorkspaceCardOnFileStatus,
+  saveCloudWorkspaceAutoRechargeSettings,
   startCloudWorkspaceCardSetupCheckout,
   startCloudWorkspaceCreditTopupCheckout,
+  type CloudWorkspaceAutoRechargeSettings,
   type CloudWorkspaceCardOnFileStatus,
 } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
@@ -2010,6 +2014,7 @@ export default function App() {
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const workspaceBillingOverviewLoadRequestIdRef = useRef(0);
   const workspaceCardOnFileLoadRequestIdRef = useRef(0);
+  const workspaceAutoRechargeLoadRequestIdRef = useRef(0);
   const workspaceCardSetupReturnRefreshInFlightRef = useRef(false);
   const workspaceCreditTopupReturnPollRef = useRef<{ attempts: number; timeoutId: number | null }>({
     attempts: 0,
@@ -3706,6 +3711,14 @@ export default function App() {
   const [workspaceCardOnFileStatus, setWorkspaceCardOnFileStatus] =
     useState<CloudWorkspaceCardOnFileStatus | null>(null);
   const [workspaceCardOnFileError, setWorkspaceCardOnFileError] = useState<string | null>(null);
+  const [workspaceAutoRechargeSettings, setWorkspaceAutoRechargeSettings] =
+    useState<CloudWorkspaceAutoRechargeSettings | null>(null);
+  const [isLoadingWorkspaceAutoRechargeSettings, setIsLoadingWorkspaceAutoRechargeSettings] =
+    useState(false);
+  const [workspaceAutoRechargeSettingsError, setWorkspaceAutoRechargeSettingsError] =
+    useState<string | null>(null);
+  const [isSavingWorkspaceAutoRechargeSettings, setIsSavingWorkspaceAutoRechargeSettings] =
+    useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -4934,6 +4947,48 @@ export default function App() {
     [ensureUsableAuthSession],
   );
 
+  const loadWorkspaceAutoRechargeSettings = useCallback(
+    async (session: AuthSession): Promise<CloudWorkspaceAutoRechargeSettings | null> => {
+      const requestId = ++workspaceAutoRechargeLoadRequestIdRef.current;
+      setIsLoadingWorkspaceAutoRechargeSettings(true);
+      setWorkspaceAutoRechargeSettingsError(null);
+      try {
+        const usableSession = await ensureUsableAuthSession(session);
+        if (!usableSession) {
+          if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
+            setWorkspaceAutoRechargeSettings(null);
+          }
+          return null;
+        }
+        const settings = await loadCloudWorkspaceAutoRechargeSettings({
+          session: usableSession,
+        });
+        if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
+          setWorkspaceAutoRechargeSettings(settings);
+          setWorkspaceAutoRechargeSettingsError(null);
+        }
+        return settings;
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to load auto recharge settings.";
+        console.warn("Workspace auto recharge settings refresh failed:", error);
+        if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
+          setWorkspaceAutoRechargeSettingsError(message);
+        }
+        return null;
+      } finally {
+        if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
+          setIsLoadingWorkspaceAutoRechargeSettings(false);
+        }
+      }
+    },
+    [ensureUsableAuthSession],
+  );
+
   useEffect(() => {
     if (!session) return;
     const shouldLoadWorkspaceCredits =
@@ -4945,11 +5000,13 @@ export default function App() {
     }
     if (shouldLoadWorkspaceBillingOverview) {
       void loadWorkspaceBillingOverview(session);
+      void loadWorkspaceAutoRechargeSettings(session);
     }
   }, [
     activePage,
     activeView,
     session,
+    loadWorkspaceAutoRechargeSettings,
     loadWorkspaceBillingOverview,
     loadWorkspaceCardOnFileStatus,
     loadWorkspaceCreditBalance,
@@ -6485,6 +6542,85 @@ export default function App() {
       );
     } finally {
       setIsStartingWorkspaceCardSetupCheckout(false);
+    }
+  }, [ensureUsableAuthSession, requireSignIn]);
+
+  const saveWorkspaceAutoRechargeSettings = useCallback(async (next: {
+    thresholdCredits: number;
+    restoreToCredits: number;
+    monthlyLimitCredits: number | null;
+  }): Promise<void> => {
+    const session = await ensureUsableAuthSession();
+    if (!session) {
+      requireSignIn();
+      return;
+    }
+    setWorkspaceAutoRechargeSettingsError(null);
+    setIsSavingWorkspaceAutoRechargeSettings(true);
+    try {
+      const cardStatus = workspaceCardOnFileStatus ?? await loadWorkspaceCardOnFileStatus(session);
+      if (cardStatus?.has_card_on_file !== true) {
+        throw new Error("Add a card before enabling auto recharge.");
+      }
+      const settings = await saveCloudWorkspaceAutoRechargeSettings({
+        session,
+        enabled: true,
+        thresholdCredits: next.thresholdCredits,
+        restoreToCredits: next.restoreToCredits,
+        monthlyLimitCredits: next.monthlyLimitCredits,
+      });
+      setWorkspaceAutoRechargeSettings(settings);
+      setWorkspaceAutoRechargeSettingsError(null);
+      captureProductAnalyticsEvent("workspace auto recharge settings saved", {
+        threshold_credits: next.thresholdCredits,
+        restore_to_credits: next.restoreToCredits,
+        monthly_limit_credits: next.monthlyLimitCredits,
+      });
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to save auto recharge settings.";
+      setWorkspaceAutoRechargeSettingsError(message);
+      throw error instanceof Error ? error : new Error(message);
+    } finally {
+      setIsSavingWorkspaceAutoRechargeSettings(false);
+    }
+  }, [
+    ensureUsableAuthSession,
+    loadWorkspaceCardOnFileStatus,
+    requireSignIn,
+    workspaceCardOnFileStatus,
+  ]);
+
+  const disableWorkspaceAutoRechargeSettings = useCallback(async (): Promise<void> => {
+    const session = await ensureUsableAuthSession();
+    if (!session) {
+      requireSignIn();
+      return;
+    }
+    setWorkspaceAutoRechargeSettingsError(null);
+    setIsSavingWorkspaceAutoRechargeSettings(true);
+    try {
+      const settings = await disableCloudWorkspaceAutoRechargeSettings({
+        session,
+      });
+      setWorkspaceAutoRechargeSettings(settings);
+      setWorkspaceAutoRechargeSettingsError(null);
+      captureProductAnalyticsEvent("workspace auto recharge settings disabled", {});
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to disable auto recharge settings.";
+      setWorkspaceAutoRechargeSettingsError(message);
+      throw error instanceof Error ? error : new Error(message);
+    } finally {
+      setIsSavingWorkspaceAutoRechargeSettings(false);
     }
   }, [ensureUsableAuthSession, requireSignIn]);
 
@@ -10045,6 +10181,12 @@ export default function App() {
       isStartingWorkspaceCardSetupCheckout,
       workspaceCardSetupError,
       startWorkspaceCardSetupCheckout,
+      workspaceAutoRechargeSettings,
+      isLoadingWorkspaceAutoRechargeSettings,
+      workspaceAutoRechargeSettingsError,
+      isSavingWorkspaceAutoRechargeSettings,
+      saveWorkspaceAutoRechargeSettings,
+      disableWorkspaceAutoRechargeSettings,
       billingUi,
     },
     integrations: {

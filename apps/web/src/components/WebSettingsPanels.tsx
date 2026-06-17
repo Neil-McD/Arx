@@ -3,6 +3,7 @@ import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
+import type { CloudWorkspaceAutoRechargeSettings } from "../../../../shared/cloudAccountCommerceGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type {
   WorkspaceBillingOverview,
@@ -163,6 +164,16 @@ export type WebSettingsPanelsProps = {
     isStartingWorkspaceCardSetupCheckout: boolean;
     workspaceCardSetupError: string | null;
     startWorkspaceCardSetupCheckout: () => Promise<void> | void;
+    workspaceAutoRechargeSettings: CloudWorkspaceAutoRechargeSettings | null;
+    isLoadingWorkspaceAutoRechargeSettings: boolean;
+    workspaceAutoRechargeSettingsError: string | null;
+    isSavingWorkspaceAutoRechargeSettings: boolean;
+    saveWorkspaceAutoRechargeSettings: (next: {
+      thresholdCredits: number;
+      restoreToCredits: number;
+      monthlyLimitCredits: number | null;
+    }) => Promise<void> | void;
+    disableWorkspaceAutoRechargeSettings: () => Promise<void> | void;
     billingUi: UseWebBillingUiControllerResult<
       AccountCommerceStatus,
       WorkspaceCreditBalance,
@@ -399,6 +410,12 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     workspaceCardSetupError: billing.workspaceCardSetupError,
     startWorkspaceCreditTopupCheckout: billing.startWorkspaceCreditTopupCheckout,
     startWorkspaceCardSetupCheckout: billing.startWorkspaceCardSetupCheckout,
+    workspaceAutoRechargeSettings: billing.workspaceAutoRechargeSettings,
+    isLoadingWorkspaceAutoRechargeSettings: billing.isLoadingWorkspaceAutoRechargeSettings,
+    workspaceAutoRechargeSettingsError: billing.workspaceAutoRechargeSettingsError,
+    isSavingWorkspaceAutoRechargeSettings: billing.isSavingWorkspaceAutoRechargeSettings,
+    saveWorkspaceAutoRechargeSettings: billing.saveWorkspaceAutoRechargeSettings,
+    disableWorkspaceAutoRechargeSettings: billing.disableWorkspaceAutoRechargeSettings,
   };
 
   const appearanceSectionProps = {

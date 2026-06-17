@@ -164,6 +164,7 @@ import type * as userProfileProjection from "../userProfileProjection.js";
 import type * as webResearchTools from "../webResearchTools.js";
 import type * as webSearchTypes from "../webSearchTypes.js";
 import type * as workosEmailVerification from "../workosEmailVerification.js";
+import type * as workspaceAutoRecharge from "../workspaceAutoRecharge.js";
 import type * as workspaceComputerProviderPolicy from "../workspaceComputerProviderPolicy.js";
 import type * as workspaceCreditBudgetSignal from "../workspaceCreditBudgetSignal.js";
 import type * as workspaceCreditSettlement from "../workspaceCreditSettlement.js";
@@ -340,6 +341,7 @@ declare const fullApi: ApiFromModules<{
   webResearchTools: typeof webResearchTools;
   webSearchTypes: typeof webSearchTypes;
   workosEmailVerification: typeof workosEmailVerification;
+  workspaceAutoRecharge: typeof workspaceAutoRecharge;
   workspaceComputerProviderPolicy: typeof workspaceComputerProviderPolicy;
   workspaceCreditBudgetSignal: typeof workspaceCreditBudgetSignal;
   workspaceCreditSettlement: typeof workspaceCreditSettlement;

@@ -24196,6 +24196,319 @@ button.message-citation-chip:hover {
   margin-bottom: 12px;
 }
 
+.workspace-payg-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-rose) 10%, transparent), transparent 48%),
+    color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
+}
+
+.workspace-payg-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-payg-kicker {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workspace-payg-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.workspace-payg-balance {
+  color: var(--text-primary);
+  font-size: 32px;
+  font-weight: 760;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.workspace-payg-description {
+  max-width: 560px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.workspace-payg-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.workspace-payg-primary-button {
+  min-width: 142px;
+}
+
+.workspace-payg-secondary-button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 84%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-payg-secondary-button:hover:not(:disabled),
+.workspace-payg-secondary-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-rose) 44%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-rose) 12%, var(--bg-card-alt));
+}
+
+.workspace-payg-secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.workspace-payg-alert,
+.workspace-payg-auto-recharge-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, #ff7b2e 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #ff7b2e 10%, var(--bg-card-alt));
+}
+
+.workspace-payg-auto-recharge-card {
+  margin-top: 2px;
+}
+
+.workspace-payg-auto-recharge-card.is-enabled {
+  border-color: color-mix(in srgb, #4ade80 28%, transparent);
+  background: color-mix(in srgb, #4ade80 8%, var(--bg-card-alt));
+}
+
+.workspace-payg-auto-recharge-card.is-paused {
+  border-color: color-mix(in srgb, #ff7b2e 34%, transparent);
+}
+
+.workspace-payg-auto-recharge-card.is-blocked {
+  border-color: color-mix(in srgb, #dc2626 34%, transparent);
+  background: color-mix(in srgb, #dc2626 8%, var(--bg-card-alt));
+}
+
+.workspace-payg-alert > div,
+.workspace-payg-auto-recharge-card > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-payg-alert strong,
+.workspace-payg-auto-recharge-card strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.workspace-payg-alert span,
+.workspace-payg-auto-recharge-card span {
+  color: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary) 10%);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.workspace-payg-alert-action {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-payg-alert-action:hover:not(:disabled),
+.workspace-payg-alert-action:focus-visible {
+  background: #ececec;
+}
+
+.workspace-payg-alert-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.workspace-payg-pack-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 62%, transparent);
+}
+
+.workspace-payg-pack-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-payg-pack-heading strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.workspace-payg-pack-heading span,
+.workspace-payg-balance-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.workspace-payg-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workspace-payg-detail-row {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 58%, transparent);
+}
+
+.workspace-auto-recharge-modal {
+  width: min(520px, calc(100vw - 32px));
+  border-radius: 12px;
+}
+
+.workspace-auto-recharge-modal .modal-header {
+  align-items: flex-start;
+}
+
+.workspace-auto-recharge-modal .modal-title {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.workspace-auto-recharge-subtitle {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.workspace-auto-recharge-form {
+  display: grid;
+  gap: 12px;
+}
+
+.workspace-auto-recharge-field,
+.workspace-auto-recharge-calculation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 204px);
+  gap: 12px;
+  align-items: center;
+}
+
+.workspace-auto-recharge-field span,
+.workspace-auto-recharge-calculation span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workspace-auto-recharge-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 0;
+  outline: none;
+}
+
+.workspace-auto-recharge-money-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  min-height: 44px;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card-alt) 86%, transparent);
+}
+
+.workspace-auto-recharge-money-input > span {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workspace-auto-recharge-field input:disabled,
+.workspace-auto-recharge-money-input:has(input:disabled) {
+  opacity: 0.72;
+}
+
+.workspace-auto-recharge-calculation {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.workspace-auto-recharge-calculation strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workspace-auto-recharge-limit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workspace-auto-recharge-limit-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent-rose);
+}
+
+.workspace-auto-recharge-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .workspace-billing-secondary-action {
   margin-top: 18px;
 }
@@ -24456,6 +24769,27 @@ button.message-citation-chip:hover {
 }
 
 @media (max-width: 640px) {
+  .workspace-payg-header,
+  .workspace-payg-details-grid,
+  .workspace-auto-recharge-field,
+  .workspace-auto-recharge-calculation {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-payg-actions {
+    justify-content: flex-start;
+  }
+
+  .workspace-payg-alert,
+  .workspace-payg-auto-recharge-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-payg-alert-action {
+    width: 100%;
+  }
+
   .tool-balance-pack-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

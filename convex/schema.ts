@@ -348,6 +348,62 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_updatedAt", ["updatedAt"]),
 
+  workspaceAutoRechargeSettings: defineTable({
+    userId: v.id("users"),
+    enabled: v.boolean(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused_payment_failed"),
+      v.literal("disabled"),
+    ),
+    thresholdCredits: v.number(),
+    restoreToCredits: v.number(),
+    monthlyLimitCredits: v.optional(v.number()),
+    currency: v.literal("usd"),
+    lastTriggeredAt: v.optional(v.number()),
+    lastSucceededAt: v.optional(v.number()),
+    lastFailureAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
+
+  workspaceAutoRechargeAttempts: defineTable({
+    attemptKey: v.string(),
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("prepared"),
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("released"),
+    ),
+    monthKey: v.string(),
+    sequence: v.number(),
+    rechargeCredits: v.number(),
+    amountCents: v.number(),
+    currency: v.literal("usd"),
+    thresholdCredits: v.number(),
+    restoreToCredits: v.number(),
+    monthlyLimitCredits: v.optional(v.number()),
+    spendableCreditsBalance: v.number(),
+    uncollectedCreditsBalance: v.number(),
+    pendingCardCollectionCreditsBalance: v.number(),
+    provider: v.optional(v.string()),
+    providerPaymentId: v.optional(v.string()),
+    providerIdempotencyKey: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_attemptKey", ["attemptKey"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_monthKey", ["userId", "monthKey"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
+
   workspaceComputeCharges: defineTable({
     chargeKey: v.string(),
     userId: v.id("users"),

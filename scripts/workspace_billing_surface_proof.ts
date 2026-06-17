@@ -9,6 +9,7 @@ const packageJson = read("package.json");
 const workspaceCreditsSource = read("convex/workspaceCredits.ts");
 const gatewaySource = read("shared/workspaceCreditsGateway.ts");
 const billingSettingsSource = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const payAsYouGoPanelSource = read("apps/web/src/components/WorkspacePayAsYouGoPanel.tsx");
 const workspacePanelSource = read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx");
 
 assert.match(
@@ -43,16 +44,23 @@ assert.match(
   "web gateway must load the canonical billing overview",
 );
 
+assert.match(
+  billingSettingsSource,
+  /WorkspacePayAsYouGoPanel/,
+  "billing settings must render the canonical pay-as-you-go panel",
+);
+
 for (const requiredBillingLabel of [
   "Current month",
-  "Prepaid balance",
+  "Credit balance",
   "Current usage",
   "Usage this month",
   "Paid this month",
   "Billing history",
+  "Add to credit balance",
 ]) {
   assert.ok(
-    billingSettingsSource.includes(requiredBillingLabel),
+    payAsYouGoPanelSource.includes(requiredBillingLabel),
     `Billing settings must render ${requiredBillingLabel}`,
   );
 }
