@@ -26,7 +26,7 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 function proveConstants() {
   assert.equal(BUILDER_PARTNER_PROGRAM_VERSION, "builder_partner_v1");
   assert.equal(BUILDER_PARTNER_TERMS_VERSION, "builder_partner_terms_v2");
-  assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1500);
+  assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1000);
   assert.equal(BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS, 500);
   assert.equal(BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS, 2000);
   assert.equal(BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS, 4000);
@@ -38,10 +38,10 @@ function proveConstants() {
 function proveCommunityCommissionMath() {
   const result = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd: 100,
-    platformFeeBps: 1500,
+    platformFeeBps: 1000,
   });
   assert.deepEqual(result, {
-    platformFeeUsd: 15,
+    platformFeeUsd: 10,
     commissionAmountUsd: 5,
     effectiveCommunityRevenueShareBps: 500,
   });
@@ -1123,7 +1123,7 @@ function proveEndToEndPartnerLifecycleBehavior() {
     partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   });
   assert.deepEqual(initial, {
-    platformFeeUsd: 15,
+    platformFeeUsd: 10,
     commissionAmountUsd: 5,
     effectiveCommunityRevenueShareBps: 500,
   });
@@ -1349,7 +1349,7 @@ function proveEndToEndPartnerLifecycleSourceContract(
   assertIncludes(
     commissionProducerSource,
     "legacyCommissionKey",
-    "Builder Partner E2E checks the legacy 6% community platform-fee key before inserting a current 5% community revenue row",
+    "Builder Partner E2E checks the legacy platform-fee key before inserting a current 5% community revenue row",
   );
   assertIncludes(
     commissionProducerSource,
@@ -1470,8 +1470,8 @@ function proveEndToEndPartnerLifecycleSourceContract(
 function provePricingFoundation(authSource: string, workspaceCreditsSource: string) {
   assert.match(
     authSource,
-    /platformFeeBps:\s*1500/,
-    "expected partner economics to sit on the 15% community platform fee",
+    /platformFeeBps:\s*1000/,
+    "expected partner economics to sit on the 10% community platform fee",
   );
   assert.match(
     workspaceCreditsSource,

@@ -30,7 +30,7 @@ type MoneyMetric = {
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "cancel_at_period_end"]);
 const CHECKOUT_STATUSES = ["pending", "complete", "expired"] as const;
-const FREE_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 1500;
+const FREE_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 1000;
 const ARCHITECT_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 300;
 const STALE_COMMUNITY_ACTIVITY_AGE_MS = 30 * 86400000;
 const COMMUNITY_SETUP_RISK_FLAGS = new Set([

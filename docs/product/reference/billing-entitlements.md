@@ -29,7 +29,7 @@ The simple cash path is:
 
 This is the product value loop: the builder packages expertise into a community intelligence system, members pay for access to that system, and Polynet keeps access and payout state explicit.
 
-The current default platform fee for free-account community revenue is 15%. Legacy paid creator billing does not create or renew platform-plan access.
+The current default platform fee for free-account community revenue is 10%. Legacy paid creator billing does not create or renew platform-plan access.
 
 Community creator revenue uses Stripe Connect subscriptions, not a Polynet-managed creator payout ledger. Stripe routes the creator share to the connected account, Polynet keeps the configured application fee, and Stripe Connect remains the payout/KYC/compliance authority. The 30-day risk hold and 14-day payout buffer apply to Builder Partner commissions, not to ordinary community creator revenue.
 

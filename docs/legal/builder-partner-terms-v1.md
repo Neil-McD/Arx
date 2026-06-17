@@ -49,7 +49,7 @@ Community-revenue commissions apply only where the referred creator was eligible
 
 The current Builder Partner economics are:
 
-1. community revenue: 40% of PolyNet's 15% platform fee on eligible referred community revenue, currently equal to 6% of eligible referred community revenue, and
+1. community revenue: 50% of PolyNet's 10% platform fee on eligible referred community revenue, currently equal to 5% of eligible referred community revenue, and
 2. paid tool usage: up to 20% of eligible referred creators' settled paid-tool usage, subject to PolyNet retaining its target revenue floor after vendor costs.
 
 Commissions are calculated from backend records. Frontend summaries, estimates, dashboards, and examples are informational and do not create a payout right.

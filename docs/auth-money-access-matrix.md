@@ -15,7 +15,7 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - can own two communities
    - can join and use communities when membership/entitlement exists
    - can connect Stripe and monetize paid community access
-   - pays the default 15% Polynet platform fee on paid community revenue
+   - pays the default 10% Polynet platform fee on paid community revenue
    - uses ChatGPT or an OpenAI API key for personal inference
    - uses tool balance for workspace tools, web research, and voice input
 3. `architect`
@@ -107,7 +107,7 @@ Prompt injection is not tiered. Authenticated free and internal architect accoun
 6. Paid access becomes real only after backend entitlement, membership, claim, and subscription state agree.
 7. Payout readiness is separate from member entitlement.
 8. Community role is separate from paid access.
-9. The default platform fee for free-account community revenue is 15%.
+9. The default platform fee for free-account community revenue is 10%.
 10. Legacy paid creator billing does not create or renew platform-plan access.
 11. Community creator revenue uses the Stripe Connect subscription path: Stripe routes creator revenue to the connected account and Polynet keeps the configured application fee. Polynet does not run a separate creator payout ledger or gestation period for community revenue.
 12. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
