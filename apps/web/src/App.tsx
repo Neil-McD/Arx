@@ -10994,6 +10994,16 @@ export default function App() {
         getInitials={getInitials}
         getAvatarColor={getAvatarColor}
         renderTextWithLinks={renderTextWithLinks}
+        requireSignIn={() => requireSignIn()}
+        showAppToastMessage={showAppToastMessage}
+        onVoiceToolBalanceRequired={(message, details) => {
+          openWorkspaceCreditTopupModal({
+            message: message.trim() || null,
+            toolKind: details?.toolKind ?? "voice_input",
+            requiredCredits: details?.requiredCredits ?? null,
+            paidUsageBillingMode: details?.paidUsageBillingMode ?? null,
+          });
+        }}
         onUnreadCountChange={setDirectMessagesUnreadCount}
         onClose={handleCloseDirectMessages}
       />

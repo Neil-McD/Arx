@@ -9740,6 +9740,26 @@ button.community-launch-knowledge-integration-chip:disabled {
   height: 17px;
 }
 
+.community-dm-panel-composer .ask-mic {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 72%, transparent);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-card) 38%, transparent);
+}
+
+.community-dm-panel-composer .ask-mic:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--text-secondary) 32%, transparent);
+}
+
+.community-dm-panel-composer .ask-mic svg {
+  width: 17px;
+  height: 17px;
+}
+
 .community-dm-panel-input {
   flex: 1 1 auto;
   min-height: 38px;

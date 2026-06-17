@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { blobToBase64 } from "./imageTransforms";
 import {
   transcribeVoice,
@@ -20,7 +20,7 @@ import {
   VOICE_TRANSCRIPTION_MAX_DURATION_MS,
 } from "./voiceCapture";
 
-export type VoiceSurface = "workspace" | "community";
+export type VoiceSurface = "workspace" | "community" | "direct_message";
 export type VoiceUiState = "idle" | "recording" | "transcribing";
 
 type VoiceInputIntent = {
@@ -35,7 +35,7 @@ type VoiceInputIntent = {
   title: string;
 };
 
-type VoiceToolBalanceDetails = {
+export type VoiceToolBalanceDetails = {
   toolKind?: PaidToolKind | null;
   requiredCredits?: number | null;
   paidUsageBillingMode?: PaidUsageBillingMode | null;
@@ -45,9 +45,9 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   session: SessionT | null;
   sessionRef: MutableRefObject<SessionT | null>;
   ensureSession?: (session: SessionT | null) => Promise<SessionT | null>;
-  activeCommunity: unknown | null;
-  activeCommunityFunnelAction: "checkout" | "request_access" | "join" | null;
-  canPostMessagesActiveCommunity: boolean;
+  activeCommunity?: unknown | null;
+  activeCommunityFunnelAction?: "checkout" | "request_access" | "join" | null;
+  canPostMessagesActiveCommunity?: boolean;
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
   onToolBalanceRequired?: (
@@ -55,10 +55,12 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
     message: string,
     details?: VoiceToolBalanceDetails,
   ) => void;
-  appendWorkspaceTranscript: (transcript: string) => void;
-  focusWorkspaceInput: () => void;
-  setCommunityMessageInput: Dispatch<SetStateAction<string>>;
-  chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  appendWorkspaceTranscript?: (transcript: string) => void;
+  focusWorkspaceInput?: () => void;
+  setCommunityMessageInput?: Dispatch<SetStateAction<string>>;
+  chatInputRef?: MutableRefObject<HTMLTextAreaElement | null>;
+  appendDirectMessageTranscript?: (transcript: string) => void;
+  focusDirectMessageInput?: () => void;
 };
 
 function isToolBalanceError(message: string): boolean {
@@ -115,6 +117,8 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
         title:
           surface === "community"
             ? "Sign in to use voice input in community chat."
+            : surface === "direct_message"
+              ? "Sign in to use voice input in direct messages."
             : "Sign in to use voice input.",
       };
     }
@@ -167,7 +171,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     return isVoiceTranscribing ? "transcribing" : "recording";
   }
 
-  function releaseVoiceCaptureResources() {
+  const releaseVoiceCaptureResources = useCallback(() => {
     const cleanupCapture = voiceCaptureCleanupRef.current;
     if (cleanupCapture) {
       try {
@@ -186,26 +190,39 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     voiceRecorderRef.current = null;
     voiceChunksRef.current = [];
     voiceCaptureStartedAtRef.current = null;
-  }
+  }, []);
 
   useEffect(() => {
     return () => {
       releaseVoiceCaptureResources();
     };
-  }, []);
+  }, [releaseVoiceCaptureResources]);
+
+  const cancelVoiceInput = useCallback(() => {
+    releaseVoiceCaptureResources();
+    setIsVoiceTranscribing(false);
+    setActiveVoiceSurface(null);
+  }, [releaseVoiceCaptureResources]);
 
   function applyVoiceTranscript(surface: VoiceSurface, transcript: string) {
     if (!transcript) return;
     if (surface === "workspace") {
-      args.appendWorkspaceTranscript(transcript);
+      args.appendWorkspaceTranscript?.(transcript);
       window.setTimeout(() => {
-        args.focusWorkspaceInput();
+        args.focusWorkspaceInput?.();
       }, 0);
       return;
     }
-    args.setCommunityMessageInput((prev) => mergeVoiceTranscript(prev, transcript));
+    if (surface === "direct_message") {
+      args.appendDirectMessageTranscript?.(transcript);
+      window.setTimeout(() => {
+        args.focusDirectMessageInput?.();
+      }, 0);
+      return;
+    }
+    args.setCommunityMessageInput?.((prev) => mergeVoiceTranscript(prev, transcript));
     window.setTimeout(() => {
-      const input = args.chatInputRef.current;
+      const input = args.chatInputRef?.current;
       if (!input) return;
       input.style.height = "auto";
       input.style.height = Math.min(input.scrollHeight, 120) + "px";
@@ -488,14 +505,19 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
 
   const workspaceVoiceIntent = resolveVoiceInputIntent("workspace");
   const communityVoiceIntent = resolveVoiceInputIntent("community");
+  const directMessageVoiceIntent = resolveVoiceInputIntent("direct_message");
   const workspaceVoiceUiState = resolveVoiceUiState("workspace");
   const communityVoiceUiState = resolveVoiceUiState("community");
+  const directMessageVoiceUiState = resolveVoiceUiState("direct_message");
 
   return {
     workspaceVoiceIntent,
     communityVoiceIntent,
+    directMessageVoiceIntent,
     workspaceVoiceUiState,
     communityVoiceUiState,
+    directMessageVoiceUiState,
     handleVoiceInputClick,
+    cancelVoiceInput,
   };
 }

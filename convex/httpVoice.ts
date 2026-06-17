@@ -623,7 +623,7 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         const preferPrimary =
           input.prefer_primary === true || String(input.prefer_primary ?? "").trim().toLowerCase() === "true";
 
-        if (surface && surface !== "workspace" && surface !== "community") {
+        if (surface && surface !== "workspace" && surface !== "community" && surface !== "direct_message") {
           return jsonResponse(req, 400, {
             ok: false,
             error: "invalid_surface",

@@ -1,5 +1,5 @@
 import { ArrowLeft, MessageCircle, Paperclip, RotateCcw } from "lucide-react";
-import type { ChangeEvent, DragEvent, FormEvent, ReactNode } from "react";
+import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DirectMessage,
@@ -13,6 +13,7 @@ import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGri
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
@@ -35,6 +36,8 @@ type WebDirectMessagePanelProps = {
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
+  inputRef?: MutableRefObject<HTMLTextAreaElement | null>;
+  voiceButtonProps?: ComponentProps<typeof VoiceInputButton>;
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
   onAttachmentFilesSelected?: (files: DirectMessageAttachmentFileInput) => void | Promise<void>;
@@ -534,6 +537,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           <Paperclip aria-hidden="true" />
         </button>
         <textarea
+          ref={(node) => {
+            if (props.inputRef) props.inputRef.current = node;
+          }}
           className="community-dm-panel-input"
           value={props.input}
           onChange={(event) => props.onInputChange(event.target.value)}
@@ -551,6 +557,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           rows={1}
           disabled={props.isSending}
         />
+        {props.voiceButtonProps ? <VoiceInputButton {...props.voiceButtonProps} /> : null}
         <button
           className="community-dm-panel-send chat-send ask-send-btn ask-send-btn-v2"
           type="submit"

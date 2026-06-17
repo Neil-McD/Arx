@@ -306,6 +306,8 @@ async function proveSourceContract() {
   const paidToolCreditReservationSource = await readRepoFile("convex/paidToolCreditReservation.ts");
   const authCoreSource = await readRepoFile("shared/authCore.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
+  const directMessagesHostSource = await readRepoFile("apps/web/src/components/WebDirectMessagesHost.tsx");
+  const directMessagePanelSource = await readRepoFile("apps/web/src/components/WebDirectMessagePanel.tsx");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
 
   assert.match(
@@ -412,6 +414,36 @@ async function proveSourceContract() {
     voiceControllerSource,
     /normalizedBuilderTier/,
     "voice controller should not receive unused tier props",
+  );
+  assert.match(
+    voiceControllerSource,
+    /export type VoiceSurface = "workspace" \| "community" \| "direct_message"/,
+    "voice input should share one surface contract across workspace, community chat, and DMs",
+  );
+  assert.match(
+    voiceControllerSource,
+    /directMessageVoiceIntent[\s\S]*directMessageVoiceUiState[\s\S]*cancelVoiceInput/,
+    "voice controller should expose DM intent/state and cleanup without duplicating recorder logic",
+  );
+  assert.match(
+    httpVoiceSource,
+    /surface !== "workspace" && surface !== "community" && surface !== "direct_message"/,
+    "voice route should accept direct_message as first-party surface metadata",
+  );
+  assert.match(
+    directMessagesHostSource,
+    /useWebVoiceInputController<SessionT>[\s\S]*appendDirectMessageTranscript[\s\S]*handleDirectMessageVoiceInputClick\("direct_message"\)/,
+    "DM composer should reuse the shared voice input controller",
+  );
+  assert.match(
+    directMessagesHostSource,
+    /pendingVoiceTranscriptConversationIdRef[\s\S]*previous\.conversation\.id !== targetConversationId[\s\S]*pendingVoiceTranscriptConversationIdRef\.current = directMessagePanel\.conversation\.id/,
+    "DM voice transcripts should stay bound to the conversation that started capture",
+  );
+  assert.match(
+    directMessagePanelSource,
+    /VoiceInputButton[\s\S]*voiceButtonProps[\s\S]*<VoiceInputButton \{\.\.\.props\.voiceButtonProps\}/,
+    "DM composer should render the shared voice input button",
   );
 
   assert.match(runtimeAgentLoopSource, /toolKind:\s*"web_research"[\s\S]*toolName:\s*"web_research"/);

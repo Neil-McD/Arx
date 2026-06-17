@@ -19,6 +19,11 @@ import {
   uploadCloudDirectMessageAttachmentFile,
 } from "../../../../shared/cloudDirectMessagesGateway";
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
+import {
+  useWebVoiceInputController,
+  type VoiceToolBalanceDetails,
+} from "../../../../shared/useWebVoiceInputController";
+import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { WebDirectMessageInboxPanel } from "./WebDirectMessageInboxPanel";
 import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 
@@ -56,6 +61,9 @@ type WebDirectMessagesHostProps<SessionT> = {
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
+  requireSignIn?: () => void;
+  showAppToastMessage?: (message: string) => void;
+  onVoiceToolBalanceRequired?: (message: string, details?: VoiceToolBalanceDetails) => void;
   onUnreadCountChange?: (count: number) => void;
   onClose: () => void;
 };
@@ -264,6 +272,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     getInitials,
     getAvatarColor,
     renderTextWithLinks,
+    requireSignIn,
+    showAppToastMessage,
+    onVoiceToolBalanceRequired,
     onUnreadCountChange,
     onClose,
   } = props;
@@ -282,8 +293,110 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const directMessageOpenRequestRef = useRef(0);
   const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
   const typingInputHadTextRef = useRef(false);
+  const sessionRef = useRef<SessionT | null>(session);
+  const directMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const voiceConversationIdRef = useRef<string | null>(null);
+  const pendingVoiceTranscriptConversationIdRef = useRef<string | null>(null);
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  const showDirectVoiceMessage = useCallback(
+    (message: string) => {
+      const normalized = message.trim() || "Voice transcription failed.";
+      if (showAppToastMessage) {
+        showAppToastMessage(normalized);
+        return;
+      }
+      setDirectMessagePanel((previous) =>
+        previous
+          ? {
+              ...previous,
+              error: normalized,
+            }
+          : previous,
+      );
+    },
+    [showAppToastMessage],
+  );
+
+  const appendDirectMessageTranscript = useCallback((transcript: string) => {
+    const normalized = transcript.trim();
+    if (!normalized) return;
+    const targetConversationId = pendingVoiceTranscriptConversationIdRef.current;
+    if (!targetConversationId) return;
+    pendingVoiceTranscriptConversationIdRef.current = null;
+    setDirectMessagePanel((previous) => {
+      if (!previous) return previous;
+      if (previous.conversation.id !== targetConversationId) return previous;
+      const input = mergeVoiceTranscript(previous.input, normalized);
+      typingInputHadTextRef.current = input.trim().length > 0;
+      return {
+        ...previous,
+        input,
+        error: null,
+      };
+    });
+  }, []);
+
+  const focusDirectMessageInput = useCallback(() => {
+    const input = directMessageInputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 96)}px`;
+    input.focus();
+  }, []);
+
+  const {
+    directMessageVoiceIntent,
+    directMessageVoiceUiState,
+    handleVoiceInputClick: handleDirectMessageVoiceInputClick,
+    cancelVoiceInput: cancelDirectMessageVoiceInput,
+  } = useWebVoiceInputController<SessionT>({
+    session,
+    sessionRef,
+    ensureSession: ensureSession
+      ? (currentSession) => ensureSession(currentSession, "direct_messages_voice")
+      : undefined,
+    activeCommunity: null,
+    activeCommunityFunnelAction: null,
+    canPostMessagesActiveCommunity: true,
+    requireSignIn: () => {
+      if (requireSignIn) {
+        requireSignIn();
+        return;
+      }
+      showDirectVoiceMessage("Sign in to use voice input in direct messages.");
+    },
+    showAppToastMessage: showDirectVoiceMessage,
+    onToolBalanceRequired: (_surface, message, details) => {
+      if (onVoiceToolBalanceRequired) {
+        onVoiceToolBalanceRequired(message, details);
+        return;
+      }
+      showDirectVoiceMessage(message.trim() || "Add balance to use voice input.");
+    },
+    appendDirectMessageTranscript,
+    focusDirectMessageInput,
+  });
+
+  useEffect(() => {
+    const previousConversationId = voiceConversationIdRef.current;
+    voiceConversationIdRef.current = activeConversationId;
+    if (!isOpen || !activeConversationId) {
+      pendingVoiceTranscriptConversationIdRef.current = null;
+      cancelDirectMessageVoiceInput();
+      return;
+    }
+    if (previousConversationId && previousConversationId !== activeConversationId) {
+      pendingVoiceTranscriptConversationIdRef.current = null;
+      cancelDirectMessageVoiceInput();
+    }
+  }, [activeConversationId, cancelDirectMessageVoiceInput, isOpen]);
+
   const directTypingPresence = useDirectMessageTypingPresence({
     isEnabled: isOpen && Boolean(activeConversationId),
     session: session as any,
@@ -1052,6 +1165,21 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           getInitials={getInitials}
           getAvatarColor={getAvatarColor}
           renderTextWithLinks={renderTextWithLinks}
+          inputRef={directMessageInputRef}
+          voiceButtonProps={{
+            state: directMessageVoiceUiState,
+            title: directMessagePanel.isSending
+              ? "Wait for the direct message to finish sending."
+              : directMessageVoiceIntent.title,
+            onClick: () => {
+              if (directMessagePanel.isSending) {
+                showDirectVoiceMessage("Wait for the direct message to finish sending.");
+                return;
+              }
+              pendingVoiceTranscriptConversationIdRef.current = directMessagePanel.conversation.id;
+              void handleDirectMessageVoiceInputClick("direct_message");
+            },
+          }}
           onInputChange={(value) => {
             const nextHasText = value.trim().length > 0;
             if (!nextHasText && typingInputHadTextRef.current) {
