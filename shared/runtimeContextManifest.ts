@@ -1,0 +1,783 @@
+import {
+  isComputerUseToolName,
+  type RetrievalToolName,
+} from "./retrievalTools.ts";
+import {
+  EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE,
+  normalizeCommunityResourceRuntimeLaneState,
+  type CommunityResourceRuntimeLaneState,
+} from "./communityResourceLane.ts";
+import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
+import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket.ts";
+
+export type RuntimeContextManifestOwner =
+  | "platform"
+  | "user"
+  | "community"
+  | "workspace"
+  | "web"
+  | "message"
+  | "provider"
+  | "runtime";
+
+export type RuntimeContextManifestPromptAuthority =
+  | "platform"
+  | "runtime"
+  | "scoped"
+  | "workflow"
+  | "demo";
+
+export type RuntimeContextManifestRetrieval =
+  | "injected_excerpt"
+  | "tool_available"
+  | "runtime_fragment"
+  | "stored_only"
+  | "excluded";
+
+export type RuntimeContextManifestVisibility =
+  | "public"
+  | "authenticated"
+  | "member"
+  | "owner"
+  | "private"
+  | "server";
+
+export type RuntimeContextManifestToolEffect =
+  | "read"
+  | "write"
+  | "external"
+  | "process"
+  | "ui";
+
+export type RuntimeContextManifestPrompt = {
+  id: string;
+  owner: RuntimeContextManifestOwner;
+  authority: RuntimeContextManifestPromptAuthority;
+  injected: boolean;
+  source: string;
+  reason: string;
+  sourceVersion?: string | null;
+};
+
+export type RuntimeContextManifestResource = {
+  id: string;
+  owner: RuntimeContextManifestOwner;
+  retrieval: RuntimeContextManifestRetrieval;
+  visibility: RuntimeContextManifestVisibility;
+  source: string;
+  reason: string;
+};
+
+export type RuntimeContextManifestTool = {
+  name: string;
+  family: string;
+  grantedBy: string;
+  effect: RuntimeContextManifestToolEffect;
+  source: "fixed_runtime_tool" | "mounted_app_tool";
+};
+
+export type RuntimeContextManifestRuntimeState = {
+  id: string;
+  kind: string;
+  rendered: boolean;
+  redacted: boolean;
+  source: string;
+  reason: string;
+  maxChars?: number | null;
+};
+
+export type RuntimeContextManifestExclusion = {
+  source: string;
+  reason: string;
+};
+
+export type RuntimeContextManifestV1 = {
+  version: 1;
+  generatedAt: string | null;
+  scope: {
+    userId: string | null;
+    threadId: string | null;
+    communityId: string | null;
+    communityContextVersion: number | null;
+    projectId: string | null;
+    resourceLane: CommunityResourceRuntimeLaneState["lane"];
+    harnessName: string | null;
+    inferenceSource: string | null;
+  };
+  request: {
+    latestUserText: string | null;
+    conversationMessageCount: number;
+    hasUserRequest: boolean;
+  };
+  prompts: RuntimeContextManifestPrompt[];
+  resources: RuntimeContextManifestResource[];
+  tools: RuntimeContextManifestTool[];
+  runtimeState: RuntimeContextManifestRuntimeState[];
+  exclusions: RuntimeContextManifestExclusion[];
+  summary: {
+    promptCount: number;
+    resourceCount: number;
+    toolCount: number;
+    runtimeStateCount: number;
+    exclusionCount: number;
+    fixedToolCount: number;
+    mountedToolCount: number;
+  };
+};
+
+type ManifestSkillInput = {
+  name?: unknown;
+  mention_token?: unknown;
+  skill_revision_id?: unknown;
+  platform_skill_id?: unknown;
+  user_platform_skill_install_id?: unknown;
+  community_skill_attachment_id?: unknown;
+};
+
+type ManifestMountedToolInput = {
+  runtime_tool_name?: unknown;
+  app_name?: unknown;
+  risk_level?: unknown;
+};
+
+export type BuildRuntimeContextManifestInput = {
+  generatedAt?: string | null;
+  userId?: string | null;
+  threadId?: string | null;
+  communityId?: string | null;
+  communityContextVersion?: number | null;
+  projectId?: string | null;
+  harnessName?: string | null;
+  inferenceSource?: string | null;
+  latestUserText?: string | null;
+  messages?: Array<{ role?: string | null; content?: string | null }> | null;
+  allowedToolNames?: readonly RetrievalToolName[] | null;
+  mountedTools?: readonly ManifestMountedToolInput[] | null;
+  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
+  communitySystemPrompt?: string | null;
+  communityAbout?: string | null;
+  agentSoul?: string | null;
+  runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
+  runtimeTurnContext?: RuntimeTurnContextPacket | null;
+  selectedPlatformSkills?: readonly ManifestSkillInput[] | null;
+  selectedPersonalSkills?: readonly ManifestSkillInput[] | null;
+  selectedCommunitySkills?: readonly ManifestSkillInput[] | null;
+  hasBrowserBuiltDemoPrompt?: boolean | null;
+};
+
+const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
+  "search_product_docs",
+  "get_product_doc",
+]);
+
+const COMMUNITY_CONTEXT_TOOL_NAMES = new Set<RetrievalToolName>([
+  "get_active_community_context",
+]);
+
+const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
+  "community_resources_map",
+  "community_resources_read",
+  "community_resources_list",
+  "community_resource_read",
+  "community_resources_search",
+  "community_resource_builder_list",
+  "community_resource_builder_read",
+  "community_resource_builder_stage_changeset",
+  "community_resource_builder_apply_changeset",
+]);
+
+const COMMUNITY_ACTIVITY_TOOL_NAMES = new Set<RetrievalToolName>([
+  "community_search",
+]);
+
+const COMMUNITY_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
+  "community_write",
+]);
+
+const WEB_RESEARCH_TOOL_NAMES = new Set<RetrievalToolName>([
+  "web_research",
+  "web_crawl",
+]);
+
+const WORKSPACE_READ_TOOL_NAMES = new Set<RetrievalToolName>([
+  "list_dir",
+  "read",
+  "glob",
+  "grep",
+  "sha256",
+]);
+
+const WORKSPACE_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
+  "write",
+  "edit",
+  "bash",
+]);
+
+const TERMINAL_TOOL_NAMES = new Set<RetrievalToolName>([
+  "terminal_start",
+  "terminal_read",
+  "terminal_write",
+  "terminal_stop",
+]);
+
+function compactText(value: unknown, limit: number): string | null {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
+}
+
+function hasText(value: unknown): boolean {
+  return Boolean(compactText(value, 1));
+}
+
+function uniqueToolNames(values: readonly RetrievalToolName[] | null | undefined): RetrievalToolName[] {
+  if (!Array.isArray(values)) return [];
+  const out: RetrievalToolName[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const toolName = String(value ?? "").trim() as RetrievalToolName;
+    if (!toolName || seen.has(toolName)) continue;
+    seen.add(toolName);
+    out.push(toolName);
+  }
+  return out;
+}
+
+function uniqueMountedTools(
+  values: readonly ManifestMountedToolInput[] | null | undefined,
+): ManifestMountedToolInput[] {
+  if (!Array.isArray(values)) return [];
+  const out: ManifestMountedToolInput[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const runtimeToolName = compactText(value?.runtime_tool_name, 160);
+    if (!runtimeToolName || seen.has(runtimeToolName)) continue;
+    seen.add(runtimeToolName);
+    out.push(value);
+  }
+  return out;
+}
+
+function selectedSkillId(
+  scope: "platform" | "personal" | "community",
+  skill: ManifestSkillInput,
+): string {
+  const token = compactText(skill.mention_token, 80);
+  if (token) return `${scope}_skill:${token}`;
+  const fallback =
+    compactText(skill.platform_skill_id, 120) ??
+    compactText(skill.user_platform_skill_install_id, 120) ??
+    compactText(skill.community_skill_attachment_id, 120) ??
+    compactText(skill.name, 120) ??
+    "unknown";
+  return `${scope}_skill:${fallback}`;
+}
+
+function pushSelectedSkillPrompts(args: {
+  prompts: RuntimeContextManifestPrompt[];
+  scope: "platform" | "personal" | "community";
+  owner: RuntimeContextManifestOwner;
+  skills: readonly ManifestSkillInput[] | null | undefined;
+}): void {
+  if (!Array.isArray(args.skills)) return;
+  for (const skill of args.skills) {
+    const skillName = compactText(skill.name, 120);
+    args.prompts.push({
+      id: selectedSkillId(args.scope, skill),
+      owner: args.owner,
+      authority: "workflow",
+      injected: true,
+      source: "runtime_skill_resolution",
+      reason: skillName
+        ? `selected skill instructions for ${skillName}`
+        : "selected skill instructions",
+      sourceVersion: compactText(skill.skill_revision_id, 120),
+    });
+  }
+}
+
+function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextManifestTool, "name" | "source"> {
+  if (PRODUCT_DOC_TOOL_NAMES.has(toolName)) {
+    return { family: "product_docs", grantedBy: "product_docs_capability", effect: "read" };
+  }
+  if (COMMUNITY_CONTEXT_TOOL_NAMES.has(toolName)) {
+    return { family: "community_context", grantedBy: "validated_community_lens", effect: "read" };
+  }
+  if (COMMUNITY_RESOURCE_TOOL_NAMES.has(toolName)) {
+    const isWrite =
+      toolName === "community_resource_builder_stage_changeset" ||
+      toolName === "community_resource_builder_apply_changeset";
+    return {
+      family: "community_resources",
+      grantedBy: "validated_community_resource_lane",
+      effect: isWrite ? "write" : "read",
+    };
+  }
+  if (COMMUNITY_ACTIVITY_TOOL_NAMES.has(toolName)) {
+    return { family: "community_activity", grantedBy: "validated_community_lens", effect: "read" };
+  }
+  if (COMMUNITY_WRITE_TOOL_NAMES.has(toolName)) {
+    return { family: "community_write", grantedBy: "validated_community_lens", effect: "write" };
+  }
+  if (WEB_RESEARCH_TOOL_NAMES.has(toolName)) {
+    return { family: "web_research", grantedBy: "web_research_capability", effect: "external" };
+  }
+  if (WORKSPACE_READ_TOOL_NAMES.has(toolName)) {
+    return { family: "workspace_read", grantedBy: "project_workspace_scope", effect: "read" };
+  }
+  if (WORKSPACE_WRITE_TOOL_NAMES.has(toolName)) {
+    return { family: "workspace_write", grantedBy: "project_workspace_scope", effect: "write" };
+  }
+  if (TERMINAL_TOOL_NAMES.has(toolName)) {
+    return { family: "terminal_control", grantedBy: "project_workspace_scope", effect: "process" };
+  }
+  if (isComputerUseToolName(toolName)) {
+    return { family: "computer_control", grantedBy: "eligible_workspace_runtime", effect: "ui" };
+  }
+  return { family: "unknown", grantedBy: "runtime_tool_policy", effect: "read" };
+}
+
+function hasAnyTool(
+  allowedToolNames: readonly RetrievalToolName[],
+  names: ReadonlySet<RetrievalToolName>,
+): boolean {
+  return allowedToolNames.some((toolName) => names.has(toolName));
+}
+
+function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
+  resourceLane: CommunityResourceRuntimeLaneState;
+}): RuntimeContextManifestPrompt[] {
+  const prompts: RuntimeContextManifestPrompt[] = [
+    {
+      id: "platform_doctrine",
+      owner: "platform",
+      authority: "platform",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "always-on platform product and safety authority",
+    },
+    {
+      id: "agent_soul",
+      owner: "platform",
+      authority: "platform",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "agent posture and identity",
+    },
+    {
+      id: "explanation_contract",
+      owner: "runtime",
+      authority: "runtime",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "communication and uncertainty policy",
+    },
+    {
+      id: "harness_operating_policy",
+      owner: "runtime",
+      authority: "runtime",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "tool-use and loop behavior policy",
+    },
+  ];
+  if (hasText(params.agentSoul)) {
+    prompts.push({
+      id: "user_agent_soul",
+      owner: "user",
+      authority: "scoped",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "member-configured agent posture",
+    });
+  }
+  if (hasText(params.communityId)) {
+    prompts.push({
+      id: "community_lens",
+      owner: "community",
+      authority: "scoped",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "server-validated community scope and compact identity",
+    });
+  }
+  if (hasText(params.communitySystemPrompt)) {
+    prompts.push({
+      id: "community_system_prompt",
+      owner: "community",
+      authority: "scoped",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "community owner/admin instructions under platform policy",
+    });
+  }
+  if (params.resourceLane.lane !== "none") {
+    prompts.push({
+      id: `community_resource_lane:${params.resourceLane.lane}`,
+      owner: "community",
+      authority: "workflow",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "community resource lane behavior",
+    });
+  }
+  if (hasText(params.projectId)) {
+    prompts.push({
+      id: "workspace_project_context",
+      owner: "workspace",
+      authority: "scoped",
+      injected: true,
+      source: "shared/runtimePrompt.ts",
+      reason: "project-bound workspace context",
+    });
+  }
+  if (params.hasBrowserBuiltDemoPrompt === true) {
+    prompts.push({
+      id: "browser_demo_prompt",
+      owner: "runtime",
+      authority: "demo",
+      injected: true,
+      source: "browser_demo_lane",
+      reason: "anonymous demo-only prompt authority",
+    });
+  }
+  pushSelectedSkillPrompts({
+    prompts,
+    scope: "platform",
+    owner: "platform",
+    skills: params.selectedPlatformSkills,
+  });
+  pushSelectedSkillPrompts({
+    prompts,
+    scope: "personal",
+    owner: "user",
+    skills: params.selectedPersonalSkills,
+  });
+  pushSelectedSkillPrompts({
+    prompts,
+    scope: "community",
+    owner: "community",
+    skills: params.selectedCommunitySkills,
+  });
+  return prompts;
+}
+
+function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
+  allowedToolNames: RetrievalToolName[];
+  resourceLane: CommunityResourceRuntimeLaneState;
+}): RuntimeContextManifestResource[] {
+  const resources: RuntimeContextManifestResource[] = [];
+  if (hasAnyTool(params.allowedToolNames, PRODUCT_DOC_TOOL_NAMES)) {
+    resources.push({
+      id: "product_docs",
+      owner: "platform",
+      retrieval: "tool_available",
+      visibility: "public",
+      source: "search_product_docs/get_product_doc",
+      reason: "platform product truth is retrievable on demand",
+    });
+  }
+  if (hasText(params.communityId)) {
+    resources.push({
+      id: "community_identity_excerpt",
+      owner: "community",
+      retrieval: "injected_excerpt",
+      visibility: "member",
+      source: "community_lens_prompt",
+      reason: "compact active community identity",
+    });
+  }
+  if (hasText(params.communityAbout)) {
+    resources.push({
+      id: "community_about_excerpt",
+      owner: "community",
+      retrieval: "injected_excerpt",
+      visibility: "member",
+      source: "community_lens_prompt",
+      reason: "bounded community about text",
+    });
+  }
+  if (hasAnyTool(params.allowedToolNames, COMMUNITY_CONTEXT_TOOL_NAMES)) {
+    resources.push({
+      id: "active_community_context",
+      owner: "community",
+      retrieval: "tool_available",
+      visibility: "member",
+      source: "get_active_community_context",
+      reason: "bounded active-lens community context",
+    });
+  }
+  if (hasAnyTool(params.allowedToolNames, COMMUNITY_RESOURCE_TOOL_NAMES)) {
+    resources.push({
+      id: "community_resources",
+      owner: "community",
+      retrieval: "tool_available",
+      visibility: params.resourceLane.lane === "builder" ? "owner" : "member",
+      source: "community_resource_tools",
+      reason: "community wiki/resources/source material",
+    });
+  }
+  if (hasAnyTool(params.allowedToolNames, COMMUNITY_ACTIVITY_TOOL_NAMES)) {
+    resources.push({
+      id: "community_activity_archive",
+      owner: "community",
+      retrieval: "tool_available",
+      visibility: "member",
+      source: "community_search",
+      reason: "raw/recent community activity evidence",
+    });
+  }
+  if (hasAnyTool(params.allowedToolNames, WEB_RESEARCH_TOOL_NAMES)) {
+    resources.push({
+      id: "web_external_evidence",
+      owner: "web",
+      retrieval: "tool_available",
+      visibility: "public",
+      source: "web_research/web_crawl",
+      reason: "external web evidence on demand",
+    });
+  }
+  if (
+    hasAnyTool(params.allowedToolNames, WORKSPACE_READ_TOOL_NAMES) ||
+    hasAnyTool(params.allowedToolNames, WORKSPACE_WRITE_TOOL_NAMES)
+  ) {
+    resources.push({
+      id: "workspace_files",
+      owner: "workspace",
+      retrieval: "tool_available",
+      visibility: "private",
+      source: "workspace_file_tools",
+      reason: "project-bound filesystem evidence and edit substrate",
+    });
+  }
+  if (params.runtimeTurnContext?.activeBackgroundTerminals?.length) {
+    resources.push({
+      id: "background_terminal_output",
+      owner: "workspace",
+      retrieval: "runtime_fragment",
+      visibility: "private",
+      source: "runtime_context_fragments",
+      reason: "bounded operational terminal evidence",
+    });
+  }
+  return resources;
+}
+
+function buildToolEntries(params: BuildRuntimeContextManifestInput & {
+  allowedToolNames: RetrievalToolName[];
+}): RuntimeContextManifestTool[] {
+  const tools: RuntimeContextManifestTool[] = params.allowedToolNames.map((toolName) => ({
+    name: toolName,
+    source: "fixed_runtime_tool",
+    ...classifyFixedTool(toolName),
+  }));
+  for (const mountedTool of uniqueMountedTools(params.mountedTools)) {
+    const toolName = compactText(mountedTool.runtime_tool_name, 160);
+    if (!toolName) continue;
+    const riskLevel = compactText(mountedTool.risk_level, 40);
+    tools.push({
+      name: toolName,
+      family: "mounted_app",
+      grantedBy: compactText(mountedTool.app_name, 120) ?? "mounted_user_app",
+      effect: riskLevel === "write" || riskLevel === "sensitive" ? "write" : "read",
+      source: "mounted_app_tool",
+    });
+  }
+  return tools;
+}
+
+function buildRuntimeStateEntries(params: BuildRuntimeContextManifestInput): RuntimeContextManifestRuntimeState[] {
+  const packet = params.runtimeTurnContext;
+  const state: RuntimeContextManifestRuntimeState[] = [];
+  if (params.runtimeTurnEnvelope) {
+    state.push({
+      id: "runtime_turn_envelope",
+      kind: "turn_envelope",
+      rendered: true,
+      redacted: false,
+      source: "shared/runtimeTurnEnvelope.ts",
+      reason: "compact request/scope/tool orientation",
+    });
+  }
+  if (packet?.threadWorkingState) {
+    state.push({
+      id: "thread_working_state",
+      kind: "working_state",
+      rendered: true,
+      redacted: false,
+      source: "shared/runtimeTurnContextPacket.ts",
+      reason: "turn continuity state",
+    });
+  }
+  if (packet?.fragments?.some((fragment) => fragment.kind === "action_ledger")) {
+    state.push({
+      id: "action_ledger",
+      kind: "action_ledger",
+      rendered: true,
+      redacted: true,
+      source: "shared/runtimeContextFragments.ts",
+      reason: "recent runtime action continuity",
+    });
+  }
+  if (packet?.activeBackgroundTerminals?.length) {
+    state.push({
+      id: "active_background_terminals",
+      kind: "active_terminals",
+      rendered: true,
+      redacted: true,
+      source: "shared/runtimeTurnContextPacket.ts",
+      reason: "running process awareness",
+    });
+  }
+  if (packet?.recentBackgroundProcessEvents?.length) {
+    state.push({
+      id: "recent_background_process_events",
+      kind: "recent_background_process_events",
+      rendered: true,
+      redacted: true,
+      source: "shared/runtimeTurnContextPacket.ts",
+      reason: "bounded recent process events",
+    });
+  }
+  if (packet?.recentToolAttempts?.length) {
+    state.push({
+      id: "recent_tool_attempts",
+      kind: "recent_tool_attempts",
+      rendered: true,
+      redacted: true,
+      source: "shared/runtimeTurnContextPacket.ts",
+      reason: "avoid repeated failed tool calls",
+    });
+  }
+  if (packet?.runtimeStop) {
+    state.push({
+      id: "runtime_stop",
+      kind: "runtime_stop",
+      rendered: true,
+      redacted: true,
+      source: "shared/runtimeTurnContextPacket.ts",
+      reason: "runtime cancellation/error explanation",
+    });
+  }
+  state.push({
+    id: "temporal_context",
+    kind: "temporal_context",
+    rendered: true,
+    redacted: false,
+    source: "shared/runtimePrompt.ts",
+    reason: "current runtime date/time/time zone",
+  });
+  return state;
+}
+
+function buildExclusions(params: BuildRuntimeContextManifestInput & {
+  allowedToolNames: RetrievalToolName[];
+}): RuntimeContextManifestExclusion[] {
+  const exclusions: RuntimeContextManifestExclusion[] = [
+    {
+      source: "provider_credentials",
+      reason: "secrets never enter prompt context",
+    },
+    {
+      source: "client_system_messages_authenticated",
+      reason: "authenticated server runtime strips client/system-role messages",
+    },
+    {
+      source: "unvalidated_scope_selectors",
+      reason: "client community/user/project selectors are not authority",
+    },
+    {
+      source: "raw_unbounded_archives",
+      reason: "large/private/dynamic archives must be retrieved through bounded tools",
+    },
+    {
+      source: "payment_redirects",
+      reason: "provider/webhook state, not redirect UX, is authoritative",
+    },
+    {
+      source: "tool_balance_as_doctrine",
+      reason: "balance state gates execution but is not prompt authority",
+    },
+    {
+      source: "message_attachments",
+      reason: "attachments are not auto-injected unless an explicit parser or reader participates",
+    },
+  ];
+  if (!hasText(params.communityId)) {
+    exclusions.push({
+      source: "community_lens",
+      reason: "no server-validated community scope for this turn",
+    });
+  }
+  if (!hasText(params.projectId)) {
+    exclusions.push({
+      source: "workspace_project_context",
+      reason: "no active project scope for this turn",
+    });
+  }
+  return exclusions;
+}
+
+export function buildRuntimeContextManifest(
+  input: BuildRuntimeContextManifestInput,
+): RuntimeContextManifestV1 {
+  const allowedToolNames = uniqueToolNames(input.allowedToolNames);
+  const resourceLane = input.communityResourceLane
+    ? normalizeCommunityResourceRuntimeLaneState(input.communityResourceLane)
+    : EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE;
+  const manifestBase = {
+    ...input,
+    allowedToolNames,
+    resourceLane,
+  };
+  const prompts = buildPromptEntries(manifestBase);
+  const resources = buildResourceEntries(manifestBase);
+  const tools = buildToolEntries(manifestBase);
+  const runtimeState = buildRuntimeStateEntries(input);
+  const exclusions = buildExclusions(manifestBase);
+  const latestUserText =
+    compactText(input.latestUserText, 500) ??
+    compactText(input.runtimeTurnEnvelope?.currentRequest, 500);
+  const conversationMessageCount = Array.isArray(input.messages)
+    ? input.messages.length
+    : 0;
+
+  return {
+    version: 1,
+    generatedAt: compactText(input.generatedAt, 80),
+    scope: {
+      userId: compactText(input.userId, 160),
+      threadId: compactText(input.threadId, 160),
+      communityId: compactText(input.communityId, 160),
+      communityContextVersion:
+        typeof input.communityContextVersion === "number" &&
+        Number.isFinite(input.communityContextVersion)
+          ? input.communityContextVersion
+          : null,
+      projectId: compactText(input.projectId, 160),
+      resourceLane: resourceLane.lane,
+      harnessName: compactText(input.harnessName, 80),
+      inferenceSource: compactText(input.inferenceSource, 80),
+    },
+    request: {
+      latestUserText,
+      conversationMessageCount,
+      hasUserRequest: Boolean(latestUserText),
+    },
+    prompts,
+    resources,
+    tools,
+    runtimeState,
+    exclusions,
+    summary: {
+      promptCount: prompts.length,
+      resourceCount: resources.length,
+      toolCount: tools.length,
+      runtimeStateCount: runtimeState.length,
+      exclusionCount: exclusions.length,
+      fixedToolCount: allowedToolNames.length,
+      mountedToolCount: tools.filter((tool) => tool.source === "mounted_app_tool").length,
+    },
+  };
+}

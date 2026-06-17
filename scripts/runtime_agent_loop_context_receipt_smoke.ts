@@ -1,0 +1,205 @@
+import assert from "node:assert/strict";
+import {
+  RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE,
+  buildRuntimeContextIntegrityCheck,
+} from "../shared/runtimeContextIntegrity.ts";
+
+process.env.OPENROUTER_API_KEY = "";
+process.env.OPENAI_API_KEY = "";
+
+const { executeChatToolsAgentLoop } = await import("../convex/runtimeAgentLoop.ts");
+
+type RuntimeEvent = {
+  eventType: string;
+  eventKey?: string;
+  payload: Record<string, unknown>;
+};
+
+const events: RuntimeEvent[] = [];
+const queryCalls: Array<{ args: unknown }> = [];
+const runId = "context_receipt_smoke_run";
+const runRecord = {
+  runId,
+  threadId: "thread_context_receipt_smoke",
+  projectId: null,
+  communityId: "community_context_receipt_smoke",
+  communityContextVersion: 7,
+  executionMode: "agentic",
+  harnessProfile: "authenticated_cloud_tools",
+  capabilityFamilies: ["product_docs"],
+};
+events.push(
+  {
+    eventType: "run_started",
+    eventKey: "run_started",
+    payload: {
+      run_id: runId,
+      project_id: null,
+      community_id: "community_context_receipt_smoke",
+      community_context_version: 7,
+      execution_mode: "agentic",
+      capability_families: ["product_docs"],
+    },
+  },
+  {
+    eventType: "runtime_context_resolved",
+    eventKey: `${runId}:runtime_context_resolved:1`,
+    payload: {
+      run_id: runId,
+      thread_id: "thread_context_receipt_smoke",
+      project_id: null,
+      community_id: "community_context_receipt_smoke",
+      community_context_version: 7,
+      capability_families: ["product_docs"],
+      harness_profile: "authenticated_cloud_tools",
+    },
+  },
+  {
+    eventType: "tool_policy_resolved",
+    eventKey: `${runId}:tool_policy_resolved:1`,
+    payload: {
+      run_id: runId,
+      allowed_tool_names: ["search_product_docs", "get_product_doc"],
+      capability_families: ["product_docs"],
+      harness_profile: "authenticated_cloud_tools",
+    },
+  },
+);
+
+const ctx = {
+  async runQuery(_functionRef: unknown, args: unknown): Promise<unknown> {
+    queryCalls.push({ args });
+    return [];
+  },
+  async runMutation(): Promise<unknown> {
+    return null;
+  },
+  async runAction(): Promise<unknown> {
+    return { active: [], recent: [] };
+  },
+};
+
+const result = await executeChatToolsAgentLoop({
+  ctx,
+  req: new Request("https://polynet.local/runtime-context-receipt-smoke"),
+  userId: "user_context_receipt_smoke",
+  authSubject: "user:context-receipt-smoke",
+  threadId: "thread_context_receipt_smoke",
+  projectId: null,
+  requestedModelId: "context-receipt-smoke-model",
+  inferenceSource: "free",
+  modelRef: "openrouter/context-receipt-smoke-model",
+  messages: [
+    {
+      role: "user",
+      content: "Smoke test the runtime context receipt path.",
+    },
+  ],
+  maxTokens: 64,
+  runId,
+  allowedToolNames: ["search_product_docs", "get_product_doc"],
+  communityId: "community_context_receipt_smoke",
+  communityName: "Context Receipt Smoke",
+  communitySlug: "context-receipt-smoke",
+  communityOneLiner: "A focused runtime context smoke fixture.",
+  communityAbout: "This fixture proves prompt and manifest receipts are emitted from the real agent loop.",
+  communitySystemPrompt: "Stay focused on context receipt verification.",
+  communityContextVersion: 7,
+  agentName: "Receipt Agent",
+  agentSoul: "Prefer auditable context over hidden prompt behavior.",
+  threadWorkingState: {
+    version: 3,
+    goal: "Verify runtime prompt and context receipts.",
+    status: "in_progress",
+    currentStep: "Enter the real agent loop and capture emitted events.",
+  },
+  appendRunEvent: async (event) => {
+    events.push(event);
+  },
+  refreshRuntimeContextSnapshot: async () => {},
+  touchRunHeartbeat: async () => {},
+});
+
+assert.equal(result.ok, false, "smoke should stop at provider execution after prompt assembly");
+assert.equal(
+  result.code,
+  "provider_inference_misconfigured",
+  "smoke should fail only because provider inference is intentionally disabled",
+);
+
+const promptReceipt = events.find((event) => event.eventType === "runtime_prompt_bundle_resolved");
+const manifestReceipt = events.find((event) => event.eventType === "runtime_context_manifest_resolved");
+assert.ok(promptReceipt, "agent loop should emit runtime prompt bundle receipt");
+assert.ok(manifestReceipt, "agent loop should emit runtime context manifest receipt");
+assert.ok(
+  events.findIndex((event) => event.eventType === "runtime_prompt_bundle_resolved") <
+    events.findIndex((event) => event.eventType === "runtime_context_manifest_resolved"),
+  "prompt receipt should be emitted before manifest receipt",
+);
+assert.equal(promptReceipt.eventKey, `${runId}:runtime_prompt_bundle_resolved:1`);
+assert.equal(manifestReceipt.eventKey, `${runId}:runtime_context_manifest_resolved:1`);
+
+const promptPayload = promptReceipt.payload as {
+  sections?: Array<{ id?: unknown; layer?: unknown; owner?: unknown; chars?: unknown; rendered?: unknown }>;
+  base_prompt_chars?: unknown;
+  system_prompt_chars?: unknown;
+};
+assert.ok(Number(promptPayload.base_prompt_chars) > 0, "prompt receipt should report rendered prompt chars");
+assert.ok(Number(promptPayload.system_prompt_chars) > 0, "prompt receipt should report full system prompt chars");
+const sectionIds = new Set((promptPayload.sections ?? []).map((section) => String(section.id ?? "")));
+for (const sectionId of [
+  "platform_doctrine",
+  "agent_soul",
+  "explanation_contract",
+  "harness_operating_policy",
+  "community_lens",
+  "community_system_prompt",
+  "user_agent_soul",
+  "workspace_harness_context",
+  "runtime_turn_context",
+  "temporal_context",
+  "harness_prompt_suffix",
+]) {
+  assert.ok(sectionIds.has(sectionId), `prompt receipt should include ${sectionId}`);
+}
+
+const manifest = (manifestReceipt.payload as { manifest?: any }).manifest;
+assert.equal(manifest?.version, 1);
+assert.equal(manifest?.scope?.userId, "user_context_receipt_smoke");
+assert.equal(manifest?.scope?.threadId, "thread_context_receipt_smoke");
+assert.equal(manifest?.scope?.communityId, "community_context_receipt_smoke");
+assert.equal(manifest?.scope?.communityContextVersion, 7);
+assert.equal(manifest?.scope?.harnessName, "chat_tools");
+assert.equal(manifest?.scope?.inferenceSource, "free");
+assert.equal(manifest?.request?.latestUserText, "Smoke test the runtime context receipt path.");
+assert.equal(manifest?.request?.conversationMessageCount, 1);
+assert.ok(manifest?.summary?.promptCount > 0, "manifest should enumerate prompt inputs");
+assert.ok(manifest?.summary?.toolCount > 0, "manifest should enumerate active tools");
+assert.ok(manifest?.summary?.runtimeStateCount > 0, "manifest should enumerate runtime state");
+assert.ok(
+  queryCalls.length > 0,
+  "smoke should exercise the runtime loop's Convex query boundary",
+);
+
+const integrityVerdict = buildRuntimeContextIntegrityCheck({
+  run: runRecord,
+  events,
+});
+events.push({
+  eventType: RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE,
+  eventKey: `${runId}:${RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE}:1`,
+  payload: {
+    run_id: runId,
+    ...integrityVerdict,
+  },
+});
+const integrityReceipt = events.find((event) => event.eventType === RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE);
+assert.ok(integrityReceipt, "runtime context integrity receipt should be appended");
+assert.equal((integrityReceipt.payload as { ok?: unknown }).ok, true);
+assert.ok(
+  events.findIndex((event) => event.eventType === "runtime_context_manifest_resolved") <
+    events.findIndex((event) => event.eventType === RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE),
+  "integrity receipt should be emitted after manifest receipt",
+);
+
+console.log("runtime_agent_loop_context_receipt_smoke: ok");
