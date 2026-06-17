@@ -24281,19 +24281,25 @@ button.message-citation-chip:hover {
 }
 
 .workspace-payg-alert,
-.workspace-payg-auto-recharge-card {
+.workspace-payg-status-card,
+.workspace-payg-usage-row {
   display: flex;
   justify-content: space-between;
   gap: 14px;
   align-items: center;
   padding: 13px 14px;
-  border: 1px solid color-mix(in srgb, #ff7b2e 28%, transparent);
+  border: 1px solid var(--border-muted);
   border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 58%, transparent);
+}
+
+.workspace-payg-alert.is-warning {
+  border-color: color-mix(in srgb, #ff7b2e 28%, transparent);
   background: color-mix(in srgb, #ff7b2e 10%, var(--bg-card-alt));
 }
 
 .workspace-payg-auto-recharge-card {
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .workspace-payg-auto-recharge-card.is-enabled {
@@ -24310,15 +24316,15 @@ button.message-citation-chip:hover {
   background: color-mix(in srgb, #dc2626 8%, var(--bg-card-alt));
 }
 
-.workspace-payg-alert > div,
-.workspace-payg-auto-recharge-card > div {
+.workspace-payg-status-copy {
   min-width: 0;
   display: grid;
   gap: 4px;
 }
 
 .workspace-payg-alert strong,
-.workspace-payg-auto-recharge-card strong {
+.workspace-payg-status-card strong,
+.workspace-payg-usage-row strong {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 760;
@@ -24326,10 +24332,31 @@ button.message-citation-chip:hover {
 }
 
 .workspace-payg-alert span,
-.workspace-payg-auto-recharge-card span {
+.workspace-payg-status-card span,
+.workspace-payg-usage-row span,
+.workspace-payg-status-copy small {
   color: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary) 10%);
   font-size: 12.5px;
   line-height: 1.4;
+}
+
+.workspace-payg-status-copy > span:first-child,
+.workspace-payg-usage-row > span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.workspace-payg-usage-row {
+  align-items: flex-start;
+}
+
+.workspace-payg-usage-row > span {
+  flex-shrink: 0;
+  padding-top: 1px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .workspace-payg-alert-action {
@@ -24376,8 +24403,7 @@ button.message-citation-chip:hover {
   line-height: 1.2;
 }
 
-.workspace-payg-pack-heading span,
-.workspace-payg-balance-note {
+.workspace-payg-pack-heading span {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.42;
@@ -24387,14 +24413,6 @@ button.message-citation-chip:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-}
-
-.workspace-payg-detail-row {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card-alt) 58%, transparent);
 }
 
 .workspace-auto-recharge-modal {
@@ -24511,39 +24529,6 @@ button.message-citation-chip:hover {
 
 .workspace-billing-secondary-action {
   margin-top: 18px;
-}
-
-.workspace-billing-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin: 4px 0 2px;
-}
-
-.workspace-billing-summary-card {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-  padding: 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card-alt) 68%, transparent);
-}
-
-.workspace-billing-summary-card span {
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.25;
-}
-
-.workspace-billing-summary-card strong {
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
 }
 
 .workspace-billing-history {
@@ -24781,9 +24766,15 @@ button.message-citation-chip:hover {
   }
 
   .workspace-payg-alert,
-  .workspace-payg-auto-recharge-card {
+  .workspace-payg-status-card,
+  .workspace-payg-usage-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .workspace-payg-usage-row > span {
+    text-align: left;
+    white-space: normal;
   }
 
   .workspace-payg-alert-action {
@@ -24791,10 +24782,6 @@ button.message-citation-chip:hover {
   }
 
   .tool-balance-pack-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .workspace-billing-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

@@ -368,7 +368,6 @@ export function WorkspacePayAsYouGoPanel({
   const [showCreditBalancePacks, setShowCreditBalancePacks] = useState(false);
   const [showAutoRechargeSettings, setShowAutoRechargeSettings] = useState(false);
   const totalCredits = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
-  const purchasedCredits = workspaceCreditBalance?.purchasedCreditsBalance ?? 0;
   const outstandingUsageCredits = getOutstandingWorkspaceToolUsageCredits(workspaceCreditBalance);
   const currentPeriod = workspaceBillingOverview?.currentPeriod ?? null;
   const currentUsageCredits = currentPeriod?.currentUsageCredits ?? outstandingUsageCredits;
@@ -398,8 +397,7 @@ export function WorkspacePayAsYouGoPanel({
   const paymentMethodLabel = hasCardOnFile
     ? `${cardBrand || "Card"}${cardLast4 ? ` ending ${cardLast4}` : ""}`
     : "No card on file";
-  const hasBlockingBillingState =
-    hasCurrentUsageCredits || (!hasCardOnFile && prepaidBalanceCredits <= 0);
+  const needsPaymentMethod = !hasCardOnFile && (hasCurrentUsageCredits || prepaidBalanceCredits <= 0);
   const autoRechargeEnabled =
     workspaceAutoRechargeSettings?.enabled === true &&
     workspaceAutoRechargeSettings.status === "active";
@@ -428,11 +426,18 @@ export function WorkspacePayAsYouGoPanel({
       ? "Update your card or settings to resume automatic credit top-ups."
       : "When your credit balance runs low, paid tool requests may stop until you add credits.";
   const autoRechargeCardClassName = [
+    "workspace-payg-status-card",
     "workspace-payg-auto-recharge-card",
     autoRechargeBlocked ? "is-blocked" : "",
     autoRechargeEnabled ? "is-enabled" : "",
     autoRechargePaused ? "is-paused" : "",
   ].filter(Boolean).join(" ");
+  const currentUsageStatusCopy = hasCurrentUsageCredits
+    ? hasCardOnFile
+      ? `${currentUsageUsd} pending - will be collected from ${paymentMethodLabel}.`
+      : `${currentUsageUsd} pending - add a card or credits to keep workspace tools available.`
+    : `No pending usage - ${currentPeriodLabel}.`;
+  const currentUsageDetailCopy = `Usage this month ${workspaceUsageThisMonthUsd} - Paid this month ${paidThisMonthUsd}.`;
 
   return (
     <>
@@ -472,37 +477,6 @@ export function WorkspacePayAsYouGoPanel({
           <div className="model-note">Checking workspace billing...</div>
         ) : (
           <>
-            {hasBlockingBillingState ? (
-              <div className="workspace-payg-alert" role="status">
-                <div>
-                  <strong>
-                    {hasCurrentUsageCredits && !hasCardOnFile
-                      ? "Payment method needed"
-                      : !hasCardOnFile && prepaidBalanceCredits <= 0
-                        ? "Add credits or a card"
-                        : "Current usage pending"}
-                  </strong>
-                  <span>
-                    {hasCurrentUsageCredits && !hasCardOnFile
-                      ? "Add a card or credit balance to keep workspace tools available."
-                      : !hasCardOnFile && prepaidBalanceCredits <= 0
-                        ? "Paid workspace tools need credit balance or a saved card before they run."
-                        : "Current usage will be collected automatically from your saved card."}
-                  </span>
-                </div>
-                {!hasCardOnFile ? (
-                  <button
-                    type="button"
-                    className="workspace-payg-alert-action"
-                    onClick={() => void startWorkspaceCardSetupCheckout()}
-                    disabled={isStartingWorkspaceCardSetupCheckout}
-                  >
-                    {isStartingWorkspaceCardSetupCheckout ? "Opening..." : "Add card"}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
             {showCreditBalancePacks ? (
               <div className="workspace-payg-pack-section" aria-label="Add to credit balance">
                 <div className="workspace-payg-pack-heading">
@@ -526,29 +500,39 @@ export function WorkspacePayAsYouGoPanel({
               </div>
             ) : null}
 
-            <div className={autoRechargeCardClassName}>
-              <div>
-                <strong>{autoRechargeTitle}</strong>
-                <span>{autoRechargeCopy}</span>
+            {needsPaymentMethod ? (
+              <div className="workspace-payg-alert is-warning" role="status">
+                <div className="workspace-payg-status-copy">
+                  <strong>
+                    {hasCurrentUsageCredits && !hasCardOnFile
+                      ? "Payment method needed"
+                      : "Add credits or a card"}
+                  </strong>
+                  <span>
+                    {hasCurrentUsageCredits && !hasCardOnFile
+                      ? "Add a card or credit balance to keep workspace tools available."
+                      : "Paid workspace tools need credit balance or a saved card before they run."}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="workspace-payg-alert-action"
+                  onClick={() => void startWorkspaceCardSetupCheckout()}
+                  disabled={isStartingWorkspaceCardSetupCheckout}
+                >
+                  {isStartingWorkspaceCardSetupCheckout ? "Opening..." : "Add card"}
+                </button>
               </div>
-              <button
-                type="button"
-                className="workspace-payg-alert-action"
-                onClick={() => setShowAutoRechargeSettings(true)}
-                disabled={isLoadingWorkspaceAutoRechargeSettings}
-              >
-                {autoRechargeActionLabel}
-              </button>
-            </div>
+            ) : null}
 
             <div className="workspace-payg-details-grid">
-              <div className="account-row workspace-payg-detail-row">
-                <div className="account-identity">
+              <div className="workspace-payg-status-card">
+                <div className="workspace-payg-status-copy">
                   <span>Payment method</span>
                   <strong>{paymentMethodLabel}</strong>
                 </div>
                 <button
-                  className="platform-save-button platform-save-button--compact workspace-billing-card-action"
+                  className="workspace-payg-alert-action"
                   type="button"
                   onClick={() => void startWorkspaceCardSetupCheckout()}
                   disabled={isStartingWorkspaceCardSetupCheckout}
@@ -560,38 +544,29 @@ export function WorkspacePayAsYouGoPanel({
                       : "Add card"}
                 </button>
               </div>
-              <div className="account-row workspace-payg-detail-row">
-                <div className="account-identity">
-                  <span>Current month</span>
-                  <strong>{currentPeriodLabel}</strong>
+              <div className={autoRechargeCardClassName}>
+                <div className="workspace-payg-status-copy">
+                  <span>Auto recharge</span>
+                  <strong>{autoRechargeTitle.replace("Auto recharge ", "")}</strong>
+                  <small>{autoRechargeCopy}</small>
                 </div>
+                <button
+                  type="button"
+                  className="workspace-payg-alert-action"
+                  onClick={() => setShowAutoRechargeSettings(true)}
+                  disabled={isLoadingWorkspaceAutoRechargeSettings}
+                >
+                  {autoRechargeActionLabel}
+                </button>
               </div>
             </div>
 
-            <div className="workspace-billing-summary-grid">
-              <div className="workspace-billing-summary-card">
-                <span>Credit balance</span>
-                <strong>{prepaidBalanceUsd}</strong>
-              </div>
-              <div className="workspace-billing-summary-card">
+            <div className="workspace-payg-usage-row" role="status">
+              <div className="workspace-payg-status-copy">
                 <span>Current usage</span>
-                <strong>{currentUsageUsd}</strong>
+                <strong>{currentUsageStatusCopy}</strong>
               </div>
-              <div className="workspace-billing-summary-card">
-                <span>Usage this month</span>
-                <strong>{workspaceUsageThisMonthUsd}</strong>
-              </div>
-              <div className="workspace-billing-summary-card">
-                <span>Paid this month</span>
-                <strong>{paidThisMonthUsd}</strong>
-              </div>
-            </div>
-
-            <div className="settings-section-desc workspace-payg-balance-note">
-              {purchasedCredits > 0
-                ? `${formatWorkspaceToolBalanceUsdFromCredits(purchasedCredits)} credit balance is available. `
-                : ""}
-              A saved card helps keep workspace tools available if usage exceeds your credit balance.
+              <span>{currentUsageDetailCopy}</span>
             </div>
 
             <div className="workspace-billing-history">
