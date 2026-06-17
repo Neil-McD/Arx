@@ -21394,6 +21394,15 @@ button.message-citation-chip:hover {
   border-radius: 12px;
 }
 
+.polymcp-access-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.polymcp-copy-action {
+  white-space: nowrap;
+}
+
 .integration-mounted-top {
   display: flex;
   align-items: flex-start;
@@ -28683,8 +28692,12 @@ button.message-citation-chip:hover {
   flex: 1;
 }
 
+.app-root.mobile-shell .polymcp-access-actions {
+  justify-content: stretch;
+}
+
 .app-root.mobile-shell .polymcp-copy-action {
-  width: 100%;
+  flex: 1 1 148px;
   justify-content: center;
 }
 

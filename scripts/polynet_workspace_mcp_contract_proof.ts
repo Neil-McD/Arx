@@ -36,6 +36,9 @@ const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const polynetMcp = read("shared/polynetMcp.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const packageJson = read("package.json");
+const integrationsSettings = read(
+  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+);
 
 assertIncludes(
   contract,
@@ -67,6 +70,52 @@ assertIncludes(
   packageJson,
   "\"check:polynet-workspace-mcp-proof\": \"node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_contract_proof.ts\"",
   "package proof script",
+);
+
+assertIncludes(
+  integrationsSettings,
+  "POLYMCP_HARNESS_CONFIG",
+  "PolyMCP copy config payload",
+);
+assertIncludes(
+  integrationsSettings,
+  "mcpServers",
+  "PolyMCP harness config shape",
+);
+assertIncludes(
+  integrationsSettings,
+  "mcp-remote@latest",
+  "PolyMCP mcp-remote adapter",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYMCP_AGENT_INSTRUCTIONS",
+  "PolyMCP copied agent instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  "Use PolyMCP when the user asks",
+  "PolyMCP instruction trigger",
+);
+assertIncludes(
+  integrationsSettings,
+  "Treat workspace_context_id values as opaque selectors",
+  "PolyMCP workspace selector instruction",
+);
+assertIncludes(
+  integrationsSettings,
+  "Copy config",
+  "PolyMCP config copy action",
+);
+assertIncludes(
+  integrationsSettings,
+  "Copy instructions",
+  "PolyMCP instructions copy action",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "handleCopyPolyMcpUrl",
+  "PolyMCP should not copy only the endpoint URL",
 );
 
 for (const toolName of [

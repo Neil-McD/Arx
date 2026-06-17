@@ -22,6 +22,39 @@ import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
 const POLYMCP_TOOL_COUNT_LABEL = "6 workspace tools";
+const POLYMCP_HARNESS_CONFIG = JSON.stringify(
+  {
+    mcpServers: {
+      polymcp: {
+        command: "npx",
+        args: ["-y", "mcp-remote@latest", POLYMCP_ENDPOINT_URL],
+      },
+    },
+  },
+  null,
+  2,
+);
+const POLYMCP_AGENT_INSTRUCTIONS = [
+  "You have access to PolyMCP, the user's PolyNet workspace memory MCP.",
+  "",
+  "Use PolyMCP when the user asks about their PolyNet communities, workspace context, accepted community memory, prior decisions, playbooks, insights, warnings, or outcomes.",
+  "",
+  "Before using workspace-specific memory, list or open the relevant PolyNet workspace. Treat workspace_context_id values as opaque selectors. Do not invent them.",
+  "",
+  "Use memory search before memory read unless the user gives a specific memory node id.",
+  "",
+  "PolyMCP memory is shared workspace/community context, not private local filesystem state. Do not treat it as permission to access unrelated tools, accounts, files, or services.",
+  "",
+  "When using PolyMCP results, cite the community/workspace context in plain language and distinguish retrieved memory from your own reasoning.",
+  "",
+  "If a PolyMCP tool returns an auth or access error, tell the user the connection or workspace permission needs attention instead of guessing.",
+].join("\n");
+
+type PolyMcpCopyTarget = "config" | "instructions";
+type PolyMcpCopyFeedback = {
+  target: PolyMcpCopyTarget;
+  status: "copied" | "error";
+};
 
 type SessionLike = {
   user: {
@@ -206,9 +239,8 @@ export function WebIntegrationsSettingsSection(
     useState<CreateSkillPackageInput>(buildInitialSkillDraft);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
-  const [polyMcpCopyState, setPolyMcpCopyState] = useState<
-    "idle" | "copied" | "error"
-  >("idle");
+  const [polyMcpCopyFeedback, setPolyMcpCopyFeedback] =
+    useState<PolyMcpCopyFeedback | null>(null);
 
   const busyMountIds = useMemo(
     () =>
@@ -269,10 +301,10 @@ export function WebIntegrationsSettingsSection(
   }, [openMountMenuId]);
 
   useEffect(() => {
-    if (polyMcpCopyState === "idle") return;
-    const timeout = window.setTimeout(() => setPolyMcpCopyState("idle"), 2200);
+    if (!polyMcpCopyFeedback) return;
+    const timeout = window.setTimeout(() => setPolyMcpCopyFeedback(null), 2200);
     return () => window.clearTimeout(timeout);
-  }, [polyMcpCopyState]);
+  }, [polyMcpCopyFeedback]);
 
   useEffect(() => {
     if (!shouldOpenCreateSkillComposer) return;
@@ -301,13 +333,24 @@ export function WebIntegrationsSettingsSection(
     setEditingSkillDraft(buildInitialSkillDraft());
   };
 
-  const handleCopyPolyMcpUrl = async () => {
+  const handleCopyPolyMcpSetup = async (
+    target: PolyMcpCopyTarget,
+    text: string,
+  ) => {
     try {
-      const copied = await tryCopyTextToClipboard(POLYMCP_ENDPOINT_URL);
-      setPolyMcpCopyState(copied ? "copied" : "error");
+      const copied = await tryCopyTextToClipboard(text);
+      setPolyMcpCopyFeedback({ target, status: copied ? "copied" : "error" });
     } catch {
-      setPolyMcpCopyState("error");
+      setPolyMcpCopyFeedback({ target, status: "error" });
     }
+  };
+
+  const getPolyMcpCopyLabel = (
+    target: PolyMcpCopyTarget,
+    idleLabel: string,
+  ) => {
+    if (polyMcpCopyFeedback?.target !== target) return idleLabel;
+    return polyMcpCopyFeedback.status === "copied" ? "Copied" : "Copy failed";
   };
 
   return (
@@ -360,19 +403,34 @@ export function WebIntegrationsSettingsSection(
                     </div>
                   </div>
                 </div>
-                <div className="integration-mounted-rail">
+                <div className="integration-mounted-rail polymcp-access-actions">
                   <button
                     type="button"
                     className="settings-cta polymcp-copy-action"
-                    onClick={handleCopyPolyMcpUrl}
-                    aria-label="Copy PolyMCP endpoint URL"
+                    onClick={() =>
+                      void handleCopyPolyMcpSetup(
+                        "config",
+                        POLYMCP_HARNESS_CONFIG,
+                      )
+                    }
+                    aria-label="Copy PolyMCP MCP server config"
                   >
                     <Copy aria-hidden="true" />
-                    {polyMcpCopyState === "copied"
-                      ? "Copied"
-                      : polyMcpCopyState === "error"
-                        ? "Copy failed"
-                        : "Copy"}
+                    {getPolyMcpCopyLabel("config", "Copy config")}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-cta polymcp-copy-action"
+                    onClick={() =>
+                      void handleCopyPolyMcpSetup(
+                        "instructions",
+                        POLYMCP_AGENT_INSTRUCTIONS,
+                      )
+                    }
+                    aria-label="Copy PolyMCP agent instructions"
+                  >
+                    <Copy aria-hidden="true" />
+                    {getPolyMcpCopyLabel("instructions", "Copy instructions")}
                   </button>
                 </div>
               </div>
