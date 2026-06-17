@@ -94,6 +94,11 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "POLYMCP_SETUP_INSTRUCTIONS",
+  "PolyMCP copied setup instructions",
+);
+assertIncludes(
+  integrationsSettings,
   "POLYMCP_SETUP_BUNDLE",
   "PolyMCP canonical setup bundle",
 );
@@ -106,6 +111,26 @@ assertIncludes(
   integrationsSettings,
   "```json",
   "PolyMCP setup bundle includes a JSON config block",
+);
+assertIncludes(
+  integrationsSettings,
+  "Open that harness's MCP server configuration",
+  "PolyMCP setup copy should tell users where to configure MCP",
+);
+assertIncludes(
+  integrationsSettings,
+  "restart or reload the harness",
+  "PolyMCP setup copy should tell users how to activate the MCP server",
+);
+assertIncludes(
+  integrationsSettings,
+  "Complete the PolyNet OAuth sign-in",
+  "PolyMCP setup copy should explain auth completion",
+);
+assertIncludes(
+  integrationsSettings,
+  "If your harness only accepts raw JSON",
+  "PolyMCP setup copy should support JSON-only harnesses",
 );
 assertIncludes(
   integrationsSettings,

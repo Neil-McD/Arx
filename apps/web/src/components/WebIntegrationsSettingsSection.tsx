@@ -49,8 +49,24 @@ const POLYMCP_AGENT_INSTRUCTIONS = [
   "",
   "If a PolyMCP tool returns an auth or access error, tell the user the connection or workspace permission needs attention instead of guessing.",
 ].join("\n");
+const POLYMCP_SETUP_INSTRUCTIONS = [
+  "Paste this setup into the agent harness you want to connect to PolyNet.",
+  "",
+  "1. Open that harness's MCP server configuration.",
+  "2. Add the `polymcp` server from the JSON block below under `mcpServers`.",
+  "3. Save the config, then restart or reload the harness so it starts the server.",
+  "4. Start a new chat and ask the harness to list your PolyNet workspaces.",
+  "5. Complete the PolyNet OAuth sign-in when the browser opens.",
+  "6. After auth succeeds, ask the harness to open the relevant workspace before reading memory.",
+  "",
+  "If your harness only accepts raw JSON, paste only the JSON block.",
+].join("\n");
 const POLYMCP_SETUP_BUNDLE = [
   "# PolyMCP Setup",
+  "",
+  "## Setup instructions",
+  "",
+  POLYMCP_SETUP_INSTRUCTIONS,
   "",
   "## MCP server config",
   "",
@@ -58,7 +74,7 @@ const POLYMCP_SETUP_BUNDLE = [
   POLYMCP_HARNESS_CONFIG,
   "```",
   "",
-  "## Agent instructions",
+  "## Agent usage guidance",
   "",
   POLYMCP_AGENT_INSTRUCTIONS,
 ].join("\n");
