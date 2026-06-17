@@ -183,7 +183,11 @@
     "check:no-legacy-provider-repo-guard": "bash scripts/no_legacy_provider_repo_guard.sh",
     "check:no-platform-fallback-guard": "bash scripts/no_platform_fallback_guard.sh",
     "check:gate-parity": "bash scripts/gate_parity_contract_check.sh",
-    "check:foundation-baseline": "bash scripts/foundation_baseline_gate.sh"
+    "check:foundation-baseline": "bash scripts/foundation_baseline_gate.sh",
+    "check:runtime-context-manifest-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_manifest_proof.ts",
+    "check:runtime-context-integrity-proof": "tsx scripts/runtime_context_integrity_proof.ts",
+    "check:runtime-agent-loop-context-receipt-smoke": "tsx scripts/runtime_agent_loop_context_receipt_smoke.ts",
+    "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts"
   },
   "dependencies": {
     "@blaxel/core": "^0.2.84",
@@ -207,6 +211,7 @@
     "@vitejs/plugin-react": "^4.3.2",
     "playwright": "^1.58.2",
     "typescript": "^5.5.4",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "tsx": "^4.22.4"
   }
 }

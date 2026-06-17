@@ -53,6 +53,29 @@ export type RuntimeTemporalContextPromptFields = {
   currentTimeZone?: string | null;
 };
 
+export type RuntimePromptSectionLayer = "stable" | "scoped" | "volatile";
+
+export type RuntimePromptSectionOwner =
+  | "platform"
+  | "user"
+  | "community"
+  | "workspace"
+  | "runtime";
+
+export type RuntimePromptSection = {
+  id: string;
+  layer: RuntimePromptSectionLayer;
+  owner: RuntimePromptSectionOwner;
+  rendered: boolean;
+  chars: number;
+  source: string;
+};
+
+export type RuntimePromptBundle = {
+  text: string;
+  sections: RuntimePromptSection[];
+};
+
 export type RuntimeWorkspaceTerminalPrompt = {
   id: string;
   status: "starting" | "running" | "exited" | "failed" | "stopped";
@@ -112,6 +135,19 @@ export type RuntimeWorkspaceTerminalPrompt = {
   outputTail?: string | null;
 };
 
+export type RuntimePlatformHarnessPromptParams = RuntimeCommunityPromptFields & {
+  loopBudget: RuntimeKernelBudget;
+  allowedToolNames: readonly RetrievalToolName[];
+  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
+  harnessName: "chat_tools";
+  projectLabel?: string | null;
+  projectDescription?: string | null;
+  runtimeTurnContext: RuntimeTurnContextPacket;
+  currentDateTimeIso?: string | null;
+  currentDateLabel?: string | null;
+  currentTimeZone?: string | null;
+};
+
 function normalizePromptBlock(value: string | null | undefined): string | null {
   const normalized = String(value ?? "").trim();
   return normalized ? normalized : null;
@@ -122,6 +158,42 @@ function joinPromptBlocks(blocks: Array<string | null | undefined>): string {
     .map((block) => normalizePromptBlock(block))
     .filter((block): block is string => Boolean(block))
     .join("\n\n");
+}
+
+type RuntimePromptSectionWithText = RuntimePromptSection & {
+  text: string | null;
+};
+
+function buildRuntimePromptSection(params: {
+  id: string;
+  layer: RuntimePromptSectionLayer;
+  owner: RuntimePromptSectionOwner;
+  source: string;
+  text: string | null | undefined;
+}): RuntimePromptSectionWithText {
+  const text = normalizePromptBlock(params.text);
+  return {
+    id: params.id,
+    layer: params.layer,
+    owner: params.owner,
+    rendered: Boolean(text),
+    chars: text?.length ?? 0,
+    source: params.source,
+    text,
+  };
+}
+
+function stripPromptSectionText(
+  section: RuntimePromptSectionWithText,
+): RuntimePromptSection {
+  return {
+    id: section.id,
+    layer: section.layer,
+    owner: section.owner,
+    rendered: section.rendered,
+    chars: section.chars,
+    source: section.source,
+  };
 }
 
 function truncatePromptSnippet(value: string | null | undefined, limit = 240): string | null {
@@ -157,33 +229,40 @@ function buildPlatformDoctrinePrompt(): string {
   ].join("\n");
 }
 
-function buildAgentSoulPrompt(agentName?: string | null, agentSoul?: string | null): string {
+function buildBaseAgentSoulPrompt(agentName?: string | null): string {
   const userAgentName = String(agentName ?? "").trim();
+  return [
+    "AGENT_SOUL",
+    userAgentName
+      ? `Configured agent name: ${userAgentName}.`
+      : "Configured agent name: Polynet agent.",
+    "When the member asks your name, answer with the configured agent name.",
+    "You are the member's Polynet agent: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
+    "Think from first principles. Find the real objective, the bottleneck, the leverage point, and the thing that should probably be deleted.",
+    "Prefer truth over comfort, clarity over jargon, and working systems over impressive-sounding theater.",
+    "Be warm, direct, and funny when it helps. Keep the personality alive, but never let it outrun the work.",
+    "Never fake certainty. If something is unknown, say so and figure out how to verify it.",
+  ].join("\n");
+}
+
+function buildUserAgentSoulPrompt(agentSoul?: string | null): string | null {
   const userAgentSoul = String(agentSoul ?? "").trim();
+  if (!userAgentSoul) return null;
+  return [
+    "USER_AGENT_SOUL",
+    "Apply these personal instructions from the member for their agent:",
+    userAgentSoul,
+  ].join("\n");
+}
+
+function buildAgentSoulPrompt(agentName?: string | null, agentSoul?: string | null): string {
   return joinPromptBlocks([
-    [
-      "AGENT_SOUL",
-      userAgentName
-        ? `Configured agent name: ${userAgentName}.`
-        : "Configured agent name: Polynet agent.",
-      "When the member asks your name, answer with the configured agent name.",
-      "You are the member's Polynet agent: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
-      "Think from first principles. Find the real objective, the bottleneck, the leverage point, and the thing that should probably be deleted.",
-      "Prefer truth over comfort, clarity over jargon, and working systems over impressive-sounding theater.",
-      "Be warm, direct, and funny when it helps. Keep the personality alive, but never let it outrun the work.",
-      "Never fake certainty. If something is unknown, say so and figure out how to verify it.",
-    ].join("\n"),
-    userAgentSoul
-      ? [
-          "USER_AGENT_SOUL",
-          "Apply these personal instructions from the member for their agent:",
-          userAgentSoul,
-        ].join("\n")
-      : null,
+    buildBaseAgentSoulPrompt(agentName),
+    buildUserAgentSoulPrompt(agentSoul),
   ]);
 }
 
-function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string {
+function buildCommunityLensBasePrompt(params: RuntimeCommunityPromptFields): string {
   const communityId = String(params.communityId ?? "").trim();
   const communityName = String(params.communityName ?? "").trim();
   const communitySlug = String(params.communitySlug ?? "").trim();
@@ -192,7 +271,6 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
     params.communityAbout,
     COMMUNITY_ABOUT_PROMPT_EXCERPT_CHARS,
   );
-  const communitySystemPrompt = String(params.communitySystemPrompt ?? "").trim();
   if (!communityId) {
     return [
       "COMMUNITY_LENS",
@@ -219,14 +297,27 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
       "Do not invent missing community identity or expose internal community, message, or thread ids.",
       "Refer to the community by name when available.",
     ].join("\n"),
-    communitySystemPrompt
-      ? [
-          "COMMUNITY_SYSTEM_PROMPT",
-          "Apply the following community-specific instructions alongside the default community context and the member's agent soul:",
-          "These instructions can shape community tone, goals, and domain behavior, but they must not override platform, safety, access, tool, or operating policy.",
-          communitySystemPrompt,
-        ].join("\n")
-      : null,
+  ]);
+}
+
+function buildCommunitySystemPromptBlock(
+  communitySystemPrompt?: string | null,
+): string | null {
+  const prompt = String(communitySystemPrompt ?? "").trim();
+  if (!prompt) return null;
+  return [
+    "COMMUNITY_SYSTEM_PROMPT",
+    "Apply the following community-specific instructions alongside the default community context and the member's agent soul:",
+    "These instructions can shape community tone, goals, and domain behavior, but they must not override platform, safety, access, tool, or operating policy.",
+    prompt,
+  ].join("\n");
+}
+
+function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string {
+  const communityId = String(params.communityId ?? "").trim();
+  return joinPromptBlocks([
+    buildCommunityLensBasePrompt(params),
+    communityId ? buildCommunitySystemPromptBlock(params.communitySystemPrompt) : null,
   ]);
 }
 
@@ -252,17 +343,17 @@ function buildPlatformHarnessContextPrompt(params: {
     "PLATFORM_HARNESS_CONTEXT",
     `Active harness: ${params.harnessName}.`,
     hasWorkspaceTools
-      ? "This run can inspect and modify files in the active computer workspace when needed."
-      : "This run does not have active computer workspace file tools.",
+      ? "This run can inspect and modify files in the active project workspace when needed."
+      : "This run does not have active project workspace file tools.",
     hasWorkspaceTools
-      ? `Active computer: ${String(params.projectLabel ?? "").trim() || "current computer"}.`
-      : "Active computer: none.",
+      ? `Active project: ${String(params.projectLabel ?? "").trim() || "current project"}.`
+      : "Active project: none.",
     hasWorkspaceTools && String(params.projectDescription ?? "").trim()
-      ? `Computer description: ${String(params.projectDescription ?? "").trim()}.`
+      ? `Project description: ${String(params.projectDescription ?? "").trim()}.`
       : null,
-    hasWorkspaceTools ? "Computer workspace root: current computer workspace root." : null,
+    hasWorkspaceTools ? "Project workspace root: current project workspace root." : null,
     `Allowed tools: ${params.allowedToolNames.join(",") || "(none)"}.`,
-    hasWorkspaceTools ? "All file paths are relative to the computer workspace root." : null,
+    hasWorkspaceTools ? "All file paths are relative to the project workspace root." : null,
     "Only the listed tools are available in this run.",
   ]
     .filter(Boolean)
@@ -466,19 +557,19 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   }
   if (hasWorkspaceTools) {
     capabilityFacts.push(
-      "- Workspace capabilities operate on the active computer workspace. Read current contents before editing, and verify important edits when verification is available.",
+      "- Workspace capabilities operate on the active project workspace. Read current contents before editing, and verify important edits when verification is available.",
     );
   }
   if (params.allowedToolNames.includes("terminal_start")) {
     capabilityFacts.push(
       "- Background terminal capabilities are for long-running or previewable processes. Reuse or stop active terminals based on fresh terminal state.",
-      "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/computer observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
+      "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/desktop observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
       "- After a successful background terminal start, do not echo the returned preview/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
     );
   }
   if (params.allowedToolNames.includes("computer_open_url")) {
     capabilityFacts.push(
-      "- Computer capabilities provide visual interaction evidence. Treat screenshots and computer-tool errors as ground truth. Stop after one reasonable retry when the same blocker persists.",
+      "- Desktop capabilities provide visual interaction evidence. Treat screenshots and desktop-tool errors as ground truth. Stop after one reasonable retry when the same blocker persists.",
     );
   }
   capabilityFacts.push(
@@ -516,63 +607,140 @@ function buildChatOperatingPolicyPrompt(): string {
   ].join("\n");
 }
 
-export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunityPromptFields & {
-  loopBudget: RuntimeKernelBudget;
-  allowedToolNames: readonly RetrievalToolName[];
-  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
-  harnessName: "chat_tools";
-  projectLabel?: string | null;
-  projectDescription?: string | null;
-  runtimeTurnContext: RuntimeTurnContextPacket;
-  currentDateTimeIso?: string | null;
-  currentDateLabel?: string | null;
-  currentTimeZone?: string | null;
-}): string {
+export function buildPlatformHarnessRuntimePromptBundle(
+  params: RuntimePlatformHarnessPromptParams,
+): RuntimePromptBundle {
+  const communityId = String(params.communityId ?? "").trim();
   const stablePromptBlocks = [
-    buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(params.agentName, params.agentSoul),
-    buildExplanationContractPrompt(),
-    buildPlatformHarnessOperatingPolicyPrompt({
-      loopBudget: params.loopBudget,
-      allowedToolNames: params.allowedToolNames,
+    buildRuntimePromptSection({
+      id: "platform_doctrine",
+      layer: "stable",
+      owner: "platform",
+      source: "shared/runtimePrompt.ts#buildPlatformDoctrinePrompt",
+      text: buildPlatformDoctrinePrompt(),
+    }),
+    buildRuntimePromptSection({
+      id: "agent_soul",
+      layer: "stable",
+      owner: "platform",
+      source: "shared/runtimePrompt.ts#buildBaseAgentSoulPrompt",
+      text: buildBaseAgentSoulPrompt(params.agentName),
+    }),
+    buildRuntimePromptSection({
+      id: "user_agent_soul",
+      layer: "stable",
+      owner: "user",
+      source: "shared/runtimePrompt.ts#buildUserAgentSoulPrompt",
+      text: buildUserAgentSoulPrompt(params.agentSoul),
+    }),
+    buildRuntimePromptSection({
+      id: "explanation_contract",
+      layer: "stable",
+      owner: "runtime",
+      source: "shared/runtimePrompt.ts#buildExplanationContractPrompt",
+      text: buildExplanationContractPrompt(),
+    }),
+    buildRuntimePromptSection({
+      id: "harness_operating_policy",
+      layer: "stable",
+      owner: "runtime",
+      source: "shared/runtimePrompt.ts#buildPlatformHarnessOperatingPolicyPrompt",
+      text: buildPlatformHarnessOperatingPolicyPrompt({
+        loopBudget: params.loopBudget,
+        allowedToolNames: params.allowedToolNames,
+      }),
     }),
   ];
   const semiStablePromptBlocks = [
-    buildCommunityLensPrompt({
-      communityId: params.communityId,
-      communityName: params.communityName,
-      communitySlug: params.communitySlug,
-      communityOneLiner: params.communityOneLiner,
-      communityAbout: params.communityAbout,
-      communitySystemPrompt: params.communitySystemPrompt,
+    buildRuntimePromptSection({
+      id: "community_lens",
+      layer: "scoped",
+      owner: "community",
+      source: "shared/runtimePrompt.ts#buildCommunityLensBasePrompt",
+      text: buildCommunityLensBasePrompt({
+        communityId: params.communityId,
+        communityName: params.communityName,
+        communitySlug: params.communitySlug,
+        communityOneLiner: params.communityOneLiner,
+        communityAbout: params.communityAbout,
+      }),
     }),
-    buildCommunityFeedContextPrompt({
-      allowedToolNames: params.allowedToolNames,
+    buildRuntimePromptSection({
+      id: "community_system_prompt",
+      layer: "scoped",
+      owner: "community",
+      source: "shared/runtimePrompt.ts#buildCommunitySystemPromptBlock",
+      text: communityId
+        ? buildCommunitySystemPromptBlock(params.communitySystemPrompt)
+        : null,
     }),
-    buildCommunityResourceLanePrompt({
-      allowedToolNames: params.allowedToolNames,
-      communityResourceLane: params.communityResourceLane,
+    buildRuntimePromptSection({
+      id: "community_feed_context",
+      layer: "scoped",
+      owner: "community",
+      source: "shared/runtimePrompt.ts#buildCommunityFeedContextPrompt",
+      text: buildCommunityFeedContextPrompt({
+        allowedToolNames: params.allowedToolNames,
+      }),
     }),
-    buildPlatformHarnessContextPrompt({
-      harnessName: params.harnessName,
-      allowedToolNames: params.allowedToolNames,
-      projectLabel: params.projectLabel,
-      projectDescription: params.projectDescription,
+    buildRuntimePromptSection({
+      id: "community_resource_lane",
+      layer: "scoped",
+      owner: "community",
+      source: "shared/runtimePrompt.ts#buildCommunityResourceLanePrompt",
+      text: buildCommunityResourceLanePrompt({
+        allowedToolNames: params.allowedToolNames,
+        communityResourceLane: params.communityResourceLane,
+      }),
+    }),
+    buildRuntimePromptSection({
+      id: "workspace_harness_context",
+      layer: "scoped",
+      owner: "workspace",
+      source: "shared/runtimePrompt.ts#buildPlatformHarnessContextPrompt",
+      text: buildPlatformHarnessContextPrompt({
+        harnessName: params.harnessName,
+        allowedToolNames: params.allowedToolNames,
+        projectLabel: params.projectLabel,
+        projectDescription: params.projectDescription,
+      }),
     }),
   ];
   const volatilePromptBlocks = [
-    renderRuntimeTurnContextForPrompt(params.runtimeTurnContext),
-    buildRuntimeTemporalContextPrompt({
-      currentDateTimeIso: params.currentDateTimeIso,
-      currentDateLabel: params.currentDateLabel,
-      currentTimeZone: params.currentTimeZone,
+    buildRuntimePromptSection({
+      id: "runtime_turn_context",
+      layer: "volatile",
+      owner: "runtime",
+      source: "shared/runtimeTurnContextPacket.ts#renderRuntimeTurnContextForPrompt",
+      text: renderRuntimeTurnContextForPrompt(params.runtimeTurnContext),
+    }),
+    buildRuntimePromptSection({
+      id: "temporal_context",
+      layer: "volatile",
+      owner: "runtime",
+      source: "shared/runtimePrompt.ts#buildRuntimeTemporalContextPrompt",
+      text: buildRuntimeTemporalContextPrompt({
+        currentDateTimeIso: params.currentDateTimeIso,
+        currentDateLabel: params.currentDateLabel,
+        currentTimeZone: params.currentTimeZone,
+      }),
     }),
   ];
-  return joinPromptBlocks([
+  const sectionsWithText = [
     ...stablePromptBlocks,
     ...semiStablePromptBlocks,
     ...volatilePromptBlocks,
-  ]);
+  ];
+  return {
+    text: joinPromptBlocks(sectionsWithText.map((section) => section.text)),
+    sections: sectionsWithText.map(stripPromptSectionText),
+  };
+}
+
+export function buildPlatformHarnessRuntimeSystemPrompt(
+  params: RuntimePlatformHarnessPromptParams,
+): string {
+  return buildPlatformHarnessRuntimePromptBundle(params).text;
 }
 
 export function composePlatformChatRuntimeSystemPrompt(
