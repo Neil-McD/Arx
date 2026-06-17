@@ -63,10 +63,15 @@ export type WebCommunitySecondaryPanelsProps = {
   resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
-function renderCenteredPane(children: ReactNode) {
+function renderCenteredPane(children: ReactNode, options?: { fill?: boolean }) {
+  // `fill` makes the pane a full-height, non-scrolling flex column so its child
+  // (the PolyNet graph) can size to the window frame instead of overflowing.
+  const fill = options?.fill ?? false;
   return (
-    <div className="community-tab-scroll">
-      <div className="web-community-centered-pane">{children}</div>
+    <div className={`community-tab-scroll${fill ? " community-tab-scroll--fill" : ""}`}>
+      <div className={`web-community-centered-pane${fill ? " web-community-centered-pane--fill" : ""}`}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -120,7 +125,7 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...props.feed} />)}
 
       {props.communityTab === "polynet" &&
-        renderCenteredPane(<WebCommunityPolynetSection {...props.polynet} />)}
+        renderCenteredPane(<WebCommunityPolynetSection {...props.polynet} />, { fill: true })}
 
       {props.communityTab === "ai_agent" &&
         renderCenteredPane(<WebCommunityAiAgentSection {...props.aiAgent} />)}

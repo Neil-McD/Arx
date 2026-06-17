@@ -6282,6 +6282,19 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-width: 0;
 }
 
+/* Fill variant: a full-height, non-scrolling column so the child (PolyNet graph)
+   sizes to the window frame instead of a fixed box that overflows/scrolls. */
+.community-tab-scroll--fill {
+  overflow: hidden;
+}
+
+.web-community-centered-pane--fill {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .discover-panel {
   display: flex;
   flex-direction: column;
@@ -15034,6 +15047,10 @@ button.chat-reply-quote:hover {
 .community-polynet-panel {
   gap: 18px;
   max-width: 1180px;
+  /* Fill the window frame: full-height flex column, no inner scroll. */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .community-polynet-header {
@@ -15075,7 +15092,10 @@ button.chat-reply-quote:hover {
 }
 
 .community-polynet-layout {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .community-polynet-side section {
@@ -15084,11 +15104,13 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
 }
 
-/* Boxless: the graph is the page surface (Obsidian-style), no card frame. */
+/* Boxless: the graph is the page surface (Obsidian-style), no card frame.
+   Flexes to fill the window frame; a small floor keeps it usable when short. */
 .community-polynet-graph-shell {
   display: grid;
   grid-template-rows: 1fr;
-  min-height: 680px;
+  flex: 1;
+  min-height: 240px;
   overflow: hidden;
 }
 
@@ -15096,7 +15118,8 @@ button.chat-reply-quote:hover {
   /* Boxless + theme-native: the network sits directly on the active theme's
      page background (Obsidian-style) — no gradient, no card. */
   position: relative;
-  min-height: 620px;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
   background: transparent;
 }
