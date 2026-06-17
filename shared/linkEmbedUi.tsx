@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 
 const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
 
@@ -200,3 +200,18 @@ export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
 
   return null;
 }
+
+export const StableMediaEmbedFrame = memo(function StableMediaEmbedFrame(props: {
+  src: string;
+  title: string;
+}) {
+  return (
+    <iframe
+      data-resource-media="true"
+      src={props.src}
+      title={props.title}
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+      allowFullScreen
+    />
+  );
+});

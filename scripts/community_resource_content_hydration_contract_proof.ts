@@ -17,6 +17,8 @@ const viewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx
 const resources = read("convex/communityResources.ts");
 const core = read("convex/communityCore.ts");
 const content = read("convex/communityResourceContent.ts");
+const markdown = read("shared/markdownUi.tsx");
+const linkEmbedUi = read("shared/linkEmbedUi.tsx");
 
 assert.match(
   packageJson,
@@ -130,14 +132,29 @@ assert.match(
   "Resources reader should keep rendering the previous resource snapshot during refresh without exposing stale edit controls",
 );
 assert.match(
-  viewer,
-  /const ResourceEmbedFrame = memo\(function ResourceEmbedFrame[\s\S]*<iframe[\s\S]*src=\{props\.src\}/,
-  "resource embeds should be isolated in a memoized frame so ordinary resource text refreshes do not touch the player",
+  linkEmbedUi,
+  /export const StableMediaEmbedFrame = memo\(function StableMediaEmbedFrame[\s\S]*data-resource-media="true"[\s\S]*src=\{props\.src\}/,
+  "resource embeds should use one shared memoized media frame so ordinary resource text refreshes do not touch the player",
 );
 assert.match(
   viewer,
-  /<ResourceEmbedFrame[\s\S]*src=\{embed\.src\}/,
-  "resource viewer should render embeds through the stable ResourceEmbedFrame component",
+  /import \{ normalizeExternalUrl, parseEmbedUrl, StableMediaEmbedFrame \}[\s\S]*<StableMediaEmbedFrame[\s\S]*src=\{embed\.src\}/,
+  "resource viewer should render URL embeds through the shared stable media frame component",
+);
+assert.match(
+  markdown,
+  /import \{ parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed \}[\s\S]*<StableMediaEmbedFrame[\s\S]*src=\{embed\.src\}/,
+  "markdown standalone media embeds should render through the same stable media frame component",
+);
+assert.match(
+  viewer,
+  /RESOURCE_BODY_INTERACTIVE_SELECTOR[\s\S]*iframe[\s\S]*\[data-resource-media='true'\][\s\S]*target\.closest\(RESOURCE_BODY_INTERACTIVE_SELECTOR\)[\s\S]*interactiveTarget && interactiveTarget !== event\.currentTarget/,
+  "click-to-edit body handling must not steal clicks from media or iframe players",
+);
+assert.match(
+  viewer,
+  /const renderedBodyMarkdown = useMemo\([\s\S]*renderMarkdown\(trimmedBody, \{ embedStandaloneMedia: true \}\)[\s\S]*\[hasBody, trimmedBody\]/,
+  "resource body markdown should be memoized so unrelated reader state changes do not rebuild the media subtree",
 );
 assert.match(
   panel,

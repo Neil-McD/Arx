@@ -5,7 +5,7 @@ import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
-import { parseEmbedUrl, type ParsedEmbed } from "./linkEmbedUi";
+import { parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed } from "./linkEmbedUi";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -328,13 +328,11 @@ function standaloneMediaEmbedFromChildren(children: ReactNode): { embed: ParsedE
 function MarkdownMediaEmbed({ embed, href }: { embed: ParsedEmbed; href: string }) {
   const providerLabel = getEmbedProviderLabel(embed.provider);
   return (
-    <figure className="md-media-embed">
-      <div className="md-media-embed-frame">
-        <iframe
+    <figure className="md-media-embed" data-resource-media="true">
+      <div className="md-media-embed-frame" data-resource-media="true">
+        <StableMediaEmbedFrame
           src={embed.src}
           title={`${providerLabel} embed`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowFullScreen
         />
       </div>
       <figcaption className="md-media-embed-caption">

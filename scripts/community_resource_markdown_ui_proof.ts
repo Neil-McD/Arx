@@ -7,13 +7,19 @@ const read = (relativePath: string) => fs.readFileSync(path.join(root, relativeP
 
 const markdown = read("shared/markdownUi.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
+const linkEmbedUi = read("shared/linkEmbedUi.tsx");
 const css = read("apps/web/src/base.css");
 const packageJson = read("package.json");
 
 assert.match(
   markdown,
-  /import \{ parseEmbedUrl, type ParsedEmbed \} from "\.\/linkEmbedUi";/,
+  /import \{ parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed \} from "\.\/linkEmbedUi";/,
   "markdown renderer should reuse the canonical supported-media embed parser",
+);
+assert.match(
+  linkEmbedUi,
+  /export const StableMediaEmbedFrame = memo\(function StableMediaEmbedFrame[\s\S]*data-resource-media="true"/,
+  "supported media embeds should share a stable iframe component with a media interaction marker",
 );
 assert.match(
   markdown,
@@ -36,19 +42,24 @@ assert.match(
   "Resources viewer should opt into standalone media embeds",
 );
 assert.match(
+  resourceViewer,
+  /RESOURCE_BODY_INTERACTIVE_SELECTOR[\s\S]*iframe[\s\S]*\[data-resource-media='true'\][\s\S]*target\.closest\(RESOURCE_BODY_INTERACTIVE_SELECTOR\)[\s\S]*interactiveTarget && interactiveTarget !== event\.currentTarget/,
+  "Resources viewer body edit trigger should not intercept media-player clicks",
+);
+assert.match(
   css,
   /grid-template-columns: minmax\(176px, 224px\) minmax\(0, 1fr\)/,
   "Resources wiki rail should stay compact",
 );
 assert.match(
   css,
-  /\.knowledge-resource-rail \{[\s\S]*position: sticky;[\s\S]*top: 4px;[\s\S]*max-height: calc\(100dvh - 24px\);[\s\S]*overflow: hidden;/,
-  "Resources wiki rail should stay visible while scrolling desktop resource content",
+  /\.knowledge-resource-rail \{[\s\S]*align-self: start;[\s\S]*display: grid;[\s\S]*border-right: 1px solid color-mix\(in srgb, var\(--border-default\) 72%, transparent\);[\s\S]*padding-right: 12px;/,
+  "Resources wiki rail should stay visually separated without owning a nested scroll container",
 );
 assert.match(
   css,
-  /@media \(max-width: 900px\) \{[\s\S]*\.knowledge-resource-rail \{[\s\S]*position: static;[\s\S]*max-height: none;[\s\S]*overflow: visible;/,
-  "Resources wiki rail should not use sticky side navigation on mobile",
+  /@media \(max-width: 900px\) \{[\s\S]*\.knowledge-resource-rail \{[\s\S]*border-right: 0;[\s\S]*border-bottom: 1px solid color-mix\(in srgb, var\(--border-default\) 72%, transparent\);[\s\S]*padding: 0 0 12px;/,
+  "Resources wiki rail should collapse to a top section on mobile",
 );
 assert.match(
   css,

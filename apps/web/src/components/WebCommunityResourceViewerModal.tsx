@@ -1,13 +1,13 @@
 import {
-  memo,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
 } from "react";
 
-import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { normalizeExternalUrl, parseEmbedUrl, StableMediaEmbedFrame } from "../../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import type { CommunityResource } from "./communityResourcesContracts";
 
@@ -62,19 +62,26 @@ function getEmbedProviderLabel(provider: string | null | undefined): string {
   return "Video";
 }
 
-const ResourceEmbedFrame = memo(function ResourceEmbedFrame(props: {
-  src: string;
-  title: string;
-}) {
-  return (
-    <iframe
-      src={props.src}
-      title={props.title}
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-      allowFullScreen
-    />
-  );
-});
+const RESOURCE_BODY_INTERACTIVE_SELECTOR = [
+  "a",
+  "button",
+  "input",
+  "textarea",
+  "select",
+  "summary",
+  "iframe",
+  "video",
+  "audio",
+  "embed",
+  "object",
+  "figure",
+  "[role='button']",
+  "[contenteditable='true']",
+  "[data-resource-media='true']",
+  ".md-media-embed",
+  ".md-media-embed-frame",
+  ".resource-viewer-embed",
+].join(", ");
 
 function hasStoredBodyContent(resource: CommunityResource): boolean {
   const bodyChars = Number(resource.body_chars ?? 0);
@@ -130,6 +137,10 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const isTitleEditing = isEditing && activeField === "title";
   const isBodyEditing = isEditing && activeField === "body";
   const isPinned = editor?.isEditing ? editor.pinnedInput : resource.pinned;
+  const renderedBodyMarkdown = useMemo(
+    () => (hasBody ? renderMarkdown(trimmedBody, { embedStandaloneMedia: true }) : null),
+    [hasBody, trimmedBody],
+  );
 
   const syncBodyTextareaHeight = () => {
     const textarea = bodyTextareaRef.current;
@@ -217,7 +228,11 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
 
   const handleBodyTriggerClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
-    if (target && target !== event.currentTarget && target.closest("a, button, input, textarea, select")) {
+    const interactiveTarget =
+      target && target !== event.currentTarget
+        ? target.closest(RESOURCE_BODY_INTERACTIVE_SELECTOR)
+        : null;
+    if (interactiveTarget && interactiveTarget !== event.currentTarget) {
       return;
     }
     beginEdit("body");
@@ -311,7 +326,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
     }
 
     if (hasBody) {
-      const prose = renderMarkdown(trimmedBody, { embedStandaloneMedia: true });
+      const prose = renderedBodyMarkdown;
       if (canEdit) {
         return (
           <div
@@ -394,8 +409,8 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
       <div className="resource-viewer-body">
         <div className="resource-viewer-column">
           {embed ? (
-            <div className="resource-viewer-embed">
-              <ResourceEmbedFrame
+            <div className="resource-viewer-embed" data-resource-media="true">
+              <StableMediaEmbedFrame
                 src={embed.src}
                 title={`${resource.title} embed`}
               />
