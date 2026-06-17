@@ -8,6 +8,7 @@ import {
   normalizePaidUsageBillingMode,
   type PaidUsageBillingMode,
 } from "./paidUsageBilling";
+import { VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS } from "./voiceCapture";
 import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
 
 export type AuthUser = {
@@ -163,6 +164,45 @@ async function readVoiceTranscriptionRequestError(
       message: await readAuthError(response),
       status: response.status,
     });
+  }
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { name?: unknown; message?: unknown };
+  const name = typeof record.name === "string" ? record.name.toLowerCase() : "";
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  return name === "aborterror" || message.includes("aborted");
+}
+
+async function fetchVoiceTranscription(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => {
+    controller.abort();
+  }, VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      throw new VoiceTranscriptionRequestError({
+        message: "Voice upload timed out. Try a shorter clip.",
+        status: 0,
+        code: "voice_upload_timeout",
+      });
+    }
+    throw new VoiceTranscriptionRequestError({
+      message: "Voice upload failed. Check your connection and try again.",
+      status: 0,
+      code: "voice_upload_failed",
+    });
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -545,24 +585,27 @@ export async function transcribeVoice(params: {
   const convexUrl = readConvexRuntimeUrl();
   if (!convexUrl) throw new Error("Voice transcription is unavailable: missing Convex URL.");
 
-  const response = await fetch(buildConvexRuntimeUrl(convexUrl, "/runtime/voice_transcribe"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetchVoiceTranscription(
+    buildConvexRuntimeUrl(convexUrl, "/runtime/voice_transcribe"),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        audio_base64: params.audioBase64,
+        mime_type: params.mimeType,
+        language: params.language ?? undefined,
+        surface: params.surface,
+        prefer_primary: params.preferPrimary ?? false,
+        duration_ms:
+          typeof params.durationMs === "number" && Number.isFinite(params.durationMs)
+            ? Math.max(0, Math.round(params.durationMs))
+            : undefined,
+      }),
     },
-    body: JSON.stringify({
-      audio_base64: params.audioBase64,
-      mime_type: params.mimeType,
-      language: params.language ?? undefined,
-      surface: params.surface,
-      prefer_primary: params.preferPrimary ?? false,
-      duration_ms:
-        typeof params.durationMs === "number" && Number.isFinite(params.durationMs)
-          ? Math.max(0, Math.round(params.durationMs))
-          : undefined,
-    }),
-  });
+  );
   if (!response.ok) {
     throw await readVoiceTranscriptionRequestError(response);
   }

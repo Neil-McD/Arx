@@ -230,16 +230,17 @@ function looksLikeXaiApiKey(value: string): boolean {
   return /^(?:xai[-_])/i.test(v);
 }
 
-function sanitizeMimeType(input: unknown): string {
+function sanitizeMimeType(input: unknown): string | null {
   const value = typeof input === "string" ? input.trim().toLowerCase() : "";
   if (!value) return "audio/webm";
   if (value.startsWith("audio/webm")) return "audio/webm";
-  if (value.startsWith("audio/ogg")) return "audio/ogg";
-  if (value.startsWith("audio/mp4")) return "audio/mp4";
-  if (value.startsWith("audio/mpeg")) return "audio/mpeg";
+  if (value.startsWith("audio/mp4") || value.startsWith("audio/m4a")) return "audio/mp4";
+  if (value.startsWith("audio/mpeg") || value.startsWith("audio/mp3") || value.startsWith("audio/mpga")) {
+    return "audio/mpeg";
+  }
   if (value.startsWith("audio/wav")) return "audio/wav";
   if (value.startsWith("audio/x-wav")) return "audio/wav";
-  return "audio/webm";
+  return null;
 }
 
 function extensionForMime(mimeType: string): string {
@@ -311,6 +312,38 @@ function isResponseFormatUnsupported(status: number, message: string): boolean {
     normalized.includes("not supported") ||
     normalized.includes("unsupported")
   );
+}
+
+function prefersJsonTranscriptionResponseFormat(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return normalized.includes("gpt-4o") && normalized.includes("transcribe");
+}
+
+async function runVoiceTranscriptionAttempts(
+  model: string,
+  attempt: (responseFormat: VoiceTranscriptionResponseFormat) => Promise<VoiceTranscribeAttemptResult>,
+): Promise<VoiceTranscribeResult> {
+  const firstFormat: VoiceTranscriptionResponseFormat = prefersJsonTranscriptionResponseFormat(model)
+    ? "json"
+    : "verbose_json";
+  const firstResult = await attempt(firstFormat);
+  if (!firstResult.ok && firstResult.retryWithJson && firstFormat !== "json") {
+    return await attempt("json");
+  }
+  return firstResult;
+}
+
+function logVoiceTranscribeEvent(
+  level: "info" | "warn",
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  try {
+    const logger = level === "warn" ? console.warn : console.log;
+    logger(`voice_transcribe_${event}`, payload);
+  } catch {
+    // ignore diagnostic logging failures
+  }
 }
 
 function readProviderDuration(payload: unknown): {
@@ -445,11 +478,7 @@ async function transcribeWithOpenAi(params: {
     };
   }
 
-  const verboseResult = await attempt("verbose_json");
-  if (!verboseResult.ok && verboseResult.retryWithJson) {
-    return await attempt("json");
-  }
-  return verboseResult;
+  return await runVoiceTranscriptionAttempts(model, attempt);
 }
 
 async function transcribeWithGroqFallback(params: {
@@ -530,11 +559,7 @@ async function transcribeWithGroqFallback(params: {
     };
   }
 
-  const verboseResult = await attempt("verbose_json");
-  if (!verboseResult.ok && verboseResult.retryWithJson) {
-    return await attempt("json");
-  }
-  return verboseResult;
+  return await runVoiceTranscriptionAttempts(model, attempt);
 }
 
 export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs): void {
@@ -583,6 +608,14 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         }
 
         const mimeType = sanitizeMimeType(input.mime_type);
+        if (!mimeType) {
+          return jsonResponse(req, 400, {
+            ok: false,
+            error: "unsupported_audio_format",
+            code: "unsupported_audio_format",
+            message: "Unsupported audio format. Record with webm, mp4, mpeg, or wav audio.",
+          });
+        }
         const language = typeof input.language === "string" ? input.language.trim().slice(0, 12) : "";
         const promptRaw = typeof input.prompt === "string" ? input.prompt.trim().slice(0, 320) : "";
         const prompt = promptRaw || DEFAULT_VOICE_PROMPT;
@@ -619,6 +652,13 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
           durationMs: input.duration_ms,
           audioBytes: bytes.byteLength,
           mimeType,
+        });
+        logVoiceTranscribeEvent("info", "request", {
+          surface: surface || null,
+          mime_type: mimeType,
+          audio_bytes: bytes.byteLength,
+          duration_ms: durationEvidence.durationMs,
+          duration_source: durationEvidence.source,
         });
 
         const creditKey = newCreditKey("voice");

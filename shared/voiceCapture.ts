@@ -6,15 +6,30 @@ export type VoiceLegacyGetUserMediaFn = (
   onError: (error: unknown) => void,
 ) => void;
 
+export const VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES = 6_000_000;
+export const VOICE_TRANSCRIPTION_MAX_DURATION_MS = 120_000;
+export const VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS = 45_000;
+
 const VOICE_CAPTURE_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
-  "audio/ogg;codecs=opus",
-  "audio/ogg",
+  "audio/mp4;codecs=mp4a.40.2",
   "audio/mp4",
   "audio/mpeg",
   "audio/wav",
 ];
+
+export function normalizeVoiceTranscriptionMimeType(input: string | null | undefined): string | null {
+  const value = typeof input === "string" ? input.trim().toLowerCase() : "";
+  if (!value) return "audio/webm";
+  if (value.startsWith("audio/webm")) return "audio/webm";
+  if (value.startsWith("audio/mp4") || value.startsWith("audio/m4a")) return "audio/mp4";
+  if (value.startsWith("audio/mpeg") || value.startsWith("audio/mp3") || value.startsWith("audio/mpga")) {
+    return "audio/mpeg";
+  }
+  if (value.startsWith("audio/wav") || value.startsWith("audio/x-wav")) return "audio/wav";
+  return null;
+}
 
 export function selectVoiceCaptureMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return undefined;

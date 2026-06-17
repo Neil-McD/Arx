@@ -14,7 +14,10 @@ import {
   getVoiceLanguageHint,
   getVoiceUserMedia,
   mergeVoiceTranscript,
+  normalizeVoiceTranscriptionMimeType,
   selectVoiceCaptureMimeType,
+  VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
+  VOICE_TRANSCRIPTION_MAX_DURATION_MS,
 } from "./voiceCapture";
 
 export type VoiceSurface = "workspace" | "community";
@@ -76,6 +79,23 @@ function isVoiceToolBalanceError(error: unknown, message: string): boolean {
     if (code) return true;
   }
   return isToolBalanceError(message);
+}
+
+function logVoiceInputDiagnostic(
+  level: "info" | "warn",
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  try {
+    const logger = level === "warn" ? console.warn : console.info;
+    logger(`[voice] ${event}`, payload);
+  } catch {
+    // ignore diagnostic logging failures
+  }
+}
+
+function readRoundedMegabytes(bytes: number): number {
+  return Math.max(1, Math.ceil(bytes / 1_000_000));
 }
 
 export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputControllerArgs<SessionT>) {
@@ -198,12 +218,66 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     blob: Blob,
     durationMs: number | null,
   ): Promise<string> {
+    const mimeType = normalizeVoiceTranscriptionMimeType(blob.type || "audio/webm");
+    if (!mimeType) {
+      logVoiceInputDiagnostic("warn", "unsupported_audio_format", {
+        surface,
+        mime_type: blob.type || null,
+        audio_bytes: blob.size,
+        duration_ms: durationMs,
+      });
+      throw new VoiceTranscriptionRequestError({
+        message: "This browser recorded an unsupported audio format.",
+        status: 400,
+        code: "unsupported_audio_format",
+      });
+    }
+    if (blob.size > VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES) {
+      logVoiceInputDiagnostic("warn", "audio_too_large", {
+        surface,
+        mime_type: mimeType,
+        audio_bytes: blob.size,
+        max_audio_bytes: VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
+        duration_ms: durationMs,
+      });
+      throw new VoiceTranscriptionRequestError({
+        message: `Voice clip is too large. Keep it under ${readRoundedMegabytes(
+          VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
+        )} MB and try again.`,
+        status: 413,
+        code: "audio_too_large",
+      });
+    }
+    if (
+      typeof durationMs === "number" &&
+      Number.isFinite(durationMs) &&
+      durationMs > VOICE_TRANSCRIPTION_MAX_DURATION_MS
+    ) {
+      logVoiceInputDiagnostic("warn", "audio_too_long", {
+        surface,
+        mime_type: mimeType,
+        audio_bytes: blob.size,
+        duration_ms: durationMs,
+        max_duration_ms: VOICE_TRANSCRIPTION_MAX_DURATION_MS,
+      });
+      throw new VoiceTranscriptionRequestError({
+        message: "Voice clip is too long. Try a shorter recording.",
+        status: 413,
+        code: "audio_too_long",
+      });
+    }
+    logVoiceInputDiagnostic("info", "upload_start", {
+      surface,
+      mime_type: mimeType,
+      audio_bytes: blob.size,
+      duration_ms: durationMs,
+    });
     const session = await resolveUsableSession(args.sessionRef.current ?? args.session, args.ensureSession);
     if (!session) throw new Error("Sign in to use voice input.");
     return await transcribeVoice({
       session: session as unknown as { access_token: string },
       audioBase64: await blobToBase64(blob),
-      mimeType: blob.type || "audio/webm",
+      mimeType,
       language: getVoiceLanguageHint(),
       surface,
       preferPrimary: false,
