@@ -490,9 +490,6 @@ export function buildChatgptCodexRequestPayload(params: {
     input: normalized.inputItems,
     client_metadata: buildChatgptCodexClientMetadata(params.requestMetadata),
   };
-  if (Number.isFinite(params.maxTokens) && params.maxTokens > 0) {
-    requestBody.max_output_tokens = Math.floor(params.maxTokens);
-  }
   if (normalized.instructions) requestBody.instructions = normalized.instructions;
   if (Array.isArray(params.tools) && params.tools.length > 0) {
     requestBody.tools = params.tools;

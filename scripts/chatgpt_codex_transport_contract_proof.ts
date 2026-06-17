@@ -106,7 +106,7 @@ function proveCodexPayloadPreservesReasoningAndMetadata() {
   assert.equal(payload.model, "gpt-5.5");
   assert.equal(payload.store, false);
   assert.equal(payload.stream, true);
-  assert.equal(payload.max_output_tokens, 1200);
+  assert.equal(Object.hasOwn(payload, "max_output_tokens"), false);
   assert.equal(payload.instructions, "You are concise.");
   assert.deepEqual(payload.include, ["reasoning.encrypted_content"]);
   assert.deepEqual(payload.reasoning, {
