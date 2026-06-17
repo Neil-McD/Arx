@@ -18,6 +18,7 @@ import {
   DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL,
   runChatgptResponsesRequest,
   runChatgptResponsesStreamingRequest,
+  type ChatgptCodexRequestMetadata,
   type ChatgptCompletionFailure,
   type ChatgptFunctionTool,
   type ChatgptResponsesParseResult,
@@ -40,6 +41,7 @@ export async function runChatgptCompletion(params: {
   modelId: string;
   messages: RuntimeChatgptMessage[];
   maxTokens: number;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
 }): Promise<ChatgptCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesRequest(params);
@@ -70,6 +72,7 @@ export async function runChatgptStreamingCompletion(params: {
   onDelta?: (delta: string) => void;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
 }): Promise<ChatgptCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesStreamingRequest({
@@ -113,6 +116,7 @@ export async function runChatgptNativeToolCompletion(params: {
   parallelToolCalls?: boolean;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
 }): Promise<ChatgptNativeToolCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesStreamingRequest({
@@ -213,6 +217,7 @@ export {
 export type {
   ChatgptCompletionFailure,
   ChatgptFunctionTool,
+  ChatgptCodexRequestMetadata,
   ChatgptNativeToolCompletionSuccess,
   ChatgptResponsesParseResult,
   ChatgptToolAwareMessage,

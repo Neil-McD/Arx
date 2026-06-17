@@ -6,6 +6,10 @@ import type {
 import { parseNativeProviderFunctionCallItem } from "../shared/nativeToolProviderParsers";
 
 const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
+const CHATGPT_CODEX_ORIGINATOR = "codex_cli_rs";
+const CHATGPT_CODEX_USER_AGENT = "codex_cli_rs/0.0.0 (PolyNet cloud; Convex; web)";
+const CHATGPT_CODEX_INSTALLATION_ID = "6e344508-6ff4-44b0-a158-ef6b596b66f2";
+const CHATGPT_CODEX_RETRY_DELAY_MS = 250;
 
 export type RuntimeChatgptMessage = {
   role: "user" | "assistant" | "system";
@@ -43,6 +47,13 @@ export type ChatgptResponsesParseResult = {
   }>;
 };
 
+export type ChatgptCodexRequestMetadata = {
+  userId?: string | null;
+  sessionId?: string | null;
+  threadId?: string | null;
+  installationId?: string | null;
+};
+
 type ChatgptReasoningSummaryLevel = "auto" | "concise" | "detailed";
 type ChatgptReasoningEffort = "low" | "medium" | "high";
 const DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL: ChatgptReasoningSummaryLevel = "auto";
@@ -50,6 +61,66 @@ const DEFAULT_CHATGPT_REASONING_EFFORT: ChatgptReasoningEffort = "medium";
 
 function normalizeHeaderValue(value: string | null): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeOutboundHeaderValue(value: string | null | undefined, maxLength = 180): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value
+    .replace(/[\r\n]/g, " ")
+    .replace(/[^\t\x20-\x7e]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function stableTinyHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function fallbackCodexScopedId(kind: "session" | "thread", metadata?: ChatgptCodexRequestMetadata | null): string {
+  const basis =
+    normalizeOutboundHeaderValue(metadata?.threadId) ||
+    normalizeOutboundHeaderValue(metadata?.sessionId) ||
+    normalizeOutboundHeaderValue(metadata?.userId) ||
+    "anonymous";
+  return `polynet-${kind}-${stableTinyHash(`${kind}:${basis}`)}`;
+}
+
+export function buildChatgptCodexRequestHeaders(params: {
+  auth: { accessToken: string; accountId?: string | null };
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
+}): Headers {
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${params.auth.accessToken}`);
+  headers.set("User-Agent", CHATGPT_CODEX_USER_AGENT);
+  headers.set("Content-Type", "application/json");
+  headers.set("Accept", "text/event-stream");
+  headers.set("originator", CHATGPT_CODEX_ORIGINATOR);
+  headers.set(
+    "session-id",
+    normalizeOutboundHeaderValue(params.requestMetadata?.sessionId) ||
+      fallbackCodexScopedId("session", params.requestMetadata),
+  );
+  headers.set(
+    "thread-id",
+    normalizeOutboundHeaderValue(params.requestMetadata?.threadId) ||
+      fallbackCodexScopedId("thread", params.requestMetadata),
+  );
+  const accountId = normalizeOutboundHeaderValue(params.auth.accountId);
+  if (accountId) headers.set("ChatGPT-Account-Id", accountId);
+  return headers;
+}
+
+function buildChatgptCodexClientMetadata(metadata?: ChatgptCodexRequestMetadata | null): Record<string, unknown> {
+  return {
+    "x-codex-installation-id":
+      normalizeOutboundHeaderValue(metadata?.installationId, 120) || CHATGPT_CODEX_INSTALLATION_ID,
+  };
 }
 
 function getHeaderValue(response: Response | null | undefined, name: string): string | null {
@@ -71,6 +142,120 @@ function buildBodyPreview(bytes: Uint8Array): string | null {
   } catch {
     return null;
   }
+}
+
+type ChatgptCodexHttpFailure = ChatgptCompletionFailure & {
+  retryWithFreshAuth: boolean;
+};
+
+function failureWithoutRetryFlag(failure: ChatgptCodexHttpFailure): ChatgptCompletionFailure {
+  return {
+    ok: false,
+    status: failure.status,
+    code: failure.code,
+    message: failure.message,
+    contentType: failure.contentType,
+    bodyPreview: failure.bodyPreview,
+    upstreamRequestId: failure.upstreamRequestId,
+    cfRay: failure.cfRay,
+  };
+}
+
+function looksLikeUsageLimitFailure(status: number, bodyPreview: string | null): boolean {
+  const body = String(bodyPreview ?? "").toLowerCase();
+  return (
+    status === 429 ||
+    body.includes("usage_limit") ||
+    body.includes("usage limit") ||
+    body.includes("rate_limit") ||
+    body.includes("rate limit") ||
+    body.includes("quota") ||
+    body.includes("too many requests")
+  );
+}
+
+function looksLikeUnsupportedModelFailure(bodyPreview: string | null): boolean {
+  const body = String(bodyPreview ?? "").toLowerCase();
+  if (!body) return false;
+  return (
+    (body.includes("model") && body.includes("not supported")) ||
+    (body.includes("model") && body.includes("unsupported")) ||
+    (body.includes("model") && body.includes("not found")) ||
+    (body.includes("model") && body.includes("does not exist")) ||
+    body.includes("not supported when using codex")
+  );
+}
+
+export function classifyChatgptCodexHttpFailure(params: {
+  status: number;
+  contentType?: string | null;
+  bodyPreview?: string | null;
+  upstreamRequestId?: string | null;
+  cfRay?: string | null;
+}): ChatgptCodexHttpFailure {
+  const status = params.status >= 400 && params.status < 600 ? params.status : 502;
+  const detail = params.bodyPreview ?? "";
+  const genericMessage = detail
+    ? `ChatGPT inference failed (HTTP ${params.status}): ${detail}`
+    : `ChatGPT inference failed (HTTP ${params.status}).`;
+
+  if (status === 401 || status === 403) {
+    return {
+      ok: false,
+      status,
+      code: "provider_connection_required",
+      message: "Reconnect ChatGPT and retry.",
+      contentType: params.contentType ?? null,
+      bodyPreview: params.bodyPreview ?? null,
+      upstreamRequestId: params.upstreamRequestId ?? null,
+      cfRay: params.cfRay ?? null,
+      retryWithFreshAuth: true,
+    };
+  }
+
+  if (looksLikeUsageLimitFailure(status, params.bodyPreview ?? null)) {
+    return {
+      ok: false,
+      status: 429,
+      code: "provider_usage_limit",
+      message: "ChatGPT/Codex usage limit reached. Retry after the account limit resets.",
+      contentType: params.contentType ?? null,
+      bodyPreview: params.bodyPreview ?? null,
+      upstreamRequestId: params.upstreamRequestId ?? null,
+      cfRay: params.cfRay ?? null,
+      retryWithFreshAuth: false,
+    };
+  }
+
+  if (looksLikeUnsupportedModelFailure(params.bodyPreview ?? null)) {
+    return {
+      ok: false,
+      status,
+      code: "provider_model_unavailable",
+      message: "The selected ChatGPT/Codex model is unavailable for this account.",
+      contentType: params.contentType ?? null,
+      bodyPreview: params.bodyPreview ?? null,
+      upstreamRequestId: params.upstreamRequestId ?? null,
+      cfRay: params.cfRay ?? null,
+      retryWithFreshAuth: false,
+    };
+  }
+
+  return {
+    ok: false,
+    status,
+    code: "provider_error",
+    message: genericMessage,
+    contentType: params.contentType ?? null,
+    bodyPreview: params.bodyPreview ?? null,
+    upstreamRequestId: params.upstreamRequestId ?? null,
+    cfRay: params.cfRay ?? null,
+    retryWithFreshAuth: params.status === 404 || params.status >= 500,
+  };
+}
+
+function waitForChatgptCodexRetry(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, CHATGPT_CODEX_RETRY_DELAY_MS));
 }
 
 function looksLikeSsePayload(decoded: string, contentType: string): boolean {
@@ -284,6 +469,46 @@ function normalizeChatgptResponsesRequest(params: {
   };
 }
 
+export function buildChatgptCodexRequestPayload(params: {
+  modelId: string;
+  messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
+  maxTokens: number;
+  tools?: ChatgptFunctionTool[];
+  parallelToolCalls?: boolean;
+  reasoningSummary?: ChatgptReasoningSummaryLevel | null;
+  reasoningEffort?: ChatgptReasoningEffort | null;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
+}): Record<string, unknown> {
+  const normalized = normalizeChatgptResponsesRequest({
+    modelId: params.modelId,
+    messages: params.messages,
+  });
+  const requestBody: Record<string, unknown> = {
+    model: params.modelId,
+    store: false,
+    stream: true,
+    input: normalized.inputItems,
+    client_metadata: buildChatgptCodexClientMetadata(params.requestMetadata),
+  };
+  if (Number.isFinite(params.maxTokens) && params.maxTokens > 0) {
+    requestBody.max_output_tokens = Math.floor(params.maxTokens);
+  }
+  if (normalized.instructions) requestBody.instructions = normalized.instructions;
+  if (Array.isArray(params.tools) && params.tools.length > 0) {
+    requestBody.tools = params.tools;
+    requestBody.parallel_tool_calls = params.parallelToolCalls === true;
+    requestBody.tool_choice = "auto";
+  }
+  if (params.reasoningSummary) {
+    requestBody.reasoning = {
+      effort: params.reasoningEffort ?? DEFAULT_CHATGPT_REASONING_EFFORT,
+      summary: params.reasoningSummary,
+    };
+    requestBody.include = ["reasoning.encrypted_content"];
+  }
+  return requestBody;
+}
+
 function extractMessageTextFromOutputItem(item: Record<string, any>): string {
   if (!Array.isArray(item.content)) return "";
   let text = "";
@@ -419,6 +644,7 @@ export async function runChatgptResponsesRequest(params: {
   signal?: AbortSignal;
   reasoningSummary?: ChatgptReasoningSummaryLevel | null;
   reasoningEffort?: ChatgptReasoningEffort | null;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
 }): Promise<
   | {
       ok: true;
@@ -428,31 +654,22 @@ export async function runChatgptResponsesRequest(params: {
     }
   | ChatgptCompletionFailure
 > {
+  const requestMetadata: ChatgptCodexRequestMetadata = {
+    ...params.requestMetadata,
+    userId: params.userId,
+  };
   let requestBodyText: string;
   try {
-    const normalized = normalizeChatgptResponsesRequest({
+    requestBodyText = JSON.stringify(buildChatgptCodexRequestPayload({
       modelId: params.modelId,
       messages: params.messages,
-    });
-    const requestBody: Record<string, unknown> = {
-      model: params.modelId,
-      store: false,
-      stream: true,
-      input: normalized.inputItems,
-    };
-    if (normalized.instructions) requestBody.instructions = normalized.instructions;
-    if (Array.isArray(params.tools) && params.tools.length > 0) {
-      requestBody.tools = params.tools;
-      requestBody.parallel_tool_calls = params.parallelToolCalls === true;
-      requestBody.tool_choice = "auto";
-    }
-    if (params.reasoningSummary) {
-      requestBody.reasoning = {
-        effort: params.reasoningEffort ?? DEFAULT_CHATGPT_REASONING_EFFORT,
-        summary: params.reasoningSummary,
-      };
-    }
-    requestBodyText = JSON.stringify(requestBody);
+      maxTokens: params.maxTokens,
+      tools: params.tools,
+      parallelToolCalls: params.parallelToolCalls,
+      reasoningSummary: params.reasoningSummary,
+      reasoningEffort: params.reasoningEffort,
+      requestMetadata,
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -463,7 +680,7 @@ export async function runChatgptResponsesRequest(params: {
     };
   }
 
-  let firstFailure: string | null = null;
+  let firstFailure: ChatgptCompletionFailure | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const auth = await getFreshChatgptAuthForUser({
       ctx: params.ctx,
@@ -481,12 +698,10 @@ export async function runChatgptResponsesRequest(params: {
 
     let response: Response;
     try {
-      const headers = new Headers();
-      headers.set("Authorization", `Bearer ${auth.accessToken}`);
-      headers.set("User-Agent", "codex-cli");
-      headers.set("Content-Type", "application/json");
-      headers.set("Accept", "text/event-stream");
-      if (auth.accountId) headers.set("ChatGPT-Account-Id", auth.accountId);
+      const headers = buildChatgptCodexRequestHeaders({
+        auth,
+        requestMetadata,
+      });
       response = await fetch(CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
         headers,
@@ -516,24 +731,19 @@ export async function runChatgptResponsesRequest(params: {
     const cfRay = normalizeHeaderValue(getHeaderValue(response, "cf-ray"));
     const bodyPreview = buildBodyPreview(body);
     if (!response.ok) {
-      const detail = bodyPreview ?? "";
-      const failure = detail
-        ? `ChatGPT inference failed (HTTP ${response.status}): ${detail}`
-        : `ChatGPT inference failed (HTTP ${response.status}).`;
-      if (attempt === 0) {
-        firstFailure = failure;
-        continue;
-      }
-      return {
-        ok: false,
-        status: response.status >= 400 && response.status < 600 ? response.status : 502,
-        code: response.status === 401 || response.status === 403 ? "provider_connection_required" : "provider_error",
-        message: firstFailure || failure,
+      const failure = classifyChatgptCodexHttpFailure({
+        status: response.status,
         contentType: contentType || null,
         bodyPreview,
         upstreamRequestId,
         cfRay,
-      };
+      });
+      if (attempt === 0 && failure.retryWithFreshAuth) {
+        firstFailure = failureWithoutRetryFlag(failure);
+        await waitForChatgptCodexRetry();
+        continue;
+      }
+      return firstFailure || failureWithoutRetryFlag(failure);
     }
 
     try {
@@ -546,14 +756,24 @@ export async function runChatgptResponsesRequest(params: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (attempt === 0) {
-        firstFailure = message || "ChatGPT inference failed.";
+        firstFailure = {
+          ok: false,
+          status: 502,
+          code: "provider_invalid_response",
+          message: message || "ChatGPT inference failed.",
+          contentType: contentType || null,
+          bodyPreview,
+          upstreamRequestId,
+          cfRay,
+        };
+        await waitForChatgptCodexRetry();
         continue;
       }
       return {
         ok: false,
         status: 502,
         code: "provider_invalid_response",
-        message: firstFailure || message || "ChatGPT inference failed.",
+        message: firstFailure?.message || message || "ChatGPT inference failed.",
         contentType: contentType || null,
         bodyPreview,
         upstreamRequestId,
@@ -588,6 +808,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
   signal?: AbortSignal;
   reasoningSummary?: ChatgptReasoningSummaryLevel | null;
   reasoningEffort?: ChatgptReasoningEffort | null;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
 }): Promise<
   | {
       ok: true;
@@ -597,31 +818,22 @@ export async function runChatgptResponsesStreamingRequest(params: {
     }
   | ChatgptCompletionFailure
 > {
+  const requestMetadata: ChatgptCodexRequestMetadata = {
+    ...params.requestMetadata,
+    userId: params.userId,
+  };
   let requestBodyText: string;
   try {
-    const normalized = normalizeChatgptResponsesRequest({
+    requestBodyText = JSON.stringify(buildChatgptCodexRequestPayload({
       modelId: params.modelId,
       messages: params.messages,
-    });
-    const requestBody: Record<string, unknown> = {
-      model: params.modelId,
-      store: false,
-      stream: true,
-      input: normalized.inputItems,
-    };
-    if (normalized.instructions) requestBody.instructions = normalized.instructions;
-    if (Array.isArray(params.tools) && params.tools.length > 0) {
-      requestBody.tools = params.tools;
-      requestBody.parallel_tool_calls = params.parallelToolCalls === true;
-      requestBody.tool_choice = "auto";
-    }
-    if (params.reasoningSummary) {
-      requestBody.reasoning = {
-        effort: params.reasoningEffort ?? DEFAULT_CHATGPT_REASONING_EFFORT,
-        summary: params.reasoningSummary,
-      };
-    }
-    requestBodyText = JSON.stringify(requestBody);
+      maxTokens: params.maxTokens,
+      tools: params.tools,
+      parallelToolCalls: params.parallelToolCalls,
+      reasoningSummary: params.reasoningSummary,
+      reasoningEffort: params.reasoningEffort,
+      requestMetadata,
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -632,7 +844,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
     };
   }
 
-  let firstFailure: string | null = null;
+  let firstFailure: ChatgptCompletionFailure | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const auth = await getFreshChatgptAuthForUser({
       ctx: params.ctx,
@@ -650,12 +862,10 @@ export async function runChatgptResponsesStreamingRequest(params: {
 
     let response: Response;
     try {
-      const headers = new Headers();
-      headers.set("Authorization", `Bearer ${auth.accessToken}`);
-      headers.set("User-Agent", "codex-cli");
-      headers.set("Content-Type", "application/json");
-      headers.set("Accept", "text/event-stream");
-      if (auth.accountId) headers.set("ChatGPT-Account-Id", auth.accountId);
+      const headers = buildChatgptCodexRequestHeaders({
+        auth,
+        requestMetadata,
+      });
       response = await fetch(CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
         headers,
@@ -686,24 +896,19 @@ export async function runChatgptResponsesStreamingRequest(params: {
     if (!response.ok) {
       const body = new Uint8Array(await response.arrayBuffer());
       const bodyPreview = buildBodyPreview(body);
-      const detail = bodyPreview ?? "";
-      const failure = detail
-        ? `ChatGPT inference failed (HTTP ${response.status}): ${detail}`
-        : `ChatGPT inference failed (HTTP ${response.status}).`;
-      if (attempt === 0) {
-        firstFailure = failure;
-        continue;
-      }
-      return {
-        ok: false,
-        status: response.status >= 400 && response.status < 600 ? response.status : 502,
-        code: response.status === 401 || response.status === 403 ? "provider_connection_required" : "provider_error",
-        message: firstFailure || failure,
+      const failure = classifyChatgptCodexHttpFailure({
+        status: response.status,
         contentType: contentType || null,
         bodyPreview,
         upstreamRequestId,
         cfRay,
-      };
+      });
+      if (attempt === 0 && failure.retryWithFreshAuth) {
+        firstFailure = failureWithoutRetryFlag(failure);
+        await waitForChatgptCodexRetry();
+        continue;
+      }
+      return firstFailure || failureWithoutRetryFlag(failure);
     }
 
     const reader = response.body?.getReader();
@@ -863,14 +1068,24 @@ export async function runChatgptResponsesStreamingRequest(params: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (attempt === 0 && !emittedAnyDelta) {
-        firstFailure = message || "ChatGPT inference failed.";
+        firstFailure = {
+          ok: false,
+          status: 502,
+          code: "provider_invalid_response",
+          message: message || "ChatGPT inference failed.",
+          contentType: contentType || null,
+          bodyPreview: null,
+          upstreamRequestId,
+          cfRay,
+        };
+        await waitForChatgptCodexRetry();
         continue;
       }
       return {
         ok: false,
         status: 502,
         code: "provider_invalid_response",
-        message: firstFailure || message || "ChatGPT inference failed.",
+        message: firstFailure?.message || message || "ChatGPT inference failed.",
         contentType: contentType || null,
         bodyPreview: null,
         upstreamRequestId,

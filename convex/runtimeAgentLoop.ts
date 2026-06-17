@@ -1,6 +1,7 @@
 import { api, internal } from "./_generated/api";
 import {
   runChatgptNativeToolCompletion,
+  type ChatgptCodexRequestMetadata,
   type ChatgptFunctionTool,
   type ChatgptToolAwareMessage,
 } from "./httpChatgpt";
@@ -1262,6 +1263,7 @@ async function runProviderNativeToolCompletion(params: {
   onReasoningSummaryPartAdded?: (params: {
     summaryIndex: number;
   }) => Promise<void> | void;
+  requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
 }): Promise<
   NativeToolAwareCompletionSuccess<string> | RuntimeAgentLoopFailureInput
@@ -1277,6 +1279,7 @@ async function runProviderNativeToolCompletion(params: {
       parallelToolCalls: params.parallelToolCalls,
       onReasoningSummaryTextDelta: params.onReasoningSummaryTextDelta,
       onReasoningSummaryPartAdded: params.onReasoningSummaryPartAdded,
+      requestMetadata: params.requestMetadata,
       signal: params.signal,
     });
   }
@@ -1804,6 +1807,7 @@ async function executeRetrievalAgentLoop(
       });
     };
     const loopStartedAt = Date.now();
+    const chatgptCodexRequestId = String(params.threadId ?? "").trim() || params.runId;
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
@@ -1836,6 +1840,10 @@ async function executeRetrievalAgentLoop(
                 responsesApiTools: providerTools.responsesTools,
                 apiKeyOverride: params.apiKeyOverride,
                 parallelToolCalls: parallelReadToolsEnabled,
+                requestMetadata: {
+                  sessionId: chatgptCodexRequestId,
+                  threadId: chatgptCodexRequestId,
+                },
                 onReasoningSummaryPartAdded: async ({ summaryIndex }) => {
                   try {
                     reasoningSummaryPartAddedCount += 1;

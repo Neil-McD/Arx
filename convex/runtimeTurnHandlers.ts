@@ -477,6 +477,10 @@ export async function handleRuntimeTurnRequest(args: {
     const runtimeCommunityContextVersion = Number.isFinite(Number(ownedThread.contextVersion ?? 0))
       ? Math.max(0, Math.floor(Number(ownedThread.contextVersion ?? 0)))
       : 0;
+    const chatgptCodexRequestMetadata = {
+      sessionId: String(ownedThread._id),
+      threadId: String(ownedThread._id),
+    };
     const persistVisibleUserMessage = true;
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
@@ -798,6 +802,7 @@ export async function handleRuntimeTurnRequest(args: {
                     modelId: requestedModelId,
                     messages: finalizationMessages,
                     maxTokens: finalizationMaxTokens,
+                    requestMetadata: chatgptCodexRequestMetadata,
                     signal,
                   });
                 }
@@ -1507,6 +1512,7 @@ export async function handleRuntimeTurnRequest(args: {
                     messages: chatMessages,
                     maxTokens,
                     onDelta: emitDelta,
+                    requestMetadata: chatgptCodexRequestMetadata,
                     onReasoningSummaryPartAdded: ({ summaryIndex }) =>
                       reasoningSummaryEmitter.onPartAdded(summaryIndex),
                     onReasoningSummaryTextDelta: ({ delta, summaryIndex }) =>
@@ -1732,6 +1738,7 @@ export async function handleRuntimeTurnRequest(args: {
                 modelId: requestedModelId,
                 messages: chatMessages,
                 maxTokens,
+                requestMetadata: chatgptCodexRequestMetadata,
                 signal,
               }),
           });

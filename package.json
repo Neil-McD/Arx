@@ -113,6 +113,7 @@
     "check:effective-harness-resolver-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/effective_harness_resolver_proof.ts",
     "check:effective-mcp-app-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/effective_mcp_app_projection_proof.ts",
     "check:runtime-responses-tool-schema-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_responses_tool_schema_proof.ts",
+    "check:chatgpt-codex-transport-proof": "tsx scripts/chatgpt_codex_transport_contract_proof.ts",
     "check:runtime-tool-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_policy_proof.ts",
     "check:shell-command-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/shell_command_policy_proof.ts",
     "check:runtime-shell-command-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_shell_command_audit_proof.ts",
