@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  POLYNET_MCP_COMPAT_PROTOCOL_VERSION,
-  POLYNET_MCP_PROTOCOL_VERSION,
-} from "../shared/polynetMcp.ts";
+import { POLYNET_MCP_PROTOCOL_VERSION } from "../shared/polynetMcp.ts";
 
 type SmokeMode = "metadata" | "authenticated" | "acceptance";
 
@@ -286,57 +283,35 @@ function firstRetrievalLogId(memory: Record<string, unknown>): string | null {
 }
 
 async function runMetadataSmoke(mcpUrl: string): Promise<Record<string, unknown>> {
-  const initialize = assertJsonRpcResult(
-    await postJsonRpc({
-      mcpUrl,
-      method: "initialize",
-      params: {
-        protocolVersion: POLYNET_MCP_PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: {
-          name: "polynet-workspace-mcp-external-smoke",
-          version: "0.1.0",
-        },
+  const unauthorizedInitialize = await postJsonRpc({
+    mcpUrl,
+    method: "initialize",
+    params: {
+      protocolVersion: POLYNET_MCP_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: {
+        name: "polynet-workspace-mcp-external-smoke",
+        version: "0.1.0",
       },
-    }),
-    "initialize",
+    },
+  });
+  assertStatus(unauthorizedInitialize, 401, "unauthenticated initialize");
+  const authenticateHeader = unauthorizedInitialize.headers.get("www-authenticate");
+  assert.ok(authenticateHeader, "unauthenticated initialize should return WWW-Authenticate.");
+  assert.ok(
+    authenticateHeader.includes("Bearer"),
+    "unauthenticated initialize should return a bearer challenge.",
   );
-  assert.equal(
-    initialize.protocolVersion,
-    POLYNET_MCP_PROTOCOL_VERSION,
-    "initialize should negotiate the current PolyNet MCP protocol version.",
-  );
-  const serverInfo = asRecord(initialize.serverInfo);
-  assert.equal(serverInfo.name, "polynet-mcp", "initialize should identify the PolyNet MCP server.");
-
-  const compatInitialize = assertJsonRpcResult(
-    await postJsonRpc({
-      mcpUrl,
-      method: "initialize",
-      params: {
-        protocolVersion: POLYNET_MCP_COMPAT_PROTOCOL_VERSION,
-        capabilities: {},
-      },
-    }),
-    "compat initialize",
-  );
-  assert.equal(
-    compatInitialize.protocolVersion,
-    POLYNET_MCP_COMPAT_PROTOCOL_VERSION,
-    "initialize should accept the compatibility MCP protocol version.",
+  assert.ok(
+    authenticateHeader.includes("resource_metadata="),
+    "unauthenticated initialize should include resource_metadata.",
   );
 
-  const toolsList = assertJsonRpcResult(
-    await postJsonRpc({ mcpUrl, method: "tools/list" }),
-    "tools/list",
-  );
-  const toolNames = asArray(toolsList.tools)
-    .map((tool) => optionalRecord(tool))
-    .map((tool) => asString(tool?.name))
-    .filter(Boolean);
-  for (const tool of PROVIDER_TOOLS) {
-    assert.ok(toolNames.includes(tool), `tools/list should advertise ${tool}.`);
-  }
+  const unauthorizedToolsList = await postJsonRpc({
+    mcpUrl,
+    method: "tools/list",
+  });
+  assertStatus(unauthorizedToolsList, 401, "unauthenticated tools/list");
 
   const unauthorizedCall = await postJsonRpc({
     mcpUrl,
@@ -347,16 +322,6 @@ async function runMetadataSmoke(mcpUrl: string): Promise<Record<string, unknown>
     },
   });
   assertStatus(unauthorizedCall, 401, "unauthenticated tools/call");
-  const authenticateHeader = unauthorizedCall.headers.get("www-authenticate");
-  assert.ok(authenticateHeader, "unauthenticated tools/call should return WWW-Authenticate.");
-  assert.ok(
-    authenticateHeader.includes("Bearer"),
-    "unauthenticated tools/call should return a bearer challenge.",
-  );
-  assert.ok(
-    authenticateHeader.includes("resource_metadata="),
-    "unauthenticated tools/call should include resource_metadata.",
-  );
   const resourceMetadataUrl = readAuthenticateParam(authenticateHeader, "resource_metadata");
   assert.ok(resourceMetadataUrl, "WWW-Authenticate should expose resource_metadata URL.");
 
@@ -402,9 +367,9 @@ async function runMetadataSmoke(mcpUrl: string): Promise<Record<string, unknown>
   );
 
   return {
-    initialize: "ok",
-    tools_list: "ok",
-    unauthenticated_challenge: "ok",
+    unauthenticated_initialize_challenge: "ok",
+    unauthenticated_tools_list_challenge: "ok",
+    unauthenticated_tools_call_challenge: "ok",
     resource_metadata_url: resourceMetadataUrl,
     authorization_server_metadata_url: authServerMetadataUrl,
     advertised_issuer: authorizationServers[0],

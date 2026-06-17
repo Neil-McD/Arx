@@ -73,9 +73,14 @@ assertIncludes(
 
 assertIncludes(contract, "## Remote MCP Auth Model", "auth contract section");
 assertIncludes(contract, "`/runtime/mcp` is an OAuth-protected remote MCP resource server.", "resource server model");
-assertIncludes(contract, "initialize", "public initialize contract");
-assertIncludes(contract, "tools/list", "public tool discovery contract");
+assertIncludes(contract, "initialize", "authenticated initialize contract");
+assertIncludes(contract, "tools/list", "authenticated tool discovery contract");
 assertIncludes(contract, "tools/call", "protected tool call contract");
+assertIncludes(
+  contract,
+  "challenges during `initialize`",
+  "mcp-remote startup auth compatibility contract",
+);
 assertIncludes(contract, "WWW-Authenticate: Bearer", "oauth challenge contract");
 assertIncludes(contract, "authorization_servers: [<upstream OAuth issuer/AuthKit domain>]", "issuer discovery contract");
 assertIncludes(contract, "configured Resource Indicator must equal", "resource indicator contract");
@@ -194,19 +199,27 @@ assertIncludes(
 const initializeIndex = httpMcp.indexOf('method === "initialize"');
 const toolsListIndex = httpMcp.indexOf('method === "tools/list"');
 const toolsCallIndex = httpMcp.indexOf('method === "tools/call"');
+const connectionAuthIndex = httpMcp.indexOf("const auth = await requireAuthenticatedActor(ctx, req);");
 assert.ok(initializeIndex >= 0, "initialize handler should exist");
 assert.ok(toolsListIndex >= 0, "tools/list handler should exist");
 assert.ok(toolsCallIndex >= 0, "tools/call handler should exist");
+assert.ok(connectionAuthIndex >= 0, "authenticated MCP connection gate should exist");
+assert.ok(connectionAuthIndex < initializeIndex, "initialize should require auth");
+assert.ok(connectionAuthIndex < toolsListIndex, "tools/list should require auth");
+assert.ok(connectionAuthIndex < toolsCallIndex, "tools/call should require auth");
 assert.ok(initializeIndex < toolsCallIndex, "initialize should be handled before protected tool calls");
 assert.ok(toolsListIndex < toolsCallIndex, "tools/list should be handled before protected tool calls");
 
-const publicProtocolBlock = httpMcp.slice(initializeIndex, toolsCallIndex);
-assertNotIncludes(
-  publicProtocolBlock,
-  "requireAuthenticatedActor(ctx, req)",
-  "public initialize and tools/list methods",
+const connectionAuthBlock = httpMcp.slice(connectionAuthIndex, initializeIndex);
+assertIncludes(connectionAuthBlock, "mcpUnauthorizedResponse", "authenticated MCP connection challenge");
+assertIncludes(
+  connectionAuthBlock,
+  "Authorization required to connect to PolyNet MCP.",
+  "authenticated MCP connection challenge message",
 );
-assertIncludes(publicProtocolBlock, "getPolynetMcpToolDefinitions()", "public tool discovery");
+
+const authenticatedProtocolBlock = httpMcp.slice(initializeIndex, toolsCallIndex);
+assertIncludes(authenticatedProtocolBlock, "getPolynetMcpToolDefinitions()", "authenticated tool discovery");
 
 const protectedToolCallBlock = blockBetween(
   httpMcp,
@@ -214,8 +227,6 @@ const protectedToolCallBlock = blockBetween(
   "\n  return jsonRpcErrorResponse(req, jsonResponse, id, -32601, \"Method not found.\");",
   "protected tools/call block",
 );
-assertIncludes(protectedToolCallBlock, "requireAuthenticatedActor(ctx, req)", "protected tool call auth");
-assertIncludes(protectedToolCallBlock, "mcpUnauthorizedResponse", "protected tool call challenge");
 assertIncludes(protectedToolCallBlock, "handleToolCall", "authenticated tool dispatch");
 
 const challengeBlock = blockBetween(

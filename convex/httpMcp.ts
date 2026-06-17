@@ -1048,6 +1048,23 @@ async function handleMcpPost(args: {
     return emptyAcceptedResponse(req, jsonResponse);
   }
 
+  if (method === "ping") {
+    if (id === null) {
+      return jsonRpcErrorResponse(req, jsonResponse, null, -32600, "Invalid Request.");
+    }
+    return jsonRpcResultResponse(req, jsonResponse, id, {});
+  }
+
+  const auth = await requireAuthenticatedActor(ctx, req);
+  if (!auth.ok) {
+    return mcpUnauthorizedResponse(
+      req,
+      jsonResponse,
+      "Authorization required to connect to PolyNet MCP.",
+    );
+  }
+  const actor = auth.actor;
+
   if (method === "initialize") {
     const params =
       message.params && typeof message.params === "object" && !Array.isArray(message.params)
@@ -1088,19 +1105,12 @@ async function handleMcpPost(args: {
           version: "0.1.0-alpha",
         },
         instructions:
-          "PolyNet MCP alpha exposes provider-side workspace tools over remote HTTP. Tool discovery is public; tool calls require PolyNet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
+          "PolyNet MCP alpha exposes provider-side workspace tools over remote HTTP. MCP connection and tool calls require PolyNet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
       },
       {
         "MCP-Protocol-Version": requestedVersion ?? POLYNET_MCP_PROTOCOL_VERSION,
       },
     );
-  }
-
-  if (method === "ping") {
-    if (id === null) {
-      return jsonRpcErrorResponse(req, jsonResponse, null, -32600, "Invalid Request.");
-    }
-    return jsonRpcResultResponse(req, jsonResponse, id, {});
   }
 
   if (method === "tools/list") {
@@ -1116,15 +1126,6 @@ async function handleMcpPost(args: {
     if (id === null) {
       return jsonRpcErrorResponse(req, jsonResponse, null, -32600, "Invalid Request.");
     }
-    const auth = await requireAuthenticatedActor(ctx, req);
-    if (!auth.ok) {
-      return mcpUnauthorizedResponse(
-        req,
-        jsonResponse,
-        "Authorization required to call protected PolyNet MCP tools.",
-      );
-    }
-    const actor = auth.actor;
     const params =
       message.params && typeof message.params === "object" && !Array.isArray(message.params)
         ? (message.params as Record<string, unknown>)

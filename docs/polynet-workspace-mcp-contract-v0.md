@@ -61,17 +61,19 @@ The MCP client must never provide a trusted `communityId`, user id, entitlement,
 Public protocol methods:
 
 ```text
-initialize
-tools/list
+notifications/*
+ping
 ```
 
 Protected protocol methods:
 
 ```text
+initialize
+tools/list
 tools/call
 ```
 
-An unauthenticated protected call must return `401` with a `WWW-Authenticate: Bearer ... resource_metadata="..."` challenge.
+An unauthenticated MCP connection or protected call must return `401` with a `WWW-Authenticate: Bearer ... resource_metadata="..."` challenge. This intentionally challenges during `initialize` so external adapters such as `mcp-remote` start their local OAuth callback listener before opening the authorization URL.
 
 The protected resource metadata document must return:
 
