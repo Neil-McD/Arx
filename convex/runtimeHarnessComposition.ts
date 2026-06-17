@@ -1,8 +1,7 @@
-import {
-  buildCommunityOverlayRuntimeState,
-} from "../shared/communityOverlayRuntime.ts";
+import { buildCommunityOverlayRuntimeState } from "../shared/communityOverlayRuntime.ts";
 import { buildPersonalSkillOverlayRuntimeState } from "../shared/personalSkillOverlayRuntime.ts";
 import { buildPlatformSkillOverlayRuntimeState } from "../shared/platformSkillOverlayRuntime.ts";
+import { DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS } from "../shared/runtimeSkillInventoryPrompt.ts";
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
 import {
   buildUserPlatformMountedAppsPromptBlock,
@@ -174,7 +173,9 @@ export function buildEffectiveMountedToolDiscoveryCatalog(
     }
   };
 
-  for (const tool of mountedTools.filter((tool) => tool.scope === "community")) {
+  for (const tool of mountedTools.filter(
+    (tool) => tool.scope === "community",
+  )) {
     appendToolIfVisible(tool);
   }
   for (const tool of mountedTools.filter((tool) => tool.scope === "user")) {
@@ -211,18 +212,16 @@ function buildEffectiveMountedToolCapabilityGroups(args: {
 
   for (const tool of args.executableTools) {
     const key = buildMountedToolCapabilityKey(tool);
-    const group =
-      groups.get(key) ??
-      {
-        appName: tool.app_name,
-        catalogAppId: tool.catalog_app_id,
-        endpointUrl: tool.endpoint_url,
-        authType: tool.auth_type,
-        scopes: new Set<"user" | "community">(),
-        defaultScopes: new Set<"user" | "community">(),
-        executableToolNames: new Set<string>(),
-        defaultToolNames: new Set<string>(),
-      };
+    const group = groups.get(key) ?? {
+      appName: tool.app_name,
+      catalogAppId: tool.catalog_app_id,
+      endpointUrl: tool.endpoint_url,
+      authType: tool.auth_type,
+      scopes: new Set<"user" | "community">(),
+      defaultScopes: new Set<"user" | "community">(),
+      executableToolNames: new Set<string>(),
+      defaultToolNames: new Set<string>(),
+    };
     group.scopes.add(tool.scope);
     group.executableToolNames.add(tool.runtime_tool_name);
     if (defaultToolNames.has(tool.runtime_tool_name)) {
@@ -253,7 +252,9 @@ function buildEffectiveMountedToolCapabilityGroups(args: {
         executable_runtime_tool_names: [...group.executableToolNames].sort(),
       } satisfies EffectiveMountedToolCapabilityGroup;
     })
-    .sort((left, right) => left.capability_key.localeCompare(right.capability_key));
+    .sort((left, right) =>
+      left.capability_key.localeCompare(right.capability_key),
+    );
 }
 
 export function resolveEffectiveMountedToolCatalog(
@@ -277,6 +278,22 @@ export function resolveEffectiveMountedToolCatalog(
   };
 }
 
+function subtractUsedSkillInventoryPromptBudget(
+  remainingBudgetChars: number,
+  usedChars: number,
+): number {
+  const safeRemaining =
+    typeof remainingBudgetChars === "number" &&
+    Number.isFinite(remainingBudgetChars)
+      ? Math.max(0, Math.floor(remainingBudgetChars))
+      : 0;
+  const safeUsed =
+    typeof usedChars === "number" && Number.isFinite(usedChars)
+      ? Math.max(0, Math.floor(usedChars))
+      : 0;
+  return Math.max(0, safeRemaining - safeUsed);
+}
+
 export function composeResolvedRuntimeHarness(args: {
   personalMountedTools: RuntimeMountedMcpTool[];
   skillResolution: RuntimeSkillResolution;
@@ -284,31 +301,47 @@ export function composeResolvedRuntimeHarness(args: {
   const platformSkillInventory = args.skillResolution.platform_skill_inventory;
   const selectedPlatformSkills = args.skillResolution.selected_platform_skills;
   const communityResourceLane = args.skillResolution.community_resource_lane;
-  const personalSkillInventory = args.skillResolution.user_platform_skill_inventory;
+  const personalSkillInventory =
+    args.skillResolution.user_platform_skill_inventory;
   const selectedPersonalSkills =
     args.skillResolution.selected_user_platform_skills;
-  const attachedCommunitySkills = args.skillResolution.community_skill_inventory;
+  const attachedCommunitySkills =
+    args.skillResolution.community_skill_inventory;
   const selectedCommunitySkills =
     args.skillResolution.selected_community_skills;
 
-  const personalSkillRuntimeState = buildPersonalSkillOverlayRuntimeState({
-    installedSkills: mapUserPlatformSkillsToOverlayRuntime(
-      personalSkillInventory,
-    ),
-    selectedSkills: mapSelectedUserPlatformSkillsToOverlayRuntime(
-      selectedPersonalSkills,
-    ),
-  });
+  const platformOverlaySkills = mapPlatformSkillsToOverlayRuntime(
+    platformSkillInventory,
+  );
+  const selectedPlatformOverlaySkills =
+    mapSelectedPlatformSkillsToOverlayRuntime(selectedPlatformSkills);
+  const communityOverlaySkills = mapCommunitySkillsToOverlayRuntime(
+    attachedCommunitySkills,
+  );
+  const selectedCommunityOverlaySkills =
+    mapSelectedCommunitySkillsToOverlayRuntime(selectedCommunitySkills);
+  const personalOverlaySkills = mapUserPlatformSkillsToOverlayRuntime(
+    personalSkillInventory,
+  );
+  const selectedPersonalOverlaySkills =
+    mapSelectedUserPlatformSkillsToOverlayRuntime(selectedPersonalSkills);
+
+  let remainingSkillInventoryPromptBudgetChars =
+    DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS;
 
   const activePlatformModule =
     platformSkillInventory.length > 0 || selectedPlatformSkills.length > 0
       ? (() => {
           const overlayRuntimeState = buildPlatformSkillOverlayRuntimeState({
-            skills: mapPlatformSkillsToOverlayRuntime(platformSkillInventory),
-            selectedSkills: mapSelectedPlatformSkillsToOverlayRuntime(
-              selectedPlatformSkills,
-            ),
+            skills: platformOverlaySkills,
+            selectedSkills: selectedPlatformOverlaySkills,
+            inventoryBudgetChars: remainingSkillInventoryPromptBudgetChars,
           });
+          remainingSkillInventoryPromptBudgetChars =
+            subtractUsedSkillInventoryPromptBudget(
+              remainingSkillInventoryPromptBudgetChars,
+              overlayRuntimeState.skillInventoryPromptReport.usedChars,
+            );
           return {
             skills: platformSkillInventory,
             selectedSkills: selectedPlatformSkills,
@@ -321,13 +354,15 @@ export function composeResolvedRuntimeHarness(args: {
     attachedCommunitySkills.length > 0 || selectedCommunitySkills.length > 0
       ? (() => {
           const overlayRuntimeState = buildCommunityOverlayRuntimeState({
-            attachedSkills: mapCommunitySkillsToOverlayRuntime(
-              attachedCommunitySkills,
-            ),
-            selectedSkills: mapSelectedCommunitySkillsToOverlayRuntime(
-              selectedCommunitySkills,
-            ),
+            attachedSkills: communityOverlaySkills,
+            selectedSkills: selectedCommunityOverlaySkills,
+            inventoryBudgetChars: remainingSkillInventoryPromptBudgetChars,
           });
+          remainingSkillInventoryPromptBudgetChars =
+            subtractUsedSkillInventoryPromptBudget(
+              remainingSkillInventoryPromptBudgetChars,
+              overlayRuntimeState.skillInventoryPromptReport.usedChars,
+            );
           return {
             attachedSkills: attachedCommunitySkills,
             selectedSkills: selectedCommunitySkills,
@@ -335,6 +370,12 @@ export function composeResolvedRuntimeHarness(args: {
           } satisfies ResolvedCommunityHarnessModule;
         })()
       : null;
+
+  const personalSkillRuntimeState = buildPersonalSkillOverlayRuntimeState({
+    installedSkills: personalOverlaySkills,
+    selectedSkills: selectedPersonalOverlaySkills,
+    inventoryBudgetChars: remainingSkillInventoryPromptBudgetChars,
+  });
 
   const runtimeMountedTools = [...args.personalMountedTools];
   const resolvedMountedToolCatalog =
@@ -355,10 +396,8 @@ export function composeResolvedRuntimeHarness(args: {
     capabilityGroups: resolvedMountedToolCatalog.capabilityGroups,
     shadowedRuntimeToolNames:
       resolvedMountedToolCatalog.shadowedRuntimeToolNames,
-    requestedSkillMentionTokens:
-      args.skillResolution.requested_mention_tokens,
-    ambiguousSkillMentionTokens:
-      args.skillResolution.ambiguous_mention_tokens,
+    requestedSkillMentionTokens: args.skillResolution.requested_mention_tokens,
+    ambiguousSkillMentionTokens: args.skillResolution.ambiguous_mention_tokens,
     systemPromptSuffix: `${buildUserPlatformMountedAppsPromptBlock(
       args.personalMountedTools,
     )}${activePlatformModule?.systemPromptSuffix ?? ""}${personalSkillRuntimeState.systemPromptSuffix}${buildAmbiguousSkillMentionsPromptBlock(

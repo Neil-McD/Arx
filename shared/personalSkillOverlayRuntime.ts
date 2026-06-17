@@ -1,3 +1,8 @@
+import {
+  buildBoundedSkillInventoryPrompt,
+  type BoundedSkillInventoryPromptReport,
+} from "./runtimeSkillInventoryPrompt.ts";
+
 export type PersonalOverlaySkillInventory = {
   name: string;
   mentionToken: string;
@@ -10,19 +15,31 @@ export type PersonalOverlaySelectedSkill = PersonalOverlaySkillInventory & {
 
 export function buildPersonalSkillsPromptBlock(
   installedSkills: PersonalOverlaySkillInventory[],
+  options?: {
+    budgetChars?: number;
+  },
 ): string {
   if (installedSkills.length === 0) return "";
-  const lines = [
-    "",
-    "PERSONAL_WORKFLOW_CONTEXT",
-    "Personal skill packages remain available across community lenses.",
-    "When active community workflows match the request, prefer them; use personal skills as supporting or fallback workflows when useful.",
-    "Full personal skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$weekly-research`.",
-  ];
-  for (const skill of installedSkills.slice(0, 12)) {
-    lines.push(`- $${skill.mentionToken}: ${skill.description || skill.name}`);
-  }
-  return lines.join("\n");
+  return buildBoundedPersonalSkillsPrompt({
+    installedSkills,
+    budgetChars: options?.budgetChars,
+  }).text;
+}
+
+function buildBoundedPersonalSkillsPrompt(params: {
+  installedSkills: PersonalOverlaySkillInventory[];
+  budgetChars?: number;
+}) {
+  return buildBoundedSkillInventoryPrompt({
+    heading: "PERSONAL_WORKFLOW_CONTEXT",
+    introLines: [
+      "Personal skill packages remain available across community lenses.",
+      "When active community workflows match the request, prefer them; use personal skills as supporting or fallback workflows when useful.",
+      "Full personal skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$weekly-research`.",
+    ],
+    skills: params.installedSkills,
+    budgetChars: params.budgetChars,
+  });
 }
 
 export function buildSelectedPersonalSkillInstructionsPromptBlock(
@@ -43,12 +60,17 @@ export function buildSelectedPersonalSkillInstructionsPromptBlock(
 export function buildPersonalSkillOverlayRuntimeState(params: {
   installedSkills: PersonalOverlaySkillInventory[];
   selectedSkills: PersonalOverlaySelectedSkill[];
+  inventoryBudgetChars?: number;
 }): {
   systemPromptSuffix: string;
+  skillInventoryPromptReport: BoundedSkillInventoryPromptReport;
 } {
+  const skillInventoryPrompt = buildBoundedPersonalSkillsPrompt({
+    installedSkills: params.installedSkills,
+    budgetChars: params.inventoryBudgetChars,
+  });
   return {
-    systemPromptSuffix: `${buildPersonalSkillsPromptBlock(
-      params.installedSkills,
-    )}${buildSelectedPersonalSkillInstructionsPromptBlock(params.selectedSkills)}`,
+    systemPromptSuffix: `${skillInventoryPrompt.text}${buildSelectedPersonalSkillInstructionsPromptBlock(params.selectedSkills)}`,
+    skillInventoryPromptReport: skillInventoryPrompt.report,
   };
 }

@@ -1,3 +1,8 @@
+import {
+  buildBoundedSkillInventoryPrompt,
+  type BoundedSkillInventoryPromptReport,
+} from "./runtimeSkillInventoryPrompt.ts";
+
 export type CommunityOverlaySkillInventory = {
   name: string;
   mentionToken: string;
@@ -10,20 +15,32 @@ export type CommunityOverlaySelectedSkill = CommunityOverlaySkillInventory & {
 
 export function buildCommunitySkillsPromptBlock(
   attachedSkills: CommunityOverlaySkillInventory[],
+  options?: {
+    budgetChars?: number;
+  },
 ): string {
   if (attachedSkills.length === 0) return "";
-  const lines = [
-    "",
-    "COMMUNITY_WORKFLOW_CONTEXT",
-    "These workflow skill packages are attached to the active community lens.",
-    "Prefer these community workflows for community-relevant work, but personal skills and connected apps remain available when useful.",
-    "If a community workflow and personal workflow overlap, prefer the community workflow for this lens.",
-    "Full community skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$weekly-research`.",
-  ];
-  for (const skill of attachedSkills.slice(0, 12)) {
-    lines.push(`- $${skill.mentionToken}: ${skill.description || skill.name}`);
-  }
-  return lines.join("\n");
+  return buildBoundedCommunitySkillsPrompt({
+    attachedSkills,
+    budgetChars: options?.budgetChars,
+  }).text;
+}
+
+function buildBoundedCommunitySkillsPrompt(params: {
+  attachedSkills: CommunityOverlaySkillInventory[];
+  budgetChars?: number;
+}) {
+  return buildBoundedSkillInventoryPrompt({
+    heading: "COMMUNITY_WORKFLOW_CONTEXT",
+    introLines: [
+      "These workflow skill packages are attached to the active community lens.",
+      "Prefer these community workflows for community-relevant work, but personal skills and connected apps remain available when useful.",
+      "If a community workflow and personal workflow overlap, prefer the community workflow for this lens.",
+      "Full community skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$weekly-research`.",
+    ],
+    skills: params.attachedSkills,
+    budgetChars: params.budgetChars,
+  });
 }
 
 export function buildSelectedSkillInstructionsPromptBlock(
@@ -44,12 +61,17 @@ export function buildSelectedSkillInstructionsPromptBlock(
 export function buildCommunityOverlayRuntimeState(params: {
   attachedSkills: CommunityOverlaySkillInventory[];
   selectedSkills: CommunityOverlaySelectedSkill[];
+  inventoryBudgetChars?: number;
 }): {
   systemPromptSuffix: string;
+  skillInventoryPromptReport: BoundedSkillInventoryPromptReport;
 } {
+  const skillInventoryPrompt = buildBoundedCommunitySkillsPrompt({
+    attachedSkills: params.attachedSkills,
+    budgetChars: params.inventoryBudgetChars,
+  });
   return {
-    systemPromptSuffix: `${buildCommunitySkillsPromptBlock(
-      params.attachedSkills,
-    )}${buildSelectedSkillInstructionsPromptBlock(params.selectedSkills)}`,
+    systemPromptSuffix: `${skillInventoryPrompt.text}${buildSelectedSkillInstructionsPromptBlock(params.selectedSkills)}`,
+    skillInventoryPromptReport: skillInventoryPrompt.report,
   };
 }
