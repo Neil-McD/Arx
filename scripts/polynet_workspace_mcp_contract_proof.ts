@@ -94,6 +94,21 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "POLYMCP_SETUP_BUNDLE",
+  "PolyMCP canonical setup bundle",
+);
+assertIncludes(
+  integrationsSettings,
+  "# PolyMCP Setup",
+  "PolyMCP setup bundle heading",
+);
+assertIncludes(
+  integrationsSettings,
+  "```json",
+  "PolyMCP setup bundle includes a JSON config block",
+);
+assertIncludes(
+  integrationsSettings,
   "Use PolyMCP when the user asks",
   "PolyMCP instruction trigger",
 );
@@ -104,13 +119,18 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Copy config",
-  "PolyMCP config copy action",
+  "Copy setup",
+  "PolyMCP canonical setup copy action",
 );
-assertIncludes(
+assertNotIncludes(
+  integrationsSettings,
+  "Copy config",
+  "PolyMCP should not split the config copy action",
+);
+assertNotIncludes(
   integrationsSettings,
   "Copy instructions",
-  "PolyMCP instructions copy action",
+  "PolyMCP should not split the instructions copy action",
 );
 assertNotIncludes(
   integrationsSettings,

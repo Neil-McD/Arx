@@ -49,12 +49,19 @@ const POLYMCP_AGENT_INSTRUCTIONS = [
   "",
   "If a PolyMCP tool returns an auth or access error, tell the user the connection or workspace permission needs attention instead of guessing.",
 ].join("\n");
-
-type PolyMcpCopyTarget = "config" | "instructions";
-type PolyMcpCopyFeedback = {
-  target: PolyMcpCopyTarget;
-  status: "copied" | "error";
-};
+const POLYMCP_SETUP_BUNDLE = [
+  "# PolyMCP Setup",
+  "",
+  "## MCP server config",
+  "",
+  "```json",
+  POLYMCP_HARNESS_CONFIG,
+  "```",
+  "",
+  "## Agent instructions",
+  "",
+  POLYMCP_AGENT_INSTRUCTIONS,
+].join("\n");
 
 type SessionLike = {
   user: {
@@ -239,8 +246,9 @@ export function WebIntegrationsSettingsSection(
     useState<CreateSkillPackageInput>(buildInitialSkillDraft);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
-  const [polyMcpCopyFeedback, setPolyMcpCopyFeedback] =
-    useState<PolyMcpCopyFeedback | null>(null);
+  const [polyMcpCopyState, setPolyMcpCopyState] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
 
   const busyMountIds = useMemo(
     () =>
@@ -301,10 +309,10 @@ export function WebIntegrationsSettingsSection(
   }, [openMountMenuId]);
 
   useEffect(() => {
-    if (!polyMcpCopyFeedback) return;
-    const timeout = window.setTimeout(() => setPolyMcpCopyFeedback(null), 2200);
+    if (polyMcpCopyState === "idle") return;
+    const timeout = window.setTimeout(() => setPolyMcpCopyState("idle"), 2200);
     return () => window.clearTimeout(timeout);
-  }, [polyMcpCopyFeedback]);
+  }, [polyMcpCopyState]);
 
   useEffect(() => {
     if (!shouldOpenCreateSkillComposer) return;
@@ -333,24 +341,13 @@ export function WebIntegrationsSettingsSection(
     setEditingSkillDraft(buildInitialSkillDraft());
   };
 
-  const handleCopyPolyMcpSetup = async (
-    target: PolyMcpCopyTarget,
-    text: string,
-  ) => {
+  const handleCopyPolyMcpSetup = async () => {
     try {
-      const copied = await tryCopyTextToClipboard(text);
-      setPolyMcpCopyFeedback({ target, status: copied ? "copied" : "error" });
+      const copied = await tryCopyTextToClipboard(POLYMCP_SETUP_BUNDLE);
+      setPolyMcpCopyState(copied ? "copied" : "error");
     } catch {
-      setPolyMcpCopyFeedback({ target, status: "error" });
+      setPolyMcpCopyState("error");
     }
-  };
-
-  const getPolyMcpCopyLabel = (
-    target: PolyMcpCopyTarget,
-    idleLabel: string,
-  ) => {
-    if (polyMcpCopyFeedback?.target !== target) return idleLabel;
-    return polyMcpCopyFeedback.status === "copied" ? "Copied" : "Copy failed";
   };
 
   return (
@@ -407,30 +404,15 @@ export function WebIntegrationsSettingsSection(
                   <button
                     type="button"
                     className="settings-cta polymcp-copy-action"
-                    onClick={() =>
-                      void handleCopyPolyMcpSetup(
-                        "config",
-                        POLYMCP_HARNESS_CONFIG,
-                      )
-                    }
-                    aria-label="Copy PolyMCP MCP server config"
+                    onClick={() => void handleCopyPolyMcpSetup()}
+                    aria-label="Copy PolyMCP setup"
                   >
                     <Copy aria-hidden="true" />
-                    {getPolyMcpCopyLabel("config", "Copy config")}
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-cta polymcp-copy-action"
-                    onClick={() =>
-                      void handleCopyPolyMcpSetup(
-                        "instructions",
-                        POLYMCP_AGENT_INSTRUCTIONS,
-                      )
-                    }
-                    aria-label="Copy PolyMCP agent instructions"
-                  >
-                    <Copy aria-hidden="true" />
-                    {getPolyMcpCopyLabel("instructions", "Copy instructions")}
+                    {polyMcpCopyState === "copied"
+                      ? "Copied"
+                      : polyMcpCopyState === "error"
+                        ? "Copy failed"
+                        : "Copy setup"}
                   </button>
                 </div>
               </div>
