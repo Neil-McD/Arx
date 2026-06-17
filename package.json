@@ -141,6 +141,7 @@
     "check:workspace-billing-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_billing_surface_proof.ts",
     "check:workspace-auto-recharge-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_auto_recharge_policy_proof.ts",
     "check:workspace-auto-recharge-attempts-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_auto_recharge_attempts_proof.ts",
+    "check:workspace-auto-recharge-executor-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_auto_recharge_executor_proof.ts",
     "check:provider-cost-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/provider_cost_accounting_contract_proof.ts",
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
     "check:web-research-local-url-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/web_research_local_url_policy_proof.ts",
