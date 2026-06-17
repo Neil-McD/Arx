@@ -24300,11 +24300,17 @@ button.message-citation-chip:hover {
 
 .workspace-payg-auto-recharge-card {
   margin-top: 0;
+  border-color: color-mix(in srgb, var(--accent-rose) 42%, var(--border-muted));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-rose) 14%, transparent), transparent 56%),
+    color-mix(in srgb, var(--accent-rose) 8%, var(--bg-card-alt));
 }
 
 .workspace-payg-auto-recharge-card.is-enabled {
-  border-color: color-mix(in srgb, #4ade80 28%, transparent);
-  background: color-mix(in srgb, #4ade80 8%, var(--bg-card-alt));
+  border-color: color-mix(in srgb, var(--accent-rose) 52%, var(--border-muted));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-rose) 18%, transparent), transparent 56%),
+    color-mix(in srgb, var(--accent-rose) 10%, var(--bg-card-alt));
 }
 
 .workspace-payg-auto-recharge-card.is-paused {
