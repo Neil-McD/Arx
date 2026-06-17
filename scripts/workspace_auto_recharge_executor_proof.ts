@@ -138,6 +138,20 @@ assert.match(executorSource, /disposition === "skipped"/);
 assert.match(executorSource, /auto_recharge_card_required/);
 assert.match(executorSource, /getStripeClient\(\)/);
 assert.match(executorSource, /stripe\.paymentIntents\.retrieve\(existingPaymentIntentId\)/);
+assert.match(
+  executorSource,
+  /stripe\.paymentIntents\.retrieve\(existingPaymentIntentId\)[\s\S]*catch \(error\)[\s\S]*providerPaymentId: existingPaymentIntentId[\s\S]*failureReason: readStripeErrorCode\(error\)/,
+  "existing PaymentIntent retrieval failures must return a retryable result with the provider id",
+);
+assert.match(executorSource, /attempt\.status === "processing"/);
+assert.match(executorSource, /disposition: "needs_reconciliation"/);
+assert.match(executorSource, /auto_recharge_processing_payment_intent_missing/);
+assertBefore(
+  executorSource,
+  'if (attempt.status === "processing")',
+  "stripe.paymentIntents.create",
+  "executor must not create a new PaymentIntent from a processing attempt with no stored provider id",
+);
 assert.match(executorSource, /auto_recharge_attempt_amount_invalid/);
 assertBefore(
   executorSource,
@@ -154,7 +168,20 @@ assert.match(executorSource, /confirm: true/);
 assert.match(executorSource, /off_session: true/);
 assert.match(executorSource, /metadata: buildWorkspaceAutoRechargePaymentIntentMetadata/);
 assert.match(executorSource, /idempotencyKey: providerIdempotencyKey/);
-assert.match(executorSource, /readStripeErrorPaymentIntent\(error\)/);
+assert.match(executorSource, /let createdPaymentIntent: any \| null = null/);
+assert.match(executorSource, /createdPaymentIntent = paymentIntent/);
+assert.match(executorSource, /const createdPaymentIntentId = normalizeStripePaymentIntentId\(paymentIntent\?\.id\)/);
+assert.match(executorSource, /providerPaymentId: createdPaymentIntentId/);
+const createSourceStart = executorSource.indexOf("stripe.paymentIntents.create");
+assert.notEqual(createSourceStart, -1, "executor must create a Stripe PaymentIntent");
+const createSource = executorSource.slice(createSourceStart);
+assertBefore(
+  createSource,
+  "providerPaymentId: createdPaymentIntentId",
+  "return await finalizeWorkspaceAutoRechargePaymentIntent",
+  "executor must persist provider PaymentIntent id before finalizing credits",
+);
+assert.match(executorSource, /readStripeErrorPaymentIntent\(error\) \?\? createdPaymentIntent/);
 assert.match(executorSource, /authentication_required/);
 assert.match(executorSource, /card_declined/);
 assert.match(executorSource, /retry_later/);

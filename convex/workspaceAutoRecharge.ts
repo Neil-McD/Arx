@@ -892,14 +892,33 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
     const stripe = getStripeClient();
     const existingPaymentIntentId = normalizeStripePaymentIntentId(attempt.providerPaymentId);
     if (existingPaymentIntentId) {
-      const paymentIntent = await stripe.paymentIntents.retrieve(existingPaymentIntentId);
-      return await finalizeWorkspaceAutoRechargePaymentIntent({
-        ctx,
-        attempt,
-        paymentIntent,
-        providerIdempotencyKey,
-        nowMs,
-      });
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(existingPaymentIntentId);
+        return await finalizeWorkspaceAutoRechargePaymentIntent({
+          ctx,
+          attempt,
+          paymentIntent,
+          providerIdempotencyKey,
+          nowMs,
+        });
+      } catch (error) {
+        return {
+          ok: true,
+          disposition: "retry_later",
+          attemptKey,
+          providerPaymentId: existingPaymentIntentId,
+          failureReason: readStripeErrorCode(error),
+        };
+      }
+    }
+
+    if (attempt.status === "processing") {
+      return {
+        ok: true,
+        disposition: "needs_reconciliation",
+        attemptKey,
+        failureReason: "auto_recharge_processing_payment_intent_missing",
+      };
     }
 
     const amountCents = Math.max(0, Math.floor(Number(attempt.amountCents ?? 0)));
@@ -923,6 +942,7 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
         nowMs,
       },
     );
+    let createdPaymentIntent: any | null = null;
     try {
       const paymentIntent = await stripe.paymentIntents.create(
         {
@@ -943,6 +963,19 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
           idempotencyKey: providerIdempotencyKey,
         },
       );
+      createdPaymentIntent = paymentIntent;
+      const createdPaymentIntentId = normalizeStripePaymentIntentId(paymentIntent?.id);
+      if (createdPaymentIntentId) {
+        await ctx.runMutation(
+          (internal as any).workspaceAutoRecharge.markWorkspaceAutoRechargeAttemptProcessingInternal,
+          {
+            attemptKey,
+            providerPaymentId: createdPaymentIntentId,
+            providerIdempotencyKey,
+            nowMs,
+          },
+        );
+      }
       return await finalizeWorkspaceAutoRechargePaymentIntent({
         ctx,
         attempt,
@@ -951,7 +984,7 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
         nowMs,
       });
     } catch (error) {
-      const paymentIntent = readStripeErrorPaymentIntent(error);
+      const paymentIntent = readStripeErrorPaymentIntent(error) ?? createdPaymentIntent;
       if (paymentIntent) {
         return await finalizeWorkspaceAutoRechargePaymentIntent({
           ctx,
