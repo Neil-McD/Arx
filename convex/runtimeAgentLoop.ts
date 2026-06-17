@@ -82,7 +82,7 @@ import {
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
 import {
-  buildPlatformHarnessRuntimeSystemPrompt,
+  buildPlatformHarnessRuntimePromptBundle,
   type RuntimeCommunityPromptFields,
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
@@ -90,6 +90,9 @@ import {
   buildRuntimeTurnEnvelope,
   type RuntimeTurnEnvelopeV1,
 } from "../shared/runtimeTurnEnvelope";
+import {
+  buildRuntimeContextManifest,
+} from "../shared/runtimeContextManifest.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
@@ -1322,6 +1325,7 @@ async function executeRetrievalAgentLoop(
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
     communitySystemPrompt?: string | null;
+    communityContextVersion?: number | null;
     projectId?: string | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
@@ -1458,7 +1462,30 @@ async function executeRetrievalAgentLoop(
     })
   ).packet;
   const projectContext = runtimeTurnContext.projectContext ?? null;
-  const baseSystemPrompt = buildPlatformHarnessRuntimeSystemPrompt({
+  const runtimeContextManifest = buildRuntimeContextManifest({
+    generatedAt: runtimeDateTimeIso,
+    userId: params.userId ?? null,
+    threadId: params.threadId ?? null,
+    communityId: params.communityId ?? null,
+    communityContextVersion: params.communityContextVersion ?? null,
+    projectId: params.projectId ?? null,
+    harnessName: params.harnessName,
+    inferenceSource: params.inferenceSource,
+    latestUserText: latestUserTextForRuntimeContext,
+    messages: params.messages,
+    allowedToolNames: effectiveAllowedToolNames,
+    mountedTools: resolvedHarness.runtimeMountedTools,
+    communityResourceLane: resolvedHarness.communityResourceLane,
+    communitySystemPrompt: params.communitySystemPrompt ?? null,
+    communityAbout: params.communityAbout ?? null,
+    agentSoul: params.agentSoul ?? null,
+    runtimeTurnEnvelope,
+    runtimeTurnContext,
+    selectedPlatformSkills,
+    selectedPersonalSkills: selectedUserPlatformSkills,
+    selectedCommunitySkills,
+  });
+  const runtimePromptBundle = buildPlatformHarnessRuntimePromptBundle({
     loopBudget: params.loopBudget,
     allowedToolNames: effectiveAllowedToolNames,
     communityResourceLane: resolvedHarness.communityResourceLane,
@@ -1478,7 +1505,8 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
   });
-  const systemPrompt = `${baseSystemPrompt}${executionSession.buildPromptSuffix()}`;
+  const promptSuffix = executionSession.buildPromptSuffix();
+  const systemPrompt = `${runtimePromptBundle.text}${promptSuffix}`;
   const nativeTranscript: NativeToolAwareMessage[] = [
     {
       role: "system",
@@ -1500,6 +1528,43 @@ async function executeRetrievalAgentLoop(
       buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
     });
   const initialProviderTools = buildActiveProviderTools();
+  try {
+    await params.appendRunEvent({
+      eventType: "runtime_prompt_bundle_resolved",
+      eventKey: `${params.runId}:runtime_prompt_bundle_resolved:1`,
+      payload: {
+        run_id: params.runId,
+        base_prompt_chars: runtimePromptBundle.text.length,
+        prompt_suffix_chars: promptSuffix.length,
+        system_prompt_chars: systemPrompt.length,
+        sections: [
+          ...runtimePromptBundle.sections,
+          {
+            id: "harness_prompt_suffix",
+            layer: "scoped",
+            owner: "runtime",
+            rendered: promptSuffix.trim().length > 0,
+            chars: promptSuffix.trim().length,
+            source: "convex/runtimeHarnessComposition.ts#systemPromptSuffix",
+          },
+        ],
+      },
+    });
+  } catch {
+    // Best-effort prompt receipt only; prompt assembly remains canonical for the turn.
+  }
+  try {
+    await params.appendRunEvent({
+      eventType: "runtime_context_manifest_resolved",
+      eventKey: `${params.runId}:runtime_context_manifest_resolved:1`,
+      payload: {
+        run_id: params.runId,
+        manifest: runtimeContextManifest,
+      },
+    });
+  } catch {
+    // Best-effort audit evidence only; prompt/tool assembly remains canonical for the turn.
+  }
   const parallelReadToolsEnabled = readRuntimeBooleanFlag(
     RUNTIME_PARALLEL_READ_TOOLS_FLAG,
     true,
@@ -2520,6 +2585,7 @@ async function executeChatToolsAgentLoop(
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
     communitySystemPrompt?: string | null;
+    communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {

@@ -20,6 +20,7 @@ import {
   type SseResponseStreamWriter,
 } from "./httpRuntimeTurnState";
 import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
+import { appendRuntimeContextIntegrityCheckBestEffort } from "./runtimeContextIntegrity";
 import {
   USER_CANCELLED_RUNTIME_CODE,
   isRuntimeRunCancelledError,
@@ -539,6 +540,14 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: String(ownedThread._id),
       runId,
     });
+    const appendContextIntegrityCheckBestEffortForRun = async (): Promise<void> => {
+      await appendRuntimeContextIntegrityCheckBestEffort({
+        ctx,
+        ownerId: actor.dbUserId,
+        runId,
+        appendRunEvent,
+      });
+    };
     let runtimeTurnEnvelopeForRun: RuntimeTurnEnvelopeV1 | null = null;
     const persistContextSnapshotBestEffort = async (
       phase: "started" | "active" | "finished",
@@ -964,6 +973,9 @@ export async function handleRuntimeTurnRequest(args: {
               communityOneLiner: runtimeCommunityOneLiner,
               communityAbout: runtimeCommunityAbout,
               communitySystemPrompt: runtimeCommunitySystemPrompt,
+              communityContextVersion: runtimeCommunityId
+                ? runtimeCommunityContextVersion
+                : null,
               agentName: runtimeAgentProfile.agentName,
               agentSoul: runtimeAgentProfile.agentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
@@ -978,6 +990,7 @@ export async function handleRuntimeTurnRequest(args: {
               },
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
             });
+            await appendContextIntegrityCheckBestEffortForRun();
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
               await persistPartialAssistantMessageBestEffort({
@@ -1255,6 +1268,9 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
+          communityContextVersion: runtimeCommunityId
+            ? runtimeCommunityContextVersion
+            : null,
           agentName: runtimeAgentProfile.agentName,
           agentSoul: runtimeAgentProfile.agentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
@@ -1272,6 +1288,7 @@ export async function handleRuntimeTurnRequest(args: {
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
         });
+        await appendContextIntegrityCheckBestEffortForRun();
       } catch (error) {
         if (isRuntimeRunCancelledError(error)) {
           await persistPartialAssistantMessageBestEffort({
