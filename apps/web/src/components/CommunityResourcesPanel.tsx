@@ -637,10 +637,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => new Set(displayableResources.map((resource) => resource.id)),
     [displayableResources],
   );
+  const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
+  const lastRenderableSelectedResourceRef = useRef<CommunityResource | null>(null);
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !displayableResourceIds.has(selectedResourceId)) return null;
     return resourcesById.get(selectedResourceId) ?? null;
   }, [displayableResourceIds, resourcesById, selectedResourceId]);
+  const readerResource =
+    selectedResource ??
+    (
+      isRefreshingResources &&
+      selectedResourceId &&
+      lastRenderableSelectedResourceRef.current?.id === selectedResourceId
+        ? lastRenderableSelectedResourceRef.current
+        : null
+    );
+  const isReaderShowingRefreshSnapshot = Boolean(readerResource && !selectedResource);
   const selectedResourceNeedsBodyHydration = resourceNeedsBodyHydration(selectedResource);
   const selectedResourceCategoryId = selectedResource ? getResourceCategoryId(selectedResource) : null;
   const selectedModule = useMemo(() => {
@@ -698,11 +710,19 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           ...(canOpenSelectedSourceResource ? { onOpen: handleOpenSelectedSourceResource } : {}),
         }
       : null;
-  const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
   const hasVisibleResourceContent = moduleViews.length > 0 || displayableResources.length > 0;
   const wasRefreshingResourcesRef = useRef(false);
   const hasCompletedResourceLoadRef = useRef(false);
+  useEffect(() => {
+    if (selectedResource) {
+      lastRenderableSelectedResourceRef.current = selectedResource;
+      return;
+    }
+    if (!isRefreshingResources || !selectedResourceId) {
+      lastRenderableSelectedResourceRef.current = null;
+    }
+  }, [isRefreshingResources, selectedResource, selectedResourceId]);
   useEffect(() => {
     if (!isRefreshingResources && wasRefreshingResourcesRef.current) {
       hasCompletedResourceLoadRef.current = true;
@@ -945,7 +965,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       <ResourceRailItem
         key={resource.id}
         resource={resource}
-        isActive={selectedResource?.id === resource.id}
+        isActive={readerResource?.id === resource.id}
         onSelect={() => handleSelectResource(resource)}
         onEdit={() => startResourceInlineEdit(resource, "body")}
         onDelete={() => setPendingDeleteResourceId(resource.id)}
@@ -1169,14 +1189,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               </div>
             </aside>
             <div className="knowledge-resource-reader">
-              {selectedResource ? (
+              {readerResource ? (
                 <>
                   <WebCommunityResourceViewerContent
-                    resource={selectedResource}
-                    sourceLineage={selectedSourceLineage}
-                    editor={selectedResourceInlineEditor}
+                    resource={readerResource}
+                    sourceLineage={isReaderShowingRefreshSnapshot ? null : selectedSourceLineage}
+                    editor={isReaderShowingRefreshSnapshot ? null : selectedResourceInlineEditor}
                   />
-                  {canManageResources && getResourceRole(selectedResource) === "source" ? (
+                  {selectedResource && canManageResources && getResourceRole(selectedResource) === "source" ? (
                     <div className="resource-reader-inline-actions">
                       <button
                         className="resources-add-choice"

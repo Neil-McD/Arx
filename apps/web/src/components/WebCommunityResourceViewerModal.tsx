@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -60,6 +61,20 @@ function getEmbedProviderLabel(provider: string | null | undefined): string {
   if (provider === "wistia") return "Wistia";
   return "Video";
 }
+
+const ResourceEmbedFrame = memo(function ResourceEmbedFrame(props: {
+  src: string;
+  title: string;
+}) {
+  return (
+    <iframe
+      src={props.src}
+      title={props.title}
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+      allowFullScreen
+    />
+  );
+});
 
 function hasStoredBodyContent(resource: CommunityResource): boolean {
   const bodyChars = Number(resource.body_chars ?? 0);
@@ -380,11 +395,9 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
         <div className="resource-viewer-column">
           {embed ? (
             <div className="resource-viewer-embed">
-              <iframe
+              <ResourceEmbedFrame
                 src={embed.src}
                 title={`${resource.title} embed`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                allowFullScreen
               />
             </div>
           ) : null}

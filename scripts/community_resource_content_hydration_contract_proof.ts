@@ -90,7 +90,7 @@ assert.match(
 );
 assert.match(
   viewer,
-  /const hasDeferredBody = !hasBody && hasStoredBodyContent\(resource\)/,
+  /const hasDeferredBody = !editor\?\.isEditing && !hasBody && hasStoredBodyContent\(resource\)/,
   "viewer should classify body_chars-without-body_md as deferred hydration",
 );
 assert.match(
@@ -100,7 +100,7 @@ assert.match(
 );
 assert.match(
   viewer,
-  /hasDeferredBody \? \([\s\S]*Loading page content/,
+  /if \(hasDeferredBody\) \{[\s\S]*Loading page content/,
   "viewer should show loading copy while persisted body content is being rehydrated",
 );
 
@@ -121,12 +121,32 @@ assert.match(
 );
 assert.match(
   panel,
+  /lastRenderableSelectedResourceRef[\s\S]*const readerResource =[\s\S]*isRefreshingResources[\s\S]*lastRenderableSelectedResourceRef\.current\?\.id === selectedResourceId/,
+  "Resources reader should preserve the last valid selected resource while background refresh is in flight",
+);
+assert.match(
+  panel,
+  /readerResource \? \([\s\S]*resource=\{readerResource\}[\s\S]*editor=\{isReaderShowingRefreshSnapshot \? null : selectedResourceInlineEditor\}/,
+  "Resources reader should keep rendering the previous resource snapshot during refresh without exposing stale edit controls",
+);
+assert.match(
+  viewer,
+  /const ResourceEmbedFrame = memo\(function ResourceEmbedFrame[\s\S]*<iframe[\s\S]*src=\{props\.src\}/,
+  "resource embeds should be isolated in a memoized frame so ordinary resource text refreshes do not touch the player",
+);
+assert.match(
+  viewer,
+  /<ResourceEmbedFrame[\s\S]*src=\{embed\.src\}/,
+  "resource viewer should render embeds through the stable ResourceEmbedFrame component",
+);
+assert.match(
+  panel,
   /const isEditDisabled = resourceNeedsBodyHydration\(resource\)[\s\S]*disabled=\{isEditDisabled\}[\s\S]*if \(isEditDisabled\) return/,
   "rail edit controls must not open an empty editor while persisted body content is still hydrating",
 );
 assert.match(
   panel,
-  /disabled=\{selectedResourceNeedsBodyHydration\}[\s\S]*if \(selectedResourceNeedsBodyHydration\) return;[\s\S]*actions\.handleEditResource\(selectedResource\)/,
+  /const selectedResourceInlineEditor =[\s\S]*canManageResources && selectedResource && !selectedResourceNeedsBodyHydration[\s\S]*startResourceInlineEdit\(selectedResource, field\)/,
   "selected page edit controls must wait for hydrated body content before editing",
 );
 assert.match(
