@@ -174,7 +174,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
   const canViewMembersActiveCommunity = communityNavVisibility.canViewMembers;
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
-  const canViewActiveCommunityPolynet = canViewActiveCommunitySettings;
+  const canViewActiveCommunityPolynet = canManageCommunitySettings;
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
   const canModerateContentActiveCommunity = communityActionGuards.canModerateContent;

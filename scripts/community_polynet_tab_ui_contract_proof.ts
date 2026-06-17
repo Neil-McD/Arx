@@ -68,13 +68,18 @@ assert.doesNotMatch(
 
 assert.match(
   activeCommunityShell,
-  /canViewActiveCommunityPolynet = canViewActiveCommunitySettings/,
-  "PolyNet nav access should follow the owner/admin community settings gate",
+  /canViewActiveCommunityPolynet = canManageCommunitySettings/,
+  "PolyNet nav access should follow the owner/admin community management gate",
 );
 assert.doesNotMatch(
   activeCommunityShell,
   /canViewActiveCommunityPolynet = Boolean\([\s\S]*communityAccessCapabilities\.canViewCommunity/,
   "PolyNet nav access must not follow broad member community view access",
+);
+assert.doesNotMatch(
+  activeCommunityShell,
+  /canViewActiveCommunityPolynet = canViewActiveCommunitySettings/,
+  "PolyNet nav access must not follow member-visible settings access",
 );
 
 console.log("Community PolyNet tab UI contract proof passed");

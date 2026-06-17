@@ -1190,6 +1190,61 @@ function CommunityDangerZoneSection({
   );
 }
 
+function CommunityMemberSettingsSection({
+  activeCommunity,
+  state,
+  actions,
+}: SharedSettingsProps & {
+  activeCommunity: ActiveCommunity;
+}) {
+  return (
+    <div className="create-community-form community-settings-form">
+      <div className="settings-section">
+        <div className="settings-section-title">Member settings</div>
+        <div className="settings-section-desc">
+          Manage how {activeCommunity.name} behaves for your account.
+        </div>
+        <label className="member-onboarding-toggle" style={{ marginTop: 16 }}>
+          <input
+            type="checkbox"
+            checked={state.communityMemberMuted}
+            disabled={state.isLoadingCommunityMemberSettings}
+            onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
+          />
+          <span className="member-onboarding-toggle-copy">
+            <strong>{state.communityMemberMuted ? "Community muted" : "Mute community"}</strong>
+            <span>
+              {state.communityMemberMuted
+                ? "This community is muted for your account."
+                : "Reduce notifications and attention markers from this community."}
+            </span>
+          </span>
+          <span className="member-onboarding-switch" aria-hidden="true" />
+        </label>
+        {state.communityMemberSettingsError ? (
+          <div className="auth-error" style={{ marginTop: 12 }}>
+            {state.communityMemberSettingsError}
+          </div>
+        ) : null}
+      </div>
+      <div className="settings-section" style={{ marginTop: 18 }}>
+        <div className="settings-section-title">Leave community</div>
+        <div className="settings-section-desc">
+          Leave this community and remove your member access.
+        </div>
+        <button
+          type="button"
+          className="danger delete-community-btn"
+          onClick={() => void actions.handleLeaveCommunity()}
+          disabled={state.isLeavingCommunity}
+        >
+          {state.isLeavingCommunity ? "Leaving..." : "Leave community"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionProps) {
   const {
     activeCommunity,
@@ -1253,8 +1308,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             Sign in
           </button>
         </div>
-      ) : !canViewActiveCommunitySettings || !canManageCommunitySettings ? (
-        <div className="chat-empty">Only community owners and admins can manage settings.</div>
+      ) : !canViewActiveCommunitySettings ? (
+        <div className="chat-empty">You do not have access to this community's settings.</div>
+      ) : !canManageCommunitySettings ? (
+        <CommunityMemberSettingsSection
+          activeCommunity={activeCommunity}
+          state={state}
+          actions={actions}
+        />
       ) : canManageCommunitySettings ? (
         <>
           <div className="create-community-form community-settings-form">

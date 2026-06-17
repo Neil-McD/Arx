@@ -12,7 +12,7 @@ function read(path: string): string {
 
 const memberAccess: CommunityTabAccess = {
   canViewMembers: true,
-  canViewSettings: false,
+  canViewSettings: true,
   canViewPolynet: false,
   canManageMembers: false,
   canViewAnalytics: false,
@@ -26,7 +26,7 @@ const builderAccess: CommunityTabAccess = {
   canViewAnalytics: true,
 };
 
-for (const tab of ["chat", "ai_feed", "resources", "events", "members"] as const) {
+for (const tab of ["chat", "ai_feed", "resources", "events", "members", "settings"] as const) {
   assert.equal(
     normalizeCommunityTabForAccess(tab, memberAccess),
     tab,
@@ -34,7 +34,7 @@ for (const tab of ["chat", "ai_feed", "resources", "events", "members"] as const
   );
 }
 
-for (const tab of ["settings", "polynet", "ai_agent", "funnel", "analytics"] as const) {
+for (const tab of ["polynet", "ai_agent", "funnel", "analytics"] as const) {
   assert.equal(
     isCommunityTabAllowedForAccess(tab, memberAccess),
     false,

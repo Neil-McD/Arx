@@ -47,7 +47,7 @@ export function deriveCommunityAccessCapabilities(
   const effectiveRole = String(access?.effective_role ?? "").trim().toLowerCase();
   const isAdmin = effectiveRole === "admin";
   const isModerator = effectiveRole === "moderator";
-  const canEnterCommunity = access ? Boolean(access.can_enter_community ?? access.can_view) : true;
+  const canEnterCommunity = access ? Boolean(access.can_enter_community ?? access.can_view) : false;
   const canManageResources = Boolean(access?.can_manage_resources) && (isOwner || isAdmin);
   const canModerateContent = Boolean(
     access?.can_moderate_content ?? (isOwner || isAdmin || isModerator),
@@ -56,7 +56,7 @@ export function deriveCommunityAccessCapabilities(
     canViewCommunity: canEnterCommunity,
     isOwner,
     canViewMembers: canEnterCommunity,
-    canViewSettings: isOwner || isAdmin,
+    canViewSettings: canEnterCommunity,
     canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
     canManageResources,
     canModerateContent,

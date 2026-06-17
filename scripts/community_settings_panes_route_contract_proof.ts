@@ -125,8 +125,8 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /Only community owners and admins can manage settings\./,
-  "non-managers must not see member-level community settings tabs",
+  /function CommunityMemberSettingsSection[\s\S]*Member settings[\s\S]*Mute community[\s\S]*Leave community/,
+  "non-managers should see member-level community settings without owner/admin panes",
 );
 assert.match(
   settingsSection,
@@ -146,8 +146,13 @@ assert.doesNotMatch(
 
 assert.match(
   accessViewModel,
-  /canViewSettings: isOwner \|\| isAdmin/,
-  "community settings nav visibility must be owner/admin-only",
+  /canViewSettings: canEnterCommunity/,
+  "community settings nav visibility must be member-visible",
+);
+assert.match(
+  accessViewModel,
+  /const canEnterCommunity = access \? Boolean\(access\.can_enter_community \?\? access\.can_view\) : false/,
+  "community settings visibility must fail closed until current-community access is loaded",
 );
 
-console.log("PASS: community settings panes are route-backed, manager-only, and refresh-safe.");
+console.log("PASS: community settings has member view plus route-backed manager panes.");
