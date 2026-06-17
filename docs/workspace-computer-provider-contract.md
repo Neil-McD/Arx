@@ -96,9 +96,8 @@ Resource admission is separate from compute billing.
 
 Project and volume admission uses PolyNet-owned truth:
 
-- no card on file: one project volume, and first materialization requires
-  purchased/prepaid tool balance
-- card on file: ten project volumes
+- all accounts: five active project volumes
+- first materialization requires purchased/prepaid tool balance or a card
 - deleted or archived project rows do not count toward the limit
 - rows whose volume retention state is `deleted` do not count toward the limit
 - first volume creation for a project is gated; re-attaching the same existing
@@ -227,8 +226,8 @@ observed lifecycle wins. Labels are useful metadata, not the sole source of
 truth; a stale `file_inspection` label must not downgrade a sandbox whose
 provider policy already matches `agent_run`.
 
-This keeps the model to one project volume and one current project sandbox while
-preventing active agent work from inheriting a file-inspection max-age policy.
+This keeps the model to one current project sandbox per active project volume
+while preventing active agent work from inheriting a file-inspection max-age policy.
 It also preserves processes and warm state when Blaxel accepts lifecycle updates.
 
 ## Blaxel Validation Gate

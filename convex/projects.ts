@@ -200,7 +200,7 @@ function workspaceResourceAdmissionMessage(code: string): string {
     return "Add prepaid credits or a card before creating workspace storage.";
   }
   if (code === "workspace_card_required_for_additional_volume") {
-    return "Extra workspace projects require a card on file.";
+    return "Additional workspace storage requires a card on file.";
   }
   if (code === "workspace_volume_limit_reached") {
     return "Workspace project volume limit reached.";

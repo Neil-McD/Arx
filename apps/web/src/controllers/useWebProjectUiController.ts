@@ -17,7 +17,6 @@ import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
 import {
   countWorkspaceProjectsForAdmission,
   getWorkspaceProjectVolumeLimitForTier,
-  WORKSPACE_FREE_PROJECT_VOLUME_LIMIT,
 } from "../../../../shared/workspaceResourceAdmission";
 
 export type WebCloudProjectRecord = CloudProjectRecord;
@@ -178,7 +177,6 @@ export function useWebProjectUiController<TSession>(
   const {
     session,
     cloudProjects,
-    hasWorkspaceCardOnFile = null,
     ensureSession,
     requireSignIn,
     showAppToastMessage,
@@ -276,23 +274,10 @@ export function useWebProjectUiController<TSession>(
       requireSignIn();
       return;
     }
-    if (
-      hasWorkspaceCardOnFile === false &&
-      countableProjectCount >= WORKSPACE_FREE_PROJECT_VOLUME_LIMIT
-    ) {
-      onWorkspaceBillingRequired?.({
-        action: "card_required",
-        message: "Extra projects require a card on file.",
-      });
-      return;
-    }
     setCreateProjectError(null);
     setCreateProjectImportFile(null);
     setIsCreateProjectModalOpen(true);
   }, [
-    countableProjectCount,
-    hasWorkspaceCardOnFile,
-    onWorkspaceBillingRequired,
     requireSignIn,
     session,
   ]);

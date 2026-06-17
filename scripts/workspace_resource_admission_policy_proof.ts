@@ -32,14 +32,14 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
-assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 1);
-assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 10);
+assert.equal(WORKSPACE_FREE_PROJECT_VOLUME_LIMIT, 5);
+assert.equal(WORKSPACE_PAID_PROJECT_VOLUME_LIMIT, 5);
 assert.equal(WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS, 500);
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.file_inspection.idleDeleteAfter, "30s");
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter, "10m");
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter, "30m");
-assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 1);
-assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 10);
+assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 5);
+assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 5);
 assert.equal(
   paidUsageBillingModeForWorkspaceStorageAction("card_required"),
   "card_required",
@@ -205,23 +205,30 @@ assert.deepEqual(
   }).ok,
   true,
 );
+assert.equal(
+  evaluateWorkspaceProjectCreateAdmission({
+    accountTier: "free",
+    existingProjectCount: 4,
+  }).ok,
+  true,
+);
 const blockedFreeProject = evaluateWorkspaceProjectCreateAdmission({
   accountTier: "free",
-  existingProjectCount: 1,
+  existingProjectCount: 5,
 });
 assert.equal(blockedFreeProject.ok, false);
 assert.equal(blockedFreeProject.code, "project_limit_reached");
-assert.equal(blockedFreeProject.limit, 1);
+assert.equal(blockedFreeProject.limit, 5);
 
 const paidProject = evaluateWorkspaceProjectCreateAdmission({
   accountTier: "paid",
-  existingProjectCount: 9,
+  existingProjectCount: 4,
 });
 assert.equal(paidProject.ok, true);
 assert.equal(
   evaluateWorkspaceProjectCreateAdmission({
     accountTier: "paid",
-    existingProjectCount: 10,
+    existingProjectCount: 5,
   }).code,
   "project_limit_reached",
 );
@@ -231,7 +238,7 @@ assert.equal(
       hasCardOnFile: true,
       workspaceCreditBalance: null,
     }),
-    existingProjectCount: 9,
+    existingProjectCount: 4,
   }).ok,
   true,
 );
@@ -244,9 +251,9 @@ assert.equal(
         purchasedCreditsBalance: 1,
       },
     }),
-    existingProjectCount: 1,
-  }).code,
-  "project_limit_reached",
+    existingProjectCount: 4,
+  }).ok,
+  true,
 );
 
 assert.equal(
@@ -286,15 +293,26 @@ assert.equal(
       includedCreditsBalance: 0,
       purchasedCreditsBalance: 1,
     },
-    existingVolumeCount: 1,
+    existingVolumeCount: 4,
+  }).ok,
+  true,
+);
+assert.equal(
+  evaluateWorkspaceVolumeMaterializationAdmission({
+    hasCardOnFile: false,
+    workspaceCreditBalance: {
+      includedCreditsBalance: 0,
+      purchasedCreditsBalance: 1,
+    },
+    existingVolumeCount: 5,
   }).code,
-  "workspace_card_required_for_additional_volume",
+  "workspace_volume_limit_reached",
 );
 assert.equal(
   evaluateWorkspaceVolumeMaterializationAdmission({
     hasCardOnFile: true,
     workspaceCreditBalance: null,
-    existingVolumeCount: 9,
+    existingVolumeCount: 4,
   }).ok,
   true,
 );
@@ -302,7 +320,7 @@ assert.equal(
   evaluateWorkspaceVolumeMaterializationAdmission({
     hasCardOnFile: true,
     workspaceCreditBalance: null,
-    existingVolumeCount: 10,
+    existingVolumeCount: 5,
   }).code,
   "workspace_volume_limit_reached",
 );
@@ -311,8 +329,8 @@ assert.equal(
     hasCardOnFile: true,
     workspaceCreditBalance: null,
     existingVolumeCount: 1,
-    providerVolumeCount: 9,
-    providerVolumeLimit: 10,
+    providerVolumeCount: 5,
+    providerVolumeLimit: 6,
     providerVolumeSafetyBuffer: 1,
   }).code,
   "workspace_provider_volume_quota_headroom_exhausted",
@@ -1141,8 +1159,8 @@ assert.doesNotMatch(
 );
 assert.match(
   providerContract,
-  /card on file: ten project volumes/,
-  "workspace provider contract must document card-on-file as the multi-volume tier signal",
+  /all accounts: five active project volumes/,
+  "workspace provider contract must document the universal project volume cap",
 );
 
 console.log("workspace_resource_admission_policy_proof: ok");

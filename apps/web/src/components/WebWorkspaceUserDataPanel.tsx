@@ -423,7 +423,7 @@ function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): str
     return "Add prepaid credits or a card before creating workspace storage.";
   }
   if (result.code === "workspace_card_required_for_additional_volume") {
-    return "Extra projects require a card on file.";
+    return "Additional workspace storage requires a card on file.";
   }
   if (result.code === "workspace_uncollected_usage_blocked") {
     return "Clear prior workspace usage before opening this project workspace.";
