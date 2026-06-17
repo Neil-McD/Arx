@@ -124,6 +124,7 @@
     "check:runtime-context-fragments-ordering-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_fragments_ordering_proof.ts",
     "check:runtime-context-fragments-redaction-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_fragments_redaction_proof.ts",
     "check:runtime-context-fragments-continuity-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_fragments_continuity_proof.ts",
+    "check:runtime-skill-inventory-budget-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_skill_inventory_budget_proof.ts",
     "check:runtime-workspace-state-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_state_proof.ts",
     "check:workspace-active-project-coherence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_active_project_coherence_proof.ts",
     "check:workspace-draft-project-route-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_draft_project_route_proof.ts",
