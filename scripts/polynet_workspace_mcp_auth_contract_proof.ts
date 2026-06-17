@@ -36,6 +36,7 @@ const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const authSetup = read("docs/auth-runtime-setup-workos-authkit.md");
 const httpMcp = read("convex/httpMcp.ts");
 const authConfig = read("convex/auth.config.ts");
+const sharedMcp = read("shared/polynetMcp.ts");
 const packageJson = read("package.json");
 const vercelConfig = read("vercel.json");
 const mcpProxy = read("api/mcp/_proxy.js");
@@ -76,6 +77,9 @@ assertIncludes(contract, "`/runtime/mcp` is an OAuth-protected remote MCP resour
 assertIncludes(contract, "initialize", "authenticated initialize contract");
 assertIncludes(contract, "tools/list", "authenticated tool discovery contract");
 assertIncludes(contract, "tools/call", "protected tool call contract");
+assertIncludes(contract, "2025-11-25", "current MCP protocol contract");
+assertIncludes(contract, "2025-06-18", "native Codex MCP protocol contract");
+assertIncludes(contract, "2025-03-26", "legacy MCP protocol contract");
 assertIncludes(
   contract,
   "challenges during `initialize`",
@@ -93,6 +97,28 @@ assertIncludes(authSetup, "ARX_MCP_RESOURCE_URL", "MCP resource setup env");
 assertIncludes(authSetup, "ARX_MCP_AUTH_JWT_AUDIENCE", "MCP audience setup env");
 assertIncludes(authSetup, "Resource Indicator", "WorkOS MCP resource indicator setup");
 assertIncludes(authSetup, "https://<POLYNET_ORIGIN>/runtime/mcp", "canonical MCP resource setup");
+
+assertIncludes(sharedMcp, 'POLYNET_MCP_PROTOCOL_VERSION = "2025-11-25"', "current MCP protocol constant");
+assertIncludes(
+  sharedMcp,
+  'POLYNET_MCP_CODEX_PROTOCOL_VERSION = "2025-06-18"',
+  "native Codex MCP protocol constant",
+);
+assertIncludes(
+  sharedMcp,
+  'POLYNET_MCP_COMPAT_PROTOCOL_VERSION = "2025-03-26"',
+  "legacy MCP protocol constant",
+);
+assertIncludes(
+  sharedMcp,
+  "POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS",
+  "central MCP protocol support list",
+);
+assertIncludes(
+  sharedMcp,
+  "isSupportedPolynetMcpProtocolVersion",
+  "central MCP protocol support helper",
+);
 
 assertIncludes(contract, "## External Smoke Harness", "external smoke contract section");
 assertIncludes(contract, "POLYNET_MCP_URL", "external smoke endpoint env");

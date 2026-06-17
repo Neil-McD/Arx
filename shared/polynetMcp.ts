@@ -507,7 +507,19 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
 };
 
 export const POLYNET_MCP_PROTOCOL_VERSION = "2025-11-25";
+export const POLYNET_MCP_CODEX_PROTOCOL_VERSION = "2025-06-18";
 export const POLYNET_MCP_COMPAT_PROTOCOL_VERSION = "2025-03-26";
+export const POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS = [
+  POLYNET_MCP_PROTOCOL_VERSION,
+  POLYNET_MCP_CODEX_PROTOCOL_VERSION,
+  POLYNET_MCP_COMPAT_PROTOCOL_VERSION,
+] as const;
+
+export function isSupportedPolynetMcpProtocolVersion(version: string): boolean {
+  return POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS.includes(
+    version as (typeof POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS)[number],
+  );
+}
 
 export function getPolynetMcpToolDefinitions(): PolynetMcpToolDefinition[] {
   return Object.values(TOOL_DEFINITIONS);

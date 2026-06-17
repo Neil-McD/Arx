@@ -1,10 +1,11 @@
 import { api, internal } from "./_generated/api";
 import type { PublicHttpAction } from "convex/server";
 import {
-  POLYNET_MCP_COMPAT_PROTOCOL_VERSION,
   POLYNET_MCP_PROTOCOL_VERSION,
+  POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS,
   getPolynetMcpToolDefinition,
   getPolynetMcpToolDefinitions,
+  isSupportedPolynetMcpProtocolVersion,
 } from "../shared/polynetMcp";
 import { normalizeSlug } from "./communityCore";
 
@@ -1025,11 +1026,7 @@ async function handleMcpPost(args: {
     req.headers.get("MCP-Protocol-Version") ?? req.headers.get("mcp-protocol-version"),
     32,
   );
-  if (
-    protocolHeader &&
-    protocolHeader !== POLYNET_MCP_PROTOCOL_VERSION &&
-    protocolHeader !== POLYNET_MCP_COMPAT_PROTOCOL_VERSION
-  ) {
+  if (protocolHeader && !isSupportedPolynetMcpProtocolVersion(protocolHeader)) {
     return jsonRpcErrorResponse(
       req,
       jsonResponse,
@@ -1038,7 +1035,7 @@ async function handleMcpPost(args: {
       "Unsupported protocol version.",
       {
         requested: protocolHeader,
-        supported: [POLYNET_MCP_PROTOCOL_VERSION, POLYNET_MCP_COMPAT_PROTOCOL_VERSION],
+        supported: POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS,
       },
       400,
     );
@@ -1071,11 +1068,7 @@ async function handleMcpPost(args: {
         ? (message.params as Record<string, unknown>)
         : {};
     const requestedVersion = normalizeString(params.protocolVersion, 32);
-    if (
-      requestedVersion &&
-      requestedVersion !== POLYNET_MCP_PROTOCOL_VERSION &&
-      requestedVersion !== POLYNET_MCP_COMPAT_PROTOCOL_VERSION
-    ) {
+    if (requestedVersion && !isSupportedPolynetMcpProtocolVersion(requestedVersion)) {
       return jsonRpcErrorResponse(
         req,
         jsonResponse,
@@ -1084,19 +1077,20 @@ async function handleMcpPost(args: {
         "Unsupported protocol version.",
         {
           requested: requestedVersion,
-          supported: [POLYNET_MCP_PROTOCOL_VERSION, POLYNET_MCP_COMPAT_PROTOCOL_VERSION],
+          supported: POLYNET_MCP_SUPPORTED_PROTOCOL_VERSIONS,
         },
       );
     }
     if (id === null) {
       return jsonRpcErrorResponse(req, jsonResponse, null, -32600, "Invalid Request.");
     }
+    const negotiatedVersion = requestedVersion ?? protocolHeader ?? POLYNET_MCP_PROTOCOL_VERSION;
     return jsonRpcResultResponse(
       req,
       jsonResponse,
       id,
       {
-        protocolVersion: requestedVersion ?? POLYNET_MCP_PROTOCOL_VERSION,
+        protocolVersion: negotiatedVersion,
         capabilities: {
           tools: {},
         },
@@ -1108,7 +1102,7 @@ async function handleMcpPost(args: {
           "PolyNet MCP alpha exposes provider-side workspace tools over remote HTTP. MCP connection and tool calls require PolyNet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
       },
       {
-        "MCP-Protocol-Version": requestedVersion ?? POLYNET_MCP_PROTOCOL_VERSION,
+        "MCP-Protocol-Version": negotiatedVersion,
       },
     );
   }

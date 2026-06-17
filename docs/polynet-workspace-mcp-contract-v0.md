@@ -73,6 +73,16 @@ tools/list
 tools/call
 ```
 
+Supported MCP protocol versions:
+
+```text
+2025-11-25
+2025-06-18
+2025-03-26
+```
+
+`2025-06-18` is required for native Codex Streamable HTTP clients. `2025-03-26` is retained for older compatibility clients.
+
 An unauthenticated MCP connection or protected call must return `401` with a `WWW-Authenticate: Bearer ... resource_metadata="..."` challenge. This intentionally challenges during `initialize` so external adapters such as `mcp-remote` start their local OAuth callback listener before opening the authorization URL.
 
 The protected resource metadata document must return:
