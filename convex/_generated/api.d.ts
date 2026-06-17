@@ -138,6 +138,7 @@ import type * as providerConnections from "../providerConnections.js";
 import type * as publicAppUrl from "../publicAppUrl.js";
 import type * as runtimeAgentLoop from "../runtimeAgentLoop.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
+import type * as runtimeContextIntegrity from "../runtimeContextIntegrity.js";
 import type * as runtimeExecutionSession from "../runtimeExecutionSession.js";
 import type * as runtimeHarnessComposition from "../runtimeHarnessComposition.js";
 import type * as runtimeHarnessShaping from "../runtimeHarnessShaping.js";
@@ -315,6 +316,7 @@ declare const fullApi: ApiFromModules<{
   publicAppUrl: typeof publicAppUrl;
   runtimeAgentLoop: typeof runtimeAgentLoop;
   runtimeCancellation: typeof runtimeCancellation;
+  runtimeContextIntegrity: typeof runtimeContextIntegrity;
   runtimeExecutionSession: typeof runtimeExecutionSession;
   runtimeHarnessComposition: typeof runtimeHarnessComposition;
   runtimeHarnessShaping: typeof runtimeHarnessShaping;
