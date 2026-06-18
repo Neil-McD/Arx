@@ -242,7 +242,7 @@ function buildResolveMountedToolsResponsesTool(): ResponsesApiFunctionTool {
 }
 
 
-async function executeRetrievalHarnessTool(params: {
+export async function executeRetrievalHarnessTool(params: {
   ctx: any;
   userId: string;
   authSubject?: string | null;

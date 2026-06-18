@@ -60,6 +60,32 @@ import {
   persistRuntimeAssistantMessage,
   persistRuntimeUserMessage,
 } from "./runtimeTurnPersistence";
+import {
+  buildPolynetCodexWorkerPrompt,
+  cancelPolynetCodexWorkerTurn,
+  POLYNET_CODEX_WORKER_CONTRACT_NAME,
+  POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+  POLYNET_CODEX_WORKER_ENGINE_ID,
+  shouldUsePolynetCodexWorkerBridge,
+  steerPolynetCodexWorkerTurn,
+  streamPolynetCodexWorkerTurn,
+} from "./polynetCodexWorkerBridge";
+import {
+  createProjectRuntimeWorkspaceSession,
+  type RuntimeWorkspaceSession,
+} from "./workspaceRuntimeSession";
+import { disposeRuntimeWorkspaceSession } from "./runtimeWorkspaceSessionDisposal";
+import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames";
+import { getFreshChatgptAuthForUser } from "./chatgptAuth";
+import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
+import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
+import { buildPolynetCodexWorkerToolTarget } from "./polynetCodexWorkerTool";
+import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken";
+import { buildPolynetPlatformToolSpecs } from "../shared/polynetPlatformToolSurface";
+import {
+  POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
+  POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT,
+} from "../shared/polynetCodexWorkerLimits";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
 
@@ -486,6 +512,14 @@ export async function handleRuntimeTurnRequest(args: {
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
     const runStartedAt = Date.now();
+    const usePolynetCodexWorkerBridge = shouldUsePolynetCodexWorkerBridge({
+      runtimeExecutionMode,
+      stream,
+      inferenceSource,
+    });
+    const runtimeEngineId = usePolynetCodexWorkerBridge
+      ? POLYNET_CODEX_WORKER_ENGINE_ID
+      : "runtime_turn";
     runtimeTurnLogContext = {
       runId,
       threadId: String(ownedThread._id),
@@ -510,14 +544,18 @@ export async function handleRuntimeTurnRequest(args: {
       communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
       communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
       modelId: requestedModelId,
-      engineId: "runtime_turn",
+      engineId: runtimeEngineId,
       executionMode: runtimeExecutionMode,
       sandboxMode: runtimeSandboxMode,
       contractName:
-        runtimeExecutionMode === "agentic"
+        usePolynetCodexWorkerBridge
+          ? POLYNET_CODEX_WORKER_CONTRACT_NAME
+          : runtimeExecutionMode === "agentic"
           ? "capability_composed_tools_v1"
           : "capability_composed_chat_v1",
-      contractVersion: "v1",
+      contractVersion: usePolynetCodexWorkerBridge
+        ? POLYNET_CODEX_WORKER_CONTRACT_VERSION
+        : "v1",
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
@@ -909,6 +947,630 @@ export async function handleRuntimeTurnRequest(args: {
       },
     });
     if (runtimeExecutionMode === "agentic") {
+      if (stream && usePolynetCodexWorkerBridge) {
+        return runtimeSseResponse(async (writer) => {
+          let streamedContent = "";
+          let streamedInferenceSource = resolvedInferenceSource;
+          let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
+          let assistantMessageId: string | null = null;
+          let assistantMessageKey: string | null = null;
+          let assistantMessageSeq: number | null = null;
+
+          const emitWorkerDelta = (data: Record<string, unknown>) => {
+            const full = typeof data.full_content === "string" ? data.full_content : null;
+            const delta = typeof data.delta === "string" ? data.delta : "";
+            if (full !== null) streamedContent = full;
+            else if (delta) streamedContent += delta;
+            writer.send({
+              event: "delta",
+              data: {
+                ...data,
+                run_id: runId,
+                engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                model_id: requestedModelId,
+              },
+            });
+          };
+
+          const streamAppendRunEvent = async (event: {
+            eventType: string;
+            eventKey?: string;
+            payload: Record<string, unknown>;
+          }): Promise<void> => {
+            const created = await appendRunEvent(event);
+            await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
+            const mapped = mapPersistedRuntimeEventRow(created);
+            if (!mapped) return;
+            writer.send({
+              event: "runtime_event",
+              data: mapped,
+            });
+          };
+
+          writer.send({
+            event: "start",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+            },
+          });
+
+          await streamAppendRunEvent({
+            eventType: "polynet_codex_worker_bridge_started",
+            eventKey: `${runId}:polynet_codex_worker_bridge_started:1`,
+            payload: {
+              run_id: runId,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+              fly_worker: true,
+            },
+          });
+
+          runtimeTurnStage = "polynet_codex_worker";
+          const activeRunCounts = (await ctx.runQuery(
+            (internal as any).polynetCodexWorkerAdmission
+              .countActivePolynetCodexWorkerRuns as any,
+            {
+              ownerId: actor.dbUserId,
+              ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+            },
+          )) as { userActive: number; projectActive: number };
+          // Counts include this run because it has already been started.
+          const runLimitFailure =
+            runtimeProjectId &&
+            activeRunCounts.projectActive > POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT
+              ? {
+                  code: "project_run_limit_reached",
+                  message: `This workspace already has ${POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT} runs in flight. Wait for one to finish or stop one.`,
+                }
+              : activeRunCounts.userActive > POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT
+                ? {
+                    code: "user_run_limit_reached",
+                    message: `You already have ${POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT} runs in flight across your workspaces. Wait for one to finish or stop one.`,
+                  }
+                : null;
+          if (runLimitFailure) {
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: runLimitFailure.code,
+              errorCode: runLimitFailure.code,
+              errorMessage: runLimitFailure.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: runLimitFailure.code,
+              errorCode: runLimitFailure.code,
+              errorMessage: runLimitFailure.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: runLimitFailure.code,
+                error: runLimitFailure.message,
+                message: runLimitFailure.message,
+                status: 429,
+              },
+            });
+            return;
+          }
+
+          const workerChatgptAuth = await getFreshChatgptAuthForUser({
+            ctx,
+            userId: String(actor.dbUserId),
+          });
+          const workerChatgptAccountId = String(workerChatgptAuth?.accountId ?? "").trim();
+          if (!workerChatgptAuth?.accessToken || !workerChatgptAccountId) {
+            const authFailureCode = "provider_connection_required";
+            const authFailureMessage =
+              "Connect ChatGPT to run Codex turns with your own account.";
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: authFailureCode,
+              errorCode: authFailureCode,
+              errorMessage: authFailureMessage,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: authFailureCode,
+              errorCode: authFailureCode,
+              errorMessage: authFailureMessage,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: authFailureCode,
+                error: authFailureMessage,
+                message: authFailureMessage,
+                status: 403,
+                cta: "connect_provider",
+              },
+            });
+            return;
+          }
+
+          let workerWorkspaceSession: RuntimeWorkspaceSession | null = null;
+          let workerSandboxName: string | null = null;
+          if (runtimeProjectId) {
+            const createdWorkspace = await createProjectRuntimeWorkspaceSession({
+              ctx,
+              authSubject: actor.authSubject,
+              userId: actor.dbUserId,
+              projectId: runtimeProjectId,
+              runId,
+            });
+            if (!createdWorkspace.ok) {
+              await persistPartialAssistantMessageBestEffort({
+                content: "",
+                status: "error",
+                reason: createdWorkspace.code,
+                errorCode: createdWorkspace.code,
+                errorMessage: createdWorkspace.message,
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: createdWorkspace.code,
+                errorCode: createdWorkspace.code,
+                errorMessage: createdWorkspace.message,
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  code: createdWorkspace.code,
+                  error: createdWorkspace.message,
+                  message: createdWorkspace.message,
+                  status: createdWorkspace.status,
+                  details: createdWorkspace.details ?? null,
+                },
+              });
+              return;
+            }
+            workerWorkspaceSession = createdWorkspace.session;
+            workerSandboxName = buildBlaxelProjectWorkspaceNames(runtimeProjectId).sandboxName;
+            await streamAppendRunEvent({
+              eventType: "workspace_session_adopted",
+              eventKey: `${runId}:workspace_session_adopted:polynet_codex_worker`,
+              payload: {
+                run_id: runId,
+                sandbox_id: workerWorkspaceSession.providerSandboxId,
+                project_id: runtimeProjectId,
+                source: "polynet_codex_worker",
+                provider_id: workerWorkspaceSession.providerId,
+                toolbox_proxy_url: null,
+              },
+            });
+          }
+
+          const workerPrompt = buildPolynetCodexWorkerPrompt({
+            conversationMessages,
+            latestUserText,
+            communityName: runtimeCommunityName,
+            communitySlug: runtimeCommunitySlug,
+            communityOneLiner: runtimeCommunityOneLiner,
+            communityAbout: runtimeCommunityAbout,
+            communitySystemPrompt: runtimeCommunitySystemPrompt,
+            agentName: runtimeAgentProfile.agentName,
+            agentSoul: runtimeAgentProfile.agentSoul,
+            threadWorkingState: ownedThread.workingState ?? null,
+            allowedToolNames,
+            projectId: runtimeProjectId,
+          });
+          const workerIngestTarget = buildPolynetCodexWorkerIngestTarget();
+          if (!workerIngestTarget) {
+            const ingestFailureCode = "polynet_codex_worker_ingest_unconfigured";
+            const ingestFailureMessage =
+              "PolyNet Codex worker ingest is not configured.";
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: ingestFailureCode,
+              errorCode: ingestFailureCode,
+              errorMessage: ingestFailureMessage,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: ingestFailureCode,
+              errorCode: ingestFailureCode,
+              errorMessage: ingestFailureMessage,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: ingestFailureCode,
+                error: ingestFailureMessage,
+                message: ingestFailureMessage,
+                status: 503,
+              },
+            });
+            return;
+          }
+          const workerTerminalTarget = workerWorkspaceSession
+            ? buildPolynetCodexWorkerTerminalTarget()
+            : null;
+          const workerPlatformTools = buildPolynetPlatformToolSpecs({
+            hasCommunity: Boolean(runtimeCommunityId),
+          });
+          const workerToolTarget =
+            workerPlatformTools.length > 0 ? buildPolynetCodexWorkerToolTarget() : null;
+          let workerRunTokens: {
+            ingest: string;
+            terminal: string | null;
+            tool: string | null;
+          } | null = null;
+          const mintedWorkerRunTokens = await mintPolynetCodexWorkerRunTokenSet({
+            ownerId: String(actor.dbUserId),
+            threadId: String(ownedThread._id),
+            runId,
+            includeTerminal: Boolean(workerTerminalTarget),
+            includeTool: Boolean(workerToolTarget),
+          });
+          if (!mintedWorkerRunTokens.ok) {
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: mintedWorkerRunTokens.code,
+              errorCode: mintedWorkerRunTokens.code,
+              errorMessage: mintedWorkerRunTokens.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: mintedWorkerRunTokens.code,
+              errorCode: mintedWorkerRunTokens.code,
+              errorMessage: mintedWorkerRunTokens.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: mintedWorkerRunTokens.code,
+                error: mintedWorkerRunTokens.message,
+                message: mintedWorkerRunTokens.message,
+                status: mintedWorkerRunTokens.status,
+              },
+            });
+            return;
+          }
+          workerRunTokens = mintedWorkerRunTokens.tokens;
+
+          let workerCancelFired = false;
+          let workerMachineId: string | null = null;
+          let workerSteeredCount = 0;
+          let workerWatcherBusy = false;
+          const workerCancelWatcher = setInterval(() => {
+            void (async () => {
+              if (workerCancelFired || workerWatcherBusy) return;
+              workerWatcherBusy = true;
+              try {
+                const row = (await ctx.runQuery(
+                  (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
+                  { ownerId: actor.dbUserId, runId },
+                )) as {
+                  status?: unknown;
+                  pendingUserSteering?: Array<{ text?: unknown }>;
+                } | null;
+                if (!row) return;
+                if (String(row.status ?? "") === "cancelled") {
+                  workerCancelFired = true;
+                  clearInterval(workerCancelWatcher);
+                  await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+                  return;
+                }
+                const steering = Array.isArray(row.pendingUserSteering)
+                  ? row.pendingUserSteering
+                  : [];
+                while (workerSteeredCount < steering.length) {
+                  const entry = steering[workerSteeredCount];
+                  const text = String(entry?.text ?? "").trim();
+                  if (!text) {
+                    workerSteeredCount += 1;
+                    continue;
+                  }
+                  const delivery = await steerPolynetCodexWorkerTurn({
+                    runId,
+                    machineId: workerMachineId,
+                    text,
+                  });
+                  if (delivery.ok || delivery.status === 409) {
+                    workerSteeredCount += 1;
+                    continue;
+                  }
+                  break;
+                }
+              } catch {
+                // Best-effort watcher; the worker turn timeout is the backstop.
+              } finally {
+                workerWatcherBusy = false;
+              }
+            })();
+          }, 3_000);
+
+          let workerResult;
+          try {
+            workerResult = await streamPolynetCodexWorkerTurn({
+              runId,
+              prompt: workerPrompt,
+              model: requestedModelId,
+              sandboxName: workerSandboxName,
+              destroyAfterRun: !workerWorkspaceSession,
+              chatgptAuth: {
+                accessToken: workerChatgptAuth.accessToken,
+                accountId: workerChatgptAccountId,
+                planType: null,
+              },
+              ingest: workerIngestTarget
+                ? {
+                    ...workerIngestTarget,
+                    run_token: workerRunTokens?.ingest ?? null,
+                    terminal_run_token: workerRunTokens?.terminal ?? null,
+                    tool_run_token: workerRunTokens?.tool ?? null,
+                    terminal_url: workerTerminalTarget,
+                    tool_url: workerToolTarget,
+                    context: {
+                      owner_id: String(actor.dbUserId),
+                      thread_id: String(ownedThread._id),
+                      run_id: runId,
+                      assistant_message_key: assistantMessageKeyForRun,
+                      model_id: requestedModelId,
+                      lane,
+                      inference_source: streamedInferenceSource,
+                      ...(workerWorkspaceSession
+                        ? {
+                            lease: {
+                              credit_reservation_key:
+                                workerWorkspaceSession.creditReservationKey ?? null,
+                              started_at: workerWorkspaceSession.startedAt,
+                              project_id: String(workerWorkspaceSession.projectId),
+                              provider_sandbox_id: workerWorkspaceSession.providerSandboxId,
+                              sandbox_cpu: workerWorkspaceSession.sandboxCpu,
+                              sandbox_memory_gib: workerWorkspaceSession.sandboxMemoryGiB,
+                              sandbox_disk_gib: workerWorkspaceSession.sandboxDiskGiB,
+                            },
+                          }
+                        : {}),
+                    },
+                  }
+                : null,
+              platformTools: workerPlatformTools,
+              onEvent: async (event) => {
+                if (event.event === "start") {
+                  const machineId = String(event.data.machine_id ?? "").trim();
+                  if (machineId) workerMachineId = machineId;
+                  return;
+                }
+                if (event.event === "delta") {
+                  emitWorkerDelta(event.data);
+                  return;
+                }
+                if (event.event === "runtime_event") {
+                  const workerEventType = String(event.data.event_type ?? "").trim();
+                  if (!workerEventType) return;
+                  const workerSeqRaw = Number(event.data.seq);
+                  const workerSeq = Number.isFinite(workerSeqRaw)
+                    ? Math.max(0, Math.floor(workerSeqRaw))
+                    : 0;
+                  const workerPayload =
+                    event.data.payload &&
+                    typeof event.data.payload === "object" &&
+                    !Array.isArray(event.data.payload)
+                      ? (event.data.payload as Record<string, unknown>)
+                      : {};
+                  await streamAppendRunEvent({
+                    eventType: workerEventType,
+                    eventKey: `${runId}:polynet_codex_worker:${workerSeq}:${workerEventType}`,
+                    payload: {
+                      ...workerPayload,
+                      run_id: runId,
+                      engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                      worker_event_id: event.data.id ?? null,
+                      worker_event_seq: workerSeq,
+                      worker_event_type: workerEventType,
+                      worker_event_created_at: event.data.created_at ?? null,
+                    },
+                  });
+                  return;
+                }
+                if (event.event === "run_model_finished" || event.event === "run_finalized") {
+                  writer.send({
+                    event: event.event,
+                    data: {
+                      ...event.data,
+                      run_id: runId,
+                      engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                      model_id: requestedModelId,
+                    },
+                  });
+                }
+              },
+            });
+          } finally {
+            clearInterval(workerCancelWatcher);
+          }
+
+          if (
+            !workerResult.ok &&
+            (workerResult.code === "polynet_codex_worker_stream_failed" ||
+              workerResult.code === "polynet_codex_worker_unreachable")
+          ) {
+            try {
+              await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+            } catch {
+              // Best effort; the worker turn timeout is the backstop.
+            }
+          }
+          streamedContent = workerResult.assistantText || streamedContent;
+
+          if (workerWorkspaceSession) {
+            try {
+              await disposeRuntimeWorkspaceSession({
+                ctx,
+                userId: actor.dbUserId,
+                runId,
+                session: workerWorkspaceSession,
+                projectId: runtimeProjectId,
+                finalState: "released",
+                appendRunEvent: streamAppendRunEvent,
+                source: "polynet_codex_worker",
+              });
+            } catch (error) {
+              logStructuredError("polynet_codex_worker_workspace_dispose_failed", {
+                error,
+                run_id: runId,
+              });
+            }
+          }
+
+          if (!workerResult.ok) {
+            const workerCancelled =
+              workerCancelFired || workerResult.code === USER_CANCELLED_RUNTIME_CODE;
+            if (workerCancelled) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishCancelledRun();
+              return;
+            }
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: workerResult.code,
+              errorCode: workerResult.code,
+              errorMessage: workerResult.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: workerResult.code,
+              errorCode: workerResult.code,
+              errorMessage: workerResult.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: workerResult.code,
+                error: workerResult.message,
+                message: workerResult.message,
+                status: workerResult.status,
+              },
+            });
+            return;
+          }
+
+          runtimeTurnStage = "assistant_persist";
+          if (persistVisibleAssistantMessage) {
+            try {
+              await throwIfRunCancelled();
+              ({
+                assistantMessageId,
+                assistantMessageKey,
+                assistantMessageSeq,
+              } = await persistRuntimeAssistantMessage({
+                ctx,
+                ownerId: actor.dbUserId,
+                threadId: ownedThread._id,
+                messageKey: assistantMessageKeyForRun,
+                requestedModelId,
+                engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+                inferenceSource: streamedInferenceSource,
+                lane,
+                inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
+                runId,
+                content: streamedContent,
+              }));
+            } catch (error) {
+              if (isRuntimeRunCancelledError(error)) {
+                await persistPartialAssistantMessageBestEffort({
+                  content: streamedContent,
+                  status: "cancelled",
+                  reason: USER_CANCELLED_RUNTIME_CODE,
+                  errorCode: USER_CANCELLED_RUNTIME_CODE,
+                  errorMessage: "Run cancelled by user.",
+                  inferenceSourceOverride: streamedInferenceSource,
+                  inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+                });
+                await finishCancelledRun();
+                return;
+              }
+              const message = error instanceof Error ? error.message : String(error);
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: "assistant_message_persist_failed",
+                errorCode: "assistant_message_persist_failed",
+                errorMessage: message || "Failed to persist assistant message.",
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  error: message || "Failed to persist assistant message.",
+                },
+              });
+              return;
+            }
+          }
+
+          try {
+            await throwIfRunCancelled();
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishCancelledRun();
+              return;
+            }
+            throw error;
+          }
+          await finishRunBestEffortForRun({
+            status: "ok",
+          });
+          writer.send({
+            event: "done",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+              full_content: streamedContent,
+              prompt_tokens: null,
+              completion_tokens: null,
+              user_message_id: userMessageId,
+              user_message_key: userMessageKey,
+              user_message_seq: userMessageSeq,
+              assistant_message_id: assistantMessageId,
+              assistant_message_key: assistantMessageKey,
+              assistant_message_seq: assistantMessageSeq,
+            },
+          });
+        });
+      }
       if (stream) {
         return runtimeSseResponse(async (writer) => {
           let streamedContent = "";

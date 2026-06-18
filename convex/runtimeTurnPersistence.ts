@@ -142,6 +142,7 @@ export async function persistRuntimeAssistantMessage(args: {
   threadId: string;
   messageKey: string;
   requestedModelId: string;
+  engineId?: string | null;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
   lane: "public" | "platform" | "chatgpt";
   inferenceLaneFallbacks?: Array<{
@@ -158,6 +159,7 @@ export async function persistRuntimeAssistantMessage(args: {
     errorMessage?: string | null;
   } | null;
 }) {
+  const engineId = String(args.engineId ?? "").trim() || "runtime_turn";
   const inferenceLaneFallbacks = Array.isArray(args.inferenceLaneFallbacks)
     ? args.inferenceLaneFallbacks.filter(
         (item): item is {
@@ -183,6 +185,7 @@ export async function persistRuntimeAssistantMessage(args: {
         text: args.content,
         meta: {
           model_id: args.requestedModelId,
+          runtime_engine_id: engineId,
           inference_source: args.inferenceSource,
           lane: args.lane,
           ...(args.partialRun
@@ -203,7 +206,7 @@ export async function persistRuntimeAssistantMessage(args: {
             : null),
         },
       },
-      engineId: "runtime_turn",
+      engineId,
       modelId: args.requestedModelId,
       runId: args.runId,
       nowMs: Date.now(),

@@ -215,6 +215,7 @@
     "check:polynet-codex-worker-fly-config": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_fly_staging_config_proof.ts",
     "check:polynet-codex-worker-fly-staging-contract": "bash scripts/run_polynet_codex_worker_fly_staging_contract_proof.sh",
     "check:polynet-codex-worker-service-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts --require-live",
+    "check:polynet-codex-worker-convex-bridge": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_convex_bridge_contract_proof.ts",
     "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh",
     "deploy:polynet-codex-worker-fly-staging": "bash scripts/deploy_polynet_codex_worker_fly_staging.sh"
   },
