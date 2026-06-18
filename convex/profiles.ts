@@ -18,6 +18,7 @@ import {
   type AccountSetupProfileDetailRow as ProfileDetailRow,
   type AccountSetupUserRow as UserRow,
 } from "./accountSetupCore";
+import { ensureOnboardingCompletedAgentLifecycleActivation } from "./agentLifecycleActivations";
 
 type ProfileMutationErrorCode =
   | "profile_avatar_invalid"
@@ -470,6 +471,8 @@ export const upsertProfileDetail = mutation({
         : normalizeProfileSocialLinksForStorage(args.socialLinks);
     const shouldMarkOnboardingDismissed =
       args.markOnboardingDismissed === true || args.completeOnboarding === true;
+    const shouldCreateOnboardingLifecycleActivation =
+      args.completeOnboarding === true && !existingDetail?.onboardingCompletedAt;
 
     if (!existingDetail) {
       await ctx.db.insert("userProfileDetails", {
@@ -500,6 +503,14 @@ export const upsertProfileDetail = mutation({
           ? { onboardingCompletedAt: nowMs }
           : null),
         updatedAt: nowMs,
+      });
+    }
+
+    if (shouldCreateOnboardingLifecycleActivation) {
+      await ensureOnboardingCompletedAgentLifecycleActivation({
+        ctx,
+        userId: actor.dbUserId,
+        nowMs,
       });
     }
 

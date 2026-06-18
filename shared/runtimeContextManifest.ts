@@ -57,6 +57,8 @@ export type RuntimeContextManifestPrompt = {
   source: string;
   reason: string;
   sourceVersion?: string | null;
+  activationRoute?: string | null;
+  activationReason?: string | null;
 };
 
 export type RuntimeContextManifestResource = {
@@ -132,6 +134,8 @@ type ManifestSkillInput = {
   platform_skill_id?: unknown;
   user_platform_skill_install_id?: unknown;
   community_skill_attachment_id?: unknown;
+  activation_route?: unknown;
+  activation_reason?: unknown;
 };
 
 type ManifestMountedToolInput = {
@@ -283,6 +287,8 @@ function pushSelectedSkillPrompts(args: {
   if (!Array.isArray(args.skills)) return;
   for (const skill of args.skills) {
     const skillName = compactText(skill.name, 120);
+    const activationRoute = compactText(skill.activation_route, 80);
+    const activationReason = compactText(skill.activation_reason, 300);
     args.prompts.push({
       id: selectedSkillId(args.scope, skill),
       owner: args.owner,
@@ -293,6 +299,8 @@ function pushSelectedSkillPrompts(args: {
         ? `selected skill instructions for ${skillName}`
         : "selected skill instructions",
       sourceVersion: compactText(skill.skill_revision_id, 120),
+      activationRoute,
+      activationReason,
     });
   }
 }

@@ -131,6 +131,7 @@ import {
   buildPlatformSkillToolNamesForSelection,
   type PlatformSkillSelectionSummary,
 } from "../shared/platformSkills";
+import type { RuntimeSkillLifecycleTrigger } from "../shared/runtimeSkillLifecycle";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -1329,6 +1330,7 @@ async function executeRetrievalAgentLoop(
     harnessName: "chat_tools";
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
+    skillLifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     projectId?: string | null;
@@ -1391,6 +1393,7 @@ async function executeRetrievalAgentLoop(
           role: String(message.role ?? ""),
           content: String(message.content ?? ""),
         })),
+        lifecycleTrigger: params.skillLifecycleTrigger ?? undefined,
       },
     ),
   );
@@ -2594,6 +2597,7 @@ async function executeChatToolsAgentLoop(
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
+    skillLifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
