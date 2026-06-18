@@ -12,6 +12,7 @@ import {
 } from "./skillCore";
 import {
   COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS,
+  GLOBAL_PLATFORM_RUNTIME_SKILLS,
   PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL,
   type RuntimePlatformSkillDefinition,
 } from "./platformSkillRuntime";
@@ -237,22 +238,38 @@ async function resolveRuntimePlatformSkillScope(args: {
   const lifecycleSelectedSkills = buildRuntimeLifecyclePlatformSelectedSkills(
     args.lifecycleTrigger,
   );
+  const globalInventory = GLOBAL_PLATFORM_RUNTIME_SKILLS.map(
+    buildRuntimePlatformSkillInventoryItem,
+  );
+  const globalSelectedCandidates = args.includeSelectedData
+    ? GLOBAL_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
+        scope: "platform" as const,
+        mentionToken: skill.mentionToken,
+        value: buildRuntimeSelectedPlatformSkill(skill, {
+          activation_route: "explicit_mention",
+          activation_reason: `user explicitly mentioned $${skill.mentionToken}`,
+        }),
+      }))
+    : [];
   if (
     !args.communityId ||
     args.communityResourceLane.lane !== "builder" ||
     !args.communityResourceLane.can_use_resource_builder
   ) {
     return {
-      inventory: [],
-      selectedCandidates: [],
+      inventory: globalInventory,
+      selectedCandidates: globalSelectedCandidates,
       autoSelectedSkills: [],
       lifecycleSelectedSkills,
     };
   }
 
-  const inventory = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
-    buildRuntimePlatformSkillInventoryItem,
-  );
+  const inventory = [
+    ...globalInventory,
+    ...COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
+      buildRuntimePlatformSkillInventoryItem,
+    ),
+  ];
   const autoSelectedSkills = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
     (skill) =>
       buildRuntimeSelectedPlatformSkill(skill, {
@@ -263,16 +280,19 @@ async function resolveRuntimePlatformSkillScope(args: {
   );
   return {
     inventory,
-    selectedCandidates: args.includeSelectedData
-      ? COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
-          scope: "platform" as const,
-          mentionToken: skill.mentionToken,
-          value: buildRuntimeSelectedPlatformSkill(skill, {
-            activation_route: "explicit_mention",
-            activation_reason: `user explicitly mentioned $${skill.mentionToken}`,
-          }),
-        }))
-      : [],
+    selectedCandidates: [
+      ...globalSelectedCandidates,
+      ...(args.includeSelectedData
+        ? COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
+            scope: "platform" as const,
+            mentionToken: skill.mentionToken,
+            value: buildRuntimeSelectedPlatformSkill(skill, {
+              activation_route: "explicit_mention",
+              activation_reason: `user explicitly mentioned $${skill.mentionToken}`,
+            }),
+          }))
+        : []),
+    ],
     autoSelectedSkills,
     lifecycleSelectedSkills,
   };

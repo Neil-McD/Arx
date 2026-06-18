@@ -43,6 +43,10 @@ export const COMMUNITY_MANAGER_PLATFORM_SKILLS: PlatformSkillSummary[] = [
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
 ];
 
+export const GLOBAL_PLATFORM_SKILLS: PlatformSkillSummary[] = [
+  PLATFORM_ONBOARDING_GUIDE_SKILL,
+];
+
 export const PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES = [
   "community_resource_builder_list",
   "community_resource_builder_read",

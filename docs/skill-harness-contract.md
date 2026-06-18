@@ -67,7 +67,8 @@ Current example:
 Current lifecycle example:
 
 - `platform:onboarding-guide`
-- selected only by backend lifecycle trigger evidence
+- globally visible as a locked platform skill
+- selected by explicit `$onboarding-guide` mention or backend lifecycle trigger evidence
 - grants no tools by itself
 
 ### Community Skills
@@ -99,7 +100,9 @@ Allowed activation routes:
 - `task_match`: backend selector matches request intent against skill metadata with confidence and ambiguity controls.
 
 Current behavior supports `explicit_mention`, `platform_required`, and a backend
-resolver path for onboarding `lifecycle_trigger` selections. `ui_selected`,
+resolver path for onboarding `lifecycle_trigger` selections. The onboarding
+platform skill is also an explicit-mention canary for platform-owned skills that
+are globally visible but not auto-injected. `ui_selected`,
 automatic product event sources for lifecycle triggers, and `task_match` are
 contract targets, not assumed current behavior.
 
@@ -181,14 +184,16 @@ Current runtime seams:
 
 Current behavior:
 
-- platform skill inventory can be backend-selected by lane
+- globally available platform skill inventory is visible through bounded routing metadata
+- builder-lane platform skill inventory can be backend-selected by lane
 - personal and community skill inventory is visible through bounded routing metadata
 - personal and community skill bodies load only after explicit `$skill` activation
+- globally available platform skill bodies load only after explicit `$skill` activation or lifecycle selection
 - platform skills shadow lower-authority duplicates
 - community skills shadow personal duplicates inside a community lens
 - selected skills are recorded in backend context manifests
 - selected skill records include backend-only activation route and reason
-- the onboarding platform skill can be selected by a backend lifecycle trigger
+- the onboarding platform skill can be selected by explicit mention or backend lifecycle trigger
 - explicit onboarding completion writes one pending `onboarding_completed`
   lifecycle activation per user
 - no cron, email, notification, or runtime dispatcher is wired in this slice

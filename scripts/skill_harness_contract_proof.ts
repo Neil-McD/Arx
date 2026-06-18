@@ -4,9 +4,11 @@ import { readFileSync } from "node:fs";
 import { composeResolvedRuntimeHarness } from "../convex/runtimeHarnessComposition.ts";
 import { buildRuntimeLifecyclePlatformSelectedSkills } from "../convex/runtimeSkillResolution.ts";
 import { normalizeRuntimeSkillResolution } from "../convex/runtimeHarnessShaping.ts";
+import { PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL } from "../convex/platformSkillRuntime.ts";
 import { buildEffectiveSkills } from "../shared/effectiveSkills.ts";
 import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
+  GLOBAL_PLATFORM_SKILLS,
   PLATFORM_ONBOARDING_GUIDE_SKILL,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
   buildPlatformSkillToolNamesForSelection,
@@ -56,6 +58,7 @@ function proveContractNamesCurrentGroundTruth() {
     "convex/runtimeAgentLoop.ts",
     "shared/runtimeContextManifest.ts",
     "platform:onboarding-guide",
+    "explicit-mention canary",
     "activation_route",
     "activation_reason",
     "a separate onboarding prompt stack",
@@ -361,6 +364,7 @@ function proveActivationEvidenceSurvivesRuntimeAndManifest() {
 
 function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
   assert.equal(PLATFORM_ONBOARDING_GUIDE_SKILL.requiresCapability, null);
+  assert.deepEqual(GLOBAL_PLATFORM_SKILLS, [PLATFORM_ONBOARDING_GUIDE_SKILL]);
   assert.equal(
     buildRuntimeLifecyclePlatformSelectedSkills(null).length,
     0,
@@ -446,6 +450,114 @@ function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
   console.log("PASS: lifecycle onboarding uses selected skill harness path");
 }
 
+function proveExplicitOnboardingCanarySkill() {
+  const onboardingInventoryItem = {
+    platform_skill_id: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.id,
+    catalog_skill_id:
+      PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.catalogSkillId ?? null,
+    name: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.name,
+    mention_token: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.mentionToken,
+    description: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.description ?? null,
+    requires_capability: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.requiresCapability,
+  };
+  const unresolved = composeResolvedRuntimeHarness({
+    personalMountedTools: [],
+    skillResolution: {
+      requested_mention_tokens: [],
+      ambiguous_mention_tokens: [],
+      community_resource_lane: {
+        lane: "none",
+        can_read_live_resources: false,
+        can_use_resource_builder: false,
+      },
+      platform_skill_inventory: [onboardingInventoryItem],
+      selected_platform_skills: [],
+      user_platform_skill_inventory: [],
+      selected_user_platform_skills: [],
+      community_skill_inventory: [],
+      selected_community_skills: [],
+    },
+  });
+  assertIncludes(
+    unresolved.systemPromptSuffix,
+    "$onboarding-guide",
+    "global onboarding skill inventory",
+  );
+  assertExcludes(
+    unresolved.systemPromptSuffix,
+    "PLATFORM_SKILL_PACKAGE: Onboarding Guide ($onboarding-guide)",
+    "unselected onboarding body",
+  );
+
+  const explicitSelected = {
+    ...onboardingInventoryItem,
+    instructions_md: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.instructionsMd,
+    activation_route: "explicit_mention" as const,
+    activation_reason: "user explicitly mentioned $onboarding-guide",
+  };
+  const resolved = composeResolvedRuntimeHarness({
+    personalMountedTools: [],
+    skillResolution: {
+      requested_mention_tokens: ["onboarding-guide"],
+      ambiguous_mention_tokens: [],
+      community_resource_lane: {
+        lane: "none",
+        can_read_live_resources: false,
+        can_use_resource_builder: false,
+      },
+      platform_skill_inventory: [onboardingInventoryItem],
+      selected_platform_skills: [explicitSelected],
+      user_platform_skill_inventory: [],
+      selected_user_platform_skills: [],
+      community_skill_inventory: [],
+      selected_community_skills: [],
+    },
+  });
+  assertIncludes(
+    resolved.systemPromptSuffix,
+    "PLATFORM_SKILL_PACKAGE: Onboarding Guide ($onboarding-guide)",
+    "explicitly selected onboarding instructions",
+  );
+  assert.deepEqual(buildPlatformSkillToolNamesForSelection([explicitSelected]), []);
+
+  const manifest = buildRuntimeContextManifest({
+    generatedAt: "2026-06-18T00:00:00.000Z",
+    userId: "user",
+    threadId: "thread",
+    communityId: null,
+    communityContextVersion: null,
+    projectId: null,
+    harnessName: "chat_tools",
+    inferenceSource: "test",
+    latestUserText: "$onboarding-guide introduce me to PolyNet.",
+    messages: [
+      {
+        role: "user",
+        content: "$onboarding-guide introduce me to PolyNet.",
+      },
+    ],
+    allowedToolNames: [],
+    mountedTools: [],
+    communityResourceLane: {
+      lane: "none",
+      can_read_live_resources: false,
+      can_use_resource_builder: false,
+    },
+    selectedPlatformSkills: [explicitSelected],
+    selectedPersonalSkills: [],
+    selectedCommunitySkills: [],
+  });
+  const onboardingPrompt = manifest.prompts.find(
+    (prompt) => prompt.id === "platform_skill:onboarding-guide",
+  );
+  assert.equal(onboardingPrompt?.activationRoute, "explicit_mention");
+  assert.equal(
+    onboardingPrompt?.activationReason,
+    "user explicitly mentioned $onboarding-guide",
+  );
+  console.log("PASS: explicit onboarding canary uses platform skill path");
+}
+
 function proveRuntimeWiringMatchesContract() {
   const runtimeSkillResolution = readText("convex/runtimeSkillResolution.ts");
   const runtimeHarnessComposition = readText("convex/runtimeHarnessComposition.ts");
@@ -459,6 +571,16 @@ function proveRuntimeWiringMatchesContract() {
     runtimeSkillResolution,
     "const includeSelectedData = requestedMentionTokens.length > 0",
     "explicit selection controls personal/community body loading",
+  );
+  assertIncludes(
+    runtimeSkillResolution,
+    "GLOBAL_PLATFORM_RUNTIME_SKILLS",
+    "global platform skill inventory",
+  );
+  assertIncludes(
+    runtimeSkillResolution,
+    "globalSelectedCandidates",
+    "explicit global platform skill candidates",
   );
   assertIncludes(
     runtimeSkillResolution,
@@ -547,6 +669,11 @@ function proveRuntimeWiringMatchesContract() {
   );
   assertIncludes(
     platformSkills,
+    "GLOBAL_PLATFORM_SKILLS",
+    "global platform skill catalog",
+  );
+  assertIncludes(
+    platformSkills,
     "requiresCapability",
     "platform skill capability gate metadata",
   );
@@ -570,6 +697,7 @@ function main() {
   proveScopeShadowingAndPlatformToolExpansion();
   proveActivationEvidenceSurvivesRuntimeAndManifest();
   proveLifecycleOnboardingActivationUsesSkillHarnessPath();
+  proveExplicitOnboardingCanarySkill();
   proveRuntimeWiringMatchesContract();
 }
 
