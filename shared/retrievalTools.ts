@@ -78,8 +78,6 @@ export const SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   ...PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES,
 ];
 
-export const WORKSPACE_SANDBOX_TOOL_NAMES = SANDBOX_TOOL_NAMES;
-
 export const NON_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "search_product_docs",
   "get_product_doc",
@@ -105,10 +103,6 @@ const COMPUTER_USE_TOOL_NAME_SET = new Set<RetrievalToolName>(COMPUTER_USE_TOOL_
 
 export function requiresSandboxSession(toolName: RetrievalToolName): boolean {
   return SANDBOX_TOOL_NAME_SET.has(toolName);
-}
-
-export function requiresWorkspaceSandbox(toolName: RetrievalToolName): boolean {
-  return requiresSandboxSession(toolName);
 }
 
 export function isComputerUseToolName(toolName: RetrievalToolName | string): toolName is ComputerUseToolName {

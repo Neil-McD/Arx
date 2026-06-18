@@ -199,7 +199,7 @@ const WEB_RESEARCH_TOOL_NAMES = new Set<RetrievalToolName>([
   "web_crawl",
 ]);
 
-const WORKSPACE_READ_TOOL_NAMES = new Set<RetrievalToolName>([
+const SANDBOX_READ_TOOL_NAMES = new Set<RetrievalToolName>([
   "list_dir",
   "read",
   "glob",
@@ -207,7 +207,7 @@ const WORKSPACE_READ_TOOL_NAMES = new Set<RetrievalToolName>([
   "sha256",
 ]);
 
-const WORKSPACE_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
+const SANDBOX_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
   "write",
   "edit",
   "bash",
@@ -323,10 +323,10 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   if (WEB_RESEARCH_TOOL_NAMES.has(toolName)) {
     return { family: "web_research", grantedBy: "web_research_capability", effect: "external" };
   }
-  if (WORKSPACE_READ_TOOL_NAMES.has(toolName)) {
+  if (SANDBOX_READ_TOOL_NAMES.has(toolName)) {
     return { family: "sandbox_read", grantedBy: "authenticated_sandbox_scope", effect: "read" };
   }
-  if (WORKSPACE_WRITE_TOOL_NAMES.has(toolName)) {
+  if (SANDBOX_WRITE_TOOL_NAMES.has(toolName)) {
     return { family: "sandbox_write", grantedBy: "authenticated_sandbox_scope", effect: "write" };
   }
   if (TERMINAL_TOOL_NAMES.has(toolName)) {
@@ -539,8 +539,8 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
     });
   }
   if (
-    hasAnyTool(params.allowedToolNames, WORKSPACE_READ_TOOL_NAMES) ||
-    hasAnyTool(params.allowedToolNames, WORKSPACE_WRITE_TOOL_NAMES)
+    hasAnyTool(params.allowedToolNames, SANDBOX_READ_TOOL_NAMES) ||
+    hasAnyTool(params.allowedToolNames, SANDBOX_WRITE_TOOL_NAMES)
   ) {
     resources.push({
       id: "workspace_files",
