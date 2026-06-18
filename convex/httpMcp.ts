@@ -728,6 +728,51 @@ function memoryToolErrorMessage(raw: unknown, fallback: string): string | null {
   return normalizeString(row.message, 500) ?? normalizeString(row.reason_code, 120) ?? fallback;
 }
 
+function workspaceAuthorityHasToolset(workspace: Record<string, unknown>, toolset: string): boolean {
+  const authority = workspace.authority;
+  if (!authority || typeof authority !== "object" || Array.isArray(authority)) return false;
+  const availableToolsets = (authority as Record<string, unknown>).available_toolsets;
+  return Array.isArray(availableToolsets) && availableToolsets.includes(toolset);
+}
+
+function requireWorkspaceAuthorityToolset(
+  workspace: Record<string, unknown>,
+  toolset: string,
+): { ok: true } | { ok: false; message: string } {
+  if (workspaceAuthorityHasToolset(workspace, toolset)) return { ok: true };
+  return {
+    ok: false,
+    message: `Workspace authority does not include ${toolset}.`,
+  };
+}
+
+function normalizeBoundedInteger(
+  value: unknown,
+  min: number,
+  max: number,
+): number | undefined {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : NaN;
+  if (!Number.isFinite(numeric)) return undefined;
+  return Math.max(min, Math.min(max, Math.floor(numeric)));
+}
+
+function normalizeWorkspaceResourceLimit(value: unknown): number | undefined {
+  return normalizeBoundedInteger(value, 1, 100);
+}
+
+function normalizeWorkspaceResourceReadOffset(value: unknown): number | undefined {
+  return normalizeBoundedInteger(value, 0, 1_000_000);
+}
+
+function normalizeWorkspaceResourceReadLimit(value: unknown): number | undefined {
+  return normalizeBoundedInteger(value, 1, 20_000);
+}
+
 async function handleToolCall(args: {
   ctx: any;
   authSubject: string;
@@ -854,6 +899,151 @@ async function handleToolCall(args: {
         isError: false,
       },
     };
+  }
+
+  if (toolName === "polynet_workspace_resources_list") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    if (!authority.ok) {
+      return { ok: false, type: "tool", message: authority.message };
+    }
+    const path = normalizeString(toolArgs.path, 1024);
+    try {
+      const resources = (await ctx.runQuery(
+        internal.communityResources.listCommunityResourceDirectoryInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          ...(path ? { path } : null),
+          limit: normalizeWorkspaceResourceLimit(toolArgs.limit),
+        },
+      )) as Record<string, unknown> | null;
+      if (!resources || typeof resources !== "object") {
+        return { ok: false, type: "tool", message: "Workspace resource listing failed." };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        resources,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace resource listing failed." };
+    }
+  }
+
+  if (toolName === "polynet_workspace_resource_read") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    if (!authority.ok) {
+      return { ok: false, type: "tool", message: authority.message };
+    }
+    const ref = normalizeString(toolArgs.ref, 1024);
+    if (!ref) {
+      return { ok: false, type: "tool", message: "ref is required." };
+    }
+    try {
+      const resource = (await ctx.runQuery(
+        internal.communityResources.readCommunityResourceDirectoryInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          ref,
+          offset: normalizeWorkspaceResourceReadOffset(toolArgs.offset),
+          limit: normalizeWorkspaceResourceReadLimit(toolArgs.limit),
+        },
+      )) as Record<string, unknown> | null;
+      if (!resource || typeof resource !== "object") {
+        return { ok: false, type: "tool", message: "Workspace resource read failed." };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        resource,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace resource read failed." };
+    }
+  }
+
+  if (toolName === "polynet_workspace_resources_search") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    if (!authority.ok) {
+      return { ok: false, type: "tool", message: authority.message };
+    }
+    const query = normalizeString(toolArgs.query, 240);
+    if (!query) {
+      return { ok: false, type: "tool", message: "query is required." };
+    }
+    try {
+      const resources = (await ctx.runQuery(
+        internal.communityResources.searchCommunityResourceDirectoryInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          query,
+          limit: normalizeWorkspaceResourceLimit(toolArgs.limit),
+        },
+      )) as Record<string, unknown> | null;
+      if (!resources || typeof resources !== "object") {
+        return { ok: false, type: "tool", message: "Workspace resource search failed." };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        resources,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace resource search failed." };
+    }
   }
 
   if (toolName === "polynet_community_search") {

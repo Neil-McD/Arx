@@ -77,6 +77,26 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "## Resource Boundary",
+  "workspace MCP resource boundary",
+);
+assertIncludes(
+  contract,
+  "require the `member_resources` authority toolset",
+  "workspace MCP member resource authority gate",
+);
+assertIncludes(
+  contract,
+  "use only the member-visible directory internals",
+  "workspace MCP member resource backend boundary",
+);
+assertIncludes(
+  contract,
+  "must not expose resource map, batch read",
+  "workspace MCP resource non-goals",
+);
+assertIncludes(
+  contract,
   "provider implementation does not import or mutate the internal MCP consumer/runtime path.",
   "workspace MCP non-interference acceptance",
 );
@@ -91,6 +111,11 @@ assertIncludes(
   integrationsSettings,
   "POLYMCP_CODEX_SETUP_COMMANDS",
   "PolyMCP Codex setup commands",
+);
+assertIncludes(
+  integrationsSettings,
+  "9 workspace tools",
+  "PolyMCP integration tool count",
 );
 assertIncludes(
   integrationsSettings,
@@ -200,6 +225,9 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
 ]) {
   assertIncludes(polynetMcp, `| "${toolName}"`, `${toolName} type union`);
   assertIncludes(polynetMcp, `name: "${toolName}"`, `${toolName} tool definition`);
@@ -216,6 +244,9 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
 ]) {
   const block = toolDefinitionBlock(polynetMcp, toolName);
   assertIncludes(block, "workspace_context_id", `${toolName} schema`);
@@ -305,6 +336,37 @@ assertIncludes(outcomeDispatch, "retrieval_log_id is required", "outcome retriev
 assertIncludes(outcomeDispatch, "result_status must be worked, failed, or mixed", "outcome status validation");
 assertNotIncludes(outcomeDispatch, "communityIntelligenceNodes", "outcome direct node mutation");
 assertNotIncludes(outcomeDispatch, "communityIntelligenceEdges", "outcome direct edge mutation");
+
+for (const toolName of [
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
+]) {
+  const definition = toolDefinitionBlock(polynetMcp, toolName);
+  assertIncludes(definition, "readOnlyHint: true", `${toolName} read-only annotation`);
+  assertIncludes(definition, "member-visible", `${toolName} member-visible description`);
+  const dispatch = toolDispatchBlock(httpMcp, toolName);
+  assertIncludes(dispatch, "resolveWorkspaceContext", `${toolName} workspace revalidation`);
+  assertIncludes(dispatch, "requireWorkspaceAuthorityToolset", `${toolName} authority toolset gate`);
+  assertIncludes(dispatch, "\"member_resources\"", `${toolName} member resource toolset gate`);
+  assertNotIncludes(dispatch, "mapCommunityResourcesForToolInternal", `${toolName} no resource map path`);
+  assertNotIncludes(dispatch, "readCommunityResourcesForToolInternal", `${toolName} no batch read path`);
+  assertNotIncludes(dispatch, "listCommunityResourceBuilderDirectory", `${toolName} no builder list path`);
+  assertNotIncludes(dispatch, "readCommunityResourceBuilderResource", `${toolName} no builder read path`);
+  assertNotIncludes(dispatch, "stageCommunityResourceBuilderChangeset", `${toolName} no staged mutation path`);
+  assertNotIncludes(dispatch, "applyCommunityResourceBuilderChangeset", `${toolName} no apply mutation path`);
+}
+
+const resourceListDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_list");
+assertIncludes(resourceListDispatch, "listCommunityResourceDirectoryInternal", "resource list member directory path");
+
+const resourceReadDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resource_read");
+assertIncludes(resourceReadDispatch, "readCommunityResourceDirectoryInternal", "resource read member directory path");
+assertIncludes(resourceReadDispatch, "ref is required", "resource read ref validation");
+
+const resourceSearchDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_search");
+assertIncludes(resourceSearchDispatch, "searchCommunityResourceDirectoryInternal", "resource search member directory path");
+assertIncludes(resourceSearchDispatch, "query is required", "resource search query validation");
 
 const rawSearchDispatch = toolDispatchBlock(httpMcp, "polynet_community_search");
 assertIncludes(rawSearchDispatch, "searchCommunityKnowledgeInternal", "raw community search remains separate");

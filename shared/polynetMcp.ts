@@ -24,7 +24,10 @@ export type PolynetMcpToolName =
   | "polynet_get_workspace_context"
   | "polynet_workspace_memory_search"
   | "polynet_workspace_memory_read"
-  | "polynet_workspace_record_outcome";
+  | "polynet_workspace_record_outcome"
+  | "polynet_workspace_resources_list"
+  | "polynet_workspace_resource_read"
+  | "polynet_workspace_resources_search";
 
 export type PolynetMcpToolDefinition = {
   name: PolynetMcpToolName;
@@ -568,6 +571,130 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       properties: {
         workspace: WORKSPACE_SUMMARY_SCHEMA,
         outcome: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_resources_list: {
+    name: "polynet_workspace_resources_list",
+    title: "List PolyNet Workspace Resources",
+    description:
+      "List live member-visible resources in an opened PolyNet workspace. This does not expose draft or builder-only resource state.",
+    annotations: {
+      title: "List PolyNet Workspace Resources",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        path: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1024,
+          description: "Optional resource directory path or directory URI. Defaults to the workspace resource root.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum directory entries to return, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resources"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resources: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_resource_read: {
+    name: "polynet_workspace_resource_read",
+    title: "Read PolyNet Workspace Resource",
+    description:
+      "Read one live member-visible resource from an opened PolyNet workspace by resource id, directory path, or directory URI.",
+    annotations: {
+      title: "Read PolyNet Workspace Resource",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "ref"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        ref: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1024,
+          description: "Resource id, readable directory path, or resource directory URI returned by resource listing/search.",
+        },
+        offset: {
+          type: "number",
+          description: "Content character offset, clamped by the server.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum content characters to return, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resource"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resource: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_resources_search: {
+    name: "polynet_workspace_resources_search",
+    title: "Search PolyNet Workspace Resources",
+    description:
+      "Search live member-visible resources in an opened PolyNet workspace. This does not search draft or builder-only resource state.",
+    annotations: {
+      title: "Search PolyNet Workspace Resources",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "query"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        query: {
+          type: "string",
+          minLength: 1,
+          maxLength: 240,
+          description: "Focused resource search query.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum matching resources to return, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resources"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resources: {
           type: "object",
           additionalProperties: true,
         },

@@ -186,6 +186,9 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
 ]) {
   assertIncludes(externalSmoke, toolName, `${toolName} external smoke`);
 }
@@ -385,6 +388,9 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
 ]) {
   const block = toolDispatchBlock(httpMcp, toolName);
   assertIncludes(block, "resolveWorkspaceContext", `${toolName} per-call workspace authorization`);

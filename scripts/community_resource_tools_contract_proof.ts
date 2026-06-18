@@ -26,6 +26,7 @@ const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const resources = read("convex/communityResources.ts");
+const httpMcp = read("convex/httpMcp.ts");
 const polynetMcp = read("shared/polynetMcp.ts");
 const timeline = read("shared/runtimeActivityTimeline.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
@@ -272,10 +273,43 @@ assert.match(timelineUi, /community_resources_list/);
 assert.match(timelineUi, /community_resource_read/);
 assert.match(timelineUi, /community_resources_search/);
 
+assert.match(
+  polynetMcp,
+  /polynet_workspace_resources_list[\s\S]*polynet_workspace_resource_read[\s\S]*polynet_workspace_resources_search/,
+  "public PolyNet MCP should expose only the member-visible workspace resource slice",
+);
+for (const toolName of [
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
+]) {
+  assert.match(polynetMcp, new RegExp(`name: "${toolName}"[\\s\\S]*readOnlyHint: true`));
+  assert.match(httpMcp, new RegExp(`toolName === "${toolName}"[\\s\\S]*requireWorkspaceAuthorityToolset[\\s\\S]*"member_resources"`));
+}
+assert.match(
+  httpMcp,
+  /polynet_workspace_resources_list[\s\S]*listCommunityResourceDirectoryInternal/,
+  "PolyMCP resource list should use the member-visible directory list internal",
+);
+assert.match(
+  httpMcp,
+  /polynet_workspace_resource_read[\s\S]*readCommunityResourceDirectoryInternal/,
+  "PolyMCP resource read should use the member-visible directory read internal",
+);
+assert.match(
+  httpMcp,
+  /polynet_workspace_resources_search[\s\S]*searchCommunityResourceDirectoryInternal/,
+  "PolyMCP resource search should use the member-visible directory search internal",
+);
 assert.doesNotMatch(
   polynetMcp,
-  /community_resources_map|community_resources_read|community_resource_read|community_resources_list|community_resources_search/,
-  "resource directory tools should not be exposed through public PolyNet MCP in this slice",
+  /polynet_workspace_resources_map|polynet_workspace_resources_read|polynet_workspace_resource_builder|polynet_workspace_resources_stage|polynet_workspace_resources_apply/,
+  "public PolyNet MCP should not expose resource map, batch read, builder, stage, or apply tools",
+);
+assert.doesNotMatch(
+  httpMcp,
+  /toolName === "polynet_workspace_resources_(map|read|stage|apply)"|toolName === "polynet_workspace_resource_builder/,
+  "provider MCP should not dispatch resource map, batch read, builder, stage, or apply tools",
 );
 assert.match(
   cognitionDocs,

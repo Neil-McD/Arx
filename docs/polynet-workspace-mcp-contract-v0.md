@@ -178,6 +178,9 @@ polynet_get_workspace_context
 polynet_workspace_memory_search
 polynet_workspace_memory_read
 polynet_workspace_record_outcome
+polynet_workspace_resources_list
+polynet_workspace_resource_read
+polynet_workspace_resources_search
 ```
 
 Existing community-named tools may remain for compatibility, but v0 product semantics should prefer the workspace-named provider tools.
@@ -239,6 +242,22 @@ It must use the same accepted-memory backend path as the internal member-agent `
 
 Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
 
+## Resource Boundary
+
+`polynet_workspace_resources_list`, `polynet_workspace_resource_read`, and `polynet_workspace_resources_search` expose live member-visible community resources through an opened workspace.
+
+They must:
+
+- require `workspace_context_id`,
+- re-resolve and revalidate the workspace selector server-side,
+- require the `member_resources` authority toolset,
+- use only the member-visible directory internals:
+  - `listCommunityResourceDirectoryInternal`,
+  - `readCommunityResourceDirectoryInternal`,
+  - `searchCommunityResourceDirectoryInternal`.
+
+They must not expose resource map, batch read, draft modules, draft resources, source inbox as builder state, builder health/preflight metadata, staged changesets, apply changesets, or any resource mutation path.
+
 ## Non-Goals
 
 This slice does not change or extend:
@@ -255,6 +274,8 @@ This slice does not change or extend:
 - workspace filesystem or shell tools,
 - community writes,
 - resource builder tools,
+- resource map or batch read tools,
+- resource staging or apply mutations,
 - compiler controls,
 - candidate or draft intelligence review,
 - public plugin marketplace publishing.
@@ -269,7 +290,8 @@ The slice is done when a real external MCP client can:
 4. get workspace context,
 5. search accepted community memory,
 6. read one memory node,
-7. record an outcome against the retrieval log.
+7. record an outcome against the retrieval log,
+8. list, read, and search member-visible workspace resources when the workspace authority includes `member_resources`.
 
 Focused proofs must show:
 
@@ -286,5 +308,8 @@ Focused proofs must show:
 - accepted memory search uses `searchCommunityMemoryInternal`,
 - accepted memory read uses `readCommunityMemoryInternal`,
 - outcome feedback uses `recordCommunityOutcomeObservationInternal`,
+- resource tools require `member_resources`,
+- resource tools use only live member-visible directory internals,
+- resource tools do not expose map, batch read, builder, staging, apply, or mutation internals,
 - raw `polynet_community_search` remains separate from accepted memory,
 - provider implementation does not import or mutate the internal MCP consumer/runtime path.

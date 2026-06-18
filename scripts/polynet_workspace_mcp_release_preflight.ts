@@ -38,6 +38,9 @@ const PROVIDER_TOOLS = [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resource_read",
+  "polynet_workspace_resources_search",
 ] as const;
 
 function argValue(name: string): string | null {
