@@ -8,6 +8,7 @@ import { POLYNET_MCP_PROTOCOL_VERSION } from "../shared/polynetMcp.ts";
 type CheckStatus = "pass" | "fail" | "warn";
 type LiveClassification =
   | "ready_for_smoke"
+  | "oauth_challenge_ready"
   | "not_released_yet"
   | "web_proxy_ready_but_convex_stale"
   | "live_origin_unreachable"
@@ -27,6 +28,9 @@ type HttpProbe = {
   status: number | null;
   text: string;
   body: unknown;
+  headers: {
+    wwwAuthenticate: string | null;
+  };
   error: string | null;
 };
 
@@ -282,6 +286,9 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<HttpPro
       status: response.status,
       text: text.slice(0, 4000),
       body: parseJson(text),
+      headers: {
+        wwwAuthenticate: response.headers.get("www-authenticate"),
+      },
       error: null,
     };
   } catch (error) {
@@ -291,6 +298,9 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<HttpPro
       status: null,
       text: "",
       body: null,
+      headers: {
+        wwwAuthenticate: null,
+      },
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
@@ -331,6 +341,18 @@ function extractToolNames(toolsList: HttpProbe): string[] {
     .filter((name): name is string => Boolean(name));
 }
 
+function hasOAuthResourceChallenge(probe: HttpProbe): boolean {
+  const authenticate = probe.headers.wwwAuthenticate;
+  return probe.status === 401 &&
+    Boolean(authenticate) &&
+    /\bBearer\b/i.test(authenticate ?? "") &&
+    /resource_metadata=/i.test(authenticate ?? "");
+}
+
+function liveClassificationIsReady(classification: LiveClassification): boolean {
+  return classification === "ready_for_smoke" || classification === "oauth_challenge_ready";
+}
+
 function classifyLive(args: {
   initialize: HttpProbe;
   toolsList: HttpProbe | null;
@@ -349,12 +371,18 @@ function classifyLive(args: {
   ) {
     return "not_released_yet";
   }
-  if (args.initialize.status !== 200 || args.protectedResource.status !== 200 || args.authorizationServer.status !== 200) {
+  if (args.protectedResource.status !== 200 || args.authorizationServer.status !== 200) {
     return "live_origin_unexpected";
   }
   const resource = asString(asRecord(args.protectedResource.body)?.resource);
   if (!resource || normalizeComparableUrl(resource) !== normalizeComparableUrl(args.mcpUrl)) {
     return "web_proxy_ready_but_convex_stale";
+  }
+  if (hasOAuthResourceChallenge(args.initialize)) {
+    return "oauth_challenge_ready";
+  }
+  if (args.initialize.status !== 200) {
+    return "live_origin_unexpected";
   }
   const toolNames = args.toolsList ? extractToolNames(args.toolsList) : [];
   if (!PROVIDER_TOOLS.every((tool) => toolNames.includes(tool))) {
@@ -385,12 +413,13 @@ async function buildLiveProbe(mcpUrl: string) {
     mcpUrl,
   });
   return {
-    ok: classification === "ready_for_smoke",
+    ok: liveClassificationIsReady(classification),
     classification,
     probes: {
       initialize: {
         ok: initialize.ok,
         status: initialize.status,
+        oauthChallengePresent: hasOAuthResourceChallenge(initialize),
         error: initialize.error,
       },
       toolsList: toolsList

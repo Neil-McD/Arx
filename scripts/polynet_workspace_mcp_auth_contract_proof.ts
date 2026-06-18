@@ -178,6 +178,9 @@ assertIncludes(releasePreflight, "ARX_MCP_AUTH_JWT_AUDIENCE", "release preflight
 assertIncludes(releasePreflight, "not_released_yet", "release preflight classifies unreleased public web origin");
 assertIncludes(releasePreflight, "web_proxy_ready_but_convex_stale", "release preflight classifies stale Convex route");
 assertIncludes(releasePreflight, "ready_for_smoke", "release preflight classifies live smoke readiness");
+assertIncludes(releasePreflight, "oauth_challenge_ready", "release preflight classifies OAuth-protected live readiness");
+assertIncludes(releasePreflight, "function hasOAuthResourceChallenge", "release preflight validates OAuth challenge shape");
+assertIncludes(releasePreflight, "resource_metadata=", "release preflight requires protected resource metadata challenge");
 assertIncludes(releasePreflight, "--require-live-ready", "release preflight has strict live-ready mode");
 for (const toolName of [
   "polynet_list_workspaces",
