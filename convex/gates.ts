@@ -21,7 +21,12 @@ type GateCode =
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "checkout";
 type GateLane = "public" | "platform" | "chatgpt";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
-type CapabilityFamily = "product_docs" | "community_tools" | "web_research" | "workspace_tools";
+type CapabilityFamily =
+  | "product_docs"
+  | "community_tools"
+  | "web_research"
+  | "sandbox_tools"
+  | "workspace_tools";
 
 type GateDecision = {
   allowed: boolean;
@@ -314,6 +319,7 @@ export const resolveGateBundle = query({
         allowProductDocs: entitledCapabilityFamilies.includes("product_docs"),
         allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
+        allowSandboxTools: entitledCapabilityFamilies.includes("sandbox_tools"),
         allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
         allowCommunityCreate: args.authState === "authenticated",
         allowPersonalMemory: args.authState === "authenticated",

@@ -492,6 +492,7 @@ export const smokeBlaxelRuntimeWorkspaceTools = action({
       );
 
       const session: BlaxelRuntimeWorkspaceSession = {
+        kind: "project_workspace",
         providerId: "blaxel",
         projectId: String(args.projectId),
         projectVolumeId: names.volumeName,

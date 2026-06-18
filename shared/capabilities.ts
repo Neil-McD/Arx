@@ -17,6 +17,7 @@ export type UserAccessPolicy = {
   allowProductDocs: boolean;
   allowCommunityTools: boolean;
   allowWebResearch: boolean;
+  allowSandboxTools: boolean;
   allowWorkspaceTools: boolean;
   allowCommunityJoin: boolean;
   allowCommunityCreate: boolean;
@@ -72,6 +73,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
     allowProductDocs: entitledCapabilityFamilies.includes("product_docs"),
     allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
     allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
+    allowSandboxTools: entitledCapabilityFamilies.includes("sandbox_tools"),
     allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
     allowCommunityJoin: isAuthenticated,
     allowCommunityCreate: canCreateCommunityInAlpha,

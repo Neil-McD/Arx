@@ -13,7 +13,7 @@ import {
   releaseBlaxelWorkspaceComputerIfIdle,
 } from "./blaxelWorkspaceComputerProvider.ts";
 import {
-  createProjectRuntimeWorkspaceSession,
+  createRuntimeSandboxSession,
   releaseRuntimeWorkspaceSessionAccountingIfCurrent,
   settleRuntimeWorkspaceSession,
   type RuntimeWorkspaceSession,
@@ -273,7 +273,7 @@ export function createPolyNetExecutionSession(params: {
   const persistWorkspaceSessionState = async (paramsForPersist: {
     state: "active" | "released" | "failed";
     session: RuntimeWorkspaceSession;
-    projectId: string;
+    projectId: string | null;
     phase: "create" | "dispose";
   }): Promise<{ ok: true } | { ok: false; attemptCount: number }> => {
     let attemptCount = 0;
@@ -305,7 +305,8 @@ export function createPolyNetExecutionSession(params: {
             {
               run_id: params.runId,
               sandbox_id: paramsForPersist.session.providerSandboxId,
-              project_id: paramsForPersist.projectId,
+              project_id: paramsForPersist.projectId ?? null,
+              sandbox_scope: paramsForPersist.session.kind,
               target_state: paramsForPersist.state,
               phase: paramsForPersist.phase,
               attempt_count: attemptCount,
@@ -337,6 +338,13 @@ export function createPolyNetExecutionSession(params: {
     refreshedTerminalCount?: number;
     errorMessage?: string | null;
   }> => {
+    if (session.kind === "thread_scratch") {
+      return {
+        ok: true,
+        shouldRelease: true,
+        reason: "scratch_sandbox_run_finished",
+      };
+    }
     try {
       const activeTerminalStatus = await params.ctx.runAction(
         internal.workspaceTerminals.refreshProjectSandboxActiveTerminalStatusInternal as any,
@@ -432,30 +440,25 @@ export function createPolyNetExecutionSession(params: {
         };
       }
       const projectId = String(params.projectId ?? "").trim();
-      if (!projectId) {
-        return {
-          ok: false as const,
-          status: 400,
-          code: "project_required",
-          message: "Workspace session requires a bound computer workspace.",
-        };
-      }
+      const source = projectId ? "project_background" : "thread_scratch";
       const createStartedAt = Date.now();
       await emitRunEvent(
         "workspace_session_create_started",
         {
           run_id: params.runId,
-          project_id: projectId,
+          project_id: projectId || null,
+          source,
           tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
           provider_id: null,
         },
         `${params.runId}:workspace_session_create_started:1`,
       );
-      const createdWorkspace = await createProjectRuntimeWorkspaceSession({
+      const createdWorkspace = await createRuntimeSandboxSession({
         ctx: params.ctx,
         authSubject: params.authSubject,
         userId: params.userId,
-        projectId,
+        projectId: projectId || null,
+        threadId: params.threadId ?? null,
         runId: params.runId,
       });
       if (!createdWorkspace.ok) {
@@ -463,12 +466,12 @@ export function createPolyNetExecutionSession(params: {
           "workspace_session_create_completed",
           {
             run_id: params.runId,
-            project_id: projectId,
+            project_id: projectId || null,
+            source,
             tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
             latency_ms: Date.now() - createStartedAt,
             status: "error",
             code: createdWorkspace.code,
-            source: "project_background",
             provider_id: null,
           },
           `${params.runId}:workspace_session_create_completed:error`,
@@ -496,17 +499,18 @@ export function createPolyNetExecutionSession(params: {
         {
           run_id: params.runId,
           sandbox_id: workspaceSession.providerSandboxId,
-          project_id: projectId,
-          source: "project_background",
+          project_id: workspaceSession.projectId ?? null,
+          source,
+          sandbox_scope: workspaceSession.kind,
           provider_id: workspaceSession.providerId,
           toolbox_proxy_url: null,
         },
-        `${params.runId}:workspace_session_adopted:project_background`,
+        `${params.runId}:workspace_session_adopted:${source}`,
       );
       const persisted = await persistWorkspaceSessionState({
         state: "active",
         session: workspaceSession,
-        projectId,
+        projectId: workspaceSession.projectId ?? null,
         phase: "create",
       });
       if (!persisted.ok) {
@@ -527,14 +531,15 @@ export function createPolyNetExecutionSession(params: {
         "workspace_session_create_completed",
         {
           run_id: params.runId,
-          project_id: projectId,
+          project_id: workspaceSession.projectId ?? null,
+          source,
+          sandbox_scope: workspaceSession.kind,
           tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
           latency_ms: Date.now() - createStartedAt,
           status: "ok",
           sandbox_id: workspaceSession.providerSandboxId,
           provider_id: workspaceSession.providerId,
           region: null,
-          source: "project_background",
         },
         `${params.runId}:workspace_session_create_completed:ok`,
       );
@@ -562,9 +567,7 @@ export function createPolyNetExecutionSession(params: {
           await persistWorkspaceSessionState({
             state: finalWorkspaceState,
             session: workspaceSession,
-            projectId: String(
-              params.projectId ?? workspaceSession.projectId ?? "",
-            ).trim(),
+            projectId: workspaceSession.projectId ?? null,
             phase: "dispose",
           });
         } catch {
@@ -578,7 +581,8 @@ export function createPolyNetExecutionSession(params: {
             {
               run_id: params.runId,
               sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
+              project_id: workspaceSession.projectId ?? null,
+              sandbox_scope: workspaceSession.kind,
               credit_reservation_key: workspaceSession.creditReservationKey ?? null,
               reason: releaseDecision.reason,
               active_terminal_count: releaseDecision.activeTerminalCount ?? null,
@@ -599,12 +603,28 @@ export function createPolyNetExecutionSession(params: {
             {
               run_id: params.runId,
               sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
+              project_id: workspaceSession.projectId ?? null,
+              sandbox_scope: workspaceSession.kind,
               credit_reservation_key: workspaceSession.creditReservationKey ?? null,
               code: providerRelease.code,
               message: providerRelease.message,
             },
             `${params.runId}:workspace_session_provider_release_failed:${workspaceSession.creditReservationKey ?? "none"}`,
+          );
+          return;
+        }
+        if (workspaceSession.kind === "thread_scratch") {
+          await emitRunEvent(
+            "workspace_session_provider_released",
+            {
+              run_id: params.runId,
+              sandbox_id: workspaceSession.providerSandboxId,
+              project_id: null,
+              sandbox_scope: workspaceSession.kind,
+              reason: providerRelease.reason,
+              release_confirmed: providerRelease.releaseConfirmed,
+            },
+            `${params.runId}:workspace_session_provider_released:scratch:${workspaceSession.providerSandboxId}`,
           );
           return;
         }

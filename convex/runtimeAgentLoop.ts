@@ -48,7 +48,7 @@ import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import {
   type RetrievalToolName,
   isComputerUseToolName,
-  requiresWorkspaceSandbox,
+  requiresSandboxSession,
 } from "../shared/retrievalTools";
 import productDocsIndexJson from "../docs/product/generated/index.json";
 import {
@@ -1150,13 +1150,13 @@ async function executeRetrievalHarnessTool(params: {
     const projectId = String(
       params.projectId ?? workspaceSession?.projectId ?? "",
     ).trim();
-    if (!projectId || !workspaceSession) {
+    if (!workspaceSession) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: "project_required",
-        errorMessage: `${params.toolName} requires a bound computer workspace.`,
+        errorCode: "sandbox_session_required",
+        errorMessage: `${params.toolName} requires an active sandbox session.`,
       };
     }
     if (isWorkspaceCreditBudgetExpired(workspaceSession)) {
@@ -1225,10 +1225,12 @@ async function executeRetrievalHarnessTool(params: {
       params.toolName === "edit" ||
       params.toolName === "bash"
     ) {
-      await markWorkspaceDirectorySnapshotsStaleBestEffort(
-        projectId,
-        `runtime_tool_${params.toolName}`,
-      );
+      if (workspaceSession.kind === "project_workspace" && projectId) {
+        await markWorkspaceDirectorySnapshotsStaleBestEffort(
+          projectId,
+          `runtime_tool_${params.toolName}`,
+        );
+      }
     }
     return {
       status: "ok",
@@ -2261,7 +2263,7 @@ async function executeRetrievalAgentLoop(
           }
         }
 
-        const needsWorkspaceSession = requiresWorkspaceSandbox(
+        const needsWorkspaceSession = requiresSandboxSession(
           toolName as RetrievalToolName,
         );
 

@@ -1,7 +1,11 @@
 import { api, internal } from "./_generated/api";
 import { decryptStoredSecret } from "./providerConnections";
 import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig";
-import type { RetrievalToolName } from "../shared/retrievalTools";
+import {
+  PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES,
+  SANDBOX_FILE_SHELL_TOOL_NAMES,
+  type RetrievalToolName,
+} from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
 import {
   resolveActiveCapabilityFamiliesFromEntitlements,
@@ -93,7 +97,7 @@ export type RuntimeTurnResolution = {
   runtimeCommunityAbout: string | null;
   runtimeCommunitySystemPrompt: string | null;
   runtimeProjectId: string | null;
-  runtimeSandboxMode: "workspace_write" | undefined;
+  runtimeSandboxMode: "sandbox_write" | "workspace_write" | undefined;
   allowedToolNames: RetrievalToolName[];
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
@@ -227,14 +231,14 @@ export function resolveAllowedToolNames(params: {
   if (params.activeCapabilityFamilies.includes("product_docs")) {
     toolNames.push("search_product_docs", "get_product_doc");
   }
-	  if (params.activeCapabilityFamilies.includes("community_tools")) {
-	    toolNames.push(
-	      "get_active_community_context",
-	      "community_resources_map",
-	      "community_resources_read",
-	      "community_resources_list",
-	      "community_resource_read",
-	      "community_resources_search",
+  if (params.activeCapabilityFamilies.includes("community_tools")) {
+    toolNames.push(
+      "get_active_community_context",
+      "community_resources_map",
+      "community_resources_read",
+      "community_resources_list",
+      "community_resource_read",
+      "community_resources_search",
       "community_search",
       "community_write",
     );
@@ -242,21 +246,11 @@ export function resolveAllowedToolNames(params: {
   if (params.activeCapabilityFamilies.includes("web_research")) {
     toolNames.push("web_research", "web_crawl");
   }
+  if (params.activeCapabilityFamilies.includes("sandbox_tools")) {
+    toolNames.push(...SANDBOX_FILE_SHELL_TOOL_NAMES);
+  }
   if (params.activeCapabilityFamilies.includes("workspace_tools")) {
-    toolNames.push(
-      "list_dir",
-      "read",
-      "glob",
-      "grep",
-      "sha256",
-      "write",
-      "edit",
-      "bash",
-      "terminal_start",
-      "terminal_read",
-      "terminal_write",
-      "terminal_stop",
-    );
+    toolNames.push(...PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES);
     if (params.inferenceSource === "chatgpt") {
       toolNames.push(
         "computer_open_url",
@@ -552,7 +546,9 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeProjectId,
       runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")
         ? "workspace_write"
-        : undefined,
+        : resolvedRuntimeCapabilityFamilies.includes("sandbox_tools")
+          ? "sandbox_write"
+          : undefined,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile: resolveHarnessProfileFromActiveCapabilities({

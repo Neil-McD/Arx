@@ -16,7 +16,12 @@ type GateCode =
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "checkout";
 type GateLane = "public" | "platform" | "chatgpt";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
-type CapabilityFamily = "product_docs" | "community_tools" | "web_research" | "workspace_tools";
+type CapabilityFamily =
+  | "product_docs"
+  | "community_tools"
+  | "web_research"
+  | "sandbox_tools"
+  | "workspace_tools";
 type ResolvedGateDecision = {
   allowed: boolean;
   code: GateCode;
@@ -213,6 +218,7 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
               (value === "community_tools" ||
                 value === "product_docs" ||
                 value === "web_research" ||
+                value === "sandbox_tools" ||
                 value === "workspace_tools") &&
               list.indexOf(value) === index,
           )

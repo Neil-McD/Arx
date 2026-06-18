@@ -50,7 +50,7 @@ export const COMPUTER_USE_TOOL_NAMES = [
 
 export type ComputerUseToolName = (typeof COMPUTER_USE_TOOL_NAMES)[number];
 
-export const WORKSPACE_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
+export const SANDBOX_FILE_SHELL_TOOL_NAMES: readonly RetrievalToolName[] = [
   "list_dir",
   "read",
   "glob",
@@ -59,12 +59,26 @@ export const WORKSPACE_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "write",
   "edit",
   "bash",
+];
+
+export const PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES: readonly RetrievalToolName[] = [
   "terminal_start",
   "terminal_read",
   "terminal_write",
   "terminal_stop",
+];
+
+export const PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES: readonly RetrievalToolName[] = [
+  ...PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES,
   ...COMPUTER_USE_TOOL_NAMES,
 ];
+
+export const SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
+  ...SANDBOX_FILE_SHELL_TOOL_NAMES,
+  ...PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES,
+];
+
+export const WORKSPACE_SANDBOX_TOOL_NAMES = SANDBOX_TOOL_NAMES;
 
 export const NON_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "search_product_docs",
@@ -85,14 +99,16 @@ export const NON_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "web_crawl",
 ];
 
-const WORKSPACE_SANDBOX_TOOL_NAME_SET = new Set<RetrievalToolName>(
-  WORKSPACE_SANDBOX_TOOL_NAMES,
-);
+const SANDBOX_TOOL_NAME_SET = new Set<RetrievalToolName>(SANDBOX_TOOL_NAMES);
 
 const COMPUTER_USE_TOOL_NAME_SET = new Set<RetrievalToolName>(COMPUTER_USE_TOOL_NAMES);
 
+export function requiresSandboxSession(toolName: RetrievalToolName): boolean {
+  return SANDBOX_TOOL_NAME_SET.has(toolName);
+}
+
 export function requiresWorkspaceSandbox(toolName: RetrievalToolName): boolean {
-  return WORKSPACE_SANDBOX_TOOL_NAME_SET.has(toolName);
+  return requiresSandboxSession(toolName);
 }
 
 export function isComputerUseToolName(toolName: RetrievalToolName | string): toolName is ComputerUseToolName {

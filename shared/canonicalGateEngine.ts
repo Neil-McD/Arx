@@ -10,11 +10,17 @@ export type RequestedFundingSource =
   | "user_chatgpt"
   | "platform"
   | "auto";
-export type CapabilityFamily = "product_docs" | "community_tools" | "web_research" | "workspace_tools";
+export type CapabilityFamily =
+  | "product_docs"
+  | "community_tools"
+  | "web_research"
+  | "sandbox_tools"
+  | "workspace_tools";
 export const AUTHENTICATED_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
   "product_docs",
   "community_tools",
   "web_research",
+  "sandbox_tools",
   "workspace_tools",
 ];
 export type RuntimeLane = "public" | "platform" | "chatgpt";
@@ -69,6 +75,7 @@ const VALID_CAPABILITY_FAMILY = new Set<CapabilityFamily>([
   "product_docs",
   "community_tools",
   "web_research",
+  "sandbox_tools",
   "workspace_tools",
 ]);
 
@@ -151,6 +158,9 @@ export function resolveActiveCapabilityFamiliesFromEntitlements(input: {
   }
   if (entitled.includes("web_research")) {
     active.push("web_research");
+  }
+  if (entitled.includes("sandbox_tools")) {
+    active.push("sandbox_tools");
   }
   if (hasProjectContext && entitled.includes("workspace_tools")) {
     active.push("workspace_tools");

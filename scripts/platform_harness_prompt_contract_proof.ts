@@ -35,6 +35,7 @@ function proveCapabilityContract() {
       "product_docs",
       "community_tools",
       "web_research",
+      "sandbox_tools",
       "workspace_tools",
     ],
     "authenticated platform capability constant should be the single product-facing entitlement set",
@@ -71,8 +72,8 @@ function proveCapabilityContract() {
       hasCommunityContext: false,
       hasProjectContext: false,
     }),
-    ["product_docs", "web_research"],
-    "without context, only global authenticated capabilities should activate",
+    ["product_docs", "web_research", "sandbox_tools"],
+    "without context, global authenticated capabilities and scratch sandbox tools should activate",
   );
   assertSameArray(
     resolveActiveCapabilityFamiliesFromEntitlements({
@@ -80,7 +81,7 @@ function proveCapabilityContract() {
       hasCommunityContext: true,
       hasProjectContext: false,
     }),
-    ["product_docs", "community_tools", "web_research"],
+    ["product_docs", "community_tools", "web_research", "sandbox_tools"],
     "community tools should activate only with a validated community lens",
   );
   assertSameArray(
@@ -89,8 +90,8 @@ function proveCapabilityContract() {
       hasCommunityContext: false,
       hasProjectContext: true,
     }),
-    ["product_docs", "web_research", "workspace_tools"],
-    "workspace tools should activate only with a project context",
+    ["product_docs", "web_research", "sandbox_tools", "workspace_tools"],
+    "project context should add workspace tools to global authenticated tools",
   );
   assertSameArray(
     resolveActiveCapabilityFamiliesFromEntitlements({
@@ -332,7 +333,7 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeAgentLoopSource,
-    /buildPlatformHarnessRuntimeSystemPrompt/,
+    /buildPlatformHarnessRuntimePromptBundle/,
     "agentic runtime path should call the platform harness prompt entrypoint",
   );
   assert.doesNotMatch(
@@ -392,8 +393,13 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeTurnResolutionSource,
-    /if \(params\.activeCapabilityFamilies\.includes\("workspace_tools"\)\)[\s\S]*"terminal_start"[\s\S]*"terminal_stop"/,
-    "workspace tools should be exposed by capability family, not product tier",
+    /if \(params\.activeCapabilityFamilies\.includes\("sandbox_tools"\)\)[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES/,
+    "sandbox file and shell tools should be exposed by authenticated sandbox capability",
+  );
+  assert.match(
+    runtimeTurnResolutionSource,
+    /if \(params\.activeCapabilityFamilies\.includes\("workspace_tools"\)\)[\s\S]*PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES/,
+    "project workspace tools should expose terminal controls by capability family, not product tier",
   );
   assert.match(
     runtimeTurnResolutionSource,

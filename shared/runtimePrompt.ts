@@ -331,7 +331,7 @@ function buildPlatformHarnessContextPrompt(params: {
   projectLabel?: string | null;
   projectDescription?: string | null;
 }): string {
-  const hasWorkspaceTools = params.allowedToolNames.some((toolName) =>
+  const hasSandboxFileTools = params.allowedToolNames.some((toolName) =>
     [
       "list_dir",
       "read",
@@ -343,21 +343,49 @@ function buildPlatformHarnessContextPrompt(params: {
       "bash",
     ].includes(toolName),
   );
+  const hasProjectWorkspaceTools = params.allowedToolNames.some((toolName) =>
+    [
+      "terminal_start",
+      "terminal_read",
+      "terminal_write",
+      "terminal_stop",
+      "computer_open_url",
+      "computer_screenshot",
+      "computer_click",
+      "computer_type",
+      "computer_keypress",
+      "computer_scroll",
+      "computer_stop",
+    ].includes(toolName),
+  );
+  const projectLabel = String(params.projectLabel ?? "").trim();
+  const projectDescription = String(params.projectDescription ?? "").trim();
+  const hasProjectContext = Boolean(projectLabel || projectDescription || hasProjectWorkspaceTools);
   return [
     "PLATFORM_HARNESS_CONTEXT",
     `Active harness: ${params.harnessName}.`,
-    hasWorkspaceTools
-      ? "This run can inspect and modify files in the active project workspace when needed."
-      : "This run does not have active project workspace file tools.",
-    hasWorkspaceTools
-      ? `Active project: ${String(params.projectLabel ?? "").trim() || "current project"}.`
+    hasSandboxFileTools
+      ? "This run can inspect and modify files inside an active sandbox when needed."
+      : "This run does not have active sandbox file tools.",
+    hasProjectContext
+      ? `Active project: ${projectLabel || "current project"}.`
       : "Active project: none.",
-    hasWorkspaceTools && String(params.projectDescription ?? "").trim()
-      ? `Project description: ${String(params.projectDescription ?? "").trim()}.`
+    hasProjectContext && projectDescription
+      ? `Project description: ${projectDescription}.`
       : null,
-    hasWorkspaceTools ? "Project workspace root: current project workspace root." : null,
+    hasSandboxFileTools && hasProjectContext
+      ? "Sandbox filesystem root: current project workspace root."
+      : null,
+    hasSandboxFileTools && !hasProjectContext
+      ? "Sandbox filesystem root: run-scoped scratch sandbox."
+      : null,
     `Allowed tools: ${params.allowedToolNames.join(",") || "(none)"}.`,
-    hasWorkspaceTools ? "All file paths are relative to the project workspace root." : null,
+    hasSandboxFileTools && hasProjectContext
+      ? "All file paths are relative to the project workspace root."
+      : null,
+    hasSandboxFileTools && !hasProjectContext
+      ? "All file paths are relative to the scratch sandbox root."
+      : null,
     "Only the listed tools are available in this run.",
   ]
     .filter(Boolean)

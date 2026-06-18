@@ -324,10 +324,10 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
     return { family: "web_research", grantedBy: "web_research_capability", effect: "external" };
   }
   if (WORKSPACE_READ_TOOL_NAMES.has(toolName)) {
-    return { family: "workspace_read", grantedBy: "project_workspace_scope", effect: "read" };
+    return { family: "sandbox_read", grantedBy: "authenticated_sandbox_scope", effect: "read" };
   }
   if (WORKSPACE_WRITE_TOOL_NAMES.has(toolName)) {
-    return { family: "workspace_write", grantedBy: "project_workspace_scope", effect: "write" };
+    return { family: "sandbox_write", grantedBy: "authenticated_sandbox_scope", effect: "write" };
   }
   if (TERMINAL_TOOL_NAMES.has(toolName)) {
     return { family: "terminal_control", grantedBy: "project_workspace_scope", effect: "process" };
@@ -547,8 +547,8 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       owner: "workspace",
       retrieval: "tool_available",
       visibility: "private",
-      source: "workspace_file_tools",
-      reason: "project-bound filesystem evidence and edit substrate",
+      source: "sandbox_file_tools",
+      reason: "private sandbox filesystem evidence and edit substrate",
     });
   }
   if (params.runtimeTurnContext?.activeBackgroundTerminals?.length) {

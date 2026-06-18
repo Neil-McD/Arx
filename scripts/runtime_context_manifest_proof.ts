@@ -162,8 +162,8 @@ assert.ok(ids(fullManifest.resources).includes("background_terminal_output"));
 assert.ok(!ids(fullManifest.resources).includes("message_attachments"));
 
 assert.equal(toolByName(fullManifest, "community_write")?.effect, "write");
-assert.equal(toolByName(fullManifest, "read")?.family, "workspace_read");
-assert.equal(toolByName(fullManifest, "write")?.family, "workspace_write");
+assert.equal(toolByName(fullManifest, "read")?.family, "sandbox_read");
+assert.equal(toolByName(fullManifest, "write")?.family, "sandbox_write");
 assert.equal(toolByName(fullManifest, "terminal_start")?.effect, "process");
 assert.equal(toolByName(fullManifest, "computer_screenshot")?.effect, "ui");
 assert.equal(toolByName(fullManifest, "me__github_create_issue")?.source, "mounted_app_tool");

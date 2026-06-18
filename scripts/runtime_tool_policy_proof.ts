@@ -5,10 +5,12 @@ import path from "node:path";
 import {
   COMPUTER_USE_TOOL_NAMES,
   NON_SANDBOX_TOOL_NAMES,
+  PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES,
   RETRIEVAL_TOOL_NAMES,
-  WORKSPACE_SANDBOX_TOOL_NAMES,
+  SANDBOX_FILE_SHELL_TOOL_NAMES,
+  SANDBOX_TOOL_NAMES,
   isComputerUseToolName,
-  requiresWorkspaceSandbox,
+  requiresSandboxSession,
   type RetrievalToolName,
 } from "../shared/retrievalTools.ts";
 import {
@@ -101,8 +103,8 @@ function proveFixedToolsHaveSingleCapabilityFamily() {
 
   assert.deepEqual(
     sorted(familyTools(WORKSPACE_FAMILY_NAMES)),
-    sorted(WORKSPACE_SANDBOX_TOOL_NAMES),
-    "workspace sandbox tools must match workspace-bound capability families",
+    sorted(SANDBOX_TOOL_NAMES),
+    "sandbox-backed tools must match sandbox-bound capability families",
   );
   assert.deepEqual(
     sorted(familyTools(NON_WORKSPACE_FAMILY_NAMES)),
@@ -110,24 +112,35 @@ function proveFixedToolsHaveSingleCapabilityFamily() {
     "non-sandbox tools must match platform/community/web capability families",
   );
 
-  for (const toolName of WORKSPACE_SANDBOX_TOOL_NAMES) {
+  assert.deepEqual(
+    sorted(familyTools(["workspace_fs", "workspace_shell"])),
+    sorted(SANDBOX_FILE_SHELL_TOOL_NAMES),
+    "file and shell tools should be the authenticated scratch-sandbox tool slice",
+  );
+  assert.deepEqual(
+    sorted(familyTools(["terminal", "computer"])),
+    sorted(PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES),
+    "terminal and computer tools should remain project-workspace runtime tools",
+  );
+
+  for (const toolName of SANDBOX_TOOL_NAMES) {
     assert.equal(
-      requiresWorkspaceSandbox(toolName),
+      requiresSandboxSession(toolName),
       true,
-      `${toolName} must lazily require a workspace sandbox`,
+      `${toolName} must lazily require a sandbox session`,
     );
   }
   for (const toolName of NON_SANDBOX_TOOL_NAMES) {
     assert.equal(
-      requiresWorkspaceSandbox(toolName),
+      requiresSandboxSession(toolName),
       false,
-      `${toolName} must not wake a workspace sandbox`,
+      `${toolName} must not wake a sandbox`,
     );
   }
   for (const toolName of COMPUTER_USE_TOOL_NAMES) {
     assert.equal(isComputerUseToolName(toolName), true);
     assert.equal(
-      WORKSPACE_SANDBOX_TOOL_NAMES.includes(toolName),
+      PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES.includes(toolName),
       true,
       `${toolName} must stay workspace-bound`,
     );
@@ -268,7 +281,7 @@ function proveFixedPolicyBoundaries() {
     "terminal_stop",
   ] as const satisfies readonly RetrievalToolName[]) {
     assert.equal(
-      requiresWorkspaceSandbox(toolName),
+      requiresSandboxSession(toolName),
       true,
       `${toolName} should be classified as workspace-bound`,
     );

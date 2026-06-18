@@ -787,9 +787,10 @@ function testBlaxelRuntimeReservationAndSettlementAreWired() {
   assert.match(schemaSource, /pendingCardCollectionCreditsBalance: v\.optional\(v\.number\(\)\)/);
   assert.match(blaxelWakeSource, /settleReservedCreditsBestEffort/);
   assert.match(runtimeSessionSource, /ensureBillableBlaxelWorkspaceComputer/);
+  assert.match(runtimeSessionSource, /createRuntimeSandboxSession/);
   assert.doesNotMatch(runtimeSessionSource, /reuseExistingLease: true/);
   assert.match(runtimeSessionSource, /recordWorkspaceComputeChargeInternal/);
-  assert.match(runtimeExecutionSource, /createProjectRuntimeWorkspaceSession\(\{\s*ctx:[\s\S]*runId: params\.runId/);
+  assert.match(runtimeExecutionSource, /createRuntimeSandboxSession\(\{\s*ctx:[\s\S]*runId: params\.runId/);
   assert.match(runtimeExecutionSource, /settleRuntimeWorkspaceSession/);
 }
 

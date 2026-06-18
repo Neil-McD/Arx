@@ -38,7 +38,7 @@ const run = {
   communityContextVersion: 3,
   executionMode: "agentic",
   harnessProfile: "authenticated_cloud_tools",
-  capabilityFamilies: ["product_docs", "community_tools", "workspace_tools"],
+  capabilityFamilies: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
 };
 
 const baseEvents = [
@@ -50,7 +50,7 @@ const baseEvents = [
       community_id: "community_1",
       community_context_version: 3,
       execution_mode: "agentic",
-      capability_families: ["product_docs", "community_tools", "workspace_tools"],
+      capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
     },
   },
   {
@@ -61,7 +61,7 @@ const baseEvents = [
       project_id: "project_1",
       community_id: "community_1",
       community_context_version: 3,
-      capability_families: ["product_docs", "community_tools", "workspace_tools"],
+      capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
       harness_profile: "authenticated_cloud_tools",
     },
   },
@@ -75,7 +75,7 @@ const baseEvents = [
         "get_active_community_context",
         "read",
       ],
-      capability_families: ["product_docs", "community_tools", "workspace_tools"],
+      capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
       harness_profile: "authenticated_cloud_tools",
     },
   },

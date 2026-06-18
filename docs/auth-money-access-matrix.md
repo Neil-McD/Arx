@@ -71,17 +71,18 @@ Entitled capability families come from auth state and account status:
 | Auth state | Tier | Entitled capability families |
 |---|---|---|
 | anonymous | n/a | `[]` |
-| authenticated | `free` | `["product_docs","community_tools","web_research","workspace_tools"]` |
-| authenticated | internal `architect` | `["product_docs","community_tools","web_research","workspace_tools"]` |
+| authenticated | `free` | `["product_docs","community_tools","web_research","sandbox_tools","workspace_tools"]` |
+| authenticated | internal `architect` | `["product_docs","community_tools","web_research","sandbox_tools","workspace_tools"]` |
 
 Active capability families are narrower than entitled capability families:
 
 1. `product_docs` can be active for authenticated users.
 2. `community_tools` is active only when a community lens is present.
 3. `web_research` can be active when entitled, but execution still requires tool balance.
-4. `workspace_tools` is active only when entitled and a project context is present.
+4. `sandbox_tools` can be active for authenticated users and exposes run-scoped file/shell tools.
+5. `workspace_tools` is active only when entitled and a project context is present; it adds project-bound terminal/computer runtime controls.
 
-Tool exposure is not free usage. Workspace tools, web research, and voice input must reserve and settle tool balance.
+Tool exposure is not free usage. Project workspace tools, web research, and voice input must reserve and settle tool balance.
 
 ## 4) Prompt Context Rules
 
