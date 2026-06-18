@@ -1262,7 +1262,16 @@ async function pushIngestPayloadBestEffort(params: {
   ingest: WorkerIngestConfig;
   payload: JsonRecord;
 }): Promise<void> {
+  const runId = readIngestRunId(params.payload);
+  const ingestPath = readUrlPath(params.ingest.url);
+  let lastStatus: number | null = null;
+  let lastResponseCode: string | null = null;
+  let lastResponseMessage: string | null = null;
+  let lastErrorName: string | null = null;
+  let lastErrorMessage: string | null = null;
+  let attempts = 0;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    attempts = attempt;
     try {
       const response = await fetch(params.ingest.url, {
         method: "POST",
@@ -1273,20 +1282,28 @@ async function pushIngestPayloadBestEffort(params: {
         body: JSON.stringify(params.payload),
         signal: AbortSignal.timeout(15_000),
       });
+      lastStatus = response.status;
+      const responseSummary = await readIngestFailureResponseSummary(response);
+      lastResponseCode = responseSummary.code;
+      lastResponseMessage = responseSummary.message;
       if (response.ok) {
         process.stdout.write(
           `${JSON.stringify({
             kind: "polynet_codex_worker_service_event",
             event: "ingest_push_succeeded",
+            run_id: runId,
             attempt,
+            ingest_path: ingestPath,
           })}\n`,
         );
         return;
       }
       // 4xx means the payload or auth is wrong; retrying cannot help.
       if (response.status >= 400 && response.status < 500) break;
-    } catch {
-      // Network failure: retry below.
+    } catch (error) {
+      const failure = summarizeIngestPushError(error);
+      lastErrorName = failure.name;
+      lastErrorMessage = failure.message;
     }
     await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
   }
@@ -1294,8 +1311,65 @@ async function pushIngestPayloadBestEffort(params: {
     `${JSON.stringify({
       kind: "polynet_codex_worker_service_event",
       event: "ingest_push_failed",
+      run_id: runId,
+      attempts,
+      ingest_path: ingestPath,
+      last_status: lastStatus,
+      last_response_code: lastResponseCode,
+      last_response_message: lastResponseMessage,
+      last_error_name: lastErrorName,
+      last_error_message: lastErrorMessage,
     })}\n`,
   );
+}
+
+function readIngestRunId(payload: JsonRecord): string | null {
+  const context = asRecord(payload.context);
+  const runId = String(context?.run_id ?? payload.run_id ?? "").trim();
+  return runId ? previewText(runId, 160) : null;
+}
+
+function readUrlPath(url: string): string | null {
+  try {
+    return new URL(url).pathname || null;
+  } catch {
+    return null;
+  }
+}
+
+async function readIngestFailureResponseSummary(response: Response): Promise<{
+  code: string | null;
+  message: string | null;
+}> {
+  if (response.ok) return { code: null, message: null };
+  try {
+    const text = await response.text();
+    const parsed = asRecord(text ? JSON.parse(text) : {});
+    const code = String(parsed?.code ?? "").trim();
+    const message = String(parsed?.message ?? parsed?.error ?? "").trim();
+    return {
+      code: code ? previewText(code, 120) : null,
+      message: message ? previewText(message, 300) : null,
+    };
+  } catch {
+    return { code: null, message: null };
+  }
+}
+
+function summarizeIngestPushError(error: unknown): {
+  name: string;
+  message: string;
+} {
+  if (error instanceof Error) {
+    return {
+      name: previewText(error.name || "Error", 80),
+      message: previewText(error.message, 300),
+    };
+  }
+  return {
+    name: "Error",
+    message: previewText(String(error ?? "unknown_error"), 300),
+  };
 }
 
 function validateProbeProof(params: {

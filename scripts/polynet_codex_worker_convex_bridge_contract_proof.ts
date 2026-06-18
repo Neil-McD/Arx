@@ -22,6 +22,9 @@ const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnPersistence = read("convex/runtimeTurnPersistence.ts");
 const platformToolSurface = read("shared/polynetPlatformToolSurface.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
+const ingestFailureLogStart = worker.indexOf('event: "ingest_push_failed"');
+const ingestFailureLogBlock =
+  ingestFailureLogStart >= 0 ? worker.slice(ingestFailureLogStart, ingestFailureLogStart + 800) : "";
 
 assert.match(
   packageJson,
@@ -271,6 +274,21 @@ assert.match(
   worker,
   /run_token: bridge\.runToken/,
   "worker service must relay the platform-tool run token",
+);
+assert.match(
+  worker,
+  /readIngestFailureResponseSummary[\s\S]*response\.text\(\)[\s\S]*parsed\?\.code[\s\S]*parsed\?\.message/,
+  "worker service must parse bounded ingest failure response details",
+);
+assert.match(
+  worker,
+  /event: "ingest_push_failed"[\s\S]*run_id[\s\S]*attempts[\s\S]*ingest_path[\s\S]*last_status[\s\S]*last_response_code[\s\S]*last_response_message[\s\S]*last_error_name[\s\S]*last_error_message/,
+  "worker service must log sanitized ingest failure evidence",
+);
+assert.doesNotMatch(
+  ingestFailureLogBlock,
+  /token|authorization|params\.payload|body/i,
+  "ingest failure log must not include tokens, auth headers, or request payloads",
 );
 assert.match(
   worker,
