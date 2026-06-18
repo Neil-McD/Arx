@@ -74,10 +74,12 @@ Environment:
   POLYNET_MCP_MEMORY_QUERY         Optional memory query. Defaults to "strategy".
   POLYNET_MCP_MEMORY_NODE_ID       Optional memory node id override for read.
   POLYNET_MCP_RETRIEVAL_LOG_ID     Optional retrieval log id override for read/outcome.
+  POLYNET_MCP_RESOURCE_QUERY       Optional resource search query. Defaults to "platform".
   POLYNET_MCP_EXPECT_RELATION      Optional exact expected workspace authority relation.
   POLYNET_MCP_EXPECT_AUTHORITY_LENS Optional exact expected workspace authority lens.
   POLYNET_MCP_EXPECT_TOOLSETS      Optional comma-separated toolsets that must be available.
   POLYNET_MCP_REQUIRE_MEMORY       Set to 1 to make authenticated mode fail if no memory node is readable.
+  POLYNET_MCP_REQUIRE_RESOURCES    Set to 1 to make authenticated mode fail if resources are unavailable or unreadable.
   POLYNET_MCP_RECORD_OUTCOME       Set to 1 to run the write-path outcome smoke.
   POLYNET_MCP_TIMEOUT_MS           Request timeout in milliseconds. Defaults to 15000.
 `);
@@ -425,6 +427,39 @@ function firstRetrievalLogId(memory: Record<string, unknown>): string | null {
   );
 }
 
+function firstResourceRef(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstResourceRef(item);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const resourceId = asString(record.resource_id) ?? asString(record.resourceId);
+  if (resourceId) return resourceId;
+
+  if (asString(record.type) === "resource") {
+    const directoryUri = asString(record.directory_uri) ?? asString(record.directoryUri);
+    if (directoryUri) return directoryUri;
+    const directoryPath = asString(record.directory_path) ?? asString(record.path);
+    if (directoryPath) return directoryPath;
+  }
+
+  for (const child of Object.values(record)) {
+    const found = firstResourceRef(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+function arrayLengthField(record: Record<string, unknown>, field: string): number {
+  const value = record[field];
+  return Array.isArray(value) ? value.length : 0;
+}
+
 async function runMetadataSmoke(mcpUrl: string): Promise<Record<string, unknown>> {
   const unauthorizedInitialize = await postJsonRpc({
     mcpUrl,
@@ -519,9 +554,98 @@ async function runMetadataSmoke(mcpUrl: string): Promise<Record<string, unknown>
   };
 }
 
+async function runResourceSmoke(args: {
+  mcpUrl: string;
+  token: string;
+  workspaceContextId: string;
+  availableToolsets: string[];
+  requireResources: boolean;
+}): Promise<Record<string, unknown>> {
+  if (!args.availableToolsets.includes("member_resources")) {
+    if (args.requireResources) {
+      throw new Error("POLYNET_MCP_REQUIRE_RESOURCES requires the member_resources toolset.");
+    }
+    return {
+      resource_list: "skipped_member_resources_unavailable",
+      resource_search: "skipped_member_resources_unavailable",
+      resource_read: "skipped_member_resources_unavailable",
+      resource_found: false,
+    };
+  }
+
+  const list = await callTool({
+    mcpUrl: args.mcpUrl,
+    token: args.token,
+    name: "polynet_workspace_resources_list",
+    toolArgs: {
+      workspace_context_id: args.workspaceContextId,
+      limit: 25,
+    },
+  });
+  const listedResources = asRecord(list.resources);
+  assert.notEqual(
+    listedResources.ok,
+    false,
+    `polynet_workspace_resources_list returned failure: ${JSON.stringify(listedResources)}`,
+  );
+
+  const resourceQuery = readEnv("POLYNET_MCP_RESOURCE_QUERY") ?? "platform";
+  const search = await callTool({
+    mcpUrl: args.mcpUrl,
+    token: args.token,
+    name: "polynet_workspace_resources_search",
+    toolArgs: {
+      workspace_context_id: args.workspaceContextId,
+      query: resourceQuery,
+      limit: 5,
+    },
+  });
+  const searchedResources = asRecord(search.resources);
+  assert.notEqual(
+    searchedResources.ok,
+    false,
+    `polynet_workspace_resources_search returned failure: ${JSON.stringify(searchedResources)}`,
+  );
+
+  const resourceRef = firstResourceRef(listedResources) ?? firstResourceRef(searchedResources);
+  let readStatus: "ok" | "skipped_no_resource" = "skipped_no_resource";
+  if (resourceRef) {
+    const read = await callTool({
+      mcpUrl: args.mcpUrl,
+      token: args.token,
+      name: "polynet_workspace_resource_read",
+      toolArgs: {
+        workspace_context_id: args.workspaceContextId,
+        ref: resourceRef,
+        limit: 1000,
+      },
+    });
+    const readResource = asRecord(read.resource);
+    assert.notEqual(
+      readResource.ok,
+      false,
+      `polynet_workspace_resource_read returned failure: ${JSON.stringify(readResource)}`,
+    );
+    readStatus = "ok";
+  } else if (args.requireResources) {
+    throw new Error("POLYNET_MCP_REQUIRE_RESOURCES requires at least one readable workspace resource.");
+  }
+
+  return {
+    resource_list: "ok",
+    resource_search: "ok",
+    resource_read: readStatus,
+    resource_found: Boolean(resourceRef),
+    resource_query: resourceQuery,
+    listed_entry_count: arrayLengthField(listedResources, "entries"),
+    search_match_count: arrayLengthField(searchedResources, "matches"),
+  };
+}
+
 async function runAuthenticatedSmoke(args: {
   mcpUrl: string;
   requireMemoryRead: boolean;
+  requireResources: boolean;
 }): Promise<Record<string, unknown>> {
   const token = readEnv("POLYNET_MCP_BEARER_TOKEN");
   if (!token) {
@@ -614,6 +738,14 @@ async function runAuthenticatedSmoke(args: {
     readStatus = "skipped_no_memory";
   }
 
+  const resourceSmoke = await runResourceSmoke({
+    mcpUrl: args.mcpUrl,
+    token,
+    workspaceContextId,
+    availableToolsets: openedAuthority.available_toolsets,
+    requireResources: args.requireResources,
+  });
+
   let outcomeStatus: "ok" | "skipped_opt_in_disabled" = "skipped_opt_in_disabled";
   if (readBoolEnv("POLYNET_MCP_RECORD_OUTCOME")) {
     assert.ok(
@@ -642,6 +774,7 @@ async function runAuthenticatedSmoke(args: {
     get_workspace_context: "ok",
     memory_search: "ok",
     memory_read: readStatus,
+    ...resourceSmoke,
     record_outcome: outcomeStatus,
     selected_workspace_slug: slug,
     workspace_context_id: workspaceContextId,
@@ -665,6 +798,7 @@ async function main() {
       ? await runAuthenticatedSmoke({
           mcpUrl,
           requireMemoryRead: mode === "acceptance" || readBoolEnv("POLYNET_MCP_REQUIRE_MEMORY"),
+          requireResources: readBoolEnv("POLYNET_MCP_REQUIRE_RESOURCES"),
         })
       : null;
   console.log(

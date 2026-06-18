@@ -220,15 +220,17 @@ POLYNET_MCP_COMMUNITY_SLUG=<community-slug>
 POLYNET_MCP_MEMORY_QUERY=<query>
 POLYNET_MCP_MEMORY_NODE_ID=<node-id>
 POLYNET_MCP_RETRIEVAL_LOG_ID=<retrieval-log-id>
+POLYNET_MCP_RESOURCE_QUERY=<query>
 POLYNET_MCP_EXPECT_RELATION=<owner|admin|moderator|member|pending|no_access>
 POLYNET_MCP_EXPECT_AUTHORITY_LENS=<owner_builder|owner|admin_builder|admin|moderator|member|pending|no_access>
 POLYNET_MCP_EXPECT_TOOLSETS=<comma-separated required toolsets>
 POLYNET_MCP_REQUIRE_MEMORY=1
+POLYNET_MCP_REQUIRE_RESOURCES=1
 POLYNET_MCP_RECORD_OUTCOME=1
 POLYNET_MCP_TIMEOUT_MS=15000
 ```
 
-Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/authority/search and does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, and required toolsets for a known test account/workspace. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
+Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/authority/search and, when `member_resources` is available, resource list/search/read. It does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, required toolsets, and a resource search query for a known test account/workspace. `POLYNET_MCP_REQUIRE_RESOURCES=1` makes authenticated smoke fail if `member_resources` is missing or no readable member-visible resource can be found. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
 
 ## Memory Boundary
 
@@ -311,5 +313,6 @@ Focused proofs must show:
 - resource tools require `member_resources`,
 - resource tools use only live member-visible directory internals,
 - resource tools do not expose map, batch read, builder, staging, apply, or mutation internals,
+- authenticated smoke calls resource list, search, and read when `member_resources` is available,
 - raw `polynet_community_search` remains separate from accepted memory,
 - provider implementation does not import or mutate the internal MCP consumer/runtime path.
