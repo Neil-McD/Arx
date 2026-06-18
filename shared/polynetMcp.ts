@@ -19,16 +19,21 @@ export type PolynetMcpToolName =
   | "polynet_list_communities"
   | "polynet_get_community"
   | "polynet_community_search"
+  | "polynet_product_docs_search"
+  | "polynet_product_doc_read"
   | "polynet_list_workspaces"
   | "polynet_open_workspace"
   | "polynet_get_workspace_context"
   | "polynet_workspace_memory_search"
   | "polynet_workspace_memory_read"
   | "polynet_workspace_record_outcome"
+  | "polynet_workspace_resources_map"
   | "polynet_workspace_resources_list"
   | "polynet_workspace_resource_read"
   | "polynet_workspace_resources_search"
-  | "polynet_workspace_builder_resources_map";
+  | "polynet_workspace_builder_resources_map"
+  | "polynet_workspace_builder_resources_list"
+  | "polynet_workspace_builder_resource_read";
 
 export type PolynetMcpToolDefinition = {
   name: PolynetMcpToolName;
@@ -347,6 +352,96 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       },
     },
   },
+  polynet_product_docs_search: {
+    name: "polynet_product_docs_search",
+    title: "Search PolyNet Product Docs",
+    description:
+      "Search canonical PolyNet product documentation and return small ranked snippets with slugs for follow-up reads.",
+    annotations: {
+      title: "Search PolyNet Product Docs",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["query"],
+      properties: {
+        query: {
+          type: "string",
+          minLength: 1,
+          maxLength: 240,
+          description: "Focused product documentation query.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum matching snippets to return, clamped by the server.",
+        },
+        section: {
+          type: "string",
+          minLength: 1,
+          maxLength: 80,
+          description: "Optional documentation section filter.",
+        },
+        audience: {
+          type: "string",
+          minLength: 1,
+          maxLength: 40,
+          description: "Optional audience filter.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["product_docs"],
+      properties: {
+        product_docs: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_product_doc_read: {
+    name: "polynet_product_doc_read",
+    title: "Read PolyNet Product Doc",
+    description:
+      "Read one canonical PolyNet product documentation page, or one heading section from that page.",
+    annotations: {
+      title: "Read PolyNet Product Doc",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["slug"],
+      properties: {
+        slug: {
+          type: "string",
+          minLength: 1,
+          maxLength: 160,
+          description: "Product documentation slug returned by product docs search.",
+        },
+        heading: {
+          type: "string",
+          minLength: 1,
+          maxLength: 160,
+          description: "Optional heading or heading slug to read from the page.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["product_doc"],
+      properties: {
+        product_doc: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
   polynet_list_workspaces: {
     name: "polynet_list_workspaces",
     title: "List PolyNet Workspaces",
@@ -578,6 +673,44 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       },
     },
   },
+  polynet_workspace_resources_map: {
+    name: "polynet_workspace_resources_map",
+    title: "Map PolyNet Workspace Resources",
+    description:
+      "Map resource structure for an opened PolyNet workspace. Members see live resources; builders may receive builder-visible structure and health according to server authority.",
+    annotations: {
+      title: "Map PolyNet Workspace Resources",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        limit: {
+          type: "number",
+          description: "Maximum resources to include across the map, clamped by the server.",
+        },
+        per_module_limit: {
+          type: "number",
+          description: "Maximum resources to include per module, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resources"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resources: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
   polynet_workspace_resources_list: {
     name: "polynet_workspace_resources_list",
     title: "List PolyNet Workspace Resources",
@@ -734,6 +867,76 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       properties: {
         workspace: WORKSPACE_SUMMARY_SCHEMA,
         resources: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_builder_resources_list: {
+    name: "polynet_workspace_builder_resources_list",
+    title: "List PolyNet Workspace Builder Resources",
+    description:
+      "List builder-visible resource directory state, including live/draft categories, pages, source inbox items, and health. This requires builder resource authority and does not mutate resources.",
+    annotations: {
+      title: "List PolyNet Workspace Builder Resources",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        limit: {
+          type: "number",
+          description: "Maximum resources to include, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resources"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resources: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_builder_resource_read: {
+    name: "polynet_workspace_builder_resource_read",
+    title: "Read PolyNet Workspace Builder Resource",
+    description:
+      "Read one builder-visible resource, source, or category by semantic ref, resource id, module id, readable path, or resources URI. This requires builder resource authority and does not mutate resources.",
+    annotations: {
+      title: "Read PolyNet Workspace Builder Resource",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "ref"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        ref: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1024,
+          description: "Category/module name, page/source title, resource id, module id, readable path, or resources URI.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resource"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resource: {
           type: "object",
           additionalProperties: true,
         },

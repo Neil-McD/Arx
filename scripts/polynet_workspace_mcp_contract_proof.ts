@@ -82,17 +82,22 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "## Product Docs Boundary",
+  "workspace MCP product docs boundary",
+);
+assertIncludes(
+  contract,
   "require the `member_resources` authority toolset",
   "workspace MCP member resource authority gate",
 );
 assertIncludes(
   contract,
-  "use only the member-visible directory internals",
+  "use only bounded resource-tool internals",
   "workspace MCP member resource backend boundary",
 );
 assertIncludes(
   contract,
-  "It must not expose batch read",
+  "They must not expose resource batch read",
   "workspace MCP resource non-goals",
 );
 assertIncludes(
@@ -114,7 +119,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "10 workspace tools",
+  "15 workspace tools",
   "PolyMCP integration tool count",
 );
 assertIncludes(
@@ -222,13 +227,18 @@ for (const toolName of [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
   "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   assertIncludes(polynetMcp, `| "${toolName}"`, `${toolName} type union`);
   assertIncludes(polynetMcp, `name: "${toolName}"`, `${toolName} tool definition`);
@@ -245,14 +255,39 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
   "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   const block = toolDefinitionBlock(polynetMcp, toolName);
   assertIncludes(block, "workspace_context_id", `${toolName} schema`);
 }
+
+for (const toolName of [
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
+]) {
+  const definition = toolDefinitionBlock(polynetMcp, toolName);
+  assertIncludes(definition, "readOnlyHint: true", `${toolName} read-only annotation`);
+  assertNotIncludes(definition, "workspace_context_id", `${toolName} platform docs scope`);
+  const dispatch = toolDispatchBlock(httpMcp, toolName);
+  assertNotIncludes(dispatch, "resolveWorkspaceContext", `${toolName} no workspace selector`);
+  assertNotIncludes(dispatch, "requireWorkspaceAuthorityToolset", `${toolName} no workspace authority gate`);
+}
+assertIncludes(
+  httpMcp,
+  "executeSearchProductDocsTool",
+  "product docs search runtime helper",
+);
+assertIncludes(
+  httpMcp,
+  "executeGetProductDocTool",
+  "product docs read runtime helper",
+);
 
 const openWorkspaceDefinition = toolDefinitionBlock(polynetMcp, "polynet_open_workspace");
 assertIncludes(openWorkspaceDefinition, "workspace: {", "open workspace context output");
@@ -359,6 +394,23 @@ for (const toolName of [
   assertNotIncludes(dispatch, "applyCommunityResourceBuilderChangeset", `${toolName} no apply mutation path`);
 }
 
+const resourceMapDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_resources_map");
+assertIncludes(resourceMapDefinition, "readOnlyHint: true", "resource map read-only annotation");
+assertIncludes(resourceMapDefinition, "Members see live resources", "resource map member-visible description");
+assertIncludes(resourceMapDefinition, "builders may receive builder-visible", "resource map builder authority description");
+
+const resourceMapDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_map");
+assertIncludes(resourceMapDispatch, "resolveWorkspaceContext", "resource map workspace revalidation");
+assertIncludes(resourceMapDispatch, "requireWorkspaceAuthorityToolset", "resource map authority toolset gate");
+assertIncludes(resourceMapDispatch, "\"member_resources\"", "resource map member resource toolset gate");
+assertIncludes(resourceMapDispatch, "mapCommunityResourcesForToolInternal", "resource map internal path");
+assertIncludes(resourceMapDispatch, "perModuleLimit", "resource map per-module limit");
+assertNotIncludes(resourceMapDispatch, "readCommunityResourcesForToolInternal", "resource map no batch read path");
+assertNotIncludes(resourceMapDispatch, "listCommunityResourceBuilderDirectory", "resource map no builder list path");
+assertNotIncludes(resourceMapDispatch, "readCommunityResourceBuilderResource", "resource map no builder read path");
+assertNotIncludes(resourceMapDispatch, "stageCommunityResourceBuilderChangeset", "resource map no staged mutation path");
+assertNotIncludes(resourceMapDispatch, "applyCommunityResourceBuilderChangeset", "resource map no apply mutation path");
+
 const resourceListDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_list");
 assertIncludes(resourceListDispatch, "listCommunityResourceDirectoryInternal", "resource list member directory path");
 
@@ -387,6 +439,32 @@ assertNotIncludes(builderResourceMapDispatch, "listCommunityResourceBuilderDirec
 assertNotIncludes(builderResourceMapDispatch, "readCommunityResourceBuilderResource", "builder resource map no builder read path");
 assertNotIncludes(builderResourceMapDispatch, "stageCommunityResourceBuilderChangeset", "builder resource map no staged mutation path");
 assertNotIncludes(builderResourceMapDispatch, "applyCommunityResourceBuilderChangeset", "builder resource map no apply mutation path");
+
+const builderResourceListDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_builder_resources_list");
+assertIncludes(builderResourceListDefinition, "readOnlyHint: true", "builder resource list read-only annotation");
+assertIncludes(builderResourceListDefinition, "builder-visible", "builder resource list description");
+
+const builderResourceListDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_builder_resources_list");
+assertIncludes(builderResourceListDispatch, "resolveWorkspaceContext", "builder resource list workspace revalidation");
+assertIncludes(builderResourceListDispatch, "requireWorkspaceAuthorityToolset", "builder resource list authority toolset gate");
+assertIncludes(builderResourceListDispatch, "\"builder_resources\"", "builder resource list builder toolset gate");
+assertIncludes(builderResourceListDispatch, "listCommunityResourceBuilderDirectory", "builder resource list internal path");
+assertNotIncludes(builderResourceListDispatch, "stageCommunityResourceBuilderChangeset", "builder resource list no staged mutation path");
+assertNotIncludes(builderResourceListDispatch, "applyCommunityResourceBuilderChangeset", "builder resource list no apply mutation path");
+
+const builderResourceReadDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_builder_resource_read");
+assertIncludes(builderResourceReadDefinition, "readOnlyHint: true", "builder resource read read-only annotation");
+assertIncludes(builderResourceReadDefinition, "builder-visible", "builder resource read description");
+assertIncludes(builderResourceReadDefinition, "ref", "builder resource read ref input");
+
+const builderResourceReadDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_builder_resource_read");
+assertIncludes(builderResourceReadDispatch, "resolveWorkspaceContext", "builder resource read workspace revalidation");
+assertIncludes(builderResourceReadDispatch, "requireWorkspaceAuthorityToolset", "builder resource read authority toolset gate");
+assertIncludes(builderResourceReadDispatch, "\"builder_resources\"", "builder resource read builder toolset gate");
+assertIncludes(builderResourceReadDispatch, "readCommunityResourceBuilderResource", "builder resource read internal path");
+assertIncludes(builderResourceReadDispatch, "ref is required", "builder resource read ref validation");
+assertNotIncludes(builderResourceReadDispatch, "stageCommunityResourceBuilderChangeset", "builder resource read no staged mutation path");
+assertNotIncludes(builderResourceReadDispatch, "applyCommunityResourceBuilderChangeset", "builder resource read no apply mutation path");
 
 const rawSearchDispatch = toolDispatchBlock(httpMcp, "polynet_community_search");
 assertIncludes(rawSearchDispatch, "searchCommunityKnowledgeInternal", "raw community search remains separate");

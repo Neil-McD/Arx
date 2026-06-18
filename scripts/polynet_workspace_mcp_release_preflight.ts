@@ -39,13 +39,18 @@ const PROVIDER_TOOLS = [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
   "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ] as const;
 
 function argValue(name: string): string | null {

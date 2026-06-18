@@ -21,7 +21,7 @@ import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
-const POLYMCP_TOOL_COUNT_LABEL = "10 workspace tools";
+const POLYMCP_TOOL_COUNT_LABEL = "15 workspace tools";
 const POLYMCP_CODEX_SETUP_COMMANDS = [
   `codex mcp add polymcp --url ${POLYMCP_ENDPOINT_URL}`,
   "codex mcp login polymcp",

@@ -77,6 +77,16 @@ assertIncludes(contract, "`/runtime/mcp` is an OAuth-protected remote MCP resour
 assertIncludes(contract, "initialize", "authenticated initialize contract");
 assertIncludes(contract, "tools/list", "authenticated tool discovery contract");
 assertIncludes(contract, "tools/call", "protected tool call contract");
+assertIncludes(
+  contract,
+  "`initialize`, `tools/list`, and `tools/call` require authentication",
+  "authenticated MCP method contract",
+);
+assertIncludes(
+  contract,
+  "unauthenticated MCP calls return a MCP-compatible OAuth `WWW-Authenticate` challenge",
+  "unauthenticated MCP challenge contract",
+);
 assertIncludes(contract, "2025-11-25", "current MCP protocol contract");
 assertIncludes(contract, "2025-06-18", "native Codex MCP protocol contract");
 assertIncludes(contract, "2025-03-26", "legacy MCP protocol contract");
@@ -130,11 +140,11 @@ assertIncludes(contract, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1", "external sm
 assertIncludes(contract, "POLYNET_MCP_EXPECT_RELATION", "external smoke expected relation env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smoke expected authority lens env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
-assertIncludes(contract, "resource list/search/read", "authenticated smoke resource contract");
-assertIncludes(contract, "builder resource map", "authenticated smoke builder resource contract");
+assertIncludes(contract, "resource map/list/search/read", "authenticated smoke resource contract");
+assertIncludes(contract, "builder resource map/list/read", "authenticated smoke builder resource contract");
 assertIncludes(
   contract,
-  "authenticated smoke calls resource list, search, and read",
+  "Authenticated smoke proves token -> tools/list -> list/open/context/authority/product docs/search",
   "resource smoke acceptance proof",
 );
 assertIncludes(contract, "Acceptance smoke", "external acceptance smoke contract");
@@ -158,6 +168,10 @@ assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES", "external
 assertIncludes(externalSmoke, "POLYNET_MCP_RECORD_OUTCOME", "external smoke outcome opt-in env");
 assertIncludes(externalSmoke, "POLYNET_MCP_TIMEOUT_MS", "external smoke timeout env");
 assertIncludes(externalSmoke, "AbortController", "external smoke timeout controller");
+assertIncludes(externalSmoke, "PROVIDER_TOOLS", "authenticated smoke provider tool inventory");
+assertIncludes(externalSmoke, "tools_list", "authenticated smoke reports tool discovery");
+assertIncludes(externalSmoke, "advertised_tool_count", "authenticated smoke reports advertised tool count");
+assertIncludes(externalSmoke, "tools/list should advertise", "authenticated smoke verifies provider tools are advertised");
 assertIncludes(externalSmoke, "function assertWorkspaceAuthority", "authenticated smoke authority assertion helper");
 assertIncludes(externalSmoke, "function assertMatchingAuthority", "authenticated smoke authority stability helper");
 assertIncludes(externalSmoke, "MCP_ACCESS_RELATIONS", "authenticated smoke canonical relation values");
@@ -167,15 +181,21 @@ assertIncludes(externalSmoke, '"workspace_context"', "authenticated smoke requir
 assertIncludes(externalSmoke, "authority_relation", "authenticated smoke reports authority relation");
 assertIncludes(externalSmoke, "authority_lens", "authenticated smoke reports authority lens");
 assertIncludes(externalSmoke, "available_toolsets", "authenticated smoke reports available toolsets");
+assertIncludes(externalSmoke, "function runProductDocsSmoke", "authenticated smoke product docs helper");
+assertIncludes(externalSmoke, "product_docs_search", "authenticated smoke reports product docs search");
+assertIncludes(externalSmoke, "product_doc_read", "authenticated smoke reports product doc read");
 assertIncludes(externalSmoke, "function runResourceSmoke", "authenticated smoke resource helper");
 assertIncludes(externalSmoke, "member_resources", "authenticated smoke gates resource calls on member_resources");
 assertIncludes(externalSmoke, "function runBuilderResourceSmoke", "authenticated smoke builder resource helper");
 assertIncludes(externalSmoke, "builder_resources", "authenticated smoke gates builder resource calls on builder_resources");
+assertIncludes(externalSmoke, "resource_map", "authenticated smoke reports resource map status");
 assertIncludes(externalSmoke, "resource_list", "authenticated smoke reports resource list status");
 assertIncludes(externalSmoke, "resource_search", "authenticated smoke reports resource search status");
 assertIncludes(externalSmoke, "resource_read", "authenticated smoke reports resource read status");
 assertIncludes(externalSmoke, "resource_found", "authenticated smoke reports resource discovery");
 assertIncludes(externalSmoke, "builder_resource_map", "authenticated smoke reports builder resource map status");
+assertIncludes(externalSmoke, "builder_resource_list", "authenticated smoke reports builder resource list status");
+assertIncludes(externalSmoke, "builder_resource_read", "authenticated smoke reports builder resource read status");
 assertIncludes(externalSmoke, "builder_resource_scope", "authenticated smoke reports builder resource scope");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_RESOURCES requires", "strict resource smoke failure");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES requires", "strict builder resource smoke failure");
@@ -199,7 +219,18 @@ assertIncludes(
   'mcpUrl: args.mcpUrl,\n      token,\n      name: "polynet_workspace_memory_read"',
   "acceptance memory read uses selected MCP URL",
 );
+for (const productDocsToolName of [
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
+]) {
+  assertIncludes(
+    externalSmoke,
+    `name: "${productDocsToolName}"`,
+    `${productDocsToolName} authenticated product docs smoke call`,
+  );
+}
 for (const resourceToolName of [
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resources_search",
   "polynet_workspace_resource_read",
@@ -214,6 +245,16 @@ assertIncludes(
   externalSmoke,
   'name: "polynet_workspace_builder_resources_map"',
   "polynet_workspace_builder_resources_map authenticated builder resource smoke call",
+);
+assertIncludes(
+  externalSmoke,
+  'name: "polynet_workspace_builder_resources_list"',
+  "polynet_workspace_builder_resources_list authenticated builder resource smoke call",
+);
+assertIncludes(
+  externalSmoke,
+  'name: "polynet_workspace_builder_resource_read"',
+  "polynet_workspace_builder_resource_read authenticated builder resource smoke call",
 );
 assertIncludes(externalSmoke, "skipped_basic_mode", "authenticated smoke should not read memory by default");
 assertIncludes(
@@ -236,13 +277,18 @@ for (const toolName of [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
   "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   assertIncludes(externalSmoke, toolName, `${toolName} external smoke`);
 }
@@ -442,10 +488,13 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
   "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   const block = toolDispatchBlock(httpMcp, toolName);
   assertIncludes(block, "resolveWorkspaceContext", `${toolName} per-call workspace authorization`);

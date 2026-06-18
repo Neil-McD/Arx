@@ -15,13 +15,18 @@ const PROVIDER_TOOLS = [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
   "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ] as const;
 
 const MCP_ACCESS_RELATIONS = [
@@ -457,6 +462,25 @@ function firstResourceRef(value: unknown): string | null {
   return null;
 }
 
+function firstProductDocSlug(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstProductDocSlug(item);
+      if (found) return found;
+    }
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const slug = asString(record.slug);
+  if (slug) return slug;
+  for (const child of Object.values(record)) {
+    const found = firstProductDocSlug(child);
+    if (found) return found;
+  }
+  return null;
+}
+
 function arrayLengthField(record: Record<string, unknown>, field: string): number {
   const value = record[field];
   return Array.isArray(value) ? value.length : 0;
@@ -465,6 +489,14 @@ function arrayLengthField(record: Record<string, unknown>, field: string): numbe
 function numericField(record: Record<string, unknown>, field: string): number | null {
   const value = record[field];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toolNamesFromToolsList(result: Record<string, unknown>): string[] {
+  return asArray(result.tools)
+    .map(optionalRecord)
+    .filter(Boolean)
+    .map((tool) => asString(tool.name))
+    .filter((name): name is string => Boolean(name));
 }
 
 async function runMetadataSmoke(mcpUrl: string): Promise<Record<string, unknown>> {
@@ -573,10 +605,13 @@ async function runResourceSmoke(args: {
       throw new Error("POLYNET_MCP_REQUIRE_RESOURCES requires the member_resources toolset.");
     }
     return {
+      resource_map: "skipped_member_resources_unavailable",
       resource_list: "skipped_member_resources_unavailable",
       resource_search: "skipped_member_resources_unavailable",
       resource_read: "skipped_member_resources_unavailable",
       resource_found: false,
+      resource_map_scope: null,
+      mapped_resource_count: null,
     };
   }
 
@@ -594,6 +629,23 @@ async function runResourceSmoke(args: {
     listedResources.ok,
     false,
     `polynet_workspace_resources_list returned failure: ${JSON.stringify(listedResources)}`,
+  );
+
+  const map = await callTool({
+    mcpUrl: args.mcpUrl,
+    token: args.token,
+    name: "polynet_workspace_resources_map",
+    toolArgs: {
+      workspace_context_id: args.workspaceContextId,
+      limit: 50,
+      per_module_limit: 10,
+    },
+  });
+  const mappedResources = asRecord(map.resources);
+  assert.notEqual(
+    mappedResources.ok,
+    false,
+    `polynet_workspace_resources_map returned failure: ${JSON.stringify(mappedResources)}`,
   );
 
   const resourceQuery = readEnv("POLYNET_MCP_RESOURCE_QUERY") ?? "platform";
@@ -639,13 +691,52 @@ async function runResourceSmoke(args: {
   }
 
   return {
+    resource_map: "ok",
     resource_list: "ok",
     resource_search: "ok",
     resource_read: readStatus,
     resource_found: Boolean(resourceRef),
     resource_query: resourceQuery,
+    resource_map_scope: asString(mappedResources.scope),
+    mapped_resource_count: numericField(mappedResources, "returned_resources"),
     listed_entry_count: arrayLengthField(listedResources, "entries"),
     search_match_count: arrayLengthField(searchedResources, "matches"),
+  };
+}
+
+async function runProductDocsSmoke(args: {
+  mcpUrl: string;
+  token: string;
+}): Promise<Record<string, unknown>> {
+  const productDocsSearch = await callTool({
+    mcpUrl: args.mcpUrl,
+    token: args.token,
+    name: "polynet_product_docs_search",
+    toolArgs: {
+      query: "community workspace context",
+      limit: 3,
+    },
+  });
+  const productDocs = asRecord(productDocsSearch.product_docs);
+  assert.equal(productDocs.ok, true, `polynet_product_docs_search failed: ${JSON.stringify(productDocs)}`);
+  const slug = firstProductDocSlug(productDocs);
+  let readStatus: "ok" | "skipped_no_product_doc" = "skipped_no_product_doc";
+  if (slug) {
+    const productDocRead = await callTool({
+      mcpUrl: args.mcpUrl,
+      token: args.token,
+      name: "polynet_product_doc_read",
+      toolArgs: { slug },
+    });
+    const productDoc = asRecord(productDocRead.product_doc);
+    assert.equal(productDoc.ok, true, `polynet_product_doc_read failed: ${JSON.stringify(productDoc)}`);
+    readStatus = "ok";
+  }
+  return {
+    product_docs_search: "ok",
+    product_doc_read: readStatus,
+    product_doc_found: Boolean(slug),
+    product_doc_result_count: numericField(productDocs, "result_count"),
   };
 }
 
@@ -662,10 +753,13 @@ async function runBuilderResourceSmoke(args: {
     }
     return {
       builder_resource_map: "skipped_builder_resources_unavailable",
+      builder_resource_list: "skipped_builder_resources_unavailable",
+      builder_resource_read: "skipped_builder_resources_unavailable",
       builder_resource_scope: null,
       builder_resource_total_resources: null,
       builder_resource_module_count: null,
       builder_resource_returned_resources: null,
+      builder_resource_found: false,
     };
   }
 
@@ -691,12 +785,54 @@ async function runBuilderResourceSmoke(args: {
     `polynet_workspace_builder_resources_map should return builder scope: ${JSON.stringify(resources)}`,
   );
 
+  const list = await callTool({
+    mcpUrl: args.mcpUrl,
+    token: args.token,
+    name: "polynet_workspace_builder_resources_list",
+    toolArgs: {
+      workspace_context_id: args.workspaceContextId,
+      limit: 25,
+    },
+  });
+  const listedResources = asRecord(list.resources);
+  assert.notEqual(
+    listedResources.ok,
+    false,
+    `polynet_workspace_builder_resources_list returned failure: ${JSON.stringify(listedResources)}`,
+  );
+
+  const resourceRef = firstResourceRef(listedResources) ?? firstResourceRef(resources);
+  let readStatus: "ok" | "skipped_no_resource" = "skipped_no_resource";
+  if (resourceRef) {
+    const read = await callTool({
+      mcpUrl: args.mcpUrl,
+      token: args.token,
+      name: "polynet_workspace_builder_resource_read",
+      toolArgs: {
+        workspace_context_id: args.workspaceContextId,
+        ref: resourceRef,
+      },
+    });
+    const resource = asRecord(read.resource);
+    assert.notEqual(
+      resource.ok,
+      false,
+      `polynet_workspace_builder_resource_read returned failure: ${JSON.stringify(resource)}`,
+    );
+    readStatus = "ok";
+  } else if (args.requireBuilderResources) {
+    throw new Error("POLYNET_MCP_REQUIRE_BUILDER_RESOURCES requires at least one readable builder resource.");
+  }
+
   return {
     builder_resource_map: "ok",
+    builder_resource_list: "ok",
+    builder_resource_read: readStatus,
     builder_resource_scope: asString(resources.scope),
     builder_resource_total_resources: numericField(resources, "total_resources"),
     builder_resource_module_count: numericField(resources, "total_modules"),
     builder_resource_returned_resources: numericField(resources, "returned_resources"),
+    builder_resource_found: Boolean(resourceRef),
   };
 }
 
@@ -709,6 +845,17 @@ async function runAuthenticatedSmoke(args: {
   const token = readEnv("POLYNET_MCP_BEARER_TOKEN");
   if (!token) {
     throw new Error("POLYNET_MCP_BEARER_TOKEN is required for authenticated smoke.");
+  }
+
+  const toolsListResponse = await postJsonRpc({
+    mcpUrl: args.mcpUrl,
+    token,
+    method: "tools/list",
+  });
+  const toolsList = assertJsonRpcResult(toolsListResponse, "authenticated tools/list");
+  const toolNames = toolNamesFromToolsList(toolsList);
+  for (const providerTool of PROVIDER_TOOLS) {
+    assert.ok(toolNames.includes(providerTool), `tools/list should advertise ${providerTool}.`);
   }
 
   const list = await callTool({
@@ -757,6 +904,11 @@ async function runAuthenticatedSmoke(args: {
   const contextWorkspace = asRecord(context.workspace);
   const contextAuthority = assertWorkspaceAuthority(contextWorkspace, "polynet_get_workspace_context");
   assertMatchingAuthority(openedAuthority, contextAuthority);
+
+  const productDocsSmoke = await runProductDocsSmoke({
+    mcpUrl: args.mcpUrl,
+    token,
+  });
 
   const query = readEnv("POLYNET_MCP_MEMORY_QUERY") ?? "strategy";
   const search = await callTool({
@@ -836,9 +988,12 @@ async function runAuthenticatedSmoke(args: {
   }
 
   return {
+    tools_list: "ok",
+    advertised_tool_count: toolNames.length,
     list_workspaces: "ok",
     open_workspace: "ok",
     get_workspace_context: "ok",
+    ...productDocsSmoke,
     memory_search: "ok",
     memory_read: readStatus,
     ...resourceSmoke,
