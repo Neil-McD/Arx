@@ -889,6 +889,14 @@ export default defineSchema({
         instagram: v.optional(v.string()),
       }),
     ),
+    // Deprecated compatibility field: current onboarding no longer writes direction.
+    onboardingDirection: v.optional(
+      v.union(
+        v.literal("build_community"),
+        v.literal("discover_community"),
+        v.literal("learn_about_polynet"),
+      ),
+    ),
     onboardingCompletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
