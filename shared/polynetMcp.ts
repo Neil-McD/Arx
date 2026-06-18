@@ -27,7 +27,8 @@ export type PolynetMcpToolName =
   | "polynet_workspace_record_outcome"
   | "polynet_workspace_resources_list"
   | "polynet_workspace_resource_read"
-  | "polynet_workspace_resources_search";
+  | "polynet_workspace_resources_search"
+  | "polynet_workspace_builder_resources_map";
 
 export type PolynetMcpToolDefinition = {
   name: PolynetMcpToolName;
@@ -685,6 +686,44 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         limit: {
           type: "number",
           description: "Maximum matching resources to return, clamped by the server.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "resources"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        resources: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  polynet_workspace_builder_resources_map: {
+    name: "polynet_workspace_builder_resources_map",
+    title: "Map PolyNet Workspace Builder Resources",
+    description:
+      "Map builder-visible resource structure, draft/source state, and resource health for an opened PolyNet workspace. This requires builder resource authority and does not mutate resources.",
+    annotations: {
+      title: "Map PolyNet Workspace Builder Resources",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        limit: {
+          type: "number",
+          description: "Maximum resources to include across the map, clamped by the server.",
+        },
+        per_module_limit: {
+          type: "number",
+          description: "Maximum resources to include per module, clamped by the server.",
         },
       },
     },

@@ -126,10 +126,12 @@ assertIncludes(contract, "POLYNET_MCP_BEARER_TOKEN", "external smoke bearer toke
 assertIncludes(contract, "POLYNET_MCP_RECORD_OUTCOME=1", "external smoke outcome opt-in");
 assertIncludes(contract, "POLYNET_MCP_RESOURCE_QUERY", "external smoke resource query env");
 assertIncludes(contract, "POLYNET_MCP_REQUIRE_RESOURCES=1", "external smoke strict resource env");
+assertIncludes(contract, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1", "external smoke strict builder resource env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_RELATION", "external smoke expected relation env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smoke expected authority lens env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
 assertIncludes(contract, "resource list/search/read", "authenticated smoke resource contract");
+assertIncludes(contract, "builder resource map", "authenticated smoke builder resource contract");
 assertIncludes(
   contract,
   "authenticated smoke calls resource list, search, and read",
@@ -152,6 +154,7 @@ assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smo
 assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_MEMORY", "external smoke strict memory env");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_RESOURCES", "external smoke strict resource env");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES", "external smoke strict builder resource env");
 assertIncludes(externalSmoke, "POLYNET_MCP_RECORD_OUTCOME", "external smoke outcome opt-in env");
 assertIncludes(externalSmoke, "POLYNET_MCP_TIMEOUT_MS", "external smoke timeout env");
 assertIncludes(externalSmoke, "AbortController", "external smoke timeout controller");
@@ -166,11 +169,16 @@ assertIncludes(externalSmoke, "authority_lens", "authenticated smoke reports aut
 assertIncludes(externalSmoke, "available_toolsets", "authenticated smoke reports available toolsets");
 assertIncludes(externalSmoke, "function runResourceSmoke", "authenticated smoke resource helper");
 assertIncludes(externalSmoke, "member_resources", "authenticated smoke gates resource calls on member_resources");
+assertIncludes(externalSmoke, "function runBuilderResourceSmoke", "authenticated smoke builder resource helper");
+assertIncludes(externalSmoke, "builder_resources", "authenticated smoke gates builder resource calls on builder_resources");
 assertIncludes(externalSmoke, "resource_list", "authenticated smoke reports resource list status");
 assertIncludes(externalSmoke, "resource_search", "authenticated smoke reports resource search status");
 assertIncludes(externalSmoke, "resource_read", "authenticated smoke reports resource read status");
 assertIncludes(externalSmoke, "resource_found", "authenticated smoke reports resource discovery");
+assertIncludes(externalSmoke, "builder_resource_map", "authenticated smoke reports builder resource map status");
+assertIncludes(externalSmoke, "builder_resource_scope", "authenticated smoke reports builder resource scope");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_RESOURCES requires", "strict resource smoke failure");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES requires", "strict builder resource smoke failure");
 assertIncludes(
   externalSmoke,
   'requireMemoryRead: mode === "acceptance" || readBoolEnv("POLYNET_MCP_REQUIRE_MEMORY")',
@@ -180,6 +188,11 @@ assertIncludes(
   externalSmoke,
   'requireResources: readBoolEnv("POLYNET_MCP_REQUIRE_RESOURCES")',
   "authenticated smoke strict resource read",
+);
+assertIncludes(
+  externalSmoke,
+  'requireBuilderResources: readBoolEnv("POLYNET_MCP_REQUIRE_BUILDER_RESOURCES")',
+  "authenticated smoke strict builder resource map",
 );
 assertIncludes(
   externalSmoke,
@@ -197,6 +210,11 @@ for (const resourceToolName of [
     `${resourceToolName} authenticated resource smoke call`,
   );
 }
+assertIncludes(
+  externalSmoke,
+  'name: "polynet_workspace_builder_resources_map"',
+  "polynet_workspace_builder_resources_map authenticated builder resource smoke call",
+);
 assertIncludes(externalSmoke, "skipped_basic_mode", "authenticated smoke should not read memory by default");
 assertIncludes(
   externalSmoke,
@@ -224,6 +242,7 @@ for (const toolName of [
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
+  "polynet_workspace_builder_resources_map",
 ]) {
   assertIncludes(externalSmoke, toolName, `${toolName} external smoke`);
 }
@@ -426,6 +445,7 @@ for (const toolName of [
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
+  "polynet_workspace_builder_resources_map",
 ]) {
   const block = toolDispatchBlock(httpMcp, toolName);
   assertIncludes(block, "resolveWorkspaceContext", `${toolName} per-call workspace authorization`);

@@ -181,6 +181,7 @@ polynet_workspace_record_outcome
 polynet_workspace_resources_list
 polynet_workspace_resource_read
 polynet_workspace_resources_search
+polynet_workspace_builder_resources_map
 ```
 
 Existing community-named tools may remain for compatibility, but v0 product semantics should prefer the workspace-named provider tools.
@@ -226,11 +227,12 @@ POLYNET_MCP_EXPECT_AUTHORITY_LENS=<owner_builder|owner|admin_builder|admin|moder
 POLYNET_MCP_EXPECT_TOOLSETS=<comma-separated required toolsets>
 POLYNET_MCP_REQUIRE_MEMORY=1
 POLYNET_MCP_REQUIRE_RESOURCES=1
+POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1
 POLYNET_MCP_RECORD_OUTCOME=1
 POLYNET_MCP_TIMEOUT_MS=15000
 ```
 
-Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/authority/search and, when `member_resources` is available, resource list/search/read. It does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, required toolsets, and a resource search query for a known test account/workspace. `POLYNET_MCP_REQUIRE_RESOURCES=1` makes authenticated smoke fail if `member_resources` is missing or no readable member-visible resource can be found. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
+Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/authority/search and, when `member_resources` is available, resource list/search/read. When `builder_resources` is available, authenticated smoke also calls the read-only builder resource map and verifies that it returns builder scope. It does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, required toolsets, and a resource search query for a known test account/workspace. `POLYNET_MCP_REQUIRE_RESOURCES=1` makes authenticated smoke fail if `member_resources` is missing or no readable member-visible resource can be found. `POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1` makes authenticated smoke fail if `builder_resources` is missing or if the builder resource map does not return builder scope. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
 
 ## Memory Boundary
 
@@ -260,6 +262,18 @@ They must:
 
 They must not expose resource map, batch read, draft modules, draft resources, source inbox as builder state, builder health/preflight metadata, staged changesets, apply changesets, or any resource mutation path.
 
+`polynet_workspace_builder_resources_map` exposes a read-only builder resource map through an opened workspace. It exists so an external harness can inspect the current resource structure, draft/source state, suggested read targets, and builder health without receiving mutation tools.
+
+It must:
+
+- require `workspace_context_id`,
+- re-resolve and revalidate the workspace selector server-side,
+- require the `builder_resources` authority toolset,
+- use only `mapCommunityResourcesForToolInternal`,
+- return builder scope when the call succeeds.
+
+It must not expose batch read, staged changesets, apply changesets, direct builder resource reads, or any resource mutation path.
+
 ## Non-Goals
 
 This slice does not change or extend:
@@ -275,8 +289,8 @@ This slice does not change or extend:
 - local stdio MCP support,
 - workspace filesystem or shell tools,
 - community writes,
-- resource builder tools,
-- resource map or batch read tools,
+- resource write tools,
+- resource batch read tools,
 - resource staging or apply mutations,
 - compiler controls,
 - candidate or draft intelligence review,
@@ -293,7 +307,8 @@ The slice is done when a real external MCP client can:
 5. search accepted community memory,
 6. read one memory node,
 7. record an outcome against the retrieval log,
-8. list, read, and search member-visible workspace resources when the workspace authority includes `member_resources`.
+8. list, read, and search member-visible workspace resources when the workspace authority includes `member_resources`,
+9. inspect the read-only builder resource map when the workspace authority includes `builder_resources`.
 
 Focused proofs must show:
 
@@ -312,7 +327,11 @@ Focused proofs must show:
 - outcome feedback uses `recordCommunityOutcomeObservationInternal`,
 - resource tools require `member_resources`,
 - resource tools use only live member-visible directory internals,
-- resource tools do not expose map, batch read, builder, staging, apply, or mutation internals,
+- member resource tools do not expose map, batch read, builder, staging, apply, or mutation internals,
+- builder resource map requires `builder_resources`,
+- builder resource map uses only `mapCommunityResourcesForToolInternal`,
+- builder resource map does not expose batch read, staging, apply, or mutation internals,
 - authenticated smoke calls resource list, search, and read when `member_resources` is available,
+- authenticated smoke calls the builder resource map when `builder_resources` is available,
 - raw `polynet_community_search` remains separate from accepted memory,
 - provider implementation does not import or mutate the internal MCP consumer/runtime path.

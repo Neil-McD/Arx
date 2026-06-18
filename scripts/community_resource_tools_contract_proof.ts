@@ -275,8 +275,8 @@ assert.match(timelineUi, /community_resources_search/);
 
 assert.match(
   polynetMcp,
-  /polynet_workspace_resources_list[\s\S]*polynet_workspace_resource_read[\s\S]*polynet_workspace_resources_search/,
-  "public PolyNet MCP should expose only the member-visible workspace resource slice",
+  /polynet_workspace_resources_list[\s\S]*polynet_workspace_resource_read[\s\S]*polynet_workspace_resources_search[\s\S]*polynet_workspace_builder_resources_map/,
+  "public PolyNet MCP should expose member resources plus the read-only builder resource map",
 );
 for (const toolName of [
   "polynet_workspace_resources_list",
@@ -301,15 +301,30 @@ assert.match(
   /polynet_workspace_resources_search[\s\S]*searchCommunityResourceDirectoryInternal/,
   "PolyMCP resource search should use the member-visible directory search internal",
 );
+assert.match(
+  polynetMcp,
+  /name: "polynet_workspace_builder_resources_map"[\s\S]*readOnlyHint: true/,
+  "PolyMCP builder resource map should be read-only",
+);
+assert.match(
+  httpMcp,
+  /toolName === "polynet_workspace_builder_resources_map"[\s\S]*requireWorkspaceAuthorityToolset[\s\S]*"builder_resources"[\s\S]*mapCommunityResourcesForToolInternal/,
+  "PolyMCP builder resource map should require builder resources and use the map internal",
+);
+assert.doesNotMatch(
+  httpMcp,
+  /toolName === "polynet_workspace_builder_resources_map"[\s\S]*readCommunityResourcesForToolInternal/,
+  "PolyMCP builder resource map should not expose batch read",
+);
 assert.doesNotMatch(
   polynetMcp,
   /polynet_workspace_resources_map|polynet_workspace_resources_read|polynet_workspace_resource_builder|polynet_workspace_resources_stage|polynet_workspace_resources_apply/,
-  "public PolyNet MCP should not expose resource map, batch read, builder, stage, or apply tools",
+  "public PolyNet MCP should not expose generic resource map, batch read, builder, stage, or apply tools",
 );
 assert.doesNotMatch(
   httpMcp,
   /toolName === "polynet_workspace_resources_(map|read|stage|apply)"|toolName === "polynet_workspace_resource_builder/,
-  "provider MCP should not dispatch resource map, batch read, builder, stage, or apply tools",
+  "provider MCP should not dispatch generic resource map, batch read, builder, stage, or apply tools",
 );
 assert.match(
   cognitionDocs,

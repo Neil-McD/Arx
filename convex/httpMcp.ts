@@ -1046,6 +1046,51 @@ async function handleToolCall(args: {
     }
   }
 
+  if (toolName === "polynet_workspace_builder_resources_map") {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "builder_resources");
+    if (!authority.ok) {
+      return { ok: false, type: "tool", message: authority.message };
+    }
+    try {
+      const resources = (await ctx.runQuery(
+        internal.communityResources.mapCommunityResourcesForToolInternal as any,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          limit: normalizeWorkspaceResourceLimit(toolArgs.limit),
+          perModuleLimit: normalizeWorkspaceResourceLimit(toolArgs.per_module_limit),
+        },
+      )) as Record<string, unknown> | null;
+      if (!resources || typeof resources !== "object") {
+        return { ok: false, type: "tool", message: "Workspace builder resource map failed." };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        resources,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace builder resource map failed." };
+    }
+  }
+
   if (toolName === "polynet_community_search") {
     const communitySlug = normalizeString(toolArgs.community_slug, 160);
     const query = normalizeString(toolArgs.query, 240);
