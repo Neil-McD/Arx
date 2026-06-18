@@ -4,6 +4,7 @@ import {
   buildAgentActivityTimeline,
   type AgentActivityKind,
 } from "../shared/runtimeActivityTimeline.ts";
+import { buildRuntimeLiveTimeline } from "../shared/runtimeTimelineUi.ts";
 
 function readText(path: string): string {
   return readFileSync(path, "utf8");
@@ -92,6 +93,49 @@ assertContains(
   runtimeTimelineUi,
   "buildRuntimeLiveTimeline",
   "runtime timeline UI projection remains intact",
+);
+
+const reasoningTimeline = buildRuntimeLiveTimeline([
+  event({ seq: 1, event_type: "run_started" }),
+  event({
+    seq: 2,
+    event_type: "reasoning_summary_part_added",
+    payload: {
+      summary_stream_id: "stream:1",
+      summary_index: 0,
+    },
+  }),
+  event({
+    seq: 3,
+    event_type: "reasoning_summary_text_delta",
+    payload: {
+      summary_stream_id: "stream:1",
+      summary_index: 0,
+      delta: "I’m checking the relevant files",
+    },
+  }),
+  event({
+    seq: 4,
+    event_type: "reasoning_summary_text_delta",
+    payload: {
+      summary_stream_id: "stream:1",
+      summary_index: 0,
+      delta: " before editing.",
+    },
+  }),
+  started(5, "read", { path: "apps/web/src/components/RuntimeLiveTimeline.tsx" }),
+  finished(6, 5, "read", { path: "apps/web/src/components/RuntimeLiveTimeline.tsx" }),
+]);
+const reasoningEntry = reasoningTimeline.find((entry) => entry.kind === "reasoning");
+assert.equal(
+  reasoningEntry?.text,
+  "I’m checking the relevant files before editing.",
+  "reasoning summary deltas should combine into a transcript thought entry",
+);
+assert.equal(
+  reasoningTimeline.some((entry) => entry.kind === "tool_group"),
+  true,
+  "runtime timeline should keep tool groups alongside reasoning entries",
 );
 
 const happyPath = [

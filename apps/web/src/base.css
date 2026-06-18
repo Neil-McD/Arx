@@ -16960,18 +16960,32 @@ button.chat-reply-quote:hover {
   width: fit-content;
   line-height: 1.35;
   letter-spacing: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
 .runtime-thought-snippet {
-  width: fit-content;
+  display: block;
   max-width: min(620px, 100%);
   overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary));
+  font-size: 14px;
+  line-height: 1.5;
   letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-thought-snippet.streaming-placeholder {
+  display: block;
+}
+
+.runtime-thought-snippet-model {
+  color: color-mix(in srgb, var(--text-primary) 90%, var(--text-secondary));
+}
+
+.runtime-thought-snippet-fallback {
+  color: color-mix(in srgb, var(--text-primary) 74%, var(--text-secondary));
 }
 
 .runtime-turn-timer {
@@ -16994,46 +17008,10 @@ button.chat-reply-quote:hover {
   transform: translateY(-0.5px);
 }
 
-.runtime-tool-roll {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-width: min(560px, 100%);
-  max-height: 58px;
-  overflow: hidden;
-  perspective: 420px;
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
-}
-
-.runtime-tool-roll-item {
-  width: fit-content;
-  max-width: 100%;
-  font-size: 13px;
-  line-height: 1.35;
-  opacity: 0;
-  transform: translateY(7px) rotateX(-16deg);
-  transform-origin: center top;
-  animation: runtime-tool-roll-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  animation-delay: var(--runtime-tool-delay, 0ms);
-}
-
-.runtime-tool-roll-kind {
-  color: var(--text-muted);
-}
-
-.runtime-tool-roll-label {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .runtime-tool-drawers {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   max-width: min(640px, 100%);
   margin-top: 2px;
 }
@@ -17041,15 +17019,27 @@ button.chat-reply-quote:hover {
 .runtime-tool-drawer {
   width: fit-content;
   max-width: 100%;
+  color: var(--text-muted);
 }
 
 .runtime-tool-drawer-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   width: fit-content;
   max-width: 100%;
   cursor: pointer;
-  font-size: 13px;
+  color: color-mix(in srgb, var(--text-muted) 78%, transparent);
+  font-size: 12px;
   line-height: 1.35;
   list-style: none;
+  opacity: 0.72;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.runtime-tool-drawer-summary:hover {
+  color: var(--text-muted);
+  opacity: 0.92;
 }
 
 .runtime-tool-drawer-summary::-webkit-details-marker {
@@ -17057,33 +17047,66 @@ button.chat-reply-quote:hover {
 }
 
 .runtime-tool-drawer-title {
-  color: var(--text-muted);
+  flex: 0 0 auto;
+  color: inherit;
+  font-weight: 520;
 }
 
 .runtime-tool-drawer-detail {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-secondary);
+  color: color-mix(in srgb, var(--text-muted) 74%, transparent);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-tool-drawer-chevron {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--text-muted) 58%, transparent);
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.runtime-tool-drawer[open] .runtime-tool-drawer-chevron {
+  transform: rotate(90deg);
 }
 
 .runtime-tool-drawer-body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin: 5px 0 2px;
-  padding-left: 14px;
+  margin: 4px 0 2px;
+  padding-left: 12px;
   color: var(--text-faint, rgba(255, 255, 255, 0.3));
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.35;
 }
 
 .runtime-tool-drawer-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   max-width: min(620px, 100%);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-tool-drawer-item-title,
+.runtime-tool-drawer-item-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runtime-tool-drawer-item-title {
+  flex: 0 1 auto;
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.runtime-tool-drawer-item-detail {
+  flex: 1 1 auto;
+  color: color-mix(in srgb, var(--text-muted) 48%, transparent);
 }
 
 .resource-changeset-card-stack {
@@ -17225,17 +17248,6 @@ button.chat-reply-quote:hover {
 
 .resource-changeset-card-error {
   color: var(--accent-error, #c75a4a);
-}
-
-@keyframes runtime-tool-roll-in {
-  0% {
-    opacity: 0;
-    transform: translateY(7px) rotateX(-16deg);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) rotateX(0);
-  }
 }
 
 .streaming-thinking-footer {

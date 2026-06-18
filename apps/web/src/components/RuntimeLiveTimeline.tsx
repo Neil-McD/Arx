@@ -15,8 +15,8 @@ import {
 import { dispatchCommunityResourcesMutated } from "../../../../shared/communityResourceMutationEvents";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { useSmoothStreamingText } from "../../../../shared/useSmoothStreamingText";
+import { buildRuntimeLiveTimeline } from "../../../../shared/runtimeTimelineUi";
 
-const TOOL_ROLL_LIMIT = 3;
 const DRAWER_STEP_LIMIT = 5;
 const CHANGESET_CARD_LIMIT = 2;
 
@@ -449,16 +449,25 @@ function toolItemLabel(item: AgentActivityItem): string {
   return item.title || item.toolName || "Used tool";
 }
 
-function toolItemsForRoll(step: AgentActivityStep | null): AgentActivityItem[] {
-  if (!step) return [];
-  return step.items
-    .filter((item) => Boolean(item.toolName))
-    .sort((a, b) => a.seqStart - b.seqStart)
-    .slice(-TOOL_ROLL_LIMIT);
-}
-
 function toolStepsForDrawers(steps: AgentActivityStep[]): AgentActivityStep[] {
   return steps.filter(isToolStep).slice(-DRAWER_STEP_LIMIT);
+}
+
+function compactThoughtText(value: string): string | null {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized || null;
+}
+
+function latestReasoningSummaryText(
+  entries: ReturnType<typeof buildRuntimeLiveTimeline>,
+): string | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.kind !== "reasoning") continue;
+    const text = compactThoughtText(entry.text);
+    if (text) return text;
+  }
+  return null;
 }
 
 export function RuntimeLiveTimeline(props: {
@@ -483,21 +492,24 @@ export function RuntimeLiveTimeline(props: {
     [steps],
   );
   const visibleToolSteps = useMemo(() => toolStepsForDrawers(steps), [steps]);
+  const liveTimelineEntries = useMemo(
+    () => buildRuntimeLiveTimeline(props.events),
+    [props.events],
+  );
+  const reasoningSummaryText = useMemo(
+    () => latestReasoningSummaryText(liveTimelineEntries),
+    [liveTimelineEntries],
+  );
   const changesetCards = useMemo(
     () => extractResourceChangesetCards(props.events),
     [props.events],
   );
-  const rollTargetStep = visibleToolSteps[visibleToolSteps.length - 1] ?? null;
-  const olderDrawers = rollTargetStep ? visibleToolSteps.slice(0, -1) : visibleToolSteps;
-  const rollingToolItems = useMemo(
-    () => toolItemsForRoll(rollTargetStep),
-    [rollTargetStep],
-  );
+  const thoughtText = reasoningSummaryText ?? narration ?? "";
   const displayWord = useSmoothStreamingText(activityWord, {
     active: showActiveIndicators,
   });
-  const displayNarration = useSmoothStreamingText(narration ?? "", {
-    active: showActiveIndicators && Boolean(narration),
+  const displayThoughtText = useSmoothStreamingText(thoughtText, {
+    active: showActiveIndicators && Boolean(thoughtText),
   });
   const elapsedMs =
     runTiming.startedAtMs === null
@@ -563,76 +575,59 @@ export function RuntimeLiveTimeline(props: {
           </span>
         </span>
       ) : null}
+      {displayThoughtText ? (
+        <span
+          className={[
+            "runtime-thought-snippet",
+            "streaming-placeholder",
+            reasoningSummaryText
+              ? "runtime-thought-snippet-model"
+              : "runtime-thought-snippet-fallback",
+          ].join(" ")}
+        >
+          {displayThoughtText}
+        </span>
+      ) : null}
+      {!displayThoughtText ? (
+        <span
+          className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word"
+          aria-live="polite"
+        >
+          {displayWord}
+        </span>
+      ) : null}
       {visibleToolSteps.length > 0 ? (
         <div className="runtime-tool-drawers" aria-label="Grouped tool activity">
-          {olderDrawers.map((step) => (
+          {visibleToolSteps.map((step) => (
             <details key={step.id} className="runtime-tool-drawer">
-              <summary className="runtime-tool-drawer-summary streaming-placeholder">
+              <summary className="runtime-tool-drawer-summary">
                 <span className="runtime-tool-drawer-title">{step.title}</span>
                 <span className="runtime-tool-drawer-detail">{step.summary}</span>
+                <span className="runtime-tool-drawer-chevron" aria-hidden="true">
+                  ›
+                </span>
               </summary>
               <div className="runtime-tool-drawer-body">
                 {step.items
                   .filter((item) => Boolean(item.toolName))
                   .map((item) => (
                     <div key={item.id} className="runtime-tool-drawer-item">
-                      {toolItemLabel(item)}
-                    </div>
-                ))}
-              </div>
-            </details>
-          ))}
-          {rollTargetStep ? (
-            <details key={rollTargetStep.id} className="runtime-tool-drawer">
-              <summary className="runtime-tool-drawer-summary streaming-placeholder">
-                <span className="runtime-tool-drawer-title">{rollTargetStep.title}</span>
-                <span className="runtime-tool-drawer-detail">{rollTargetStep.summary}</span>
-              </summary>
-              <div className="runtime-tool-drawer-body">
-                {rollTargetStep.items
-                  .filter((item) => Boolean(item.toolName))
-                  .map((item) => (
-                    <div key={item.id} className="runtime-tool-drawer-item">
-                      {toolItemLabel(item)}
+                      <span className="runtime-tool-drawer-item-title">
+                        {toolItemLabel(item)}
+                      </span>
+                      {item.detail ? (
+                        <span className="runtime-tool-drawer-item-detail">
+                          {item.detail}
+                        </span>
+                      ) : null}
                     </div>
                   ))}
               </div>
             </details>
-          ) : null}
-          {rollingToolItems.length > 0 ? (
-            <div className="runtime-tool-roll" aria-label="Recent tool activity">
-              {rollingToolItems.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="runtime-tool-roll-item streaming-placeholder"
-                  style={{
-                    ["--runtime-tool-delay" as string]: `${index * 45}ms`,
-                  }}
-                >
-                  <span className="runtime-tool-roll-kind">
-                    {item.toolName ?? "tool"}
-                  </span>
-                  <span className="runtime-tool-roll-label">
-                    {toolItemLabel(item)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
+          ))}
         </div>
       ) : null}
       {approvalCards}
-      {displayNarration ? (
-        <span className="runtime-thought-snippet streaming-placeholder">
-          {displayNarration}
-        </span>
-      ) : null}
-      <span
-        className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word"
-        aria-live="polite"
-      >
-        {displayWord}
-      </span>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { isComputerUseToolName } from "./retrievalTools";
+import { isComputerUseToolName } from "./retrievalTools.ts";
 import type { CloudRuntimeRunEventTransportRow } from "./cloudThreadsRead";
 
 export type RuntimeToolCategory =
