@@ -427,6 +427,7 @@ function emptyAcceptedResponse(req: Request, jsonResponse: JsonResponseFn): Resp
 }
 
 function sanitizeCommunitySummary(row: CommunityMembershipProjection) {
+  const role = normalizeString(row.role, 32)?.toLowerCase();
   return {
     slug: String(row.communities?.slug ?? "").trim(),
     name: String(row.communities?.name ?? "").trim() || "Community",
@@ -442,14 +443,28 @@ function sanitizeCommunitySummary(row: CommunityMembershipProjection) {
           ? "approval"
           : "open",
     relation:
-      normalizeString(row.role, 32)?.toLowerCase() === "owner"
+      role === "owner"
         ? "owner"
-        : normalizeString(row.role, 32)?.toLowerCase() === "admin"
+        : role === "admin"
           ? "admin"
-          : normalizeString(row.role, 32)?.toLowerCase() === "moderator"
+          : role === "moderator"
             ? "moderator"
             : "member",
   };
+}
+
+function sanitizeMcpAccessRelation(raw: unknown): string {
+  const relation = normalizeString(raw, 32)?.toLowerCase();
+  if (
+    relation === "owner" ||
+    relation === "admin" ||
+    relation === "moderator" ||
+    relation === "member" ||
+    relation === "pending"
+  ) {
+    return relation;
+  }
+  return "no_access";
 }
 
 function sanitizeCommunityAccessCapabilities(access: Record<string, unknown>) {
@@ -467,6 +482,71 @@ function sanitizeCommunityAccessCapabilities(access: Record<string, unknown>) {
     can_manage_branding: access.can_manage_branding === true,
     can_manage_publishing: access.can_manage_publishing === true,
     can_manage_payouts: access.can_manage_payouts === true,
+  };
+}
+
+function buildWorkspaceAuthority(access: Record<string, unknown>) {
+  const relation = sanitizeMcpAccessRelation(access.relation);
+  const isEntitled = access.is_entitled === true;
+  const capabilities = sanitizeCommunityAccessCapabilities(access);
+  const availableToolsets: string[] = ["workspace_context"];
+
+  if (isEntitled && (capabilities.can_enter_community || capabilities.can_read_chat)) {
+    availableToolsets.push("accepted_memory", "raw_evidence_search", "member_resources");
+  }
+  if (capabilities.can_manage_resources) {
+    availableToolsets.push("builder_resources");
+  }
+  if (capabilities.can_review_join_requests) {
+    availableToolsets.push("join_request_review");
+  }
+  if (
+    capabilities.can_manage_members ||
+    capabilities.can_manage_pricing ||
+    capabilities.can_manage_branding ||
+    capabilities.can_manage_publishing ||
+    capabilities.can_manage_payouts
+  ) {
+    availableToolsets.push("community_admin");
+  }
+  if (
+    relation === "owner" ||
+    capabilities.can_manage_branding ||
+    capabilities.can_manage_publishing ||
+    capabilities.can_manage_payouts
+  ) {
+    availableToolsets.push("owner_controls");
+  }
+
+  const authorityLens =
+    relation === "owner"
+      ? capabilities.can_manage_resources
+        ? "owner_builder"
+        : "owner"
+      : relation === "admin"
+        ? capabilities.can_manage_resources
+          ? "admin_builder"
+          : "admin"
+        : relation === "moderator"
+          ? "moderator"
+          : relation === "member"
+            ? "member"
+            : relation === "pending"
+              ? "pending"
+              : "no_access";
+
+  return {
+    relation,
+    authority_lens: authorityLens,
+    available_toolsets: availableToolsets.filter(
+      (value, index, list) => list.indexOf(value) === index,
+    ),
+    unavailable_reason:
+      relation === "pending"
+        ? "join_request_pending"
+        : relation === "no_access"
+          ? "community_access_required"
+          : null,
   };
 }
 
@@ -496,6 +576,7 @@ function buildWorkspaceContext(
 ) {
   const summary = sanitizeWorkspaceSummary(row);
   const capabilities = sanitizeCommunityAccessCapabilities(access);
+  const authority = buildWorkspaceAuthority(access);
   return {
     ...summary,
     community: {
@@ -507,10 +588,11 @@ function buildWorkspaceContext(
       entry_policy: summary.entry_policy,
     },
     access: {
-      relation: normalizeString(access.relation, 32) ?? summary.relation,
+      relation: authority.relation,
       is_entitled: access.is_entitled === true,
       capabilities,
     },
+    authority,
     memory: {
       accepted_memory_tool: "polynet_workspace_memory_search",
       accepted_memory_read_tool: "polynet_workspace_memory_read",
@@ -715,7 +797,7 @@ async function handleToolCall(args: {
           : String(row.communities?.entry_policy ?? "").trim().toLowerCase() === "approval"
             ? "approval"
             : "open",
-      relation: normalizeString(access.relation, 32) ?? "member",
+      relation: sanitizeMcpAccessRelation(access.relation),
       is_entitled: access.is_entitled === true,
       capabilities: sanitizeCommunityAccessCapabilities(access),
     };

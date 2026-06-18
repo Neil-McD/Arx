@@ -20,6 +20,37 @@ const PROVIDER_TOOLS = [
   "polynet_workspace_record_outcome",
 ] as const;
 
+const MCP_ACCESS_RELATIONS = [
+  "owner",
+  "admin",
+  "moderator",
+  "member",
+  "pending",
+  "no_access",
+] as const;
+
+const MCP_AUTHORITY_LENSES = [
+  "owner_builder",
+  "owner",
+  "admin_builder",
+  "admin",
+  "moderator",
+  "member",
+  "pending",
+  "no_access",
+] as const;
+
+const MCP_TOOLSETS = [
+  "workspace_context",
+  "accepted_memory",
+  "raw_evidence_search",
+  "member_resources",
+  "builder_resources",
+  "join_request_review",
+  "community_admin",
+  "owner_controls",
+] as const;
+
 let requestId = 1;
 
 function printHelp(): never {
@@ -40,6 +71,9 @@ Environment:
   POLYNET_MCP_MEMORY_QUERY         Optional memory query. Defaults to "strategy".
   POLYNET_MCP_MEMORY_NODE_ID       Optional memory node id override for read.
   POLYNET_MCP_RETRIEVAL_LOG_ID     Optional retrieval log id override for read/outcome.
+  POLYNET_MCP_EXPECT_RELATION      Optional exact expected workspace authority relation.
+  POLYNET_MCP_EXPECT_AUTHORITY_LENS Optional exact expected workspace authority lens.
+  POLYNET_MCP_EXPECT_TOOLSETS      Optional comma-separated toolsets that must be available.
   POLYNET_MCP_REQUIRE_MEMORY       Set to 1 to make authenticated mode fail if no memory node is readable.
   POLYNET_MCP_RECORD_OUTCOME       Set to 1 to run the write-path outcome smoke.
   POLYNET_MCP_TIMEOUT_MS           Request timeout in milliseconds. Defaults to 15000.
@@ -122,6 +156,112 @@ function asString(value: unknown): string | null {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function envList(name: string): string[] {
+  const value = readEnv(name);
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function assertOneOf<T extends readonly string[]>(
+  value: string | null,
+  allowed: T,
+  label: string,
+): asserts value is T[number] {
+  assert.ok(value, `${label} is required.`);
+  assert.ok(
+    (allowed as readonly string[]).includes(value),
+    `${label} must be one of ${allowed.join(", ")}; received ${value}.`,
+  );
+}
+
+type WorkspaceAuthorityProjection = {
+  relation: string;
+  authority_lens: string;
+  available_toolsets: string[];
+};
+
+function assertWorkspaceAuthority(
+  workspace: Record<string, unknown>,
+  label: string,
+): WorkspaceAuthorityProjection {
+  const authority = asRecord(workspace.authority);
+  const relation = asString(authority.relation);
+  assertOneOf(relation, MCP_ACCESS_RELATIONS, `${label}.authority.relation`);
+
+  const authorityLens = asString(authority.authority_lens);
+  assertOneOf(authorityLens, MCP_AUTHORITY_LENSES, `${label}.authority.authority_lens`);
+
+  const availableToolsets = asArray(authority.available_toolsets)
+    .map(asString)
+    .filter((item): item is string => Boolean(item));
+  assert.ok(
+    availableToolsets.length > 0,
+    `${label}.authority.available_toolsets should not be empty.`,
+  );
+  assert.ok(
+    availableToolsets.includes("workspace_context"),
+    `${label}.authority.available_toolsets should include workspace_context.`,
+  );
+  for (const toolset of availableToolsets) {
+    assertOneOf(toolset, MCP_TOOLSETS, `${label}.authority.available_toolsets[]`);
+  }
+
+  const expectedRelation = readEnv("POLYNET_MCP_EXPECT_RELATION");
+  if (expectedRelation) {
+    assert.equal(
+      relation,
+      expectedRelation,
+      `${label}.authority.relation should match POLYNET_MCP_EXPECT_RELATION.`,
+    );
+  }
+
+  const expectedAuthorityLens = readEnv("POLYNET_MCP_EXPECT_AUTHORITY_LENS");
+  if (expectedAuthorityLens) {
+    assert.equal(
+      authorityLens,
+      expectedAuthorityLens,
+      `${label}.authority.authority_lens should match POLYNET_MCP_EXPECT_AUTHORITY_LENS.`,
+    );
+  }
+
+  for (const toolset of envList("POLYNET_MCP_EXPECT_TOOLSETS")) {
+    assert.ok(
+      availableToolsets.includes(toolset),
+      `${label}.authority.available_toolsets should include expected toolset: ${toolset}.`,
+    );
+  }
+
+  return {
+    relation,
+    authority_lens: authorityLens,
+    available_toolsets: availableToolsets,
+  };
+}
+
+function assertMatchingAuthority(
+  opened: WorkspaceAuthorityProjection,
+  context: WorkspaceAuthorityProjection,
+): void {
+  assert.equal(
+    context.relation,
+    opened.relation,
+    "polynet_get_workspace_context authority relation should match polynet_open_workspace.",
+  );
+  assert.equal(
+    context.authority_lens,
+    opened.authority_lens,
+    "polynet_get_workspace_context authority lens should match polynet_open_workspace.",
+  );
+  assert.deepEqual(
+    context.available_toolsets.slice().sort(),
+    opened.available_toolsets.slice().sort(),
+    "polynet_get_workspace_context available toolsets should match polynet_open_workspace.",
+  );
 }
 
 function parseJson(text: string): unknown {
@@ -418,8 +558,9 @@ async function runAuthenticatedSmoke(args: {
   const openedWorkspace = asRecord(opened.workspace);
   const workspaceContextId = asString(openedWorkspace.workspace_context_id);
   assert.ok(workspaceContextId, "polynet_open_workspace should return workspace_context_id.");
+  const openedAuthority = assertWorkspaceAuthority(openedWorkspace, "polynet_open_workspace");
 
-  await callTool({
+  const context = await callTool({
     mcpUrl: args.mcpUrl,
     token,
     name: "polynet_get_workspace_context",
@@ -427,6 +568,9 @@ async function runAuthenticatedSmoke(args: {
       workspace_context_id: workspaceContextId,
     },
   });
+  const contextWorkspace = asRecord(context.workspace);
+  const contextAuthority = assertWorkspaceAuthority(contextWorkspace, "polynet_get_workspace_context");
+  assertMatchingAuthority(openedAuthority, contextAuthority);
 
   const query = readEnv("POLYNET_MCP_MEMORY_QUERY") ?? "strategy";
   const search = await callTool({
@@ -498,6 +642,9 @@ async function runAuthenticatedSmoke(args: {
     record_outcome: outcomeStatus,
     selected_workspace_slug: slug,
     workspace_context_id: workspaceContextId,
+    authority_relation: openedAuthority.relation,
+    authority_lens: openedAuthority.authority_lens,
+    available_toolsets: openedAuthority.available_toolsets,
     memory_node_found: Boolean(nodeId),
     retrieval_log_found: Boolean(retrievalLogId),
   };

@@ -62,6 +62,21 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "authority.authority_lens",
+  "workspace MCP authority projection",
+);
+assertIncludes(
+  contract,
+  "authority.available_toolsets",
+  "workspace MCP authority toolset projection",
+);
+assertIncludes(
+  contract,
+  "normalize those to `no_access`",
+  "workspace MCP no-access projection",
+);
+assertIncludes(
+  contract,
   "provider implementation does not import or mutate the internal MCP consumer/runtime path.",
   "workspace MCP non-interference acceptance",
 );
@@ -74,8 +89,23 @@ assertIncludes(
 
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_HARNESS_CONFIG",
-  "PolyMCP copy config payload",
+  "POLYMCP_CODEX_SETUP_COMMANDS",
+  "PolyMCP Codex setup commands",
+);
+assertIncludes(
+  integrationsSettings,
+  "codex mcp add polymcp --url",
+  "PolyMCP Codex add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "codex mcp login polymcp",
+  "PolyMCP Codex login command",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYMCP_GENERIC_HTTP_CONFIG",
+  "PolyMCP generic HTTP config payload",
 );
 assertIncludes(
   integrationsSettings,
@@ -84,13 +114,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "mcp-remote@latest",
-  "PolyMCP mcp-remote adapter",
-);
-assertIncludes(
-  integrationsSettings,
-  "POLYMCP_AGENT_INSTRUCTIONS",
-  "PolyMCP copied agent instructions",
+  'type: "http"',
+  "PolyMCP generic HTTP config type",
 );
 assertIncludes(
   integrationsSettings,
@@ -109,43 +134,48 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "```bash",
+  "PolyMCP setup bundle includes Codex commands",
+);
+assertIncludes(
+  integrationsSettings,
   "```json",
   "PolyMCP setup bundle includes a JSON config block",
 );
 assertIncludes(
   integrationsSettings,
-  "Open that harness's MCP server configuration",
-  "PolyMCP setup copy should tell users where to configure MCP",
+  "Your harness starts OAuth",
+  "PolyMCP setup copy should explain harness-owned OAuth",
 );
 assertIncludes(
   integrationsSettings,
-  "restart or reload the harness",
+  "open a new Codex thread",
   "PolyMCP setup copy should tell users how to activate the MCP server",
 );
 assertIncludes(
   integrationsSettings,
-  "Complete the PolyNet OAuth sign-in",
-  "PolyMCP setup copy should explain auth completion",
-);
-assertIncludes(
-  integrationsSettings,
-  "If your harness only accepts raw JSON",
+  "Use this if your harness asks for MCP JSON",
   "PolyMCP setup copy should support JSON-only harnesses",
 );
 assertIncludes(
   integrationsSettings,
-  "Use PolyMCP when the user asks",
-  "PolyMCP instruction trigger",
-);
-assertIncludes(
-  integrationsSettings,
-  "Treat workspace_context_id values as opaque selectors",
-  "PolyMCP workspace selector instruction",
+  "List my PolyNet workspaces",
+  "PolyMCP setup copy should give a smoke-test prompt",
 );
 assertIncludes(
   integrationsSettings,
   "Copy setup",
   "PolyMCP canonical setup copy action",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_BEARER_TOKEN",
+  "PolyMCP setup should not ask users to configure bearer tokens",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "mcp-remote@latest",
+  "PolyMCP should not make mcp-remote the canonical setup path",
 );
 assertNotIncludes(
   integrationsSettings,
@@ -194,6 +224,15 @@ for (const toolName of [
 const openWorkspaceDefinition = toolDefinitionBlock(polynetMcp, "polynet_open_workspace");
 assertIncludes(openWorkspaceDefinition, "workspace: {", "open workspace context output");
 assertIncludes(openWorkspaceDefinition, "additionalProperties: true", "open workspace context output");
+assertIncludes(openWorkspaceDefinition, "authority: WORKSPACE_AUTHORITY_SCHEMA", "open workspace authority output");
+
+const workspaceContextDefinition = toolDefinitionBlock(polynetMcp, "polynet_get_workspace_context");
+assertIncludes(workspaceContextDefinition, "authority: WORKSPACE_AUTHORITY_SCHEMA", "workspace context authority output");
+assertIncludes(polynetMcp, "const WORKSPACE_AUTHORITY_SCHEMA", "workspace authority schema");
+assertIncludes(polynetMcp, "\"authority_lens\"", "workspace authority lens schema");
+assertIncludes(polynetMcp, "\"available_toolsets\"", "workspace authority toolset schema");
+assertIncludes(polynetMcp, "\"no_access\"", "workspace no-access relation schema");
+assertNotIncludes(polynetMcp, "\"visitor\"", "MCP-facing relation schemas");
 
 for (const toolName of [
   "polynet_workspace_memory_search",
@@ -212,6 +251,26 @@ assertIncludes(
   httpMcp,
   "function parseWorkspaceContextId",
   "workspace context parsing",
+);
+assertIncludes(
+  httpMcp,
+  "function sanitizeMcpAccessRelation",
+  "MCP access relation projection",
+);
+assertIncludes(
+  httpMcp,
+  "function buildWorkspaceAuthority",
+  "MCP authority projection",
+);
+assertIncludes(
+  httpMcp,
+  "authority_lens",
+  "MCP authority lens output",
+);
+assertIncludes(
+  httpMcp,
+  "available_toolsets",
+  "MCP authority toolset output",
 );
 assertIncludes(
   httpMcp,

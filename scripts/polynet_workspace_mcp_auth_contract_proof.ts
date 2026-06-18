@@ -124,6 +124,10 @@ assertIncludes(contract, "## External Smoke Harness", "external smoke contract s
 assertIncludes(contract, "POLYNET_MCP_URL", "external smoke endpoint env");
 assertIncludes(contract, "POLYNET_MCP_BEARER_TOKEN", "external smoke bearer token env");
 assertIncludes(contract, "POLYNET_MCP_RECORD_OUTCOME=1", "external smoke outcome opt-in");
+assertIncludes(contract, "POLYNET_MCP_EXPECT_RELATION", "external smoke expected relation env");
+assertIncludes(contract, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smoke expected authority lens env");
+assertIncludes(contract, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
+assertIncludes(contract, "list/open/context/authority/search", "authenticated smoke authority contract");
 assertIncludes(contract, "Acceptance smoke", "external acceptance smoke contract");
 
 assertIncludes(externalSmoke, "--mode=metadata", "external metadata smoke mode");
@@ -135,10 +139,22 @@ assertIncludes(externalSmoke, "POLYNET_MCP_COMMUNITY_SLUG", "external smoke work
 assertIncludes(externalSmoke, "POLYNET_MCP_MEMORY_QUERY", "external smoke memory query env");
 assertIncludes(externalSmoke, "POLYNET_MCP_MEMORY_NODE_ID", "external smoke memory node override env");
 assertIncludes(externalSmoke, "POLYNET_MCP_RETRIEVAL_LOG_ID", "external smoke retrieval log override env");
+assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_RELATION", "external smoke expected relation env");
+assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smoke expected authority lens env");
+assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_MEMORY", "external smoke strict memory env");
 assertIncludes(externalSmoke, "POLYNET_MCP_RECORD_OUTCOME", "external smoke outcome opt-in env");
 assertIncludes(externalSmoke, "POLYNET_MCP_TIMEOUT_MS", "external smoke timeout env");
 assertIncludes(externalSmoke, "AbortController", "external smoke timeout controller");
+assertIncludes(externalSmoke, "function assertWorkspaceAuthority", "authenticated smoke authority assertion helper");
+assertIncludes(externalSmoke, "function assertMatchingAuthority", "authenticated smoke authority stability helper");
+assertIncludes(externalSmoke, "MCP_ACCESS_RELATIONS", "authenticated smoke canonical relation values");
+assertIncludes(externalSmoke, "MCP_AUTHORITY_LENSES", "authenticated smoke canonical authority lenses");
+assertIncludes(externalSmoke, "MCP_TOOLSETS", "authenticated smoke canonical toolsets");
+assertIncludes(externalSmoke, '"workspace_context"', "authenticated smoke requires workspace context toolset");
+assertIncludes(externalSmoke, "authority_relation", "authenticated smoke reports authority relation");
+assertIncludes(externalSmoke, "authority_lens", "authenticated smoke reports authority lens");
+assertIncludes(externalSmoke, "available_toolsets", "authenticated smoke reports available toolsets");
 assertIncludes(
   externalSmoke,
   'requireMemoryRead: mode === "acceptance" || readBoolEnv("POLYNET_MCP_REQUIRE_MEMORY")',

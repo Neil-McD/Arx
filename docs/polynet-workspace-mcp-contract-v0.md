@@ -54,6 +54,54 @@ authenticated user
 
 The MCP client must never provide a trusted `communityId`, user id, entitlement, or permission decision.
 
+`polynet_open_workspace` and `polynet_get_workspace_context` must include an MCP-facing `authority` projection derived from the existing community access bundle:
+
+```text
+authority.relation
+authority.authority_lens
+authority.available_toolsets
+authority.unavailable_reason
+```
+
+`authority.relation` is product-facing and must use only:
+
+```text
+owner
+admin
+moderator
+member
+pending
+no_access
+```
+
+The backend may still use legacy/internal fallback states such as `visitor`, but the MCP projection must normalize those to `no_access`.
+
+`authority_lens` is a compact harness hint, not a permission token. The server must still revalidate each tool call. Current lenses are:
+
+```text
+owner_builder
+owner
+admin_builder
+admin
+moderator
+member
+pending
+no_access
+```
+
+`available_toolsets` names authority-enabled PolyNet tool families. It does not mean every family has a public MCP tool in this v0 slice. Current canonical toolset names are:
+
+```text
+workspace_context
+accepted_memory
+raw_evidence_search
+member_resources
+builder_resources
+join_request_review
+community_admin
+owner_controls
+```
+
 ## Remote MCP Auth Model
 
 `/runtime/mcp` is an OAuth-protected remote MCP resource server.
@@ -169,12 +217,15 @@ POLYNET_MCP_COMMUNITY_SLUG=<community-slug>
 POLYNET_MCP_MEMORY_QUERY=<query>
 POLYNET_MCP_MEMORY_NODE_ID=<node-id>
 POLYNET_MCP_RETRIEVAL_LOG_ID=<retrieval-log-id>
+POLYNET_MCP_EXPECT_RELATION=<owner|admin|moderator|member|pending|no_access>
+POLYNET_MCP_EXPECT_AUTHORITY_LENS=<owner_builder|owner|admin_builder|admin|moderator|member|pending|no_access>
+POLYNET_MCP_EXPECT_TOOLSETS=<comma-separated required toolsets>
 POLYNET_MCP_REQUIRE_MEMORY=1
 POLYNET_MCP_RECORD_OUTCOME=1
 POLYNET_MCP_TIMEOUT_MS=15000
 ```
 
-Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/search and does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
+Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/authority/search and does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, and required toolsets for a known test account/workspace. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
 
 ## Memory Boundary
 
@@ -230,6 +281,8 @@ Focused proofs must show:
 - authorization-server metadata supports authorization code, PKCE, refresh, and public-client token exchange,
 - memory tools require `workspace_context_id`,
 - `workspace_context_id` is parsed as a selector and revalidated server-side,
+- workspace context returns `authority_lens` and `available_toolsets`,
+- internal visitor/no-membership state is normalized to `no_access` in MCP output,
 - accepted memory search uses `searchCommunityMemoryInternal`,
 - accepted memory read uses `readCommunityMemoryInternal`,
 - outcome feedback uses `recordCommunityOutcomeObservationInternal`,

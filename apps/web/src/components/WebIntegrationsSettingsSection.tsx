@@ -22,44 +22,28 @@ import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
 const POLYMCP_TOOL_COUNT_LABEL = "6 workspace tools";
-const POLYMCP_HARNESS_CONFIG = JSON.stringify(
+const POLYMCP_CODEX_SETUP_COMMANDS = [
+  `codex mcp add polymcp --url ${POLYMCP_ENDPOINT_URL}`,
+  "codex mcp login polymcp",
+].join("\n");
+const POLYMCP_GENERIC_HTTP_CONFIG = JSON.stringify(
   {
     mcpServers: {
       polymcp: {
-        command: "npx",
-        args: ["-y", "mcp-remote@latest", POLYMCP_ENDPOINT_URL],
+        type: "http",
+        url: POLYMCP_ENDPOINT_URL,
       },
     },
   },
   null,
   2,
 );
-const POLYMCP_AGENT_INSTRUCTIONS = [
-  "You have access to PolyMCP, the user's PolyNet workspace memory MCP.",
-  "",
-  "Use PolyMCP when the user asks about their PolyNet communities, workspace context, accepted community memory, prior decisions, playbooks, insights, warnings, or outcomes.",
-  "",
-  "Before using workspace-specific memory, list or open the relevant PolyNet workspace. Treat workspace_context_id values as opaque selectors. Do not invent them.",
-  "",
-  "Use memory search before memory read unless the user gives a specific memory node id.",
-  "",
-  "PolyMCP memory is shared workspace/community context, not private local filesystem state. Do not treat it as permission to access unrelated tools, accounts, files, or services.",
-  "",
-  "When using PolyMCP results, cite the community/workspace context in plain language and distinguish retrieved memory from your own reasoning.",
-  "",
-  "If a PolyMCP tool returns an auth or access error, tell the user the connection or workspace permission needs attention instead of guessing.",
-].join("\n");
 const POLYMCP_SETUP_INSTRUCTIONS = [
-  "Paste this setup into the agent harness you want to connect to PolyNet.",
+  "Use this setup in the agent harness you want to connect to PolyNet.",
   "",
-  "1. Open that harness's MCP server configuration.",
-  "2. Add the `polymcp` server from the JSON block below under `mcpServers`.",
-  "3. Save the config, then restart or reload the harness so it starts the server.",
-  "4. Start a new chat and ask the harness to list your PolyNet workspaces.",
-  "5. Complete the PolyNet OAuth sign-in when the browser opens.",
-  "6. After auth succeeds, ask the harness to open the relevant workspace before reading memory.",
+  "PolyNet does not ask you to paste an access token. Your harness starts OAuth, opens the browser for PolyNet sign-in, and stores its own token after the browser callback completes.",
   "",
-  "If your harness only accepts raw JSON, paste only the JSON block.",
+  "After login completes, open a new Codex thread and ask: List my PolyNet workspaces.",
 ].join("\n");
 const POLYMCP_SETUP_BUNDLE = [
   "# PolyMCP Setup",
@@ -68,15 +52,21 @@ const POLYMCP_SETUP_BUNDLE = [
   "",
   POLYMCP_SETUP_INSTRUCTIONS,
   "",
-  "## MCP server config",
+  "## Codex",
   "",
-  "```json",
-  POLYMCP_HARNESS_CONFIG,
+  "Run:",
+  "",
+  "```bash",
+  POLYMCP_CODEX_SETUP_COMMANDS,
   "```",
   "",
-  "## Agent usage guidance",
+  "## Generic MCP JSON",
   "",
-  POLYMCP_AGENT_INSTRUCTIONS,
+  "Use this if your harness asks for MCP JSON instead of CLI commands.",
+  "",
+  "```json",
+  POLYMCP_GENERIC_HTTP_CONFIG,
+  "```",
 ].join("\n");
 
 type SessionLike = {
@@ -390,7 +380,8 @@ export function WebIntegrationsSettingsSection(
             PolyMCP
           </div>
           <div className="settings-section-desc">
-            Connect external AI clients to your PolyNet workspace memory.
+            Connect Codex, Claude Code, Cursor, or another MCP client to your
+            PolyNet workspace memory.
           </div>
           <div className="integrations-app-list">
             <div className="integration-mounted-row polymcp-access-row">
@@ -411,8 +402,8 @@ export function WebIntegrationsSettingsSection(
                       </span>
                     </div>
                     <div className="integration-mounted-detail">
-                      Use accepted community memory and workspace context from
-                      clients that support remote MCP.
+                      Copy the setup, let your harness complete OAuth in the
+                      browser, then ask it to list your PolyNet workspaces.
                     </div>
                   </div>
                 </div>

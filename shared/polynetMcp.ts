@@ -47,6 +47,37 @@ const EMPTY_OBJECT_SCHEMA: JsonSchema = {
   properties: {},
 };
 
+const MCP_ACCESS_RELATION_VALUES = [
+  "owner",
+  "admin",
+  "moderator",
+  "member",
+  "pending",
+  "no_access",
+];
+
+const MCP_AUTHORITY_LENS_VALUES = [
+  "owner_builder",
+  "owner",
+  "admin_builder",
+  "admin",
+  "moderator",
+  "member",
+  "pending",
+  "no_access",
+];
+
+const MCP_TOOLSET_VALUES = [
+  "workspace_context",
+  "accepted_memory",
+  "raw_evidence_search",
+  "member_resources",
+  "builder_resources",
+  "join_request_review",
+  "community_admin",
+  "owner_controls",
+];
+
 const COMMUNITY_SUMMARY_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -59,7 +90,7 @@ const COMMUNITY_SUMMARY_SCHEMA: JsonSchema = {
     entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
     relation: {
       type: "string",
-      enum: ["owner", "admin", "moderator", "member", "pending", "visitor"],
+      enum: MCP_ACCESS_RELATION_VALUES,
     },
   },
 };
@@ -83,7 +114,38 @@ const WORKSPACE_SUMMARY_SCHEMA: JsonSchema = {
     entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
     relation: {
       type: "string",
-      enum: ["owner", "admin", "moderator", "member", "pending", "visitor"],
+      enum: MCP_ACCESS_RELATION_VALUES,
+    },
+  },
+};
+
+const WORKSPACE_AUTHORITY_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["relation", "authority_lens", "available_toolsets"],
+  properties: {
+    relation: {
+      type: "string",
+      enum: MCP_ACCESS_RELATION_VALUES,
+      description: "MCP-facing community authority relation. Internal visitor state is projected as no_access.",
+    },
+    authority_lens: {
+      type: "string",
+      enum: MCP_AUTHORITY_LENS_VALUES,
+      description: "Canonical authority lens derived from server-side access capabilities.",
+    },
+    available_toolsets: {
+      type: "array",
+      items: {
+        type: "string",
+        enum: MCP_TOOLSET_VALUES,
+      },
+      description: "Authority-enabled PolyNet tool families for this workspace lens.",
+    },
+    unavailable_reason: {
+      type: ["string", "null"],
+      maxLength: 240,
+      description: "Reason workspace toolsets are unavailable, when access is pending or missing.",
     },
   },
 };
@@ -178,7 +240,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
             entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
             relation: {
               type: "string",
-              enum: ["owner", "admin", "moderator", "member", "pending", "visitor"],
+              enum: MCP_ACCESS_RELATION_VALUES,
             },
             is_entitled: { type: "boolean" },
             capabilities: {
@@ -333,6 +395,10 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         workspace: {
           type: "object",
           additionalProperties: true,
+          required: ["authority"],
+          properties: {
+            authority: WORKSPACE_AUTHORITY_SCHEMA,
+          },
         },
       },
     },
@@ -362,6 +428,10 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         workspace: {
           type: "object",
           additionalProperties: true,
+          required: ["authority"],
+          properties: {
+            authority: WORKSPACE_AUTHORITY_SCHEMA,
+          },
         },
       },
     },
