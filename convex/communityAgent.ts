@@ -2,11 +2,14 @@ import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityAgentConfigLike,
+  getCommunityAndMembership,
   requireCommunityChatAccess,
   requireCommunityManager,
+  resolveCommunityAccessBundle,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { normalizeCommunityLensAuthority } from "../shared/communityLensAuthority";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
@@ -159,11 +162,28 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const { community } = await requireCommunityChatAccess({
+    const { community, membership } = await getCommunityAndMembership({
       ctx,
       communityId: args.communityId,
       userId,
     });
+    const access = await resolveCommunityAccessBundle({
+      ctx,
+      community,
+      membership,
+      userId,
+    });
+    const communityLensAuthority = normalizeCommunityLensAuthority({
+      relation: access.relation,
+      effective_role: access.effective_role,
+      can_manage_members: access.can_manage_members,
+      can_manage_resources: access.can_manage_resources,
+      can_moderate_content: access.can_moderate_content,
+      can_review_join_requests: access.can_review_join_requests,
+    });
+    if (!access.can_enter_community || !communityLensAuthority) {
+      throw new Error("community_entitlement_required");
+    }
     const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
     const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;
     const communitySlug = String(community.slug ?? "").trim() || null;
@@ -176,6 +196,7 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
       community_one_liner: communityOneLiner,
       community_about: communityAbout,
       community_system_prompt: config?.systemPrompt ?? null,
+      community_lens_authority: communityLensAuthority,
       system_prompt: config?.systemPrompt ?? null,
     };
   },

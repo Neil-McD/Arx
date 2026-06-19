@@ -1640,6 +1640,7 @@ export async function handleRuntimeTurnRequest(args: {
               communityOneLiner: runtimeCommunityOneLiner,
               communityAbout: runtimeCommunityAbout,
               communitySystemPrompt: runtimeCommunitySystemPrompt,
+              communityLensAuthority: runtimeCommunityLensAuthority,
               communityContextVersion: runtimeCommunityId
                 ? runtimeCommunityContextVersion
                 : null,
@@ -1935,6 +1936,7 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
+          communityLensAuthority: runtimeCommunityLensAuthority,
           communityContextVersion: runtimeCommunityId
             ? runtimeCommunityContextVersion
             : null,
@@ -2105,6 +2107,7 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
+          communityLensAuthority: runtimeCommunityLensAuthority,
           agentName: runtimeAgentProfile.agentName,
           agentSoul: runtimeAgentProfile.agentSoul,
           projectContext: runtimeProjectContext,

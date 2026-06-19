@@ -1501,6 +1501,7 @@ async function executeRetrievalAgentLoop(
     communityOneLiner: params.communityOneLiner,
     communityAbout: params.communityAbout,
     communitySystemPrompt: params.communitySystemPrompt,
+    communityLensAuthority: params.communityLensAuthority,
     agentName: params.agentName,
     agentSoul: params.agentSoul,
     projectLabel: projectContext?.label ?? null,

@@ -66,6 +66,19 @@ const fullParams = {
     can_read_live_resources: true,
     can_use_resource_builder: true,
   },
+  communityLensAuthority: {
+    relation: "owner" as const,
+    effectiveRole: "owner" as const,
+    canManage: true,
+    canModerate: true,
+    canManageResources: true,
+    canReviewJoinRequests: true,
+    communityResourceLane: {
+      lane: "builder" as const,
+      can_read_live_resources: true,
+      can_use_resource_builder: true,
+    },
+  },
   agentName: "James",
   agentSoul: "Keep the receipt exact.",
   projectLabel: "Bundle project",
@@ -111,6 +124,7 @@ assert.deepEqual(sectionIds(fullBundle), [
   "explanation_contract",
   "harness_operating_policy",
   "community_lens",
+  "community_lens_authority",
   "community_system_prompt",
   "community_feed_context",
   "community_resource_lane",
@@ -130,6 +144,7 @@ const orderedHeadings = [
   "EXPLANATION_CONTRACT",
   "AGENT_OPERATING_POLICY",
   "COMMUNITY_LENS",
+  "COMMUNITY_LENS_AUTHORITY",
   "COMMUNITY_SYSTEM_PROMPT",
   "COMMUNITY_FEED_CONTEXT",
   "COMMUNITY_RESOURCE_BUILDER_LANE",
@@ -147,6 +162,7 @@ for (const heading of orderedHeadings) {
 
 assert.equal(sectionById(fullBundle, "platform_doctrine")?.layer, "stable");
 assert.equal(sectionById(fullBundle, "community_lens")?.layer, "scoped");
+assert.equal(sectionById(fullBundle, "community_lens_authority")?.owner, "community");
 assert.equal(sectionById(fullBundle, "runtime_turn_context")?.layer, "volatile");
 assert.equal(sectionById(fullBundle, "user_agent_soul")?.owner, "user");
 assert.equal(sectionById(fullBundle, "workspace_harness_context")?.owner, "workspace");
@@ -184,6 +200,7 @@ assertRendered(omittedBundle, "agent_soul");
 assertRendered(omittedBundle, "community_lens");
 assertRendered(omittedBundle, "workspace_harness_context");
 assertOmitted(omittedBundle, "user_agent_soul");
+assertOmitted(omittedBundle, "community_lens_authority");
 assertOmitted(omittedBundle, "community_system_prompt");
 assertOmitted(omittedBundle, "community_feed_context");
 assertOmitted(omittedBundle, "community_resource_lane");

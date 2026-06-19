@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 type Role = "admin" | "moderator" | "member" | null;
 type EntryPolicy = "open" | "approval" | "paid_subscription";
 type SubscriptionStatus = "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
-type Relation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
+type Relation = "pending" | "member" | "moderator" | "admin" | "owner" | null;
 
 type AccessScenario = {
   name: string;
@@ -78,7 +78,7 @@ function resolveScenarioAccess(scenario: AccessScenario): AccessProjection {
           ? "member"
           : scenario.joinRequestStatus === "pending"
             ? "pending"
-            : "visitor";
+            : null;
 
   return {
     relation,
@@ -231,7 +231,7 @@ function main() {
       isBlocked: true,
     },
     {
-      relation: "visitor",
+      relation: null,
       isEntitled: false,
       canEnterCommunity: false,
       canReadChat: false,
@@ -266,7 +266,7 @@ function main() {
         subscriptionStatus: status,
       },
       {
-        relation: "visitor",
+        relation: null,
         isEntitled: false,
         canEnterCommunity: false,
         canReadChat: false,
@@ -299,7 +299,7 @@ function main() {
       accessSource: "manual_grant",
     },
     {
-      relation: "visitor",
+      relation: null,
       isEntitled: false,
       canManageMembers: false,
       canManageResources: false,
@@ -315,7 +315,7 @@ function main() {
       isBlocked: true,
     },
     {
-      relation: "visitor",
+      relation: null,
       isEntitled: false,
       canManageMembers: false,
       canManageResources: false,
@@ -332,7 +332,7 @@ function main() {
       subscriptionStatus: "canceled",
     },
     {
-      relation: "visitor",
+      relation: null,
       isEntitled: false,
       canManageMembers: false,
       canManageResources: false,

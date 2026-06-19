@@ -9,6 +9,10 @@ import {
   type CommunityResourceRuntimeLaneState,
 } from "./communityResourceLane.ts";
 import {
+  renderCommunityLensAuthorityForPrompt,
+  type CommunityLensAuthority,
+} from "./communityLensAuthority.ts";
+import {
   renderProjectContextForPrompt,
   type RuntimeProjectContextPrompt,
 } from "./projectContext.ts";
@@ -48,6 +52,7 @@ export type RuntimeCommunityIdentityPromptFields = {
 export type RuntimeCommunityPromptFields = RuntimeCommunityIdentityPromptFields & {
   agentName?: string | null;
   communitySystemPrompt?: string | null;
+  communityLensAuthority?: CommunityLensAuthority | null;
   agentSoul?: string | null;
 };
 
@@ -321,6 +326,7 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
   const communityId = String(params.communityId ?? "").trim();
   return joinPromptBlocks([
     buildCommunityLensBasePrompt(params),
+    communityId ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority) : null,
     communityId ? buildCommunitySystemPromptBlock(params.communitySystemPrompt) : null,
   ]);
 }
@@ -734,6 +740,15 @@ export function buildPlatformHarnessRuntimePromptBundle(
         communityOneLiner: params.communityOneLiner,
         communityAbout: params.communityAbout,
       }),
+    }),
+    buildRuntimePromptSection({
+      id: "community_lens_authority",
+      layer: "scoped",
+      owner: "community",
+      source: "shared/communityLensAuthority.ts#renderCommunityLensAuthorityForPrompt",
+      text: communityId
+        ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority)
+        : null,
     }),
     buildRuntimePromptSection({
       id: "community_system_prompt",

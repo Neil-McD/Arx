@@ -32,6 +32,9 @@ function main() {
     join(root, "convex/runtimeHarnessComposition.ts"),
   );
   const runtimePrompt = readText(join(root, "shared/runtimePrompt.ts"));
+  const communityLensAuthority = readText(
+    join(root, "shared/communityLensAuthority.ts"),
+  );
   const communityOverlayRuntime = readText(
     join(root, "shared/communityOverlayRuntime.ts"),
   );
@@ -130,6 +133,36 @@ function main() {
     runtimePrompt,
     "The about excerpt is not a complete knowledge base.",
     "community lens prompt distinguishes identity excerpt from retrievable knowledge",
+  );
+  assertIncludes(
+    communityLensAuthority,
+    'export type CommunityLensAuthorityRelation =',
+    "canonical community lens authority relation type",
+  );
+  assertNotIncludes(
+    communityLensAuthority,
+    '"pending"',
+    "runtime community lens authority excludes pending users",
+  );
+  assertNotIncludes(
+    communityLensAuthority,
+    '"visitor"',
+    "runtime community lens authority excludes visitor role",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "community_lens_authority",
+    "runtime prompt includes community authority receipt section",
+  );
+  assertIncludes(
+    runtimeTurnResolution,
+    "runtimeCommunityLensAuthority",
+    "runtime resolver returns canonical community lens authority",
+  );
+  assertIncludes(
+    runtimeTurnHandlers,
+    "communityLensAuthority: runtimeCommunityLensAuthority",
+    "runtime handlers pass community lens authority into harnesses",
   );
   assertIncludes(
     communityOverlayRuntime,

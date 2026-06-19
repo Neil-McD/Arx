@@ -17,6 +17,10 @@ import {
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
 import {
+  normalizeCommunityLensAuthority,
+  type CommunityLensAuthority,
+} from "../shared/communityLensAuthority";
+import {
   asRuntimeMessages,
   gateDeniedResponse,
   hasChatgptConnectionForUser,
@@ -102,6 +106,7 @@ export type RuntimeTurnResolution = {
   runtimeCommunityOneLiner: string | null;
   runtimeCommunityAbout: string | null;
   runtimeCommunitySystemPrompt: string | null;
+  runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   runtimeProjectId: string | null;
   runtimeSandboxMode: "sandbox_write" | "workspace_write" | undefined;
   allowedToolNames: RetrievalToolName[];
@@ -474,6 +479,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunityOneLiner: string | null = null;
   let runtimeCommunityAbout: string | null = null;
   let runtimeCommunitySystemPrompt: string | null = null;
+  let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
   if (threadCommunityId) {
     try {
@@ -491,6 +497,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         community_one_liner?: unknown;
         community_about?: unknown;
         community_system_prompt?: unknown;
+        community_lens_authority?: unknown;
       } | null;
       runtimeCommunityId =
         String(resolvedCommunity?.community_id ?? "").trim() || null;
@@ -504,8 +511,14 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         String(resolvedCommunity?.community_about ?? "").trim() || null;
       runtimeCommunitySystemPrompt =
         String(resolvedCommunity?.community_system_prompt ?? "").trim() || null;
+      runtimeCommunityLensAuthority = normalizeCommunityLensAuthority(
+        resolvedCommunity?.community_lens_authority,
+      );
       if (!runtimeCommunityId) {
         throw new Error("community_lens_unavailable");
+      }
+      if (!runtimeCommunityLensAuthority) {
+        throw new Error("community_lens_authority_unavailable");
       }
     } catch (error) {
       console.warn("runtime_community_prompt_resolution_failed", {
@@ -567,6 +580,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityOneLiner,
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
+      runtimeCommunityLensAuthority,
       runtimeProjectId,
       runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")
         ? "workspace_write"
