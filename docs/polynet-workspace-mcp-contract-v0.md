@@ -185,6 +185,8 @@ The copied setup should be a self-contained setup packet for the receiving agent
 
 The packet must keep the receiving agent focused on the PolyMCP connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If PolyMCP is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
 
+If the receiving harness gets a PolyNet authorization URL, the packet should prefer automatic browser opening or a clean markdown link such as `[Sign in to PolyNet](AUTHORIZATION_URL)`. It should not paste the raw full OAuth URL unless no cleaner link path is available. It should only ask the user to paste the localhost callback URL back if the browser callback fails or cannot be reached.
+
 Claude Code setup should use native remote HTTP MCP:
 
 ```bash

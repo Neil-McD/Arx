@@ -137,6 +137,21 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "[Sign in to PolyNet](AUTHORIZATION_URL)",
+  "workspace MCP contract should define clean OAuth link presentation",
+);
+assertIncludes(
+  contract,
+  "It should not paste the raw full OAuth URL unless no cleaner link path is available.",
+  "workspace MCP contract should discourage raw OAuth URL dumps",
+);
+assertIncludes(
+  contract,
+  "only ask the user to paste the localhost callback URL back if the browser callback fails",
+  "workspace MCP contract should reserve callback URL paste for failure recovery",
+);
+assertIncludes(
+  contract,
   "Claude Code setup should use native remote HTTP MCP",
   "workspace MCP contract should include Claude Code setup",
 );
@@ -279,6 +294,36 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "## OAuth Link Handling",
+  "PolyMCP setup packet should include OAuth link handling",
+);
+assertIncludes(
+  integrationsSettings,
+  "do not paste the raw full URL unless there is no other option",
+  "PolyMCP setup packet should discourage raw OAuth URL dumps",
+);
+assertIncludes(
+  integrationsSettings,
+  "Open the authorization URL automatically if this harness can open browser links.",
+  "PolyMCP setup packet should prefer automatic browser opening",
+);
+assertIncludes(
+  integrationsSettings,
+  "[Sign in to PolyNet](AUTHORIZATION_URL)",
+  "PolyMCP setup packet should prefer a clean markdown auth link",
+);
+assertIncludes(
+  integrationsSettings,
+  "Only ask the user to paste the localhost callback URL back if the browser callback fails",
+  "PolyMCP setup packet should reserve callback URL paste for failure recovery",
+);
+assertIncludes(
+  integrationsSettings,
+  "treat it as a one-time OAuth credential",
+  "PolyMCP setup packet should treat callback codes as sensitive",
+);
+assertIncludes(
+  integrationsSettings,
   "## What To Do",
   "PolyMCP setup packet should include agent workflow instructions",
 );
@@ -316,6 +361,11 @@ assertIncludes(
   integrationsSettings,
   "Run `/mcp`, select `polymcp`, then complete PolyNet sign-in in the browser.",
   "PolyMCP setup packet should explain Claude Code sign-in",
+);
+assertIncludes(
+  integrationsSettings,
+  "show it as [Sign in to PolyNet](AUTHORIZATION_URL), not as a raw URL block",
+  "PolyMCP Claude Code instructions should avoid raw authorization URL blocks",
 );
 assertIncludes(
   integrationsSettings,
