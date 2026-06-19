@@ -20,6 +20,8 @@ const runToken = read("convex/polynetCodexWorkerRunToken.ts");
 const disposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnPersistence = read("convex/runtimeTurnPersistence.ts");
+const runtimePrompt = read("shared/runtimePrompt.ts");
+const runtimeCodexPromptProjection = read("shared/runtimeCodexPromptProjection.ts");
 const platformToolSurface = read("shared/polynetPlatformToolSurface.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
 const ingestFailureLogStart = worker.indexOf('event: "ingest_push_failed"');
@@ -66,8 +68,18 @@ assert.match(
 );
 assert.match(
   bridge,
-  /fetch\(`\$\{config\.baseUrl\}\/v1\/codex\/turn\?stream=1`[\s\S]*Authorization: `Bearer \$\{config\.authToken\}`[\s\S]*chatgpt_auth: \{[\s\S]*access_token: params\.chatgptAuth\.accessToken[\s\S]*chatgpt_account_id: params\.chatgptAuth\.accountId/,
-  "bridge must call the worker stream with bearer auth and per-user ChatGPT auth",
+  /resolvePolynetRuntimeEngine\([\s\S]*requestedRuntimeEngine[\s\S]*RUNTIME_ENGINE_POLYNET[\s\S]*RUNTIME_ENGINE_CODEX[\s\S]*legacy_inference/,
+  "bridge must expose an explicit PolyNet/Codex runtime engine resolver while preserving legacy inference fallback",
+);
+assert.match(
+  bridge,
+  /polynet_codex_worker_requires_agentic_runtime[\s\S]*polynet_codex_worker_requires_streaming[\s\S]*polynet_codex_worker_requires_chatgpt/,
+  "explicit Codex requests must fail closed when the turn is not eligible",
+);
+assert.match(
+  bridge,
+  /fetch\(`\$\{config\.baseUrl\}\/v1\/codex\/turn\?stream=1`[\s\S]*Authorization: `Bearer \$\{config\.authToken\}`[\s\S]*developer_instructions: String\(params\.developerInstructions[\s\S]*chatgpt_auth: \{[\s\S]*access_token: params\.chatgptAuth\.accessToken[\s\S]*chatgpt_account_id: params\.chatgptAuth\.accountId/,
+  "bridge must call the worker stream with bearer auth, PolyNet developer instructions, and per-user ChatGPT auth",
 );
 assert.match(
   bridge,
@@ -82,8 +94,13 @@ assert.match(
 
 assert.match(
   handlers,
-  /shouldUsePolynetCodexWorkerBridge\(\{[\s\S]*runtimeExecutionMode,[\s\S]*stream,[\s\S]*inferenceSource/,
-  "runtime handler must decide the worker bridge from resolved turn coordinates",
+  /resolvePolynetRuntimeEngine\(\{[\s\S]*requestedRuntimeEngine,[\s\S]*runtimeExecutionMode,[\s\S]*stream,[\s\S]*inferenceSource/,
+  "runtime handler must decide the engine from the explicit request and resolved turn coordinates",
+);
+assert.match(
+  handlers,
+  /eventType: "runtime_engine_resolved"[\s\S]*runtime_engine_requested[\s\S]*runtime_engine_resolved[\s\S]*runtime_engine_source[\s\S]*codex_worker_bridge/,
+  "runtime handler must emit an auditable runtime-engine receipt",
 );
 assert.match(
   handlers,
@@ -112,12 +129,22 @@ assert.match(
 );
 assert.match(
   handlers,
-  /buildPolynetCodexWorkerPrompt\(\{[\s\S]*communitySystemPrompt[\s\S]*agentName[\s\S]*threadWorkingState[\s\S]*allowedToolNames/,
-  "worker prompt must receive PolyNet context from the runtime resolver",
+  /buildPolynetPlatformToolSpecs\(\{[\s\S]*buildPolynetPlatformToolNames\(\{[\s\S]*buildRuntimeTurnEnvelope\(\{[\s\S]*allowedToolNames: codexVisiblePolynetToolNames/,
+  "worker path must derive Codex prompt tool authority from the exact projected PolyNet platform surface before rendering the runtime envelope",
 );
 assert.match(
   handlers,
-  /buildPolynetCodexWorkerIngestTarget\(\)[\s\S]*polynet_codex_worker_ingest_unconfigured[\s\S]*buildPolynetCodexWorkerTerminalTarget\(\)[\s\S]*buildPolynetPlatformToolSpecs[\s\S]*buildPolynetCodexWorkerToolTarget\(\)/,
+  /buildPolynetCodexWorkerTurnInputs\(\{[\s\S]*communitySystemPrompt[\s\S]*agentName[\s\S]*agentSoul[\s\S]*runtimeTurnContext[\s\S]*codexVisiblePolynetToolNames/,
+  "worker turn inputs must receive PolyNet context plus the Codex-visible PolyNet tool surface",
+);
+assert.match(
+  handlers,
+  /eventType: "polynet_codex_worker_instructions_resolved"[\s\S]*agent_name_rendered[\s\S]*agent_soul_rendered[\s\S]*runtime_prompt_chars[\s\S]*runtime_prompt_section_ids[\s\S]*developer_instruction_chars[\s\S]*prompt_chars/,
+  "worker path must emit a canonical prompt projection receipt without raw agent soul text",
+);
+assert.match(
+  handlers,
+  /buildPolynetCodexWorkerIngestTarget\(\)[\s\S]*polynet_codex_worker_ingest_unconfigured[\s\S]*buildPolynetCodexWorkerTerminalTarget\(\)[\s\S]*buildPolynetCodexWorkerToolTarget\(\)/,
   "worker path must fail closed without durable ingest and then project terminal/tool bridge targets",
 );
 assert.match(
@@ -127,8 +154,8 @@ assert.match(
 );
 assert.match(
   handlers,
-  /streamPolynetCodexWorkerTurn\(\{[\s\S]*runId,[\s\S]*prompt: workerPrompt,[\s\S]*model: requestedModelId[\s\S]*sandboxName: workerSandboxName/,
-  "worker path must delegate execution to the headless Codex worker",
+  /streamPolynetCodexWorkerTurn\(\{[\s\S]*runId,[\s\S]*prompt: workerTurnInputs\.prompt,[\s\S]*developerInstructions: workerTurnInputs\.developerInstructions,[\s\S]*model: requestedModelId[\s\S]*sandboxName: workerSandboxName/,
+  "worker path must delegate execution and PolyNet developer instructions to the headless Codex worker",
 );
 assert.match(
   handlers,
@@ -241,13 +268,13 @@ assert.match(
 );
 assert.match(
   platformToolSurface,
-  /billingPolicy[\s\S]*unregistered tool/,
-  "platform tool surface must be canonical and fail on unregistered rows",
+  /unregistered tool[\s\S]*buildPolynetPlatformToolNames/,
+  "platform tool surface must expose specs and names from the same canonical registry and fail on unregistered rows",
 );
 assert.doesNotMatch(
   platformToolSurface,
-  /community_write|community_resource_builder_stage_changeset|community_resource_builder_apply_changeset/,
-  "write/builder tools must not be projected to worker turns in this slice",
+  /community_write|community_resource_builder_apply_changeset/,
+  "live write/apply tools must not be projected to worker turns in this slice",
 );
 assert.match(
   disposal,
@@ -294,6 +321,46 @@ assert.match(
   worker,
   /workspace_serve[\s\S]*workspace_serve_requested[\s\S]*workspace_serve_finished/,
   "worker service must expose the project app-serving tool path",
+);
+assert.match(
+  worker,
+  /developerInstructions: string \| null/,
+  "worker service run params must carry developer instructions",
+);
+assert.match(
+  worker,
+  /body\.developer_instructions[\s\S]*body\.developerInstructions/,
+  "worker service must parse developer_instructions from HTTP requests",
+);
+assert.match(
+  worker,
+  /params\.developerInstructions[\s\S]*developerInstructions: codexDeveloperInstructions/,
+  "worker service must pass PolyNet developer instructions into Codex thread/start",
+);
+assert.match(
+  worker,
+  /POLYNET_CODEX_WORKER_RUNTIME_AUTHORITY|PolyNet Codex worker service/,
+  "worker service source must include the worker substrate developer-instruction layer",
+);
+assert.match(
+  bridge,
+  /buildRuntimeCodexPromptProjection[\s\S]*export function buildPolynetCodexWorkerTurnInputs[\s\S]*runtimeTurnContext[\s\S]*conversationMessages[\s\S]*latestUserText/,
+  "bridge must project canonical PolyNet context into Codex turn inputs",
+);
+assert.doesNotMatch(
+  bridge,
+  /Agent name:|Agent soul:/,
+  "worker prompt builder must not put agent identity into user prompt text",
+);
+assert.match(
+  runtimeCodexPromptProjection,
+  /buildPlatformHarnessRuntimePromptBundle[\s\S]*POLYNET_CODEX_RUNTIME_AUTHORITY[\s\S]*Apply the configured PolyNet agent name and soul[\s\S]*runtimePromptSectionIds/,
+  "shared Codex projection must render the canonical PolyNet prompt bundle with auditable section ids",
+);
+assert.match(
+  runtimePrompt,
+  /export function buildPlatformHarnessRuntimePromptBundle/,
+  "shared runtime prompt must expose the canonical platform harness prompt bundle for Codex projection",
 );
 assert.match(
   worker,

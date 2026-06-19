@@ -68,3 +68,11 @@ export function buildPolynetPlatformToolSpecs(params: {
 }): PolynetPlatformToolSpec[] {
   return params.hasCommunity ? SPECS_WITH_COMMUNITY : SPECS_WITHOUT_COMMUNITY;
 }
+
+export function buildPolynetPlatformToolNames(params: {
+  hasCommunity: boolean;
+}): RetrievalToolName[] {
+  return POLYNET_PLATFORM_TOOL_SURFACE.filter(
+    (entry) => params.hasCommunity || !entry.requiresCommunity,
+  ).map((entry) => entry.toolName);
+}

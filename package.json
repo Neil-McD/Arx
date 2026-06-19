@@ -210,6 +210,7 @@
     "check:runtime-context-integrity-proof": "tsx scripts/runtime_context_integrity_proof.ts",
     "check:runtime-agent-loop-context-receipt-smoke": "tsx scripts/runtime_agent_loop_context_receipt_smoke.ts",
     "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts",
+    "check:runtime-codex-prompt-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_codex_prompt_projection_proof.ts",
     "check:polynet-codex-worker-staging": "CONVEX_DEPLOYMENT=dev:quick-porcupine-949 POLYNET_DEPLOYMENT_KIND=staging bash scripts/polynet_codex_worker_staging_guard.sh",
     "check:polynet-codex-worker-stage-identity": "bash scripts/polynet_codex_worker_stage_identity_guard_proof.sh",
     "check:polynet-codex-worker-fly-config": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_fly_staging_config_proof.ts",

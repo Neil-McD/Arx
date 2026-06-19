@@ -94,6 +94,7 @@ type WorkerPlatformToolSpec = {
 type RunTurnParams = {
   runId: string;
   prompt: string;
+  developerInstructions: string | null;
   model: string;
   sandboxName: string;
   sandboxProvided: boolean;
@@ -467,6 +468,31 @@ export class PolynetCodexWorkerRuntime {
         latency_ms: sandboxEnsureMs,
       });
 
+      const codexDeveloperInstructions = [
+        params.developerInstructions,
+        [
+          "You are running inside the PolyNet Codex worker service.",
+          "These service instructions only describe execution mechanics; they do not replace PolyNet developer instructions, identity, tone, community context, project context, or user intent.",
+          "Your workspace is a full-access remote Linux environment rooted at /workspace, reached only through the dynamic tool named workspace_bash.",
+          "workspace_bash can read, write, install, and run anything in that workspace.",
+          ...(activeTurn.serve
+            ? [
+                "To run a server or app the user can see, call workspace_serve with the start command and port; it returns a preview URL and shows the app in the user's preview panel. Never start servers with workspace_bash.",
+              ]
+            : []),
+          ...(activeTurn.platformToolBridge
+            ? [
+                "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform.",
+              ]
+            : []),
+          "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
+          "The local environment is not your workspace: never use local shell commands, local file edits, or local paths.",
+          "Report tool output clearly and only with the detail the user needs.",
+        ].join(" "),
+      ]
+        .filter((line) => String(line ?? "").trim().length > 0)
+        .join("\n\n");
+
       activeTurn.timing.startBucket("codex_thread_start_ms");
       const threadResponse = asRecord(
         await this.client.request("thread/start", {
@@ -478,24 +504,7 @@ export class PolynetCodexWorkerRuntime {
           // Codex's own web search, billed to the user's ChatGPT account
           // (BYOK) — PolyNet never pays for searches.
           config: { web_search: "live" },
-          developerInstructions: [
-            "You are running inside the PolyNet Codex worker service.",
-            "Your workspace is a full-access remote Linux environment rooted at /workspace, reached only through the dynamic tool named workspace_bash.",
-            "workspace_bash can read, write, install, and run anything in that workspace.",
-            ...(activeTurn.serve
-              ? [
-                  "To run a server or app the user can see, call workspace_serve with the start command and port; it returns a preview URL and shows the app in the user's preview panel. Never start servers with workspace_bash.",
-                ]
-              : []),
-            ...(activeTurn.platformToolBridge
-              ? [
-                  "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform.",
-                ]
-              : []),
-            "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
-            "The local environment is not your workspace: never use local shell commands, local file edits, or local paths.",
-            "Report the tool output concisely.",
-          ].join(" "),
+          developerInstructions: codexDeveloperInstructions,
           dynamicTools: [
             buildBlaxelBashDynamicToolSpec(),
             ...(activeTurn.serve ? [buildWorkspaceServeDynamicToolSpec()] : []),
@@ -523,6 +532,8 @@ export class PolynetCodexWorkerRuntime {
       emitWorkerEvent("codex_thread_started", {
         codex_thread_id: threadId,
         latency_ms: codexThreadStartMs,
+        developer_instruction_chars: codexDeveloperInstructions.length,
+        polynet_developer_instructions_applied: Boolean(params.developerInstructions),
       });
 
       activeTurn.timing.startBucket("codex_turn_start_ack_ms");
@@ -1450,6 +1461,9 @@ async function handleTurnEndpoint(params: {
       ? buildPlatformToolProbePrompt(platformToolProbe)
       : buildProbePrompt(command)
     : String(body.prompt ?? "").trim();
+  const developerInstructions = params.probeMode
+    ? null
+    : String(body.developer_instructions ?? body.developerInstructions ?? "").trim() || null;
   if (!prompt) {
     sendJson(params.res, 400, {
       ok: false,
@@ -1568,6 +1582,7 @@ async function handleTurnEndpoint(params: {
       await params.runtime.runTurn({
         runId,
         prompt,
+        developerInstructions,
         model,
         sandboxName,
         sandboxProvided,
@@ -1602,6 +1617,7 @@ async function handleTurnEndpoint(params: {
     const result = await params.runtime.runTurn({
       runId,
       prompt,
+      developerInstructions,
       model,
       sandboxName,
       sandboxProvided,

@@ -34,12 +34,16 @@ import {
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
 import {
+  buildRuntimeTurnContextPacket,
   buildRuntimeTurnContextSnapshot,
   renderRuntimeTurnContextForFailureFinalizer,
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
-import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
+import {
+  buildRuntimeTurnEnvelope,
+  type RuntimeTurnEnvelopeV1,
+} from "../shared/runtimeTurnEnvelope";
 import {
   buildRuntimeFailureFinalAnswer,
   hasConnectedAppFailureEvidence,
@@ -61,12 +65,12 @@ import {
   persistRuntimeUserMessage,
 } from "./runtimeTurnPersistence";
 import {
-  buildPolynetCodexWorkerPrompt,
+  buildPolynetCodexWorkerTurnInputs,
   cancelPolynetCodexWorkerTurn,
   POLYNET_CODEX_WORKER_CONTRACT_NAME,
   POLYNET_CODEX_WORKER_CONTRACT_VERSION,
   POLYNET_CODEX_WORKER_ENGINE_ID,
-  shouldUsePolynetCodexWorkerBridge,
+  resolvePolynetRuntimeEngine,
   steerPolynetCodexWorkerTurn,
   streamPolynetCodexWorkerTurn,
 } from "./polynetCodexWorkerBridge";
@@ -81,7 +85,10 @@ import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest"
 import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
 import { buildPolynetCodexWorkerToolTarget } from "./polynetCodexWorkerTool";
 import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken";
-import { buildPolynetPlatformToolSpecs } from "../shared/polynetPlatformToolSurface";
+import {
+  buildPolynetPlatformToolNames,
+  buildPolynetPlatformToolSpecs,
+} from "../shared/polynetPlatformToolSurface";
 import {
   POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
   POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT,
@@ -474,6 +481,7 @@ export async function handleRuntimeTurnRequest(args: {
       maxTokens,
       stream,
       inferenceSource,
+      requestedRuntimeEngine,
       providerApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
@@ -481,6 +489,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityOneLiner,
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
+      runtimeCommunityLensAuthority,
       runtimeProjectId,
       runtimeSandboxMode,
       allowedToolNames,
@@ -512,14 +521,26 @@ export async function handleRuntimeTurnRequest(args: {
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
     const runStartedAt = Date.now();
-    const usePolynetCodexWorkerBridge = shouldUsePolynetCodexWorkerBridge({
+    const runtimeEngineResolution = resolvePolynetRuntimeEngine({
+      requestedRuntimeEngine,
       runtimeExecutionMode,
       stream,
       inferenceSource,
     });
-    const runtimeEngineId = usePolynetCodexWorkerBridge
-      ? POLYNET_CODEX_WORKER_ENGINE_ID
-      : "runtime_turn";
+    if (!runtimeEngineResolution.ok) {
+      return runtimeJsonResponse(runtimeEngineResolution.status, {
+        ok: false,
+        code: runtimeEngineResolution.code,
+        error: runtimeEngineResolution.code,
+        message: runtimeEngineResolution.message,
+        runtime_engine_requested: runtimeEngineResolution.requestedRuntimeEngine,
+        runtime_engine_resolved: null,
+        disabled_reason: runtimeEngineResolution.disabledReason,
+      });
+    }
+    const usePolynetCodexWorkerBridge =
+      runtimeEngineResolution.usePolynetCodexWorkerBridge;
+    const runtimeEngineId = runtimeEngineResolution.engineId;
     runtimeTurnLogContext = {
       runId,
       threadId: String(ownedThread._id),
@@ -530,6 +551,8 @@ export async function handleRuntimeTurnRequest(args: {
       requestedModelId,
       lane,
       inferenceSource,
+      requestedRuntimeEngine: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
+      resolvedRuntimeEngine: runtimeEngineResolution.resolvedRuntimeEngine,
       executionMode: runtimeExecutionMode,
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
@@ -545,6 +568,9 @@ export async function handleRuntimeTurnRequest(args: {
       communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
       modelId: requestedModelId,
       engineId: runtimeEngineId,
+      runtimeEngineRequested: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
+      runtimeEngineResolved: runtimeEngineResolution.resolvedRuntimeEngine,
+      runtimeEngineSource: runtimeEngineResolution.runtimeEngineSource,
       executionMode: runtimeExecutionMode,
       sandboxMode: runtimeSandboxMode,
       contractName:
@@ -932,8 +958,27 @@ export async function handleRuntimeTurnRequest(args: {
         project_id: runtimeProjectId ?? null,
         community_id: runtimeCommunityId ?? null,
         community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
+        runtime_engine_requested:
+          runtimeEngineResolution.requestedRuntimeEngine ?? null,
+        runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
+        runtime_engine_source: runtimeEngineResolution.runtimeEngineSource,
+        engine_id: runtimeEngineId,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
+      },
+    });
+    await appendRunEvent({
+      eventType: "runtime_engine_resolved",
+      eventKey: `${runId}:runtime_engine_resolved:1`,
+      payload: {
+        run_id: runId,
+        runtime_engine_requested:
+          runtimeEngineResolution.requestedRuntimeEngine ?? null,
+        runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
+        runtime_engine_source: runtimeEngineResolution.runtimeEngineSource,
+        engine_id: runtimeEngineId,
+        codex_worker_bridge: usePolynetCodexWorkerBridge,
+        disabled_reason: runtimeEngineResolution.disabledReason,
       },
     });
     await appendRunEvent({
@@ -1152,7 +1197,50 @@ export async function handleRuntimeTurnRequest(args: {
             });
           }
 
-          const workerPrompt = buildPolynetCodexWorkerPrompt({
+          const codexPromptGeneratedAt = new Date();
+          const codexPromptTimeZone = "UTC";
+          const workerPlatformTools = buildPolynetPlatformToolSpecs({
+            hasCommunity: Boolean(runtimeCommunityId),
+          });
+          const codexVisiblePolynetToolNames = buildPolynetPlatformToolNames({
+            hasCommunity: Boolean(runtimeCommunityId),
+          });
+          const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope({
+            latestUserText,
+            threadWorkingState: ownedThread.workingState ?? null,
+            threadId: String(ownedThread._id),
+            communityId: runtimeCommunityId,
+            projectId: runtimeProjectId,
+            communityResourceLane: runtimeCommunityLensAuthority?.communityResourceLane ?? null,
+            allowedToolNames: codexVisiblePolynetToolNames,
+          });
+          runtimeTurnEnvelopeForRun = codexRuntimeTurnEnvelope;
+          let codexRuntimeTurnContext: RuntimeTurnContextPacket;
+          try {
+            codexRuntimeTurnContext = (
+              await loadRuntimeTurnContextPacketForRun({
+                ctx,
+                ownerId: actor.dbUserId,
+                threadId: ownedThread._id,
+                projectId: runtimeProjectId,
+                authSubject: actor.authSubject,
+                runId,
+                latestUserText,
+                runtimeTurnEnvelope: codexRuntimeTurnEnvelope,
+                threadWorkingState: ownedThread.workingState ?? null,
+                summarizeCurrentRunEvents: false,
+                runtimeStop: null,
+              })
+            ).packet;
+          } catch {
+            codexRuntimeTurnContext = buildRuntimeTurnContextPacket({
+              latestUserText,
+              runtimeTurnEnvelope: codexRuntimeTurnEnvelope,
+              threadWorkingState: ownedThread.workingState ?? null,
+            });
+          }
+          await persistContextSnapshotBestEffort("started", codexRuntimeTurnEnvelope);
+          const workerTurnInputs = buildPolynetCodexWorkerTurnInputs({
             conversationMessages,
             latestUserText,
             communityName: runtimeCommunityName,
@@ -1160,11 +1248,35 @@ export async function handleRuntimeTurnRequest(args: {
             communityOneLiner: runtimeCommunityOneLiner,
             communityAbout: runtimeCommunityAbout,
             communitySystemPrompt: runtimeCommunitySystemPrompt,
+            communityLensAuthority: runtimeCommunityLensAuthority,
             agentName: runtimeAgentProfile.agentName,
             agentSoul: runtimeAgentProfile.agentSoul,
-            threadWorkingState: ownedThread.workingState ?? null,
-            allowedToolNames,
-            projectId: runtimeProjectId,
+            runtimeTurnContext: codexRuntimeTurnContext,
+            codexVisiblePolynetToolNames,
+            currentDateTimeIso: codexPromptGeneratedAt.toISOString(),
+            currentDateLabel: new Intl.DateTimeFormat("en-US", {
+              dateStyle: "full",
+              timeStyle: "long",
+              timeZone: codexPromptTimeZone,
+            }).format(codexPromptGeneratedAt),
+            currentTimeZone: codexPromptTimeZone,
+          });
+          await streamAppendRunEvent({
+            eventType: "polynet_codex_worker_instructions_resolved",
+            eventKey: `${runId}:polynet_codex_worker_instructions_resolved:1`,
+            payload: {
+              run_id: runId,
+              agent_name_rendered: workerTurnInputs.receipt.agentNameRendered,
+              agent_soul_rendered: workerTurnInputs.receipt.agentSoulRendered,
+              runtime_prompt_chars: workerTurnInputs.receipt.runtimePromptChars,
+              runtime_prompt_section_ids: workerTurnInputs.receipt.runtimePromptSectionIds,
+              rendered_runtime_prompt_section_ids:
+                workerTurnInputs.receipt.renderedRuntimePromptSectionIds,
+              omitted_runtime_prompt_section_ids:
+                workerTurnInputs.receipt.omittedRuntimePromptSectionIds,
+              developer_instruction_chars: workerTurnInputs.receipt.developerInstructionChars,
+              prompt_chars: workerTurnInputs.receipt.promptChars,
+            },
           });
           const workerIngestTarget = buildPolynetCodexWorkerIngestTarget();
           if (!workerIngestTarget) {
@@ -1200,9 +1312,6 @@ export async function handleRuntimeTurnRequest(args: {
           const workerTerminalTarget = workerWorkspaceSession
             ? buildPolynetCodexWorkerTerminalTarget()
             : null;
-          const workerPlatformTools = buildPolynetPlatformToolSpecs({
-            hasCommunity: Boolean(runtimeCommunityId),
-          });
           const workerToolTarget =
             workerPlatformTools.length > 0 ? buildPolynetCodexWorkerToolTarget() : null;
           let workerRunTokens: {
@@ -1302,7 +1411,8 @@ export async function handleRuntimeTurnRequest(args: {
           try {
             workerResult = await streamPolynetCodexWorkerTurn({
               runId,
-              prompt: workerPrompt,
+              prompt: workerTurnInputs.prompt,
+              developerInstructions: workerTurnInputs.developerInstructions,
               model: requestedModelId,
               sandboxName: workerSandboxName,
               destroyAfterRun: !workerWorkspaceSession,

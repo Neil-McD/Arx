@@ -1,3 +1,17 @@
+import {
+  buildRuntimeCodexPromptProjection,
+  type RuntimeCodexPromptProjection,
+} from "../shared/runtimeCodexPromptProjection";
+import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes";
+import type { RuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket";
+import type { RetrievalToolName } from "../shared/retrievalTools";
+import type { CommunityLensAuthority } from "../shared/communityLensAuthority";
+import {
+  RUNTIME_ENGINE_CODEX,
+  RUNTIME_ENGINE_POLYNET,
+  type RuntimeEngine,
+} from "../shared/runtimeEngine";
+
 export const POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker";
 export const POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_worker_fly_bridge_v1";
 export const POLYNET_CODEX_WORKER_CONTRACT_VERSION = "v1";
@@ -138,13 +152,149 @@ export function shouldUsePolynetCodexWorkerBridge(params: {
   return getPolynetCodexWorkerBridgeConfig().enabled;
 }
 
+export type PolynetRuntimeEngineResolution =
+  | {
+      ok: true;
+      requestedRuntimeEngine: RuntimeEngine | null;
+      resolvedRuntimeEngine: RuntimeEngine;
+      runtimeEngineSource: "request" | "legacy_inference";
+      engineId: string;
+      usePolynetCodexWorkerBridge: boolean;
+      disabledReason: string | null;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      requestedRuntimeEngine: RuntimeEngine;
+      resolvedRuntimeEngine: null;
+      runtimeEngineSource: "request";
+      engineId: null;
+      usePolynetCodexWorkerBridge: false;
+      disabledReason: string | null;
+    };
+
+function resolveExplicitCodexWorkerFailure(params: {
+  runtimeExecutionMode: "agentic" | "chat";
+  stream: boolean;
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+}): {
+  status: number;
+  code: string;
+  message: string;
+  disabledReason: string | null;
+} | null {
+  if (params.runtimeExecutionMode !== "agentic") {
+    return {
+      status: 400,
+      code: "polynet_codex_worker_requires_agentic_runtime",
+      message: "Codex runtime requires agentic workspace tools.",
+      disabledReason: null,
+    };
+  }
+  if (!params.stream) {
+    return {
+      status: 400,
+      code: "polynet_codex_worker_requires_streaming",
+      message: "Codex runtime requires streaming turns.",
+      disabledReason: null,
+    };
+  }
+  if (params.inferenceSource !== "chatgpt") {
+    return {
+      status: 403,
+      code: "polynet_codex_worker_requires_chatgpt",
+      message: "Codex runtime requires a connected ChatGPT account.",
+      disabledReason: null,
+    };
+  }
+  const config = getPolynetCodexWorkerBridgeConfig();
+  if (!config.enabled) {
+    return {
+      status: 503,
+      code: config.disabledReason ?? "polynet_codex_worker_env_missing",
+      message: "PolyNet Codex worker is not configured for this deployment.",
+      disabledReason: config.disabledReason,
+    };
+  }
+  return null;
+}
+
+export function resolvePolynetRuntimeEngine(params: {
+  requestedRuntimeEngine: RuntimeEngine | null;
+  runtimeExecutionMode: "agentic" | "chat";
+  stream: boolean;
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+}): PolynetRuntimeEngineResolution {
+  if (params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET) {
+    return {
+      ok: true,
+      requestedRuntimeEngine: RUNTIME_ENGINE_POLYNET,
+      resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET,
+      runtimeEngineSource: "request",
+      engineId: "runtime_turn",
+      usePolynetCodexWorkerBridge: false,
+      disabledReason: null,
+    };
+  }
+
+  if (params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX) {
+    const failure = resolveExplicitCodexWorkerFailure(params);
+    if (failure) {
+      return {
+        ok: false,
+        ...failure,
+        requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+        resolvedRuntimeEngine: null,
+        runtimeEngineSource: "request",
+        engineId: null,
+        usePolynetCodexWorkerBridge: false,
+      };
+    }
+    return {
+      ok: true,
+      requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+      resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+      runtimeEngineSource: "request",
+      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+      usePolynetCodexWorkerBridge: true,
+      disabledReason: null,
+    };
+  }
+
+  const usePolynetCodexWorkerBridge = shouldUsePolynetCodexWorkerBridge(params);
+  const legacyCodexEligible =
+    params.runtimeExecutionMode === "agentic" &&
+    params.stream &&
+    params.inferenceSource === "chatgpt";
+  return {
+    ok: true,
+    requestedRuntimeEngine: null,
+    resolvedRuntimeEngine: usePolynetCodexWorkerBridge
+      ? RUNTIME_ENGINE_CODEX
+      : RUNTIME_ENGINE_POLYNET,
+    runtimeEngineSource: "legacy_inference",
+    engineId: usePolynetCodexWorkerBridge
+      ? POLYNET_CODEX_WORKER_ENGINE_ID
+      : "runtime_turn",
+    usePolynetCodexWorkerBridge,
+    disabledReason:
+      !usePolynetCodexWorkerBridge && legacyCodexEligible
+        ? getPolynetCodexWorkerBridgeConfig().disabledReason
+        : null,
+  };
+}
+
 export type PolynetCodexWorkerChatgptAuth = {
   accessToken: string;
   accountId: string;
   planType: string | null;
 };
 
-export function buildPolynetCodexWorkerPrompt(params: {
+export type PolynetCodexWorkerTurnInputs = RuntimeCodexPromptProjection;
+
+export function buildPolynetCodexWorkerTurnInputs(params: {
   conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
   latestUserText: string;
   communityName: string | null;
@@ -152,47 +302,39 @@ export function buildPolynetCodexWorkerPrompt(params: {
   communityOneLiner: string | null;
   communityAbout: string | null;
   communitySystemPrompt: string | null;
+  communityLensAuthority: CommunityLensAuthority | null;
   agentName: string | null;
   agentSoul: string | null;
-  threadWorkingState: unknown;
-  allowedToolNames: string[];
-  projectId: string | null;
-}): string {
-  const recentMessages = params.conversationMessages.slice(-12);
-  const transcript = recentMessages
-    .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content}`)
-    .join("\n\n");
-  const communityLines = [
-    params.communityName ? `Community: ${params.communityName}` : "",
-    params.communitySlug ? `Community slug: ${params.communitySlug}` : "",
-    params.communityOneLiner ? `Community one-liner: ${params.communityOneLiner}` : "",
-    params.communityAbout ? `Community about: ${params.communityAbout}` : "",
-    params.communitySystemPrompt ? `Community instructions: ${params.communitySystemPrompt}` : "",
-  ].filter(Boolean);
-  const agentLines = [
-    params.agentName ? `Agent name: ${params.agentName}` : "",
-    params.agentSoul ? `Agent soul: ${params.agentSoul}` : "",
-  ].filter(Boolean);
-  const workingState =
-    params.threadWorkingState && typeof params.threadWorkingState === "object"
-      ? JSON.stringify(params.threadWorkingState).slice(0, 4000)
-      : "";
-  return [
-    "You are PolyNet's headless Codex runtime for an authenticated workspace thread.",
-    "Use the workspace_bash tool when real workspace commands are needed.",
-    "Do not claim local PolyNet server state unless tool output or provided context proves it.",
-    "Return a concise, user-facing answer when the work is done.",
-    "",
-    params.projectId ? `Project id: ${params.projectId}` : "",
-    communityLines.length ? communityLines.join("\n") : "",
-    agentLines.length ? agentLines.join("\n") : "",
-    params.allowedToolNames.length ? `PolyNet allowed tool families: ${params.allowedToolNames.join(", ")}` : "",
-    workingState ? `Thread working state:\n${workingState}` : "",
-    transcript ? `Recent conversation:\n${transcript}` : "",
-    `Latest user request:\n${params.latestUserText}`,
-  ]
-    .filter((line) => String(line ?? "").trim().length > 0)
-    .join("\n\n");
+  runtimeTurnContext: RuntimeTurnContextPacket;
+  codexVisiblePolynetToolNames: readonly RetrievalToolName[];
+  currentDateTimeIso: string | null;
+  currentDateLabel: string | null;
+  currentTimeZone: string | null;
+}): PolynetCodexWorkerTurnInputs {
+  const projectContext = params.runtimeTurnContext.projectContext ?? null;
+  return buildRuntimeCodexPromptProjection({
+    loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+    allowedToolNames: params.codexVisiblePolynetToolNames,
+    harnessName: "chat_tools",
+    communityId: params.runtimeTurnContext.runtimeTurnEnvelope?.authority.communityId ?? null,
+    communityName: params.communityName,
+    communitySlug: params.communitySlug,
+    communityOneLiner: params.communityOneLiner,
+    communityAbout: params.communityAbout,
+    communitySystemPrompt: params.communitySystemPrompt,
+    communityLensAuthority: params.communityLensAuthority,
+    communityResourceLane: params.communityLensAuthority?.communityResourceLane ?? null,
+    agentName: params.agentName,
+    agentSoul: params.agentSoul,
+    projectLabel: projectContext?.label ?? null,
+    projectDescription: projectContext?.description ?? null,
+    runtimeTurnContext: params.runtimeTurnContext,
+    currentDateTimeIso: params.currentDateTimeIso,
+    currentDateLabel: params.currentDateLabel,
+    currentTimeZone: params.currentTimeZone,
+    conversationMessages: params.conversationMessages,
+    latestUserText: params.latestUserText,
+  });
 }
 
 function parseSseBlock(block: string): PolynetCodexWorkerSseEvent | null {
@@ -289,6 +431,7 @@ export async function steerPolynetCodexWorkerTurn(params: {
 export async function streamPolynetCodexWorkerTurn(params: {
   runId: string;
   prompt: string;
+  developerInstructions?: string | null;
   model: string;
   sandboxName?: string | null;
   destroyAfterRun?: boolean;
@@ -343,6 +486,9 @@ export async function streamPolynetCodexWorkerTurn(params: {
       run_id: params.runId,
       model: params.model,
       prompt: params.prompt,
+      ...(String(params.developerInstructions ?? "").trim()
+        ? { developer_instructions: String(params.developerInstructions ?? "").trim() }
+        : {}),
       stream: true,
       ...(String(params.sandboxName ?? "").trim()
         ? { sandbox_name: String(params.sandboxName ?? "").trim() }
