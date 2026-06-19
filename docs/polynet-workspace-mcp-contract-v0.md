@@ -167,6 +167,51 @@ The authorization-server compatibility metadata must only advertise `registratio
 
 Auth proves user identity only. Workspace access remains server-authorized per call through the existing community access and entitlement gates.
 
+## OAuth Continuity Model
+
+The target PolyMCP user experience is:
+
+```text
+Settings -> Integrations -> Copy setup -> paste into harness -> one OAuth login -> durable MCP access
+```
+
+PolyNet must not ask users to paste bearer tokens. PolyNet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client that owns local credential persistence.
+
+For a single harness profile/device, one successful OAuth login should survive new chats, app restarts, and normal access-token expiry. The harness should store refresh-capable credentials and refresh access tokens silently. Re-authentication is expected only after logout, token revocation, refresh-token expiry, account switch, a new harness profile/device, or lost local credentials.
+
+The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet. PolyNet-owned UX should explain the handoff: if the browser shows a plain local page such as `Authentication complete. You may close this window.`, the user should close that tab, return to the harness, and start a fresh chat or reconnect MCP if the current thread was already running before login.
+
+Recommended Codex credential persistence should be configured before OAuth when available:
+
+```toml
+mcp_oauth_credentials_store = "keyring"
+```
+
+Codex setup should use native Streamable HTTP OAuth as the canonical path. Run `add` first:
+
+```bash
+codex mcp add polymcp --url https://www.polynet.ai/runtime/mcp
+```
+
+Only if Codex does not open OAuth during `add`, run the login fallback:
+
+```bash
+codex mcp login polymcp --scopes openid,profile,email,offline_access
+```
+
+`mcp-remote` is a compatibility fallback only. It is not the canonical Codex setup path and its stored OAuth credentials should not be treated as proof that native Codex MCP OAuth is authenticated.
+
+Continuity acceptance requires a clean native Codex profile to:
+
+1. add PolyMCP with native Streamable HTTP,
+2. authenticate once,
+3. call `tools/list`,
+4. open a workspace,
+5. restart the harness,
+6. call `tools/list` again without another browser login,
+7. wait past normal access-token expiry,
+8. call `tools/list` again and confirm refresh happened silently.
+
 ## Tool Surface
 
 Provider v0 adds:
@@ -331,6 +376,12 @@ Focused proofs must show:
 - unauthenticated MCP calls return a MCP-compatible OAuth `WWW-Authenticate` challenge,
 - protected resource metadata names `/runtime/mcp` as the resource and the upstream issuer as authorization server,
 - authorization-server metadata supports authorization code, PKCE, refresh, and public-client token exchange,
+- setup copy uses native Codex OAuth with `offline_access`,
+- setup copy recommends durable MCP credential storage,
+- setup copy puts durable credential storage before OAuth,
+- setup copy presents `codex mcp login` as fallback only,
+- setup copy explains the harness-owned local callback completion page and the close-tab/return-to-harness next action,
+- `mcp-remote` remains non-canonical compatibility only,
 - memory tools require `workspace_context_id`,
 - `workspace_context_id` is parsed as a selector and revalidated server-side,
 - workspace context returns `authority_lens` and `available_toolsets`,

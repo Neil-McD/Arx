@@ -22,9 +22,12 @@ import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
 const POLYMCP_TOOL_COUNT_LABEL = "15 workspace tools";
-const POLYMCP_CODEX_SETUP_COMMANDS = [
-  `codex mcp add polymcp --url ${POLYMCP_ENDPOINT_URL}`,
-  "codex mcp login polymcp",
+const POLYMCP_CODEX_ADD_COMMAND = `codex mcp add polymcp --url ${POLYMCP_ENDPOINT_URL}`;
+const POLYMCP_CODEX_LOGIN_FALLBACK_COMMAND =
+  "codex mcp login polymcp --scopes openid,profile,email,offline_access";
+const POLYMCP_CODEX_DURABLE_CONFIG = [
+  '# Recommended: keep MCP OAuth credentials in the OS keychain when available.',
+  'mcp_oauth_credentials_store = "keyring"',
 ].join("\n");
 const POLYMCP_GENERIC_HTTP_CONFIG = JSON.stringify(
   {
@@ -41,9 +44,17 @@ const POLYMCP_GENERIC_HTTP_CONFIG = JSON.stringify(
 const POLYMCP_SETUP_INSTRUCTIONS = [
   "Use this setup in the agent harness you want to connect to PolyNet.",
   "",
-  "PolyNet does not ask you to paste an access token. Your harness starts OAuth, opens the browser for PolyNet sign-in, and stores its own token after the browser callback completes.",
+  "PolyNet does not ask you to paste an access token. Your harness starts OAuth, opens the browser for PolyNet sign-in, and stores durable MCP credentials after the browser callback completes.",
   "",
-  "After login completes, open a new Codex thread and ask: List my PolyNet workspaces.",
+  "You should only need to authenticate once per harness profile or device. Re-auth should only happen after logout, revocation, refresh-token expiry, account switch, or lost local credentials.",
+  "",
+  "For Codex, add the optional keyring setting before OAuth if you want OS keychain credential storage. Then run the add command first; only run the login fallback if Codex does not open PolyNet sign-in during add.",
+  "",
+  'If the browser shows "Authentication complete. You may close this window.", close that tab and return to your harness.',
+  "",
+  "If you authenticated after an already-open Codex thread started, open a fresh chat or reconnect MCP so the harness picks up the new credential.",
+  "",
+  'Ask: "Use PolyMCP to list my PolyNet workspaces."',
 ].join("\n");
 const POLYMCP_SETUP_BUNDLE = [
   "# PolyMCP Setup",
@@ -54,10 +65,22 @@ const POLYMCP_SETUP_BUNDLE = [
   "",
   "## Codex",
   "",
-  "Run:",
+  "Optional durable credential store in `~/.codex/config.toml` before OAuth:",
+  "",
+  "```toml",
+  POLYMCP_CODEX_DURABLE_CONFIG,
+  "```",
+  "",
+  "Add PolyMCP:",
   "",
   "```bash",
-  POLYMCP_CODEX_SETUP_COMMANDS,
+  POLYMCP_CODEX_ADD_COMMAND,
+  "```",
+  "",
+  "Only if Codex does not open OAuth during add, run:",
+  "",
+  "```bash",
+  POLYMCP_CODEX_LOGIN_FALLBACK_COMMAND,
   "```",
   "",
   "## Generic MCP JSON",
@@ -402,8 +425,9 @@ export function WebIntegrationsSettingsSection(
                       </span>
                     </div>
                     <div className="integration-mounted-detail">
-                      Copy the setup, let your harness complete OAuth in the
-                      browser, then ask it to list your PolyNet workspaces.
+                      Copy setup, sign in once, then close the local
+                      authentication tab and ask your harness to list your
+                      PolyNet workspaces.
                     </div>
                   </div>
                 </div>

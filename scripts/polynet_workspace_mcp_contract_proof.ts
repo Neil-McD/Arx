@@ -105,6 +105,21 @@ assertIncludes(
   "provider implementation does not import or mutate the internal MCP consumer/runtime path.",
   "workspace MCP non-interference acceptance",
 );
+assertIncludes(
+  contract,
+  "The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet.",
+  "workspace MCP contract should assign callback UI ownership to the harness",
+);
+assertIncludes(
+  contract,
+  "Authentication complete. You may close this window.",
+  "workspace MCP contract should describe the plain local callback page",
+);
+assertIncludes(
+  contract,
+  "start a fresh chat or reconnect MCP",
+  "workspace MCP contract should document reconnect guidance after login",
+);
 
 assertIncludes(
   packageJson,
@@ -114,8 +129,13 @@ assertIncludes(
 
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_CODEX_SETUP_COMMANDS",
-  "PolyMCP Codex setup commands",
+  "POLYMCP_CODEX_ADD_COMMAND",
+  "PolyMCP Codex primary add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYMCP_CODEX_LOGIN_FALLBACK_COMMAND",
+  "PolyMCP Codex login fallback command",
 );
 assertIncludes(
   integrationsSettings,
@@ -130,7 +150,32 @@ assertIncludes(
 assertIncludes(
   integrationsSettings,
   "codex mcp login polymcp",
-  "PolyMCP Codex login command",
+  "PolyMCP Codex login fallback command",
+);
+assertIncludes(
+  integrationsSettings,
+  "--scopes openid,profile,email,offline_access",
+  "PolyMCP Codex login requests refresh-capable scopes",
+);
+assertIncludes(
+  integrationsSettings,
+  'mcp_oauth_credentials_store = "keyring"',
+  "PolyMCP Codex durable credential store recommendation",
+);
+assertIncludes(
+  integrationsSettings,
+  "before OAuth",
+  "PolyMCP setup copy should put durable credential storage before OAuth",
+);
+assertIncludes(
+  integrationsSettings,
+  "run the add command first",
+  "PolyMCP setup copy should make add the primary Codex setup command",
+);
+assertIncludes(
+  integrationsSettings,
+  "only run the login fallback",
+  "PolyMCP setup copy should make Codex login a fallback",
 );
 assertIncludes(
   integrationsSettings,
@@ -169,6 +214,16 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "Add PolyMCP:",
+  "PolyMCP setup bundle should label the primary add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "Only if Codex does not open OAuth during add, run:",
+  "PolyMCP setup bundle should label the login fallback",
+);
+assertIncludes(
+  integrationsSettings,
   "```json",
   "PolyMCP setup bundle includes a JSON config block",
 );
@@ -179,7 +234,22 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "open a new Codex thread",
+  "You should only need to authenticate once per harness profile or device.",
+  "PolyMCP setup copy should set the OAuth continuity expectation",
+);
+assertIncludes(
+  integrationsSettings,
+  "Authentication complete. You may close this window.",
+  "PolyMCP setup copy should normalize the local callback completion page",
+);
+assertIncludes(
+  integrationsSettings,
+  "close that tab and return to your harness",
+  "PolyMCP setup copy should explain the callback handoff next action",
+);
+assertIncludes(
+  integrationsSettings,
+  "open a fresh chat or reconnect MCP",
   "PolyMCP setup copy should tell users how to activate the MCP server",
 );
 assertIncludes(
@@ -189,8 +259,18 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "List my PolyNet workspaces",
+  "Use PolyMCP to list my PolyNet workspaces.",
   "PolyMCP setup copy should give a smoke-test prompt",
+);
+assertIncludes(
+  integrationsSettings,
+  "close the local",
+  "PolyMCP integration card should mention closing the local auth tab",
+);
+assertIncludes(
+  integrationsSettings,
+  "authentication tab",
+  "PolyMCP integration card should explain the local auth tab",
 );
 assertIncludes(
   integrationsSettings,

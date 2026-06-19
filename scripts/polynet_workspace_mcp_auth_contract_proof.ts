@@ -103,10 +103,109 @@ assertIncludes(contract, "/runtime/mcp", "public MCP runtime route contract");
 assertIncludes(contract, "/.well-known/oauth-protected-resource", "public MCP protected resource route contract");
 assertIncludes(contract, "/.well-known/oauth-authorization-server", "public MCP authorization server route contract");
 assertIncludes(contract, "Auth proves user identity only.", "auth versus authorization boundary");
+assertIncludes(contract, "## OAuth Continuity Model", "OAuth continuity contract section");
+assertIncludes(
+  contract,
+  "one OAuth login -> durable MCP access",
+  "OAuth continuity target UX",
+);
+assertIncludes(
+  contract,
+  "PolyNet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client",
+  "OAuth role separation",
+);
+assertIncludes(
+  contract,
+  "The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet.",
+  "OAuth callback UI ownership boundary",
+);
+assertIncludes(
+  contract,
+  "Authentication complete. You may close this window.",
+  "OAuth callback completion copy boundary",
+);
+assertIncludes(
+  contract,
+  "close that tab, return to the harness",
+  "OAuth callback close-tab next action",
+);
+assertIncludes(
+  contract,
+  "start a fresh chat or reconnect MCP",
+  "OAuth callback reconnect guidance",
+);
+assertIncludes(
+  contract,
+  "codex mcp login polymcp --scopes openid,profile,email,offline_access",
+  "native Codex OAuth fallback with offline access",
+);
+assertIncludes(
+  contract,
+  'mcp_oauth_credentials_store = "keyring"',
+  "native Codex durable credential store",
+);
+assertIncludes(
+  contract,
+  "Recommended Codex credential persistence should be configured before OAuth",
+  "native Codex durable credential store should precede OAuth",
+);
+assertIncludes(
+  contract,
+  "Run `add` first",
+  "native Codex add command should be primary",
+);
+assertIncludes(
+  contract,
+  "Only if Codex does not open OAuth during `add`, run the login fallback",
+  "native Codex login should be fallback only",
+);
+assertIncludes(
+  contract,
+  "`mcp-remote` is a compatibility fallback only",
+  "mcp-remote non-canonical boundary",
+);
 assertIncludes(authSetup, "ARX_MCP_RESOURCE_URL", "MCP resource setup env");
 assertIncludes(authSetup, "ARX_MCP_AUTH_JWT_AUDIENCE", "MCP audience setup env");
 assertIncludes(authSetup, "Resource Indicator", "WorkOS MCP resource indicator setup");
 assertIncludes(authSetup, "https://<POLYNET_ORIGIN>/runtime/mcp", "canonical MCP resource setup");
+assertIncludes(authSetup, "## 4) Hosted MCP OAuth Continuity", "hosted MCP OAuth continuity setup section");
+assertIncludes(
+  authSetup,
+  "one harness profile + one PolyMCP config + one successful OAuth login",
+  "hosted MCP OAuth continuity invariant",
+);
+assertIncludes(authSetup, "Client ID Metadata Document", "WorkOS CIMD setup guidance");
+assertIncludes(authSetup, "Dynamic Client Registration", "WorkOS DCR compatibility setup guidance");
+assertIncludes(
+  authSetup,
+  "codex mcp login polymcp --scopes openid,profile,email,offline_access",
+  "hosted MCP OAuth native Codex login fallback",
+);
+assertIncludes(
+  authSetup,
+  'mcp_oauth_credentials_store = "keyring"',
+  "hosted MCP OAuth durable credential store",
+);
+assertIncludes(
+  authSetup,
+  "Recommended Codex credential persistence should be configured before OAuth",
+  "hosted MCP OAuth durable credential store should precede OAuth",
+);
+assertIncludes(
+  authSetup,
+  "Run `add` first",
+  "hosted MCP OAuth add command should be primary",
+);
+assertIncludes(
+  authSetup,
+  "Only if Codex does not open OAuth during `add`, run the login fallback",
+  "hosted MCP OAuth login should be fallback only",
+);
+assertIncludes(
+  authSetup,
+  "A native Codex harness and an `mcp-remote` adapter can use different client registrations and credential stores.",
+  "native Codex versus mcp-remote credential-store boundary",
+);
 
 assertIncludes(sharedMcp, 'POLYNET_MCP_PROTOCOL_VERSION = "2025-11-25"', "current MCP protocol constant");
 assertIncludes(
