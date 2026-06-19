@@ -16927,10 +16927,10 @@ button.chat-reply-quote:hover {
 }
 
 .runtime-live-timeline-reasoning-text {
-  max-width: 74ch;
-  font-size: 0.96em;
-  line-height: 1.55;
-  color: color-mix(in srgb, var(--text-primary) 92%, var(--text-secondary));
+  max-width: min(74ch, 100%);
+  font-size: 1em;
+  line-height: 1.58;
+  color: color-mix(in srgb, var(--text-primary) 96%, var(--text-secondary));
 }
 
 .runtime-live-timeline-reasoning-text > :first-child {
@@ -16966,26 +16966,16 @@ button.chat-reply-quote:hover {
 
 .runtime-thought-snippet {
   display: block;
-  max-width: min(620px, 100%);
-  overflow: hidden;
-  color: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary));
-  font-size: 14px;
-  line-height: 1.5;
+  max-width: min(74ch, 100%);
+  color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
+  font-size: 1em;
+  line-height: 1.58;
   letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-thought-snippet.streaming-placeholder {
-  display: block;
-}
-
-.runtime-thought-snippet-model {
-  color: color-mix(in srgb, var(--text-primary) 90%, var(--text-secondary));
+  white-space: normal;
 }
 
 .runtime-thought-snippet-fallback {
-  color: color-mix(in srgb, var(--text-primary) 74%, var(--text-secondary));
+  color: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary));
 }
 
 .runtime-turn-timer {
@@ -17008,82 +16998,79 @@ button.chat-reply-quote:hover {
   transform: translateY(-0.5px);
 }
 
-.runtime-tool-drawers {
+.runtime-trace-flow {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-width: min(640px, 100%);
-  margin-top: 2px;
+  gap: 8px;
+  max-width: min(74ch, 100%);
 }
 
-.runtime-tool-drawer {
+.runtime-trace-reasoning {
+  width: 100%;
+}
+
+.runtime-trace-tool {
   width: fit-content;
   max-width: 100%;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--text-muted));
 }
 
-.runtime-tool-drawer-summary {
+.runtime-trace-tool-summary {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   width: fit-content;
   max-width: 100%;
   cursor: pointer;
-  color: color-mix(in srgb, var(--text-muted) 78%, transparent);
-  font-size: 12px;
-  line-height: 1.35;
+  color: color-mix(in srgb, var(--text-secondary) 84%, var(--text-muted));
+  font-size: 13px;
+  line-height: 1.4;
   list-style: none;
-  opacity: 0.72;
   transition: color 120ms ease, opacity 120ms ease;
 }
 
-.runtime-tool-drawer-summary:hover {
-  color: var(--text-muted);
-  opacity: 0.92;
+.runtime-trace-tool-summary:hover {
+  color: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary));
 }
 
-.runtime-tool-drawer-summary::-webkit-details-marker {
+.runtime-trace-tool-summary::-webkit-details-marker {
   display: none;
 }
 
-.runtime-tool-drawer-title {
+.runtime-trace-tool-summary::marker {
+  content: "";
+}
+
+.runtime-trace-tool-title {
   flex: 0 0 auto;
   color: inherit;
-  font-weight: 520;
+  font-weight: 560;
 }
 
-.runtime-tool-drawer-detail {
-  min-width: 0;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--text-muted) 74%, transparent);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-tool-drawer-chevron {
+.runtime-trace-tool-chevron {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--text-muted) 58%, transparent);
+  color: color-mix(in srgb, currentColor 70%, transparent);
   font-size: 14px;
   line-height: 1;
   transition: transform 120ms ease;
 }
 
-.runtime-tool-drawer[open] .runtime-tool-drawer-chevron {
+.runtime-trace-tool[open] .runtime-trace-tool-chevron {
   transform: rotate(90deg);
 }
 
-.runtime-tool-drawer-body {
+.runtime-trace-tool-body {
   display: flex;
   flex-direction: column;
   gap: 3px;
   margin: 4px 0 2px;
   padding-left: 12px;
-  color: var(--text-faint, rgba(255, 255, 255, 0.3));
-  font-size: 11.5px;
-  line-height: 1.35;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.runtime-tool-drawer-item {
+.runtime-trace-tool-call {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -17092,21 +17079,31 @@ button.chat-reply-quote:hover {
   white-space: nowrap;
 }
 
-.runtime-tool-drawer-item-title,
-.runtime-tool-drawer-item-detail {
+.runtime-trace-tool-call-title,
+.runtime-trace-tool-call-link,
+.runtime-trace-tool-call-kind {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.runtime-tool-drawer-item-title {
+.runtime-trace-tool-call-title,
+.runtime-trace-tool-call-link {
   flex: 0 1 auto;
-  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+  color: color-mix(in srgb, var(--text-secondary) 86%, var(--text-muted));
+  text-decoration: none;
 }
 
-.runtime-tool-drawer-item-detail {
-  flex: 1 1 auto;
-  color: color-mix(in srgb, var(--text-muted) 48%, transparent);
+.runtime-trace-tool-call-link:hover {
+  color: color-mix(in srgb, var(--text-primary) 86%, var(--text-secondary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.runtime-trace-tool-call-kind {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--text-muted) 74%, transparent);
 }
 
 .resource-changeset-card-stack {
@@ -18368,7 +18365,7 @@ button.message-citation-chip:hover {
 }
 
 .message-text.runtime-live-timeline-reasoning-text {
-  color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
+  color: color-mix(in srgb, var(--text-primary) 96%, var(--text-secondary));
 }
 
 .message-text.runtime-live-timeline-reasoning-text .md-paragraph {

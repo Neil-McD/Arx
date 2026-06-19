@@ -125,12 +125,42 @@ const reasoningTimeline = buildRuntimeLiveTimeline([
   }),
   started(5, "read", { path: "apps/web/src/components/RuntimeLiveTimeline.tsx" }),
   finished(6, 5, "read", { path: "apps/web/src/components/RuntimeLiveTimeline.tsx" }),
+  event({
+    seq: 7,
+    event_type: "reasoning_summary_part_added",
+    payload: {
+      summary_stream_id: "stream:1",
+      summary_index: 1,
+    },
+  }),
+  event({
+    seq: 8,
+    event_type: "reasoning_summary_text_delta",
+    payload: {
+      summary_stream_id: "stream:1",
+      summary_index: 1,
+      delta: "I’m checking the result.",
+    },
+  }),
 ]);
-const reasoningEntry = reasoningTimeline.find((entry) => entry.kind === "reasoning");
+assert.deepEqual(
+  reasoningTimeline.map((entry) => entry.kind),
+  ["reasoning", "tool_group", "reasoning"],
+  "runtime trace entries should preserve reasoning/tool/reasoning order",
+);
+const reasoningEntries = reasoningTimeline.filter(
+  (entry) => entry.kind === "reasoning",
+);
+const reasoningEntry = reasoningEntries[0];
 assert.equal(
   reasoningEntry?.text,
   "I’m checking the relevant files before editing.",
   "reasoning summary deltas should combine into a transcript thought entry",
+);
+assert.equal(
+  reasoningEntries[1]?.text,
+  "I’m checking the result.",
+  "later reasoning summary sections should remain separate transcript entries",
 );
 assert.equal(
   reasoningTimeline.some((entry) => entry.kind === "tool_group"),

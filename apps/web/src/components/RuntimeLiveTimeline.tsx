@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
 import {
   buildAgentActivityTimeline,
-  type AgentActivityItem,
   type AgentActivityStep,
 } from "../../../../shared/runtimeActivityTimeline";
 import type { AuthSessionLike } from "../../../../shared/authSession";
@@ -15,9 +14,13 @@ import {
 import { dispatchCommunityResourcesMutated } from "../../../../shared/communityResourceMutationEvents";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { useSmoothStreamingText } from "../../../../shared/useSmoothStreamingText";
-import { buildRuntimeLiveTimeline } from "../../../../shared/runtimeTimelineUi";
+import {
+  buildRuntimeLiveTimeline,
+  type RuntimeLiveTimelineEntry,
+  type RuntimeTimelineToolCall,
+  type RuntimeTimelineToolGroup,
+} from "../../../../shared/runtimeTimelineUi";
 
-const DRAWER_STEP_LIMIT = 5;
 const CHANGESET_CARD_LIMIT = 2;
 
 type ResourceChangesetPreviewItem = {
@@ -441,39 +444,61 @@ function narrationForStep(step: AgentActivityStep | null): string | null {
   return "I’m wrapping up the result.";
 }
 
-function isToolStep(step: AgentActivityStep): boolean {
-  return step.items.some((item) => Boolean(item.toolName));
+function hasReasoningEntries(entries: RuntimeLiveTimelineEntry[]): boolean {
+  return entries.some((entry) => entry.kind === "reasoning" && entry.text.trim());
 }
 
-function toolItemLabel(item: AgentActivityItem): string {
-  return item.title || item.toolName || "Used tool";
-}
-
-function toolStepsForDrawers(steps: AgentActivityStep[]): AgentActivityStep[] {
-  return steps.filter(isToolStep).slice(-DRAWER_STEP_LIMIT);
-}
-
-function compactThoughtText(value: string): string | null {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized || null;
-}
-
-function latestReasoningSummaryText(
-  entries: ReturnType<typeof buildRuntimeLiveTimeline>,
-): string | null {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (entry?.kind !== "reasoning") continue;
-    const text = compactThoughtText(entry.text);
-    if (text) return text;
+function renderToolCallLabel(call: RuntimeTimelineToolCall): ReactNode {
+  if (call.href) {
+    return (
+      <a
+        className="runtime-trace-tool-call-link"
+        href={call.href}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {call.title}
+      </a>
+    );
   }
-  return null;
+  return <span className="runtime-trace-tool-call-title">{call.title}</span>;
+}
+
+function RuntimeTraceToolGroup(props: {
+  group: RuntimeTimelineToolGroup;
+}): JSX.Element {
+  const { group } = props;
+  return (
+    <details
+      className={[
+        "runtime-trace-tool",
+        `runtime-trace-tool-${group.status}`,
+      ].join(" ")}
+    >
+      <summary className="runtime-trace-tool-summary">
+        <span className="runtime-trace-tool-title">{group.title}</span>
+        <span className="runtime-trace-tool-chevron" aria-hidden="true">
+          ›
+        </span>
+      </summary>
+      <div className="runtime-trace-tool-body">
+        {group.calls.map((call) => (
+          <div key={call.id} className="runtime-trace-tool-call">
+            {renderToolCallLabel(call)}
+            <span className="runtime-trace-tool-call-kind">
+              {call.toolName}
+            </span>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 export function RuntimeLiveTimeline(props: {
   events: ThreadStreamingRuntimeEvent[];
   session: AuthSessionLike | null;
-  renderReasoningMarkdown: (text: string) => unknown;
+  renderReasoningMarkdown: (text: string) => ReactNode;
   showActiveIndicators?: boolean;
 }): JSX.Element | null {
   const showActiveIndicators = props.showActiveIndicators ?? false;
@@ -491,25 +516,24 @@ export function RuntimeLiveTimeline(props: {
     () => narrationForStep(latestWorkStep(steps)),
     [steps],
   );
-  const visibleToolSteps = useMemo(() => toolStepsForDrawers(steps), [steps]);
   const liveTimelineEntries = useMemo(
     () => buildRuntimeLiveTimeline(props.events),
     [props.events],
   );
-  const reasoningSummaryText = useMemo(
-    () => latestReasoningSummaryText(liveTimelineEntries),
+  const hasModelReasoning = useMemo(
+    () => hasReasoningEntries(liveTimelineEntries),
     [liveTimelineEntries],
   );
   const changesetCards = useMemo(
     () => extractResourceChangesetCards(props.events),
     [props.events],
   );
-  const thoughtText = reasoningSummaryText ?? narration ?? "";
   const displayWord = useSmoothStreamingText(activityWord, {
     active: showActiveIndicators,
   });
-  const displayThoughtText = useSmoothStreamingText(thoughtText, {
-    active: showActiveIndicators && Boolean(thoughtText),
+  const fallbackThoughtText = hasModelReasoning ? "" : narration ?? "";
+  const displayFallbackThoughtText = useSmoothStreamingText(fallbackThoughtText, {
+    active: showActiveIndicators && Boolean(fallbackThoughtText),
   });
   const elapsedMs =
     runTiming.startedAtMs === null
@@ -575,57 +599,37 @@ export function RuntimeLiveTimeline(props: {
           </span>
         </span>
       ) : null}
-      {displayThoughtText ? (
-        <span
-          className={[
-            "runtime-thought-snippet",
-            "streaming-placeholder",
-            reasoningSummaryText
-              ? "runtime-thought-snippet-model"
-              : "runtime-thought-snippet-fallback",
-          ].join(" ")}
-        >
-          {displayThoughtText}
+      {displayFallbackThoughtText ? (
+        <span className="runtime-thought-snippet runtime-thought-snippet-fallback">
+          {displayFallbackThoughtText}
         </span>
       ) : null}
-      {!displayThoughtText ? (
+      {liveTimelineEntries.length > 0 ? (
+        <div className="runtime-trace-flow">
+          {liveTimelineEntries.map((entry) =>
+            entry.kind === "reasoning" ? (
+              <div
+                key={entry.id}
+                className="runtime-trace-reasoning message-text runtime-live-timeline-reasoning-text"
+              >
+                {props.renderReasoningMarkdown(entry.text)}
+              </div>
+            ) : (
+              <RuntimeTraceToolGroup
+                key={entry.id}
+                group={entry.group}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
+      {!displayFallbackThoughtText && liveTimelineEntries.length === 0 ? (
         <span
           className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word"
           aria-live="polite"
         >
           {displayWord}
         </span>
-      ) : null}
-      {visibleToolSteps.length > 0 ? (
-        <div className="runtime-tool-drawers" aria-label="Grouped tool activity">
-          {visibleToolSteps.map((step) => (
-            <details key={step.id} className="runtime-tool-drawer">
-              <summary className="runtime-tool-drawer-summary">
-                <span className="runtime-tool-drawer-title">{step.title}</span>
-                <span className="runtime-tool-drawer-detail">{step.summary}</span>
-                <span className="runtime-tool-drawer-chevron" aria-hidden="true">
-                  ›
-                </span>
-              </summary>
-              <div className="runtime-tool-drawer-body">
-                {step.items
-                  .filter((item) => Boolean(item.toolName))
-                  .map((item) => (
-                    <div key={item.id} className="runtime-tool-drawer-item">
-                      <span className="runtime-tool-drawer-item-title">
-                        {toolItemLabel(item)}
-                      </span>
-                      {item.detail ? (
-                        <span className="runtime-tool-drawer-item-detail">
-                          {item.detail}
-                        </span>
-                      ) : null}
-                    </div>
-                  ))}
-              </div>
-            </details>
-          ))}
-        </div>
       ) : null}
       {approvalCards}
     </div>
