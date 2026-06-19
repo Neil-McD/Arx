@@ -357,7 +357,7 @@ async function main() {
     await timed(result, "createOrReuseVolume", async () =>
       VolumeInstance.createIfNotExists({
         name: result.volumeName,
-        displayName: "PolyNet Blaxel workspace lifecycle upgrade probe",
+        displayName: "Polynet Blaxel workspace lifecycle upgrade probe",
         size: result.config.volumeSizeMb,
         region: result.config.region,
         labels: {

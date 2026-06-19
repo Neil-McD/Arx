@@ -128,7 +128,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "GitHub has a vetted remote MCP identity. PolyNet should prefer OAuth when available and use scoped bearer tokens only as a fallback.",
+        "GitHub has a vetted remote MCP identity. Polynet should prefer OAuth when available and use scoped bearer tokens only as a fallback.",
     },
     {
       id: "supabase",
@@ -166,7 +166,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "Supabase has a vetted remote MCP identity. PolyNet should preserve project/read-only config and use OAuth or a scoped access token.",
+        "Supabase has a vetted remote MCP identity. Polynet should preserve project/read-only config and use OAuth or a scoped access token.",
     },
     {
       id: "vercel",
@@ -205,7 +205,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "Vercel is recognized as a hosted OAuth MCP. It should stage for OAuth setup until PolyNet exposes the full setup path.",
+        "Vercel is recognized as a hosted OAuth MCP. It should stage for OAuth setup until Polynet exposes the full setup path.",
     },
     {
       id: "context7",
@@ -280,7 +280,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "Fly was detected as a local CLI/runtime MCP shape, which cannot be copied into PolyNet as a remote hosted mount yet.",
+        "Fly was detected as a local CLI/runtime MCP shape, which cannot be copied into Polynet as a remote hosted mount yet.",
     },
     {
       id: "convex",
@@ -330,7 +330,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "Convex was detected as a project-bound CLI MCP shape. PolyNet can attach it for setup tracking, but it needs a managed runtime/config path before tools can be live.",
+        "Convex was detected as a project-bound CLI MCP shape. Polynet can attach it for setup tracking, but it needs a managed runtime/config path before tools can be live.",
     },
     {
       id: "workos_docs",
@@ -361,7 +361,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       requiredConfigParams: [],
       structuredConfigParams: [],
       reason:
-        "WorkOS Docs was detected as a local stdio docs MCP. PolyNet can attach it for setup tracking, but it needs a hosted/runtime adapter before tools can be live.",
+        "WorkOS Docs was detected as a local stdio docs MCP. Polynet can attach it for setup tracking, but it needs a hosted/runtime adapter before tools can be live.",
     },
     {
       id: "posthog",
@@ -475,7 +475,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "Computer Use is a local desktop/runtime capability. PolyNet can attach it for setup tracking, but it needs a managed runtime before tools can be live.",
+        "Computer Use is a local desktop/runtime capability. Polynet can attach it for setup tracking, but it needs a managed runtime before tools can be live.",
     },
     {
       id: "node_repl",
@@ -507,7 +507,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         },
       ],
       reason:
-        "Node REPL is a local runtime capability. PolyNet can attach it for setup tracking, but it needs a managed runtime before tools can be live.",
+        "Node REPL is a local runtime capability. Polynet can attach it for setup tracking, but it needs a managed runtime before tools can be live.",
     },
   ];
 
@@ -578,7 +578,7 @@ export function resolveCommunityWorkflowImportMcpRegistryConnectPolicy(args: {
     return {
       ok: false,
       code: "mcp_registry_entry_missing",
-      message: "This imported MCP is not in the reviewed PolyNet registry.",
+      message: "This imported MCP is not in the reviewed Polynet registry.",
     };
   }
   const supportsRemote = entry.supportedTransports.some(
@@ -629,7 +629,7 @@ export function resolveCommunityWorkflowImportMcpRegistryConnectPolicy(args: {
     return {
       ok: false,
       code: "mcp_registry_auth_invalid",
-      message: `${entry.name} does not support ${args.authType} setup in PolyNet yet.`,
+      message: `${entry.name} does not support ${args.authType} setup in Polynet yet.`,
     };
   }
   if (

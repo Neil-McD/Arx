@@ -63,7 +63,7 @@ const MCP_TOOLSETS = [
 let requestId = 1;
 
 function printHelp(): never {
-  console.log(`PolyNet Workspace MCP external smoke
+  console.log(`Polynet Workspace MCP external smoke
 
 Usage:
   npm run smoke:polynet-workspace-mcp-metadata -- --url=https://example.com/runtime/mcp

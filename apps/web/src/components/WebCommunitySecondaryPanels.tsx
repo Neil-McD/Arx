@@ -65,7 +65,7 @@ export type WebCommunitySecondaryPanelsProps = {
 
 function renderCenteredPane(children: ReactNode, options?: { fill?: boolean }) {
   // `fill` makes the pane a full-height, non-scrolling flex column so its child
-  // (the PolyNet graph) can size to the window frame instead of overflowing.
+  // (the Polynet graph) can size to the window frame instead of overflowing.
   const fill = options?.fill ?? false;
   return (
     <div className={`community-tab-scroll${fill ? " community-tab-scroll--fill" : ""}`}>

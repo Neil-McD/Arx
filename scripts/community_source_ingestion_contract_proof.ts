@@ -265,7 +265,7 @@ assert.match(
 assert.match(
   sourceCrawler,
   /export type CommunitySourceCrawlerProvider = "simple" \| "crawl4ai"[\s\S]*export type CommunitySourceCrawlJobStatus = "queued" \| "crawling" \| "saving_sources" \| "ready" \| "failed"[\s\S]*export type CommunitySourcePageResult = \{[\s\S]*requested_url: string[\s\S]*final_url: string[\s\S]*canonical_url: string[\s\S]*root_url: string[\s\S]*parent_url: string \| null[\s\S]*depth: number[\s\S]*markdown: string[\s\S]*links: CommunitySourcePageLink\[\][\s\S]*status: CommunitySourcePageStatus[\s\S]*error: string \| null/,
-  "source crawling should use a stable PolyNet-owned page result contract",
+  "source crawling should use a stable Polynet-owned page result contract",
 );
 assert.match(
   resources,

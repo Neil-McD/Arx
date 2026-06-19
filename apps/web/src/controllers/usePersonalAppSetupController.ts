@@ -222,7 +222,7 @@ function buildImportedCommunityMcpSetupCatalogEntry(
         authType: "oauth",
         authLabel: "OAuth",
         note:
-          "Connect this imported MCP with OAuth. PolyNet will attach it to your personal harness for this community.",
+          "Connect this imported MCP with OAuth. Polynet will attach it to your personal harness for this community.",
       },
     };
   }
@@ -241,7 +241,7 @@ function buildImportedCommunityMcpSetupCatalogEntry(
       authType: null,
       authLabel: "Auth",
       note:
-        "Imported MCPs must use a vetted remote HTTPS endpoint before PolyNet can make them live.",
+        "Imported MCPs must use a vetted remote HTTPS endpoint before Polynet can make them live.",
       endpointPlaceholder: "https://mcp.example.com",
       supportedAuthTypes: [
         { value: "bearer", label: "Bearer token", secretLabel: "Bearer token" },

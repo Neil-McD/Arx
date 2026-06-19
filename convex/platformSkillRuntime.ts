@@ -28,7 +28,7 @@ export const PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD = [
 ].join("\n");
 
 export const PLATFORM_ONBOARDING_GUIDE_INSTRUCTIONS_MD = [
-  "Purpose: introduce a newly onboarded PolyNet user to the platform in a friendly, useful, and action-oriented way.",
+  "Purpose: introduce a newly onboarded Polynet user to the platform in a friendly, useful, and action-oriented way.",
   "Ground truth: use only the active runtime context, visible community/project/workspace state, and available tools. Do not pretend to know private setup details that are not present.",
   "First response: briefly introduce yourself as the user's agent, name what you can currently see about their workspace or community context, and offer one concrete next action.",
   "Keep it lightweight: do not dump a manual, docs tour, or long feature list. The goal is to help the user get to their first useful action.",

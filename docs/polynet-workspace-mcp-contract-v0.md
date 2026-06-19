@@ -1,19 +1,19 @@
-# PolyNet Workspace MCP Provider Contract v0
+# Polynet Workspace MCP Provider Contract v0
 
 Status: active contract
 
 ## First Principle
 
-PolyNet Workspace MCP is a provider surface. It lets an external agent harness access a server-authoritative PolyNet workspace projection.
+Polynet Workspace MCP is a provider surface. It lets an external agent harness access a server-authoritative Polynet workspace projection.
 
-It is not the existing PolyNet MCP app consumer path.
+It is not the existing Polynet MCP app consumer path.
 
 ```text
-PolyNet consumes MCPs:
-  third-party MCP app -> PolyNet runtime harness
+Polynet consumes MCPs:
+  third-party MCP app -> Polynet runtime harness
 
-PolyNet exposes MCP:
-  external agent harness -> PolyNet workspace MCP -> PolyNet community workspace
+Polynet exposes MCP:
+  external agent harness -> Polynet workspace MCP -> Polynet community workspace
 ```
 
 ## Scope
@@ -89,7 +89,7 @@ pending
 no_access
 ```
 
-`available_toolsets` names authority-enabled PolyNet tool families. It does not mean every family has a public MCP tool in this v0 slice. Current canonical toolset names are:
+`available_toolsets` names authority-enabled Polynet tool families. It does not mean every family has a public MCP tool in this v0 slice. Current canonical toolset names are:
 
 ```text
 workspace_context
@@ -136,12 +136,12 @@ An unauthenticated MCP connection or protected call must return `401` with a `WW
 The protected resource metadata document must return:
 
 ```text
-resource: <canonical PolyNet MCP endpoint URL, including /runtime/mcp>
+resource: <canonical Polynet MCP endpoint URL, including /runtime/mcp>
 authorization_servers: [<upstream OAuth issuer/AuthKit domain>]
 bearer_methods_supported: ["header"]
 ```
 
-PolyNet may also expose `/.well-known/oauth-authorization-server` at the MCP server origin as a compatibility proxy for clients that try authorization-server discovery from the resource origin, but the protected resource metadata must name the real upstream issuer as the authorization server.
+Polynet may also expose `/.well-known/oauth-authorization-server` at the MCP server origin as a compatibility proxy for clients that try authorization-server discovery from the resource origin, but the protected resource metadata must name the real upstream issuer as the authorization server.
 
 Production should set `ARX_MCP_RESOURCE_URL` to the canonical public MCP endpoint, for example:
 
@@ -169,25 +169,25 @@ Auth proves user identity only. Workspace access remains server-authorized per c
 
 ## OAuth Continuity Model
 
-The target PolyNet MCP user experience is:
+The target Polynet MCP user experience is:
 
 ```text
 Settings -> Integrations -> Copy setup -> paste into harness -> one OAuth login -> durable MCP access
 ```
 
-PolyNet must not ask users to paste bearer tokens. PolyNet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client that owns local credential persistence.
+Polynet must not ask users to paste bearer tokens. Polynet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client that owns local credential persistence.
 
 For a single harness profile/device, one successful OAuth login should survive new chats, app restarts, and normal access-token expiry. The harness should store refresh-capable credentials and refresh access tokens silently. Re-authentication is expected only after logout, token revocation, refresh-token expiry, account switch, a new harness profile/device, or lost local credentials.
 
-The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet. PolyNet-owned UX should explain the handoff: if the browser shows a plain local page such as `Authentication complete. You may close this window.`, the user should close that tab, return to the harness, and start a fresh chat or reconnect MCP if the current thread was already running before login.
+The local OAuth callback completion page is owned by the external MCP client or adapter, not by Polynet. Polynet-owned UX should explain the handoff: if the browser shows a plain local page such as `Authentication complete. You may close this window.`, the user should close that tab, return to the harness, and start a fresh chat or reconnect MCP if the current thread was already running before login.
 
-The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start PolyNet sign-in, verify the connection by listing PolyNet workspaces, and report when PolyNet is connected.
+The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start Polynet sign-in, verify the connection by listing Polynet workspaces, and report when Polynet is connected.
 
-The packet must keep the receiving agent focused on the PolyNet connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If PolyNet is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
+The packet must keep the receiving agent focused on the Polynet connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If Polynet is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
 
-New harness setup should use `polynet` as the canonical local server alias. Existing harnesses that already have `polymcp` configured should treat it as the same PolyNet MCP server. The copied setup must not tell users to install both aliases unless the user explicitly wants to migrate the local alias.
+New harness setup should use `polynet` as the canonical local server alias. Existing harnesses that already have `polymcp` configured should treat it as the same Polynet MCP server. The copied setup must not tell users to install both aliases unless the user explicitly wants to migrate the local alias.
 
-If the receiving harness gets a PolyNet authorization URL, the packet should prefer automatic browser opening or a clean markdown link such as `[Sign in to PolyNet](AUTHORIZATION_URL)`. It should not paste the raw full OAuth URL unless no cleaner link path is available. It should only ask the user to paste the localhost callback URL back if the browser callback fails or cannot be reached.
+If the receiving harness gets a Polynet authorization URL, the packet should prefer automatic browser opening or a clean markdown link such as `[Sign in to Polynet](AUTHORIZATION_URL)`. It should not paste the raw full OAuth URL unless no cleaner link path is available. It should only ask the user to paste the localhost callback URL back if the browser callback fails or cannot be reached.
 
 Claude Code setup should use native remote HTTP MCP:
 
@@ -195,7 +195,7 @@ Claude Code setup should use native remote HTTP MCP:
 claude mcp add --transport http polynet https://www.polynet.ai/runtime/mcp
 ```
 
-Then the receiving harness should use Claude Code's `/mcp` flow to select `polynet` and complete PolyNet sign-in. If the harness already has the legacy `polymcp` alias, it should authenticate that existing server instead of installing a duplicate.
+Then the receiving harness should use Claude Code's `/mcp` flow to select `polynet` and complete Polynet sign-in. If the harness already has the legacy `polymcp` alias, it should authenticate that existing server instead of installing a duplicate.
 
 Recommended Codex credential persistence should be configured before OAuth when available:
 
@@ -219,7 +219,7 @@ codex mcp login polynet --scopes openid,profile,email,offline_access
 
 Continuity acceptance requires a clean native Codex profile to:
 
-1. add PolyNet with native Streamable HTTP,
+1. add Polynet with native Streamable HTTP,
 2. authenticate once,
 3. call `tools/list`,
 4. open a workspace,
@@ -314,7 +314,7 @@ Raw/recent/archive evidence remains separate from accepted memory. External agen
 
 ## Product Docs Boundary
 
-`polynet_product_docs_search` and `polynet_product_doc_read` expose canonical PolyNet product documentation to external harnesses. They are authenticated, read-only, and do not require a workspace selector because product documentation is platform context rather than community state.
+`polynet_product_docs_search` and `polynet_product_doc_read` expose canonical Polynet product documentation to external harnesses. They are authenticated, read-only, and do not require a workspace selector because product documentation is platform context rather than community state.
 
 ## Resource Boundary
 
@@ -374,14 +374,14 @@ This slice does not change or extend:
 
 The slice is done when a real external MCP client can:
 
-1. initialize the PolyNet MCP server,
+1. initialize the Polynet MCP server,
 2. list workspaces,
 3. open a community workspace,
 4. get workspace context,
 5. search accepted community memory,
 6. read one memory node,
 7. record an outcome against the retrieval log,
-8. search and read PolyNet product docs,
+8. search and read Polynet product docs,
 9. map, list, read, and search workspace resources when the workspace authority includes `member_resources`,
 10. inspect read-only builder resource map/list/read state when the workspace authority includes `builder_resources`.
 

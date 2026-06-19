@@ -61,18 +61,18 @@ https://<POLYNET_ORIGIN>/runtime/mcp
 
 Set `ARX_MCP_RESOURCE_URL` to that exact value in production so OAuth protected-resource metadata does not drift when requests pass through Vercel, Convex, or another proxy origin. Set `ARX_MCP_AUTH_JWT_AUDIENCE` to the same value when MCP access tokens carry the resource URL as their `aud` claim. Keep `ARX_AUTH_JWT_AUDIENCE` for the primary web/session JWT audience if it differs.
 
-Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dynamic registration endpoint. PolyNet must not infer one from the token endpoint.
+Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dynamic registration endpoint. Polynet must not infer one from the token endpoint.
 
 ## 4) Hosted MCP OAuth Continuity
 
-The hosted PolyNet MCP continuity invariant is:
+The hosted Polynet MCP continuity invariant is:
 
 ```text
-one harness profile + one PolyNet MCP config + one successful OAuth login
+one harness profile + one Polynet MCP config + one successful OAuth login
 = durable access across new chats, harness restarts, and normal access-token expiry
 ```
 
-PolyNet is the OAuth resource server. WorkOS/AuthKit is the authorization server. The external harness is the OAuth client and owns local credential persistence. PolyNet must not ask users to paste bearer tokens for normal MCP setup.
+Polynet is the OAuth resource server. WorkOS/AuthKit is the authorization server. The external harness is the OAuth client and owns local credential persistence. Polynet must not ask users to paste bearer tokens for normal MCP setup.
 
 WorkOS/AuthKit should be configured so MCP clients can identify themselves and receive refresh-capable credentials:
 
@@ -100,7 +100,7 @@ Only if Codex does not open OAuth during `add`, run the login fallback:
 codex mcp login polynet --scopes openid,profile,email,offline_access
 ```
 
-New harness setup should use `polynet` as the local server alias. Existing harnesses that already have `polymcp` configured may keep using it as the same PolyNet MCP server; do not install both aliases unless intentionally migrating the local alias.
+New harness setup should use `polynet` as the local server alias. Existing harnesses that already have `polymcp` configured may keep using it as the same Polynet MCP server; do not install both aliases unless intentionally migrating the local alias.
 
 `mcp-remote` may remain useful for legacy clients, but it is not proof that native Codex MCP OAuth is authenticated. A native Codex harness and an `mcp-remote` adapter can use different client registrations and credential stores.
 
@@ -116,7 +116,7 @@ Re-authentication should be treated as a bug unless one of these is true:
 Continuity validation:
 
 1. create or use a clean Codex profile,
-2. add PolyNet with native Streamable HTTP,
+2. add Polynet with native Streamable HTTP,
 3. complete OAuth during `codex mcp add`, or run the login fallback if `add` did not open OAuth,
 4. confirm authenticated `tools/list` works,
 5. close and reopen Codex,

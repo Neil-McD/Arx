@@ -66,7 +66,7 @@ function hasFlag(name: string): boolean {
 }
 
 function printHelp(): never {
-  console.log(`PolyNet Workspace MCP release preflight
+  console.log(`Polynet Workspace MCP release preflight
 
 Usage:
   npm run preflight:polynet-workspace-mcp-release

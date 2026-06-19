@@ -2,7 +2,7 @@
 
 Status: active contract
 
-This contract defines how PolyNet skills should route context into the runtime harness without turning the system prompt into a dumping ground.
+This contract defines how Polynet skills should route context into the runtime harness without turning the system prompt into a dumping ground.
 
 ## First Principle
 

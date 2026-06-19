@@ -121,14 +121,14 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     detailBullets: [
       "Reduces a video request into scenes, assets, timing, and output format.",
       "Drafts HyperFrames-friendly HTML, CSS, and JavaScript composition structure.",
-      "Uses PolyNet project workspace tools only when they are active and verified.",
+      "Uses Polynet project workspace tools only when they are active and verified.",
     ],
     installInput: {
       catalog_skill_id: "hyperframes",
       name: "HyperFrames",
       description:
         "Plan, draft, and verify HTML-first HyperFrames video compositions.",
-      instructions_md: `Use this skill when the user wants to plan, draft, inspect, or render a HyperFrames HTML video composition.\n\nOperating rules:\n1. Start by reducing the brief into scenes, duration, aspect ratio, assets, motion, captions, and target output.\n2. Treat HyperFrames as an artifact workflow: project files, preview links, frame snapshots, and rendered video paths are the useful outputs.\n3. Encode HyperFrames-specific structure explicitly: composition roots need data-composition-id, dimensions, timed clip attributes, and registered paused timelines when animation is used.\n4. If PolyNet project workspace tools are active, use the existing workspace path: write/edit/read for project files, bash for short npx hyperframes commands such as doctor, lint, inspect, and short renders, and terminal_start plus terminal_read for preview or Studio processes.\n5. If project workspace tools are not active, produce the composition plan and code/file structure, but do not claim a preview or render completed.\n6. Keep binary media out of chat context. Summarize outputs and link or reference artifacts instead.\n7. Before finalizing, call out missing assets, unsafe assumptions, render blockers, and the smallest next verification step.`,
+      instructions_md: `Use this skill when the user wants to plan, draft, inspect, or render a HyperFrames HTML video composition.\n\nOperating rules:\n1. Start by reducing the brief into scenes, duration, aspect ratio, assets, motion, captions, and target output.\n2. Treat HyperFrames as an artifact workflow: project files, preview links, frame snapshots, and rendered video paths are the useful outputs.\n3. Encode HyperFrames-specific structure explicitly: composition roots need data-composition-id, dimensions, timed clip attributes, and registered paused timelines when animation is used.\n4. If Polynet project workspace tools are active, use the existing workspace path: write/edit/read for project files, bash for short npx hyperframes commands such as doctor, lint, inspect, and short renders, and terminal_start plus terminal_read for preview or Studio processes.\n5. If project workspace tools are not active, produce the composition plan and code/file structure, but do not claim a preview or render completed.\n6. Keep binary media out of chat context. Summarize outputs and link or reference artifacts instead.\n7. Before finalizing, call out missing assets, unsafe assumptions, render blockers, and the smallest next verification step.`,
     },
   },
   {

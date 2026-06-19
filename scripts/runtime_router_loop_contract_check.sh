@@ -91,10 +91,10 @@ require_match_in_file "$HARNESS_TELEMETRY_FILE" 'estimated_parallel_savings_ms' 
   "workspace batch telemetry estimates parallel savings"
 require_match_in_file "$HARNESS_TELEMETRY_FILE" 'parallel_blocker_reason_counts' \
   "workspace batch telemetry records blocker reasons"
-require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'createPolyNetExecutionSession\(' \
-  "workspace loop creates a unified PolyNet execution session"
+require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'createPolynetExecutionSession\(' \
+  "workspace loop creates a unified Polynet execution session"
 require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executionSession\.' \
-  "workspace loop routes execution through the PolyNet execution session"
+  "workspace loop routes execution through the Polynet execution session"
 require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executionSession\.executeTerminalTool\(' \
   "workspace loop routes terminal tools through the execution session"
 require_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'executionSession\.executeComputerTool\(' \

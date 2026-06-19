@@ -1566,7 +1566,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Strong near-term MCP candidate for execution workflows and one of the best current fits for personal harness app connections.",
     supportLabel: "Ready now",
     supportNote:
-      "Linear exposes a remote MCP endpoint and bearer-token auth that align well with the current PolyNet connector contract.",
+      "Linear exposes a remote MCP endpoint and bearer-token auth that align well with the current Polynet connector contract.",
     heroNote:
       "Best for issue planning, cycles, execution, and product operating rhythms.",
     capabilities: [
@@ -1637,7 +1637,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "High-value community knowledge surface for founder docs, resources, transcripts, and shared operating files.",
     supportLabel: "Third-party MCP only",
     supportNote:
-      "Google Workspace MCP coverage exists through third-party hosted and local servers, but PolyNet should wait for a vetted remote auth path before claiming direct support.",
+      "Google Workspace MCP coverage exists through third-party hosted and local servers, but Polynet should wait for a vetted remote auth path before claiming direct support.",
     heroNote:
       "Best for bringing founder documents, community resources, and shared files into a community lens.",
     capabilities: [
@@ -1660,7 +1660,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth or managed auth",
       note:
-        "Keep Drive catalog-first until PolyNet has a vetted Google Workspace MCP connection path with clear per-user and per-community scoping.",
+        "Keep Drive catalog-first until Polynet has a vetted Google Workspace MCP connection path with clear per-user and per-community scoping.",
     },
   },
   {
@@ -1728,7 +1728,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth or managed connector",
       note:
-        "Calendar belongs in the catalog, but should wait for PolyNet's hosted OAuth MCP path or an approved connector backplane.",
+        "Calendar belongs in the catalog, but should wait for Polynet's hosted OAuth MCP path or an approved connector backplane.",
     },
   },
   {
@@ -1741,7 +1741,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     supportNote:
       "Airtable exposes an official remote MCP endpoint and supports bearer-style personal access tokens in addition to OAuth.",
     heroNote:
-      "Best for structured community data that founders already maintain outside PolyNet.",
+      "Best for structured community data that founders already maintain outside Polynet.",
     capabilities: [
       "Search, create, and update records in accessible Airtable bases.",
       "Use existing Airtable permissions as the permission boundary.",
@@ -1773,7 +1773,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     name: "Stripe",
     tagline: "Customers, subscriptions, invoices, and payments",
     description:
-      "Important billing and commerce context surface, but PolyNet billing authority must remain entitlement-driven and server-verified.",
+      "Important billing and commerce context surface, but Polynet billing authority must remain entitlement-driven and server-verified.",
     supportLabel: "Ready with restricted key",
     supportNote:
       "Stripe's hosted remote MCP server accepts a restricted API key as a bearer token. Secret and publishable keys are rejected.",
@@ -1781,7 +1781,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Best for commerce operations, customer context, invoices, and subscription support workflows.",
     capabilities: [
       "Inspect customers, invoices, products, subscriptions, and payments.",
-      "Support creator commerce workflows without replacing PolyNet entitlement checks.",
+      "Support creator commerce workflows without replacing Polynet entitlement checks.",
       "Keep mutation-shaped Stripe MCP tools blocked until explicit per-tool approval exists.",
     ],
     websiteUrl: "https://stripe.com",
@@ -1802,7 +1802,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       tokenHelpUrl: "https://dashboard.stripe.com/apikeys",
       tokenHelpLabel: "Create restricted key",
       note:
-        "Connects to Stripe through your own restricted API key. Secret and publishable keys are rejected, mutation-shaped Stripe tools stay blocked, and Stripe MCP does not become authoritative for PolyNet billing, entitlements, or payouts.",
+        "Connects to Stripe through your own restricted API key. Secret and publishable keys are rejected, mutation-shaped Stripe tools stay blocked, and Stripe MCP does not become authoritative for Polynet billing, entitlements, or payouts.",
     },
   },
   {
@@ -1819,7 +1819,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     capabilities: [
       "Use the standard Storefront MCP endpoint for store context and policy questions.",
       "Create and update shopping carts through the storefront MCP surface.",
-      "Support commerce guidance without touching PolyNet billing authority or UCP catalog endpoints.",
+      "Support commerce guidance without touching Polynet billing authority or UCP catalog endpoints.",
     ],
     websiteUrl: "https://www.shopify.com",
     docsUrl: "https://shopify.dev/docs/apps/build/storefront-mcp/servers/storefront",
@@ -1849,7 +1849,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Strong builder and design-system app for bringing design context into implementation and for later writing structured design work back to Figma.",
     supportLabel: "Needs richer auth",
     supportNote:
-      "Figma's remote MCP endpoint is official, but it depends on OAuth and supported-client access that the current PolyNet connector should not pretend to own yet.",
+      "Figma's remote MCP endpoint is official, but it depends on OAuth and supported-client access that the current Polynet connector should not pretend to own yet.",
     heroNote:
       "Best for product communities, design systems, UI implementation, and builder workflows.",
     capabilities: [
@@ -1872,7 +1872,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth",
       note:
-        "Figma should stay catalog-first until PolyNet supports hosted OAuth MCP connections and the client allowlist path is confirmed.",
+        "Figma should stay catalog-first until Polynet supports hosted OAuth MCP connections and the client allowlist path is confirmed.",
     },
   },
   {
@@ -1940,7 +1940,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth or custom endpoint",
       note:
-        "YouTube should be catalog-first until we choose between Pipedream, a community server, or a PolyNet-owned transcript and channel-intelligence connector.",
+        "YouTube should be catalog-first until we choose between Pipedream, a community server, or a Polynet-owned transcript and channel-intelligence connector.",
     },
   },
   {
@@ -1953,11 +1953,11 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     supportNote:
       "Zapier provides MCP server infrastructure and embeddable MCP docs, but each user still needs a Zapier account, server setup, and app-level authentication.",
     heroNote:
-      "Best for long-tail automations once PolyNet can expose a governed connector backplane.",
+      "Best for long-tail automations once Polynet can expose a governed connector backplane.",
     capabilities: [
       "Route agents into thousands of Zapier-supported app actions.",
       "Use Zapier-managed app authentication and action configuration.",
-      "Cover long-tail integrations without making them first-party PolyNet surfaces.",
+      "Cover long-tail integrations without making them first-party Polynet surfaces.",
     ],
     websiteUrl: "https://zapier.com",
     docsUrl: "https://docs.zapier.com/mcp/quickstart",
@@ -1974,7 +1974,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Zapier MCP server",
       note:
-        "Zapier is strategically valuable, but PolyNet should integrate it as a governed backplane rather than a generic unbounded action surface.",
+        "Zapier is strategically valuable, but Polynet should integrate it as a governed backplane rather than a generic unbounded action surface.",
     },
   },
   {
@@ -1985,7 +1985,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "High-fit operator surface for agencies, creator funnels, client follow-up, calendars, contacts, and revenue operations.",
     supportLabel: "Needs verification",
     supportNote:
-      "HighLevel documents an MCP server, but PolyNet should verify the hosted endpoint, auth mode, and account scoping before marking it ready.",
+      "HighLevel documents an MCP server, but Polynet should verify the hosted endpoint, auth mode, and account scoping before marking it ready.",
     heroNote:
       "Best for agentic distribution businesses and community operators already running funnels and client workflows in HighLevel.",
     capabilities: [
@@ -2010,7 +2010,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authLabel: "OAuth or API key",
       secretLabel: "HighLevel API key",
       note:
-        "Catalog-first until the exact HighLevel MCP endpoint and per-location permission model are verified in PolyNet.",
+        "Catalog-first until the exact HighLevel MCP endpoint and per-location permission model are verified in Polynet.",
     },
   },
   {
@@ -2045,7 +2045,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Salesforce OAuth",
       note:
-        "Salesforce should stay catalog-first until PolyNet supports hosted OAuth MCP connections and org-scoped consent.",
+        "Salesforce should stay catalog-first until Polynet supports hosted OAuth MCP connections and org-scoped consent.",
     },
   },
   {
@@ -2056,7 +2056,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Strong CRM and marketing operations surface for founder funnels, lifecycle automation, deals, contacts, and customer context.",
     supportLabel: "Needs verification",
     supportNote:
-      "HubSpot has MCP documentation, but PolyNet still needs to verify the exact hosted auth flow and scopes before direct connect.",
+      "HubSpot has MCP documentation, but Polynet still needs to verify the exact hosted auth flow and scopes before direct connect.",
     heroNote:
       "Best for teams that want their agents to understand marketing, sales, and customer lifecycle state.",
     capabilities: [
@@ -2113,7 +2113,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth or managed connector",
       note:
-        "Jira should remain catalog-first until PolyNet chooses the Atlassian MCP/provider path and scopes it cleanly.",
+        "Jira should remain catalog-first until Polynet chooses the Atlassian MCP/provider path and scopes it cleanly.",
     },
   },
   {
@@ -2147,7 +2147,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Google OAuth",
       note:
-        "Gmail is catalog-first until PolyNet has a vetted Google Workspace MCP flow with explicit email scopes.",
+        "Gmail is catalog-first until Polynet has a vetted Google Workspace MCP flow with explicit email scopes.",
     },
   },
   {
@@ -2226,7 +2226,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Microsoft 365 communication surface for email, calendar context, customer follow-up, and operator workflows.",
     supportLabel: "Microsoft 365 path",
     supportNote:
-      "Outlook should be added as catalog-first until PolyNet has a vetted Microsoft Graph/OAuth MCP connector.",
+      "Outlook should be added as catalog-first until Polynet has a vetted Microsoft Graph/OAuth MCP connector.",
     heroNote:
       "Best for teams whose operating context lives in Microsoft 365.",
     capabilities: [
@@ -2249,7 +2249,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Microsoft OAuth",
       note:
-        "Outlook is catalog-first until PolyNet chooses a Microsoft 365 MCP path with clear Graph scopes.",
+        "Outlook is catalog-first until Polynet chooses a Microsoft 365 MCP path with clear Graph scopes.",
     },
   },
   {
@@ -2351,7 +2351,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Microsoft OAuth",
       note:
-        "SharePoint is catalog-first until PolyNet has a tenant-aware Microsoft 365 MCP connector.",
+        "SharePoint is catalog-first until Polynet has a tenant-aware Microsoft 365 MCP connector.",
     },
   },
   {
@@ -2396,7 +2396,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Support operations surface for tickets, help-center articles, customer context, and service workflows.",
     supportLabel: "Backplane MCP",
     supportNote:
-      "Zendesk should be catalog-first until PolyNet verifies a hosted MCP/provider path and safe write permissions.",
+      "Zendesk should be catalog-first until Polynet verifies a hosted MCP/provider path and safe write permissions.",
     heroNote:
       "Best for customer support teams and community operators with support queues.",
     capabilities: [
@@ -2430,7 +2430,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Automation backplane for teams that want self-hosted or managed workflows around agents, apps, and business systems.",
     supportLabel: "Automation backplane",
     supportNote:
-      "n8n is strategically useful, but PolyNet should treat it as a governed workflow backplane rather than a generic unbounded tool surface.",
+      "n8n is strategically useful, but Polynet should treat it as a governed workflow backplane rather than a generic unbounded tool surface.",
     heroNote:
       "Best for custom automations where Zapier is too constrained or teams want more control.",
     capabilities: [
@@ -2454,7 +2454,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authLabel: "Self-hosted or managed endpoint",
       secretLabel: "n8n credential",
       note:
-        "n8n belongs in Discover, but PolyNet needs an explicit workflow execution contract before direct install.",
+        "n8n belongs in Discover, but Polynet needs an explicit workflow execution contract before direct install.",
     },
   },
   {
@@ -2488,7 +2488,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth or managed connector",
       note:
-        "Make should stay catalog-first until PolyNet chooses a trusted provider path and workflow approval model.",
+        "Make should stay catalog-first until Polynet chooses a trusted provider path and workflow approval model.",
     },
   },
   {
@@ -2499,7 +2499,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Strong creative capability for founder education, multilingual community updates, onboarding videos, and avatar-based summaries.",
     supportLabel: "Needs richer auth",
     supportNote:
-      "HeyGen documents MCP support with OAuth tied to a web plan; the current PolyNet manual token connector should not claim direct readiness.",
+      "HeyGen documents MCP support with OAuth tied to a web plan; the current Polynet manual token connector should not claim direct readiness.",
     heroNote:
       "Best for turning community knowledge and founder updates into generated video.",
     capabilities: [
@@ -2522,7 +2522,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth",
       note:
-        "HeyGen belongs in the creative catalog, but direct install should wait for hosted OAuth MCP support inside PolyNet.",
+        "HeyGen belongs in the creative catalog, but direct install should wait for hosted OAuth MCP support inside Polynet.",
     },
   },
   {
@@ -2557,7 +2557,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: "oauth",
       authLabel: "OAuth",
       note:
-        "Higgsfield should stay planned until PolyNet has an async media job contract, provider credit guardrails, and artifact storage/display flow.",
+        "Higgsfield should stay planned until Polynet has an async media job contract, provider credit guardrails, and artifact storage/display flow.",
     },
   },
   {
@@ -2568,7 +2568,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Agent-oriented video authoring framework for composing videos as web documents and rendering them into production media.",
     supportLabel: "Workspace CLI skill",
     supportNote:
-      "HyperFrames uses PolyNet's existing project workspace tools when a workspace is active. It is not a hosted remote MCP connector.",
+      "HyperFrames uses Polynet's existing project workspace tools when a workspace is active. It is not a hosted remote MCP connector.",
     heroNote:
       "Best for builder communities that want agents to generate video from structured HTML scenes.",
     capabilities: [
@@ -2603,7 +2603,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Developer-native video framework with an official documentation MCP server and strong fit for technical video-generation workflows.",
     supportLabel: "Local MCP only",
     supportNote:
-      "Remotion's documented MCP path uses a local npm server for documentation context, so it does not fit PolyNet's hosted remote connector yet.",
+      "Remotion's documented MCP path uses a local npm server for documentation context, so it does not fit Polynet's hosted remote connector yet.",
     heroNote:
       "Best for developer communities building programmable videos, explainers, and generated motion graphics.",
     capabilities: [
@@ -2626,7 +2626,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Local stdio MCP",
       note:
-        "Catalog only until PolyNet supports a bounded local/sandbox execution bridge; the web runtime must not execute local stdio tools.",
+        "Catalog only until Polynet supports a bounded local/sandbox execution bridge; the web runtime must not execute local stdio tools.",
     },
   },
   {
@@ -2660,7 +2660,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth",
       note:
-        "Slack should stay catalog-first until PolyNet supports the right auth and approval path.",
+        "Slack should stay catalog-first until Polynet supports the right auth and approval path.",
     },
   },
   {
@@ -2694,7 +2694,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth or managed connector",
       note:
-        "Discord should stay catalog-first until PolyNet chooses a trusted connector and defines safe read/write moderation boundaries.",
+        "Discord should stay catalog-first until Polynet chooses a trusted connector and defines safe read/write moderation boundaries.",
     },
   },
   {

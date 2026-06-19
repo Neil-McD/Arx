@@ -106,7 +106,7 @@ function readEnv(name: string): string {
 
 function buildAllowedMcpOrigins(): Set<string> {
   const out = new Set<string>();
-  // MCP hosts are a different trust boundary than the PolyNet SPA/web origins.
+  // MCP hosts are a different trust boundary than the Polynet SPA/web origins.
   // Remote MCP clients may also omit Origin entirely, so only validate the header
   // when it is present and compare it against the dedicated MCP allowlist.
   const rawList = readEnv("ARX_ALLOWED_MCP_ORIGINS");
@@ -1577,7 +1577,7 @@ async function handleMcpPost(args: {
     return mcpUnauthorizedResponse(
       req,
       jsonResponse,
-      "Authorization required to connect to PolyNet MCP.",
+      "Authorization required to connect to Polynet MCP.",
     );
   }
   const actor = auth.actor;
@@ -1619,7 +1619,7 @@ async function handleMcpPost(args: {
           version: "0.1.0-alpha",
         },
         instructions:
-          "PolyNet MCP alpha exposes provider-side workspace tools over remote HTTP. MCP connection and tool calls require PolyNet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
+          "Polynet MCP alpha exposes provider-side workspace tools over remote HTTP. MCP connection and tool calls require Polynet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
       },
       {
         "MCP-Protocol-Version": negotiatedVersion,

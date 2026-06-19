@@ -16,7 +16,7 @@ export function WebSignOutConfirmModal(props: WebSignOutConfirmModalProps) {
         <div className="modal-header resource-delete-header">
           <div className="resource-delete-copy">
             <div className="resource-viewer-eyebrow">Sign out</div>
-            <h2 className="resource-delete-title">Sign out of PolyNet?</h2>
+            <h2 className="resource-delete-title">Sign out of Polynet?</h2>
             <div className="resource-modal-subtitle">
               You&apos;ll be signed out on this device and can sign back in whenever you want.
             </div>

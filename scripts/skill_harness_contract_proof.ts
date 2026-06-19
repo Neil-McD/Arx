@@ -529,11 +529,11 @@ function proveExplicitOnboardingCanarySkill() {
     projectId: null,
     harnessName: "chat_tools",
     inferenceSource: "test",
-    latestUserText: "$onboarding-guide introduce me to PolyNet.",
+    latestUserText: "$onboarding-guide introduce me to Polynet.",
     messages: [
       {
         role: "user",
-        content: "$onboarding-guide introduce me to PolyNet.",
+        content: "$onboarding-guide introduce me to Polynet.",
       },
     ],
     allowedToolNames: [],

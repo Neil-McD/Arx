@@ -31,7 +31,7 @@ export const PLATFORM_ONBOARDING_GUIDE_SKILL: PlatformSkillSummary = {
   name: "Onboarding Guide",
   mentionToken: "onboarding-guide",
   description:
-    "Introduce new users to PolyNet and guide them toward their first useful action.",
+    "Introduce new users to Polynet and guide them toward their first useful action.",
   scope: "platform",
   locked: true,
   canDisable: false,

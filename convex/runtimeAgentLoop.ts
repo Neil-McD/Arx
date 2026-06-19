@@ -99,7 +99,7 @@ import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryE
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
-import { createPolyNetExecutionSession } from "./runtimeExecutionSession";
+import { createPolynetExecutionSession } from "./runtimeExecutionSession";
 import {
   type ActiveRuntimeToolBatchTelemetry,
   type RuntimeToolBatchExecutionMode,
@@ -1413,7 +1413,7 @@ async function executeRetrievalAgentLoop(
     resolvedHarness.activeCommunityModule?.attachedSkills ?? [];
   const selectedCommunitySkills =
     resolvedHarness.activeCommunityModule?.selectedSkills ?? [];
-  const executionSession = createPolyNetExecutionSession({
+  const executionSession = createPolynetExecutionSession({
     ctx: params.ctx,
     userId: params.userId,
     authSubject: params.authSubject,

@@ -1,6 +1,6 @@
 # Workspace Computer Provider Contract
 
-PolyNet's product authority is still the project record. A workspace computer is
+Polynet's product authority is still the project record. A workspace computer is
 the provider-backed machine attached to that project while tools, terminals,
 previews, and file inspection need execution.
 
@@ -58,9 +58,9 @@ migration/cleanup is a separate lifecycle operation.
 
 ## Project Resource Truth
 
-The `cloudProjects` row is the PolyNet source of truth for resource ownership and
+The `cloudProjects` row is the Polynet source of truth for resource ownership and
 retention policy. Provider state is evidence from Blaxel; retention state is
-PolyNet policy.
+Polynet policy.
 
 Volume truth:
 
@@ -94,7 +94,7 @@ Actual deletion remains a separate reconciler responsibility.
 
 Resource admission is separate from compute billing.
 
-Project and volume admission uses PolyNet-owned truth:
+Project and volume admission uses Polynet-owned truth:
 
 - all accounts: five active project volumes
 - first materialization requires purchased/prepaid tool balance or a card
@@ -130,7 +130,7 @@ same project workspace, but volume creation must pass resource admission first.
 
 ## Stale Sandbox Reconciliation
 
-The project record remains PolyNet's source of truth for the current workspace
+The project record remains Polynet's source of truth for the current workspace
 computer pointer, but the provider owns whether that sandbox still exists. Blaxel
 can delete an idle sandbox through lifecycle policy while the durable project
 volume remains valid.
@@ -163,7 +163,7 @@ resources delete the Blaxel sandbox first, then delete the Blaxel volume;
 missing provider resources count as already cleaned up.
 
 For Blaxel, `releaseWorkspaceComputerIfIdle` does not delete the sandbox.
-Release is a PolyNet-side acknowledgement that the provider can move the sandbox
+Release is a Polynet-side acknowledgement that the provider can move the sandbox
 through automatic standby/expiration according to its lifecycle policy. Because
 Blaxel standby is automatic rather than a confirmed manual stop, accounting must
 include the explicit auto-standby grace window before clearing the active project
@@ -248,7 +248,7 @@ staging workspace path, these checks must stay true:
   `glob`, `grep`, `sha256`, and `edit` all use the same provider-neutral path
   chat uses.
 - The Blaxel resource inventory diagnostic can list provider volumes/sandboxes
-  and classify them against PolyNet `cloudProjects` rows without creating,
+  and classify them against Polynet `cloudProjects` rows without creating,
   mutating, or deleting provider resources. The public diagnostic action is
   production-allowed but operator-gated because provider resource names and
   labels are operational infrastructure data. The unauthenticated internal

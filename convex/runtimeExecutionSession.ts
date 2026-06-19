@@ -198,7 +198,7 @@ async function requireRuntimeAccessibleTerminalRow(params: {
   };
 }
 
-export function createPolyNetExecutionSession(params: {
+export function createPolynetExecutionSession(params: {
   ctx: any;
   userId: any;
   authSubject?: string | null;

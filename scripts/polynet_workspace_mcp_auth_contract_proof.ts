@@ -111,12 +111,12 @@ assertIncludes(
 );
 assertIncludes(
   contract,
-  "PolyNet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client",
+  "Polynet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client",
   "OAuth role separation",
 );
 assertIncludes(
   contract,
-  "The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet.",
+  "The local OAuth callback completion page is owned by the external MCP client or adapter, not by Polynet.",
   "OAuth callback UI ownership boundary",
 );
 assertIncludes(
@@ -171,7 +171,7 @@ assertIncludes(authSetup, "https://<POLYNET_ORIGIN>/runtime/mcp", "canonical MCP
 assertIncludes(authSetup, "## 4) Hosted MCP OAuth Continuity", "hosted MCP OAuth continuity setup section");
 assertIncludes(
   authSetup,
-  "one harness profile + one PolyNet MCP config + one successful OAuth login",
+  "one harness profile + one Polynet MCP config + one successful OAuth login",
   "hosted MCP OAuth continuity invariant",
 );
 assertIncludes(authSetup, "Client ID Metadata Document", "WorkOS CIMD setup guidance");
@@ -188,7 +188,7 @@ assertIncludes(
 );
 assertIncludes(
   authSetup,
-  "Existing harnesses that already have `polymcp` configured may keep using it as the same PolyNet MCP server",
+  "Existing harnesses that already have `polymcp` configured may keep using it as the same Polynet MCP server",
   "hosted MCP OAuth legacy polymcp alias compatibility",
 );
 assertIncludes(
@@ -468,7 +468,7 @@ const connectionAuthBlock = httpMcp.slice(connectionAuthIndex, initializeIndex);
 assertIncludes(connectionAuthBlock, "mcpUnauthorizedResponse", "authenticated MCP connection challenge");
 assertIncludes(
   connectionAuthBlock,
-  "Authorization required to connect to PolyNet MCP.",
+  "Authorization required to connect to Polynet MCP.",
   "authenticated MCP connection challenge message",
 );
 

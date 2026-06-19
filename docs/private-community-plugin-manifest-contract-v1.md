@@ -2,7 +2,7 @@
 
 Status: active contract
 
-This contract defines the first PolyNet private plugin import primitive. It is intentionally smaller than Codex, Claude Code, or OpenCLAW plugin systems.
+This contract defines the first Polynet private plugin import primitive. It is intentionally smaller than Codex, Claude Code, or OpenCLAW plugin systems.
 
 ## First Principle
 
@@ -57,7 +57,7 @@ MCP entries are setup candidates only. Runtime execution still comes from user-o
 Allowed MCP fields:
 
 - `name`: optional source label. Compiled setup plans use the canonical reviewed registry name, not this value.
-- `mcpRegistryId`: optional reviewed PolyNet registry id.
+- `mcpRegistryId`: optional reviewed Polynet registry id.
 - `endpointUrl`: optional HTTPS endpoint.
 - `authType`: optional `none`, `api_key`, `bearer`, or `oauth`.
 - `transport`: optional transport label.

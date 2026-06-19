@@ -190,7 +190,7 @@ assert.match(
 assert.match(
   inventory,
   /listCloudProjectsForWorkspaceResourceInventoryInternal/,
-  "provider inventory diagnostic must compare provider truth against PolyNet project truth",
+  "provider inventory diagnostic must compare provider truth against Polynet project truth",
 );
 assert.match(
   inventory,
@@ -266,12 +266,12 @@ assert.match(
 assert.match(
   projects,
   /listCloudProjectsForWorkspaceResourceInventoryInternal/,
-  "PolyNet project inventory rows must come from a dedicated internal query",
+  "Polynet project inventory rows must come from a dedicated internal query",
 );
 assert.match(
   projects,
   /\.query\("cloudProjects"\)/,
-  "project inventory query must read PolyNet project truth",
+  "project inventory query must read Polynet project truth",
 );
 
 assert.match(

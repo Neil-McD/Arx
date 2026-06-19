@@ -7,7 +7,7 @@ import { parseNativeProviderFunctionCallItem } from "../shared/nativeToolProvide
 
 const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 const CHATGPT_CODEX_ORIGINATOR = "codex_cli_rs";
-const CHATGPT_CODEX_USER_AGENT = "codex_cli_rs/0.0.0 (PolyNet cloud; Convex; web)";
+const CHATGPT_CODEX_USER_AGENT = "codex_cli_rs/0.0.0 (Polynet cloud; Convex; web)";
 const CHATGPT_CODEX_INSTALLATION_ID = "6e344508-6ff4-44b0-a158-ef6b596b66f2";
 const CHATGPT_CODEX_RETRY_DELAY_MS = 250;
 

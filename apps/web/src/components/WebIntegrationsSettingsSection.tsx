@@ -43,39 +43,39 @@ const POLYNET_MCP_GENERIC_HTTP_CONFIG = JSON.stringify(
   2,
 );
 const POLYNET_MCP_SETUP_BUNDLE = [
-  "# PolyNet Setup Packet",
+  "# Polynet Setup Packet",
   "",
-  "You are helping the user connect this AI harness to PolyNet.",
+  "You are helping the user connect this AI harness to Polynet.",
   "",
   "Goal:",
-  "Connect PolyNet so this harness can access the user's PolyNet communities, resources, and workspace memory.",
+  "Connect Polynet so this harness can access the user's Polynet communities, resources, and workspace memory.",
   "",
-  "PolyNet MCP endpoint:",
+  "Polynet MCP endpoint:",
   POLYNET_MCP_ENDPOINT_URL,
   "",
   "## Operating Rules",
   "",
-  "- Keep the setup focused on PolyNet.",
+  "- Keep the setup focused on Polynet.",
   "- Do not ask for or paste access tokens.",
   "- Do not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
   "- If this harness cannot run a setup command or open an interactive auth panel, give the user the exact next command or click path and stop.",
-  "- If PolyNet is already configured but says it needs authentication, skip setup debugging and move directly to sign-in.",
+  "- If Polynet is already configured but says it needs authentication, skip setup debugging and move directly to sign-in.",
   "",
   "## Existing `polymcp` Installs",
   "",
   "New setup should use the server alias `polynet`.",
   "",
-  "If this harness already has `polymcp` configured, treat it as the same PolyNet server. Do not install both unless the user explicitly wants to migrate the local alias.",
+  "If this harness already has `polymcp` configured, treat it as the same Polynet server. Do not install both unless the user explicitly wants to migrate the local alias.",
   "",
   "If `polymcp` needs authentication, authenticate that existing server instead of re-adding `polynet`.",
   "",
   "## OAuth Link Handling",
   "",
-  "If this harness receives a PolyNet authorization URL, do not paste the raw full URL unless there is no other option.",
+  "If this harness receives a Polynet authorization URL, do not paste the raw full URL unless there is no other option.",
   "",
   "Prefer this order:",
   "1. Open the authorization URL automatically if this harness can open browser links.",
-  "2. Otherwise show a markdown link: [Sign in to PolyNet](AUTHORIZATION_URL).",
+  "2. Otherwise show a markdown link: [Sign in to Polynet](AUTHORIZATION_URL).",
   "3. Only show the raw authorization URL if the harness cannot open links and cannot render markdown links.",
   "",
   "Only ask the user to paste the localhost callback URL back if the browser callback fails or says the page cannot be reached.",
@@ -85,15 +85,15 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "## What To Do",
   "",
   "1. Identify which harness you are running in.",
-  "2. Add PolyNet with the matching setup path below, unless `polynet` or legacy `polymcp` is already configured.",
+  "2. Add Polynet with the matching setup path below, unless `polynet` or legacy `polymcp` is already configured.",
   "3. If authentication is needed, give the user one clear sign-in action for this harness.",
-  "4. After sign-in, verify the connection by listing the user's PolyNet workspaces.",
+  "4. After sign-in, verify the connection by listing the user's Polynet workspaces.",
   "5. If this already-open chat cannot see the tools after sign-in, tell the user to start a fresh chat or reconnect tools.",
-  "6. Tell the user when PolyNet is connected.",
+  "6. Tell the user when Polynet is connected.",
   "",
   "## Claude Code",
   "",
-  "Add PolyNet:",
+  "Add Polynet:",
   "",
   "```bash",
   POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND,
@@ -107,9 +107,9 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "/mcp",
   "```",
   "",
-  "Run `/mcp`, select `polynet`, then complete PolyNet sign-in in the browser.",
+  "Run `/mcp`, select `polynet`, then complete Polynet sign-in in the browser.",
   "",
-  "If Claude Code gives you an authorization URL, open it if possible. If you must show it to the user, show it as [Sign in to PolyNet](AUTHORIZATION_URL), not as a raw URL block.",
+  "If Claude Code gives you an authorization URL, open it if possible. If you must show it to the user, show it as [Sign in to Polynet](AUTHORIZATION_URL), not as a raw URL block.",
   "",
   "If `polynet` or legacy `polymcp` already appears as `Needs authentication`, do not re-add it. Ask the user to run `/mcp`, select that server, and sign in.",
   "",
@@ -121,7 +121,7 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   POLYNET_MCP_CODEX_DURABLE_CONFIG,
   "```",
   "",
-  "Add PolyNet:",
+  "Add Polynet:",
   "",
   "```bash",
   POLYNET_MCP_CODEX_ADD_COMMAND,
@@ -159,20 +159,20 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "",
   "## Verify",
   "",
-  "After setup, use PolyNet to list the user's PolyNet workspaces.",
+  "After setup, use Polynet to list the user's Polynet workspaces.",
   "",
-  "If PolyNet tools are not visible after sign-in, tell the user to start a fresh chat or reconnect tools. Do not repeat OAuth unless the harness still says authentication is required.",
+  "If Polynet tools are not visible after sign-in, tell the user to start a fresh chat or reconnect tools. Do not repeat OAuth unless the harness still says authentication is required.",
   "",
   "If successful, tell the user:",
   "",
   "```text",
-  "PolyNet is connected. I can now use your PolyNet communities, resources, and workspace memory.",
+  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory.",
   "```",
   "",
   "## Usage Guidance",
   "",
-  "Use PolyNet when the user asks about:",
-  "- PolyNet communities",
+  "Use Polynet when the user asks about:",
+  "- Polynet communities",
   "- workspace memory",
   "- accepted community context",
   "- resources",
@@ -181,7 +181,7 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "- warnings",
   "- outcomes",
   "",
-  "Before using workspace-specific memory, list or open the relevant PolyNet workspace.",
+  "Before using workspace-specific memory, list or open the relevant Polynet workspace.",
   "",
   "Treat workspace context IDs as opaque selectors. Do not invent them.",
 ].join("\n");
@@ -494,23 +494,23 @@ export function WebIntegrationsSettingsSection(
               <path d="M4 12h16" />
               <path d="M7 7h10v10H7z" />
             </svg>
-            PolyNet
+            Polynet
           </div>
           <div className="settings-section-desc">
             Connect Codex, Claude Code, Cursor, or another AI harness to your
-            PolyNet workspace memory.
+            Polynet workspace memory.
           </div>
           <div className="integrations-app-list">
             <div className="integration-mounted-row polymcp-access-row">
               <div className="integration-mounted-top">
                 <div className="integration-mounted-identity">
                   <DiscoverCatalogLogo
-                    name="PolyNet"
+                    name="Polynet"
                     logoUrl="/landing-polynet/logo.png"
                   />
                   <div className="integration-mounted-main">
                     <div className="integration-mounted-title-row">
-                      <strong>PolyNet</strong>
+                      <strong>Polynet</strong>
                       <span className="integration-status-pill">
                         {POLYNET_MCP_TOOL_COUNT_LABEL}
                       </span>
@@ -529,7 +529,7 @@ export function WebIntegrationsSettingsSection(
                     type="button"
                     className="settings-cta polymcp-copy-action"
                     onClick={() => void handleCopyPolyMcpSetup()}
-                    aria-label="Copy PolyNet setup"
+                    aria-label="Copy Polynet setup"
                   >
                     <Copy aria-hidden="true" />
                     {polyMcpCopyState === "copied"

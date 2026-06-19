@@ -6282,7 +6282,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-width: 0;
 }
 
-/* Fill variant: a full-height, non-scrolling column so the child (PolyNet graph)
+/* Fill variant: a full-height, non-scrolling column so the child (Polynet graph)
    sizes to the window frame instead of a fixed box that overflows/scrolls. */
 .community-tab-scroll--fill {
   overflow: hidden;

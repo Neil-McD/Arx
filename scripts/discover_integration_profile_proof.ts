@@ -304,7 +304,7 @@ function main() {
   );
   assert.ok(
     stripe.personalConnect.note.includes("does not become authoritative"),
-    "Stripe copy must preserve the PolyNet billing authority boundary",
+    "Stripe copy must preserve the Polynet billing authority boundary",
   );
   const stripeProfile = resolveDiscoverAppIntegrationProfile(stripe);
   assert.equal(stripeProfile.adapterKind, "remote_mcp_token");

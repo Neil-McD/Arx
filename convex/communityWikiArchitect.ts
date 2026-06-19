@@ -60,7 +60,7 @@ const COMMUNITY_RESOURCE_CONTENT_WRITER_MAX_SEED_SOURCE_UNITS = 6;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_UNIT_CHARS = 2_500;
 const COMMUNITY_RESOURCE_CONTENT_WRITER_BODY_CHARS = 20_000;
 
-const COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT = `You are the Resource Drafter for a PolyNet community.
+const COMMUNITY_RESOURCE_CONTENT_WRITER_PROMPT = `You are the Resource Drafter for a Polynet community.
 
 Write ONE useful draft resource page from ONE ready source-inbox item.
 
