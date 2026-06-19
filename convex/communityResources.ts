@@ -3833,11 +3833,12 @@ async function requireCommunityResourceDirectoryToolAccess(args: {
   authSubject?: string | null;
   communityId: any;
 }): Promise<any> {
-  const userId = await resolveUserIdForAuthenticatedRequest({
-    ctx: args.ctx,
-    userId: args.userId,
-    authSubject: args.authSubject ?? null,
-  });
+  const userId =
+    args.userId ??
+    await resolveUserIdForAuthenticatedRequest({
+      ctx: args.ctx,
+      authSubject: args.authSubject ?? null,
+    });
   await requireCommunityChatAccess({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -5451,6 +5452,64 @@ async function buildCommunityResourceBuilderModuleReadPayload(args: {
   };
 }
 
+async function listCommunityResourceBuilderDirectoryCore(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  limit?: number;
+}) {
+  await requireCommunityManager({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const limit = Math.max(
+    1,
+    Math.min(
+      COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT,
+      Math.floor(args.limit ?? COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT),
+    ),
+  );
+  const [modules, resources] = await Promise.all([
+    args.ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect() as Promise<CommunityResourceModuleLike[]>,
+    args.ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect() as Promise<CommunityResourceLike[]>,
+  ]);
+  const moduleNameMap = new Map(
+    modules.map((module) => [normalizeIdValue(module._id), module.name]),
+  );
+  return {
+    ok: true,
+    kind: "community_resource_builder_directory",
+    limit,
+    total_resources: resources.length,
+    truncated: resources.length > limit,
+    health: buildCommunityResourceBuilderHealthReportFromRows({
+      modules,
+      resources,
+      nowMs: Date.now(),
+    }),
+    modules: await Promise.all(
+      modules
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder || b.createdAt - a.createdAt)
+        .map((row) => mapCommunityResourceModuleRow(args.ctx, row)),
+    ),
+    resources: await Promise.all(
+      resources
+        .slice()
+        .sort(compareCommunityResources)
+        .slice(0, limit)
+        .map((row) => mapCompactCommunityResourceBuilderListRow(row, moduleNameMap)),
+    ),
+  };
+}
+
 export const listCommunityResourceBuilderDirectory = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -5464,58 +5523,87 @@ export const listCommunityResourceBuilderDirectory = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({
+    return await listCommunityResourceBuilderDirectoryCore({
       ctx,
-      communityId: args.communityId,
       userId,
+      communityId: args.communityId,
+      limit: args.limit,
     });
-    const limit = Math.max(
-      1,
-      Math.min(
-        COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT,
-        Math.floor(args.limit ?? COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT),
-      ),
-    );
-    const [modules, resources] = await Promise.all([
-      ctx.db
-        .query("communityResourceModules" as any)
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect() as Promise<CommunityResourceModuleLike[]>,
-      ctx.db
-        .query("communityResources" as any)
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect() as Promise<CommunityResourceLike[]>,
-    ]);
-    const moduleNameMap = new Map(
-      modules.map((module) => [normalizeIdValue(module._id), module.name]),
-    );
-    return {
-      ok: true,
-      kind: "community_resource_builder_directory",
-      limit,
-      total_resources: resources.length,
-      truncated: resources.length > limit,
-      health: buildCommunityResourceBuilderHealthReportFromRows({
-        modules,
-        resources,
-        nowMs: Date.now(),
-      }),
-      modules: await Promise.all(
-        modules
-          .slice()
-          .sort((a, b) => a.sortOrder - b.sortOrder || b.createdAt - a.createdAt)
-          .map((row) => mapCommunityResourceModuleRow(ctx, row)),
-      ),
-      resources: await Promise.all(
-        resources
-          .slice()
-          .sort(compareCommunityResources)
-          .slice(0, limit)
-          .map((row) => mapCompactCommunityResourceBuilderListRow(row, moduleNameMap)),
-      ),
-    };
   },
 });
+
+export const listCommunityResourceBuilderDirectoryInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await listCommunityResourceBuilderDirectoryCore({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      limit: args.limit,
+    }),
+});
+
+async function readCommunityResourceBuilderResourceCore(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  ref?: string;
+  resourceId?: any;
+  moduleId?: any;
+}) {
+  await requireCommunityManager({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const ref = String(args.ref ?? args.resourceId ?? args.moduleId ?? "").trim();
+  if (!ref) throw new Error("community_resource_builder_read_ref_required");
+
+  const [modules, resources] = await Promise.all([
+    args.ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect() as Promise<CommunityResourceModuleLike[]>,
+    args.ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect() as Promise<CommunityResourceLike[]>,
+  ]);
+  const moduleNameMap = buildModuleNameMap(modules);
+  const resolved = resolveCommunityResourceBuilderRef({
+    communityId: args.communityId,
+    ref,
+    modules,
+    resources,
+    moduleNameMap,
+  });
+  if (!resolved.ok) {
+    return {
+      kind: "community_resource_builder_read",
+      ...resolved,
+    };
+  }
+  if (resolved.target_type === "resource") {
+    return {
+      ok: true,
+      kind: "community_resource_builder_read",
+      target_type: "resource",
+      resource: await mapCommunityResourceRowWithBody(args.ctx, resolved.resource),
+    };
+  }
+  return await buildCommunityResourceBuilderModuleReadPayload({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    module: resolved.module,
+    sourceInbox: resolved.sourceInbox,
+    resources,
+    moduleNameMap,
+  });
+}
 
 export const readCommunityResourceBuilderResource = query({
   args: {
@@ -5532,56 +5620,83 @@ export const readCommunityResourceBuilderResource = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({
+    return await readCommunityResourceBuilderResourceCore({
       ctx,
-      communityId: args.communityId,
       userId,
-    });
-    const ref = String(args.ref ?? args.resourceId ?? args.moduleId ?? "").trim();
-    if (!ref) throw new Error("community_resource_builder_read_ref_required");
-
-    const [modules, resources] = await Promise.all([
-      ctx.db
-        .query("communityResourceModules" as any)
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect() as Promise<CommunityResourceModuleLike[]>,
-      ctx.db
-        .query("communityResources" as any)
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect() as Promise<CommunityResourceLike[]>,
-    ]);
-    const moduleNameMap = buildModuleNameMap(modules);
-    const resolved = resolveCommunityResourceBuilderRef({
       communityId: args.communityId,
-      ref,
-      modules,
-      resources,
-      moduleNameMap,
-    });
-    if (!resolved.ok) {
-      return {
-        kind: "community_resource_builder_read",
-        ...resolved,
-      };
-    }
-    if (resolved.target_type === "resource") {
-      return {
-        ok: true,
-        kind: "community_resource_builder_read",
-        target_type: "resource",
-        resource: await mapCommunityResourceRowWithBody(ctx, resolved.resource),
-      };
-    }
-    return await buildCommunityResourceBuilderModuleReadPayload({
-      ctx,
-      communityId: args.communityId,
-      module: resolved.module,
-      sourceInbox: resolved.sourceInbox,
-      resources,
-      moduleNameMap,
+      ref: args.ref,
+      resourceId: args.resourceId,
+      moduleId: args.moduleId,
     });
   },
 });
+
+export const readCommunityResourceBuilderResourceInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    ref: v.optional(v.string()),
+    resourceId: v.optional(v.union(v.id("communityResources"), v.null())),
+    moduleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
+  },
+  handler: async (ctx, args) =>
+    await readCommunityResourceBuilderResourceCore({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      ref: args.ref,
+      resourceId: args.resourceId,
+      moduleId: args.moduleId,
+    }),
+});
+
+async function stageCommunityResourceBuilderChangesetCore(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  summary: string;
+  operations: unknown[];
+}) {
+  await requireCommunityManager({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const nowMs = Date.now();
+  const summary = normalizeChangesetSummary(args.summary);
+  const operations = normalizeCommunityResourceBuilderChangesetOperations(args.operations);
+  const preflight = await buildCommunityResourceBuilderChangesetPreflight({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    operations,
+    nowMs,
+  });
+  const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+  const id = await args.ctx.db.insert("communityResourceBuilderChangesets" as any, {
+    communityId: args.communityId,
+    createdByUserId: args.userId,
+    status: "staged",
+    summary,
+    operations,
+    preflight,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return {
+    ok: true,
+    kind: "community_resource_builder_changeset_staged",
+    changeset_id: normalizeIdValue(id),
+    community_id: normalizeIdValue(args.communityId),
+    status: "staged",
+    summary,
+    operation_count: operations.length,
+    preview_items: preview.preview_items,
+    preview_total_count: preview.total_count,
+    preview_limit: preview.preview_limit,
+    warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
+    preflight,
+  };
+}
 
 export const stageCommunityResourceBuilderChangeset = mutation({
   args: {
@@ -5597,46 +5712,31 @@ export const stageCommunityResourceBuilderChangeset = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({
+    return await stageCommunityResourceBuilderChangesetCore({
       ctx,
       communityId: args.communityId,
       userId,
+      summary: args.summary,
+      operations: args.operations,
     });
-    const nowMs = Date.now();
-    const summary = normalizeChangesetSummary(args.summary);
-    const operations = normalizeCommunityResourceBuilderChangesetOperations(args.operations);
-    const preflight = await buildCommunityResourceBuilderChangesetPreflight({
-      ctx,
-      communityId: args.communityId,
-      operations,
-      nowMs,
-    });
-    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
-    const id = await ctx.db.insert("communityResourceBuilderChangesets" as any, {
-      communityId: args.communityId,
-      createdByUserId: userId,
-      status: "staged",
-      summary,
-      operations,
-      preflight,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return {
-      ok: true,
-      kind: "community_resource_builder_changeset_staged",
-      changeset_id: normalizeIdValue(id),
-      community_id: normalizeIdValue(args.communityId),
-      status: "staged",
-      summary,
-      operation_count: operations.length,
-      preview_items: preview.preview_items,
-      preview_total_count: preview.total_count,
-      preview_limit: preview.preview_limit,
-      warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
-      preflight,
-    };
   },
+});
+
+export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    summary: v.string(),
+    operations: v.array(v.any()),
+  },
+  handler: async (ctx, args) =>
+    await stageCommunityResourceBuilderChangesetCore({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      summary: args.summary,
+      operations: args.operations,
+    }),
 });
 
 export const getCommunityResourceBuilderChangesetStatus = query({

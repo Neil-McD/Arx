@@ -14,6 +14,7 @@ export const POLYNET_CODEX_WORKER_INGEST_PATH = "/runtime/polynet_codex_worker_i
 
 export type PolynetCodexWorkerIngestContext = {
   owner_id: string;
+  auth_subject: string | null;
   thread_id: string;
   run_id: string;
   assistant_message_key: string;
@@ -57,6 +58,7 @@ export function parsePolynetCodexWorkerIngestContext(
   const record = asRecord(value);
   if (!record) return null;
   const ownerId = String(record.owner_id ?? "").trim();
+  const authSubject = String(record.auth_subject ?? "").trim() || null;
   const threadId = String(record.thread_id ?? "").trim();
   const runId = String(record.run_id ?? "").trim();
   const assistantMessageKey = String(record.assistant_message_key ?? "").trim();
@@ -68,6 +70,7 @@ export function parsePolynetCodexWorkerIngestContext(
   if (!["free", "platform", "user_key", "chatgpt"].includes(inferenceSource)) return null;
   return {
     owner_id: ownerId,
+    auth_subject: authSubject,
     thread_id: threadId,
     run_id: runId,
     assistant_message_key: assistantMessageKey,

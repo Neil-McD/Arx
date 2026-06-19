@@ -1314,6 +1314,23 @@ export async function handleRuntimeTurnRequest(args: {
             : null;
           const workerToolTarget =
             workerPlatformTools.length > 0 ? buildPolynetCodexWorkerToolTarget() : null;
+          await streamAppendRunEvent({
+            eventType: "polynet_codex_worker_tools_projected",
+            eventKey: `${runId}:polynet_codex_worker_tools_projected:1`,
+            payload: {
+              run_id: runId,
+              tool_bridge_configured: Boolean(workerToolTarget),
+              platform_tool_count: workerPlatformTools.length,
+              platform_tool_names: workerPlatformTools.map((tool) => tool.name),
+              platform_tool_policies: workerPlatformTools.map((tool) => ({
+                tool_name: tool.name,
+                billing_policy: tool.billing_policy,
+                risk_level: tool.risk_level,
+                required_community_resource_lane:
+                  tool.required_community_resource_lane,
+              })),
+            },
+          });
           let workerRunTokens: {
             ingest: string;
             terminal: string | null;
@@ -1431,6 +1448,7 @@ export async function handleRuntimeTurnRequest(args: {
                     tool_url: workerToolTarget,
                     context: {
                       owner_id: String(actor.dbUserId),
+                      auth_subject: actor.authSubject ?? null,
                       thread_id: String(ownedThread._id),
                       run_id: runId,
                       assistant_message_key: assistantMessageKeyForRun,

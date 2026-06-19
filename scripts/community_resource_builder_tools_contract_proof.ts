@@ -21,6 +21,7 @@ const runtimeLifecycle = read("apps/web/src/controllers/useWebRuntimeRunLifecycl
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 
 assert.match(
   packageJson,
@@ -253,8 +254,8 @@ assert.match(
 );
 
 const builderListBody = resources.slice(
-  resources.indexOf("export const listCommunityResourceBuilderDirectory"),
-  resources.indexOf("export const readCommunityResourceBuilderResource"),
+  resources.indexOf("async function listCommunityResourceBuilderDirectoryCore"),
+  resources.indexOf("export const listCommunityResourceBuilderDirectoryInternal"),
 );
 assert.ok(builderListBody.length > 0, "builder list body should be discoverable");
 assert.doesNotMatch(
@@ -294,7 +295,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /readCommunityResourceBuilderResource[\s\S]*ref: v\.optional\(v\.string\(\)\)[\s\S]*resolveCommunityResourceBuilderRef/,
+  /readCommunityResourceBuilderResourceCore[\s\S]*ref\?: string[\s\S]*resolveCommunityResourceBuilderRef[\s\S]*readCommunityResourceBuilderResource[\s\S]*ref: v\.optional\(v\.string\(\)\)/,
   "builder read backend should accept and resolve semantic refs",
 );
 assert.match(
@@ -336,6 +337,11 @@ assert.match(
   resources,
   /stageCommunityResourceBuilderChangeset[\s\S]*buildCommunityResourceBuilderChangesetPreflight[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
   "staging should validate and store a changeset without applying resource writes",
+);
+assert.match(
+  runtimeAgentLoop,
+  /community_resource_builder_stage_changeset[\s\S]*internal\.communityResources\.stageCommunityResourceBuilderChangesetInternal/,
+  "runtime tool staging should use the internal mutation after worker/run authority is already validated",
 );
 assert.match(
   resources,

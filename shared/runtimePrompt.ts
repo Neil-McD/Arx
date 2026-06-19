@@ -471,20 +471,34 @@ function buildCommunityResourceLanePrompt(params: {
     params.allowedToolNames,
   );
   if (lane.lane === "builder" && hasBuilderTools) {
+    const canStageChangesets = params.allowedToolNames.includes(
+      "community_resource_builder_stage_changeset",
+    );
+    const canApplyChangesets = params.allowedToolNames.includes(
+      "community_resource_builder_apply_changeset",
+    );
     return [
       "COMMUNITY_RESOURCE_BUILDER_LANE",
       "The active user can build Resources for this exact community lens.",
       "Use builder-only resource state only for this community: drafts, review items, source inbox, imported source references, provenance, and health.",
       "For read-only member-style questions, follow the live Resources read workflow before using builder-only state.",
       "Broad requests like improve resources, clean this up, refactor knowledge, or organize references are discovery requests first.",
-      "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before staging any changeset.",
-      "Stage only an exact implementation proposal after the builder has agreed on the direction.",
-      "Apply only after explicit approval of the exact staged changeset, then verify by reading or listing affected resources.",
+      canStageChangesets
+        ? "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before staging any changeset."
+        : "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before proposing edits.",
+      canStageChangesets
+        ? "Stage only an exact implementation proposal after the builder has agreed on the direction."
+        : "Do not imply resource edits have been staged or saved unless a staging tool is actually available and has succeeded.",
+      canApplyChangesets
+        ? "Apply only after explicit approval of the exact staged changeset, then verify by reading or listing affected resources."
+        : "A staged changeset is a proposal only; do not say it is live or applied. Ask the builder to review and apply it through the approval flow.",
       "Builder-facing replies must translate resource tool results into product state: what exists now, what was saved, what is staged, what is live, what is unverified, and the next concrete builder decision.",
       "After source crawl, import, or source-inbox inspection, report source title, URL or domain, saved versus reused state, ready/failed/partial status, page count, source-unit count when visible, failed pages or units, and whether the material lives in source inbox, draft Resources, or live Resources.",
       "Do not expose internal ids, database ids, resource ids, category/module ids, source ids, crawl job ids, run ids, or changeset ids in builder-facing prose unless the user explicitly asks for debugging/internal details.",
       "Use human labels instead of ids: source title, category name, page title, status, and next action. Tool payloads may still use internal ids when required.",
-      "When approval is needed, ask for natural approval such as \"Apply it\" or \"Approve these changes\". Do not ask the builder to paste a changeset id.",
+      canApplyChangesets
+        ? "When approval is needed, ask for natural approval such as \"Apply it\" or \"Approve these changes\". Do not ask the builder to paste a changeset id."
+        : "When approval is needed, ask for natural approval such as \"Review this proposal\" or \"Apply this through the approval flow\". Do not ask the builder to paste a changeset id.",
     ].join("\n");
   }
   if (hasLiveTools) {
@@ -555,15 +569,33 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
     );
   }
   if (hasCommunityResourceBuilderTools(params.allowedToolNames)) {
+    const canStageChangesets = params.allowedToolNames.includes(
+      "community_resource_builder_stage_changeset",
+    );
+    const canApplyChangesets = params.allowedToolNames.includes(
+      "community_resource_builder_apply_changeset",
+    );
     toolGuidance.push(
       "- Resources Architect builder tools are builder-lane only and expose draft, review, source inbox, and health state that member resource tools intentionally hide.",
       "- Use community_resource_builder_list first; its health summary is the deterministic architecture preflight. Then use community_resource_builder_read with ref to inspect a wiki category, page, source, readable path, resources:// URI, or exact id before proposing edits. Tool payloads may still use module_id/module_name for the internal category container.",
       "- If community_resource_builder_read returns ambiguous_resource_builder_ref or resource_builder_ref_not_found, use the returned matches or suggested_refs and retry with the most specific directory_uri instead of stopping.",
-      "- For builder edits, explain what you found as product state, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset.",
+      canStageChangesets && canApplyChangesets
+        ? "- For builder edits, explain what you found as product state, align with the builder on direction, stage the smallest defensible changeset with community_resource_builder_stage_changeset, then wait for explicit builder approval before calling community_resource_builder_apply_changeset."
+        : canStageChangesets
+          ? "- For builder edits, explain what you found as product state, align with the builder on direction, then stage the smallest defensible changeset with community_resource_builder_stage_changeset as a proposal only. Do not claim the staged changeset is live or applied."
+          : "- For builder edits, explain what you found as product state, align with the builder on direction, and propose the smallest defensible change without claiming it was staged or saved.",
       "- You may propose delete_page or delete_category only when deletion is clearly justified. Prefer move/edit for ambiguous material. Do not delete source inbox records; delete_category is only for empty categories.",
-      "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation. Keep the changeset id internal; ask the builder for natural approval, not id-paste approval.",
-      "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",
     );
+    if (canApplyChangesets) {
+      toolGuidance.push(
+        "- Do not call community_resource_builder_apply_changeset just because a changeset exists. Apply only after the builder clearly confirms this exact staged changeset in the conversation. Keep the changeset id internal; ask the builder for natural approval, not id-paste approval.",
+        "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",
+      );
+    } else if (canStageChangesets) {
+      toolGuidance.push(
+        "- After staging a changeset, summarize the proposal, warnings, and exact next approval step. Keep the changeset id internal unless the user explicitly asks for debugging details.",
+      );
+    }
   }
   if (params.allowedToolNames.includes("community_write")) {
     toolGuidance.push(

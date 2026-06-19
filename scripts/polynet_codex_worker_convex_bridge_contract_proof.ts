@@ -149,8 +149,18 @@ assert.match(
 );
 assert.match(
   handlers,
+  /eventType: "polynet_codex_worker_tools_projected"[\s\S]*platform_tool_names[\s\S]*platform_tool_policies[\s\S]*required_community_resource_lane/,
+  "worker path must emit an auditable platform-tool projection receipt",
+);
+assert.match(
+  handlers,
   /mintPolynetCodexWorkerRunTokenSet\(\{[\s\S]*ownerId: String\(actor\.dbUserId\)[\s\S]*includeTerminal: Boolean\(workerTerminalTarget\)[\s\S]*includeTool: Boolean\(workerToolTarget\)/,
   "worker path must mint per-run scoped tokens only for projected bridge surfaces",
+);
+assert.match(
+  handlers,
+  /context: \{[\s\S]*owner_id: String\(actor\.dbUserId\),[\s\S]*auth_subject: actor\.authSubject \?\? null,[\s\S]*thread_id: String\(ownedThread\._id\)/,
+  "worker path must send the server-resolved auth subject in the signed bridge context",
 );
 assert.match(
   handlers,
@@ -227,6 +237,11 @@ assert.match(
 );
 assert.match(
   ingest,
+  /auth_subject: string \| null[\s\S]*const authSubject = String\(record\.auth_subject[\s\S]*auth_subject: authSubject/,
+  "shared worker context parser must preserve the server-resolved auth subject",
+);
+assert.match(
+  ingest,
   /getRuntimeRunByOwnerRunIdInternal[\s\S]*runRow\.threadId[\s\S]*runRow\.engineId[\s\S]*invalid_run/,
   "ingest must validate the signed context against the canonical run row",
 );
@@ -258,8 +273,13 @@ assert.match(
 );
 assert.match(
   tool,
-  /getRuntimeRunByOwnerRunIdInternal[\s\S]*findPolynetPlatformToolSurfaceEntry[\s\S]*billingPolicy[\s\S]*executeRetrievalHarnessTool/,
-  "platform-tool bridge must validate the run, registry row, billing policy, and shared dispatcher",
+  /getRuntimeRunByOwnerRunIdInternal[\s\S]*findPolynetPlatformToolSurfaceEntry[\s\S]*CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES[\s\S]*readRunCommunityResourceLane[\s\S]*runAuthorityAllowsRequiredLane[\s\S]*billingPolicy[\s\S]*executeRetrievalHarnessTool[\s\S]*authSubject: context\.auth_subject/,
+  "platform-tool bridge must validate the run, registry row, write allowlist, run-row authority lane, billing policy, and shared dispatcher",
+);
+assert.doesNotMatch(
+  tool,
+  /resolveRuntimeCommunityPromptContextInternal/,
+  "platform-tool bridge must not re-resolve community authority during worker callbacks",
 );
 assert.match(
   runtimeAgentLoop,
@@ -268,14 +288,43 @@ assert.match(
 );
 assert.match(
   platformToolSurface,
-  /unregistered tool[\s\S]*buildPolynetPlatformToolNames/,
-  "platform tool surface must expose specs and names from the same canonical registry and fail on unregistered rows",
+  /riskLevel[\s\S]*requiredCommunityResourceLane[\s\S]*community_resources_read[\s\S]*community_resource_builder_list[\s\S]*requiredCommunityResourceLane: "builder"[\s\S]*community_resource_builder_read[\s\S]*requiredCommunityResourceLane: "builder"[\s\S]*community_resource_builder_stage_changeset[\s\S]*riskLevel: "write"[\s\S]*requiredCommunityResourceLane: "builder"[\s\S]*unregistered tool[\s\S]*buildPolynetPlatformToolNames/,
+  "platform tool surface must project PolyNet native resource read tools plus staged-only builder changesets with member/builder lane policy and fail on unregistered rows",
 );
 assert.doesNotMatch(
   platformToolSurface,
   /community_write|community_resource_builder_apply_changeset/,
   "live write/apply tools must not be projected to worker turns in this slice",
 );
+for (const forbiddenToolName of [
+  "list_dir",
+  "read",
+  "glob",
+  "grep",
+  "sha256",
+  "write",
+  "edit",
+  "bash",
+  "terminal_start",
+  "terminal_read",
+  "terminal_write",
+  "terminal_stop",
+  "computer_open_url",
+  "computer_screenshot",
+  "computer_click",
+  "computer_type",
+  "computer_keypress",
+  "computer_scroll",
+  "computer_stop",
+  "web_research",
+  "web_crawl",
+]) {
+  assert.doesNotMatch(
+    platformToolSurface,
+    new RegExp(`toolName: "${forbiddenToolName}"`),
+    `Codex platform projection must not duplicate ${forbiddenToolName}`,
+  );
+}
 assert.match(
   disposal,
   /refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*workspace_session_accounting_kept_alive[\s\S]*settleRuntimeWorkspaceSession[\s\S]*releaseRuntimeWorkspaceSessionAccountingIfCurrent/,

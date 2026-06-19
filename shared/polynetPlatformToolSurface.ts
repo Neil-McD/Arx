@@ -1,33 +1,120 @@
 import { getToolDefinition } from "./toolRegistry";
 import type { RetrievalToolName } from "./retrievalTools";
 
-// Slice 1 of the capability registry: read-only community lens + product
-// docs, all free. Write tools, premium (usage-billed) tools, and dynamically
-// mounted tools join in later slices; every entry carries a billing policy so
-// activating a paid tool is a row change, not new architecture.
+// Codex receives only PolyNet-native capabilities through the first-party
+// polynet.* bridge. Generic workspace, terminal, browser, and web-search tools
+// stay native to Codex so we do not expose duplicate tool surfaces. The only
+// write-risk tool projected today stages a builder changeset; applying live
+// changes remains outside this bridge.
 export type PolynetPlatformToolBillingPolicy = "free";
+export type PolynetPlatformToolRiskLevel = "read" | "write" | "sensitive";
+export type PolynetPlatformToolRequiredCommunityResourceLane =
+  | "none"
+  | "member"
+  | "builder";
 
 export type PolynetPlatformToolSurfaceEntry = {
   toolName: RetrievalToolName;
   billingPolicy: PolynetPlatformToolBillingPolicy;
   requiresCommunity: boolean;
+  riskLevel: PolynetPlatformToolRiskLevel;
+  requiredCommunityResourceLane: PolynetPlatformToolRequiredCommunityResourceLane;
 };
 
 export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceEntry[] = [
-  { toolName: "get_active_community_context", billingPolicy: "free", requiresCommunity: true },
-  { toolName: "community_search", billingPolicy: "free", requiresCommunity: true },
-  { toolName: "community_resources_map", billingPolicy: "free", requiresCommunity: true },
-  { toolName: "community_resources_list", billingPolicy: "free", requiresCommunity: true },
-  { toolName: "community_resource_read", billingPolicy: "free", requiresCommunity: true },
-  { toolName: "community_resources_search", billingPolicy: "free", requiresCommunity: true },
-  { toolName: "search_product_docs", billingPolicy: "free", requiresCommunity: false },
-  { toolName: "get_product_doc", billingPolicy: "free", requiresCommunity: false },
+  {
+    toolName: "get_active_community_context",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_search",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_resources_map",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_resources_read",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_resources_list",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_resource_read",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_resources_search",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+  },
+  {
+    toolName: "community_resource_builder_list",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "builder",
+  },
+  {
+    toolName: "community_resource_builder_read",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "builder",
+  },
+  {
+    toolName: "community_resource_builder_stage_changeset",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "write",
+    requiredCommunityResourceLane: "builder",
+  },
+  {
+    toolName: "search_product_docs",
+    billingPolicy: "free",
+    requiresCommunity: false,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "none",
+  },
+  {
+    toolName: "get_product_doc",
+    billingPolicy: "free",
+    requiresCommunity: false,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "none",
+  },
 ];
 
 export type PolynetPlatformToolSpec = {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  billing_policy: PolynetPlatformToolBillingPolicy;
+  risk_level: PolynetPlatformToolRiskLevel;
+  required_community_resource_lane: PolynetPlatformToolRequiredCommunityResourceLane;
 };
 
 export function findPolynetPlatformToolSurfaceEntry(
@@ -54,6 +141,9 @@ function buildSpecs(params: { hasCommunity: boolean }): PolynetPlatformToolSpec[
       name: definition.name,
       description: definition.description,
       input_schema: definition.inputSchema as Record<string, unknown>,
+      billing_policy: entry.billingPolicy,
+      risk_level: entry.riskLevel,
+      required_community_resource_lane: entry.requiredCommunityResourceLane,
     };
   });
 }

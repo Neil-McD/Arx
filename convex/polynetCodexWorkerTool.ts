@@ -10,6 +10,10 @@ import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import {
   findPolynetPlatformToolSurfaceEntry,
 } from "../shared/polynetPlatformToolSurface";
+import {
+  normalizeCommunityResourceRuntimeLane,
+  type CommunityResourceRuntimeLane,
+} from "../shared/communityResourceLane";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -17,6 +21,9 @@ export const POLYNET_CODEX_WORKER_TOOL_PATH =
   "/runtime/polynet_codex_worker_tool";
 
 const PLATFORM_TOOL_OUTPUT_MAX_CHARS = 24_000;
+const CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES = new Set([
+  "community_resource_builder_stage_changeset",
+]);
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -32,6 +39,32 @@ function readEnv(name: string): string {
     // Convex exposes environment variables through process.env in actions.
   }
   return "";
+}
+
+function runAuthorityAllowsRequiredLane(
+  lane: CommunityResourceRuntimeLane | null,
+  requiredLane: "none" | "member" | "builder",
+): boolean {
+  if (requiredLane === "none") return true;
+  if (requiredLane === "builder") return lane === "builder";
+  return lane === "member" || lane === "builder";
+}
+
+function readRunCommunityResourceLane(runRow: {
+  activeContextSnapshot?: unknown;
+  communityId?: unknown;
+  threadId?: unknown;
+}): CommunityResourceRuntimeLane {
+  const snapshot = asRecord(runRow.activeContextSnapshot);
+  const envelope = asRecord(snapshot?.runtimeTurnEnvelope);
+  const authority = asRecord(envelope?.authority);
+  const snapshotCommunityId = String(authority?.communityId ?? "").trim();
+  const snapshotThreadId = String(authority?.threadId ?? "").trim();
+  const runCommunityId = String(runRow.communityId ?? "").trim();
+  const runThreadId = String(runRow.threadId ?? "").trim();
+  if (!snapshotCommunityId || snapshotCommunityId !== runCommunityId) return "none";
+  if (!snapshotThreadId || snapshotThreadId !== runThreadId) return "none";
+  return normalizeCommunityResourceRuntimeLane(authority?.communityResourceLane);
 }
 
 export function buildPolynetCodexWorkerToolTarget(): string | null {
@@ -89,12 +122,22 @@ export async function handlePolynetCodexWorkerTool(
 
   // The signed run token proves Convex minted this short-lived tool request;
   // the live run row still remains the authority for owner/thread/engine.
-  let runRow: { threadId?: unknown; engineId?: unknown; communityId?: unknown } | null = null;
+  let runRow: {
+    threadId?: unknown;
+    engineId?: unknown;
+    communityId?: unknown;
+    activeContextSnapshot?: unknown;
+  } | null = null;
   try {
     runRow = (await ctx.runQuery(
       (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
       { ownerId: context.owner_id, runId: context.run_id },
-    )) as { threadId?: unknown; engineId?: unknown; communityId?: unknown } | null;
+    )) as {
+      threadId?: unknown;
+      engineId?: unknown;
+      communityId?: unknown;
+      activeContextSnapshot?: unknown;
+    } | null;
   } catch {
     runRow = null;
   }
@@ -115,6 +158,19 @@ export async function handlePolynetCodexWorkerTool(
       message: `"${requestedToolName}" is not an available PolyNet platform tool.`,
     });
   }
+  if (
+    surfaceEntry.riskLevel !== "read" &&
+    !CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES.has(surfaceEntry.toolName)
+  ) {
+    return json(200, {
+      ok: false,
+      code: "platform_write_tool_not_enabled",
+      message:
+        "This PolyNet write tool is not enabled for Codex worker turns.",
+      tool_name: surfaceEntry.toolName,
+      risk_level: surfaceEntry.riskLevel,
+    });
+  }
 
   // The community lens binds to the CANONICAL run row, never to anything the
   // worker echoes back — a compromised worker cannot choose the lens.
@@ -125,6 +181,31 @@ export async function handlePolynetCodexWorkerTool(
       code: "community_required",
       message: "This tool needs an active community on the thread.",
     });
+  }
+  if (surfaceEntry.requiresCommunity && communityId) {
+    const communityResourceLane = readRunCommunityResourceLane(runRow);
+    if (
+      !runAuthorityAllowsRequiredLane(
+        communityResourceLane,
+        surfaceEntry.requiredCommunityResourceLane,
+      )
+    ) {
+      return json(200, {
+        ok: false,
+        code:
+          surfaceEntry.requiredCommunityResourceLane === "builder"
+            ? "community_builder_authority_required"
+            : "community_member_authority_required",
+        message:
+          surfaceEntry.requiredCommunityResourceLane === "builder"
+            ? "This tool requires builder access to the active community Resources lane."
+            : "This tool requires member access to the active community Resources lane.",
+        tool_name: surfaceEntry.toolName,
+        risk_level: surfaceEntry.riskLevel,
+        required_community_resource_lane:
+          surfaceEntry.requiredCommunityResourceLane,
+      });
+    }
   }
 
   // Billing hook. Every surface entry carries a policy; "free" is a no-op by
@@ -147,6 +228,7 @@ export async function handlePolynetCodexWorkerTool(
     result = await executeRetrievalHarnessTool({
       ctx,
       userId: String(context.owner_id),
+      authSubject: context.auth_subject ?? undefined,
       projectId,
       runId: context.run_id,
       communityId,

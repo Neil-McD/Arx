@@ -665,10 +665,9 @@ export async function executeRetrievalHarnessTool(params: {
     }
     try {
       const payload = await params.ctx.runQuery(
-        api.communityResources.listCommunityResourceBuilderDirectory as any,
+        internal.communityResources.listCommunityResourceBuilderDirectoryInternal as any,
         {
           userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
           limit:
             typeof normalizedArgs.limit === "number"
@@ -707,10 +706,9 @@ export async function executeRetrievalHarnessTool(params: {
     }
     try {
       const payload = await params.ctx.runQuery(
-        api.communityResources.readCommunityResourceBuilderResource as any,
+        internal.communityResources.readCommunityResourceBuilderResourceInternal as any,
         {
           userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
           ref:
             typeof normalizedArgs.ref === "string"
@@ -751,10 +749,9 @@ export async function executeRetrievalHarnessTool(params: {
     }
     try {
       const payload = await params.ctx.runMutation(
-        api.communityResources.stageCommunityResourceBuilderChangeset as any,
+        internal.communityResources.stageCommunityResourceBuilderChangesetInternal as any,
         {
           userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
           summary:
             typeof normalizedArgs.summary === "string"
