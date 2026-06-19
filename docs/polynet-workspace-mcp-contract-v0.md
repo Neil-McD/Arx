@@ -181,6 +181,16 @@ For a single harness profile/device, one successful OAuth login should survive n
 
 The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet. PolyNet-owned UX should explain the handoff: if the browser shows a plain local page such as `Authentication complete. You may close this window.`, the user should close that tab, return to the harness, and start a fresh chat or reconnect MCP if the current thread was already running before login.
 
+The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start PolyNet sign-in, verify the connection by listing PolyNet workspaces, and report when PolyMCP is connected.
+
+Claude Code setup should use native remote HTTP MCP:
+
+```bash
+claude mcp add --transport http polymcp https://www.polynet.ai/runtime/mcp
+```
+
+Then the receiving harness should use Claude Code's `/mcp` flow to select `polymcp` and complete PolyNet sign-in.
+
 Recommended Codex credential persistence should be configured before OAuth when available:
 
 ```toml
@@ -376,6 +386,8 @@ Focused proofs must show:
 - unauthenticated MCP calls return a MCP-compatible OAuth `WWW-Authenticate` challenge,
 - protected resource metadata names `/runtime/mcp` as the resource and the upstream issuer as authorization server,
 - authorization-server metadata supports authorization code, PKCE, refresh, and public-client token exchange,
+- setup copy is a self-contained setup packet for the receiving agent,
+- setup copy includes a Claude Code remote HTTP setup path,
 - setup copy uses native Codex OAuth with `offline_access`,
 - setup copy recommends durable MCP credential storage,
 - setup copy puts durable credential storage before OAuth,

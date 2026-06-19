@@ -22,6 +22,7 @@ import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
 const POLYMCP_TOOL_COUNT_LABEL = "15 workspace tools";
+const POLYMCP_CLAUDE_CODE_ADD_COMMAND = `claude mcp add --transport http polymcp ${POLYMCP_ENDPOINT_URL}`;
 const POLYMCP_CODEX_ADD_COMMAND = `codex mcp add polymcp --url ${POLYMCP_ENDPOINT_URL}`;
 const POLYMCP_CODEX_LOGIN_FALLBACK_COMMAND =
   "codex mcp login polymcp --scopes openid,profile,email,offline_access";
@@ -41,31 +42,44 @@ const POLYMCP_GENERIC_HTTP_CONFIG = JSON.stringify(
   null,
   2,
 );
-const POLYMCP_SETUP_INSTRUCTIONS = [
-  "Paste this setup into Codex, Claude Code, Cursor, or another AI harness you want to connect to PolyNet.",
-  "",
-  "PolyNet does not ask you to paste an access token. Your harness starts OAuth, opens the browser for PolyNet sign-in, and stores durable MCP credentials after the browser callback completes.",
-  "",
-  "You should only need to authenticate once per harness profile or device. Re-auth should only happen after logout, revocation, refresh-token expiry, account switch, or lost local credentials.",
-  "",
-  "For Codex, add the optional keyring setting before OAuth if you want OS keychain credential storage. Then run the add command first; only run the login fallback if Codex does not open PolyNet sign-in during add.",
-  "",
-  'If the browser shows "Authentication complete. You may close this window.", close that tab and return to your harness.',
-  "",
-  "If you authenticated after an already-open Codex thread started, open a fresh chat or reconnect MCP so the harness picks up the new credential.",
-  "",
-  'Ask: "Use PolyMCP to list my PolyNet workspaces."',
-].join("\n");
 const POLYMCP_SETUP_BUNDLE = [
-  "# PolyMCP Setup",
+  "# PolyMCP Setup Packet",
   "",
-  "## Setup instructions",
+  "You are helping the user connect this AI harness to PolyNet.",
   "",
-  POLYMCP_SETUP_INSTRUCTIONS,
+  "Goal:",
+  "Connect PolyMCP so this harness can access the user's PolyNet communities, resources, and workspace memory.",
+  "",
+  "PolyMCP endpoint:",
+  POLYMCP_ENDPOINT_URL,
+  "",
+  "## What To Do",
+  "",
+  "1. Identify which harness you are running in.",
+  "2. Use the matching setup path below.",
+  "3. Start PolyNet sign-in when needed.",
+  "4. After sign-in, verify the connection by listing the user's PolyNet workspaces.",
+  "5. Tell the user when PolyMCP is connected.",
+  "",
+  "## Claude Code",
+  "",
+  "Run:",
+  "",
+  "```bash",
+  POLYMCP_CLAUDE_CODE_ADD_COMMAND,
+  "```",
+  "",
+  "Then run:",
+  "",
+  "```text",
+  "/mcp",
+  "```",
+  "",
+  "Select `polymcp`, complete PolyNet sign-in in the browser, then return to Claude Code.",
   "",
   "## Codex",
   "",
-  "Optional durable credential store in `~/.codex/config.toml` before OAuth:",
+  "Optional before OAuth, in `~/.codex/config.toml`:",
   "",
   "```toml",
   POLYMCP_CODEX_DURABLE_CONFIG,
@@ -83,13 +97,51 @@ const POLYMCP_SETUP_BUNDLE = [
   POLYMCP_CODEX_LOGIN_FALLBACK_COMMAND,
   "```",
   "",
-  "## Generic MCP JSON",
+  "## Cursor Or Other JSON-Based Harnesses",
   "",
-  "Use this if your harness asks for MCP JSON instead of CLI commands.",
+  "Use this HTTP MCP config:",
   "",
   "```json",
   POLYMCP_GENERIC_HTTP_CONFIG,
   "```",
+  "",
+  "## After Sign-In",
+  "",
+  "If the browser shows:",
+  "",
+  "```text",
+  "Authentication complete. You may close this window.",
+  "```",
+  "",
+  "Close that tab and return to this harness.",
+  "",
+  "If this chat was already open before sign-in, start a fresh chat or reconnect tools so the harness picks up the new connection.",
+  "",
+  "## Verify",
+  "",
+  "After setup, use PolyMCP to list the user's PolyNet workspaces.",
+  "",
+  "If successful, tell the user:",
+  "",
+  "```text",
+  "PolyMCP is connected. I can now use your PolyNet communities, resources, and workspace memory.",
+  "```",
+  "",
+  "## Usage Guidance",
+  "",
+  "Use PolyMCP when the user asks about:",
+  "- PolyNet communities",
+  "- workspace memory",
+  "- accepted community context",
+  "- resources",
+  "- prior decisions",
+  "- playbooks",
+  "- warnings",
+  "- outcomes",
+  "",
+  "Before using workspace-specific memory, list or open the relevant PolyNet workspace.",
+  "",
+  "Treat workspace context IDs as opaque selectors. Do not invent them.",
 ].join("\n");
 
 type SessionLike = {
@@ -403,7 +455,7 @@ export function WebIntegrationsSettingsSection(
             PolyMCP
           </div>
           <div className="settings-section-desc">
-            Connect Codex, Claude Code, Cursor, or another MCP client to your
+            Connect Codex, Claude Code, Cursor, or another AI harness to your
             PolyNet workspace memory.
           </div>
           <div className="integrations-app-list">
@@ -425,9 +477,8 @@ export function WebIntegrationsSettingsSection(
                       </span>
                     </div>
                     <div className="integration-mounted-detail">
-                      Copy setup, paste it into your AI harness, sign in once,
-                      then ask about your PolyNet communities, resources, and
-                      workspace memory.
+                      Copy one setup packet, paste it into Codex, Claude Code,
+                      Cursor, or another AI harness, then sign in once.
                     </div>
                   </div>
                 </div>

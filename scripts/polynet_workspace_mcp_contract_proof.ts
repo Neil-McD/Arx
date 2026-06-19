@@ -120,6 +120,21 @@ assertIncludes(
   "start a fresh chat or reconnect MCP",
   "workspace MCP contract should document reconnect guidance after login",
 );
+assertIncludes(
+  contract,
+  "The copied setup should be a self-contained setup packet for the receiving agent.",
+  "workspace MCP contract should define the setup packet model",
+);
+assertIncludes(
+  contract,
+  "Claude Code setup should use native remote HTTP MCP",
+  "workspace MCP contract should include Claude Code setup",
+);
+assertIncludes(
+  contract,
+  "claude mcp add --transport http polymcp https://www.polynet.ai/runtime/mcp",
+  "workspace MCP contract should include the Claude Code remote HTTP command",
+);
 
 assertIncludes(
   packageJson,
@@ -127,6 +142,11 @@ assertIncludes(
   "package proof script",
 );
 
+assertIncludes(
+  integrationsSettings,
+  "POLYMCP_CLAUDE_CODE_ADD_COMMAND",
+  "PolyMCP Claude Code add command constant",
+);
 assertIncludes(
   integrationsSettings,
   "POLYMCP_CODEX_ADD_COMMAND",
@@ -141,6 +161,16 @@ assertIncludes(
   integrationsSettings,
   "15 workspace tools",
   "PolyMCP integration tool count",
+);
+assertIncludes(
+  integrationsSettings,
+  "claude mcp add --transport http polymcp",
+  "PolyMCP Claude Code remote HTTP add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "/mcp",
+  "PolyMCP Claude Code OAuth flow command",
 );
 assertIncludes(
   integrationsSettings,
@@ -169,12 +199,12 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "run the add command first",
+  "Add PolyMCP:",
   "PolyMCP setup copy should make add the primary Codex setup command",
 );
 assertIncludes(
   integrationsSettings,
-  "only run the login fallback",
+  "Only if Codex does not open OAuth during add, run:",
   "PolyMCP setup copy should make Codex login a fallback",
 );
 assertIncludes(
@@ -194,23 +224,67 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_SETUP_INSTRUCTIONS",
-  "PolyMCP copied setup instructions",
-);
-assertIncludes(
-  integrationsSettings,
   "POLYMCP_SETUP_BUNDLE",
   "PolyMCP canonical setup bundle",
 );
 assertIncludes(
   integrationsSettings,
-  "# PolyMCP Setup",
-  "PolyMCP setup bundle heading",
+  "# PolyMCP Setup Packet",
+  "PolyMCP setup packet heading",
+);
+assertIncludes(
+  integrationsSettings,
+  "You are helping the user connect this AI harness to PolyNet.",
+  "PolyMCP setup packet should address the receiving agent",
+);
+assertIncludes(
+  integrationsSettings,
+  "Connect PolyMCP so this harness can access the user's PolyNet communities, resources, and workspace memory.",
+  "PolyMCP setup packet should define the goal",
+);
+assertIncludes(
+  integrationsSettings,
+  "PolyMCP endpoint:",
+  "PolyMCP setup packet should include the endpoint label",
+);
+assertIncludes(
+  integrationsSettings,
+  "## What To Do",
+  "PolyMCP setup packet should include agent workflow instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  "Identify which harness you are running in.",
+  "PolyMCP setup packet should tell the receiving agent to identify its harness",
+);
+assertIncludes(
+  integrationsSettings,
+  "verify the connection by listing the user's PolyNet workspaces",
+  "PolyMCP setup packet should require connection verification",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Claude Code",
+  "PolyMCP setup packet should include Claude Code instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  "Select `polymcp`, complete PolyNet sign-in in the browser, then return to Claude Code.",
+  "PolyMCP setup packet should explain Claude Code sign-in",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Codex",
+  "PolyMCP setup packet should include Codex instructions",
+);
+assert.ok(
+  integrationsSettings.indexOf("## Claude Code") < integrationsSettings.indexOf("## Codex"),
+  "PolyMCP setup packet should put Claude Code before Codex",
 );
 assertIncludes(
   integrationsSettings,
   "```bash",
-  "PolyMCP setup bundle includes Codex commands",
+  "PolyMCP setup packet includes shell commands",
 );
 assertIncludes(
   integrationsSettings,
@@ -224,63 +298,78 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "## Cursor Or Other JSON-Based Harnesses",
+  "PolyMCP setup packet should include JSON-based harness instructions",
+);
+assertIncludes(
+  integrationsSettings,
   "```json",
-  "PolyMCP setup bundle includes a JSON config block",
+  "PolyMCP setup packet includes a JSON config block",
 );
 assertIncludes(
   integrationsSettings,
-  "Paste this setup into Codex, Claude Code, Cursor, or another AI harness you want to connect to PolyNet.",
-  "PolyMCP setup copy should name the target AI harnesses",
+  "Use this HTTP MCP config:",
+  "PolyMCP setup packet should support JSON-only harnesses",
 );
 assertIncludes(
   integrationsSettings,
-  "Your harness starts OAuth",
-  "PolyMCP setup copy should explain harness-owned OAuth",
-);
-assertIncludes(
-  integrationsSettings,
-  "You should only need to authenticate once per harness profile or device.",
-  "PolyMCP setup copy should set the OAuth continuity expectation",
+  "## After Sign-In",
+  "PolyMCP setup packet should include after-sign-in instructions",
 );
 assertIncludes(
   integrationsSettings,
   "Authentication complete. You may close this window.",
-  "PolyMCP setup copy should normalize the local callback completion page",
+  "PolyMCP setup packet should normalize the local callback completion page",
 );
 assertIncludes(
   integrationsSettings,
-  "close that tab and return to your harness",
-  "PolyMCP setup copy should explain the callback handoff next action",
+  "Close that tab and return to this harness.",
+  "PolyMCP setup packet should explain the callback handoff next action",
 );
 assertIncludes(
   integrationsSettings,
-  "open a fresh chat or reconnect MCP",
-  "PolyMCP setup copy should tell users how to activate the MCP server",
+  "start a fresh chat or reconnect tools",
+  "PolyMCP setup packet should tell users how to activate the connection",
 );
 assertIncludes(
   integrationsSettings,
-  "Use this if your harness asks for MCP JSON",
-  "PolyMCP setup copy should support JSON-only harnesses",
+  "## Verify",
+  "PolyMCP setup packet should include a verification section",
 );
 assertIncludes(
   integrationsSettings,
-  "Use PolyMCP to list my PolyNet workspaces.",
-  "PolyMCP setup copy should give a smoke-test prompt",
+  "PolyMCP is connected. I can now use your PolyNet communities, resources, and workspace memory.",
+  "PolyMCP setup packet should give a success response",
 );
 assertIncludes(
   integrationsSettings,
-  "paste it into your AI harness",
-  "PolyMCP integration card should explain where setup is pasted",
+  "## Usage Guidance",
+  "PolyMCP setup packet should include usage guidance",
 );
 assertIncludes(
   integrationsSettings,
-  "PolyNet communities, resources, and",
-  "PolyMCP integration card should explain what users can ask about",
+  "Before using workspace-specific memory, list or open the relevant PolyNet workspace.",
+  "PolyMCP setup packet should require workspace selection before memory use",
 );
 assertIncludes(
   integrationsSettings,
-  "workspace memory.",
-  "PolyMCP integration card should mention workspace memory",
+  "Treat workspace context IDs as opaque selectors. Do not invent them.",
+  "PolyMCP setup packet should preserve workspace context selector rules",
+);
+assertIncludes(
+  integrationsSettings,
+  "Copy one setup packet",
+  "PolyMCP integration card should frame the copied text as one packet",
+);
+assertIncludes(
+  integrationsSettings,
+  "Codex, Claude Code",
+  "PolyMCP integration card should name target harnesses",
+);
+assertIncludes(
+  integrationsSettings,
+  "another AI harness",
+  "PolyMCP user-facing copy should say AI harness instead of MCP harness",
 );
 assertIncludes(
   integrationsSettings,
