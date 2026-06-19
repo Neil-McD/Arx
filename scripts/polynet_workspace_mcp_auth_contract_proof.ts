@@ -136,7 +136,7 @@ assertIncludes(
 );
 assertIncludes(
   contract,
-  "codex mcp login polymcp --scopes openid,profile,email,offline_access",
+  "codex mcp login polynet --scopes openid,profile,email,offline_access",
   "native Codex OAuth fallback with offline access",
 );
 assertIncludes(
@@ -171,15 +171,25 @@ assertIncludes(authSetup, "https://<POLYNET_ORIGIN>/runtime/mcp", "canonical MCP
 assertIncludes(authSetup, "## 4) Hosted MCP OAuth Continuity", "hosted MCP OAuth continuity setup section");
 assertIncludes(
   authSetup,
-  "one harness profile + one PolyMCP config + one successful OAuth login",
+  "one harness profile + one PolyNet MCP config + one successful OAuth login",
   "hosted MCP OAuth continuity invariant",
 );
 assertIncludes(authSetup, "Client ID Metadata Document", "WorkOS CIMD setup guidance");
 assertIncludes(authSetup, "Dynamic Client Registration", "WorkOS DCR compatibility setup guidance");
 assertIncludes(
   authSetup,
-  "codex mcp login polymcp --scopes openid,profile,email,offline_access",
+  "codex mcp login polynet --scopes openid,profile,email,offline_access",
   "hosted MCP OAuth native Codex login fallback",
+);
+assertIncludes(
+  authSetup,
+  "codex mcp add polynet --url https://<POLYNET_ORIGIN>/runtime/mcp",
+  "hosted MCP OAuth native Codex add command",
+);
+assertIncludes(
+  authSetup,
+  "Existing harnesses that already have `polymcp` configured may keep using it as the same PolyNet MCP server",
+  "hosted MCP OAuth legacy polymcp alias compatibility",
 );
 assertIncludes(
   authSetup,

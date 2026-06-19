@@ -127,13 +127,28 @@ assertIncludes(
 );
 assertIncludes(
   contract,
-  "The packet must keep the receiving agent focused on the PolyMCP connection.",
+  "The packet must keep the receiving agent focused on the PolyNet connection.",
   "workspace MCP contract should constrain receiving-agent setup behavior",
 );
 assertIncludes(
   contract,
   "It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
   "workspace MCP contract should keep setup from detouring into unrelated CLI repair",
+);
+assertIncludes(
+  contract,
+  "New harness setup should use `polynet` as the canonical local server alias.",
+  "workspace MCP contract should define canonical polynet alias",
+);
+assertIncludes(
+  contract,
+  "Existing harnesses that already have `polymcp` configured should treat it as the same PolyNet MCP server.",
+  "workspace MCP contract should preserve legacy polymcp alias",
+);
+assertIncludes(
+  contract,
+  "must not tell users to install both aliases unless the user explicitly wants to migrate",
+  "workspace MCP contract should prevent duplicate alias installs",
 );
 assertIncludes(
   contract,
@@ -157,8 +172,18 @@ assertIncludes(
 );
 assertIncludes(
   contract,
-  "claude mcp add --transport http polymcp https://www.polynet.ai/runtime/mcp",
+  "claude mcp add --transport http polynet https://www.polynet.ai/runtime/mcp",
   "workspace MCP contract should include the Claude Code remote HTTP command",
+);
+assertIncludes(
+  contract,
+  "codex mcp add polynet --url https://www.polynet.ai/runtime/mcp",
+  "workspace MCP contract should include the canonical Codex add command",
+);
+assertIncludes(
+  contract,
+  "codex mcp login polynet --scopes openid,profile,email,offline_access",
+  "workspace MCP contract should include the canonical Codex login fallback",
 );
 
 assertIncludes(
@@ -169,18 +194,18 @@ assertIncludes(
 
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_CLAUDE_CODE_ADD_COMMAND",
-  "PolyMCP Claude Code add command constant",
+  "POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND",
+  "PolyNet Claude Code add command constant",
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_CODEX_ADD_COMMAND",
-  "PolyMCP Codex primary add command",
+  "POLYNET_MCP_CODEX_ADD_COMMAND",
+  "PolyNet Codex primary add command",
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_CODEX_LOGIN_FALLBACK_COMMAND",
-  "PolyMCP Codex login fallback command",
+  "POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND",
+  "PolyNet Codex login fallback command",
 );
 assertIncludes(
   integrationsSettings,
@@ -189,8 +214,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "claude mcp add --transport http polymcp",
-  "PolyMCP Claude Code remote HTTP add command",
+  "claude mcp add --transport http polynet",
+  "PolyNet Claude Code remote HTTP add command",
 );
 assertIncludes(
   integrationsSettings,
@@ -199,13 +224,13 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "codex mcp add polymcp --url",
-  "PolyMCP Codex add command",
+  "codex mcp add polynet --url",
+  "PolyNet Codex add command",
 );
 assertIncludes(
   integrationsSettings,
-  "codex mcp login polymcp",
-  "PolyMCP Codex login fallback command",
+  "codex mcp login polynet",
+  "PolyNet Codex login fallback command",
 );
 assertIncludes(
   integrationsSettings,
@@ -224,8 +249,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Add PolyMCP:",
-  "PolyMCP setup copy should make add the primary Codex setup command",
+  "Add PolyNet:",
+  "PolyNet setup copy should make add the primary Codex setup command",
 );
 assertIncludes(
   integrationsSettings,
@@ -234,8 +259,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_GENERIC_HTTP_CONFIG",
-  "PolyMCP generic HTTP config payload",
+  "POLYNET_MCP_GENERIC_HTTP_CONFIG",
+  "PolyNet generic HTTP config payload",
 );
 assertIncludes(
   integrationsSettings,
@@ -244,18 +269,23 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "polynet: {",
+  "PolyNet generic JSON config should use the canonical polynet key",
+);
+assertIncludes(
+  integrationsSettings,
   'type: "http"',
   "PolyMCP generic HTTP config type",
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_SETUP_BUNDLE",
-  "PolyMCP canonical setup bundle",
+  "POLYNET_MCP_SETUP_BUNDLE",
+  "PolyNet canonical setup bundle",
 );
 assertIncludes(
   integrationsSettings,
-  "# PolyMCP Setup Packet",
-  "PolyMCP setup packet heading",
+  "# PolyNet Setup Packet",
+  "PolyNet setup packet heading",
 );
 assertIncludes(
   integrationsSettings,
@@ -264,13 +294,13 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Connect PolyMCP so this harness can access the user's PolyNet communities, resources, and workspace memory.",
-  "PolyMCP setup packet should define the goal",
+  "Connect PolyNet so this harness can access the user's PolyNet communities, resources, and workspace memory.",
+  "PolyNet setup packet should define the goal",
 );
 assertIncludes(
   integrationsSettings,
-  "PolyMCP endpoint:",
-  "PolyMCP setup packet should include the endpoint label",
+  "PolyNet MCP endpoint:",
+  "PolyNet setup packet should include the endpoint label",
 );
 assertIncludes(
   integrationsSettings,
@@ -291,6 +321,26 @@ assertIncludes(
   integrationsSettings,
   "give the user the exact next command or click path and stop",
   "PolyMCP setup packet should make blocked auth handoff concise",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Existing `polymcp` Installs",
+  "PolyNet setup packet should include legacy polymcp compatibility",
+);
+assertIncludes(
+  integrationsSettings,
+  "New setup should use the server alias `polynet`.",
+  "PolyNet setup packet should canonicalize new installs to polynet",
+);
+assertIncludes(
+  integrationsSettings,
+  "treat it as the same PolyNet server",
+  "PolyNet setup packet should treat polymcp as a legacy alias",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not install both unless the user explicitly wants to migrate the local alias.",
+  "PolyNet setup packet should prevent duplicate alias installs",
 );
 assertIncludes(
   integrationsSettings,
@@ -334,8 +384,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Add PolyMCP with the matching setup path below, unless it is already configured.",
-  "PolyMCP setup packet should not duplicate existing MCP registration",
+  "Add PolyNet with the matching setup path below, unless `polynet` or legacy `polymcp` is already configured.",
+  "PolyNet setup packet should not duplicate existing MCP registration",
 );
 assertIncludes(
   integrationsSettings,
@@ -359,8 +409,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Run `/mcp`, select `polymcp`, then complete PolyNet sign-in in the browser.",
-  "PolyMCP setup packet should explain Claude Code sign-in",
+  "Run `/mcp`, select `polynet`, then complete PolyNet sign-in in the browser.",
+  "PolyNet setup packet should explain Claude Code sign-in",
 );
 assertIncludes(
   integrationsSettings,
@@ -369,8 +419,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "If `polymcp` already appears as `Needs authentication`, do not re-add it.",
-  "PolyMCP setup packet should route configured Claude Code servers directly to auth",
+  "If `polynet` or legacy `polymcp` already appears as `Needs authentication`, do not re-add it.",
+  "PolyNet setup packet should route configured Claude Code servers directly to auth",
 );
 assertIncludes(
   integrationsSettings,
@@ -388,8 +438,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Add PolyMCP:",
-  "PolyMCP setup bundle should label the primary add command",
+  "Add PolyNet:",
+  "PolyNet setup bundle should label the primary add command",
 );
 assertIncludes(
   integrationsSettings,
@@ -398,8 +448,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "If `polymcp` is already configured, do not add it again.",
-  "PolyMCP setup packet should avoid duplicate Codex registration",
+  "If `polynet` or legacy `polymcp` is already configured, do not add it again.",
+  "PolyNet setup packet should avoid duplicate Codex registration",
 );
 assertIncludes(
   integrationsSettings,
@@ -453,8 +503,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "PolyMCP is connected. I can now use your PolyNet communities, resources, and workspace memory.",
-  "PolyMCP setup packet should give a success response",
+  "PolyNet is connected. I can now use your PolyNet communities, resources, and workspace memory.",
+  "PolyNet setup packet should give a success response",
 );
 assertIncludes(
   integrationsSettings,
@@ -474,7 +524,7 @@ assertIncludes(
 assertIncludes(
   integrationsSettings,
   "Copy one setup packet",
-  "PolyMCP integration card should frame the copied text as one packet",
+  "PolyNet integration card should frame the copied text as one packet",
 );
 assertIncludes(
   integrationsSettings,
@@ -484,12 +534,42 @@ assertIncludes(
 assertIncludes(
   integrationsSettings,
   "another AI harness",
-  "PolyMCP user-facing copy should say AI harness instead of MCP harness",
+  "PolyNet user-facing copy should say AI harness instead of MCP harness",
 );
 assertIncludes(
   integrationsSettings,
   "Copy setup",
-  "PolyMCP canonical setup copy action",
+  "PolyNet canonical setup copy action",
+);
+assertIncludes(
+  integrationsSettings,
+  "name=\"PolyNet\"",
+  "PolyNet visible integration logo name",
+);
+assertIncludes(
+  integrationsSettings,
+  "<strong>PolyNet</strong>",
+  "PolyNet visible integration title",
+);
+assertIncludes(
+  integrationsSettings,
+  "aria-label=\"Copy PolyNet setup\"",
+  "PolyNet visible setup copy action label",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "PolyMCP",
+  "PolyNet setup/UI source after compatibility rename",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "claude mcp add --transport http polymcp",
+  "PolyNet setup should not make polymcp the canonical Claude Code alias",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "codex mcp add polymcp",
+  "PolyNet setup should not make polymcp the canonical Codex alias",
 );
 assertNotIncludes(
   integrationsSettings,

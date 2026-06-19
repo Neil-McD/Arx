@@ -169,7 +169,7 @@ Auth proves user identity only. Workspace access remains server-authorized per c
 
 ## OAuth Continuity Model
 
-The target PolyMCP user experience is:
+The target PolyNet MCP user experience is:
 
 ```text
 Settings -> Integrations -> Copy setup -> paste into harness -> one OAuth login -> durable MCP access
@@ -181,19 +181,21 @@ For a single harness profile/device, one successful OAuth login should survive n
 
 The local OAuth callback completion page is owned by the external MCP client or adapter, not by PolyNet. PolyNet-owned UX should explain the handoff: if the browser shows a plain local page such as `Authentication complete. You may close this window.`, the user should close that tab, return to the harness, and start a fresh chat or reconnect MCP if the current thread was already running before login.
 
-The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start PolyNet sign-in, verify the connection by listing PolyNet workspaces, and report when PolyMCP is connected.
+The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start PolyNet sign-in, verify the connection by listing PolyNet workspaces, and report when PolyNet is connected.
 
-The packet must keep the receiving agent focused on the PolyMCP connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If PolyMCP is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
+The packet must keep the receiving agent focused on the PolyNet connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If PolyNet is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
+
+New harness setup should use `polynet` as the canonical local server alias. Existing harnesses that already have `polymcp` configured should treat it as the same PolyNet MCP server. The copied setup must not tell users to install both aliases unless the user explicitly wants to migrate the local alias.
 
 If the receiving harness gets a PolyNet authorization URL, the packet should prefer automatic browser opening or a clean markdown link such as `[Sign in to PolyNet](AUTHORIZATION_URL)`. It should not paste the raw full OAuth URL unless no cleaner link path is available. It should only ask the user to paste the localhost callback URL back if the browser callback fails or cannot be reached.
 
 Claude Code setup should use native remote HTTP MCP:
 
 ```bash
-claude mcp add --transport http polymcp https://www.polynet.ai/runtime/mcp
+claude mcp add --transport http polynet https://www.polynet.ai/runtime/mcp
 ```
 
-Then the receiving harness should use Claude Code's `/mcp` flow to select `polymcp` and complete PolyNet sign-in.
+Then the receiving harness should use Claude Code's `/mcp` flow to select `polynet` and complete PolyNet sign-in. If the harness already has the legacy `polymcp` alias, it should authenticate that existing server instead of installing a duplicate.
 
 Recommended Codex credential persistence should be configured before OAuth when available:
 
@@ -204,20 +206,20 @@ mcp_oauth_credentials_store = "keyring"
 Codex setup should use native Streamable HTTP OAuth as the canonical path. Run `add` first:
 
 ```bash
-codex mcp add polymcp --url https://www.polynet.ai/runtime/mcp
+codex mcp add polynet --url https://www.polynet.ai/runtime/mcp
 ```
 
 Only if Codex does not open OAuth during `add`, run the login fallback:
 
 ```bash
-codex mcp login polymcp --scopes openid,profile,email,offline_access
+codex mcp login polynet --scopes openid,profile,email,offline_access
 ```
 
 `mcp-remote` is a compatibility fallback only. It is not the canonical Codex setup path and its stored OAuth credentials should not be treated as proof that native Codex MCP OAuth is authenticated.
 
 Continuity acceptance requires a clean native Codex profile to:
 
-1. add PolyMCP with native Streamable HTTP,
+1. add PolyNet with native Streamable HTTP,
 2. authenticate once,
 3. call `tools/list`,
 4. open a workspace,

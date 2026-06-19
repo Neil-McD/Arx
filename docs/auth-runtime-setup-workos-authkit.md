@@ -65,10 +65,10 @@ Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dyn
 
 ## 4) Hosted MCP OAuth Continuity
 
-The hosted PolyMCP continuity invariant is:
+The hosted PolyNet MCP continuity invariant is:
 
 ```text
-one harness profile + one PolyMCP config + one successful OAuth login
+one harness profile + one PolyNet MCP config + one successful OAuth login
 = durable access across new chats, harness restarts, and normal access-token expiry
 ```
 
@@ -91,14 +91,16 @@ mcp_oauth_credentials_store = "keyring"
 Codex native Streamable HTTP OAuth is the canonical setup path. Run `add` first:
 
 ```bash
-codex mcp add polymcp --url https://<POLYNET_ORIGIN>/runtime/mcp
+codex mcp add polynet --url https://<POLYNET_ORIGIN>/runtime/mcp
 ```
 
 Only if Codex does not open OAuth during `add`, run the login fallback:
 
 ```bash
-codex mcp login polymcp --scopes openid,profile,email,offline_access
+codex mcp login polynet --scopes openid,profile,email,offline_access
 ```
+
+New harness setup should use `polynet` as the local server alias. Existing harnesses that already have `polymcp` configured may keep using it as the same PolyNet MCP server; do not install both aliases unless intentionally migrating the local alias.
 
 `mcp-remote` may remain useful for legacy clients, but it is not proof that native Codex MCP OAuth is authenticated. A native Codex harness and an `mcp-remote` adapter can use different client registrations and credential stores.
 
@@ -114,7 +116,7 @@ Re-authentication should be treated as a bug unless one of these is true:
 Continuity validation:
 
 1. create or use a clean Codex profile,
-2. add PolyMCP with native Streamable HTTP,
+2. add PolyNet with native Streamable HTTP,
 3. complete OAuth during `codex mcp add`, or run the login fallback if `add` did not open OAuth,
 4. confirm authenticated `tools/list` works,
 5. close and reopen Codex,
