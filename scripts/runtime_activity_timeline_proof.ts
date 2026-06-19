@@ -168,6 +168,25 @@ assert.equal(
   "runtime timeline should keep tool groups alongside reasoning entries",
 );
 
+const escapedReasoningTimeline = buildRuntimeLiveTimeline([
+  event({
+    seq: 1,
+    event_type: "reasoning_summary_text_delta",
+    payload: {
+      summary_stream_id: "stream:escaped",
+      summary_index: 0,
+      delta: "\\*\\*Researching current status\\*\\* I’m checking sources.",
+    },
+  }),
+]);
+assert.equal(
+  escapedReasoningTimeline[0]?.kind === "reasoning"
+    ? escapedReasoningTimeline[0].text
+    : null,
+  "**Researching current status** I’m checking sources.",
+  "escaped reasoning markdown delimiters should normalize before markdown rendering",
+);
+
 const happyPath = [
   event({ seq: 1, event_type: "run_started", created_at: "2026-04-25T12:00:00.000Z" }),
   started(2, "list_dir", { path: "convex" }),

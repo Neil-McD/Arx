@@ -106,6 +106,13 @@ function normalizeInlineWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function normalizeReasoningSummaryText(value: string): string {
+  return value
+    .replace(/\\\*\\\*/g, "**")
+    .replace(/\\_\\_/g, "__")
+    .trim();
+}
+
 function truncateLabel(value: string, maxChars: number): string {
   const normalized = normalizeInlineWhitespace(value);
   if (normalized.length <= maxChars) return normalized;
@@ -723,7 +730,7 @@ export function buildRuntimeLiveTimeline(
       kind: "reasoning" as const,
       seqStart: section.seqStart,
       seqEnd: section.seqEnd,
-      text: section.text.trim(),
+      text: normalizeReasoningSummaryText(section.text),
       isActive: section.seqEnd === latestEventSeq,
     }))
     .filter((entry) => entry.text);

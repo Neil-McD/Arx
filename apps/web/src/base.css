@@ -16918,42 +16918,9 @@ button.chat-reply-quote:hover {
   margin-bottom: 10px;
 }
 
-.runtime-live-timeline-entry {
-  width: 100%;
-}
-
-.runtime-live-timeline-reasoning {
-  color: var(--text-primary);
-}
-
 .runtime-live-timeline-reasoning-text {
   max-width: min(74ch, 100%);
-  font-size: 1em;
-  line-height: 1.58;
-  color: color-mix(in srgb, var(--text-primary) 96%, var(--text-secondary));
-}
-
-.runtime-live-timeline-reasoning-text > :first-child {
-  margin-top: 0;
-}
-
-.runtime-live-timeline-reasoning-text > :last-child {
-  margin-bottom: 0;
-}
-
-.runtime-live-timeline-reasoning-text .md-header,
-.runtime-live-timeline-reasoning-text h1.md-header,
-.runtime-live-timeline-reasoning-text h2.md-header,
-.runtime-live-timeline-reasoning-text h3.md-header,
-.runtime-live-timeline-reasoning-text h1,
-.runtime-live-timeline-reasoning-text h2,
-.runtime-live-timeline-reasoning-text h3 {
-  color: inherit;
-}
-
-.runtime-live-timeline-reasoning-text strong,
-.runtime-live-timeline-reasoning-text b {
-  color: inherit;
+  opacity: 0.9;
 }
 
 .runtime-activity-word {
@@ -16967,15 +16934,11 @@ button.chat-reply-quote:hover {
 .runtime-thought-snippet {
   display: block;
   max-width: min(74ch, 100%);
-  color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
-  font-size: 1em;
-  line-height: 1.58;
-  letter-spacing: 0;
-  white-space: normal;
+  opacity: 0.84;
 }
 
 .runtime-thought-snippet-fallback {
-  color: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary));
+  color: inherit;
 }
 
 .runtime-turn-timer {
@@ -18362,78 +18325,6 @@ button.message-citation-chip:hover {
 
 .message-text .md-list li > .md-paragraph + .code-block-wrapper {
   margin-top: 0.5em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text {
-  color: color-mix(in srgb, var(--text-primary) 96%, var(--text-secondary));
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-paragraph {
-  margin: 0.5em 0;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-header {
-  color: var(--text-primary);
-  font-weight: 650;
-  line-height: 1.25;
-  margin: 0.78em 0 0.24em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text h1.md-header,
-.message-text.runtime-live-timeline-reasoning-text h2.md-header {
-  font-size: 1.1em;
-  margin-top: 0.86em;
-  margin-bottom: 0.26em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text h3.md-header {
-  font-size: 1.02em;
-  margin-top: 0.72em;
-  margin-bottom: 0.2em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text h4.md-header,
-.message-text.runtime-live-timeline-reasoning-text h5.md-header,
-.message-text.runtime-live-timeline-reasoning-text h6.md-header {
-  font-size: 0.98em;
-  margin-top: 0.58em;
-  margin-bottom: 0.18em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-list {
-  margin: 0.42em 0;
-  padding-left: 1.32em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-list li {
-  margin: 0.18em 0;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-list .md-list {
-  margin: 0.08em 0 0.1em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-header + .md-paragraph,
-.message-text.runtime-live-timeline-reasoning-text .md-header + .md-list,
-.message-text.runtime-live-timeline-reasoning-text .md-header + .code-block-wrapper,
-.message-text.runtime-live-timeline-reasoning-text .md-header + .md-blockquote {
-  margin-top: 0.18em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-paragraph + h2.md-header,
-.message-text.runtime-live-timeline-reasoning-text .md-list + h2.md-header,
-.message-text.runtime-live-timeline-reasoning-text .md-table-block + h2.md-header,
-.message-text.runtime-live-timeline-reasoning-text .md-artifact-block + h2.md-header,
-.message-text.runtime-live-timeline-reasoning-text .code-block-wrapper + h2.md-header {
-  margin-top: 0.82em;
-}
-
-.message-text.runtime-live-timeline-reasoning-text .md-paragraph + h3.md-header,
-.message-text.runtime-live-timeline-reasoning-text .md-list + h3.md-header,
-.message-text.runtime-live-timeline-reasoning-text .md-table-block + h3.md-header,
-.message-text.runtime-live-timeline-reasoning-text .md-artifact-block + h3.md-header,
-.message-text.runtime-live-timeline-reasoning-text .code-block-wrapper + h3.md-header {
-  margin-top: 0.64em;
 }
 
 .code-block-header {
