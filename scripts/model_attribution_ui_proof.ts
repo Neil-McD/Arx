@@ -38,6 +38,17 @@ assert.equal(
   formatModelAttributionLabel({
     modelId: "gpt-5.5",
     inferenceSource: "chatgpt",
+    engineId: "polynet_codex_worker",
+    modelToggles: toggles,
+  }),
+  "GPT 5.5 · Codex",
+  "Codex worker turns should render Codex rather than the underlying ChatGPT account provider",
+);
+
+assert.equal(
+  formatModelAttributionLabel({
+    modelId: "gpt-5.5",
+    inferenceSource: "chatgpt",
     engineId: null,
     modelToggles: toggles,
   }),

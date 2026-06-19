@@ -49,6 +49,7 @@ function resolveModelLabel(
 function formatRuntimeEngineProviderLabel(value: string | null | undefined): string | null {
   const raw = String(value ?? "").trim().toLowerCase();
   if (!raw) return null;
+  if (raw === "polynet_codex_worker") return "Codex";
   if (
     raw === "runtime_turn" ||
     raw === "runtime_convex" ||
