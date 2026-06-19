@@ -420,15 +420,6 @@ function latestWorkStep(steps: AgentActivityStep[]): AgentActivityStep | null {
   );
 }
 
-function activityWordForSteps(steps: AgentActivityStep[]): string {
-  const activeStep =
-    steps.find((step) => step.isActive) ??
-    latestWorkStep(steps) ??
-    null;
-  if (!activeStep) return "Thinking";
-  return activeStep.title;
-}
-
 function narrationForStep(step: AgentActivityStep | null): string | null {
   if (!step) return null;
   if (step.kind === "planning") return "I’m setting up the run and deciding where to start.";
@@ -511,7 +502,6 @@ export function RuntimeLiveTimeline(props: {
     [props.events],
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const activityWord = useMemo(() => activityWordForSteps(steps), [steps]);
   const narration = useMemo(
     () => narrationForStep(latestWorkStep(steps)),
     [steps],
@@ -528,9 +518,6 @@ export function RuntimeLiveTimeline(props: {
     () => extractResourceChangesetCards(props.events),
     [props.events],
   );
-  const displayWord = useSmoothStreamingText(activityWord, {
-    active: showActiveIndicators,
-  });
   const fallbackThoughtText = hasModelReasoning ? "" : narration ?? "";
   const displayFallbackThoughtText = useSmoothStreamingText(fallbackThoughtText, {
     active: showActiveIndicators && Boolean(fallbackThoughtText),
@@ -545,6 +532,7 @@ export function RuntimeLiveTimeline(props: {
             nowMs) - runTiming.startedAtMs,
         );
   const isLiveTimer = showActiveIndicators && runTiming.finishedAtMs === null;
+  const showThinkingFooter = showActiveIndicators && runTiming.finishedAtMs === null;
   const timerLabel =
     elapsedMs === null
       ? null
@@ -623,12 +611,13 @@ export function RuntimeLiveTimeline(props: {
           )}
         </div>
       ) : null}
-      {!displayFallbackThoughtText && liveTimelineEntries.length === 0 ? (
+      {showThinkingFooter ? (
         <span
-          className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word"
+          className="streaming-placeholder shimmer-text streaming-thinking-footer"
           aria-live="polite"
+          aria-label="Thinking"
         >
-          {displayWord}
+          Thinking
         </span>
       ) : null}
       {approvalCards}

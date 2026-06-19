@@ -16923,14 +16923,6 @@ button.chat-reply-quote:hover {
   opacity: 0.9;
 }
 
-.runtime-activity-word {
-  width: fit-content;
-  line-height: 1.35;
-  letter-spacing: 0;
-  color: var(--text-muted);
-  font-size: 12.5px;
-}
-
 .runtime-thought-snippet {
   display: block;
   max-width: min(74ch, 100%);
