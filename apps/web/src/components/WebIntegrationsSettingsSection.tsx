@@ -42,7 +42,7 @@ const POLYMCP_GENERIC_HTTP_CONFIG = JSON.stringify(
   2,
 );
 const POLYMCP_SETUP_INSTRUCTIONS = [
-  "Use this setup in the agent harness you want to connect to PolyNet.",
+  "Paste this setup into Codex, Claude Code, Cursor, or another AI harness you want to connect to PolyNet.",
   "",
   "PolyNet does not ask you to paste an access token. Your harness starts OAuth, opens the browser for PolyNet sign-in, and stores durable MCP credentials after the browser callback completes.",
   "",
@@ -425,9 +425,9 @@ export function WebIntegrationsSettingsSection(
                       </span>
                     </div>
                     <div className="integration-mounted-detail">
-                      Copy setup, sign in once, then close the local
-                      authentication tab and ask your harness to list your
-                      PolyNet workspaces.
+                      Copy setup, paste it into your AI harness, sign in once,
+                      then ask about your PolyNet communities, resources, and
+                      workspace memory.
                     </div>
                   </div>
                 </div>

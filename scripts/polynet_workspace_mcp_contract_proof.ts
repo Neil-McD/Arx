@@ -229,6 +229,11 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "Paste this setup into Codex, Claude Code, Cursor, or another AI harness you want to connect to PolyNet.",
+  "PolyMCP setup copy should name the target AI harnesses",
+);
+assertIncludes(
+  integrationsSettings,
   "Your harness starts OAuth",
   "PolyMCP setup copy should explain harness-owned OAuth",
 );
@@ -264,13 +269,18 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "close the local",
-  "PolyMCP integration card should mention closing the local auth tab",
+  "paste it into your AI harness",
+  "PolyMCP integration card should explain where setup is pasted",
 );
 assertIncludes(
   integrationsSettings,
-  "authentication tab",
-  "PolyMCP integration card should explain the local auth tab",
+  "PolyNet communities, resources, and",
+  "PolyMCP integration card should explain what users can ask about",
+);
+assertIncludes(
+  integrationsSettings,
+  "workspace memory.",
+  "PolyMCP integration card should mention workspace memory",
 );
 assertIncludes(
   integrationsSettings,
