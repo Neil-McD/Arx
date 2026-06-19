@@ -457,14 +457,17 @@ function renderToolCallLabel(call: RuntimeTimelineToolCall): ReactNode {
 
 function RuntimeTraceToolGroup(props: {
   group: RuntimeTimelineToolGroup;
+  isActive: boolean;
 }): JSX.Element {
-  const { group } = props;
+  const { group, isActive } = props;
+  const isLiveActive = isActive && group.status === "running";
   return (
     <details
       className={[
         "runtime-trace-tool",
         `runtime-trace-tool-${group.status}`,
-      ].join(" ")}
+        isLiveActive ? "runtime-trace-tool-active" : "",
+      ].filter(Boolean).join(" ")}
     >
       <summary className="runtime-trace-tool-summary">
         <span className="runtime-trace-tool-title">{group.title}</span>
@@ -606,6 +609,7 @@ export function RuntimeLiveTimeline(props: {
               <RuntimeTraceToolGroup
                 key={entry.id}
                 group={entry.group}
+                isActive={entry.isActive}
               />
             ),
           )}

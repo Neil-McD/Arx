@@ -16988,6 +16988,21 @@ button.chat-reply-quote:hover {
   color: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary));
 }
 
+.runtime-trace-tool-active > .runtime-trace-tool-summary .runtime-trace-tool-title,
+.runtime-trace-tool-active > .runtime-trace-tool-summary .runtime-trace-tool-chevron {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 25%,
+    var(--text-faint, rgba(255, 255, 255, 0.3)) 50%,
+    var(--text-muted) 75%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-web 2s ease-in-out infinite;
+}
+
 .runtime-trace-tool-summary::-webkit-details-marker {
   display: none;
 }
