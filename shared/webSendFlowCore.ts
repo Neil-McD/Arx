@@ -1,5 +1,10 @@
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
 import { resolveCloudModelSelection } from "./inferenceLaneResolver";
+import {
+  RUNTIME_ENGINE_POLYNET,
+  normalizeRuntimeEngine,
+  type RuntimeEngine,
+} from "./runtimeEngine";
 import type { GuestInferenceIssue } from "./webTurnRunnerCore";
 
 type ModelToggle = {
@@ -10,6 +15,7 @@ type ModelToggle = {
 export type ThreadRecord = {
   id: string;
   model_id: string | null;
+  runtime_engine?: RuntimeEngine | null;
   project_id?: string | null;
   community_id?: string | null;
   last_seq: number;
@@ -59,6 +65,7 @@ export type UseWebSendFlowControllerArgs<
     projectId: string | null;
     communityId: string | null;
     modelId: string;
+    runtimeEngine: RuntimeEngine;
     requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
     inferenceSource: "free" | "user_key" | "chatgpt";
     startedInDraft: boolean;
@@ -69,6 +76,7 @@ export type UseWebSendFlowControllerArgs<
     projectId: string | null;
     communityId: string | null;
     modelId: string;
+    runtimeEngine: RuntimeEngine;
     requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
     inferenceSource: "free" | "user_key" | "chatgpt";
     startedInDraft: boolean;
@@ -78,6 +86,7 @@ export type UseWebSendFlowControllerArgs<
   createThread: (session: SessionT) => Promise<ThreadRecordT | null>;
   onThreadCreated?: (thread: ThreadRecordT) => void;
   updateThreadModel: (threadId: string, modelId: string, session: SessionT) => Promise<void>;
+  updateThreadRuntimeEngine: (threadId: string, runtimeEngine: RuntimeEngine, session: SessionT) => Promise<void>;
   maybeSetThreadTitleFromText: (threadId: string, userText: string, session: SessionT) => Promise<void>;
   createPersonalMemoryItemDirect: (params: { content: string; pinned: boolean }) => Promise<unknown>;
   showMemoryToastMessage: (message: string) => void;
@@ -106,6 +115,7 @@ export type UseWebSendFlowControllerArgs<
       userMessageKey?: string;
       systemPrompt?: string | null;
       inferenceSource?: "free" | "user_key" | "chatgpt";
+      runtimeEngine?: RuntimeEngine;
       requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
       requestedAgenticTools?: boolean;
       replyToId?: string;
@@ -136,6 +146,7 @@ export type UseWebSendFlowControllerArgs<
   threadMessages: ThreadMessageT[];
   threads: ThreadRecordT[];
   activeModelId: string | null;
+  activeRuntimeEngine: RuntimeEngine;
   modelToggles: ModelToggle[];
   userMemoryRememberEnabled: boolean;
   accountTier: string | null;
@@ -226,6 +237,23 @@ export function resolvePreferredModelSelectionFromArgs<
   });
 }
 
+export function resolvePreferredRuntimeEngineFromArgs<
+  SessionT,
+  AttachmentT,
+  ThreadRecordT extends ThreadRecord,
+  ThreadMessageT extends ThreadMessage,
+>(
+  args: UseWebSendFlowControllerArgs<SessionT, AttachmentT, ThreadRecordT, ThreadMessageT>,
+  threadId: string,
+): RuntimeEngine {
+  const threadEngine = args.threads.find((thread) => thread.id === threadId)?.runtime_engine;
+  return (
+    normalizeRuntimeEngine(threadEngine) ??
+    normalizeRuntimeEngine(args.activeRuntimeEngine) ??
+    RUNTIME_ENGINE_POLYNET
+  );
+}
+
 export function mapRequestedFundingSourceToInferenceSource(
   fundingSource: "demo_public" | "user_key" | "user_chatgpt",
 ): "free" | "user_key" | "chatgpt" {
@@ -280,5 +308,29 @@ export function syncThreadModelSelectionInState<
   if (!session) return;
   void args.updateThreadModel(threadId, modelId, session).catch((error) => {
     console.warn("Failed to persist thread model selection:", error);
+  });
+}
+
+export function syncThreadRuntimeEngineSelectionInState<
+  SessionT,
+  AttachmentT,
+  ThreadRecordT extends ThreadRecord,
+  ThreadMessageT extends ThreadMessage,
+>(
+  args: UseWebSendFlowControllerArgs<SessionT, AttachmentT, ThreadRecordT, ThreadMessageT>,
+  threadId: string,
+  runtimeEngine: RuntimeEngine,
+  session: SessionT | null,
+): void {
+  args.setThreads((prev) =>
+    prev.map((thread) =>
+      thread.id === threadId
+        ? ({ ...thread, runtime_engine: runtimeEngine } as ThreadRecordT)
+        : thread,
+    ),
+  );
+  if (!session) return;
+  void args.updateThreadRuntimeEngine(threadId, runtimeEngine, session).catch((error) => {
+    console.warn("Failed to persist thread runtime engine selection:", error);
   });
 }

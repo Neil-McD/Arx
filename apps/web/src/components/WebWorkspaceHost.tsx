@@ -29,6 +29,11 @@ import {
 } from "../../../../shared/workspaceTerminalsGateway";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
+import {
+  RUNTIME_ENGINE_CODEX,
+  RUNTIME_ENGINE_POLYNET,
+  type RuntimeEngine,
+} from "../../../../shared/runtimeEngine";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { useWorkspaceAutoScroll } from "../../../../shared/useWorkspaceAutoScroll";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
@@ -383,6 +388,8 @@ export type WebWorkspaceHostProps = {
   showAppToastMessage: (message: string) => void;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  activeRuntimeEngine: RuntimeEngine;
+  onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceVoiceClick: () => void;
@@ -737,6 +744,8 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   guestWorkspaceComposerPlaceholder: string;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  activeRuntimeEngine: RuntimeEngine;
+  onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
@@ -810,6 +819,8 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   guestSignupRail={props.guestSignupRail}
                   activeModelLabel={props.activeModelLabel}
                   modelToggles={props.modelToggles}
+                  activeRuntimeEngine={props.activeRuntimeEngine}
+                  onRuntimeEngineChange={props.onRuntimeEngineChange}
                   workspaceVoiceUiState={props.workspaceVoiceUiState}
                   workspaceVoiceTitle={props.workspaceVoiceTitle}
                   onWorkspaceFileInputChange={props.onWorkspaceFileInputChange}
@@ -882,6 +893,8 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasAuthenticatedPresentation !== next.hasAuthenticatedPresentation ||
     prev.isAuthRecoveringSignedIn !== next.isAuthRecoveringSignedIn ||
     prev.isAccountGraphHydratingCritical !== next.isAccountGraphHydratingCritical ||
+    prev.activeRuntimeEngine !== next.activeRuntimeEngine ||
+    prev.onRuntimeEngineChange !== next.onRuntimeEngineChange ||
     prev.renderPreviewForRun !== next.renderPreviewForRun ||
     prev.onRequireThreadErrorSignIn !== next.onRequireThreadErrorSignIn ||
     prev.onRetryLastThreadError !== next.onRetryLastThreadError ||
@@ -908,6 +921,8 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasAuthenticatedPresentation === next.hasAuthenticatedPresentation &&
     prev.isAuthRecoveringSignedIn === next.isAuthRecoveringSignedIn &&
     prev.isAccountGraphHydratingCritical === next.isAccountGraphHydratingCritical &&
+    prev.activeRuntimeEngine === next.activeRuntimeEngine &&
+    prev.onRuntimeEngineChange === next.onRuntimeEngineChange &&
     prev.isActiveWorkspaceThreadBusy === next.isActiveWorkspaceThreadBusy &&
     prev.isStreamingWorkspaceTurn === next.isStreamingWorkspaceTurn
   );
@@ -1030,6 +1045,41 @@ function WorkspaceAttachmentPreview(props: {
   );
 }
 
+function WorkspaceRuntimeEngineSelector(props: {
+  value: RuntimeEngine;
+  disabled: boolean;
+  onChange: (engine: RuntimeEngine) => void;
+}) {
+  const options: Array<{ value: RuntimeEngine; label: string }> = [
+    { value: RUNTIME_ENGINE_POLYNET, label: "PolyNet" },
+    { value: RUNTIME_ENGINE_CODEX, label: "Codex" },
+  ];
+  const handleChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
+    props.onChange(event.currentTarget.value as RuntimeEngine);
+  };
+
+  return (
+    <label className="ask-engine-selector" title="Choose runtime">
+      <select
+        className="ask-engine-select"
+        value={props.value}
+        disabled={props.disabled}
+        onChange={handleChange}
+        aria-label="Choose runtime"
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function WorkspaceComposer(props: {
   landing?: boolean;
   hasSession: boolean;
@@ -1050,6 +1100,8 @@ function WorkspaceComposer(props: {
   guestSignupRail: ReactNode;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  activeRuntimeEngine: RuntimeEngine;
+  onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
@@ -1123,6 +1175,13 @@ function WorkspaceComposer(props: {
             style={{ display: "none" }}
             onChange={props.onWorkspaceFileInputChange}
           />
+          {props.hasAuthenticatedPresentation ? (
+            <WorkspaceRuntimeEngineSelector
+              value={props.activeRuntimeEngine}
+              disabled={disableComposerActions}
+              onChange={props.onRuntimeEngineChange}
+            />
+          ) : null}
         </div>
         <div className={`ask-actions${props.landing ? " ask-actions-landing" : ""}`}>
           <VoiceInputButton
@@ -2232,6 +2291,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 guestWorkspaceComposerPlaceholder={props.guestWorkspaceComposerPlaceholder}
                 activeModelLabel={props.activeModelLabel}
                 modelToggles={props.modelToggles}
+                activeRuntimeEngine={props.activeRuntimeEngine}
+                onRuntimeEngineChange={props.onRuntimeEngineChange}
                 workspaceVoiceUiState={props.workspaceVoiceUiState}
                 workspaceVoiceTitle={props.workspaceVoiceTitle}
                 onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
@@ -2326,6 +2387,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             guestSignupRail={props.guestSignupRail}
             activeModelLabel={props.activeModelLabel}
             modelToggles={props.modelToggles}
+            activeRuntimeEngine={props.activeRuntimeEngine}
+            onRuntimeEngineChange={props.onRuntimeEngineChange}
             workspaceVoiceUiState={props.workspaceVoiceUiState}
             workspaceVoiceTitle={props.workspaceVoiceTitle}
             onWorkspaceFileInputChange={handleWorkspaceFileInputChange}

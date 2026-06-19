@@ -500,6 +500,11 @@ import {
   markCloudThreadAgentAttentionSeen,
   uploadCloudThreadAttachmentFile,
 } from "../../../shared/cloudThreadsGateway";
+import {
+  RUNTIME_ENGINE_POLYNET,
+  normalizeRuntimeEngine,
+  type RuntimeEngine,
+} from "../../../shared/runtimeEngine";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
 import {
@@ -685,6 +690,7 @@ type ThreadRecord = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: RuntimeEngine | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -739,6 +745,7 @@ const GUEST_MODEL_LABELS = SHARED_FREE_MODEL_LABELS;
 const MODEL_TOGGLES_STORAGE_KEY = "polynet_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "polynet_active_model_id";
 const LEGACY_ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
+const ACTIVE_RUNTIME_ENGINE_STORAGE_KEY = "polynet_active_runtime_engine";
 const APP_THEME_STORAGE_KEY = "polynet-theme";
 const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
@@ -2049,6 +2056,25 @@ export default function App() {
       return null;
     }
   });
+  const [activeRuntimeEngine, setActiveRuntimeEngineState] = useState<RuntimeEngine>(() => {
+    try {
+      return (
+        normalizeRuntimeEngine(localStorage.getItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY)) ??
+        RUNTIME_ENGINE_POLYNET
+      );
+    } catch {
+      return RUNTIME_ENGINE_POLYNET;
+    }
+  });
+  const setActiveRuntimeEngine = useCallback((next: RuntimeEngine): void => {
+    const normalized = normalizeRuntimeEngine(next) ?? RUNTIME_ENGINE_POLYNET;
+    setActiveRuntimeEngineState(normalized);
+    try {
+      localStorage.setItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized);
+    } catch {
+      // Local storage is best-effort; the cloud thread value remains canonical for saved threads.
+    }
+  }, []);
   const formatModelLabel = useCallback(
     (modelId: string | null | undefined): string | null => {
       const normalized = (modelId ?? "").trim();
@@ -3601,6 +3627,7 @@ export default function App() {
     toEpochSeconds,
     activeCommunityId,
     activeModelId: DEFAULT_ACTIVE_MODEL_ID,
+    activeRuntimeEngine,
     modelToggles: platformModelToggles,
     defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
   });
@@ -4639,8 +4666,37 @@ export default function App() {
     return await refreshAccountSetupStatus();
   }, [refreshAccountSetupStatus, saveUserMemorySettings]);
 
-  const { createThread, updateThreadModel, maybeSetThreadTitleFromText, setThreadCommunityLens } =
-    workspaceCore.threadMutation;
+  const {
+    createThread,
+    updateThreadModel,
+    updateThreadRuntimeEngine,
+    maybeSetThreadTitleFromText,
+    setThreadCommunityLens,
+  } = workspaceCore.threadMutation;
+  const handleWorkspaceRuntimeEngineChange = useCallback(
+    (next: RuntimeEngine): void => {
+      const runtimeEngine = normalizeRuntimeEngine(next) ?? RUNTIME_ENGINE_POLYNET;
+      setActiveRuntimeEngine(runtimeEngine);
+      if (workspaceWantsNewChat || !activeThreadId) return;
+      const session = sessionRef.current;
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === activeThreadId
+            ? { ...thread, runtime_engine: runtimeEngine }
+            : thread,
+        ),
+      );
+      if (!session) return;
+      void updateThreadRuntimeEngine(activeThreadId, runtimeEngine, session as AuthSession);
+    },
+    [
+      activeThreadId,
+      setActiveRuntimeEngine,
+      setThreads,
+      updateThreadRuntimeEngine,
+      workspaceWantsNewChat,
+    ],
+  );
 
   const { loadDiscoverCommunities } = useWebDiscoverController({
     toCanonicalCommunityVisibility,
@@ -7440,6 +7496,26 @@ export default function App() {
   const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
+  const activeRuntimeEngineForWorkspace =
+    !workspaceWantsNewChat && activeThreadId
+      ? normalizeRuntimeEngine(
+          threads.find((thread) => thread.id === activeThreadId)?.runtime_engine,
+        ) ?? activeRuntimeEngine
+      : activeRuntimeEngine;
+  useEffect(() => {
+    if (workspaceWantsNewChat || !activeThreadId) return;
+    const threadRuntimeEngine = normalizeRuntimeEngine(
+      threads.find((thread) => thread.id === activeThreadId)?.runtime_engine,
+    );
+    if (!threadRuntimeEngine || threadRuntimeEngine === activeRuntimeEngine) return;
+    setActiveRuntimeEngine(threadRuntimeEngine);
+  }, [
+    activeRuntimeEngine,
+    activeThreadId,
+    setActiveRuntimeEngine,
+    threads,
+    workspaceWantsNewChat,
+  ]);
   const shouldShowAccountSetupCard =
     Boolean(session) &&
     Boolean(effectiveAccountSetupStatus) &&
@@ -7470,6 +7546,7 @@ export default function App() {
       projectId,
       communityId,
       modelId,
+      runtimeEngine,
       requestedFundingSource,
       inferenceSource,
       startedInDraft,
@@ -7480,6 +7557,7 @@ export default function App() {
         project_id: projectId,
         community_id: communityId,
         model_id: modelId,
+        runtime_engine: runtimeEngine,
         requested_funding_source: requestedFundingSource,
         inference_source: inferenceSource,
         started_in_draft: startedInDraft,
@@ -7492,6 +7570,7 @@ export default function App() {
       projectId,
       communityId,
       modelId,
+      runtimeEngine,
       requestedFundingSource,
       inferenceSource,
       startedInDraft,
@@ -7502,6 +7581,7 @@ export default function App() {
         project_id: projectId,
         community_id: communityId,
         model_id: modelId,
+        runtime_engine: runtimeEngine,
         requested_funding_source: requestedFundingSource,
         inference_source: inferenceSource,
         started_in_draft: startedInDraft,
@@ -7518,6 +7598,7 @@ export default function App() {
       });
     },
     updateThreadModel,
+    updateThreadRuntimeEngine,
     maybeSetThreadTitleFromText,
     createPersonalMemoryItemDirect,
     showMemoryToastMessage,
@@ -7538,6 +7619,7 @@ export default function App() {
     threadMessages,
     threads,
     activeModelId: DEFAULT_ACTIVE_MODEL_ID,
+    activeRuntimeEngine: activeRuntimeEngineForWorkspace,
     modelToggles: platformModelToggles,
     userMemoryRememberEnabled:
       userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
@@ -10524,6 +10606,8 @@ export default function App() {
     showAppToastMessage,
     activeModelLabel: workspace.derived.activeModelLabel,
     modelToggles: platformModelToggles,
+    activeRuntimeEngine: activeRuntimeEngineForWorkspace,
+    onRuntimeEngineChange: handleWorkspaceRuntimeEngineChange,
     workspaceVoiceUiState,
     workspaceVoiceTitle: workspaceVoiceIntent.title,
     onWorkspaceVoiceClick: () => void handleVoiceInputClick("workspace"),

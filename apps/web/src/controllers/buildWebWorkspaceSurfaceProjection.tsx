@@ -1,6 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { AuthSession } from "../auth";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
+import type { RuntimeEngine } from "../../../../shared/runtimeEngine";
 import type { MessageContextModalPayload } from "../../../../shared/messageContextUi";
 import type {
   WebWorkspaceHostProps,
@@ -74,6 +75,8 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   showAppToastMessage: (message: string) => void;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  activeRuntimeEngine: RuntimeEngine;
+  onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceVoiceClick: () => void;
@@ -310,6 +313,8 @@ export function buildWebWorkspaceSurfaceProjection(
     showAppToastMessage: params.showAppToastMessage,
     activeModelLabel: params.activeModelLabel,
     modelToggles: params.modelToggles,
+    activeRuntimeEngine: params.activeRuntimeEngine,
+    onRuntimeEngineChange: params.onRuntimeEngineChange,
     workspaceVoiceUiState: params.workspaceVoiceUiState,
     workspaceVoiceTitle: params.workspaceVoiceTitle,
     onWorkspaceVoiceClick: params.onWorkspaceVoiceClick,

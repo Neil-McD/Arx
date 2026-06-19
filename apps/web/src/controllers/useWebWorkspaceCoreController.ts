@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
+import type { RuntimeEngine } from "../../../../shared/runtimeEngine";
 import { useWebThreadMutationController } from "../../../../shared/useWebThreadMutationController";
 import {
   emitWorkspaceEvent,
@@ -13,6 +14,7 @@ type ThreadLike = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: RuntimeEngine | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -64,6 +66,7 @@ type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> =
   toEpochSeconds: (value: string) => number;
   activeCommunityId: string | null;
   activeModelId: string | null;
+  activeRuntimeEngine: RuntimeEngine;
   modelToggles: ModelToggle[];
   defaultActiveModelId: string;
 };
@@ -93,6 +96,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     activeCommunityId: params.activeCommunityId,
     activeProjectId: params.project.state.activeProjectId,
     activeModelId: params.activeModelId,
+    activeRuntimeEngine: params.activeRuntimeEngine,
     modelToggles: params.modelToggles,
     threads: params.threads,
     defaultActiveModelId: params.defaultActiveModelId,
@@ -313,10 +317,11 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         name: "thread_create",
         status: "start",
         projectId: params.project.derived.resolvedActiveProjectId,
-        detail: {
-          communityId: params.activeCommunityId,
-          activeModelId: params.activeModelId,
-        },
+          detail: {
+            communityId: params.activeCommunityId,
+            activeModelId: params.activeModelId,
+            runtimeEngine: params.activeRuntimeEngine,
+          },
       });
       try {
         const thread = await rawThreadMutation.createThread(session);
@@ -339,6 +344,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           detail: {
             communityId: thread.community_id ?? null,
             modelId: thread.model_id ?? null,
+            runtimeEngine: thread.runtime_engine ?? null,
           },
         });
         return thread;
@@ -356,9 +362,52 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     [
       params.activeCommunityId,
       params.activeModelId,
+      params.activeRuntimeEngine,
       params.project.derived.resolvedActiveProjectId,
       rawThreadMutation,
     ],
+  );
+
+  const updateThreadRuntimeEngine = useCallback<typeof rawThreadMutation.updateThreadRuntimeEngine>(
+    async (threadId, runtimeEngine, session) => {
+      emitWorkspaceEvent({
+        scope: "thread",
+        name: "thread_update_runtime_engine",
+        status: "start",
+        projectId: params.project.derived.resolvedActiveProjectId,
+        threadId,
+        detail: {
+          runtimeEngine,
+        },
+      });
+      try {
+        await rawThreadMutation.updateThreadRuntimeEngine(threadId, runtimeEngine, session);
+        emitWorkspaceEvent({
+          scope: "thread",
+          name: "thread_update_runtime_engine",
+          status: "success",
+          projectId: params.project.derived.resolvedActiveProjectId,
+          threadId,
+          detail: {
+            runtimeEngine,
+          },
+        });
+      } catch (error) {
+        emitWorkspaceEvent({
+          scope: "thread",
+          name: "thread_update_runtime_engine",
+          status: "failure",
+          projectId: params.project.derived.resolvedActiveProjectId,
+          threadId,
+          detail: {
+            runtimeEngine,
+          },
+          error: formatWorkspaceInstrumentationError(error),
+        });
+        throw error;
+      }
+    },
+    [params.project.derived.resolvedActiveProjectId, rawThreadMutation],
   );
 
   const updateThreadModel = useCallback<typeof rawThreadMutation.updateThreadModel>(
@@ -512,6 +561,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     threadMutation: {
       ...rawThreadMutation,
       createThread,
+      updateThreadRuntimeEngine,
       updateThreadModel,
       maybeSetThreadTitleFromText,
       setThreadCommunityLens,

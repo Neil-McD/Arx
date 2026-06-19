@@ -13,6 +13,10 @@ import {
   type CapabilityFamily,
 } from "../shared/canonicalGateEngine";
 import {
+  normalizeRuntimeEngine,
+  type RuntimeEngine,
+} from "../shared/runtimeEngine";
+import {
   asRuntimeMessages,
   gateDeniedResponse,
   hasChatgptConnectionForUser,
@@ -29,6 +33,7 @@ export type RuntimeCapabilityFamily = CapabilityFamily;
 export type RuntimeTurnInput = {
   thread_id?: string;
   model_id?: string | null;
+  runtime_engine?: RuntimeEngine | null;
   surface?: "web";
   requested_agentic_tools?: boolean | null;
   requested_funding_source?:
@@ -89,6 +94,7 @@ export type RuntimeTurnResolution = {
   maxTokens: number;
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+  requestedRuntimeEngine: RuntimeEngine | null;
   providerApiKeyOverride: string | null;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
@@ -337,6 +343,23 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const platformMap = loadPlatformModelMap();
   const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.5";
   const publicRef = publicMap[requestedModelId];
+  const requestedRuntimeEngine = normalizeRuntimeEngine(input.runtime_engine);
+  if (
+    input.runtime_engine !== undefined &&
+    input.runtime_engine !== null &&
+    String(input.runtime_engine).trim().length > 0 &&
+    !requestedRuntimeEngine
+  ) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "invalid_runtime_engine",
+        error: "invalid_runtime_engine",
+        message: "runtime_engine must be either polynet or codex.",
+      }),
+    };
+  }
   const requestedAgenticTools = resolveRequestedAgenticTools(
     input.requested_agentic_tools,
   );
@@ -536,6 +559,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       maxTokens,
       stream,
       inferenceSource,
+      requestedRuntimeEngine,
       providerApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,

@@ -15794,6 +15794,63 @@ button.chat-reply-quote:hover {
   cursor: not-allowed;
 }
 
+.ask-engine-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.ask-engine-selector::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-right: 1.25px solid currentColor;
+  border-bottom: 1.25px solid currentColor;
+  color: var(--text-muted);
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.ask-engine-select {
+  width: auto;
+  height: 28px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: normal;
+  padding: 0 16px 0 0;
+  outline: none;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.ask-engine-select:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.ask-engine-select:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  text-underline-offset: 4px;
+}
+
+.ask-engine-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .ask-icon-btn.ask-mic {
   position: relative;
   isolation: isolate;

@@ -1,6 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import type { PaidUsageBillingMode } from "./paidUsageBilling";
+import type { RuntimeEngine } from "./runtimeEngine";
 import type { PaidToolKind } from "./workspaceCredits";
 
 export type InferenceIssueModalState = {
@@ -61,6 +62,7 @@ export type UseWebTurnRunnerControllerArgs<
     id: string;
     title?: string | null;
     model_id?: string | null;
+    runtime_engine?: RuntimeEngine | null;
     project_id?: string | null;
     community_id?: string | null;
     context_version?: number | null;
@@ -109,6 +111,7 @@ export type RunAgentTurnParams = {
   userMessageKey?: string;
   systemPrompt?: string | null;
   inferenceSource?: "free" | "user_key" | "chatgpt";
+  runtimeEngine?: RuntimeEngine;
   requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
   requestedAgenticTools?: boolean;
   replyToId?: string;

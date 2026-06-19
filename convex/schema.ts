@@ -2510,6 +2510,7 @@ export default defineSchema({
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     contextVersion: v.optional(v.number()),
     workingState: v.optional(
       v.object({
