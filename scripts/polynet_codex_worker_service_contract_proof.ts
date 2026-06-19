@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 type JsonRecord = Record<string, unknown>;
 
-type SseEvent = {
-  event: string;
-  data: JsonRecord;
-};
-
 const args = new Set(process.argv.slice(2));
 const requireLive = args.has("--require-live");
 const rootDir = path.resolve(new URL("..", import.meta.url).pathname);
 const runnerPath = path.join(rootDir, "scripts/run_polynet_codex_worker_service_local.sh");
+const blaxelToolSource = readFileSync(
+  path.join(rootDir, "services/polynet-codex-worker/src/blaxelTool.ts"),
+  "utf8",
+);
 const port = readIntegerEnv("POLYNET_CODEX_WORKER_PROOF_PORT", 8800 + Math.floor(Math.random() * 500));
 const authToken = `polynet-worker-proof-${randomUUID()}`;
 const serviceUrl = `http://127.0.0.1:${port}`;
@@ -50,13 +50,6 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function runtimeEventTypes(events: SseEvent[]): string[] {
-  return events
-    .filter((event) => event.event === "runtime_event")
-    .map((event) => String(event.data.event_type ?? ""))
-    .filter(Boolean);
-}
-
 function serviceEvents(): JsonRecord[] {
   return stdoutTail.flatMap((line) => {
     try {
@@ -67,6 +60,12 @@ function serviceEvents(): JsonRecord[] {
     }
   });
 }
+
+assert.match(
+  blaxelToolSource,
+  /resolveBlaxelWorkspaceComputerIfReady[\s\S]*params\.requireExisting === true[\s\S]*ensureBlaxelWorkspaceComputer/,
+  "provided project sandboxes must be adopted/resolved by the worker, not recreated from Fly defaults",
+);
 
 async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15_000): Promise<{
   status: number;
@@ -114,86 +113,77 @@ async function waitForHealth(proc: ChildProcessWithoutNullStreams, timeoutMs = 1
   throw new Error(`worker service did not become reachable: ${lastError}`);
 }
 
-function parseSseBlock(block: string): SseEvent | null {
-  let event = "message";
-  const dataLines: string[] = [];
-  for (const line of block.split(/\r?\n/)) {
-    if (line.startsWith("event:")) {
-      event = line.slice("event:".length).trim();
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice("data:".length).trimStart());
-    }
-  }
-  if (dataLines.length === 0) return null;
-  const rawData = dataLines.join("\n");
-  return {
-    event,
-    data: asRecord(JSON.parse(rawData)) ?? {},
-  };
-}
-
-async function readSseEvents(response: Response, timeoutMs = 360_000): Promise<SseEvent[]> {
-  assert.ok(response.body, "streaming response must include a body");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const events: SseEvent[] = [];
-  let buffer = "";
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    let separatorIndex = buffer.indexOf("\n\n");
-    while (separatorIndex >= 0) {
-      const rawBlock = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
-      const parsed = parseSseBlock(rawBlock);
-      if (parsed) events.push(parsed);
-      separatorIndex = buffer.indexOf("\n\n");
-    }
-  }
-
-  if (buffer.trim()) {
-    const parsed = parseSseBlock(buffer);
-    if (parsed) events.push(parsed);
-  }
-  return events;
-}
-
-async function runStreamedProbe(): Promise<SseEvent[]> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 390_000);
-  try {
-    const response = await fetch(`${serviceUrl}/v1/codex/probe?stream=1`, {
+async function runWorkspaceProbe(): Promise<JsonRecord> {
+  const response = await fetchJson(
+    `${serviceUrl}/v1/workspace/probe`,
+    {
       method: "POST",
       headers: {
         Authorization: `Bearer ${authToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        run_id: `polynet-worker-service-proof-${randomUUID().slice(0, 8)}`,
-        stream: true,
+        run_id: `polynet-worker-service-workspace-proof-${randomUUID().slice(0, 8)}`,
         destroy_after_run: true,
         command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && uname -s",
       }),
-      signal: controller.signal,
-    });
-    assert.equal(response.status, 200, `streamed probe status must be 200, got ${response.status}`);
-    assert.match(
-      response.headers.get("content-type") ?? "",
-      /text\/event-stream/,
-      "streamed probe must return text/event-stream",
-    );
-    await assertBusyResponse();
-    return await readSseEvents(response);
-  } finally {
-    clearTimeout(timeout);
+    },
+    180_000,
+  );
+  assert.equal(
+    response.status,
+    200,
+    `workspace probe status must be 200: ${JSON.stringify(response.body)}`,
+  );
+  return response.body;
+}
+
+function assertWorkspaceProbeBody(body: JsonRecord): JsonRecord {
+  assert.equal(body.ok, true, `workspace probe must succeed: ${JSON.stringify(body)}`);
+  assert.equal(body.engine_id, "polynet_codex_worker", "workspace probe engine mismatch");
+  assert.equal(body.probe_kind, "workspace", "workspace probe kind mismatch");
+
+  const proof = asRecord(body.proof);
+  assert.equal(proof?.ok, true, `workspace proof must pass: ${JSON.stringify(proof)}`);
+  assert.deepEqual(asArray(proof?.failures), [], "workspace proof must have no failures");
+
+  const toolCalls = asArray(body.tool_calls);
+  assert.equal(toolCalls.length, 1, "workspace probe must execute exactly one workspace command");
+  const toolCall = asRecord(toolCalls[0]);
+  assert.equal(toolCall?.ok, true, `workspace command must succeed: ${JSON.stringify(toolCall)}`);
+  const stdout = String(toolCall?.stdout_preview ?? "");
+  assert.ok(
+    stdout.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE"),
+    `workspace stdout must include probe marker: ${stdout}`,
+  );
+  assert.ok(stdout.includes("/workspace"), `workspace stdout must include /workspace: ${stdout}`);
+
+  const timing = asRecord(body.timing);
+  const buckets = asRecord(timing?.buckets);
+  assert.ok(buckets, "workspace probe timing must include buckets");
+  for (const key of ["sandbox_ensure_ms", "workspace_exec_ms", "sandbox_destroy_ms"]) {
+    assert.equal(typeof buckets[key], "number", `workspace timing bucket missing: ${key}`);
   }
+
+  const eventTypes = asArray(body.events)
+    .map((event) => String(asRecord(event)?.event_type ?? ""))
+    .filter(Boolean);
+  for (const eventType of [
+    "workspace_probe_started",
+    "sandbox_ensure_started",
+    "sandbox_ensure_finished",
+    "workspace_exec_requested",
+    "workspace_exec_finished",
+    "workspace_probe_finished",
+    "sandbox_destroy_finished",
+  ]) {
+    assert.ok(eventTypes.includes(eventType), `workspace event missing: ${eventType}`);
+  }
+  return buckets;
 }
 
 async function assertBusyResponse(): Promise<void> {
-  const response = await fetch(`${serviceUrl}/v1/codex/probe`, {
+  const response = await fetch(`${serviceUrl}/v1/workspace/probe`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${authToken}`,
@@ -211,58 +201,90 @@ async function assertBusyResponse(): Promise<void> {
   assert.equal(body.code, "worker_busy", `busy response code mismatch: ${text}`);
 }
 
-function assertProbeEvents(events: SseEvent[]): JsonRecord {
-  assert.ok(events.some((event) => event.event === "start"), "stream must include start event");
-  assert.ok(events.some((event) => event.event === "delta"), "stream must include assistant token deltas");
-  const errorEvent = events.find((event) => event.event === "error");
-  assert.equal(errorEvent, undefined, `stream must not include error event: ${JSON.stringify(errorEvent?.data)}`);
-  const modelFinished = events.find((event) => event.event === "run_model_finished");
-  assert.ok(modelFinished, "stream must include run_model_finished event");
-  const done = events.find((event) => event.event === "done");
-  assert.ok(done, "stream must include done event");
-  const finalized = events.find((event) => event.event === "run_finalized");
-  assert.ok(finalized, "stream must include run_finalized event");
+async function assertTurnControlEndpointsFailClosed(): Promise<void> {
+  const unauthCancel = await fetchJson(`${serviceUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(unauthCancel.status, 401, "cancel endpoint must reject missing bearer auth");
 
-  const proof = asRecord(finalized.data.proof ?? done.data.proof);
-  assert.equal(proof?.ok, true, `probe proof must pass: ${JSON.stringify(proof)}`);
-  assert.deepEqual(asArray(proof?.failures), [], "probe proof must have no failures");
-  assert.equal(finalized.data.ok, true, `run_finalized must be ok: ${JSON.stringify(finalized.data)}`);
-  assert.equal(finalized.data.error, null, `run_finalized error must be null: ${JSON.stringify(finalized.data.error)}`);
+  const missingCancelRunId = await fetchJson(`${serviceUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  assert.equal(missingCancelRunId.status, 400, "cancel endpoint must require run_id");
+  assert.equal(missingCancelRunId.body.code, "run_id_required", "cancel missing run_id code mismatch");
 
-  const timing = asRecord(finalized.data.timing);
-  const buckets = asRecord(timing?.buckets);
-  assert.ok(buckets, "finalized timing must include buckets");
-  for (const key of [
-    "sandbox_ensure_ms",
-    "codex_thread_start_ms",
-    "codex_turn_start_ack_ms",
-    "codex_turn_total_ms",
-    "first_codex_event_ms",
-    "first_workspace_exec_ms",
-    "latest_workspace_exec_latency_ms",
-    "first_assistant_delta_ms",
-    "sandbox_destroy_ms",
-  ]) {
-    assert.equal(typeof buckets[key], "number", `timing bucket missing: ${key}`);
-  }
+  const cancelMismatch = await fetchJson(`${serviceUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(cancelMismatch.status, 409, "cancel with unknown run id must 409");
+  assert.equal(cancelMismatch.body.code, "no_matching_turn", "cancel mismatch code");
 
-  const eventTypes = runtimeEventTypes(events);
-  for (const eventType of [
-    "sandbox_ensure_started",
-    "sandbox_ensure_finished",
-    "codex_thread_started",
-    "codex_turn_start_acknowledged",
-    "workspace_exec_requested",
-    "workspace_exec_finished",
-    "codex_turn_completed",
-    "sandbox_destroy_finished",
-    "run_model_finished",
-    "run_finalized",
-  ]) {
-    assert.ok(eventTypes.includes(eventType), `runtime event missing: ${eventType}`);
-  }
+  const unauthSteer = await fetchJson(`${serviceUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: "not-a-real-run", text: "keep going" }),
+  });
+  assert.equal(unauthSteer.status, 401, "steer endpoint must reject missing bearer auth");
 
-  return buckets;
+  const missingSteerText = await fetchJson(`${serviceUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(missingSteerText.status, 400, "steer endpoint must require run_id and text");
+  assert.equal(missingSteerText.body.code, "run_id_and_text_required", "steer missing text code mismatch");
+
+  const steerMismatch = await fetchJson(`${serviceUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run", text: "keep going" }),
+  });
+  assert.equal(steerMismatch.status, 409, "steer with unknown run id must 409");
+  assert.equal(steerMismatch.body.code, "no_matching_turn", "steer mismatch code");
+}
+
+async function assertBusyWhileWorkspaceProbeInFlight(): Promise<void> {
+  const blockingProbe = fetchJson(
+    `${serviceUrl}/v1/workspace/probe`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        run_id: `polynet-worker-service-blocking-proof-${randomUUID().slice(0, 8)}`,
+        destroy_after_run: true,
+        command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && uname -s && sleep 8",
+      }),
+    },
+    180_000,
+  );
+
+  await sleep(2_000);
+  await assertBusyResponse();
+
+  const response = await blockingProbe;
+  assert.equal(response.status, 200, `blocking workspace probe must finish: ${JSON.stringify(response.body)}`);
+  assert.equal(response.body.ok, true, `blocking workspace probe must succeed: ${JSON.stringify(response.body)}`);
 }
 
 async function stopService(proc: ChildProcessWithoutNullStreams): Promise<void> {
@@ -319,14 +341,14 @@ async function main() {
     assert.equal(asRecord(health.codex)?.initialized, true, "Codex app-server must be initialized");
     assert.equal(asRecord(health.blaxel)?.configured, true, "Blaxel env must be configured");
 
-    const unauth = await fetchJson(`${serviceUrl}/v1/codex/probe`, {
+    const unauth = await fetchJson(`${serviceUrl}/v1/workspace/probe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    assert.equal(unauth.status, 401, "probe endpoint must reject missing bearer auth");
+    assert.equal(unauth.status, 401, "workspace probe endpoint must reject missing bearer auth");
 
-    const invalidSandbox = await fetchJson(`${serviceUrl}/v1/codex/probe`, {
+    const invalidSandbox = await fetchJson(`${serviceUrl}/v1/workspace/probe`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${authToken}`,
@@ -336,11 +358,25 @@ async function main() {
         sandbox_name: "!!!",
       }),
     });
-    assert.equal(invalidSandbox.status, 400, "probe endpoint must reject invalid sandbox names");
+    assert.equal(invalidSandbox.status, 400, "workspace probe endpoint must reject invalid sandbox names");
     assert.equal(invalidSandbox.body.code, "invalid_sandbox_name", "invalid sandbox response code mismatch");
 
-    const events = await runStreamedProbe();
-    const timingBuckets = assertProbeEvents(events);
+    const missingCodexAuth = await fetchJson(`${serviceUrl}/v1/codex/probe`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "say hi" }),
+    });
+    assert.equal(missingCodexAuth.status, 400, "Codex probe must require per-user ChatGPT auth");
+    assert.equal(missingCodexAuth.body.code, "chatgpt_auth_required", "missing Codex auth code mismatch");
+    await assertTurnControlEndpointsFailClosed();
+
+    await assertBusyWhileWorkspaceProbeInFlight();
+
+    const workspaceProbe = await runWorkspaceProbe();
+    const timingBuckets = assertWorkspaceProbeBody(workspaceProbe);
 
     console.log(
       JSON.stringify(
@@ -348,8 +384,10 @@ async function main() {
           ok: true,
           service_url: serviceUrl,
           service_events: serviceEvents(),
-          event_count: events.length,
-          runtime_event_types: runtimeEventTypes(events),
+          event_count: asArray(workspaceProbe.events).length,
+          runtime_event_types: asArray(workspaceProbe.events)
+            .map((event) => String(asRecord(event)?.event_type ?? ""))
+            .filter(Boolean),
           timing_buckets_ms: timingBuckets,
         },
         null,
