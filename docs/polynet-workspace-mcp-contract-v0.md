@@ -183,6 +183,8 @@ The local OAuth callback completion page is owned by the external MCP client or 
 
 The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start PolyNet sign-in, verify the connection by listing PolyNet workspaces, and report when PolyMCP is connected.
 
+The packet must keep the receiving agent focused on the PolyMCP connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If PolyMCP is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
+
 Claude Code setup should use native remote HTTP MCP:
 
 ```bash

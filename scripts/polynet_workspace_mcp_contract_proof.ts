@@ -127,6 +127,16 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "The packet must keep the receiving agent focused on the PolyMCP connection.",
+  "workspace MCP contract should constrain receiving-agent setup behavior",
+);
+assertIncludes(
+  contract,
+  "It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
+  "workspace MCP contract should keep setup from detouring into unrelated CLI repair",
+);
+assertIncludes(
+  contract,
   "Claude Code setup should use native remote HTTP MCP",
   "workspace MCP contract should include Claude Code setup",
 );
@@ -249,6 +259,26 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "## Operating Rules",
+  "PolyMCP setup packet should include operating rules",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not ask for or paste access tokens.",
+  "PolyMCP setup packet should forbid token-paste setup",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
+  "PolyMCP setup packet should avoid unrelated CLI repair detours",
+);
+assertIncludes(
+  integrationsSettings,
+  "give the user the exact next command or click path and stop",
+  "PolyMCP setup packet should make blocked auth handoff concise",
+);
+assertIncludes(
+  integrationsSettings,
   "## What To Do",
   "PolyMCP setup packet should include agent workflow instructions",
 );
@@ -256,6 +286,16 @@ assertIncludes(
   integrationsSettings,
   "Identify which harness you are running in.",
   "PolyMCP setup packet should tell the receiving agent to identify its harness",
+);
+assertIncludes(
+  integrationsSettings,
+  "Add PolyMCP with the matching setup path below, unless it is already configured.",
+  "PolyMCP setup packet should not duplicate existing MCP registration",
+);
+assertIncludes(
+  integrationsSettings,
+  "If authentication is needed, give the user one clear sign-in action for this harness.",
+  "PolyMCP setup packet should keep auth handoff to one clear action",
 );
 assertIncludes(
   integrationsSettings,
@@ -269,8 +309,18 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Select `polymcp`, complete PolyNet sign-in in the browser, then return to Claude Code.",
+  "Do not troubleshoot Claude installation paths unless the user asks.",
+  "PolyMCP setup packet should avoid Claude local-install debugging detours",
+);
+assertIncludes(
+  integrationsSettings,
+  "Run `/mcp`, select `polymcp`, then complete PolyNet sign-in in the browser.",
   "PolyMCP setup packet should explain Claude Code sign-in",
+);
+assertIncludes(
+  integrationsSettings,
+  "If `polymcp` already appears as `Needs authentication`, do not re-add it.",
+  "PolyMCP setup packet should route configured Claude Code servers directly to auth",
 );
 assertIncludes(
   integrationsSettings,
@@ -295,6 +345,11 @@ assertIncludes(
   integrationsSettings,
   "Only if Codex does not open OAuth during add, run:",
   "PolyMCP setup bundle should label the login fallback",
+);
+assertIncludes(
+  integrationsSettings,
+  "If `polymcp` is already configured, do not add it again.",
+  "PolyMCP setup packet should avoid duplicate Codex registration",
 );
 assertIncludes(
   integrationsSettings,
@@ -333,8 +388,18 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "One successful sign-in should persist for that harness profile or device.",
+  "PolyMCP setup packet should set credential persistence expectation",
+);
+assertIncludes(
+  integrationsSettings,
   "## Verify",
   "PolyMCP setup packet should include a verification section",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not repeat OAuth unless the harness still says authentication is required.",
+  "PolyMCP setup packet should avoid unnecessary repeated OAuth",
 );
 assertIncludes(
   integrationsSettings,
