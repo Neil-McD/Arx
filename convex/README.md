@@ -1,68 +1,90 @@
-# Convex Runtime + Data Layer
+# Welcome to your Convex functions directory!
 
-This folder is the canonical Convex backend surface for Polynet. Runtime/product paths are Convex-first, with no legacy function/RPC transport in active code paths.
+Write your Convex functions here.
+See https://docs.convex.dev/functions for more.
 
-## Included
+A query function that takes two arguments looks like:
 
-1. `schema.ts`
-2. `auth.ts` (actor bootstrap + entitlement-backed tier resolution)
-3. `gates.ts` (canonical gate resolver contract)
-4. `entitlements.ts` (read queries)
-5. `projects.ts` (read queries)
-6. `threads.ts`
-7. `community.ts`
-8. `billing.ts`
-9. `profiles.ts`
-10. `personalMemory.ts`
-11. `modelRegistry.ts`
-12. `settings.ts`
-13. `httpRuntimeRoutes.ts` (canonical runtime HTTP routes: public turn, authenticated runtime turn, voice, community context)
-14. `probe.ts` (`probe:health` query for boot verification)
-15. `../convex.json` (Convex functions root)
+```ts
+// convex/myFunctions.ts
+import { query } from "./_generated/server";
+import { v } from "convex/values";
 
-## Setup
+export const myQueryFunction = query({
+  // Validators for arguments.
+  args: {
+    first: v.number(),
+    second: v.string(),
+  },
 
-0. Quickstart template:
-   - copy `.env.convex.quickstart.example` to `.env` and fill required values.
-1. Add `VITE_CONVEX_URL` in repo-root `.env`.
-2. Configure shared OAuth/OIDC env:
-   - `ARX_AUTH_AUTHORIZE_URL` (required for hosted MCP auth metadata)
-   - `ARX_AUTH_TOKEN_URL` (required for hosted MCP auth metadata)
-   - `ARX_AUTH_CLIENT_ID` (required)
-   - `ARX_AUTH_SCOPE` (optional; defaults to `openid profile email offline_access`)
-   - WorkOS/AuthKit example:
-     - `ARX_AUTH_AUTHORIZE_URL=https://<AUTHKIT_DOMAIN>/oauth2/authorize`
-     - `ARX_AUTH_TOKEN_URL=https://<AUTHKIT_DOMAIN>/oauth2/token`
-     - `ARX_AUTH_CLIENT_ID=<AUTHKIT_CLIENT_ID>`
-3. Configure Convex JWT provider env (recommended):
-   - `ARX_AUTH_JWT_ISSUER` (required)
-   - `ARX_AUTH_JWT_JWKS_URL` (required or derivable from issuer)
-   - `ARX_AUTH_JWT_AUDIENCE` (optional but recommended)
-   - `ARX_AUTH_JWT_ALGORITHM` (`RS256` default)
-   - `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false` (recommended; dev/test-only override, fail closed on missing verified identity)
-   - WorkOS/AuthKit example:
-     - `ARX_AUTH_JWT_ISSUER=https://<AUTHKIT_DOMAIN>`
-     - `ARX_AUTH_JWT_JWKS_URL=https://<AUTHKIT_DOMAIN>/oauth2/jwks`
-   - These same OAuth envs are used by the remote Polynet MCP surface to serve
-     `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`
-     for hosted MCP auth discovery.
-4. Validate auth env readiness:
-   - `npm run check:auth-runtime-readiness`
-5. Authenticate Convex CLI (`npx convex login`) if not already logged in.
-6. Deploy functions:
-   1. `npm run convex:dev` (during development), or
-   2. `npm run convex:deploy` (for hosted deployment).
-7. Confirm probe in browser console:
-   - `[convex] probe:health ok ...`
+  // Function implementation.
+  handler: async (ctx, args) => {
+    // Read the database as many times as you need here.
+    // See https://docs.convex.dev/database/reading-data.
+    const documents = await ctx.db.query("tablename").collect();
 
-## Auth Migration Preflight
+    // Arguments passed from the client are properties of the args object.
+    console.log(args.first, args.second);
 
-## Remaining Hardening Work
+    // Write arbitrary JavaScript here: filter, aggregate, build derived data,
+    // remove non-public properties, or create new objects.
+    return documents;
+  },
+});
+```
 
-1. Broaden end-to-end parity tests across all journeys (auth, threads, community, billing, voice).
-2. Continue runtime/auth/community behavior hardening and failure-mode validation.
-3. Prune obsolete migration-era docs/guards once cutover confidence is fully locked.
+Using this query function in a React component looks like:
 
-## Goal
+```ts
+const data = useQuery(api.myFunctions.myQueryFunction, {
+  first: 10,
+  second: "hello",
+});
+```
 
-Define canonical read contracts first so the web surface and runtime routes can migrate with minimal drift.
+A mutation function looks like:
+
+```ts
+// convex/myFunctions.ts
+import { mutation } from "./_generated/server";
+import { v } from "convex/values";
+
+export const myMutationFunction = mutation({
+  // Validators for arguments.
+  args: {
+    first: v.string(),
+    second: v.string(),
+  },
+
+  // Function implementation.
+  handler: async (ctx, args) => {
+    // Insert or modify documents in the database here.
+    // Mutations can also read from the database like queries.
+    // See https://docs.convex.dev/database/writing-data.
+    const message = { body: args.first, author: args.second };
+    const id = await ctx.db.insert("messages", message);
+
+    // Optionally, return a value from your mutation.
+    return await ctx.db.get("messages", id);
+  },
+});
+```
+
+Using this mutation function in a React component looks like:
+
+```ts
+const mutation = useMutation(api.myFunctions.myMutationFunction);
+function handleButtonPress() {
+  // fire and forget, the most common way to use mutations
+  mutation({ first: "Hello!", second: "me" });
+  // OR
+  // use the result once the mutation has completed
+  mutation({ first: "Hello!", second: "me" }).then((result) =>
+    console.log(result),
+  );
+}
+```
+
+Use the Convex CLI to push your functions to a deployment. See everything
+the Convex CLI can do by running `npx convex -h` in your project root
+directory. To learn more, launch the docs with `npx convex docs`.

@@ -28,6 +28,10 @@ import {
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
+import {
+  WebCommunityInteractionProjection,
+  type WebCommunityInteractionProjectionProps,
+} from "./WebCommunityInteractionProjection";
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 
 type CommunityChatMessage = SharedCommunityChatMessage<CommunityMessageAttachment>;
@@ -167,6 +171,12 @@ export type WebCommunityChatPanelProps = {
   onCancelEdit: () => void;
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
+  interactionProjection?: Omit<
+    WebCommunityInteractionProjectionProps,
+    "activeCommunityName" | "displayName" | "getAvatarColor" | "getInitials" | "formatChatTime" | "renderTextWithLinks"
+  > & {
+    enabled: boolean;
+  };
 };
 
 function parseTimelineTime(value: string): number {
@@ -281,6 +291,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onCancelEdit,
     voiceButtonProps,
     lightboxModalProps,
+    interactionProjection,
   } = props;
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
   const canUseComposer = canPostMessages && !isProfileSetupGateActive;
@@ -392,6 +403,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const profilePanelCommunityContext = loadedProfilePanelCommunityContext ?? EMPTY_PROFILE_COMMUNITY_CONTEXT;
   const canOpenDirectMessageFromCommunity = Boolean(
     hasSession && activeCommunity?.id && onOpenDirectMessageFromCommunity,
+  );
+  const showInteractionProjection = Boolean(
+    interactionProjection?.enabled &&
+    activeCommunity &&
+    hasAuthenticatedPresentation &&
+    hasResolvedCommunityChat &&
+    !isLoadingChat,
   );
 
   useEffect(() => {
@@ -510,14 +528,33 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           </div>
         ) : null}
         <div className="workspace-body chat-feed">
-          <div
-            className="chat-messages"
-            ref={(node) => {
-              messageListRef.current = node;
-            }}
-            onScroll={onChatScroll}
-          >
-            <div className="chat-messages-inner">
+          {showInteractionProjection && interactionProjection ? (
+            <div
+              className="community-interaction-scroll"
+              ref={(node) => {
+                messageListRef.current = node;
+              }}
+              onScroll={onChatScroll}
+            >
+              <WebCommunityInteractionProjection
+                {...interactionProjection}
+                activeCommunityName={activeCommunity?.name ?? "Community"}
+                displayName={displayName}
+                getAvatarColor={getAvatarColor}
+                getInitials={getInitials}
+                formatChatTime={formatChatTime}
+                renderTextWithLinks={renderTextWithLinks}
+              />
+            </div>
+          ) : (
+            <div
+              className="chat-messages"
+              ref={(node) => {
+                messageListRef.current = node;
+              }}
+              onScroll={onChatScroll}
+            >
+              <div className="chat-messages-inner">
               {!hasAuthenticatedPresentation && (
                 <div className="chat-messages-state-shell">
                   <div className="chat-empty">
@@ -655,10 +692,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   {typingLabel}
                 </div>
               )}
+              </div>
             </div>
-          </div>
+          )}
 
-          {!isUserAtBottom && (
+          {!showInteractionProjection && !isUserAtBottom && (
             <button
               className="scroll-to-bottom workspace"
               type="button"

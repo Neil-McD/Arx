@@ -16,6 +16,7 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForChatMessage,
 } from "./communityArchiveDocuments";
+import { recordLegacyChatMessageInteractionBestEffort } from "./communityInteractions";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
@@ -504,6 +505,12 @@ export const createThreadUserMessage = mutation({
     await upsertArchiveDocumentForChatMessage(ctx, {
       thread,
       message: row,
+    });
+    await recordLegacyChatMessageInteractionBestEffort({
+      ctx,
+      thread,
+      message: row,
+      nowMs,
     });
     return await mapCommunityChatMessageRow(ctx, row);
   },
