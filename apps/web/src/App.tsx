@@ -109,6 +109,12 @@ import {
 import { useCommunityAttentionController } from "../../../shared/useCommunityAttentionController";
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
+  listCloudCommunityInteractionReplies,
+  listCloudCommunityInteractionRoots,
+  type CommunityInteractionReplyBundle,
+  type CommunityInteractionRootBundle,
+} from "../../../shared/cloudCommunityInteractionsGateway";
+import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
@@ -729,6 +735,8 @@ type MessageAttachment = CommunityMessageAttachment & {
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 type CommunityActivityEvent = SharedCommunityActivityEvent;
+type CommunityInteractionRoot = CommunityInteractionRootBundle;
+type CommunityInteractionReply = CommunityInteractionReplyBundle;
 type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
@@ -1141,6 +1149,8 @@ type AccountGraphHydrationPhase = "idle" | "critical" | "secondary" | "ready";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
+const COMMUNITY_INTERACTION_ROOT_LIMIT = 50;
+const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("web");
 
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
@@ -1151,6 +1161,30 @@ const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 const WEB_RAIL_WIDTH = 72;
 const WEB_SESSIONS_DRAWER_WIDTH = 240;
 const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 400;
+
+function isTruthyRuntimeFlag(value: unknown): boolean {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+const COMMUNITY_INTERACTION_PROJECTION_ENABLED = isTruthyRuntimeFlag(
+  import.meta.env.VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION,
+);
+
+function formatCommunityInteractionProjectionError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.trim().toLowerCase();
+  if (normalized.includes("community_entitlement_required")) {
+    return "Join this community to view threads.";
+  }
+  if (normalized.includes("verified_identity_required") || normalized.includes("convex_auth")) {
+    return "Sign in to view community threads.";
+  }
+  if (normalized.includes("profile_setup_required")) {
+    return "Finish your profile to view community threads.";
+  }
+  return message.trim() || "Failed to load community threads.";
+}
 
 function buildCurrentTelemetryPathname(): string | null {
   if (typeof window === "undefined") return null;
@@ -2151,6 +2185,22 @@ export default function App() {
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityActivityEvents, setCommunityActivityEvents] = useState<CommunityActivityEvent[]>([]);
+  const [communityInteractionRoots, setCommunityInteractionRoots] = useState<CommunityInteractionRoot[]>([]);
+  const [isLoadingCommunityInteractions, setIsLoadingCommunityInteractions] = useState(false);
+  const [communityInteractionError, setCommunityInteractionError] = useState<string | null>(null);
+  const [selectedCommunityInteractionRootId, setSelectedCommunityInteractionRootId] = useState<string | null>(null);
+  const [communityInteractionRepliesByRootId, setCommunityInteractionRepliesByRootId] = useState<
+    Record<string, CommunityInteractionReply[]>
+  >({});
+  const [communityInteractionRepliesErrorByRootId, setCommunityInteractionRepliesErrorByRootId] = useState<
+    Record<string, string | null>
+  >({});
+  const [loadingCommunityInteractionRepliesRootId, setLoadingCommunityInteractionRepliesRootId] =
+    useState<string | null>(null);
+  const activeCommunityInteractionCommunityIdRef = useRef<string | null>(null);
+  const communityInteractionRootsRequestIdRef = useRef(0);
+  const communityInteractionRepliesRequestIdRef = useRef<Record<string, number>>({});
+  activeCommunityInteractionCommunityIdRef.current = activeCommunityId;
   const [communityMessageInput, setCommunityMessageInput] = useState("");
   const workspaceComposerApiRef = useRef<WorkspaceComposerApi | null>(null);
   const workspaceStarterPromptConsumedRef = useRef(false);
@@ -2345,6 +2395,119 @@ export default function App() {
     void loadOlderCommunityChat(activeCommunityId, session);
   };
 
+  const resetCommunityInteractionProjection = useCallback(() => {
+    communityInteractionRootsRequestIdRef.current += 1;
+    communityInteractionRepliesRequestIdRef.current = {};
+    setCommunityInteractionRoots([]);
+    setCommunityInteractionError(null);
+    setIsLoadingCommunityInteractions(false);
+    setSelectedCommunityInteractionRootId(null);
+    setCommunityInteractionRepliesByRootId({});
+    setCommunityInteractionRepliesErrorByRootId({});
+    setLoadingCommunityInteractionRepliesRootId(null);
+  }, []);
+
+  const loadCommunityInteractionReplies = useCallback(async (
+    rootIdRaw: string,
+    activeSessionRaw: AuthSession | null = session,
+  ) => {
+    const rootId = String(rootIdRaw ?? "").trim();
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !rootId) return;
+    const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
+    if (!usableSession) return;
+    const requestId = (communityInteractionRepliesRequestIdRef.current[rootId] ?? 0) + 1;
+    communityInteractionRepliesRequestIdRef.current = {
+      ...communityInteractionRepliesRequestIdRef.current,
+      [rootId]: requestId,
+    };
+    setLoadingCommunityInteractionRepliesRootId(rootId);
+    setCommunityInteractionRepliesErrorByRootId((previous) => ({ ...previous, [rootId]: null }));
+    try {
+      const replies = await listCloudCommunityInteractionReplies<AuthSession>({
+        session: usableSession,
+        rootId,
+        limit: COMMUNITY_INTERACTION_REPLY_LIMIT,
+      });
+      if (communityInteractionRepliesRequestIdRef.current[rootId] !== requestId) return;
+      setCommunityInteractionRepliesByRootId((previous) => ({ ...previous, [rootId]: replies }));
+    } catch (error) {
+      if (communityInteractionRepliesRequestIdRef.current[rootId] !== requestId) return;
+      setCommunityInteractionRepliesErrorByRootId((previous) => ({
+        ...previous,
+        [rootId]: formatCommunityInteractionProjectionError(error),
+      }));
+    } finally {
+      if (communityInteractionRepliesRequestIdRef.current[rootId] === requestId) {
+        setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
+      }
+    }
+  }, [ensureUsableAuthSession, session]);
+
+  const loadCommunityInteractionRoots = useCallback(async (
+    communityIdRaw: string | null = activeCommunityId,
+    activeSessionRaw: AuthSession | null = session,
+  ) => {
+    const communityId = String(communityIdRaw ?? "").trim();
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !communityId) {
+      resetCommunityInteractionProjection();
+      return;
+    }
+    const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
+    if (!usableSession) return;
+    const requestId = communityInteractionRootsRequestIdRef.current + 1;
+    communityInteractionRootsRequestIdRef.current = requestId;
+    setIsLoadingCommunityInteractions(true);
+    setCommunityInteractionError(null);
+    try {
+      const roots = await listCloudCommunityInteractionRoots<AuthSession>({
+        session: usableSession,
+        communityId,
+        limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
+      });
+      if (
+        communityInteractionRootsRequestIdRef.current !== requestId
+        || activeCommunityInteractionCommunityIdRef.current !== communityId
+      ) {
+        return;
+      }
+      setCommunityInteractionRoots(roots);
+      setSelectedCommunityInteractionRootId((current) =>
+        current && roots.some((bundle) => bundle.root.id === current) ? current : null,
+      );
+    } catch (error) {
+      if (
+        communityInteractionRootsRequestIdRef.current !== requestId
+        || activeCommunityInteractionCommunityIdRef.current !== communityId
+      ) {
+        return;
+      }
+      setCommunityInteractionError(formatCommunityInteractionProjectionError(error));
+    } finally {
+      if (
+        communityInteractionRootsRequestIdRef.current === requestId
+        && activeCommunityInteractionCommunityIdRef.current === communityId
+      ) {
+        setIsLoadingCommunityInteractions(false);
+      }
+    }
+  }, [activeCommunityId, ensureUsableAuthSession, resetCommunityInteractionProjection, session]);
+
+  const handleSelectCommunityInteractionRoot = useCallback((rootIdRaw: string) => {
+    const rootId = String(rootIdRaw ?? "").trim();
+    if (!rootId) return;
+    setSelectedCommunityInteractionRootId((current) => {
+      const next = current === rootId ? null : rootId;
+      if (next && !communityInteractionRepliesByRootId[next]) {
+        void loadCommunityInteractionReplies(next);
+      }
+      return next;
+    });
+  }, [communityInteractionRepliesByRootId, loadCommunityInteractionReplies]);
+
+  const handleCloseCommunityInteractionDrawer = useCallback(() => {
+    setSelectedCommunityInteractionRootId(null);
+  }, []);
+
   useCommunityChatRealtime({
     isEnabled: activePage === "community" && hasResolvedCommunityChat,
     session: session,
@@ -2362,6 +2525,32 @@ export default function App() {
       return loadUserProfiles(userIds, session);
     },
   });
+
+  useEffect(() => {
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED) {
+      resetCommunityInteractionProjection();
+      return;
+    }
+    if (
+      activePage !== "community"
+      || communityTab !== "chat"
+      || !activeCommunityId
+      || !session
+      || !hasResolvedCommunityChat
+    ) {
+      resetCommunityInteractionProjection();
+      return;
+    }
+    void loadCommunityInteractionRoots(activeCommunityId, session);
+  }, [
+    activeCommunityId,
+    activePage,
+    communityTab,
+    hasResolvedCommunityChat,
+    loadCommunityInteractionRoots,
+    resetCommunityInteractionProjection,
+    session,
+  ]);
 
   useEffect(() => {
     if (activePage !== "community" || !activeCommunityId || !hasResolvedCommunityChat) return;
@@ -2411,6 +2600,12 @@ export default function App() {
         has_reply: hasReply,
         surface: "community_chat",
       });
+      if (COMMUNITY_INTERACTION_PROJECTION_ENABLED) {
+        void loadCommunityInteractionRoots(communityId, session);
+        if (hasReply && selectedCommunityInteractionRootId) {
+          void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, session);
+        }
+      }
     },
     chatInputRef,
     communityAttachmentsRef,
@@ -10088,6 +10283,31 @@ export default function App() {
         index: communityChatLightboxIndex,
         setIndex: setCommunityChatLightboxIndex,
         onClose: closeCommunityChatLightbox,
+      },
+      interactionProjection: {
+        enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
+        roots: communityInteractionRoots,
+        selectedRootId: selectedCommunityInteractionRootId,
+        replies: selectedCommunityInteractionRootId
+          ? communityInteractionRepliesByRootId[selectedCommunityInteractionRootId] ?? []
+          : [],
+        isLoadingRoots: isLoadingCommunityInteractions,
+        isLoadingReplies:
+          selectedCommunityInteractionRootId !== null
+          && loadingCommunityInteractionRepliesRootId === selectedCommunityInteractionRootId,
+        error: communityInteractionError,
+        repliesError: selectedCommunityInteractionRootId
+          ? communityInteractionRepliesErrorByRootId[selectedCommunityInteractionRootId] ?? null
+          : null,
+        onSelectRoot: handleSelectCommunityInteractionRoot,
+        onCloseDrawer: handleCloseCommunityInteractionDrawer,
+        onRetryRoots: () => {
+          if (!activeCommunityId) return;
+          void loadCommunityInteractionRoots(activeCommunityId, session);
+        },
+        onRetryReplies: (rootId: string) => {
+          void loadCommunityInteractionReplies(rootId, session);
+        },
       },
     });
   const activateDiscoverCommunityCard = useCallback((opts: {

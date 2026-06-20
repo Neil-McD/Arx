@@ -11,7 +11,7 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
    - anonymous free
    - authenticated free
    - internal architect/dev-only
-2. Canonical chat + canonical community UX.
+2. Canonical community interaction substrate + canonical community UX.
 3. Community agentic harness + community AI feed + community research.
 4. Project-bound workspace tools.
 5. User-funded ChatGPT-auth lane for OpenAI inference.

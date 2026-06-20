@@ -55,6 +55,7 @@ type PolicyDecisionActor = {
 type OutcomeResultStatus = "worked" | "failed" | "mixed" | "unknown";
 type SourceTraceType =
   | "chat"
+  | "interaction"
   | "ai_feed"
   | "resource"
   | "workflow_run"

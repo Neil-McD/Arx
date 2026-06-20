@@ -69,6 +69,8 @@ import type * as communityEvents from "../communityEvents.js";
 import type * as communityExperience from "../communityExperience.js";
 import type * as communityFunnel from "../communityFunnel.js";
 import type * as communityIntelligenceDirectory from "../communityIntelligenceDirectory.js";
+import type * as communityInteractionBackfill from "../communityInteractionBackfill.js";
+import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityPublic from "../communityPublic.js";
@@ -257,6 +259,8 @@ declare const fullApi: ApiFromModules<{
   communityExperience: typeof communityExperience;
   communityFunnel: typeof communityFunnel;
   communityIntelligenceDirectory: typeof communityIntelligenceDirectory;
+  communityInteractionBackfill: typeof communityInteractionBackfill;
+  communityInteractions: typeof communityInteractions;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
   communityPublic: typeof communityPublic;

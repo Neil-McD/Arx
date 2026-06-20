@@ -66,6 +66,15 @@ import {
   patchOwnMessageContent as patchOwnMessageContentImpl,
   setCommunityTyping as setCommunityTypingImpl,
 } from "./communityChat";
+import {
+  createCommunityInteractionReply as createCommunityInteractionReplyImpl,
+  createCommunityInteractionRoot as createCommunityInteractionRootImpl,
+  listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
+  listCommunityInteractionRoots as listCommunityInteractionRootsImpl,
+} from "./communityInteractions";
+import {
+  backfillCommunityInteractionsFromLegacyChatBatch as backfillCommunityInteractionsFromLegacyChatBatchImpl,
+} from "./communityInteractionBackfill";
 import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
 import {
   listCommunityActivityEvents as listCommunityActivityEventsImpl,
@@ -263,6 +272,11 @@ export const deleteOwnMessage = deleteOwnMessageImpl;
 export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
+export const createCommunityInteractionRoot = createCommunityInteractionRootImpl;
+export const createCommunityInteractionReply = createCommunityInteractionReplyImpl;
+export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
+export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;
+export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;
 export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;
