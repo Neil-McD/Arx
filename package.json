@@ -217,6 +217,10 @@
     "check:polynet-codex-worker-service-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts --require-live",
     "check:polynet-codex-worker-convex-bridge": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_convex_bridge_contract_proof.ts",
     "check:daytona-codex-direct-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_direct_runtime_contract_proof.ts",
+    "check:daytona-preview-security-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_preview_security_contract_proof.ts",
+    "check:daytona-preview-dedupe-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_preview_dedupe_contract_proof.ts",
+    "check:daytona-computer-use-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_computer_use_contract_proof.ts",
+    "check:daytona-computer-use-screenshot-bridge-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_computer_use_screenshot_bridge_proof.ts",
     "smoke:daytona-codex-runtime-live": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_live_smoke.ts",
     "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh"
   },

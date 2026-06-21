@@ -66,7 +66,9 @@ export async function mintPreviewProxySessionToken(params: {
       message: string;
     }
 > {
-  const secret = readEnv("ARX_PREVIEW_PROXY_SIGNING_SECRET");
+  const secret =
+    readEnv("POLYNET_PREVIEW_PROXY_SIGNING_SECRET") ||
+    readEnv("ARX_PREVIEW_PROXY_SIGNING_SECRET");
   if (!secret) {
     return {
       ok: false,

@@ -256,6 +256,81 @@ export async function handlePolynetCodexWorkerTool(
   }
 
   const requestedToolName = String(body.tool_name ?? "").trim();
+  if (requestedToolName === "computer_open_url") {
+    const toolArgs = asRecord(body.arguments) ?? {};
+    const opened = (await ctx.runAction(
+      (internal as any).daytonaCodexRuntimeTargetActions
+        .openDaytonaComputerUseUrlInternal as any,
+      {
+        ownerId: context.owner_id,
+        runId: context.run_id,
+        url: String(toolArgs.url ?? ""),
+        reason: "codex_worker_computer_open_url_tool",
+      },
+    )) as JsonRecord;
+    if (opened?.ok !== true) {
+      return json(200, {
+        ok: false,
+        code:
+          String(opened?.code ?? "").trim() ||
+          "daytona_computer_open_url_unavailable",
+        message:
+          String(opened?.message ?? "").trim() ||
+          "Daytona Computer Use browser navigation is unavailable for this run.",
+      });
+    }
+    const summary =
+      String(opened.summary ?? "").trim() ||
+      "Opened URL in the Daytona computer browser.";
+    return json(200, {
+      ok: true,
+      tool_name: "computer_open_url",
+      output: summary,
+      summary,
+      command_exit_code: opened.command_exit_code ?? null,
+      display_keys: opened.display_keys ?? [],
+      window_count: opened.window_count ?? null,
+    });
+  }
+  if (requestedToolName === "computer_screenshot") {
+    const captured = (await ctx.runAction(
+      (internal as any).daytonaCodexRuntimeTargetActions
+        .captureDaytonaComputerUseScreenshotInternal as any,
+      {
+        ownerId: context.owner_id,
+        runId: context.run_id,
+        reason: "codex_worker_computer_screenshot_tool",
+      },
+    )) as JsonRecord;
+    if (captured?.ok !== true) {
+      return json(200, {
+        ok: false,
+        code:
+          String(captured?.code ?? "").trim() ||
+          "daytona_computer_use_screenshot_unavailable",
+        message:
+          String(captured?.message ?? "").trim() ||
+          "Daytona Computer Use screenshot is unavailable for this run.",
+      });
+    }
+    const summary =
+      String(captured.summary ?? "").trim() ||
+      "Captured Daytona computer screenshot.";
+    return json(200, {
+      ok: true,
+      tool_name: "computer_screenshot",
+      output: summary,
+      summary,
+      frame_url: String(captured.frame_url ?? "").trim() || null,
+      frame_storage_id: String(captured.frame_storage_id ?? "").trim() || null,
+      frame_mime_type: captured.frame_mime_type ?? null,
+      frame_size_bytes: captured.frame_size_bytes ?? null,
+      screenshot_method: captured.screenshot_method ?? null,
+      screenshot_width: captured.screenshot_width ?? null,
+      screenshot_height: captured.screenshot_height ?? null,
+    });
+  }
+
   const surfaceEntry = findPolynetPlatformToolSurfaceEntry(requestedToolName);
   if (!surfaceEntry) {
     return json(200, {

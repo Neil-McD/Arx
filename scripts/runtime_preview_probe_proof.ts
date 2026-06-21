@@ -85,7 +85,7 @@ assert.match(
 assert.match(
   previewProxySource,
   /lower === "content-encoding"[\s\S]*lower === "content-length"[\s\S]*lower === "transfer-encoding"/,
-  "preview proxy must not forward content-encoding after buffering decoded fetch bodies",
+  "preview gateway must not forward content-encoding after buffering decoded fetch bodies",
 );
 
 const stoppedProviderStatusIndex = workspaceTerminalProcessCoreSource.indexOf(

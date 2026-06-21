@@ -132,6 +132,50 @@ export type CloudRuntimeComputerUseLiveSessionLookup =
       debug?: CloudRuntimeComputerUseLiveSessionDebug | null;
     };
 
+export type CloudRuntimeComputerUseScreenshot = {
+  frame_url: string | null;
+  frame_mime_type: string | null;
+  frame_size_bytes: number | null;
+  screenshot_method: string | null;
+  screenshot_width: number | null;
+  screenshot_height: number | null;
+};
+
+export type CloudRuntimeComputerUseScreenshotLookup =
+  | {
+      ok: true;
+      screenshot: CloudRuntimeComputerUseScreenshot;
+      debug?: CloudRuntimeComputerUseLiveSessionDebug | null;
+    }
+  | {
+      ok: false;
+      code: string;
+      retryable: boolean;
+      debug?: CloudRuntimeComputerUseLiveSessionDebug | null;
+    };
+
+export type CloudRuntimeDaytonaPreviewSession = {
+  preview_proxy_token: string;
+  preview_port: number;
+  preview_path: string | null;
+  preview_label: string | null;
+  expires_at: string;
+  expires_in_seconds: number;
+  auth_mode: string | null;
+  preview_transport: "polynet_preview_gateway" | string | null;
+};
+
+export type CloudRuntimeDaytonaPreviewSessionLookup =
+  | {
+      ok: true;
+      session: CloudRuntimeDaytonaPreviewSession;
+    }
+  | {
+      ok: false;
+      code: string;
+      retryable: boolean;
+    };
+
 export function isConvexCloudThreadsEnabled(): boolean {
   return hasConvexUrl();
 }
@@ -492,5 +536,151 @@ export async function getConvexCloudRuntimeRunComputerUseLiveSession(params: {
       payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
         ? (payload.debug as CloudRuntimeComputerUseLiveSessionDebug)
         : null,
+  };
+}
+
+export async function captureConvexCloudRuntimeRunComputerUseScreenshot(params: {
+  session: AuthSessionLike;
+  runId: string;
+  reason?: string;
+}): Promise<CloudRuntimeComputerUseScreenshotLookup> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) {
+    return {
+      ok: false,
+      code: "auth_unavailable",
+      retryable: false,
+    };
+  }
+  const { client, authSubject } = bootstrapped;
+  const runId = String(params.runId ?? "").trim();
+  if (!runId) {
+    return {
+      ok: false,
+      code: "invalid_run_id",
+      retryable: false,
+    };
+  }
+  const payload = (await client.action("threads:captureCloudRuntimeRunComputerUseScreenshot" as any, {
+    authSubject,
+    runId,
+    ...(typeof params.reason === "string" && params.reason.trim()
+      ? { reason: params.reason.trim() }
+      : null),
+  })) as Record<string, unknown> | null;
+  const debug =
+    payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
+      ? (payload.debug as CloudRuntimeComputerUseLiveSessionDebug)
+      : null;
+  if (!payload || payload.ok !== true) {
+    const code =
+      String(payload?.code ?? "daytona_computer_use_screenshot_unavailable").trim() ||
+      "daytona_computer_use_screenshot_unavailable";
+    return {
+      ok: false,
+      code,
+      retryable:
+        typeof payload?.retryable === "boolean"
+          ? payload.retryable
+          : code !== "runtime_run_not_found" && code !== "auth_unavailable",
+      debug,
+    };
+  }
+  const frameSize = Number(payload.frame_size_bytes ?? 0);
+  const width = Number(payload.screenshot_width ?? 0);
+  const height = Number(payload.screenshot_height ?? 0);
+  return {
+    ok: true,
+    screenshot: {
+      frame_url: typeof payload.frame_url === "string" && payload.frame_url.trim()
+        ? payload.frame_url.trim()
+        : null,
+      frame_mime_type:
+        typeof payload.frame_mime_type === "string" && payload.frame_mime_type.trim()
+          ? payload.frame_mime_type.trim()
+          : null,
+      frame_size_bytes: Number.isFinite(frameSize) && frameSize > 0 ? Math.floor(frameSize) : null,
+      screenshot_method:
+        typeof payload.screenshot_method === "string" && payload.screenshot_method.trim()
+          ? payload.screenshot_method.trim()
+          : null,
+      screenshot_width: Number.isFinite(width) && width > 0 ? Math.floor(width) : null,
+      screenshot_height: Number.isFinite(height) && height > 0 ? Math.floor(height) : null,
+    },
+    debug,
+  };
+}
+
+export async function getConvexCloudRuntimeRunDaytonaPreviewSession(params: {
+  session: AuthSessionLike;
+  runId: string;
+  port: number;
+}): Promise<CloudRuntimeDaytonaPreviewSessionLookup> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) {
+    return {
+      ok: false,
+      code: "auth_unavailable",
+      retryable: false,
+    };
+  }
+  const { client, authSubject } = bootstrapped;
+  const runId = String(params.runId ?? "").trim();
+  const port = Math.floor(Number(params.port));
+  if (!runId) {
+    return {
+      ok: false,
+      code: "invalid_run_id",
+      retryable: false,
+    };
+  }
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    return {
+      ok: false,
+      code: "invalid_preview_port",
+      retryable: false,
+    };
+  }
+  const payload = (await client.action("threads:getCloudRuntimeRunDaytonaPreviewSession" as any, {
+    authSubject,
+    runId,
+    port,
+  })) as Record<string, unknown> | null;
+  if (!payload || payload.ok !== true) {
+    const code = String(payload?.code ?? "daytona_preview_unavailable").trim() || "daytona_preview_unavailable";
+    return {
+      ok: false,
+      code,
+      retryable:
+        typeof payload?.retryable === "boolean"
+          ? payload.retryable
+          : code !== "runtime_run_not_found" &&
+            code !== "daytona_sandbox_not_available" &&
+            code !== "auth_unavailable",
+    };
+  }
+  const previewProxyToken = String(payload.preview_proxy_token ?? "").trim();
+  const previewPort = Math.floor(toFiniteNumber(payload.preview_port, port));
+  const expiresAtMs = Number(payload.expires_at ?? 0);
+  if (!previewProxyToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= 0) {
+    return {
+      ok: false,
+      code: "daytona_preview_unavailable",
+      retryable: true,
+    };
+  }
+  return {
+    ok: true,
+    session: {
+      preview_proxy_token: previewProxyToken,
+      preview_port: previewPort,
+      preview_path: typeof payload.preview_path === "string" ? payload.preview_path : null,
+      preview_label: typeof payload.preview_label === "string" ? payload.preview_label : null,
+      expires_at: toIsoStringFromMs(expiresAtMs),
+      expires_in_seconds: Math.max(0, Math.floor(toFiniteNumber(payload.expires_in_seconds, 0))),
+      auth_mode: typeof payload.auth_mode === "string" ? payload.auth_mode : null,
+      preview_transport:
+        typeof payload.preview_transport === "string" ? payload.preview_transport : null,
+    },
   };
 }

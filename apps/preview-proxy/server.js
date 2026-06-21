@@ -4,7 +4,13 @@ import httpProxy from "http-proxy";
 import { verifyPreviewProxySessionToken } from "./previewProxySessionToken.js";
 
 const PREVIEW_COOKIE_NAME = "polynet-workspace-preview";
-const PROXY_LAYER = "fly-preview-proxy";
+const PROXY_LAYER = "workspace-preview-proxy";
+const POLYNET_PREVIEW_GATEWAY_LAYER_HEADER = "X-Polynet-Preview-Gateway-Layer";
+const POLYNET_PREVIEW_GATEWAY_REQUEST_ID_HEADER = "X-Polynet-Preview-Gateway-Request-Id";
+const POLYNET_PREVIEW_GATEWAY_REASON_HEADER = "X-Polynet-Preview-Gateway-Reason";
+const LEGACY_ARX_PROXY_LAYER_HEADER = "X-Arx-Proxy-Layer";
+const LEGACY_ARX_PROXY_REQUEST_ID_HEADER = "X-Arx-Proxy-Request-Id";
+const LEGACY_ARX_PROXY_REASON_HEADER = "X-Arx-Proxy-Reason";
 
 function buildRequestId() {
   return crypto.randomUUID().slice(0, 8);
@@ -22,11 +28,22 @@ function hashConfigFingerprint(value) {
   return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
 }
 
-function setProxyHeaders(target, requestId, reason = null) {
-  target.setHeader("X-Arx-Proxy-Layer", PROXY_LAYER);
-  target.setHeader("X-Arx-Proxy-Request-Id", requestId);
+function readPreviewProxySigningSecret() {
+  return String(
+    process.env.POLYNET_PREVIEW_PROXY_SIGNING_SECRET ??
+      process.env.ARX_PREVIEW_PROXY_SIGNING_SECRET ??
+      "",
+  ).trim();
+}
+
+function setPreviewGatewayHeaders(target, requestId, reason = null) {
+  target.setHeader(POLYNET_PREVIEW_GATEWAY_LAYER_HEADER, PROXY_LAYER);
+  target.setHeader(POLYNET_PREVIEW_GATEWAY_REQUEST_ID_HEADER, requestId);
+  target.setHeader(LEGACY_ARX_PROXY_LAYER_HEADER, PROXY_LAYER);
+  target.setHeader(LEGACY_ARX_PROXY_REQUEST_ID_HEADER, requestId);
   if (reason) {
-    target.setHeader("X-Arx-Proxy-Reason", reason);
+    target.setHeader(POLYNET_PREVIEW_GATEWAY_REASON_HEADER, reason);
+    target.setHeader(LEGACY_ARX_PROXY_REASON_HEADER, reason);
   }
 }
 
@@ -45,13 +62,32 @@ function logProxyEvent(level, requestId, message, detail = {}) {
   console.log(line);
 }
 
+function readConfiguredAllowedPreviewHostSuffixes() {
+  return String(process.env.POLYNET_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function hostMatchesSuffix(host, suffix) {
+  const normalizedSuffix = String(suffix ?? "").trim().toLowerCase();
+  if (!normalizedSuffix) return false;
+  const bareSuffix = normalizedSuffix.replace(/^\.+/, "");
+  return host === bareSuffix || host.endsWith(`.${bareSuffix}`);
+}
+
 function isAllowedWorkspacePreviewHost(hostname) {
   const host = String(hostname ?? "").trim().toLowerCase();
   if (!host) return false;
-  return (
-    host.endsWith(".preview.bl.run") ||
-    host.endsWith(".runv2.blaxel.dev")
-  );
+  const suffixes = [
+    "preview.bl.run",
+    "runv2.blaxel.dev",
+    "proxy.daytona.works",
+    "proxy.daytona.work",
+    "daytonaproxy01.net",
+    ...readConfiguredAllowedPreviewHostSuffixes(),
+  ];
+  return suffixes.some((suffix) => hostMatchesSuffix(host, suffix));
 }
 
 function getCookieValue(rawCookie, name) {
@@ -206,7 +242,7 @@ async function resolveProxySession(req) {
 function writeErrorResponse(req, res, status, message, clearCookie = false, reason = "proxy_error") {
   res.statusCode = status;
   res.setHeader("Cache-Control", "no-store");
-  setProxyHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown", reason);
+  setPreviewGatewayHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown", reason);
   if (clearCookie) {
     res.setHeader("Set-Cookie", buildClearCookie(req));
   }
@@ -220,25 +256,34 @@ const proxy = httpProxy.createProxyServer({
   xfwd: false,
 });
 
+function setUpstreamPreviewHeaders(target, req, previewToken = null) {
+  if (req.headers.host) {
+    target.setHeader("X-Forwarded-Host", String(req.headers.host));
+  }
+  target.setHeader("X-Daytona-Skip-Preview-Warning", "true");
+  const token = String(previewToken ?? "").trim();
+  if (token) {
+    target.setHeader("X-Daytona-Preview-Token", token);
+  }
+}
+
 proxy.on("proxyReq", (proxyReq, req) => {
   const session = req.__liveDesktopProxySession;
   if (!session) return;
-  if (req.headers.host) {
-    proxyReq.setHeader("X-Forwarded-Host", String(req.headers.host));
-  }
+  setUpstreamPreviewHeaders(proxyReq, req, session.previewToken);
 });
 
 proxy.on("proxyReqWs", (proxyReq, req) => {
   const session = req.__liveDesktopProxySession;
   if (!session) return;
-  if (req.headers.host) {
-    proxyReq.setHeader("X-Forwarded-Host", String(req.headers.host));
-  }
+  setUpstreamPreviewHeaders(proxyReq, req, session.previewToken);
 });
 
 proxy.on("proxyRes", (proxyRes, req) => {
   const session = req.__liveDesktopProxySession;
   if (!session) return;
+  proxyRes.headers["x-polynet-preview-gateway-layer"] = PROXY_LAYER;
+  proxyRes.headers["x-polynet-preview-gateway-request-id"] = req.__liveDesktopProxyRequestId ?? "unknown";
   proxyRes.headers["x-arx-proxy-layer"] = PROXY_LAYER;
   proxyRes.headers["x-arx-proxy-request-id"] = req.__liveDesktopProxyRequestId ?? "unknown";
   const locationHeader = proxyRes.headers.location;
@@ -276,9 +321,12 @@ proxy.on("error", (error, req, resOrSocket) => {
     if (!res.headersSent) {
       res.writeHead(502, {
         "Cache-Control": "no-store",
-        "X-Arx-Proxy-Layer": PROXY_LAYER,
-        "X-Arx-Proxy-Request-Id": req?.__liveDesktopProxyRequestId ?? "unknown",
-        "X-Arx-Proxy-Reason": "proxy_error",
+        [POLYNET_PREVIEW_GATEWAY_LAYER_HEADER]: PROXY_LAYER,
+        [POLYNET_PREVIEW_GATEWAY_REQUEST_ID_HEADER]: req?.__liveDesktopProxyRequestId ?? "unknown",
+        [POLYNET_PREVIEW_GATEWAY_REASON_HEADER]: "proxy_error",
+        [LEGACY_ARX_PROXY_LAYER_HEADER]: PROXY_LAYER,
+        [LEGACY_ARX_PROXY_REQUEST_ID_HEADER]: req?.__liveDesktopProxyRequestId ?? "unknown",
+        [LEGACY_ARX_PROXY_REASON_HEADER]: "proxy_error",
       });
     }
     res.end(message);
@@ -292,9 +340,9 @@ proxy.on("error", (error, req, resOrSocket) => {
 });
 
 function validatePreviewProxyConfig() {
-  const signingSecret = String(process.env.ARX_PREVIEW_PROXY_SIGNING_SECRET ?? "").trim();
+  const signingSecret = readPreviewProxySigningSecret();
   if (!signingSecret) {
-    throw new Error("ARX_PREVIEW_PROXY_SIGNING_SECRET is required.");
+    throw new Error("POLYNET_PREVIEW_PROXY_SIGNING_SECRET is required.");
   }
   return {
     signingSecretFingerprint: hashConfigFingerprint(signingSecret),
@@ -306,10 +354,14 @@ function validatePreviewProxyConfig() {
 }
 
 function buildForwardHeaders(req, previewToken = null) {
-  void previewToken;
   const forwarded = {};
   if (req.headers.host) {
     forwarded["X-Forwarded-Host"] = String(req.headers.host);
+  }
+  forwarded["X-Daytona-Skip-Preview-Warning"] = "true";
+  const token = String(previewToken ?? "").trim();
+  if (token) {
+    forwarded["X-Daytona-Preview-Token"] = token;
   }
   const passThrough = [
     "accept",
@@ -483,7 +535,7 @@ async function proxyWorkspacePreviewHttp(req, res, resolved, requestUrl) {
     }
     res.statusCode = 502;
     res.setHeader("Cache-Control", "no-store");
-    setProxyHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown", "upstream_fetch_failed");
+    setPreviewGatewayHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown", "upstream_fetch_failed");
     res.end(error instanceof Error ? error.message : "Preview proxy request failed.");
     return;
   }
@@ -498,7 +550,7 @@ async function proxyWorkspacePreviewHttp(req, res, resolved, requestUrl) {
         }
         res.statusCode = upstream.status;
         res.setHeader("Cache-Control", "no-store");
-        setProxyHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown", "redirect");
+        setPreviewGatewayHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown", "redirect");
         res.setHeader("Location", `${redirected.pathname}${redirected.search}${redirected.hash}`);
         res.end();
         return;
@@ -513,7 +565,7 @@ async function proxyWorkspacePreviewHttp(req, res, resolved, requestUrl) {
   }
   res.statusCode = upstream.status;
   res.setHeader("Cache-Control", "no-store");
-  setProxyHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown");
+  setPreviewGatewayHeaders(res, req.__liveDesktopProxyRequestId ?? "unknown");
   copyFetchHeadersToResponse(upstream, res, resolved.kind);
 
   if (method === "HEAD") {
@@ -537,7 +589,7 @@ export function createPreviewProxyServer() {
     const requestUrl = new URL(req.url ?? "/", `http://${req.headers.host || "localhost"}`);
     if (requestUrl.pathname === "/health") {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      setProxyHeaders(res, req.__liveDesktopProxyRequestId);
+      setPreviewGatewayHeaders(res, req.__liveDesktopProxyRequestId);
       res.end(JSON.stringify({ ok: true }));
       return;
     }

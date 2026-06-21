@@ -19,6 +19,7 @@ import {
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
+import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 
 type ThreadLike = {
   _id: any;
@@ -1877,6 +1878,34 @@ export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   },
 });
 
+export const getDaytonaWorkspacePreviewReadyEventInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    port: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const runId = normalizeRunId(args.runId);
+    const port = normalizeWorkspacePreviewPort(args.port);
+    if (port === null) return null;
+    const rows = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", runId))
+      .order("desc")
+      .take(500)) as RuntimeRunEventLike[];
+    for (const row of rows) {
+      if (row.eventType !== "workspace_preview_ready") continue;
+      const payload = asRecord(row.payload);
+      if (!payload) continue;
+      if (String(payload.provider ?? "").trim() !== "daytona") continue;
+      const eventPort = normalizeWorkspacePreviewPort(payload.port);
+      if (eventPort !== port) continue;
+      return row;
+    }
+    return null;
+  },
+});
+
 export const listStaleRunningRuntimeRunsInternal = internalQuery({
   args: {
     nowMs: v.optional(v.number()),
@@ -2870,6 +2899,218 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
           stage: "action_exception",
           message,
         },
+      };
+    }
+  },
+});
+
+export const captureCloudRuntimeRunComputerUseScreenshot = action({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    runId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+        ctx,
+        ownerId: args.ownerId,
+        authSubject: args.authSubject ?? null,
+      });
+      const runId = normalizeRunId(args.runId);
+      const baseDebug: Record<string, unknown> = {
+        owner_id_present: Boolean(ownerId),
+        requested_run_id: runId,
+      };
+      const run = (await ctx.runQuery(internal.threads.getRuntimeRunByOwnerRunIdInternal as any, {
+        ownerId,
+        runId,
+      })) as RuntimeRunLike | null;
+      if (!run) {
+        return {
+          ok: false,
+          status: 404,
+          code: "runtime_run_not_found",
+          message: "Runtime run not found.",
+          retryable: false,
+          debug: {
+            ...baseDebug,
+            stage: "run_lookup",
+            run_found: false,
+          },
+        };
+      }
+      const captured = (await ctx.runAction(
+        (internal as any).daytonaCodexRuntimeTargetActions
+          .captureDaytonaComputerUseScreenshotInternal as any,
+        {
+          ownerId,
+          runId,
+          reason:
+            String(args.reason ?? "").trim() ||
+            "authenticated_cloud_runtime_computer_use_screenshot",
+        },
+      )) as Record<string, unknown>;
+      if (captured?.ok !== true) {
+        return {
+          ok: false,
+          status: 409,
+          code:
+            String(captured?.code ?? "").trim() ||
+            "daytona_computer_use_screenshot_unavailable",
+          message:
+            String(captured?.message ?? "").trim() ||
+            "Daytona Computer Use screenshot is unavailable for this run.",
+          retryable:
+            String(captured?.code ?? "") !== "daytona_runtime_target_not_found" &&
+            String(captured?.code ?? "") !== "daytona_sandbox_not_available",
+          debug: {
+            ...baseDebug,
+            stage: "daytona_capture",
+            run_found: true,
+            run_status: run.status,
+            run_thread_id: run.threadId ?? null,
+            provider_id: "daytona",
+          },
+        };
+      }
+      return {
+        ok: true,
+        frame_url: captured.frame_url ?? null,
+        frame_mime_type: captured.frame_mime_type ?? null,
+        frame_size_bytes: captured.frame_size_bytes ?? null,
+        screenshot_method: captured.screenshot_method ?? null,
+        screenshot_width: captured.screenshot_width ?? null,
+        screenshot_height: captured.screenshot_height ?? null,
+        debug: {
+          ...baseDebug,
+          stage: "daytona_capture",
+          run_found: true,
+          run_status: run.status,
+          run_thread_id: run.threadId ?? null,
+          provider_id: "daytona",
+          status_keys: captured.status_keys ?? [],
+          result_keys: captured.result_keys ?? [],
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "unknown_error");
+      return {
+        ok: false,
+        status: 500,
+        code: "computer_use_screenshot_failed",
+        message: "Computer-use screenshot failed before a frame could be captured.",
+        retryable: true,
+        debug: {
+          stage: "action_exception",
+          message,
+        },
+      };
+    }
+  },
+});
+
+export const getCloudRuntimeRunDaytonaPreviewSession = action({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    runId: v.string(),
+    port: v.number(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+        ctx,
+        ownerId: args.ownerId,
+        authSubject: args.authSubject ?? null,
+      });
+      const runId = normalizeRunId(args.runId);
+      const port = normalizeWorkspacePreviewPort(args.port);
+      if (port === null) {
+        return {
+          ok: false,
+          status: 400,
+          code: "invalid_preview_port",
+          message: "Preview port is invalid.",
+          retryable: false,
+        };
+      }
+
+      const run = (await ctx.runQuery(internal.threads.getRuntimeRunByOwnerRunIdInternal as any, {
+        ownerId,
+        runId,
+      })) as RuntimeRunLike | null;
+      if (!run) {
+        return {
+          ok: false,
+          status: 404,
+          code: "runtime_run_not_found",
+          message: "Runtime run not found.",
+          retryable: false,
+        };
+      }
+      const previewReadyEvent = (await ctx.runQuery(
+        internal.threads.getDaytonaWorkspacePreviewReadyEventInternal as any,
+        {
+          ownerId,
+          runId,
+          port,
+        },
+      )) as RuntimeRunEventLike | null;
+      if (!previewReadyEvent) {
+        return {
+          ok: false,
+          status: 403,
+          code: "daytona_preview_not_authorized",
+          message: "No Daytona app preview was started for this run and port.",
+          retryable: false,
+        };
+      }
+
+      const preview = (await ctx.runAction(
+        (internal as any).daytonaCodexRuntimeTargetActions
+          .resolveDaytonaCodexRuntimePreviewInternal as any,
+        {
+          ownerId,
+          runId,
+          port,
+        },
+      )) as Record<string, unknown> | null;
+      if (!preview || preview.ok !== true) {
+        const code = String(preview?.code ?? "daytona_preview_unavailable").trim() || "daytona_preview_unavailable";
+        return {
+          ok: false,
+          status: code === "daytona_runtime_target_not_found" ? 404 : 503,
+          code,
+          message: String(preview?.message ?? "Daytona preview is unavailable."),
+          retryable:
+            code !== "runtime_run_not_found" &&
+            code !== "daytona_sandbox_not_available" &&
+            code !== "invalid_preview_port",
+        };
+      }
+
+      return {
+        ok: true,
+        preview_proxy_token: String(preview.preview_proxy_token ?? ""),
+        preview_port: port,
+        preview_path: typeof preview.preview_path === "string" ? preview.preview_path : null,
+        preview_label: typeof preview.preview_label === "string" ? preview.preview_label : null,
+        expires_at: Number(preview.expires_at ?? 0),
+        expires_in_seconds: Number(preview.expires_in_seconds ?? 0),
+        auth_mode: typeof preview.auth_mode === "string" ? preview.auth_mode : null,
+        preview_transport:
+          typeof preview.preview_transport === "string" ? preview.preview_transport : null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "unknown_error");
+      return {
+        ok: false,
+        status: 500,
+        code: "daytona_preview_lookup_failed",
+        message,
+        retryable: true,
       };
     }
   },

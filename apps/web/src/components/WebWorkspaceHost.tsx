@@ -48,6 +48,10 @@ import {
   type WorkspacePreviewMetricsObservation,
   type WorkspacePreviewLifecycleState,
 } from "./WebWorkspaceAppPreview";
+import {
+  DaytonaRuntimeAppPreview,
+  type DaytonaRuntimePreviewAnchor,
+} from "./DaytonaRuntimeAppPreview";
 import { WebBackgroundTerminalRail } from "./WebBackgroundTerminalRail";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { WebWorkspaceThreadError } from "./WebWorkspaceThreadError";
@@ -440,6 +444,67 @@ function parsePreviewRunAnchor(
     terminalId,
     updatedAt: Date.parse(event.created_at) || 0,
   };
+}
+
+function parseDaytonaPreviewRunAnchor(
+  event: ThreadStreamingRuntimeEvent,
+): DaytonaRuntimePreviewAnchor | null {
+  if (event.event_type !== "workspace_preview_ready") return null;
+  const payload =
+    event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : null;
+  if (!payload) return null;
+  if (String(payload.provider ?? "").trim() !== "daytona") return null;
+  const runId = String(event.run_id ?? "").trim();
+  const port = Math.floor(Number(payload.port));
+  if (!runId || !Number.isFinite(port) || port < 1 || port > 65535) return null;
+  const terminalSessionId = String(payload.terminal_session_id ?? "").trim() || null;
+  return {
+    id: buildDaytonaPreviewAnchorDedupeKey(runId, port),
+    runId,
+    port,
+    terminalSessionId,
+    updatedAt: Date.parse(event.created_at) || 0,
+  };
+}
+
+function buildDaytonaPreviewAnchorDedupeKey(runId: string, port: number): string {
+  return `${runId}:${port}`;
+}
+
+function buildLatestDaytonaPreviewAnchorsByRunId(params: {
+  activeThreadStreamingRunId?: string | null;
+  activeThreadRuntimeEvents?: readonly ThreadStreamingRuntimeEvent[] | null;
+  runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
+}): Record<string, DaytonaRuntimePreviewAnchor[]> {
+  const runtimeEventBatches = Object.values(params.runtimeEventsByRunId ?? {});
+  const next = new Map<string, DaytonaRuntimePreviewAnchor>();
+  const ingest = (events: readonly ThreadStreamingRuntimeEvent[] | null | undefined) => {
+    if (!Array.isArray(events)) return;
+    for (const event of events) {
+      const anchor = parseDaytonaPreviewRunAnchor(event);
+      if (!anchor) continue;
+      const current = next.get(anchor.id);
+      if (!current || anchor.updatedAt >= current.updatedAt) {
+        next.set(anchor.id, anchor);
+      }
+    }
+  };
+
+  for (const events of runtimeEventBatches) ingest(events);
+  if (params.activeThreadStreamingRunId) ingest(params.activeThreadRuntimeEvents);
+
+  const byRunId: Record<string, DaytonaRuntimePreviewAnchor[]> = {};
+  for (const anchor of next.values()) {
+    const existing = byRunId[anchor.runId] ?? [];
+    existing.push(anchor);
+    byRunId[anchor.runId] = existing;
+  }
+  for (const anchors of Object.values(byRunId)) {
+    anchors.sort((a, b) => a.port - b.port || a.updatedAt - b.updatedAt);
+  }
+  return byRunId;
 }
 
 function buildLatestPreviewRunIdByTerminalId(params: {
@@ -1300,6 +1365,15 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const latestPreviewRunIdByTerminalId = useMemo(
     () =>
       buildLatestPreviewRunIdByTerminalId({
+        activeThreadStreamingRunId: props.activeThreadStreamingRunId,
+        activeThreadRuntimeEvents: props.activeThreadRuntimeEvents,
+        runtimeEventsByRunId: props.runtimeEventsByRunId,
+      }),
+    [props.activeThreadRuntimeEvents, props.activeThreadStreamingRunId, props.runtimeEventsByRunId],
+  );
+  const latestDaytonaPreviewAnchorsByRunId = useMemo(
+    () =>
+      buildLatestDaytonaPreviewAnchorsByRunId({
         activeThreadStreamingRunId: props.activeThreadStreamingRunId,
         activeThreadRuntimeEvents: props.activeThreadRuntimeEvents,
         runtimeEventsByRunId: props.runtimeEventsByRunId,
@@ -2167,22 +2241,33 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         (terminal) =>
           resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId) === normalizedRunId,
       );
-      if (runTerminals.length === 0) return null;
+      const daytonaAnchors = latestDaytonaPreviewAnchorsByRunId[normalizedRunId] ?? [];
+      if (runTerminals.length === 0 && daytonaAnchors.length === 0) return null;
       return (
-        <WebWorkspaceAppPreview
-          terminals={runTerminals}
-          previewStateByTerminalId={previewStateByTerminalId}
-          busyTerminalIds={busyWorkspaceTerminalIds}
-          mode="inline"
-          allowExpand={isDesktopViewport}
-          onEnsurePreview={handleEnsurePreview}
-          onExpandPreview={handleExpandPreview}
-          onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
-          onPreviewMetricsObservation={handlePreviewMetricsObservation}
-          onStopTerminal={(terminalSessionId) => {
-            void handleStopWorkspaceTerminal(terminalSessionId);
-          }}
-        />
+        <>
+          {runTerminals.length > 0 ? (
+            <WebWorkspaceAppPreview
+              terminals={runTerminals}
+              previewStateByTerminalId={previewStateByTerminalId}
+              busyTerminalIds={busyWorkspaceTerminalIds}
+              mode="inline"
+              allowExpand={isDesktopViewport}
+              onEnsurePreview={handleEnsurePreview}
+              onExpandPreview={handleExpandPreview}
+              onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+              onPreviewMetricsObservation={handlePreviewMetricsObservation}
+              onStopTerminal={(terminalSessionId) => {
+                void handleStopWorkspaceTerminal(terminalSessionId);
+              }}
+            />
+          ) : null}
+          {daytonaAnchors.length > 0 ? (
+            <DaytonaRuntimeAppPreview
+              anchors={daytonaAnchors}
+              session={props.session}
+            />
+          ) : null}
+        </>
       );
     },
     [
@@ -2193,7 +2278,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       isDesktopViewport,
       activePreviewCapableTerminals,
       latestPreviewRunIdByTerminalId,
+      latestDaytonaPreviewAnchorsByRunId,
       previewStateByTerminalId,
+      props.session,
     ],
   );
 

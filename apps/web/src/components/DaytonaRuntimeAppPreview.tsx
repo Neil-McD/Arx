@@ -1,0 +1,220 @@
+import { useEffect, useMemo, useState } from "react";
+import type { AuthSessionLike } from "../../../../shared/authSession";
+import { getConvexCloudRuntimeRunDaytonaPreviewSession } from "../../../../shared/cloudThreadsRead";
+import { buildWorkspacePreviewProxyUrl } from "../lib/workspacePreviewProxy";
+
+export type DaytonaRuntimePreviewAnchor = {
+  id: string;
+  runId: string;
+  port: number;
+  terminalSessionId: string | null;
+  updatedAt: number;
+};
+
+type DaytonaPreviewPhase = "loading" | "ready" | "error";
+
+type DaytonaPreviewState = {
+  phase: DaytonaPreviewPhase;
+  frameUrl: string | null;
+  rawUrl: string | null;
+  label: string | null;
+  error: string | null;
+  attempt: number;
+};
+
+function describePreviewError(code: string | null): string {
+  if (!code) return "The Daytona app preview could not be attached.";
+  if (code === "auth_unavailable") return "Sign in again to attach this app preview.";
+  if (code === "runtime_run_not_found") return "This runtime run is no longer available.";
+  if (code === "daytona_sandbox_not_available") return "The Daytona sandbox for this run is no longer available.";
+  if (code === "daytona_preview_not_authorized") return "This run did not start an app preview on that port.";
+  if (code === "daytona_preview_url_missing") return "Daytona did not return a preview URL for this app.";
+  if (code === "daytona_preview_unavailable") return "The Daytona app preview is not available yet.";
+  return "The Daytona app preview could not be attached.";
+}
+
+function DaytonaRuntimeAppPreviewCard(props: {
+  anchor: DaytonaRuntimePreviewAnchor;
+  session: AuthSessionLike | null;
+}): JSX.Element {
+  const [state, setState] = useState<DaytonaPreviewState>({
+    phase: "loading",
+    frameUrl: null,
+    rawUrl: null,
+    label: null,
+    error: null,
+    attempt: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((prev) => ({
+      ...prev,
+      phase: "loading",
+      error: null,
+    }));
+    if (!props.session) {
+      setState((prev) => ({
+        ...prev,
+        phase: "error",
+        error: describePreviewError("auth_unavailable"),
+      }));
+      return;
+    }
+    void getConvexCloudRuntimeRunDaytonaPreviewSession({
+      session: props.session,
+      runId: props.anchor.runId,
+      port: props.anchor.port,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setState((prev) => ({
+            ...prev,
+            phase: "error",
+            frameUrl: null,
+            rawUrl: null,
+            error: describePreviewError(result.code),
+          }));
+          return;
+        }
+        const frameUrl = buildWorkspacePreviewProxyUrl({
+          previewProxyToken: result.session.preview_proxy_token,
+          previewPath: result.session.preview_path,
+          searchParams: {
+            polynet_preview: "inline",
+            polynet_preview_contract: "surface-v1",
+          },
+        });
+        setState((prev) => ({
+          ...prev,
+          phase: "loading",
+          frameUrl,
+          rawUrl: frameUrl,
+          label: result.session.preview_label,
+          error: null,
+        }));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setState((prev) => ({
+          ...prev,
+          phase: "error",
+          frameUrl: null,
+          rawUrl: null,
+          error: error instanceof Error ? error.message : "The Daytona app preview could not be attached.",
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.anchor.port, props.anchor.runId, props.session, state.attempt]);
+
+  const title = state.label || `Daytona app :${props.anchor.port}`;
+  return (
+    <article className="workspace-app-preview-card">
+      <div className="workspace-app-preview-header">
+        <div className="workspace-app-preview-title-row">
+          <div className="workspace-app-preview-title">{title}</div>
+          <span className={`workspace-app-preview-status ${state.phase === "error" ? "failed" : "running"}`}>
+            {state.phase === "error" ? "Unavailable" : state.phase === "ready" ? "Running" : "Loading"}
+          </span>
+        </div>
+        <div className="workspace-app-preview-actions">
+          <button
+            type="button"
+            className="workspace-app-preview-button"
+            onClick={() => {
+              setState((prev) => ({
+                ...prev,
+                attempt: prev.attempt + 1,
+              }));
+            }}
+          >
+            Refresh
+          </button>
+          {state.rawUrl ? (
+            <a
+              className="workspace-app-preview-button"
+              href={state.rawUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open
+            </a>
+          ) : null}
+        </div>
+      </div>
+      {state.frameUrl ? (
+        <div
+          className="workspace-app-preview-frame-shell"
+          data-preview-fit="stable"
+        >
+          <div className="workspace-app-preview-frame-viewport">
+            <div className="workspace-app-preview-frame-stage">
+              <iframe
+                className="workspace-app-preview-frame"
+                src={state.frameUrl}
+                title={title}
+                loading="eager"
+                referrerPolicy="no-referrer"
+                onLoad={() => {
+                  setState((prev) => ({
+                    ...prev,
+                    phase: "ready",
+                  }));
+                }}
+                onError={() => {
+                  setState((prev) => ({
+                    ...prev,
+                    phase: "error",
+                    error: "The Daytona app preview failed to load.",
+                  }));
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="workspace-app-preview-frame-shell">
+          <div className="workspace-app-preview-state">
+            <div className="workspace-app-preview-state-title">
+              {state.phase === "error" ? "Preview unavailable" : "Attaching preview"}
+            </div>
+            <div className="workspace-app-preview-state-copy">
+              {state.error ?? "Connecting to the Daytona app preview."}
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+export function DaytonaRuntimeAppPreview(props: {
+  anchors: DaytonaRuntimePreviewAnchor[];
+  session: AuthSessionLike | null;
+}): JSX.Element | null {
+  const anchors = useMemo(
+    () =>
+      props.anchors
+        .filter((anchor) => anchor.runId && Number.isFinite(anchor.port))
+        .sort((a, b) => a.port - b.port),
+    [props.anchors],
+  );
+  if (anchors.length === 0) return null;
+  return (
+    <section
+      className="workspace-app-preview-stack"
+      aria-label="Running Daytona apps"
+    >
+      {anchors.map((anchor) => (
+        <DaytonaRuntimeAppPreviewCard
+          key={anchor.id}
+          anchor={anchor}
+          session={props.session}
+        />
+      ))}
+    </section>
+  );
+}

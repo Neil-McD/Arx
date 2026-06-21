@@ -2,7 +2,11 @@ const PREVIEW_PROXY_TOKEN_VERSION = 1;
 const VALID_PREVIEW_PROXY_KINDS = new Set(["workspace_preview", "live_desktop"]);
 
 function readPreviewProxySigningSecret() {
-  return String(process.env.ARX_PREVIEW_PROXY_SIGNING_SECRET ?? "").trim();
+  return String(
+    process.env.POLYNET_PREVIEW_PROXY_SIGNING_SECRET ??
+      process.env.ARX_PREVIEW_PROXY_SIGNING_SECRET ??
+      "",
+  ).trim();
 }
 
 function encodeBase64Url(bytes) {
