@@ -835,10 +835,10 @@ export async function executeRetrievalHarnessTool(params: {
     }
     try {
       const payload = await params.ctx.runMutation(
-        api.community.publishCommunityAiFeedAgentPost as any,
+        (internal as any).communityAiFeed.publishCommunityAiFeedAgentPostInternal as any,
         {
           userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
+          authSubject: params.authSubject ?? "",
           communityId: params.communityId,
           postType: String(normalizedArgs.post_type ?? "observation"),
           title:
@@ -1443,6 +1443,7 @@ async function executeRetrievalAgentLoop(
     communityId: params.communityId ?? null,
     projectId: params.projectId ?? null,
     communityResourceLane: resolvedHarness.communityResourceLane,
+    communityLensAuthority: params.communityLensAuthority ?? null,
     allowedToolNames: effectiveAllowedToolNames,
   });
   try {

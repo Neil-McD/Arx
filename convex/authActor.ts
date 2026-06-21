@@ -403,6 +403,22 @@ async function findActorByResolvedSubject(args: {
   return toActor(args.authSubject, user);
 }
 
+export async function resolveAuthenticatedActorByTrustedSubject(args: {
+  ctx: any;
+  authSubject: string;
+  userId?: any;
+}): Promise<AuthenticatedActor> {
+  const authSubject = normalizeIdValue(args.authSubject);
+  if (!authSubject) throw new Error("auth_subject_required");
+  const actor = await findActorByResolvedSubject({
+    ctx: args.ctx,
+    authSubject,
+    userId: args.userId,
+  });
+  if (!actor) throw new Error("user_not_found");
+  return actor;
+}
+
 async function ensureActorByResolvedSubject(args: {
   ctx: any;
   authSubject: string;
@@ -661,6 +677,20 @@ export const resolveAuthenticatedActorInternal = internalQuery({
     return await resolveAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,
+    });
+  },
+});
+
+export const resolveAuthenticatedActorByTrustedSubjectInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    return await resolveAuthenticatedActorByTrustedSubject({
+      ctx,
+      authSubject: args.authSubject,
+      userId: args.userId,
     });
   },
 });

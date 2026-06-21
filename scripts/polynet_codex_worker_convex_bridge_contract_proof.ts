@@ -17,8 +17,12 @@ const targets = read("convex/daytonaCodexRuntimeTargets.ts");
 const targetActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
 const terminal = read("convex/polynetCodexWorkerTerminal.ts");
+const tool = read("convex/polynetCodexWorkerTool.ts");
 const runToken = read("convex/polynetCodexWorkerRunToken.ts");
 const admission = read("convex/polynetCodexWorkerAdmission.ts");
+const communityRecentContext = read("convex/communityRecentContext.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const platformToolSurface = read("shared/polynetPlatformToolSurface.ts");
 const workerLimits = read("shared/polynetCodexWorkerLimits.ts");
 const runtimeTurnEnvelope = read("shared/runtimeTurnEnvelope.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
@@ -145,6 +149,36 @@ assert.match(
   runtimeTurnEnvelope,
   /communityLensAuthority[\s\S]*allowedToolNames/,
   "runtime envelope must carry canonical community authority and allowed tool names",
+);
+assert.match(
+  platformToolSurface,
+  /requiredCommunityAuthority[\s\S]*toolName: "community_write"[\s\S]*requiredCommunityAuthority: "moderator"[\s\S]*entry\.requiredCommunityResourceLane === "builder"[\s\S]*authority\?\.canManageResources === true/,
+  "platform tool surface must gate community_write by moderator authority and builder tools by resource-management authority",
+);
+assert.match(
+  handlers,
+  /const codexPlatformToolProjection = \{[\s\S]*communityResourceLane:[\s\S]*runtimeCommunityLensAuthority\?\.communityResourceLane[\s\S]*communityLensAuthority: runtimeCommunityLensAuthority[\s\S]*buildPolynetPlatformToolSpecs\(\s*codexPlatformToolProjection,?\s*\)[\s\S]*required_community_authority/,
+  "runtime handler must project Codex-visible PolyNet tools from canonical community lens authority",
+);
+assert.match(
+  tool,
+  /runAuthorityAllowsRequiredLane[\s\S]*authority\?\.canManageResources === true[\s\S]*readRunCommunityAuthority[\s\S]*runAuthorityAllowsRequiredAuthority[\s\S]*required_community_authority/,
+  "worker tool endpoint must enforce canonical run-snapshot authority before dispatching tools",
+);
+assert.match(
+  tool,
+  /runStatus !== "running"[\s\S]*codex_worker_run_not_active/,
+  "worker tool endpoint must reject callbacks after the run is no longer active",
+);
+assert.match(
+  communityRecentContext,
+  /readCommunityRecentContextForUser[\s\S]*readCommunityRecentContextInternal = internalQuery[\s\S]*userId: v\.id\("users"\)[\s\S]*readCommunityRecentContext = query[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*readCommunityRecentContextForUser/,
+  "community recent context must keep public verified-auth query and expose an internal pre-resolved-user path for signed runtime tools",
+);
+assert.match(
+  runtimeAgentLoop,
+  /params\.toolName === "community_write"[\s\S]*publishCommunityAiFeedAgentPostInternal/,
+  "community_write must use the trusted internal publish path for runtime tool calls",
 );
 assert.match(
   worker,

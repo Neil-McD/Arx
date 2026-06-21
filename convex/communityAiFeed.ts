@@ -3,6 +3,9 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
+  resolveAuthenticatedActorByTrustedSubject,
+} from "./authActor";
+import {
   normalizeIdValue,
   normalizeName,
   normalizeOptionalText,
@@ -68,6 +71,34 @@ type FeedReactionRow = {
   createdAt: number;
   updatedAt: number;
 };
+
+async function publishCommunityAiFeedAgentPostForUser(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  postType: "observation" | "recommendation" | "action";
+  title?: string | null;
+  body: string;
+  evidence?: string[] | null;
+}) {
+  await requireCommunityModerator({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const nowMs = Date.now();
+  return await insertFeedPost({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    authorUserId: args.userId,
+    authorLabel: "Community agent",
+    postType: args.postType,
+    title: args.title ?? null,
+    body: args.body,
+    evidence: args.evidence ?? null,
+    nowMs,
+  });
+}
 
 function normalizeFeedPostType(raw: unknown): "observation" | "recommendation" | "action" {
   const value = String(raw ?? "").trim().toLowerCase();
@@ -784,22 +815,42 @@ export const publishCommunityAiFeedAgentPost = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityModerator({
+    return await publishCommunityAiFeedAgentPostForUser({
       ctx,
       communityId: args.communityId,
       userId,
-    });
-    const nowMs = Date.now();
-    return await insertFeedPost({
-      ctx,
-      communityId: args.communityId,
-      authorUserId: userId,
-      authorLabel: "Community agent",
       postType: args.postType,
       title: args.title ?? null,
       body: args.body,
       evidence: args.evidence ?? null,
-      nowMs,
+    });
+  },
+});
+
+export const publishCommunityAiFeedAgentPostInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.string(),
+    communityId: v.id("communities"),
+    postType: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
+    title: v.optional(v.union(v.string(), v.null())),
+    body: v.string(),
+    evidence: v.optional(v.union(v.array(v.string()), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveAuthenticatedActorByTrustedSubject({
+      ctx,
+      authSubject: args.authSubject,
+      userId: args.userId,
+    });
+    return await publishCommunityAiFeedAgentPostForUser({
+      ctx,
+      communityId: args.communityId,
+      userId: actor.dbUserId,
+      postType: args.postType,
+      title: args.title ?? null,
+      body: args.body,
+      evidence: args.evidence ?? null,
     });
   },
 });

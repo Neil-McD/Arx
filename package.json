@@ -211,6 +211,7 @@
     "check:runtime-agent-loop-context-receipt-smoke": "tsx scripts/runtime_agent_loop_context_receipt_smoke.ts",
     "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts",
     "check:runtime-codex-prompt-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_codex_prompt_projection_proof.ts",
+    "check:daytona-codex-tool-role-matrix-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_tool_role_matrix_proof.ts",
     "check:daytona-codex-runtime-staging": "CONVEX_DEPLOYMENT=dev:quick-porcupine-949 POLYNET_DEPLOYMENT_KIND=staging bash scripts/daytona_codex_runtime_staging_guard.sh",
     "check:daytona-codex-runtime-stage-identity": "bash scripts/daytona_codex_runtime_stage_identity_guard_proof.sh",
     "check:polynet-codex-worker-service-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts --require-live",

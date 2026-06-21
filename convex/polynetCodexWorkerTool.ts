@@ -9,6 +9,7 @@ import {
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import {
   findPolynetPlatformToolSurfaceEntry,
+  type PolynetPlatformToolRequiredCommunityAuthority,
 } from "../shared/polynetPlatformToolSurface";
 import {
   normalizeCommunityResourceRuntimeLane,
@@ -23,7 +24,17 @@ export const POLYNET_CODEX_WORKER_TOOL_PATH =
 const PLATFORM_TOOL_OUTPUT_MAX_CHARS = 24_000;
 const CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES = new Set([
   "community_resource_builder_stage_changeset",
+  "community_write",
 ]);
+
+type RunCommunityAuthority = {
+  relation: string | null;
+  effectiveRole: string | null;
+  canManage: boolean;
+  canModerate: boolean;
+  canManageResources: boolean;
+  canReviewJoinRequests: boolean;
+};
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -44,10 +55,55 @@ function readEnv(name: string): string {
 function runAuthorityAllowsRequiredLane(
   lane: CommunityResourceRuntimeLane | null,
   requiredLane: "none" | "member" | "builder",
+  authority?: RunCommunityAuthority | null,
 ): boolean {
   if (requiredLane === "none") return true;
-  if (requiredLane === "builder") return lane === "builder";
+  if (requiredLane === "builder") {
+    return lane === "builder" && authority?.canManageResources === true;
+  }
   return lane === "member" || lane === "builder";
+}
+
+function authorityRoleRank(value: unknown): number {
+  const role = String(value ?? "").trim().toLowerCase();
+  if (role === "owner") return 4;
+  if (role === "admin") return 3;
+  if (role === "moderator") return 2;
+  if (role === "member") return 1;
+  return 0;
+}
+
+function readBoolean(record: JsonRecord | null, ...keys: string[]): boolean {
+  if (!record) return false;
+  return keys.some((key) => record[key] === true);
+}
+
+function runAuthorityAllowsRequiredAuthority(
+  authority: RunCommunityAuthority | null,
+  requiredAuthority: PolynetPlatformToolRequiredCommunityAuthority,
+): boolean {
+  if (requiredAuthority === "none") return true;
+  if (!authority) return false;
+  const rank = Math.max(
+    authorityRoleRank(authority.effectiveRole),
+    authorityRoleRank(authority.relation),
+  );
+  if (requiredAuthority === "member") return rank >= 1;
+  if (requiredAuthority === "moderator") return rank >= 2 || authority.canModerate;
+  if (requiredAuthority === "admin") return rank >= 3 || authority.canManage;
+  return rank >= 4;
+}
+
+function communityAuthorityFailureCode(
+  requiredAuthority: PolynetPlatformToolRequiredCommunityAuthority,
+): string {
+  if (requiredAuthority === "owner") return "community_owner_authority_required";
+  if (requiredAuthority === "admin") return "community_admin_authority_required";
+  if (requiredAuthority === "moderator") {
+    return "community_moderator_authority_required";
+  }
+  if (requiredAuthority === "member") return "community_member_authority_required";
+  return "community_authority_required";
 }
 
 function readRunCommunityResourceLane(runRow: {
@@ -65,6 +121,45 @@ function readRunCommunityResourceLane(runRow: {
   if (!snapshotCommunityId || snapshotCommunityId !== runCommunityId) return "none";
   if (!snapshotThreadId || snapshotThreadId !== runThreadId) return "none";
   return normalizeCommunityResourceRuntimeLane(authority?.communityResourceLane);
+}
+
+function readRunCommunityAuthority(runRow: {
+  activeContextSnapshot?: unknown;
+  communityId?: unknown;
+  threadId?: unknown;
+}): RunCommunityAuthority | null {
+  const snapshot = asRecord(runRow.activeContextSnapshot);
+  const envelope = asRecord(snapshot?.runtimeTurnEnvelope);
+  const authority = asRecord(envelope?.authority);
+  const snapshotCommunityId = String(authority?.communityId ?? "").trim();
+  const snapshotThreadId = String(authority?.threadId ?? "").trim();
+  const runCommunityId = String(runRow.communityId ?? "").trim();
+  const runThreadId = String(runRow.threadId ?? "").trim();
+  if (!snapshotCommunityId || snapshotCommunityId !== runCommunityId) return null;
+  if (!snapshotThreadId || snapshotThreadId !== runThreadId) return null;
+  const relation = String(
+    authority?.communityRelation ?? authority?.community_relation ?? "",
+  ).trim();
+  const effectiveRole = String(
+    authority?.communityEffectiveRole ?? authority?.community_effective_role ?? "",
+  ).trim();
+  if (!relation && !effectiveRole) return null;
+  return {
+    relation: relation || null,
+    effectiveRole: effectiveRole || null,
+    canManage: readBoolean(authority, "canManage", "can_manage"),
+    canModerate: readBoolean(authority, "canModerate", "can_moderate"),
+    canManageResources: readBoolean(
+      authority,
+      "canManageResources",
+      "can_manage_resources",
+    ),
+    canReviewJoinRequests: readBoolean(
+      authority,
+      "canReviewJoinRequests",
+      "can_review_join_requests",
+    ),
+  };
 }
 
 export function buildPolynetCodexWorkerToolTarget(): string | null {
@@ -125,6 +220,7 @@ export async function handlePolynetCodexWorkerTool(
   let runRow: {
     threadId?: unknown;
     engineId?: unknown;
+    status?: unknown;
     communityId?: unknown;
     activeContextSnapshot?: unknown;
   } | null = null;
@@ -135,6 +231,7 @@ export async function handlePolynetCodexWorkerTool(
     )) as {
       threadId?: unknown;
       engineId?: unknown;
+      status?: unknown;
       communityId?: unknown;
       activeContextSnapshot?: unknown;
     } | null;
@@ -147,6 +244,15 @@ export async function handlePolynetCodexWorkerTool(
     String(runRow.engineId ?? "") !== POLYNET_CODEX_WORKER_ENGINE_ID
   ) {
     return json(404, { ok: false, code: "invalid_run" });
+  }
+  const runStatus = String(runRow.status ?? "").trim();
+  if (runStatus !== "running") {
+    return json(409, {
+      ok: false,
+      code: "codex_worker_run_not_active",
+      message: "This Codex worker run is no longer active.",
+      run_status: runStatus || null,
+    });
   }
 
   const requestedToolName = String(body.tool_name ?? "").trim();
@@ -183,11 +289,33 @@ export async function handlePolynetCodexWorkerTool(
     });
   }
   if (surfaceEntry.requiresCommunity && communityId) {
+    const communityAuthority = readRunCommunityAuthority(runRow);
+    if (
+      !runAuthorityAllowsRequiredAuthority(
+        communityAuthority,
+        surfaceEntry.requiredCommunityAuthority,
+      )
+    ) {
+      const code = communityAuthorityFailureCode(
+        surfaceEntry.requiredCommunityAuthority,
+      );
+      return json(200, {
+        ok: false,
+        code,
+        message:
+          "This tool requires stronger authority in the active community lens.",
+        tool_name: surfaceEntry.toolName,
+        risk_level: surfaceEntry.riskLevel,
+        required_community_authority:
+          surfaceEntry.requiredCommunityAuthority,
+      });
+    }
     const communityResourceLane = readRunCommunityResourceLane(runRow);
     if (
       !runAuthorityAllowsRequiredLane(
         communityResourceLane,
         surfaceEntry.requiredCommunityResourceLane,
+        communityAuthority,
       )
     ) {
       return json(200, {

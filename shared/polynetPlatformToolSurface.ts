@@ -1,17 +1,32 @@
-import { getToolDefinition } from "./toolRegistry";
-import type { RetrievalToolName } from "./retrievalTools";
+import { getToolDefinition } from "./toolRegistry.ts";
+import type { RetrievalToolName } from "./retrievalTools.ts";
+import {
+  normalizeCommunityResourceRuntimeLaneState,
+  type CommunityResourceRuntimeLaneState,
+} from "./communityResourceLane.ts";
+import {
+  normalizeCommunityLensAuthority,
+  type CommunityLensAuthority,
+} from "./communityLensAuthority.ts";
 
 // Codex receives only PolyNet-native capabilities through the first-party
 // polynet.* bridge. Generic workspace, terminal, browser, and web-search tools
-// stay native to Codex so we do not expose duplicate tool surfaces. The only
-// write-risk tool projected today stages a builder changeset; applying live
-// changes remains outside this bridge.
+// stay native to Codex so we do not expose duplicate tool surfaces. The write
+// surface stays narrow: Codex can stage builder resource changesets and publish
+// moderator-gated community posts. Applying resource changes remains outside
+// this bridge.
 export type PolynetPlatformToolBillingPolicy = "free";
 export type PolynetPlatformToolRiskLevel = "read" | "write" | "sensitive";
 export type PolynetPlatformToolRequiredCommunityResourceLane =
   | "none"
   | "member"
   | "builder";
+export type PolynetPlatformToolRequiredCommunityAuthority =
+  | "none"
+  | "member"
+  | "moderator"
+  | "admin"
+  | "owner";
 
 export type PolynetPlatformToolSurfaceEntry = {
   toolName: RetrievalToolName;
@@ -19,6 +34,7 @@ export type PolynetPlatformToolSurfaceEntry = {
   requiresCommunity: boolean;
   riskLevel: PolynetPlatformToolRiskLevel;
   requiredCommunityResourceLane: PolynetPlatformToolRequiredCommunityResourceLane;
+  requiredCommunityAuthority: PolynetPlatformToolRequiredCommunityAuthority;
 };
 
 export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceEntry[] = [
@@ -28,6 +44,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_search",
@@ -35,6 +52,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resources_map",
@@ -42,6 +60,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resources_read",
@@ -49,6 +68,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resources_list",
@@ -56,6 +76,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resource_read",
@@ -63,6 +84,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resources_search",
@@ -70,6 +92,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resource_builder_list",
@@ -77,6 +100,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "builder",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resource_builder_read",
@@ -84,6 +108,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "read",
     requiredCommunityResourceLane: "builder",
+    requiredCommunityAuthority: "member",
   },
   {
     toolName: "community_resource_builder_stage_changeset",
@@ -91,6 +116,15 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: true,
     riskLevel: "write",
     requiredCommunityResourceLane: "builder",
+    requiredCommunityAuthority: "member",
+  },
+  {
+    toolName: "community_write",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "write",
+    requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "moderator",
   },
   {
     toolName: "search_product_docs",
@@ -98,6 +132,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: false,
     riskLevel: "read",
     requiredCommunityResourceLane: "none",
+    requiredCommunityAuthority: "none",
   },
   {
     toolName: "get_product_doc",
@@ -105,6 +140,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiresCommunity: false,
     riskLevel: "read",
     requiredCommunityResourceLane: "none",
+    requiredCommunityAuthority: "none",
   },
 ];
 
@@ -115,7 +151,43 @@ export type PolynetPlatformToolSpec = {
   billing_policy: PolynetPlatformToolBillingPolicy;
   risk_level: PolynetPlatformToolRiskLevel;
   required_community_resource_lane: PolynetPlatformToolRequiredCommunityResourceLane;
+  required_community_authority: PolynetPlatformToolRequiredCommunityAuthority;
 };
+
+export type PolynetPlatformToolProjectionParams = {
+  hasCommunity: boolean;
+  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
+  communityLensAuthority?: CommunityLensAuthority | null;
+};
+
+function authorityRoleRank(value: unknown): number {
+  const role = String(value ?? "").trim().toLowerCase();
+  if (role === "owner") return 4;
+  if (role === "admin") return 3;
+  if (role === "moderator") return 2;
+  if (role === "member") return 1;
+  return 0;
+}
+
+function communityAuthorityAllowsRequiredAuthority(
+  authority: CommunityLensAuthority | null,
+  requiredAuthority: PolynetPlatformToolRequiredCommunityAuthority,
+): boolean {
+  if (requiredAuthority === "none") return true;
+  if (!authority) return false;
+  const rank = Math.max(
+    authorityRoleRank(authority.effectiveRole),
+    authorityRoleRank(authority.relation),
+  );
+  if (requiredAuthority === "member") return rank >= 1;
+  if (requiredAuthority === "moderator") {
+    return rank >= 2 || authority.canModerate;
+  }
+  if (requiredAuthority === "admin") {
+    return rank >= 3 || authority.canManage;
+  }
+  return rank >= 4 || authority.relation === "owner" || authority.effectiveRole === "owner";
+}
 
 export function findPolynetPlatformToolSurfaceEntry(
   name: string,
@@ -125,44 +197,76 @@ export function findPolynetPlatformToolSurfaceEntry(
   return POLYNET_PLATFORM_TOOL_SURFACE.find((entry) => entry.toolName === name) ?? null;
 }
 
-function buildSpecs(params: { hasCommunity: boolean }): PolynetPlatformToolSpec[] {
-  return POLYNET_PLATFORM_TOOL_SURFACE.filter(
-    (entry) => params.hasCommunity || !entry.requiresCommunity,
-  ).map((entry) => {
-    const definition = getToolDefinition(entry.toolName);
-    if (!definition) {
-      // Fails the Convex push / worker boot, so a surface row naming an
-      // unregistered tool can never reach a live turn.
-      throw new Error(
-        `polynet platform tool surface names an unregistered tool: ${entry.toolName}`,
-      );
-    }
-    return {
-      name: definition.name,
-      description: definition.description,
-      input_schema: definition.inputSchema as Record<string, unknown>,
-      billing_policy: entry.billingPolicy,
-      risk_level: entry.riskLevel,
-      required_community_resource_lane: entry.requiredCommunityResourceLane,
-    };
-  });
+export function canProjectPolynetPlatformTool(
+  entry: PolynetPlatformToolSurfaceEntry,
+  params: PolynetPlatformToolProjectionParams,
+): boolean {
+  if (entry.requiresCommunity && !params.hasCommunity) return false;
+  const authority = normalizeCommunityLensAuthority(params.communityLensAuthority);
+  if (
+    !communityAuthorityAllowsRequiredAuthority(
+      authority,
+      entry.requiredCommunityAuthority,
+    )
+  ) {
+    return false;
+  }
+  if (entry.requiredCommunityResourceLane === "none") return true;
+
+  const lane = params.hasCommunity
+    ? normalizeCommunityResourceRuntimeLaneState(params.communityResourceLane).lane
+    : "none";
+  if (entry.requiredCommunityResourceLane === "member") {
+    return lane === "member" || lane === "builder";
+  }
+  if (entry.requiredCommunityResourceLane === "builder") {
+    return lane === "builder" && authority?.canManageResources === true;
+  }
+  return false;
 }
 
-// Precomputed at module load — this is also the registration guard above
-// running once per deploy instead of per turn.
-const SPECS_WITH_COMMUNITY = buildSpecs({ hasCommunity: true });
-const SPECS_WITHOUT_COMMUNITY = buildSpecs({ hasCommunity: false });
-
-export function buildPolynetPlatformToolSpecs(params: {
-  hasCommunity: boolean;
-}): PolynetPlatformToolSpec[] {
-  return params.hasCommunity ? SPECS_WITH_COMMUNITY : SPECS_WITHOUT_COMMUNITY;
+function buildToolSpecForSurfaceEntry(
+  entry: PolynetPlatformToolSurfaceEntry,
+): PolynetPlatformToolSpec {
+  const definition = getToolDefinition(entry.toolName);
+  if (!definition) {
+    // Fails the Convex push / worker boot, so a surface row naming an
+    // unregistered tool can never reach a live turn.
+    throw new Error(
+      `polynet platform tool surface names an unregistered tool: ${entry.toolName}`,
+    );
+  }
+  return {
+    name: definition.name,
+    description: definition.description,
+    input_schema: definition.inputSchema as Record<string, unknown>,
+    billing_policy: entry.billingPolicy,
+    risk_level: entry.riskLevel,
+    required_community_resource_lane: entry.requiredCommunityResourceLane,
+    required_community_authority: entry.requiredCommunityAuthority,
+  };
 }
 
-export function buildPolynetPlatformToolNames(params: {
-  hasCommunity: boolean;
-}): RetrievalToolName[] {
-  return POLYNET_PLATFORM_TOOL_SURFACE.filter(
-    (entry) => params.hasCommunity || !entry.requiresCommunity,
+POLYNET_PLATFORM_TOOL_SURFACE.forEach(buildToolSpecForSurfaceEntry);
+
+function buildSpecs(
+  params: PolynetPlatformToolProjectionParams,
+): PolynetPlatformToolSpec[] {
+  return POLYNET_PLATFORM_TOOL_SURFACE.filter((entry) =>
+    canProjectPolynetPlatformTool(entry, params),
+  ).map(buildToolSpecForSurfaceEntry);
+}
+
+export function buildPolynetPlatformToolSpecs(
+  params: PolynetPlatformToolProjectionParams,
+): PolynetPlatformToolSpec[] {
+  return buildSpecs(params);
+}
+
+export function buildPolynetPlatformToolNames(
+  params: PolynetPlatformToolProjectionParams,
+): RetrievalToolName[] {
+  return POLYNET_PLATFORM_TOOL_SURFACE.filter((entry) =>
+    canProjectPolynetPlatformTool(entry, params),
   ).map((entry) => entry.toolName);
 }

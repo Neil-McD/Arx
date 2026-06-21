@@ -1481,6 +1481,9 @@ export async function handleRuntimeTurnRequest(args: {
           const codexPromptTimeZone = "UTC";
           const codexPlatformToolProjection = {
             hasCommunity: Boolean(runtimeCommunityId),
+            communityResourceLane:
+              runtimeCommunityLensAuthority?.communityResourceLane ?? null,
+            communityLensAuthority: runtimeCommunityLensAuthority,
           };
           const workerPlatformTools = buildPolynetPlatformToolSpecs(
             codexPlatformToolProjection,
@@ -1619,6 +1622,8 @@ export async function handleRuntimeTurnRequest(args: {
                 risk_level: tool.risk_level,
                 required_community_resource_lane:
                   tool.required_community_resource_lane,
+                required_community_authority:
+                  tool.required_community_authority,
               })),
               community_lens_authority:
                 buildCommunityLensAuthorityReceipt(runtimeCommunityLensAuthority),

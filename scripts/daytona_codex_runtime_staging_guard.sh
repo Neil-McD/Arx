@@ -4,6 +4,7 @@ set -euo pipefail
 EXPECTED_ROOT="/Users/neilmcdevitt/code/arx-daytona-codex-runtime-spike"
 EXPECTED_BRANCH_PREFIX="codex/daytona-codex-runtime-spike-"
 EXPECTED_SPLIT_BRANCH_PREFIX="codex/daytona-runtime-core-slice-"
+EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX="codex/daytona-tool-authority-slice-"
 EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"
 FORBIDDEN_CONVEX_PROD="wry-hawk-715"
 EXPECTED_VERCEL_PROJECT_NAME="polynet-staging"
@@ -38,8 +39,8 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$branch" == "main" ]]; then
   fail "refusing Daytona Codex runtime staging work from main"
 fi
-if [[ "$branch" != "$EXPECTED_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_SPLIT_BRANCH_PREFIX"* ]]; then
-  fail "expected branch to start with $EXPECTED_BRANCH_PREFIX or $EXPECTED_SPLIT_BRANCH_PREFIX, got $branch"
+if [[ "$branch" != "$EXPECTED_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_SPLIT_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX"* ]]; then
+  fail "expected branch to start with $EXPECTED_BRANCH_PREFIX, $EXPECTED_SPLIT_BRANCH_PREFIX, or $EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX, got $branch"
 fi
 ok "branch is Daytona Codex runtime staging safe: $branch"
 

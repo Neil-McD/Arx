@@ -1,6 +1,9 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  resolveAuthenticatedActorByTrustedSubject,
+} from "./authActor";
+import {
   type CommunityAgentConfigLike,
   getCommunityAndMembership,
   requireCommunityChatAccess,
@@ -52,6 +55,52 @@ async function pruneCommunityAgentConfigRows(
     if (String(row._id) === String(keepId)) continue;
     await ctx.db.delete(row._id as any);
   }
+}
+
+async function resolveRuntimeCommunityPromptContextForUser(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+}) {
+  const { community, membership } = await getCommunityAndMembership({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const access = await resolveCommunityAccessBundle({
+    ctx: args.ctx,
+    community,
+    membership,
+    userId: args.userId,
+  });
+  const communityLensAuthority = normalizeCommunityLensAuthority({
+    relation: access.relation,
+    effective_role: access.effective_role,
+    can_manage_members: access.can_manage_members,
+    can_manage_resources: access.can_manage_resources,
+    can_moderate_content: access.can_moderate_content,
+    can_review_join_requests: access.can_review_join_requests,
+  });
+  if (!access.can_enter_community || !communityLensAuthority) {
+    throw new Error("community_entitlement_required");
+  }
+  const config = selectPrimaryCommunityAgentConfigRow(
+    await listCommunityAgentConfigRows(args.ctx, args.communityId),
+  );
+  const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;
+  const communitySlug = String(community.slug ?? "").trim() || null;
+  const communityOneLiner = String(community.oneLiner ?? "").trim() || null;
+  const communityAbout = String(community.about ?? "").trim() || null;
+  return {
+    community_id: String(args.communityId),
+    community_name: communityName,
+    community_slug: communitySlug,
+    community_one_liner: communityOneLiner,
+    community_about: communityAbout,
+    community_system_prompt: config?.systemPrompt ?? null,
+    community_lens_authority: communityLensAuthority,
+    system_prompt: config?.systemPrompt ?? null,
+  };
 }
 
 export const getCommunityAgentConfig = query({
@@ -153,52 +202,20 @@ export const getActiveCommunityAgentSystemPrompt = query({
 export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
   args: {
     userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
+    authSubject: v.string(),
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
+    const actor = await resolveAuthenticatedActorByTrustedSubject({
       ctx,
+      authSubject: args.authSubject,
       userId: args.userId,
-      authSubject: args.authSubject ?? null,
     });
-    const { community, membership } = await getCommunityAndMembership({
+    return await resolveRuntimeCommunityPromptContextForUser({
       ctx,
       communityId: args.communityId,
-      userId,
+      userId: actor.dbUserId,
     });
-    const access = await resolveCommunityAccessBundle({
-      ctx,
-      community,
-      membership,
-      userId,
-    });
-    const communityLensAuthority = normalizeCommunityLensAuthority({
-      relation: access.relation,
-      effective_role: access.effective_role,
-      can_manage_members: access.can_manage_members,
-      can_manage_resources: access.can_manage_resources,
-      can_moderate_content: access.can_moderate_content,
-      can_review_join_requests: access.can_review_join_requests,
-    });
-    if (!access.can_enter_community || !communityLensAuthority) {
-      throw new Error("community_entitlement_required");
-    }
-    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
-    const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;
-    const communitySlug = String(community.slug ?? "").trim() || null;
-    const communityOneLiner = String(community.oneLiner ?? "").trim() || null;
-    const communityAbout = String(community.about ?? "").trim() || null;
-    return {
-      community_id: String(args.communityId),
-      community_name: communityName,
-      community_slug: communitySlug,
-      community_one_liner: communityOneLiner,
-      community_about: communityAbout,
-      community_system_prompt: config?.systemPrompt ?? null,
-      community_lens_authority: communityLensAuthority,
-      system_prompt: config?.systemPrompt ?? null,
-    };
   },
 });
 

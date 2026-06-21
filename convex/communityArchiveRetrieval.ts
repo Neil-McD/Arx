@@ -1,9 +1,31 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { normalizeIdValue, toIsoString } from "./communityCore";
 import type { ArchiveDocLike } from "./communityArchiveDocuments";
 import { normalizeOptionalText, truncateText } from "./communityArchiveDocuments";
 import { embedGeminiQuery, resolveGeminiEmbeddingConfig } from "./communityArchiveEmbeddingPipeline";
 import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
+
+async function resolveTrustedSearchUserId(args: {
+  ctx: any;
+  userId?: any;
+  authSubject?: string | null;
+}): Promise<any> {
+  const authSubject = String(args.authSubject ?? "").trim();
+  if (!authSubject) {
+    if (args.userId) return args.userId;
+    throw new Error("auth_subject_required");
+  }
+  const actor = (await args.ctx.runQuery(
+    (internal as any).authActor.resolveAuthenticatedActorByTrustedSubjectInternal,
+    {
+      authSubject,
+      ...(args.userId ? { userId: args.userId } : null),
+    },
+  )) as { dbUserId?: unknown } | null;
+  const resolvedUserId = actor?.dbUserId;
+  if (!resolvedUserId) throw new Error("authenticated_user_required");
+  return resolvedUserId;
+}
 
 function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
   return {
@@ -29,12 +51,19 @@ export async function searchCommunityKnowledge(args: {
   communityId: any;
   query: string;
 }): Promise<unknown> {
-  const recent: any = await args.ctx.runQuery(api.community.readCommunityRecentContext as any, {
+  const userId = await resolveTrustedSearchUserId({
+    ctx: args.ctx,
     userId: args.userId,
-    authSubject: args.authSubject ?? undefined,
-    communityId: args.communityId,
-    query: args.query,
+    authSubject: args.authSubject ?? null,
   });
+  const recent: any = await args.ctx.runQuery(
+    (internal as any).communityRecentContext.readCommunityRecentContextInternal,
+    {
+      userId,
+      communityId: args.communityId,
+      query: args.query,
+    },
+  );
   const queryText = truncateText(args.query, 240);
   const config = resolveGeminiEmbeddingConfig();
   const diagnostics = {
