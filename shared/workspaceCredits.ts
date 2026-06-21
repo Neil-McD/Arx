@@ -81,9 +81,19 @@ export const WORKSPACE_FILE_INSPECTION_RESERVATION_EXPIRY_MS =
 
 export const WORKSPACE_VCPU_USD_PER_SECOND = 0;
 export const WORKSPACE_MEMORY_GIB_USD_PER_SECOND = 0.0000115;
+export const CODEX_RUNTIME_DAYTONA_USD_PER_SECOND = 0.0082 / 3600;
 
-export type PaidToolKind = "workspace_tools" | "web_research" | "voice_input";
-export const PAID_TOOL_LEDGER_TOOL_NAMES = ["workspace_compute", "web_research", "voice_transcribe"] as const;
+export type PaidToolKind =
+  | "workspace_tools"
+  | "web_research"
+  | "voice_input"
+  | "codex_runtime";
+export const PAID_TOOL_LEDGER_TOOL_NAMES = [
+  "workspace_compute",
+  "web_research",
+  "voice_transcribe",
+  "codex_runtime",
+] as const;
 export type PaidToolLedgerToolName = (typeof PAID_TOOL_LEDGER_TOOL_NAMES)[number];
 
 export const PAID_TOOL_DEFINITIONS = {
@@ -102,6 +112,11 @@ export const PAID_TOOL_DEFINITIONS = {
     primaryMessage: "Voice input uses paid transcription.",
     operatorLabel: "Voice input",
   },
+  codex_runtime: {
+    ledgerToolName: "codex_runtime",
+    primaryMessage: "Codex runtime uses tool credits while it runs.",
+    operatorLabel: "Codex runtime",
+  },
 } as const satisfies Record<
   PaidToolKind,
   {
@@ -116,6 +131,7 @@ export function normalizePaidToolKind(value: unknown): PaidToolKind | null {
   if (normalized === "workspace_tools") return "workspace_tools";
   if (normalized === "web_research") return "web_research";
   if (normalized === "voice_input") return "voice_input";
+  if (normalized === "codex_runtime") return "codex_runtime";
   return null;
 }
 
@@ -291,6 +307,21 @@ export function priceWorkspaceUsageCredits(params: {
 }): number {
   return priceVendorCostUsdToWorkspaceCredits({
     rawVendorCostUsd: params.computeCostUsd,
+  });
+}
+
+export function estimateCodexRuntimeVendorCostUsd(params: {
+  durationSeconds: number;
+}): number {
+  const durationSeconds = Math.max(0, Number(params.durationSeconds) || 0);
+  return durationSeconds * CODEX_RUNTIME_DAYTONA_USD_PER_SECOND;
+}
+
+export function priceCodexRuntimeCredits(params: {
+  durationSeconds: number;
+}): number {
+  return priceVendorCostUsdToWorkspaceCredits({
+    rawVendorCostUsd: estimateCodexRuntimeVendorCostUsd(params),
   });
 }
 

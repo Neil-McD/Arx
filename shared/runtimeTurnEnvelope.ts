@@ -3,6 +3,7 @@ import {
   normalizeCommunityResourceRuntimeLaneState,
   type CommunityResourceRuntimeLaneState,
 } from "./communityResourceLane.ts";
+import type { CommunityLensAuthority } from "./communityLensAuthority.ts";
 import type { ThreadWorkingStatePrompt } from "./runtimePrompt.ts";
 
 export type RuntimeTurnEnvelopeV1 = {
@@ -14,6 +15,12 @@ export type RuntimeTurnEnvelopeV1 = {
     communityId: string | null;
     projectId: string | null;
     communityResourceLane: CommunityResourceRuntimeLaneState["lane"];
+    communityRelation: string | null;
+    communityEffectiveRole: string | null;
+    canManage: boolean;
+    canModerate: boolean;
+    canManageResources: boolean;
+    canReviewJoinRequests: boolean;
     allowedToolNames: string[];
   };
   state: {
@@ -63,6 +70,7 @@ export function buildRuntimeTurnEnvelope(params: {
   communityId?: string | null;
   projectId?: string | null;
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
+  communityLensAuthority?: CommunityLensAuthority | null;
   allowedToolNames?: readonly (string | null | undefined)[] | null;
 }): RuntimeTurnEnvelopeV1 {
   const allowedToolNames = uniqueToolNames(params.allowedToolNames).slice(0, 80);
@@ -71,6 +79,7 @@ export function buildRuntimeTurnEnvelope(params: {
     : EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE;
   const workingState = params.threadWorkingState ?? null;
   const currentRequest = compactText(params.latestUserText, 280);
+  const communityLensAuthority = params.communityLensAuthority ?? null;
   return {
     version: 1,
     currentRequest,
@@ -80,6 +89,12 @@ export function buildRuntimeTurnEnvelope(params: {
       communityId: compactText(params.communityId, 120),
       projectId: compactText(params.projectId, 120),
       communityResourceLane: communityResourceLane.lane,
+      communityRelation: compactText(communityLensAuthority?.relation, 40),
+      communityEffectiveRole: compactText(communityLensAuthority?.effectiveRole, 40),
+      canManage: Boolean(communityLensAuthority?.canManage),
+      canModerate: Boolean(communityLensAuthority?.canModerate),
+      canManageResources: Boolean(communityLensAuthority?.canManageResources),
+      canReviewJoinRequests: Boolean(communityLensAuthority?.canReviewJoinRequests),
       allowedToolNames,
     },
     state: {
@@ -110,7 +125,7 @@ export function renderRuntimeTurnEnvelopeForPrompt(
     "RUNTIME_TURN_ENVELOPE",
     `Current request: ${envelope.currentRequest || "(none)"}`,
     `Continuity goal: ${envelope.continuityGoal || "(none)"}`,
-    `Authority: thread=${authority.threadId || "(none)"}; community=${authority.communityId || "(none)"}; project=${authority.projectId || "(none)"}; resource_lane=${authority.communityResourceLane}`,
+    `Authority: thread=${authority.threadId || "(none)"}; community=${authority.communityId || "(none)"}; project=${authority.projectId || "(none)"}; resource_lane=${authority.communityResourceLane}; role=${authority.communityRelation || "(none)"}; effective_role=${authority.communityEffectiveRole || "(none)"}; can_moderate=${authority.canModerate ? "yes" : "no"}; can_manage_resources=${authority.canManageResources ? "yes" : "no"}`,
     `Available tools: ${renderToolList(authority.allowedToolNames)}`,
     `Current step: ${state.currentStep || "(none)"}`,
     `Verified: ${state.verified.length > 0 ? state.verified.join(" | ") : "(none)"}`,

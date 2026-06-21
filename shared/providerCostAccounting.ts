@@ -1,4 +1,4 @@
-export const PROVIDER_COST_CATEGORIES = ["workspace", "web", "voice"] as const;
+export const PROVIDER_COST_CATEGORIES = ["workspace", "web", "voice", "runtime"] as const;
 
 export type ProviderCostCategory = (typeof PROVIDER_COST_CATEGORIES)[number];
 
@@ -9,6 +9,7 @@ export const PROVIDER_COST_COMPONENTS = [
   "web_research_call",
   "web_crawl_provider_call",
   "fly_crawler",
+  "daytona_codex_runtime_active",
   "voice_transcription",
   "knowledge_model_inference",
 ] as const;

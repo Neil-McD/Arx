@@ -7,6 +7,17 @@ import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 import {
   verifyPolynetCodexWorkerRunToken,
 } from "./polynetCodexWorkerRunToken";
+import {
+  settleReservedCreditsBestEffort,
+  settleReservedCreditsStrict,
+} from "./workspaceCreditSettlement";
+import {
+  CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+  estimateCodexRuntimeVendorCostUsd,
+  PAID_TOOL_PRICING_VERSION,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceCodexRuntimeCredits,
+} from "../shared/workspaceCredits";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -27,6 +38,11 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
     : null;
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function readEnv(name: string): string {
@@ -80,7 +96,7 @@ export function parsePolynetCodexWorkerIngestContext(
   };
 }
 
-// Durable backstop for worker turns: the Fly worker posts its final payload
+// Durable backstop for Codex runtime turns: the runtime posts its final payload
 // here directly, so a Convex action dying mid-stream can no longer lose a
 // completed turn. Every write below is idempotent against the live SSE path
 // (events dedupe on eventKey, the assistant message dedupes on messageKey).
@@ -249,6 +265,98 @@ export async function handlePolynetCodexWorkerIngest(
         : {}),
   });
 
+  let codexRuntimeCreditsSettled = false;
+  let codexRuntimeCreditsOutcome: string | null = null;
+  const codexRuntimeBilling = asRecord(
+    body.context && (body.context as JsonRecord).codex_runtime_billing,
+  );
+  const codexRuntimeCreditKey = String(codexRuntimeBilling?.credit_key ?? "").trim();
+  if (codexRuntimeCreditKey) {
+    const timing = asRecord(body.timing);
+    const durationSeconds = Math.max(
+      0,
+      (readPositiveNumber(timing?.total_ms) ?? 0) / 1000,
+    );
+    const terminalReason =
+      status === "ok"
+        ? "completed"
+        : status === "cancelled"
+          ? "cancelled"
+          : String(errorRecord?.code ?? "polynet_codex_worker_turn_failed");
+    if (durationSeconds > 0) {
+      const rawVendorCostUsd = estimateCodexRuntimeVendorCostUsd({
+        durationSeconds,
+      });
+      const creditsSettled = priceCodexRuntimeCredits({ durationSeconds });
+      try {
+        await settleReservedCreditsStrict({
+          ctx,
+          creditKey: codexRuntimeCreditKey,
+          status: "succeeded",
+          creditsSettled,
+          rawVendorCostUsd,
+        metadata: {
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+          provider: "daytona",
+          pricing_model: "daytona_runtime_seconds_estimate",
+          provider_billing_reconciliation: "pending",
+          provider_billing_evidence: "estimated_from_runtime_duration",
+          daytona_runtime_usd_per_second: CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+          duration_seconds: durationSeconds,
+          duration_source: "worker_ingest_timing_total_ms",
+            worker_machine_id: null,
+            reserved_credits: readPositiveNumber(codexRuntimeBilling?.reserved_credits),
+            terminal_reason: terminalReason,
+          },
+        });
+        codexRuntimeCreditsSettled = true;
+        codexRuntimeCreditsOutcome = "succeeded";
+      } catch {
+        codexRuntimeCreditsOutcome = "settlement_failed";
+      }
+    } else {
+      await settleReservedCreditsBestEffort({
+        ctx,
+        creditKey: codexRuntimeCreditKey,
+        status: "refunded",
+        failureReason: terminalReason || "codex_runtime_not_started",
+        metadata: {
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          provider: "daytona",
+          pricing_model: "daytona_runtime_seconds_estimate",
+          worker_started: false,
+          terminal_reason: terminalReason,
+        },
+      });
+      codexRuntimeCreditsOutcome = "refunded_not_started";
+    }
+  }
+
+  let capacityLeaseReleased = false;
+  let capacityLeaseReleaseReason: string | null = null;
+  try {
+    const reason =
+      status === "ok"
+        ? "completed"
+        : status === "cancelled"
+          ? "cancelled"
+          : String(errorRecord?.code ?? "polynet_codex_worker_turn_failed");
+    const release = (await ctx.runMutation(
+      (internal as any).polynetCodexWorkerAdmission
+        .releasePolynetCodexWorkerLease as any,
+      {
+        ownerId: context.owner_id,
+        runId: context.run_id,
+        reason,
+      },
+    )) as { released?: unknown; reason?: unknown };
+    capacityLeaseReleased = release.released === true;
+    capacityLeaseReleaseReason = String(release.reason ?? reason);
+  } catch {
+    capacityLeaseReleaseReason = "release_failed";
+  }
+
   // Dispose the workspace lease if the live path never did. Disposal is
   // terminal-aware, so app-preview terminals keep accounting alive instead of
   // getting prematurely settled by this durable backstop.
@@ -294,6 +402,10 @@ export async function handlePolynetCodexWorkerIngest(
     run_id: context.run_id,
     events_appended: eventsAppended,
     assistant_persisted: assistantPersisted,
+    codex_runtime_credits_settled: codexRuntimeCreditsSettled,
+    codex_runtime_credits_outcome: codexRuntimeCreditsOutcome,
+    capacity_lease_released: capacityLeaseReleased,
+    capacity_lease_release_reason: capacityLeaseReleaseReason,
     lease_settled: leaseSettled,
     lease_disposal_outcome: leaseDisposalOutcome,
   });

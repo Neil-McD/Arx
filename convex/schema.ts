@@ -407,7 +407,7 @@ export default defineSchema({
   workspaceComputeCharges: defineTable({
     chargeKey: v.string(),
     userId: v.id("users"),
-    projectId: v.id("cloudProjects"),
+    projectId: v.optional(v.id("cloudProjects")),
     runId: v.string(),
     providerSandboxId: v.string(),
     startedAt: v.number(),
@@ -443,6 +443,7 @@ export default defineSchema({
       v.literal("workspace"),
       v.literal("web"),
       v.literal("voice"),
+      v.literal("runtime"),
     ),
     component: v.union(
       v.literal("blaxel_active_runtime"),
@@ -451,6 +452,7 @@ export default defineSchema({
       v.literal("web_research_call"),
       v.literal("web_crawl_provider_call"),
       v.literal("fly_crawler"),
+      v.literal("daytona_codex_runtime_active"),
       v.literal("voice_transcription"),
       v.literal("knowledge_model_inference"),
     ),
@@ -2578,6 +2580,88 @@ export default defineSchema({
     .index("by_thread", ["threadId"])
     .index("by_thread_seq", ["threadId", "seq"])
     .index("by_owner_messageKey", ["ownerId", "messageKey"]),
+
+  polynetCodexWorkerCapacityLeases: defineTable({
+    runId: v.string(),
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    projectId: v.optional(v.id("cloudProjects")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("released"),
+      v.literal("expired"),
+    ),
+    acquiredAt: v.number(),
+    expiresAt: v.number(),
+    releasedAt: v.optional(v.number()),
+    releaseReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_owner_runId", ["ownerId", "runId"])
+    .index("by_status_expiresAt", ["status", "expiresAt"])
+    .index("by_owner_status_expiresAt", ["ownerId", "status", "expiresAt"])
+    .index("by_project_status_expiresAt", ["projectId", "status", "expiresAt"]),
+
+  daytonaCodexRuntimeTargets: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    projectId: v.optional(v.id("cloudProjects")),
+    runId: v.string(),
+    scope: v.union(v.literal("run"), v.literal("thread"), v.literal("project")),
+    provider: v.literal("daytona"),
+    sandboxId: v.optional(v.string()),
+    sandboxName: v.optional(v.string()),
+    sandboxState: v.optional(v.string()),
+    workerState: v.union(
+      v.literal("creating"),
+      v.literal("starting"),
+      v.literal("ready"),
+      v.literal("error"),
+      v.literal("released"),
+    ),
+    workerPort: v.number(),
+    workerUrl: v.optional(v.string()),
+    workerAuthMode: v.optional(v.string()),
+    signedPreviewExpiresAt: v.optional(v.number()),
+    snapshotId: v.optional(v.string()),
+    targetRegion: v.optional(v.string()),
+    leaseRunId: v.optional(v.string()),
+    lifecycleMode: v.optional(
+      v.union(v.literal("prepared_staging_reuse"), v.literal("per_turn_ephemeral")),
+    ),
+    autoStopMinutes: v.optional(v.number()),
+    autoArchiveMinutes: v.optional(v.number()),
+    autoDeleteMinutes: v.optional(v.number()),
+    providerTeardownState: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("skipped"),
+        v.literal("stopped"),
+        v.literal("deleted"),
+        v.literal("failed"),
+      ),
+    ),
+    providerTeardownReason: v.optional(v.string()),
+    providerTeardownAt: v.optional(v.number()),
+    providerTeardownErrorCode: v.optional(v.string()),
+    providerTeardownErrorMessage: v.optional(v.string()),
+    lastHealthAt: v.optional(v.number()),
+    lastUsedAt: v.optional(v.number()),
+    releasedAt: v.optional(v.number()),
+    releaseReason: v.optional(v.string()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_runId", ["ownerId", "runId"])
+    .index("by_runId", ["runId"])
+    .index("by_workerState_updatedAt", ["workerState", "updatedAt"])
+    .index("by_sandboxId", ["sandboxId"])
+    .index("by_owner_workerState_lastUsedAt", ["ownerId", "workerState", "lastUsedAt"])
+    .index("by_project_workerState_lastUsedAt", ["projectId", "workerState", "lastUsedAt"]),
 
   runtimeRuns: defineTable({
     ownerId: v.id("users"),

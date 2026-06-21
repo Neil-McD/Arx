@@ -44,6 +44,9 @@ import {
   buildRuntimeTurnEnvelope,
   type RuntimeTurnEnvelopeV1,
 } from "../shared/runtimeTurnEnvelope";
+import type {
+  CommunityLensAuthority,
+} from "../shared/communityLensAuthority";
 import {
   buildRuntimeFailureFinalAnswer,
   hasConnectedAppFailureEvidence,
@@ -67,12 +70,14 @@ import {
 import {
   buildPolynetCodexWorkerTurnInputs,
   cancelPolynetCodexWorkerTurn,
+  getPolynetCodexWorkerBridgeConfig,
   POLYNET_CODEX_WORKER_CONTRACT_NAME,
   POLYNET_CODEX_WORKER_CONTRACT_VERSION,
   POLYNET_CODEX_WORKER_ENGINE_ID,
   resolvePolynetRuntimeEngine,
   steerPolynetCodexWorkerTurn,
   streamPolynetCodexWorkerTurn,
+  type PolynetCodexWorkerResolvedTarget,
 } from "./polynetCodexWorkerBridge";
 import {
   createProjectRuntimeWorkspaceSession,
@@ -89,9 +94,21 @@ import {
   buildPolynetPlatformToolNames,
   buildPolynetPlatformToolSpecs,
 } from "../shared/polynetPlatformToolSurface";
+import { reservePaidToolCredits } from "./paidToolCreditReservation";
 import {
-  POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT,
-  POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT,
+  settleReservedCreditsBestEffort,
+  settleReservedCreditsStrict,
+} from "./workspaceCreditSettlement";
+import {
+  CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+  creditsToUsd,
+  estimateCodexRuntimeVendorCostUsd,
+  PAID_TOOL_PRICING_VERSION,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceCodexRuntimeCredits,
+} from "../shared/workspaceCredits";
+import {
+  POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS,
 } from "../shared/polynetCodexWorkerLimits";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
@@ -117,6 +134,21 @@ type RuntimeCompletionFailure = {
   message: string;
 };
 
+function buildCommunityLensAuthorityReceipt(
+  authority: CommunityLensAuthority | null | undefined,
+) {
+  if (!authority) return null;
+  return {
+    relation: authority.relation,
+    effective_role: authority.effectiveRole,
+    community_resource_lane: authority.communityResourceLane.lane,
+    can_manage: authority.canManage,
+    can_moderate: authority.canModerate,
+    can_manage_resources: authority.canManageResources,
+    can_review_join_requests: authority.canReviewJoinRequests,
+  };
+}
+
 function openAiModelIdFromRef(modelRef: string): string | null {
   const trimmed = String(modelRef ?? "").trim();
   if (!trimmed.toLowerCase().startsWith("openai/")) return null;
@@ -128,6 +160,11 @@ function isRuntimeCompletionFailure(
   completion: RuntimeCompletionSuccess | RuntimeCompletionFailure,
 ): completion is RuntimeCompletionFailure {
   return "ok" in completion && completion.ok === false;
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 async function loadUserAgentProfileForRuntime(
@@ -679,6 +716,106 @@ export async function handleRuntimeTurnRequest(args: {
       activeSnapshotUpdatedAt = nowMs;
       await persistContextSnapshotBestEffort("active");
     };
+    let polynetCodexWorkerLeaseAcquired = false;
+    let polynetCodexWorkerLeaseReleased = false;
+    let polynetCodexRuntimeCreditKey: string | null = null;
+    let polynetCodexRuntimeCreditsReserved = 0;
+    let polynetCodexRuntimeWorkerStartedAtMs: number | null = null;
+    let polynetCodexRuntimeWorkerMachineId: string | null = null;
+    let polynetCodexRuntimeTimingTotalMs: number | null = null;
+    let polynetCodexRuntimeCreditsSettled = false;
+    const settlePolynetCodexRuntimeCreditsBestEffort = async (
+      terminalReason: string,
+    ): Promise<void> => {
+      if (!polynetCodexRuntimeCreditKey || polynetCodexRuntimeCreditsSettled) return;
+      polynetCodexRuntimeCreditsSettled = true;
+      const timingDurationSeconds =
+        polynetCodexRuntimeTimingTotalMs !== null
+          ? polynetCodexRuntimeTimingTotalMs / 1000
+          : null;
+      const fallbackDurationSeconds =
+        polynetCodexRuntimeWorkerStartedAtMs !== null
+          ? Math.max(0, (Date.now() - polynetCodexRuntimeWorkerStartedAtMs) / 1000)
+          : null;
+      const durationSeconds = Math.max(
+        0,
+        timingDurationSeconds ?? fallbackDurationSeconds ?? 0,
+      );
+      if (!(durationSeconds > 0)) {
+        await settleReservedCreditsBestEffort({
+          ctx,
+          creditKey: polynetCodexRuntimeCreditKey,
+          status: "refunded",
+          failureReason: terminalReason || "codex_runtime_not_started",
+          metadata: {
+            pricing_version: PAID_TOOL_PRICING_VERSION,
+            provider: "daytona",
+            pricing_model: "daytona_runtime_seconds_estimate",
+            worker_started: false,
+            terminal_reason: terminalReason,
+          },
+        });
+        return;
+      }
+
+      const rawVendorCostUsd = estimateCodexRuntimeVendorCostUsd({
+        durationSeconds,
+      });
+      const creditsSettled = priceCodexRuntimeCredits({ durationSeconds });
+      try {
+        await settleReservedCreditsStrict({
+          ctx,
+          creditKey: polynetCodexRuntimeCreditKey,
+          status: "succeeded",
+          creditsSettled,
+          rawVendorCostUsd,
+          metadata: {
+            pricing_version: PAID_TOOL_PRICING_VERSION,
+            target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+            provider: "daytona",
+            pricing_model: "daytona_runtime_seconds_estimate",
+            provider_billing_reconciliation: "pending",
+            provider_billing_evidence: "estimated_from_runtime_duration",
+            daytona_runtime_usd_per_second: CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+            duration_seconds: durationSeconds,
+            duration_source:
+              polynetCodexRuntimeTimingTotalMs !== null
+                ? "worker_timing_total_ms"
+                : "convex_observed_start_elapsed",
+            worker_machine_id: polynetCodexRuntimeWorkerMachineId,
+            reserved_credits: polynetCodexRuntimeCreditsReserved,
+            terminal_reason: terminalReason,
+          },
+        });
+      } catch (error) {
+        logStructuredError("polynet_codex_runtime_credit_settlement_failed", {
+          error,
+          run_id: runId,
+          credit_key: polynetCodexRuntimeCreditKey,
+          duration_seconds: durationSeconds,
+        });
+      }
+    };
+    const releasePolynetCodexWorkerLeaseBestEffort = async (
+      reason: string,
+    ): Promise<void> => {
+      if (!polynetCodexWorkerLeaseAcquired || polynetCodexWorkerLeaseReleased) return;
+      polynetCodexWorkerLeaseReleased = true;
+      try {
+        await ctx.runMutation(
+          (internal as any).polynetCodexWorkerAdmission
+            .releasePolynetCodexWorkerLease as any,
+          {
+            ownerId: actor.dbUserId,
+            runId,
+            reason,
+          },
+        );
+      } catch {
+        // The lease TTL is the final backstop; terminal run finalization should
+        // not fail because release accounting had a transient write failure.
+      }
+    };
     type FinishRunBestEffortParams = Parameters<typeof finishRunBestEffortRaw>[0];
     const finishRunBestEffortForRun = async (
       params: FinishRunBestEffortParams,
@@ -715,10 +852,27 @@ export async function handleRuntimeTurnRequest(args: {
           contextSnapshot = null;
         }
       }
-      await finishRunBestEffortRaw({
-        ...params,
-        contextSnapshot,
-      });
+      try {
+        await finishRunBestEffortRaw({
+          ...params,
+          contextSnapshot,
+        });
+      } finally {
+        await settlePolynetCodexRuntimeCreditsBestEffort(
+          params.status === "ok"
+            ? "completed"
+            : params.status === "cancelled"
+              ? "cancelled"
+              : params.errorCode || params.reason || "error",
+        );
+        await releasePolynetCodexWorkerLeaseBestEffort(
+          params.status === "ok"
+            ? "completed"
+            : params.status === "cancelled"
+              ? "cancelled"
+              : params.errorCode || params.reason || "error",
+        );
+      }
     };
     finishRunBestEffort = finishRunBestEffortForRun;
     await persistContextSnapshotBestEffort("started");
@@ -958,6 +1112,8 @@ export async function handleRuntimeTurnRequest(args: {
         project_id: runtimeProjectId ?? null,
         community_id: runtimeCommunityId ?? null,
         community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
+        community_lens_authority:
+          buildCommunityLensAuthorityReceipt(runtimeCommunityLensAuthority),
         runtime_engine_requested:
           runtimeEngineResolution.requestedRuntimeEngine ?? null,
         runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
@@ -1051,61 +1207,11 @@ export async function handleRuntimeTurnRequest(args: {
               run_id: runId,
               engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
               model_id: requestedModelId,
-              fly_worker: true,
+              daytona_runtime: true,
             },
           });
 
           runtimeTurnStage = "polynet_codex_worker";
-          const activeRunCounts = (await ctx.runQuery(
-            (internal as any).polynetCodexWorkerAdmission
-              .countActivePolynetCodexWorkerRuns as any,
-            {
-              ownerId: actor.dbUserId,
-              ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
-            },
-          )) as { userActive: number; projectActive: number };
-          // Counts include this run because it has already been started.
-          const runLimitFailure =
-            runtimeProjectId &&
-            activeRunCounts.projectActive > POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT
-              ? {
-                  code: "project_run_limit_reached",
-                  message: `This workspace already has ${POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT} runs in flight. Wait for one to finish or stop one.`,
-                }
-              : activeRunCounts.userActive > POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT
-                ? {
-                    code: "user_run_limit_reached",
-                    message: `You already have ${POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT} runs in flight across your workspaces. Wait for one to finish or stop one.`,
-                  }
-                : null;
-          if (runLimitFailure) {
-            await persistPartialAssistantMessageBestEffort({
-              content: "",
-              status: "error",
-              reason: runLimitFailure.code,
-              errorCode: runLimitFailure.code,
-              errorMessage: runLimitFailure.message,
-              inferenceSourceOverride: streamedInferenceSource,
-              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-            });
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: runLimitFailure.code,
-              errorCode: runLimitFailure.code,
-              errorMessage: runLimitFailure.message,
-            });
-            writer.send({
-              event: "error",
-              data: {
-                code: runLimitFailure.code,
-                error: runLimitFailure.message,
-                message: runLimitFailure.message,
-                status: 429,
-              },
-            });
-            return;
-          }
-
           const workerChatgptAuth = await getFreshChatgptAuthForUser({
             ctx,
             userId: String(actor.dbUserId),
@@ -1143,9 +1249,170 @@ export async function handleRuntimeTurnRequest(args: {
             return;
           }
 
+          const leaseAcquireResult = (await ctx.runMutation(
+            (internal as any).polynetCodexWorkerAdmission
+              .tryAcquirePolynetCodexWorkerLease as any,
+            {
+              ownerId: actor.dbUserId,
+              threadId: ownedThread._id,
+              runId,
+              ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+            },
+          )) as {
+            ok: boolean;
+            status?: number;
+            code?: string;
+            message?: string;
+            leaseId?: string;
+            expiresAt?: number;
+            counts?: Record<string, unknown>;
+            limits?: Record<string, unknown>;
+          };
+          if (!leaseAcquireResult.ok) {
+            const capacityCode =
+              String(leaseAcquireResult.code ?? "").trim() ||
+              "codex_runtime_capacity_unavailable";
+            const capacityMessage =
+              String(leaseAcquireResult.message ?? "").trim() ||
+              "Codex runtime capacity is unavailable.";
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: capacityCode,
+              errorCode: capacityCode,
+              errorMessage: capacityMessage,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: capacityCode,
+              errorCode: capacityCode,
+              errorMessage: capacityMessage,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: capacityCode,
+                error: capacityMessage,
+                message: capacityMessage,
+                status: leaseAcquireResult.status ?? 429,
+                counts: leaseAcquireResult.counts ?? null,
+                limits: leaseAcquireResult.limits ?? null,
+              },
+            });
+            return;
+          }
+          polynetCodexWorkerLeaseAcquired = true;
+          try {
+            await streamAppendRunEvent({
+              eventType: "polynet_codex_worker_capacity_admitted",
+              eventKey: `${runId}:polynet_codex_worker_capacity_admitted:1`,
+              payload: {
+                run_id: runId,
+                lease_id: leaseAcquireResult.leaseId ?? null,
+                lease_expires_at: leaseAcquireResult.expiresAt ?? null,
+                counts: leaseAcquireResult.counts ?? null,
+                limits: leaseAcquireResult.limits ?? null,
+              },
+            });
+          } catch {
+            // Admission succeeded; evidence write is not allowed to consume the
+            // lease without attempting the turn. Terminal finalization releases it.
+          }
+
+          const codexRuntimeReserveDurationSeconds =
+            POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS / 1000;
+          const codexRuntimeReserveRawVendorCostUsd =
+            estimateCodexRuntimeVendorCostUsd({
+              durationSeconds: codexRuntimeReserveDurationSeconds,
+            });
+          const codexRuntimeReserveCredits = priceCodexRuntimeCredits({
+            durationSeconds: codexRuntimeReserveDurationSeconds,
+          });
+          const codexRuntimeCreditKey = `codex_runtime:${runId}`;
+          const codexRuntimeReservation = await reservePaidToolCredits({
+            ctx,
+            creditKey: codexRuntimeCreditKey,
+            userId: actor.dbUserId,
+            projectId: runtimeProjectId ?? undefined,
+            runId,
+            toolKind: "codex_runtime",
+            toolName: "codex_runtime",
+            action: "turn",
+            vendor: "daytona",
+            credits: codexRuntimeReserveCredits,
+            rawVendorCostUsd: codexRuntimeReserveRawVendorCostUsd,
+            polynetPriceUsd: creditsToUsd(codexRuntimeReserveCredits),
+            metadata: {
+              pricing_version: PAID_TOOL_PRICING_VERSION,
+              target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+              provider: "daytona",
+              pricing_model: "daytona_runtime_seconds_estimate",
+              provider_billing_reconciliation: "pending",
+              provider_billing_evidence: "estimated_from_runtime_duration",
+              daytona_runtime_usd_per_second: CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+              reserve_duration_seconds: codexRuntimeReserveDurationSeconds,
+              reserve_raw_vendor_cost_usd: codexRuntimeReserveRawVendorCostUsd,
+              lease_id: leaseAcquireResult.leaseId ?? null,
+              lease_expires_at: leaseAcquireResult.expiresAt ?? null,
+            },
+          });
+          if (!codexRuntimeReservation.ok) {
+            const billingMode =
+              String(codexRuntimeReservation.details.paid_usage_billing_mode ?? "").trim() ||
+              "card_preferred";
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: codexRuntimeReservation.code,
+              errorCode: codexRuntimeReservation.code,
+              errorMessage: codexRuntimeReservation.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: codexRuntimeReservation.code,
+              errorCode: codexRuntimeReservation.code,
+              errorMessage: codexRuntimeReservation.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: codexRuntimeReservation.code,
+                error: codexRuntimeReservation.message,
+                message: codexRuntimeReservation.message,
+                status: 402,
+                tool_kind: "codex_runtime",
+                required_credits: codexRuntimeReserveCredits,
+                paid_usage_billing_mode: billingMode,
+              },
+            });
+            return;
+          }
+          polynetCodexRuntimeCreditKey = codexRuntimeCreditKey;
+          polynetCodexRuntimeCreditsReserved = codexRuntimeReserveCredits;
+          const workerBridgeConfig = getPolynetCodexWorkerBridgeConfig();
+          try {
+            await streamAppendRunEvent({
+              eventType: "polynet_codex_runtime_credit_reserved",
+              eventKey: `${runId}:polynet_codex_runtime_credit_reserved:1`,
+              payload: {
+                run_id: runId,
+                credit_key: codexRuntimeCreditKey,
+                reserved_credits: codexRuntimeReserveCredits,
+                reserve_duration_seconds: codexRuntimeReserveDurationSeconds,
+                reserve_raw_vendor_cost_usd: codexRuntimeReserveRawVendorCostUsd,
+              },
+            });
+          } catch {
+            // Reservation is authoritative; audit event write is best-effort.
+          }
+
           let workerWorkspaceSession: RuntimeWorkspaceSession | null = null;
           let workerSandboxName: string | null = null;
-          if (runtimeProjectId) {
+          if (runtimeProjectId && workerBridgeConfig.provider !== "daytona_direct") {
             const createdWorkspace = await createProjectRuntimeWorkspaceSession({
               ctx,
               authSubject: actor.authSubject,
@@ -1195,16 +1462,32 @@ export async function handleRuntimeTurnRequest(args: {
                 toolbox_proxy_url: null,
               },
             });
+          } else if (runtimeProjectId && workerBridgeConfig.provider === "daytona_direct") {
+            await streamAppendRunEvent({
+              eventType: "workspace_session_skipped",
+              eventKey: `${runId}:workspace_session_skipped:daytona_direct`,
+              payload: {
+                run_id: runId,
+                project_id: runtimeProjectId,
+                source: "polynet_codex_worker",
+                provider: "daytona",
+                transport: "daytona_direct",
+                reason: "daytona_direct_uses_runtime_workspace",
+              },
+            });
           }
 
           const codexPromptGeneratedAt = new Date();
           const codexPromptTimeZone = "UTC";
-          const workerPlatformTools = buildPolynetPlatformToolSpecs({
+          const codexPlatformToolProjection = {
             hasCommunity: Boolean(runtimeCommunityId),
-          });
-          const codexVisiblePolynetToolNames = buildPolynetPlatformToolNames({
-            hasCommunity: Boolean(runtimeCommunityId),
-          });
+          };
+          const workerPlatformTools = buildPolynetPlatformToolSpecs(
+            codexPlatformToolProjection,
+          );
+          const codexVisiblePolynetToolNames = buildPolynetPlatformToolNames(
+            codexPlatformToolProjection,
+          );
           const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope({
             latestUserText,
             threadWorkingState: ownedThread.workingState ?? null,
@@ -1212,6 +1495,7 @@ export async function handleRuntimeTurnRequest(args: {
             communityId: runtimeCommunityId,
             projectId: runtimeProjectId,
             communityResourceLane: runtimeCommunityLensAuthority?.communityResourceLane ?? null,
+            communityLensAuthority: runtimeCommunityLensAuthority,
             allowedToolNames: codexVisiblePolynetToolNames,
           });
           runtimeTurnEnvelopeForRun = codexRuntimeTurnEnvelope;
@@ -1312,14 +1596,21 @@ export async function handleRuntimeTurnRequest(args: {
           const workerTerminalTarget = workerWorkspaceSession
             ? buildPolynetCodexWorkerTerminalTarget()
             : null;
+          const workerRuntimeToolBridgeRequired =
+            workerBridgeConfig.provider === "daytona_direct";
           const workerToolTarget =
-            workerPlatformTools.length > 0 ? buildPolynetCodexWorkerToolTarget() : null;
+            workerPlatformTools.length > 0 || workerRuntimeToolBridgeRequired
+              ? buildPolynetCodexWorkerToolTarget()
+              : null;
           await streamAppendRunEvent({
             eventType: "polynet_codex_worker_tools_projected",
             eventKey: `${runId}:polynet_codex_worker_tools_projected:1`,
             payload: {
               run_id: runId,
               tool_bridge_configured: Boolean(workerToolTarget),
+              runtime_tool_names: workerRuntimeToolBridgeRequired
+                ? ["computer_open_url", "computer_screenshot"]
+                : [],
               platform_tool_count: workerPlatformTools.length,
               platform_tool_names: workerPlatformTools.map((tool) => tool.name),
               platform_tool_policies: workerPlatformTools.map((tool) => ({
@@ -1329,6 +1620,8 @@ export async function handleRuntimeTurnRequest(args: {
                 required_community_resource_lane:
                   tool.required_community_resource_lane,
               })),
+              community_lens_authority:
+                buildCommunityLensAuthorityReceipt(runtimeCommunityLensAuthority),
             },
           });
           let workerRunTokens: {
@@ -1372,8 +1665,130 @@ export async function handleRuntimeTurnRequest(args: {
           }
           workerRunTokens = mintedWorkerRunTokens.tokens;
 
-          let workerCancelFired = false;
           let workerMachineId: string | null = null;
+          let workerResolvedTarget: PolynetCodexWorkerResolvedTarget | null = null;
+          if (workerBridgeConfig.provider === "daytona_direct") {
+            try {
+              await streamAppendRunEvent({
+                eventType: "daytona_codex_runtime_target_resolve_started",
+                eventKey: `${runId}:daytona_codex_runtime_target_resolve_started:1`,
+                payload: {
+                  run_id: runId,
+                  provider: "daytona",
+                  transport: "daytona_direct",
+                  scope: "run",
+                },
+              });
+              const resolved = (await ctx.runAction(
+                (internal as any).daytonaCodexRuntimeTargetActions
+                  .ensureDaytonaCodexRuntimeTargetInternal as any,
+                {
+                  ownerId: actor.dbUserId,
+                  threadId: ownedThread._id,
+                  runId,
+                  ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+                },
+              )) as {
+                targetId?: unknown;
+                sandboxId?: unknown;
+                workerUrl?: unknown;
+                authToken?: unknown;
+                signedPreviewExpiresAt?: unknown;
+                snapshotId?: unknown;
+                targetRegion?: unknown;
+                autoStopMinutes?: unknown;
+                autoArchiveMinutes?: unknown;
+                autoDeleteMinutes?: unknown;
+                workerPort?: unknown;
+                timing?: unknown;
+              };
+              workerResolvedTarget = {
+                provider: "daytona",
+                targetId: String(resolved.targetId ?? ""),
+                sandboxId: String(resolved.sandboxId ?? "") || null,
+                workerUrl: String(resolved.workerUrl ?? ""),
+                authToken: String(resolved.authToken ?? ""),
+                signedPreviewExpiresAt:
+                  typeof resolved.signedPreviewExpiresAt === "number"
+                    ? resolved.signedPreviewExpiresAt
+                    : null,
+              };
+              const resolvedSnapshotId =
+                String(resolved.snapshotId ?? "").trim() || null;
+              const resolvedTargetRegion =
+                String(resolved.targetRegion ?? "").trim() || null;
+              const resolvedAutoStopMinutes = readPositiveNumber(
+                resolved.autoStopMinutes,
+              );
+              const resolvedAutoArchiveMinutes = readPositiveNumber(
+                resolved.autoArchiveMinutes,
+              );
+              const resolvedAutoDeleteMinutes = readPositiveNumber(
+                resolved.autoDeleteMinutes,
+              );
+              const resolvedWorkerPort = readPositiveNumber(resolved.workerPort);
+              workerMachineId = workerResolvedTarget.sandboxId;
+              polynetCodexRuntimeWorkerMachineId = workerResolvedTarget.sandboxId;
+              await streamAppendRunEvent({
+                eventType: "daytona_codex_runtime_target_ready",
+                eventKey: `${runId}:daytona_codex_runtime_target_ready:1`,
+                payload: {
+                  run_id: runId,
+                  provider: "daytona",
+                  transport: "daytona_direct",
+                  scope: "run",
+                  target_id: workerResolvedTarget.targetId,
+                  sandbox_id: workerResolvedTarget.sandboxId,
+                  snapshot_id: resolvedSnapshotId,
+                  target_region: resolvedTargetRegion,
+                  auto_stop_minutes: resolvedAutoStopMinutes,
+                  auto_archive_minutes: resolvedAutoArchiveMinutes,
+                  auto_delete_minutes: resolvedAutoDeleteMinutes,
+                  worker_port: resolvedWorkerPort,
+                  signed_preview_expires_at:
+                    workerResolvedTarget.signedPreviewExpiresAt ?? null,
+                  timing: resolved.timing ?? null,
+                },
+              });
+            } catch (error) {
+              const targetFailureCode =
+                error instanceof Error && error.message
+                  ? error.message.split(/\s|\n/)[0]
+                  : "daytona_codex_runtime_target_failed";
+              const targetFailureMessage =
+                error instanceof Error
+                  ? error.message
+                  : "Daytona Codex runtime target failed.";
+              await persistPartialAssistantMessageBestEffort({
+                content: "",
+                status: "error",
+                reason: targetFailureCode,
+                errorCode: targetFailureCode,
+                errorMessage: targetFailureMessage,
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: targetFailureCode,
+                errorCode: targetFailureCode,
+                errorMessage: targetFailureMessage,
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  code: targetFailureCode,
+                  error: targetFailureMessage,
+                  message: targetFailureMessage,
+                  status: 503,
+                  provider: "daytona",
+                },
+              });
+              return;
+            }
+          }
+
+          let workerCancelFired = false;
           let workerSteeredCount = 0;
           let workerWatcherBusy = false;
           const workerCancelWatcher = setInterval(() => {
@@ -1392,7 +1807,11 @@ export async function handleRuntimeTurnRequest(args: {
                 if (String(row.status ?? "") === "cancelled") {
                   workerCancelFired = true;
                   clearInterval(workerCancelWatcher);
-                  await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+                  await cancelPolynetCodexWorkerTurn({
+                    runId,
+                    machineId: workerMachineId,
+                    target: workerResolvedTarget,
+                  });
                   return;
                 }
                 const steering = Array.isArray(row.pendingUserSteering)
@@ -1409,6 +1828,7 @@ export async function handleRuntimeTurnRequest(args: {
                     runId,
                     machineId: workerMachineId,
                     text,
+                    target: workerResolvedTarget,
                   });
                   if (delivery.ok || delivery.status === 409) {
                     workerSteeredCount += 1;
@@ -1455,6 +1875,22 @@ export async function handleRuntimeTurnRequest(args: {
                       model_id: requestedModelId,
                       lane,
                       inference_source: streamedInferenceSource,
+                      codex_runtime_billing: {
+                        credit_key: polynetCodexRuntimeCreditKey,
+                        reserved_credits: polynetCodexRuntimeCreditsReserved,
+                        daytona_runtime_usd_per_second:
+                          CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+                      },
+                      ...(workerResolvedTarget
+                        ? {
+                            daytona_runtime_target: {
+                              target_id: workerResolvedTarget.targetId,
+                              sandbox_id: workerResolvedTarget.sandboxId,
+                              signed_preview_expires_at:
+                                workerResolvedTarget.signedPreviewExpiresAt,
+                            },
+                          }
+                        : {}),
                       ...(workerWorkspaceSession
                         ? {
                             lease: {
@@ -1473,10 +1909,17 @@ export async function handleRuntimeTurnRequest(args: {
                   }
                 : null,
               platformTools: workerPlatformTools,
+              target: workerResolvedTarget,
               onEvent: async (event) => {
                 if (event.event === "start") {
+                  if (polynetCodexRuntimeWorkerStartedAtMs === null) {
+                    polynetCodexRuntimeWorkerStartedAtMs = Date.now();
+                  }
                   const machineId = String(event.data.machine_id ?? "").trim();
-                  if (machineId) workerMachineId = machineId;
+                  if (machineId) {
+                    workerMachineId = machineId;
+                    polynetCodexRuntimeWorkerMachineId = machineId;
+                  }
                   return;
                 }
                 if (event.event === "delta") {
@@ -1512,6 +1955,13 @@ export async function handleRuntimeTurnRequest(args: {
                   return;
                 }
                 if (event.event === "run_model_finished" || event.event === "run_finalized") {
+                  const timing = event.data.timing;
+                  const timingRecord =
+                    timing && typeof timing === "object" && !Array.isArray(timing)
+                      ? (timing as Record<string, unknown>)
+                      : null;
+                  const totalMs = readPositiveNumber(timingRecord?.total_ms);
+                  if (totalMs !== null) polynetCodexRuntimeTimingTotalMs = totalMs;
                   writer.send({
                     event: event.event,
                     data: {
@@ -1527,6 +1977,10 @@ export async function handleRuntimeTurnRequest(args: {
           } finally {
             clearInterval(workerCancelWatcher);
           }
+          const workerTimingTotalMs = readPositiveNumber(workerResult.timing?.total_ms);
+          if (workerTimingTotalMs !== null) {
+            polynetCodexRuntimeTimingTotalMs = workerTimingTotalMs;
+          }
 
           if (
             !workerResult.ok &&
@@ -1534,12 +1988,76 @@ export async function handleRuntimeTurnRequest(args: {
               workerResult.code === "polynet_codex_worker_unreachable")
           ) {
             try {
-              await cancelPolynetCodexWorkerTurn({ runId, machineId: workerMachineId });
+              await cancelPolynetCodexWorkerTurn({
+                runId,
+                machineId: workerMachineId,
+                target: workerResolvedTarget,
+              });
             } catch {
               // Best effort; the worker turn timeout is the backstop.
             }
           }
           streamedContent = workerResult.assistantText || streamedContent;
+
+          if (workerResolvedTarget) {
+            const teardownReason = workerResult.ok ? "turn_finished" : "turn_failed";
+            try {
+              await ctx.runMutation(
+                (internal as any).daytonaCodexRuntimeTargets
+                  .releaseDaytonaCodexRuntimeTargetInternal as any,
+                {
+                  ownerId: actor.dbUserId,
+                  runId,
+                  reason: teardownReason,
+                },
+              );
+            } catch {
+              // Daytona auto-stop/delete is the runtime cleanup backstop.
+            }
+            try {
+              await streamAppendRunEvent({
+                eventType: "daytona_codex_runtime_provider_teardown_started",
+                eventKey: `${runId}:daytona_codex_runtime_provider_teardown_started:1`,
+                payload: {
+                  run_id: runId,
+                  provider: "daytona",
+                  transport: "daytona_direct",
+                  target_id: workerResolvedTarget.targetId,
+                  sandbox_id: workerResolvedTarget.sandboxId,
+                  reason: teardownReason,
+                  cleanup_mode: "scheduled",
+                },
+              });
+              await ctx.scheduler.runAfter(
+                0,
+                (internal as any).daytonaCodexRuntimeTargetActions
+                  .teardownAndRecordDaytonaCodexRuntimeTargetInternal as any,
+                {
+                  ownerId: actor.dbUserId,
+                  runId,
+                  reason: teardownReason,
+                },
+              );
+            } catch (teardownError) {
+              await streamAppendRunEvent({
+                eventType: "daytona_codex_runtime_provider_teardown_failed",
+                eventKey: `${runId}:daytona_codex_runtime_provider_teardown_failed:1`,
+                payload: {
+                  run_id: runId,
+                  provider: "daytona",
+                  transport: "daytona_direct",
+                  target_id: workerResolvedTarget.targetId,
+                  sandbox_id: workerResolvedTarget.sandboxId,
+                  reason: teardownReason,
+                  failure_stage: "schedule",
+                  message:
+                    teardownError instanceof Error
+                      ? teardownError.message.slice(0, 1000)
+                      : String(teardownError ?? "teardown_failed").slice(0, 1000),
+                },
+              });
+            }
+          }
 
           if (workerWorkspaceSession) {
             try {

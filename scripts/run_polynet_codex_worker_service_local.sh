@@ -25,6 +25,10 @@ PRESET_VARS=(
   POLYNET_CODEX_WORKER_HOST
   POLYNET_CODEX_WORKER_MODEL
   POLYNET_CODEX_WORKER_CODEX_BIN
+  POLYNET_CODEX_WORKER_CODEX_HOME
+  POLYNET_CODEX_WORKSPACE_HOST
+  POLYNET_DAYTONA_WORKSPACE_ROOT
+  POLYNET_DAYTONA_PREVIEW_URL_PATTERN
   CONVEX_DEPLOYMENT
   POLYNET_DEPLOYMENT_KIND
 )
@@ -51,6 +55,7 @@ export CONVEX_DEPLOYMENT="${CONVEX_DEPLOYMENT:-dev:quick-porcupine-949}"
 export POLYNET_CODEX_WORKER_CODEX_BIN="${POLYNET_CODEX_WORKER_CODEX_BIN:-codex}"
 export POLYNET_CODEX_WORKER_HOST="${POLYNET_CODEX_WORKER_HOST:-127.0.0.1}"
 export POLYNET_CODEX_WORKER_MODEL="${POLYNET_CODEX_WORKER_MODEL:-gpt-5.5}"
+export POLYNET_CODEX_WORKSPACE_HOST="${POLYNET_CODEX_WORKSPACE_HOST:-blaxel}"
 
 if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
   if [[ "$POLYNET_CODEX_WORKER_HOST" == "127.0.0.1" || "$POLYNET_CODEX_WORKER_HOST" == "localhost" ]]; then
@@ -61,8 +66,35 @@ if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
   fi
 fi
 
-CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-"${TMPDIR:-/tmp}/polynet-codex-worker-local/codex-home"}"
+if [[ "$POLYNET_CODEX_WORKSPACE_HOST" == "daytona" ]]; then
+  DAYTONA_WORKSPACE_ROOT="${POLYNET_DAYTONA_WORKSPACE_ROOT:-/home/daytona}"
+  CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-"$DAYTONA_WORKSPACE_ROOT/.polynet-codex-home"}"
+else
+  CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-"${TMPDIR:-/tmp}/polynet-codex-worker-local/codex-home"}"
+fi
 mkdir -p "$CODEX_HOME_DIR"
+if [[ "$POLYNET_CODEX_WORKSPACE_HOST" == "daytona" ]]; then
+  POLYNET_WORKER_ROOT_DIR="$ROOT_DIR" node \
+    --experimental-strip-types \
+    --experimental-specifier-resolution=node \
+    --input-type=module <<'NODE' > "$CODEX_HOME_DIR/config.toml"
+const { join } = await import("node:path");
+const { pathToFileURL } = await import("node:url");
+
+const rootDir = process.env.POLYNET_WORKER_ROOT_DIR;
+if (!rootDir) throw new Error("POLYNET_WORKER_ROOT_DIR is required.");
+const moduleUrl = pathToFileURL(
+  join(rootDir, "services/polynet-codex-worker/src/daytonaRuntimePolicy.ts"),
+).href;
+const { renderDaytonaCodexCliConfigToml } = await import(moduleUrl);
+process.stdout.write(
+  renderDaytonaCodexCliConfigToml({
+    model: process.env.POLYNET_CODEX_WORKER_MODEL || "gpt-5.5",
+  }),
+);
+NODE
+  chmod 600 "$CODEX_HOME_DIR/config.toml" || true
+fi
 if [[ -z "${CODEX_ACCESS_TOKEN:-}" && -f "$HOME/.codex/auth.json" && ! -f "$CODEX_HOME_DIR/auth.json" ]]; then
   cp "$HOME/.codex/auth.json" "$CODEX_HOME_DIR/auth.json"
   chmod 600 "$CODEX_HOME_DIR/auth.json" || true
@@ -71,7 +103,9 @@ export CODEX_HOME="$CODEX_HOME_DIR"
 
 cd "$ROOT_DIR"
 
-bash "$ROOT_DIR/scripts/polynet_codex_worker_staging_guard.sh"
+if [[ "$POLYNET_CODEX_WORKSPACE_HOST" != "daytona" ]]; then
+  bash "$ROOT_DIR/scripts/daytona_codex_runtime_staging_guard.sh"
+fi
 
 exec node \
   --experimental-strip-types \

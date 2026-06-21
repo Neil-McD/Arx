@@ -3,6 +3,7 @@ import {
   destroyBlaxelWorkspaceComputer,
   ensureBlaxelWorkspaceComputer,
   executeBlaxelWorkspaceCommand,
+  resolveBlaxelWorkspaceComputerIfReady,
 } from "../../../convex/blaxelWorkspaceComputerProvider.ts";
 import {
   WORKSPACE_PREVIEW_PORT_MAX,
@@ -64,7 +65,7 @@ export function normalizeToolCommand(args: unknown, fallbackCommand: string): st
   return command;
 }
 
-export function buildBlaxelBashDynamicToolSpec(): Record<string, unknown> {
+export function buildWorkspaceBashDynamicToolSpec(): Record<string, unknown> {
   return {
     name: "workspace_bash",
     description:
@@ -81,6 +82,10 @@ export function buildBlaxelBashDynamicToolSpec(): Record<string, unknown> {
       additionalProperties: false,
     },
   };
+}
+
+export function buildBlaxelBashDynamicToolSpec(): Record<string, unknown> {
+  return buildWorkspaceBashDynamicToolSpec();
 }
 
 export function buildWorkspaceServeDynamicToolSpec(): Record<string, unknown> {
@@ -133,15 +138,19 @@ export async function ensureBlaxelSandbox(params: {
   providerSandboxId: string | null;
   workspaceRoot: string | null;
 }> {
-  const ensured = await ensureBlaxelWorkspaceComputer({
-    sandboxName: params.sandboxName,
-    lifecycleIntent: "agent_run",
-    requireExisting: params.requireExisting === true,
-    labels: {
-      purpose: "polynet-codex-worker-service",
-      ...(params.labels ?? {}),
-    },
-  });
+  const ensured =
+    params.requireExisting === true
+      ? await resolveBlaxelWorkspaceComputerIfReady({
+          sandboxName: params.sandboxName,
+        })
+      : await ensureBlaxelWorkspaceComputer({
+          sandboxName: params.sandboxName,
+          lifecycleIntent: "agent_run",
+          labels: {
+            purpose: "polynet-codex-worker-service",
+            ...(params.labels ?? {}),
+          },
+        });
   if (ensured.ok === false) {
     throw new Error(`Blaxel sandbox ensure failed: ${ensured.code}: ${ensured.message}`);
   }

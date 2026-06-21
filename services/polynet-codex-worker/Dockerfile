@@ -12,9 +12,10 @@ RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" && npm cache clean --for
 
 COPY convex ./convex
 COPY shared ./shared
+COPY scripts/run_polynet_codex_worker_service_local.sh ./scripts/run_polynet_codex_worker_service_local.sh
 COPY services/polynet-codex-worker ./services/polynet-codex-worker
 
-RUN chmod +x /app/services/polynet-codex-worker/entrypoint.sh && mkdir -p /app/agent-cwd
+RUN chmod +x /app/services/polynet-codex-worker/entrypoint.sh /app/scripts/run_polynet_codex_worker_service_local.sh && mkdir -p /app/agent-cwd
 
 ENV NODE_ENV=production
 ENV PORT=8787

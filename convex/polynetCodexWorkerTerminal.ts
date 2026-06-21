@@ -90,12 +90,12 @@ export async function handlePolynetCodexWorkerTerminal(
 
   // The signed run token proves Convex minted this short-lived request; the
   // live run row still remains the authority for owner/thread/engine.
-  let runRow: { threadId?: unknown; engineId?: unknown } | null = null;
+  let runRow: { threadId?: unknown; engineId?: unknown; status?: unknown } | null = null;
   try {
     runRow = (await ctx.runQuery(
       (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
       { ownerId: context.owner_id, runId: context.run_id },
-    )) as { threadId?: unknown; engineId?: unknown } | null;
+    )) as { threadId?: unknown; engineId?: unknown; status?: unknown } | null;
   } catch {
     runRow = null;
   }
@@ -105,6 +105,15 @@ export async function handlePolynetCodexWorkerTerminal(
     String(runRow.engineId ?? "") !== POLYNET_CODEX_WORKER_ENGINE_ID
   ) {
     return json(404, { ok: false, code: "invalid_run" });
+  }
+  const runStatus = String(runRow.status ?? "").trim();
+  if (runStatus !== "running") {
+    return json(409, {
+      ok: false,
+      code: "codex_worker_run_not_active",
+      message: "This Codex worker run is no longer active.",
+      run_status: runStatus || null,
+    });
   }
 
   const lease = asRecord(asRecord(body.context)?.lease);

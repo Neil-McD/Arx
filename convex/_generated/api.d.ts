@@ -80,6 +80,8 @@ import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
+import type * as daytonaCodexRuntimeTargetActions from "../daytonaCodexRuntimeTargetActions.js";
+import type * as daytonaCodexRuntimeTargets from "../daytonaCodexRuntimeTargets.js";
 import type * as developerApps from "../developerApps.js";
 import type * as directMessages from "../directMessages.js";
 import type * as discoverMarketplace from "../discoverMarketplace.js";
@@ -265,6 +267,8 @@ declare const fullApi: ApiFromModules<{
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;
+  daytonaCodexRuntimeTargetActions: typeof daytonaCodexRuntimeTargetActions;
+  daytonaCodexRuntimeTargets: typeof daytonaCodexRuntimeTargets;
   developerApps: typeof developerApps;
   directMessages: typeof directMessages;
   discoverMarketplace: typeof discoverMarketplace;

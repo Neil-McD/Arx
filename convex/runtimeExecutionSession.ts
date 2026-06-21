@@ -32,7 +32,10 @@ import {
   normalizeResolveMountedToolsArguments,
   RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
 } from "./runtimeMountedToolExposure";
-import type { NativeToolAwareMessage } from "../shared/nativeToolProtocol";
+import {
+  buildToolObservationMessage,
+  type NativeToolAwareMessage,
+} from "../shared/nativeToolProtocol";
 import type { NativeToolExecutionResult } from "../shared/nativeToolLoop";
 import {
   type RetrievalToolName,
@@ -613,21 +616,6 @@ export function createPolyNetExecutionSession(params: {
           );
           return;
         }
-        if (workspaceSession.kind === "thread_scratch") {
-          await emitRunEvent(
-            "workspace_session_provider_released",
-            {
-              run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: null,
-              sandbox_scope: workspaceSession.kind,
-              reason: providerRelease.reason,
-              release_confirmed: providerRelease.releaseConfirmed,
-            },
-            `${params.runId}:workspace_session_provider_released:scratch:${workspaceSession.providerSandboxId}`,
-          );
-          return;
-        }
         const settlement = await settleRuntimeWorkspaceSession({
           ctx: params.ctx,
           userId: params.userId,
@@ -643,7 +631,7 @@ export function createPolyNetExecutionSession(params: {
             {
               run_id: params.runId,
               sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
+              project_id: workspaceSession.projectId ?? null,
               credit_reservation_key: settlement.creditReservationKey ?? null,
               credits_debited: settlement.creditsDebited ?? null,
               compute_cost_usd: settlement.computeCostUsd ?? null,
@@ -668,7 +656,7 @@ export function createPolyNetExecutionSession(params: {
               ? {
                   run_id: params.runId,
                   sandbox_id: workspaceSession.providerSandboxId,
-                  project_id: workspaceSession.projectId,
+                  project_id: workspaceSession.projectId ?? null,
                   credit_reservation_key: settlement.creditReservationKey ?? null,
                   released: released.released,
                   reason: released.reason,
@@ -680,7 +668,7 @@ export function createPolyNetExecutionSession(params: {
               : {
                   run_id: params.runId,
                   sandbox_id: workspaceSession.providerSandboxId,
-                  project_id: workspaceSession.projectId,
+                  project_id: workspaceSession.projectId ?? null,
                   credit_reservation_key: settlement.creditReservationKey ?? null,
                   error_message: released.error,
                 },
@@ -692,7 +680,7 @@ export function createPolyNetExecutionSession(params: {
             {
               run_id: params.runId,
               sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId,
+              project_id: workspaceSession.projectId ?? null,
               credit_reservation_key: settlement.creditReservationKey,
               credits_debited: settlement.creditsDebited,
               compute_cost_usd: settlement.computeCostUsd,
@@ -1108,6 +1096,145 @@ export function createPolyNetExecutionSession(params: {
         };
       }
       const computerToolName = paramsForComputer.toolName;
+      if (computerToolName === "computer_open_url") {
+        const opened = (await params.ctx.runAction(
+          (internal as any).daytonaCodexRuntimeTargetActions
+            .openDaytonaComputerUseUrlInternal as any,
+          {
+            ownerId: params.userId,
+            runId: params.runId,
+            url: String(paramsForComputer.normalizedArgs.url ?? ""),
+            reason: "runtime_computer_open_url_tool",
+          },
+        )) as Record<string, unknown>;
+        if (opened?.ok !== true) {
+          const errorCode =
+            String(opened?.code ?? "").trim() ||
+            "daytona_computer_open_url_unavailable";
+          return {
+            status: "error",
+            exitCode: null,
+            outputText: "",
+            errorCode,
+            errorMessage:
+              String(opened?.message ?? "").trim() ||
+              "Daytona Computer Use browser navigation is unavailable for this run.",
+            details: {
+              provider_id: "daytona",
+              computer_use: {
+                provider: "daytona",
+                error_code: errorCode,
+              },
+            },
+          };
+        }
+        const summary =
+          String(opened.summary ?? "").trim() ||
+          "Opened URL in the Daytona computer browser.";
+        return {
+          status: "ok",
+          exitCode: 0,
+          outputText: summary,
+          errorCode: null,
+          errorMessage: null,
+          details: {
+            provider_id: "daytona",
+            computer_use: {
+              provider: "daytona",
+              summary,
+              command_exit_code: opened.command_exit_code ?? null,
+              display_keys: opened.display_keys ?? [],
+              window_count: opened.window_count ?? null,
+              capture_reason: opened.capture_reason ?? null,
+            },
+          },
+        };
+      }
+      if (computerToolName === "computer_screenshot") {
+        const captured = (await params.ctx.runAction(
+          (internal as any).daytonaCodexRuntimeTargetActions
+            .captureDaytonaComputerUseScreenshotInternal as any,
+          {
+            ownerId: params.userId,
+            runId: params.runId,
+            reason: "runtime_computer_screenshot_tool",
+          },
+        )) as Record<string, unknown>;
+        if (captured?.ok !== true) {
+          const errorCode =
+            String(captured?.code ?? "").trim() ||
+            "daytona_computer_use_screenshot_unavailable";
+          return {
+            status: "error",
+            exitCode: null,
+            outputText: "",
+            errorCode,
+            errorMessage:
+              String(captured?.message ?? "").trim() ||
+              "Daytona Computer Use screenshot is unavailable for this run.",
+            details: {
+              provider_id: "daytona",
+              computer_use: {
+                provider: "daytona",
+                error_code: errorCode,
+              },
+            },
+          };
+        }
+
+        const frameUrl = String(captured.frame_url ?? "").trim();
+        const frameStorageId = String(captured.frame_storage_id ?? "").trim();
+        const summary =
+          String(captured.summary ?? "").trim() ||
+          "Captured Daytona desktop screenshot.";
+        if (!frameUrl || !frameStorageId) {
+          return {
+            status: "error",
+            exitCode: null,
+            outputText: "",
+            errorCode: "daytona_computer_use_screenshot_frame_unavailable",
+            errorMessage: "Daytona captured a screenshot but did not return a readable frame.",
+            details: {
+              provider_id: "daytona",
+              computer_use: {
+                provider: "daytona",
+                frame_storage_id: frameStorageId || null,
+              },
+            },
+          };
+        }
+
+        const observationMessage = buildToolObservationMessage({
+          summaryText: summary,
+          imageUrl: frameUrl,
+        });
+        return {
+          status: "ok",
+          exitCode: 0,
+          outputText: summary,
+          errorCode: null,
+          errorMessage: null,
+          details: {
+            provider_id: "daytona",
+            computer_use: {
+              provider: "daytona",
+              summary,
+              frame_storage_id: frameStorageId,
+              frame_mime_type: captured.frame_mime_type ?? null,
+              frame_size_bytes: captured.frame_size_bytes ?? null,
+              screenshot_method: captured.screenshot_method ?? null,
+              screenshot_width: captured.screenshot_width ?? null,
+              screenshot_height: captured.screenshot_height ?? null,
+              capture_reason: captured.capture_reason ?? null,
+              status_keys: captured.status_keys ?? [],
+              result_keys: captured.result_keys ?? [],
+            },
+          },
+          observationContent: Array.isArray(observationMessage.content)
+            ? observationMessage.content
+            : null,
+        };
+      }
       await emitRunEvent("computer_tool_completed", {
         run_id: params.runId,
         tool_name: computerToolName,

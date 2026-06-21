@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
+  echo "FAIL: POLYNET_CODEX_WORKER_AUTH_TOKEN is required" >&2
+  exit 1
+fi
+
 mkdir -p "$CODEX_HOME"
 chmod 700 "$CODEX_HOME" || true
 
@@ -23,19 +28,16 @@ elif [[ ! -f "$CODEX_HOME/auth.json" ]]; then
   exit 1
 fi
 
+if [[ "${POLYNET_CODEX_WORKSPACE_HOST:-blaxel}" != "daytona" ]]; then
+  if [[ -z "${BL_WORKSPACE:-}" || -z "${BL_API_KEY:-}" ]]; then
+    echo "FAIL: BL_WORKSPACE and BL_API_KEY are required" >&2
+    exit 1
+  fi
+fi
+
 unset CODEX_AUTH_JSON_BASE64
 unset CODEX_ACCESS_TOKEN
 unset OPENAI_API_KEY
-
-if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
-  echo "FAIL: POLYNET_CODEX_WORKER_AUTH_TOKEN is required" >&2
-  exit 1
-fi
-
-if [[ -z "${BL_WORKSPACE:-}" || -z "${BL_API_KEY:-}" ]]; then
-  echo "FAIL: BL_WORKSPACE and BL_API_KEY are required" >&2
-  exit 1
-fi
 
 exec node \
   --experimental-strip-types \

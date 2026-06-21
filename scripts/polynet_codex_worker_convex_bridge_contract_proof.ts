@@ -12,21 +12,19 @@ function exists(relativePath: string): boolean {
 const packageJson = read("package.json");
 const bridge = read("convex/polynetCodexWorkerBridge.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
-const httpRoutes = read("convex/http.ts");
+const schema = read("convex/schema.ts");
+const targets = read("convex/daytonaCodexRuntimeTargets.ts");
+const targetActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
 const terminal = read("convex/polynetCodexWorkerTerminal.ts");
-const tool = read("convex/polynetCodexWorkerTool.ts");
 const runToken = read("convex/polynetCodexWorkerRunToken.ts");
-const disposal = read("convex/runtimeWorkspaceSessionDisposal.ts");
-const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
-const runtimeTurnPersistence = read("convex/runtimeTurnPersistence.ts");
-const runtimePrompt = read("shared/runtimePrompt.ts");
-const runtimeCodexPromptProjection = read("shared/runtimeCodexPromptProjection.ts");
-const platformToolSurface = read("shared/polynetPlatformToolSurface.ts");
+const admission = read("convex/polynetCodexWorkerAdmission.ts");
+const workerLimits = read("shared/polynetCodexWorkerLimits.ts");
+const runtimeTurnEnvelope = read("shared/runtimeTurnEnvelope.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
-const ingestFailureLogStart = worker.indexOf('event: "ingest_push_failed"');
-const ingestFailureLogBlock =
-  ingestFailureLogStart >= 0 ? worker.slice(ingestFailureLogStart, ingestFailureLogStart + 800) : "";
+const daytonaConfig = read("services/polynet-codex-worker/src/daytonaCodexConfig.ts");
+const daytonaPolicy = read("services/polynet-codex-worker/src/daytonaRuntimePolicy.ts");
+const daytonaWorkspace = read("services/polynet-codex-worker/src/daytonaLocalWorkspaceTool.ts");
 
 assert.match(
   packageJson,
@@ -36,391 +34,152 @@ assert.match(
 
 assert.match(
   bridge,
-  /POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker"/,
-  "bridge must expose the canonical worker engine id",
+  /POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_runtime_daytona_v1"/,
+  "bridge contract must name the Daytona runtime contract",
 );
 for (const requiredEnvName of [
   "POLYNET_CODEX_WORKER_RUNTIME_ENABLED",
+  "POLYNET_CODEX_RUNTIME_PROVIDER",
   "POLYNET_DEPLOYMENT_KIND",
-  "POLYNET_CODEX_WORKER_URL",
   "POLYNET_CODEX_WORKER_AUTH_TOKEN",
 ]) {
-  assert.match(
-    bridge,
-    new RegExp(requiredEnvName),
-    `bridge must read ${requiredEnvName}`,
-  );
+  assert.match(bridge, new RegExp(requiredEnvName), `bridge must read ${requiredEnvName}`);
 }
 assert.match(
   bridge,
-  /polynet_codex_worker_deployment_kind_invalid/,
-  "bridge must fail closed on invalid deployment kinds",
+  /function readCodexRuntimeProvider\(\)[\s\S]*return "daytona_direct"/,
+  "bridge must default to direct Daytona runtime provider",
 );
 assert.match(
   bridge,
-  /polynet_codex_worker_production_env_mismatch[\s\S]*polynet_codex_worker_staging_env_mismatch/,
-  "bridge must reject obvious staging/production URL mismatches",
+  /DAYTONA_API_KEY[\s\S]*DAYTONA_JWT_TOKEN[\s\S]*daytona_direct_credentials_missing/,
+  "direct Daytona provider must fail closed without Daytona credentials",
 );
 assert.match(
   bridge,
-  /runtimeExecutionMode !== "agentic"[\s\S]*!params\.stream[\s\S]*inferenceSource !== "chatgpt"[\s\S]*getPolynetCodexWorkerBridgeConfig\(\)\.enabled/,
-  "bridge must only route enabled streamed agentic ChatGPT turns",
+  /proxy\\\.daytona\\\.works[\s\S]*app\\\.daytona\\\.io[\s\S]*polynet_codex_worker_ephemeral_daytona_url_invalid/,
+  "legacy URL mode must reject raw Daytona ephemeral URLs as canonical worker URLs",
+);
+assert.doesNotMatch(
+  bridge,
+  /force-instance-id/,
+  "cancel and steer must not depend on Fly machine pinning",
+);
+
+assert.match(
+  schema,
+  /daytonaCodexRuntimeTargets: defineTable\(\{[\s\S]*runId: v\.string\(\)[\s\S]*sandboxId: v\.optional\(v\.string\(\)\)[\s\S]*workerUrl: v\.optional\(v\.string\(\)\)[\s\S]*\.index\("by_runId"/,
+  "schema must persist Daytona runtime target state by run id",
 );
 assert.match(
-  bridge,
-  /resolvePolynetRuntimeEngine\([\s\S]*requestedRuntimeEngine[\s\S]*RUNTIME_ENGINE_POLYNET[\s\S]*RUNTIME_ENGINE_CODEX[\s\S]*legacy_inference/,
-  "bridge must expose an explicit PolyNet/Codex runtime engine resolver while preserving legacy inference fallback",
+  schema,
+  /polynetCodexWorkerCapacityLeases: defineTable\(\{[\s\S]*status: v\.union\([\s\S]*v\.literal\("active"\)[\s\S]*v\.literal\("released"\)[\s\S]*v\.literal\("expired"\)[\s\S]*\.index\("by_status_expiresAt"[\s\S]*\.index\("by_owner_status_expiresAt"[\s\S]*\.index\("by_project_status_expiresAt"/,
+  "schema must define first-class Codex runtime capacity leases",
+);
+
+assert.match(
+  targets,
+  /claimDaytonaCodexRuntimeTargetInternal[\s\S]*markDaytonaCodexRuntimeTargetReadyInternal[\s\S]*releaseDaytonaCodexRuntimeTargetInternal/,
+  "Daytona target mutations must claim, mark ready, and release target rows",
 );
 assert.match(
-  bridge,
-  /polynet_codex_worker_requires_agentic_runtime[\s\S]*polynet_codex_worker_requires_streaming[\s\S]*polynet_codex_worker_requires_chatgpt/,
-  "explicit Codex requests must fail closed when the turn is not eligible",
+  targetActions,
+  /ensureDaytonaCodexRuntimeTargetInternal[\s\S]*new Daytona\(buildDaytonaConfig\(\)\)[\s\S]*markDaytonaCodexRuntimeTargetReadyInternal/,
+  "Daytona target action must create a provider sandbox and mark it ready",
 );
 assert.match(
-  bridge,
-  /fetch\(`\$\{config\.baseUrl\}\/v1\/codex\/turn\?stream=1`[\s\S]*Authorization: `Bearer \$\{config\.authToken\}`[\s\S]*developer_instructions: String\(params\.developerInstructions[\s\S]*chatgpt_auth: \{[\s\S]*access_token: params\.chatgptAuth\.accessToken[\s\S]*chatgpt_account_id: params\.chatgptAuth\.accountId/,
-  "bridge must call the worker stream with bearer auth, PolyNet developer instructions, and per-user ChatGPT auth",
-);
-assert.match(
-  bridge,
-  /fly-force-instance-id/,
-  "cancel and steer requests must be able to target the active Fly machine",
-);
-assert.match(
-  bridge,
-  /polynet_codex_worker_unreachable[\s\S]*polynet_codex_worker_stream_failed/,
-  "bridge must normalize transport and stream failures",
+  targetActions,
+  /teardownDaytonaCodexRuntimeTargetInternal[\s\S]*daytona\.delete[\s\S]*markDaytonaCodexRuntimeTargetProviderTeardownInternal/,
+  "Daytona target teardown must delete the provider sandbox and record teardown state",
 );
 
 assert.match(
   handlers,
-  /resolvePolynetRuntimeEngine\(\{[\s\S]*requestedRuntimeEngine,[\s\S]*runtimeExecutionMode,[\s\S]*stream,[\s\S]*inferenceSource/,
-  "runtime handler must decide the engine from the explicit request and resolved turn coordinates",
+  /getPolynetCodexWorkerBridgeConfig\(\)[\s\S]*workerBridgeConfig\.provider === "daytona_direct"[\s\S]*ensureDaytonaCodexRuntimeTargetInternal/,
+  "runtime handler must resolve a Daytona runtime target for direct Daytona turns",
 );
 assert.match(
   handlers,
-  /eventType: "runtime_engine_resolved"[\s\S]*runtime_engine_requested[\s\S]*runtime_engine_resolved[\s\S]*runtime_engine_source[\s\S]*codex_worker_bridge/,
-  "runtime handler must emit an auditable runtime-engine receipt",
+  /runtimeProjectId && workerBridgeConfig\.provider === "daytona_direct"[\s\S]*workspace_session_skipped[\s\S]*daytona_direct_uses_runtime_workspace/,
+  "direct Daytona turns must not adopt the legacy project workspace session",
 );
 assert.match(
   handlers,
-  /engineId: runtimeEngineId[\s\S]*POLYNET_CODEX_WORKER_CONTRACT_NAME[\s\S]*POLYNET_CODEX_WORKER_CONTRACT_VERSION/,
-  "runtime runs must record the worker engine and contract when bridged",
+  /tryAcquirePolynetCodexWorkerLease[\s\S]*reservePaidToolCredits[\s\S]*streamPolynetCodexWorkerTurn[\s\S]*target: workerResolvedTarget/,
+  "runtime handler must acquire capacity, reserve credits, and stream through the resolved Daytona target",
 );
 assert.match(
   handlers,
-  /if \(stream && usePolynetCodexWorkerBridge\) \{[\s\S]*runtimeSseResponse/,
-  "worker path must be scoped to the streamed bridge branch",
-);
-assert.match(
-  handlers,
-  /countActivePolynetCodexWorkerRuns[\s\S]*project_run_limit_reached[\s\S]*user_run_limit_reached/,
-  "worker path must enforce project and user concurrent-run caps",
-);
-assert.match(
-  handlers,
-  /getFreshChatgptAuthForUser\(\{[\s\S]*userId: String\(actor\.dbUserId\)[\s\S]*provider_connection_required/,
-  "worker path must require fresh per-user ChatGPT auth",
-);
-assert.match(
-  handlers,
-  /createProjectRuntimeWorkspaceSession\(\{[\s\S]*projectId: runtimeProjectId[\s\S]*buildBlaxelProjectWorkspaceNames\(runtimeProjectId\)\.sandboxName/,
-  "project-bound worker turns must adopt the canonical project workspace session",
-);
-assert.match(
-  handlers,
-  /buildPolynetPlatformToolSpecs\(\{[\s\S]*buildPolynetPlatformToolNames\(\{[\s\S]*buildRuntimeTurnEnvelope\(\{[\s\S]*allowedToolNames: codexVisiblePolynetToolNames/,
-  "worker path must derive Codex prompt tool authority from the exact projected PolyNet platform surface before rendering the runtime envelope",
-);
-assert.match(
-  handlers,
-  /buildPolynetCodexWorkerTurnInputs\(\{[\s\S]*communitySystemPrompt[\s\S]*agentName[\s\S]*agentSoul[\s\S]*runtimeTurnContext[\s\S]*codexVisiblePolynetToolNames/,
-  "worker turn inputs must receive PolyNet context plus the Codex-visible PolyNet tool surface",
-);
-assert.match(
-  handlers,
-  /eventType: "polynet_codex_worker_instructions_resolved"[\s\S]*agent_name_rendered[\s\S]*agent_soul_rendered[\s\S]*runtime_prompt_chars[\s\S]*runtime_prompt_section_ids[\s\S]*developer_instruction_chars[\s\S]*prompt_chars/,
-  "worker path must emit a canonical prompt projection receipt without raw agent soul text",
-);
-assert.match(
-  handlers,
-  /buildPolynetCodexWorkerIngestTarget\(\)[\s\S]*polynet_codex_worker_ingest_unconfigured[\s\S]*buildPolynetCodexWorkerTerminalTarget\(\)[\s\S]*buildPolynetCodexWorkerToolTarget\(\)/,
-  "worker path must fail closed without durable ingest and then project terminal/tool bridge targets",
-);
-assert.match(
-  handlers,
-  /eventType: "polynet_codex_worker_tools_projected"[\s\S]*platform_tool_names[\s\S]*platform_tool_policies[\s\S]*required_community_resource_lane/,
-  "worker path must emit an auditable platform-tool projection receipt",
-);
-assert.match(
-  handlers,
-  /mintPolynetCodexWorkerRunTokenSet\(\{[\s\S]*ownerId: String\(actor\.dbUserId\)[\s\S]*includeTerminal: Boolean\(workerTerminalTarget\)[\s\S]*includeTool: Boolean\(workerToolTarget\)/,
-  "worker path must mint per-run scoped tokens only for projected bridge surfaces",
-);
-assert.match(
-  handlers,
-  /context: \{[\s\S]*owner_id: String\(actor\.dbUserId\),[\s\S]*auth_subject: actor\.authSubject \?\? null,[\s\S]*thread_id: String\(ownedThread\._id\)/,
-  "worker path must send the server-resolved auth subject in the signed bridge context",
-);
-assert.match(
-  handlers,
-  /streamPolynetCodexWorkerTurn\(\{[\s\S]*runId,[\s\S]*prompt: workerTurnInputs\.prompt,[\s\S]*developerInstructions: workerTurnInputs\.developerInstructions,[\s\S]*model: requestedModelId[\s\S]*sandboxName: workerSandboxName/,
-  "worker path must delegate execution and PolyNet developer instructions to the headless Codex worker",
-);
-assert.match(
-  handlers,
-  /pendingUserSteering[\s\S]*steerPolynetCodexWorkerTurn\(\{[\s\S]*machineId: workerMachineId/,
-  "worker path must forward user steering to the active machine",
-);
-assert.match(
-  handlers,
-  /clearInterval\(workerCancelWatcher\)[\s\S]*cancelPolynetCodexWorkerTurn\(\{ runId, machineId: workerMachineId \}\)/,
-  "worker path must clear the watcher and cancel failed remote turns",
-);
-assert.match(
-  handlers,
-  /event\.event === "runtime_event"[\s\S]*streamAppendRunEvent\(\{[\s\S]*worker_event_seq/,
-  "worker runtime events must persist into Convex runtimeRunEvents",
-);
-assert.match(
-  handlers,
-  /disposeRuntimeWorkspaceSession\(\{[\s\S]*session: workerWorkspaceSession[\s\S]*source: "polynet_codex_worker"/,
-  "worker path must dispose workspace leases through the shared disposal helper",
-);
-assert.match(
-  handlers,
-  /persistRuntimeAssistantMessage\(\{[\s\S]*engineId: POLYNET_CODEX_WORKER_ENGINE_ID[\s\S]*content: streamedContent/,
-  "worker assistant output must persist with the worker engine id",
-);
-assert.match(
-  runtimeTurnPersistence,
-  /engineId\?: string \| null[\s\S]*const engineId = String\(args\.engineId[\s\S]*runtime_engine_id: engineId[\s\S]*engineId,/,
-  "assistant persistence must store the resolved runtime engine id on both row and content metadata",
+  /releaseDaytonaCodexRuntimeTargetInternal[\s\S]*daytona_codex_runtime_provider_teardown_started[\s\S]*teardownAndRecordDaytonaCodexRuntimeTargetInternal/,
+  "runtime handler must release target rows before scheduling provider teardown",
 );
 
 assert.match(
-  httpRoutes,
-  /POLYNET_CODEX_WORKER_INGEST_PATH[\s\S]*handlePolynetCodexWorkerIngest/,
-  "ingest endpoint must be registered on the Convex http router",
+  admission,
+  /tryAcquirePolynetCodexWorkerLease = internalMutation[\s\S]*POLYNET_CODEX_WORKER_DEPLOYMENT_CONCURRENT_RUN_LIMIT[\s\S]*user_run_limit_reached[\s\S]*project_run_limit_reached/,
+  "admission must enforce deployment, user, and project runtime caps",
 );
 assert.match(
-  httpRoutes,
-  /POLYNET_CODEX_WORKER_TERMINAL_PATH[\s\S]*handlePolynetCodexWorkerTerminal/,
-  "terminal endpoint must be registered on the Convex http router",
-);
-assert.match(
-  httpRoutes,
-  /POLYNET_CODEX_WORKER_TOOL_PATH[\s\S]*handlePolynetCodexWorkerTool/,
-  "platform-tool endpoint must be registered on the Convex http router",
-);
-
-assert.match(
-  runToken,
-  /POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET[\s\S]*"ingest"[\s\S]*"terminal"[\s\S]*"tool"[\s\S]*HMAC[\s\S]*SHA-256/,
-  "run tokens must use endpoint audiences and HMAC SHA-256",
-);
-assert.match(
-  runToken,
-  /POLYNET_CODEX_WORKER_RUN_TOKEN_TTL_MS = 45 \* 60 \* 1000/,
-  "run tokens must have a short default lifetime",
-);
-assert.match(
-  runToken,
-  /timingSafeEqual[\s\S]*expectedAudience[\s\S]*polynet_codex_worker_run_token_audience_mismatch[\s\S]*polynet_codex_worker_run_token_context_mismatch/,
-  "run-token verification must check signature, audience, expiry, and run context",
+  workerLimits,
+  /POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT = 5[\s\S]*POLYNET_CODEX_WORKER_DEPLOYMENT_CONCURRENT_RUN_LIMIT = 10[\s\S]*POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT = 10/,
+  "worker limits must encode project, deployment, and user caps",
 );
 
 assert.match(
   ingest,
-  /POLYNET_CODEX_WORKER_AUTH_TOKEN[\s\S]*bearer !== expectedToken[\s\S]*verifyPolynetCodexWorkerRunToken\(\{[\s\S]*expectedAudience: "ingest"/,
-  "ingest must require the shared bearer token and ingest-audience run token",
-);
-assert.match(
-  ingest,
-  /auth_subject: string \| null[\s\S]*const authSubject = String\(record\.auth_subject[\s\S]*auth_subject: authSubject/,
-  "shared worker context parser must preserve the server-resolved auth subject",
-);
-assert.match(
-  ingest,
-  /getRuntimeRunByOwnerRunIdInternal[\s\S]*runRow\.threadId[\s\S]*runRow\.engineId[\s\S]*invalid_run/,
-  "ingest must validate the signed context against the canonical run row",
-);
-assert.match(
-  ingest,
-  /persistRuntimeAssistantMessage\(\{[\s\S]*messageKey: context\.assistant_message_key[\s\S]*engineId: POLYNET_CODEX_WORKER_ENGINE_ID[\s\S]*finishRunBestEffort/,
-  "ingest must idempotently persist final assistant output and finish the run",
-);
-assert.match(
-  ingest,
-  /disposeRuntimeWorkspaceSession\(\{[\s\S]*source: "polynet_codex_worker_ingest"/,
-  "ingest backstop must dispose leaked workspace leases through the shared helper",
-);
-
-assert.match(
-  terminal,
-  /verifyPolynetCodexWorkerRunToken\(\{[\s\S]*expectedAudience: "terminal"/,
-  "terminal bridge must require a terminal-audience run token",
+  /verifyPolynetCodexWorkerRunToken[\s\S]*expectedAudience: "ingest"[\s\S]*getRuntimeRunByOwnerRunIdInternal/,
+  "ingest endpoint must verify scoped run tokens against the canonical run row",
 );
 assert.match(
   terminal,
-  /getRuntimeRunByOwnerRunIdInternal[\s\S]*project_workspace_required[\s\S]*startWorkspaceTerminalProcess[\s\S]*resolveWorkspaceTerminalPreview/,
-  "terminal bridge must validate the run and use the shared terminal-preview path",
+  /verifyPolynetCodexWorkerRunToken[\s\S]*expectedAudience: "terminal"[\s\S]*runStatus !== "running"[\s\S]*codex_worker_run_not_active/,
+  "terminal endpoint must reject callbacks after the run is no longer active",
 );
 assert.match(
-  tool,
-  /verifyPolynetCodexWorkerRunToken\(\{[\s\S]*expectedAudience: "tool"/,
-  "platform-tool bridge must require a tool-audience run token",
+  runToken,
+  /expectedAudience[\s\S]*owner_id[\s\S]*thread_id[\s\S]*run_id/,
+  "run token verification must bind audience and run context",
+);
+
+assert.match(
+  runtimeTurnEnvelope,
+  /communityLensAuthority[\s\S]*allowedToolNames/,
+  "runtime envelope must carry canonical community authority and allowed tool names",
 );
 assert.match(
-  tool,
-  /getRuntimeRunByOwnerRunIdInternal[\s\S]*findPolynetPlatformToolSurfaceEntry[\s\S]*CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES[\s\S]*readRunCommunityResourceLane[\s\S]*runAuthorityAllowsRequiredLane[\s\S]*billingPolicy[\s\S]*executeRetrievalHarnessTool[\s\S]*authSubject: context\.auth_subject/,
-  "platform-tool bridge must validate the run, registry row, write allowlist, run-row authority lane, billing policy, and shared dispatcher",
-);
-assert.doesNotMatch(
-  tool,
-  /resolveRuntimeCommunityPromptContextInternal/,
-  "platform-tool bridge must not re-resolve community authority during worker callbacks",
+  worker,
+  /type WorkerWorkspaceHostId = "blaxel" \| "daytona"[\s\S]*readWorkspaceHostId\(\)[\s\S]*POLYNET_CODEX_WORKSPACE_HOST/,
+  "worker service must select Daytona as a first-class workspace host",
 );
 assert.match(
-  runtimeAgentLoop,
-  /export async function executeRetrievalHarnessTool/,
-  "shared retrieval tool dispatcher must be exported for the worker bridge",
+  worker,
+  /buildDaytonaCodexConfigToml[\s\S]*ensureDaytonaLocalWorkspace[\s\S]*runDaytonaLocalBash/,
+  "worker service must render Daytona Codex config and use local Daytona workspace tools",
 );
 assert.match(
-  platformToolSurface,
-  /riskLevel[\s\S]*requiredCommunityResourceLane[\s\S]*community_resources_read[\s\S]*community_resource_builder_list[\s\S]*requiredCommunityResourceLane: "builder"[\s\S]*community_resource_builder_read[\s\S]*requiredCommunityResourceLane: "builder"[\s\S]*community_resource_builder_stage_changeset[\s\S]*riskLevel: "write"[\s\S]*requiredCommunityResourceLane: "builder"[\s\S]*unregistered tool[\s\S]*buildPolynetPlatformToolNames/,
-  "platform tool surface must project PolyNet native resource read tools plus staged-only builder changesets with member/builder lane policy and fail on unregistered rows",
+  daytonaConfig,
+  /buildDaytonaCodexDeveloperInstructions[\s\S]*PolyNet's Codex runtime hosted in a Daytona sandbox/,
+  "Daytona Codex config must inject PolyNet runtime instructions",
 );
-assert.doesNotMatch(
-  platformToolSurface,
-  /community_write|community_resource_builder_apply_changeset/,
-  "live write/apply tools must not be projected to worker turns in this slice",
+assert.match(
+  daytonaPolicy,
+  /normalizeModel[\s\S]*"gpt-5.5"[\s\S]*DAYTONA_RUNTIME_POLICY[\s\S]*approvalPolicy: "never"[\s\S]*networkAccess: false[\s\S]*shellNetworkAccess: "provider_default"/,
+  "Daytona runtime policy must encode the current native Codex and workspace network defaults",
 );
-for (const forbiddenToolName of [
-  "list_dir",
-  "read",
-  "glob",
-  "grep",
-  "sha256",
-  "write",
-  "edit",
-  "bash",
-  "terminal_start",
-  "terminal_read",
-  "terminal_write",
-  "terminal_stop",
-  "computer_open_url",
-  "computer_screenshot",
-  "computer_click",
-  "computer_type",
-  "computer_keypress",
-  "computer_scroll",
-  "computer_stop",
-  "web_research",
-  "web_crawl",
+assert.match(
+  daytonaWorkspace,
+  /getDaytonaWorkspaceRoot[\s\S]*runDaytonaLocalBash[\s\S]*startDaytonaLocalServer/,
+  "Daytona local workspace adapter must expose root, shell, and serve operations",
+);
+
+for (const requiredPath of [
+  "convex/daytonaCodexRuntimeTargetActions.ts",
+  "convex/daytonaCodexRuntimeTargets.ts",
+  "services/polynet-codex-worker/src/daytonaCodexConfig.ts",
+  "services/polynet-codex-worker/src/daytonaRuntimePolicy.ts",
+  "services/polynet-codex-worker/src/daytonaLocalWorkspaceTool.ts",
 ]) {
-  assert.doesNotMatch(
-    platformToolSurface,
-    new RegExp(`toolName: "${forbiddenToolName}"`),
-    `Codex platform projection must not duplicate ${forbiddenToolName}`,
-  );
+  assert.ok(exists(requiredPath), `${requiredPath} must exist`);
 }
-assert.match(
-  disposal,
-  /refreshProjectSandboxActiveTerminalStatusInternal[\s\S]*workspace_session_accounting_kept_alive[\s\S]*settleRuntimeWorkspaceSession[\s\S]*releaseRuntimeWorkspaceSessionAccountingIfCurrent/,
-  "workspace disposal must be terminal-aware and reuse current accounting release",
-);
-
-assert.match(
-  worker,
-  /runToken: ingestRunToken[\s\S]*terminalRunToken: ingestTerminalRunToken[\s\S]*toolRunToken: ingestToolRunToken/,
-  "worker service must parse per-audience run tokens from the turn payload",
-);
-assert.match(
-  worker,
-  /run_token: params\.ingest\.runToken/,
-  "worker service must relay the ingest run token",
-);
-assert.match(
-  worker,
-  /run_token: serve\.terminalRunToken/,
-  "worker service must relay the terminal run token",
-);
-assert.match(
-  worker,
-  /run_token: bridge\.runToken/,
-  "worker service must relay the platform-tool run token",
-);
-assert.match(
-  worker,
-  /readIngestFailureResponseSummary[\s\S]*response\.text\(\)[\s\S]*parsed\?\.code[\s\S]*parsed\?\.message/,
-  "worker service must parse bounded ingest failure response details",
-);
-assert.match(
-  worker,
-  /event: "ingest_push_failed"[\s\S]*run_id[\s\S]*attempts[\s\S]*ingest_path[\s\S]*last_status[\s\S]*last_response_code[\s\S]*last_response_message[\s\S]*last_error_name[\s\S]*last_error_message/,
-  "worker service must log sanitized ingest failure evidence",
-);
-assert.doesNotMatch(
-  ingestFailureLogBlock,
-  /token|authorization|params\.payload|body/i,
-  "ingest failure log must not include tokens, auth headers, or request payloads",
-);
-assert.match(
-  worker,
-  /workspace_serve[\s\S]*workspace_serve_requested[\s\S]*workspace_serve_finished/,
-  "worker service must expose the project app-serving tool path",
-);
-assert.match(
-  worker,
-  /developerInstructions: string \| null/,
-  "worker service run params must carry developer instructions",
-);
-assert.match(
-  worker,
-  /body\.developer_instructions[\s\S]*body\.developerInstructions/,
-  "worker service must parse developer_instructions from HTTP requests",
-);
-assert.match(
-  worker,
-  /params\.developerInstructions[\s\S]*developerInstructions: codexDeveloperInstructions/,
-  "worker service must pass PolyNet developer instructions into Codex thread/start",
-);
-assert.match(
-  worker,
-  /POLYNET_CODEX_WORKER_RUNTIME_AUTHORITY|PolyNet Codex worker service/,
-  "worker service source must include the worker substrate developer-instruction layer",
-);
-assert.match(
-  bridge,
-  /buildRuntimeCodexPromptProjection[\s\S]*export function buildPolynetCodexWorkerTurnInputs[\s\S]*runtimeTurnContext[\s\S]*conversationMessages[\s\S]*latestUserText/,
-  "bridge must project canonical PolyNet context into Codex turn inputs",
-);
-assert.doesNotMatch(
-  bridge,
-  /Agent name:|Agent soul:/,
-  "worker prompt builder must not put agent identity into user prompt text",
-);
-assert.match(
-  runtimeCodexPromptProjection,
-  /buildPlatformHarnessRuntimePromptBundle[\s\S]*POLYNET_CODEX_RUNTIME_AUTHORITY[\s\S]*Apply the configured PolyNet agent name and soul[\s\S]*runtimePromptSectionIds/,
-  "shared Codex projection must render the canonical PolyNet prompt bundle with auditable section ids",
-);
-assert.match(
-  runtimePrompt,
-  /export function buildPlatformHarnessRuntimePromptBundle/,
-  "shared runtime prompt must expose the canonical platform harness prompt bundle for Codex projection",
-);
-assert.match(
-  worker,
-  /turn\/steer[\s\S]*expectedTurnId: activeTurn\.turnId/,
-  "worker service must steer only the active Codex turn",
-);
-
-assert.equal(
-  exists("services/polynet-codex-worker/fly.production.toml"),
-  false,
-  "this staging slice must not add a production Fly rail",
-);
 
 console.log("polynet_codex_worker_convex_bridge_contract_proof: ok");

@@ -2,9 +2,12 @@
 // same project share the one project sandbox (and its volume), so these caps
 // bound parallel agents per workspace and per user — not sandbox count.
 export const POLYNET_CODEX_WORKER_PROJECT_CONCURRENT_RUN_LIMIT = 5;
-// Must not exceed the Fly worker pool size (currently 10 machines) — each
-// concurrent run occupies one single-flight machine. Raise this and the pool
-// together.
+
+// Each admitted run occupies one active Daytona-hosted Codex runtime target.
+// Keep this conservative until the direct Daytona scheduler is proven live.
+export const POLYNET_CODEX_WORKER_DEPLOYMENT_CONCURRENT_RUN_LIMIT = 10;
+
+// A single user can occupy at most the deployment pool in this staging slice.
 export const POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT = 10;
 
 // A run counts as active when it is still "running" and started within this

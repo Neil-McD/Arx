@@ -13,7 +13,7 @@ import {
 } from "../shared/runtimeEngine";
 
 export const POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker";
-export const POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_worker_fly_bridge_v1";
+export const POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_runtime_daytona_v1";
 export const POLYNET_CODEX_WORKER_CONTRACT_VERSION = "v1";
 const POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS = new Set([
   "staging",
@@ -22,6 +22,16 @@ const POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS = new Set([
 
 type JsonRecord = Record<string, unknown>;
 type PolynetCodexWorkerDeploymentKind = "staging" | "production";
+type PolynetCodexWorkerTransportProvider = "worker_url" | "daytona_direct";
+
+export type PolynetCodexWorkerResolvedTarget = {
+  provider: "daytona";
+  targetId: string;
+  sandboxId: string | null;
+  workerUrl: string;
+  authToken: string;
+  signedPreviewExpiresAt: number | null;
+};
 
 export type PolynetCodexWorkerSseEvent = {
   event: string;
@@ -67,6 +77,17 @@ function readBooleanEnv(name: string): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
+function readCodexRuntimeProvider(): PolynetCodexWorkerTransportProvider {
+  const raw = readEnv("POLYNET_CODEX_RUNTIME_PROVIDER").toLowerCase();
+  if (raw === "worker_url" || raw === "url" || raw === "legacy_url") return "worker_url";
+  if (raw === "daytona_direct" || raw === "daytona") return "daytona_direct";
+  return "daytona_direct";
+}
+
+function hasDaytonaCredentials(): boolean {
+  return Boolean(readEnv("DAYTONA_API_KEY") || readEnv("DAYTONA_JWT_TOKEN"));
+}
+
 function readWorkerDeploymentKind(): PolynetCodexWorkerDeploymentKind | null {
   const raw = readEnv("POLYNET_DEPLOYMENT_KIND");
   return POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS.has(
@@ -81,25 +102,34 @@ function workerUrlDeploymentMismatch(params: {
   baseUrl: string;
 }): string | null {
   const normalizedUrl = params.baseUrl.toLowerCase();
+  if (/\.proxy\.daytona\.works|app\.daytona\.io/.test(normalizedUrl)) {
+    return "polynet_codex_worker_ephemeral_daytona_url_invalid";
+  }
+  if (/\.fly\.dev/.test(normalizedUrl)) {
+    return "polynet_codex_worker_deleted_host_url";
+  }
   if (params.deploymentKind === "production") {
     return /staging|quick-porcupine-949/.test(normalizedUrl)
       ? "polynet_codex_worker_production_env_mismatch"
       : null;
   }
-  return /wry-hawk-715|www\.polynet\.ai|polynet-codex-worker\.fly\.dev/.test(normalizedUrl)
+  return /wry-hawk-715|www\.polynet\.ai/.test(normalizedUrl)
     ? "polynet_codex_worker_staging_env_mismatch"
     : null;
 }
 
 export function getPolynetCodexWorkerBridgeConfig(): {
   enabled: boolean;
+  provider: PolynetCodexWorkerTransportProvider;
   baseUrl: string | null;
   authToken: string | null;
   disabledReason: string | null;
 } {
+  const provider = readCodexRuntimeProvider();
   if (!readBooleanEnv("POLYNET_CODEX_WORKER_RUNTIME_ENABLED")) {
     return {
       enabled: false,
+      provider,
       baseUrl: null,
       authToken: null,
       disabledReason: "polynet_codex_worker_runtime_disabled",
@@ -109,9 +139,38 @@ export function getPolynetCodexWorkerBridgeConfig(): {
   if (!deploymentKind) {
     return {
       enabled: false,
+      provider,
       baseUrl: null,
       authToken: null,
       disabledReason: "polynet_codex_worker_deployment_kind_invalid",
+    };
+  }
+  if (provider === "daytona_direct") {
+    const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
+    if (!authToken) {
+      return {
+        enabled: false,
+        provider,
+        baseUrl: null,
+        authToken: null,
+        disabledReason: "polynet_codex_worker_auth_token_missing",
+      };
+    }
+    if (!hasDaytonaCredentials()) {
+      return {
+        enabled: false,
+        provider,
+        baseUrl: null,
+        authToken,
+        disabledReason: "daytona_direct_credentials_missing",
+      };
+    }
+    return {
+      enabled: true,
+      provider,
+      baseUrl: null,
+      authToken,
+      disabledReason: null,
     };
   }
   const baseUrl = readEnv("POLYNET_CODEX_WORKER_URL").replace(/\/+$/, "");
@@ -119,6 +178,7 @@ export function getPolynetCodexWorkerBridgeConfig(): {
   if (!baseUrl || !authToken) {
     return {
       enabled: false,
+      provider,
       baseUrl: baseUrl || null,
       authToken: authToken || null,
       disabledReason: "polynet_codex_worker_env_missing",
@@ -128,6 +188,7 @@ export function getPolynetCodexWorkerBridgeConfig(): {
   if (mismatch) {
     return {
       enabled: false,
+      provider,
       baseUrl,
       authToken,
       disabledReason: mismatch,
@@ -135,6 +196,7 @@ export function getPolynetCodexWorkerBridgeConfig(): {
   }
   return {
     enabled: true,
+    provider,
     baseUrl,
     authToken,
     disabledReason: null,
@@ -375,24 +437,49 @@ function normalizeWorkerErrorPayload(payload: JsonRecord, fallbackStatus: number
   return { code, message };
 }
 
+function resolveWorkerTransport(params?: {
+  target?: PolynetCodexWorkerResolvedTarget | null;
+}): {
+  enabled: boolean;
+  baseUrl: string | null;
+  authToken: string | null;
+  disabledReason: string | null;
+} {
+  if (params?.target?.workerUrl && params.target.authToken) {
+    return {
+      enabled: true,
+      baseUrl: params.target.workerUrl.replace(/\/+$/, ""),
+      authToken: params.target.authToken,
+      disabledReason: null,
+    };
+  }
+  const config = getPolynetCodexWorkerBridgeConfig();
+  return {
+    enabled: config.enabled,
+    baseUrl: config.baseUrl,
+    authToken: config.authToken,
+    disabledReason:
+      config.provider === "daytona_direct" && config.enabled
+        ? "daytona_direct_target_missing"
+        : config.disabledReason,
+  };
+}
+
 export async function cancelPolynetCodexWorkerTurn(params: {
   runId: string;
   machineId?: string | null;
+  target?: PolynetCodexWorkerResolvedTarget | null;
 }): Promise<{ ok: boolean; status: number }> {
-  const config = getPolynetCodexWorkerBridgeConfig();
+  const config = resolveWorkerTransport({ target: params.target ?? null });
   if (!config.enabled || !config.baseUrl || !config.authToken) {
     return { ok: false, status: 503 };
   }
-  const machineId = String(params.machineId ?? "").trim();
   try {
     const response = await fetch(`${config.baseUrl}/v1/codex/turn/cancel`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.authToken}`,
         "Content-Type": "application/json",
-        // With a multi-machine pool, the cancel must reach the specific
-        // machine running this turn, not whichever sibling is idle.
-        ...(machineId ? { "fly-force-instance-id": machineId } : {}),
       },
       body: JSON.stringify({ run_id: params.runId }),
     });
@@ -406,19 +493,18 @@ export async function steerPolynetCodexWorkerTurn(params: {
   runId: string;
   machineId?: string | null;
   text: string;
+  target?: PolynetCodexWorkerResolvedTarget | null;
 }): Promise<{ ok: boolean; status: number }> {
-  const config = getPolynetCodexWorkerBridgeConfig();
+  const config = resolveWorkerTransport({ target: params.target ?? null });
   if (!config.enabled || !config.baseUrl || !config.authToken) {
     return { ok: false, status: 503 };
   }
-  const machineId = String(params.machineId ?? "").trim();
   try {
     const response = await fetch(`${config.baseUrl}/v1/codex/turn/steer`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.authToken}`,
         "Content-Type": "application/json",
-        ...(machineId ? { "fly-force-instance-id": machineId } : {}),
       },
       body: JSON.stringify({ run_id: params.runId, text: params.text }),
     });
@@ -451,9 +537,10 @@ export async function streamPolynetCodexWorkerTurn(params: {
     description: string;
     input_schema: Record<string, unknown>;
   }> | null;
+  target?: PolynetCodexWorkerResolvedTarget | null;
   onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
 }): Promise<PolynetCodexWorkerBridgeResult> {
-  const config = getPolynetCodexWorkerBridgeConfig();
+  const config = resolveWorkerTransport({ target: params.target ?? null });
   if (!config.enabled || !config.baseUrl || !config.authToken) {
     return {
       ok: false,
@@ -466,10 +553,9 @@ export async function streamPolynetCodexWorkerTurn(params: {
     };
   }
 
-  // A 409 means every awake machine is mid-turn; fly-proxy needs seconds to
-  // boot a stopped pool sibling (cold start + Codex login), so retry with a
-  // wake-sized backoff before declaring the pool full. 409 is always safe to
-  // retry: the turn never started.
+  // A 409 means the runtime target is mid-turn or the Daytona target is still
+  // warming, so retry briefly before declaring capacity unavailable. 409 is
+  // safe to retry: the turn never started.
   const WORKER_BUSY_RETRY_DELAYS_MS = [1_500, 3_000, 4_500, 6_000];
   let busyAttempt = 0;
   let response: Response;

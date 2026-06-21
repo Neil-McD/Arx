@@ -12,6 +12,10 @@ const args = new Set(process.argv.slice(2));
 const requireLive = args.has("--require-live");
 const rootDir = path.resolve(new URL("..", import.meta.url).pathname);
 const runnerPath = path.join(rootDir, "scripts/run_polynet_codex_worker_service_local.sh");
+const serverSource = readFileSync(
+  path.join(rootDir, "services/polynet-codex-worker/src/server.ts"),
+  "utf8",
+);
 const blaxelToolSource = readFileSync(
   path.join(rootDir, "services/polynet-codex-worker/src/blaxelTool.ts"),
   "utf8",
@@ -64,7 +68,22 @@ function serviceEvents(): JsonRecord[] {
 assert.match(
   blaxelToolSource,
   /resolveBlaxelWorkspaceComputerIfReady[\s\S]*params\.requireExisting === true[\s\S]*ensureBlaxelWorkspaceComputer/,
-  "provided project sandboxes must be adopted/resolved by the worker, not recreated from Fly defaults",
+  "provided project sandboxes must be adopted/resolved by the worker, not recreated from runtime defaults",
+);
+assert.match(
+  serverSource,
+  /const server = createPolynetCodexWorkerServer\(runtime\)[\s\S]*server\.listen\(port, host, resolve\)[\s\S]*void runtime[\s\S]*\.start\(\)[\s\S]*codex_app_server_background_init_finished/,
+  "worker HTTP server must listen before native Codex app-server initialization finishes",
+);
+assert.match(
+  serverSource,
+  /activeTurn\.timing\.startBucket\("codex_app_server_await_ms"\)[\s\S]*await this\.start\(\)[\s\S]*codex_app_server_await_finished/,
+  "Codex turns must still await native Codex app-server initialization before model work",
+);
+assert.match(
+  serverSource,
+  /worker_http_ready: true[\s\S]*initializing[\s\S]*init_latency_ms[\s\S]*init_error/,
+  "worker health must distinguish HTTP readiness from native Codex readiness",
 );
 
 async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15_000): Promise<{
@@ -113,6 +132,31 @@ async function waitForHealth(proc: ChildProcessWithoutNullStreams, timeoutMs = 1
   throw new Error(`worker service did not become reachable: ${lastError}`);
 }
 
+async function waitForCodexInitialized(
+  proc: ChildProcessWithoutNullStreams,
+  timeoutMs = 120_000,
+): Promise<JsonRecord | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (proc.exitCode !== null || proc.signalCode !== null) {
+      throw new Error(
+        `worker service exited before codex init: code=${proc.exitCode ?? "null"} signal=${proc.signalCode ?? "null"}`,
+      );
+    }
+    const response = await fetchJson(
+      `${serviceUrl}/healthz`,
+      { headers: { Authorization: `Bearer ${authToken}` } },
+      5000,
+    );
+    const codex = asRecord(response.body.codex);
+    if (response.body.ok === false || codex?.initialized === true || codex?.init_error) {
+      return response.body;
+    }
+    await sleep(500);
+  }
+  return null;
+}
+
 async function runWorkspaceProbe(): Promise<JsonRecord> {
   const response = await fetchJson(
     `${serviceUrl}/v1/workspace/probe`,
@@ -138,7 +182,7 @@ async function runWorkspaceProbe(): Promise<JsonRecord> {
   return response.body;
 }
 
-function assertWorkspaceProbeBody(body: JsonRecord): JsonRecord {
+function assertWorkspaceProbeBody(body: JsonRecord, expectedWorkspaceRoot: string): JsonRecord {
   assert.equal(body.ok, true, `workspace probe must succeed: ${JSON.stringify(body)}`);
   assert.equal(body.engine_id, "polynet_codex_worker", "workspace probe engine mismatch");
   assert.equal(body.probe_kind, "workspace", "workspace probe kind mismatch");
@@ -156,7 +200,10 @@ function assertWorkspaceProbeBody(body: JsonRecord): JsonRecord {
     stdout.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE"),
     `workspace stdout must include probe marker: ${stdout}`,
   );
-  assert.ok(stdout.includes("/workspace"), `workspace stdout must include /workspace: ${stdout}`);
+  assert.ok(
+    stdout.includes(expectedWorkspaceRoot),
+    `workspace stdout must include ${expectedWorkspaceRoot}: ${stdout}`,
+  );
 
   const timing = asRecord(body.timing);
   const buckets = asRecord(timing?.buckets);
@@ -304,6 +351,7 @@ async function stopService(proc: ChildProcessWithoutNullStreams): Promise<void> 
 
 async function main() {
   const codexHome = await mkdtemp(path.join(tmpdir(), "polynet-codex-worker-proof-"));
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "polynet-codex-worker-workspace-"));
   const proc = spawn("bash", [runnerPath], {
     cwd: rootDir,
     env: {
@@ -314,6 +362,8 @@ async function main() {
       POLYNET_CODEX_WORKER_DESTROY_AFTER_RUN: "true",
       POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS: process.env.POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS ?? "60",
       POLYNET_CODEX_WORKER_HOST: "127.0.0.1",
+      POLYNET_CODEX_WORKSPACE_HOST: "daytona",
+      POLYNET_DAYTONA_WORKSPACE_ROOT: workspaceRoot,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -322,13 +372,24 @@ async function main() {
 
   try {
     const health = await waitForHealth(proc);
-    if (health.ok !== true && !requireLive) {
+    assert.equal(health.worker_http_ready, true, "worker HTTP readiness must not wait on Codex init");
+    assert.equal(health.ok, true, `worker HTTP health must be ok once reachable: ${JSON.stringify(health)}`);
+    assert.equal(
+      typeof asRecord(health.codex)?.initialized,
+      "boolean",
+      "worker health must expose Codex initialized state",
+    );
+    const codexReadyHealth =
+      asRecord(health.codex)?.initialized === true
+        ? health
+        : await waitForCodexInitialized(proc, requireLive ? 120_000 : 10_000);
+    if (!codexReadyHealth && !requireLive) {
       console.log(
         JSON.stringify(
           {
             ok: true,
             skipped: true,
-            reason: "worker_service_health_degraded",
+            reason: "codex_app_server_initialization_not_observed",
             health,
           },
           null,
@@ -337,9 +398,31 @@ async function main() {
       );
       return;
     }
-    assert.equal(health.ok, true, `worker health must be ok for live proof: ${JSON.stringify(health)}`);
-    assert.equal(asRecord(health.codex)?.initialized, true, "Codex app-server must be initialized");
-    assert.equal(asRecord(health.blaxel)?.configured, true, "Blaxel env must be configured");
+    if (!codexReadyHealth) {
+      throw new Error("Codex app-server did not initialize before timeout");
+    }
+    if (codexReadyHealth.ok !== true && !requireLive) {
+      console.log(
+        JSON.stringify(
+          {
+            ok: true,
+            skipped: true,
+            reason: "codex_app_server_health_degraded",
+            health: codexReadyHealth,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    assert.equal(codexReadyHealth.ok, true, `worker health must be ok for live proof: ${JSON.stringify(codexReadyHealth)}`);
+    assert.equal(asRecord(codexReadyHealth.codex)?.initialized, true, "Codex app-server must be initialized");
+    assert.equal(
+      asRecord(codexReadyHealth.workspace_host)?.configured,
+      true,
+      "workspace host must be configured",
+    );
 
     const unauth = await fetchJson(`${serviceUrl}/v1/workspace/probe`, {
       method: "POST",
@@ -376,7 +459,7 @@ async function main() {
     await assertBusyWhileWorkspaceProbeInFlight();
 
     const workspaceProbe = await runWorkspaceProbe();
-    const timingBuckets = assertWorkspaceProbeBody(workspaceProbe);
+    const timingBuckets = assertWorkspaceProbeBody(workspaceProbe, workspaceRoot);
 
     console.log(
       JSON.stringify(
@@ -411,6 +494,7 @@ async function main() {
   } finally {
     await stopService(proc);
     await rm(codexHome, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true });
   }
 }
 
