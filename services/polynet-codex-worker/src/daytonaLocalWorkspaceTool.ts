@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { DAYTONA_CODEX_WORKSPACE_ROOT } from "../../../shared/daytonaCodexRuntimePolicy.ts";
 import {
   neutralizeWorkspaceText,
   previewText,
@@ -12,6 +13,7 @@ import {
 import { elapsedMs, nowMs } from "./timing.ts";
 
 const MAX_OUTPUT_CHARS = 120_000;
+const DEFAULT_DAYTONA_WORKSPACE_ROOT = DAYTONA_CODEX_WORKSPACE_ROOT;
 
 function readEnv(name: string): string {
   return String(process.env[name] ?? "").trim();
@@ -20,7 +22,7 @@ function readEnv(name: string): string {
 function resolveDaytonaWorkspaceRoot(): string {
   const explicit = readEnv("POLYNET_DAYTONA_WORKSPACE_ROOT");
   if (explicit) return path.resolve(explicit);
-  if (existsSync("/home/daytona")) return "/home/daytona";
+  if (existsSync("/home/daytona")) return DEFAULT_DAYTONA_WORKSPACE_ROOT;
   if (existsSync("/workspace")) return "/workspace";
   return process.cwd();
 }

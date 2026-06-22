@@ -4,12 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERCEL_DIR="$ROOT_DIR/.vercel"
 PROJECT_JSON="$VERCEL_DIR/project.json"
+DEPLOY_SCRIPT="$ROOT_DIR/scripts/deploy_daytona_codex_runtime_staging_convex.sh"
 BACKUP_DIR=""
 
 EXPECTED_PROJECT_NAME="polynet-staging"
 EXPECTED_PROJECT_ID="prj_plXUH12pm9nZ5lWS5wJOt163maFL"
 EXPECTED_ORG_ID="team_TJvbi4UGtg62xteusiC1Cvxy"
 PROD_PROJECT_ID="prj_VnjQSvvvuznl4AffYtjylQAg1c6q"
+
+if ! grep -q 'npx convex dev --once --tail-logs disable --typecheck disable' "$DEPLOY_SCRIPT"; then
+  echo "FAIL: Daytona staging Convex deploy script must use convex dev --once" >&2
+  exit 1
+fi
+echo "OK: Daytona staging Convex deploy script uses convex dev --once"
+
+if grep -q 'convex deploy' "$DEPLOY_SCRIPT"; then
+  echo "FAIL: Daytona staging Convex deploy script must not use convex deploy" >&2
+  exit 1
+fi
+echo "OK: Daytona staging Convex deploy script does not use convex deploy"
 
 cleanup() {
   rm -rf "$VERCEL_DIR"

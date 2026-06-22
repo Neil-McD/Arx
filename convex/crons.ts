@@ -92,6 +92,16 @@ crons.interval(
 );
 
 crons.interval(
+  "sweep expired daytona codex runtime targets",
+  { minutes: 5 },
+  (internal as any).daytonaCodexRuntimeTargetActions
+    .sweepExpiredDaytonaCodexRuntimeTargetsInternal,
+  {
+    limit: 20,
+  },
+);
+
+crons.interval(
   "expire stale tool balance checkouts",
   { minutes: 15 },
   (internal as any).workspaceCredits.expireStaleWorkspaceCreditTopupCheckoutSessionsInternal,

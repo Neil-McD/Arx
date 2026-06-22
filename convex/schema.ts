@@ -2621,6 +2621,7 @@ export default defineSchema({
       v.literal("error"),
       v.literal("released"),
     ),
+    workspaceRoot: v.optional(v.string()),
     workerPort: v.number(),
     workerUrl: v.optional(v.string()),
     workerAuthMode: v.optional(v.string()),
@@ -2629,8 +2630,13 @@ export default defineSchema({
     targetRegion: v.optional(v.string()),
     leaseRunId: v.optional(v.string()),
     lifecycleMode: v.optional(
-      v.union(v.literal("prepared_staging_reuse"), v.literal("per_turn_ephemeral")),
+      v.union(
+        v.literal("prepared_staging_reuse"),
+        v.literal("thread_ephemeral"),
+        v.literal("per_turn_ephemeral"),
+      ),
     ),
+    providerEphemeral: v.optional(v.boolean()),
     autoStopMinutes: v.optional(v.number()),
     autoArchiveMinutes: v.optional(v.number()),
     autoDeleteMinutes: v.optional(v.number()),
@@ -2647,6 +2653,49 @@ export default defineSchema({
     providerTeardownAt: v.optional(v.number()),
     providerTeardownErrorCode: v.optional(v.string()),
     providerTeardownErrorMessage: v.optional(v.string()),
+    workspaceChangeState: v.optional(
+      v.union(
+        v.literal("unknown"),
+        v.literal("clean"),
+        v.literal("dirty"),
+        v.literal("scan_failed"),
+      ),
+    ),
+    workspaceRetentionState: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("human_save_pending"),
+        v.literal("discarded"),
+        v.literal("saved"),
+        v.literal("expired"),
+      ),
+    ),
+    workspaceRetentionExpiresAt: v.optional(v.number()),
+    workspaceMeaningfulFileCount: v.optional(v.number()),
+    workspaceMeaningfulFilePreview: v.optional(v.array(v.string())),
+    lastWorkspaceScanAt: v.optional(v.number()),
+    activePreviewPorts: v.optional(v.array(v.number())),
+    previewLeaseState: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("active"),
+        v.literal("released"),
+        v.literal("expired"),
+      ),
+    ),
+    previewLeaseExpiresAt: v.optional(v.number()),
+    cleanupDecision: v.optional(
+      v.union(
+        v.literal("delete_clean_workspace"),
+        v.literal("stop_for_human_save"),
+        v.literal("keep_running_active_preview"),
+        v.literal("skip_prepared_staging_reuse"),
+        v.literal("retain_scan_failed"),
+        v.literal("delete_expired_retention"),
+        v.literal("cleanup_failed"),
+      ),
+    ),
+    cleanupEligibleAt: v.optional(v.number()),
     lastHealthAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
     releasedAt: v.optional(v.number()),
@@ -2658,8 +2707,17 @@ export default defineSchema({
   })
     .index("by_owner_runId", ["ownerId", "runId"])
     .index("by_runId", ["runId"])
+    .index("by_owner_threadId", ["ownerId", "threadId"])
     .index("by_workerState_updatedAt", ["workerState", "updatedAt"])
     .index("by_sandboxId", ["sandboxId"])
+    .index("by_workspaceRetentionState_expiresAt", [
+      "workspaceRetentionState",
+      "workspaceRetentionExpiresAt",
+    ])
+    .index("by_previewLeaseState_expiresAt", [
+      "previewLeaseState",
+      "previewLeaseExpiresAt",
+    ])
     .index("by_owner_workerState_lastUsedAt", ["ownerId", "workerState", "lastUsedAt"])
     .index("by_project_workerState_lastUsedAt", ["projectId", "workerState", "lastUsedAt"]),
 

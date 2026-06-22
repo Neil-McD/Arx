@@ -213,6 +213,7 @@
     "check:runtime-codex-prompt-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_codex_prompt_projection_proof.ts",
     "check:daytona-codex-tool-role-matrix-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_tool_role_matrix_proof.ts",
     "check:daytona-codex-runtime-staging": "CONVEX_DEPLOYMENT=dev:quick-porcupine-949 POLYNET_DEPLOYMENT_KIND=staging bash scripts/daytona_codex_runtime_staging_guard.sh",
+    "deploy:daytona-codex-runtime-staging-convex": "bash scripts/deploy_daytona_codex_runtime_staging_convex.sh",
     "check:daytona-codex-runtime-stage-identity": "bash scripts/daytona_codex_runtime_stage_identity_guard_proof.sh",
     "check:polynet-codex-worker-service-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts --require-live",
     "check:polynet-codex-worker-convex-bridge": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_convex_bridge_contract_proof.ts",
@@ -222,6 +223,11 @@
     "check:daytona-computer-use-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_computer_use_contract_proof.ts",
     "check:daytona-computer-use-screenshot-bridge-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_computer_use_screenshot_bridge_proof.ts",
     "smoke:daytona-codex-runtime-live": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_live_smoke.ts",
+    "probe:daytona-codex-native-workspace": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_live_smoke.ts --live --require-live --native-workspace-probe",
+    "probe:daytona-codex-interactive-preview": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_live_smoke.ts --live --require-live --interactive-preview-probe",
+    "probe:daytona-codex-cleanup-sweeper": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_cleanup_sweeper_probe.ts",
+    "probe:daytona-stop-resume-persistence": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_sandbox_stop_resume_persistence_probe.ts",
+    "promote:daytona-codex-runtime-snapshot": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_snapshot_promote.ts",
     "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh"
   },
   "dependencies": {

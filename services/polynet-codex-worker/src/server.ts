@@ -10,7 +10,7 @@ import {
 import {
   buildDaytonaRuntimePolicyReceipt,
   DAYTONA_RUNTIME_POLICY,
-} from "./daytonaRuntimePolicy.ts";
+} from "../../../shared/daytonaCodexRuntimePolicy.ts";
 import {
   buildWorkspaceBashDynamicToolSpec,
   buildWorkspaceServeDynamicToolSpec,
@@ -37,6 +37,14 @@ import {
   formatWorkspacePreviewPortRange,
   normalizeWorkspacePreviewPort,
 } from "../../../shared/workspacePreviewPort.ts";
+import {
+  CODEX_COMPUTER_OPEN_URL_TOOL_NAME,
+  CODEX_COMPUTER_SCREENSHOT_TOOL_NAME,
+  CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES,
+  CODEX_RUNTIME_ADAPTER_TOOL_NAMES,
+  CODEX_WORKSPACE_BASH_TOOL_NAME,
+  CODEX_WORKSPACE_SERVE_TOOL_NAME,
+} from "../../../shared/harnessToolPolicy.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -118,9 +126,14 @@ type WorkerPlatformToolSpec = {
   inputSchema: JsonRecord;
 };
 
+type CodexDynamicToolsBuildResult = {
+  dynamicTools: Record<string, unknown>[];
+  receipt: JsonRecord;
+};
+
 function buildComputerScreenshotDynamicToolSpec(): Record<string, unknown> {
   return {
-    name: "computer_screenshot",
+    name: CODEX_COMPUTER_SCREENSHOT_TOOL_NAME,
     description:
       "Capture a screenshot of the Daytona computer so you can visually inspect the running app or desktop. Use this when the user asks you to look at a preview, inspect the UI, or verify what is visible. Do not print raw provider URLs or image data.",
     inputSchema: {
@@ -133,7 +146,7 @@ function buildComputerScreenshotDynamicToolSpec(): Record<string, unknown> {
 
 function buildComputerOpenUrlDynamicToolSpec(): Record<string, unknown> {
   return {
-    name: "computer_open_url",
+    name: CODEX_COMPUTER_OPEN_URL_TOOL_NAME,
     description:
       "Open an HTTP(S) URL in the Daytona computer's visible browser before taking a screenshot. Use this after workspace_serve when you need to visually inspect the running localhost preview. Prefer localhost preview URLs and do not print raw provider URLs.",
     inputSchema: {
@@ -147,6 +160,78 @@ function buildComputerOpenUrlDynamicToolSpec(): Record<string, unknown> {
       },
       required: ["url"],
       additionalProperties: false,
+    },
+  };
+}
+
+function readDynamicToolName(tool: Record<string, unknown>): string {
+  const namespace = String(tool.namespace ?? "").trim();
+  const name = String(tool.name ?? "").trim();
+  if (!name) return "";
+  return namespace ? `${namespace}.${name}` : name;
+}
+
+function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildResult {
+  const dynamicTools: Record<string, unknown>[] = [];
+  if (activeTurn.workspaceHostId !== "daytona") {
+    dynamicTools.push(buildWorkspaceBashDynamicToolSpec());
+  }
+  if (activeTurn.serve || activeTurn.localServeAvailable) {
+    dynamicTools.push(buildWorkspaceServeDynamicToolSpec());
+  }
+  if (activeTurn.runtimeToolBridge && activeTurn.workspaceHostId.startsWith("daytona")) {
+    dynamicTools.push(
+      buildComputerOpenUrlDynamicToolSpec(),
+      buildComputerScreenshotDynamicToolSpec(),
+    );
+  }
+  if (activeTurn.platformToolBridge) {
+    dynamicTools.push(
+      ...activeTurn.platformTools.map((tool) => ({
+        namespace: "polynet",
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        // Probe turns project eagerly: the probe asserts the call rail, not
+        // deferred tool discovery.
+        deferLoading: !activeTurn.platformToolProbe,
+      })),
+    );
+  }
+
+  const toolNames = dynamicTools.map(readDynamicToolName).filter(Boolean);
+  const forbiddenToolNameSet = new Set<string>(CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES);
+  const forbiddenToolNamesPresent =
+    activeTurn.workspaceHostId === "daytona"
+      ? toolNames
+          .map((name) => name.replace(/^polynet\./, ""))
+          .filter(
+            (name, index, list) =>
+              forbiddenToolNameSet.has(name) && list.indexOf(name) === index,
+          )
+      : [];
+  const polynetPlatformToolNames = dynamicTools
+    .filter((tool) => String(tool.namespace ?? "").trim() === "polynet")
+    .map((tool) => String(tool.name ?? "").trim())
+    .filter(Boolean);
+  const runtimeAdapterToolNameSet = new Set<string>(CODEX_RUNTIME_ADAPTER_TOOL_NAMES);
+  const runtimeAdapterToolNames = toolNames.filter((name) =>
+    runtimeAdapterToolNameSet.has(name),
+  );
+  const duplicateShellTool = toolNames.includes(CODEX_WORKSPACE_BASH_TOOL_NAME);
+
+  return {
+    dynamicTools,
+    receipt: {
+      workspace_host_id: activeTurn.workspaceHostId,
+      workspace_access_mode:
+        activeTurn.workspaceHostId === "daytona" ? "native_codex" : "dynamic_workspace_bash",
+      duplicate_shell_tool: duplicateShellTool,
+      shell_tool: duplicateShellTool ? CODEX_WORKSPACE_BASH_TOOL_NAME : null,
+      tool_names: toolNames,
+      runtime_adapter_tool_names: runtimeAdapterToolNames,
+      polynet_platform_tool_names: polynetPlatformToolNames,
+      forbidden_tool_names_present: forbiddenToolNamesPresent,
     },
   };
 }
@@ -252,12 +337,13 @@ type WorkerRuntimeHealth = {
       turn_approval_policy: typeof CODEX_APPROVAL_POLICY;
       turn_sandbox_policy: {
         type: typeof CODEX_TURN_SANDBOX_POLICY.type;
-        network_access: typeof CODEX_TURN_SANDBOX_POLICY.networkAccess;
+        network_access?: false;
       };
     };
     workspace_tool_access: {
-      shell_tool: "workspace_bash";
-      access: "full";
+      mode: "native_codex" | "dynamic_workspace_bash";
+      shell_tool: typeof CODEX_WORKSPACE_BASH_TOOL_NAME | null;
+      access: "native" | "full";
       workspace_root: string | null;
     };
   };
@@ -389,13 +475,46 @@ function readBearer(req: IncomingMessage): string {
 
 let cachedCodexVersion: string | null | undefined;
 
+const CODEX_APP_SERVER_ENV_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TERM",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "CODEX_HOME",
+] as const;
+
+export function buildCodexAppServerEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of CODEX_APP_SERVER_ENV_ALLOWLIST) {
+    const value = source[key];
+    if (typeof value === "string" && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (!key.startsWith("LC_")) continue;
+    if (typeof value === "string" && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
 function getCodexVersion(codexBin: string): string | null {
   // The binary never changes for the life of the process; healthz is probed
   // every ~20s and must not spawn a process per probe.
   if (cachedCodexVersion !== undefined) return cachedCodexVersion;
   const result = spawnSync(codexBin, ["--version"], {
     encoding: "utf8",
-    env: process.env,
+    env: buildCodexAppServerEnv(process.env),
   });
   cachedCodexVersion =
     result.status === 0 ? String(result.stdout || result.stderr || "").trim() || null : null;
@@ -463,6 +582,10 @@ export class PolynetCodexWorkerRuntime {
     return Boolean(this.options.authToken) && token === this.options.authToken;
   }
 
+  getWorkspaceHostId(): WorkerWorkspaceHostId {
+    return this.options.workspaceHostId;
+  }
+
   isBusy(): boolean {
     return this.activeTurn !== null || this.activeWorkspaceProbeRunId !== null;
   }
@@ -528,12 +651,21 @@ export class PolynetCodexWorkerRuntime {
           turn_approval_policy: CODEX_APPROVAL_POLICY,
           turn_sandbox_policy: {
             type: CODEX_TURN_SANDBOX_POLICY.type,
-            network_access: CODEX_TURN_SANDBOX_POLICY.networkAccess,
+            ...(CODEX_TURN_SANDBOX_POLICY.type === "workspaceWrite"
+              ? { network_access: CODEX_TURN_SANDBOX_POLICY.networkAccess }
+              : {}),
           },
         },
         workspace_tool_access: {
-          shell_tool: "workspace_bash",
-          access: "full",
+          mode:
+            this.options.workspaceHostId === "daytona"
+              ? "native_codex"
+              : "dynamic_workspace_bash",
+          shell_tool:
+            this.options.workspaceHostId === "daytona"
+              ? null
+              : CODEX_WORKSPACE_BASH_TOOL_NAME,
+          access: this.options.workspaceHostId === "daytona" ? "native" : "full",
           workspace_root: workspaceRoot,
         },
       },
@@ -850,19 +982,23 @@ export class PolynetCodexWorkerRuntime {
       return event;
     };
 
+    const configuredTurnTimeoutSeconds = readIntegerEnv("POLYNET_CODEX_WORKER_TURN_TIMEOUT_SECONDS", 0);
     const turnTimeoutMs =
-      readIntegerEnv("POLYNET_CODEX_WORKER_TURN_TIMEOUT_SECONDS", 900) * 1000;
+      configuredTurnTimeoutSeconds > 0 ? configuredTurnTimeoutSeconds * 1000 : null;
     const waitForTurnCompletion = (turnId: string, timeoutMs = turnTimeoutMs): Promise<JsonRecord> =>
       new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          activeTurn.turnCompletionResolvers.delete(turnId);
-          // Stop the orphaned Codex turn so it cannot keep consuming the
-          // user's ChatGPT quota behind a freed worker slot.
-          void this.interruptActiveTurnBestEffort("turn_timeout");
-          reject(new Error(`timed out waiting for turn completion: ${turnId}`));
-        }, timeoutMs);
+        const timeout =
+          typeof timeoutMs === "number" && timeoutMs > 0
+            ? setTimeout(() => {
+                activeTurn.turnCompletionResolvers.delete(turnId);
+                // Optional operator backstop only; active agent turns do not
+                // have a product hard cap by default.
+                void this.interruptActiveTurnBestEffort("turn_timeout");
+                reject(new Error(`timed out waiting for turn completion: ${turnId}`));
+              }, timeoutMs)
+            : null;
         const wrappedResolve = (value: JsonRecord) => {
-          clearTimeout(timeout);
+          if (timeout) clearTimeout(timeout);
           resolve(value);
         };
         const current = activeTurn.turnCompletionResolvers.get(turnId) ?? [];
@@ -953,12 +1089,21 @@ export class PolynetCodexWorkerRuntime {
         workspaceServeAvailable: Boolean(activeTurn.serve || activeTurn.localServeAvailable),
         platformToolsAvailable: Boolean(activeTurn.platformToolBridge),
       });
+      const codexThreadCwd =
+        activeTurn.workspaceHostId === "daytona"
+          ? (activeTurn.workspaceRoot ?? getDaytonaWorkspaceRoot())
+          : this.options.cwd;
+      const codexDynamicTools = buildCodexDynamicTools(activeTurn);
+      emitWorkerEvent("codex_dynamic_tools_advertised", {
+        ...codexDynamicTools.receipt,
+        codex_thread_cwd: codexThreadCwd,
+      });
 
       activeTurn.timing.startBucket("codex_thread_start_ms");
       const threadResponse = asRecord(
         await this.client.request("thread/start", {
           model: params.model,
-          cwd: this.options.cwd,
+          cwd: codexThreadCwd,
           approvalPolicy: CODEX_APPROVAL_POLICY,
           sandbox: CODEX_THREAD_SANDBOX,
           ephemeral: true,
@@ -966,30 +1111,7 @@ export class PolynetCodexWorkerRuntime {
           // (BYOK) — PolyNet never pays for searches.
           config: { web_search: DAYTONA_RUNTIME_POLICY.nativeCodex.webSearch },
           developerInstructions: codexDeveloperInstructions,
-          dynamicTools: [
-            buildWorkspaceBashDynamicToolSpec(),
-            ...(activeTurn.serve || activeTurn.localServeAvailable
-              ? [buildWorkspaceServeDynamicToolSpec()]
-              : []),
-            ...(activeTurn.runtimeToolBridge &&
-            activeTurn.workspaceHostId.startsWith("daytona")
-              ? [
-                  buildComputerOpenUrlDynamicToolSpec(),
-                  buildComputerScreenshotDynamicToolSpec(),
-                ]
-              : []),
-            ...(activeTurn.platformToolBridge
-              ? activeTurn.platformTools.map((tool) => ({
-                  namespace: "polynet",
-                  name: tool.name,
-                  description: tool.description,
-                  inputSchema: tool.inputSchema,
-                  // Probe turns project eagerly: the probe asserts the call
-                  // rail, not deferred tool discovery.
-                  deferLoading: !activeTurn.platformToolProbe,
-                }))
-              : []),
-          ],
+          dynamicTools: codexDynamicTools.dynamicTools,
           experimentalRawEvents: false,
           persistExtendedHistory: false,
         }),
@@ -1002,6 +1124,7 @@ export class PolynetCodexWorkerRuntime {
       emitWorkerEvent("codex_thread_started", {
         codex_thread_id: threadId,
         latency_ms: codexThreadStartMs,
+        codex_thread_cwd: codexThreadCwd,
         developer_instruction_chars: codexDeveloperInstructions.length,
         polynet_developer_instructions_applied: Boolean(params.developerInstructions),
       });
@@ -1046,6 +1169,8 @@ export class PolynetCodexWorkerRuntime {
           : validateProbeProof({
               toolCalls: activeTurn.toolCalls,
               workspaceRoot: activeTurn.workspaceRoot,
+              workspaceHostId: activeTurn.workspaceHostId,
+              assistantText: activeTurn.assistantText,
             })
         : { ok: true, failures: [] as string[] };
       summary = {
@@ -1072,6 +1197,12 @@ export class PolynetCodexWorkerRuntime {
         })),
         proof,
         timing: activeTurn.timing.summary(),
+        events: activeTurn.eventLog.map((event) => ({
+          seq: event.seq,
+          event_type: event.event_type,
+          payload: event.payload,
+          created_at: event.created_at,
+        })),
       };
       const modelFinishedPayload = {
         run_id: params.runId,
@@ -1156,6 +1287,12 @@ export class PolynetCodexWorkerRuntime {
             proof,
             error: describeError(pendingError),
             timing: activeTurn.timing.summary(),
+            events: activeTurn.eventLog.map((event) => ({
+              seq: event.seq,
+              event_type: event.event_type,
+              payload: event.payload,
+              created_at: event.created_at,
+            })),
           };
       const finalizedPayload = {
         run_id: params.runId,
@@ -1201,10 +1338,11 @@ export class PolynetCodexWorkerRuntime {
   }
 
   private async startInner(): Promise<void> {
+    const codexAppServerEnv = buildCodexAppServerEnv(process.env);
     this.client = new CodexAppServerClient({
       codexBin: this.options.codexBin,
       cwd: this.options.cwd,
-      env: process.env,
+      env: codexAppServerEnv,
       onNotification: (message) => this.handleNotification(message),
       onServerRequest: (message) => this.handleServerRequest(message),
       onStderr: (line) => {
@@ -1310,6 +1448,12 @@ export class PolynetCodexWorkerRuntime {
 
     if (method === "item/started" && params) {
       const item = asRecord(params.item);
+      this.emitRuntimeEvent("codex_item_started", {
+        codex_turn_id: String(params.turnId ?? ""),
+        item_id: String(item?.id ?? ""),
+        item_type: String(item?.type ?? ""),
+        tool: String(item?.tool ?? ""),
+      });
       if (String(item?.type ?? "") === "dynamicToolCall") {
         this.emitRuntimeEvent("tool_call_started", {
           codex_turn_id: String(params.turnId ?? ""),
@@ -1323,6 +1467,15 @@ export class PolynetCodexWorkerRuntime {
 
     if (method === "item/completed" && params) {
       const item = asRecord(params.item);
+      this.emitRuntimeEvent("codex_item_completed", {
+        codex_turn_id: String(params.turnId ?? ""),
+        item_id: String(item?.id ?? ""),
+        item_type: String(item?.type ?? ""),
+        tool: String(item?.tool ?? ""),
+        status: String(item?.status ?? ""),
+        success: item?.success === true,
+        duration_ms: typeof item?.durationMs === "number" ? item.durationMs : null,
+      });
       if (String(item?.type ?? "") === "dynamicToolCall") {
         this.emitRuntimeEvent("tool_call_finished", {
           codex_turn_id: String(params.turnId ?? ""),
@@ -1366,10 +1519,30 @@ export class PolynetCodexWorkerRuntime {
         return;
       }
       if (method === "item/commandExecution/requestApproval") {
+        if (activeTurn) {
+          activeTurn.timing.setBucket(
+            "codex_approval_request_denied_ms",
+            elapsedMs(activeTurn.timing.startedAtMs),
+          );
+          this.emitRuntimeEvent("codex_approval_request_denied", {
+            method,
+            reason: "worker_policy_declines_approval_requests",
+          });
+        }
         this.client.respond(message.id, { decision: "decline" });
         return;
       }
       if (method === "execCommandApproval" || method === "applyPatchApproval") {
+        if (activeTurn) {
+          activeTurn.timing.setBucket(
+            "codex_approval_request_denied_ms",
+            elapsedMs(activeTurn.timing.startedAtMs),
+          );
+          this.emitRuntimeEvent("codex_approval_request_denied", {
+            method,
+            reason: "worker_policy_declines_approval_requests",
+          });
+        }
         this.client.respond(message.id, { decision: "denied" });
         return;
       }
@@ -1382,15 +1555,15 @@ export class PolynetCodexWorkerRuntime {
     }
     const params = asRecord(message.params);
     const toolName = String(params?.tool ?? "");
-    if (params && toolName === "workspace_serve") {
+    if (params && toolName === CODEX_WORKSPACE_SERVE_TOOL_NAME) {
       await this.handleWorkspaceServeCall(message.id, activeTurn, params);
       return;
     }
-    if (params && toolName === "computer_open_url") {
+    if (params && toolName === CODEX_COMPUTER_OPEN_URL_TOOL_NAME) {
       await this.handleComputerOpenUrlCall(message.id, activeTurn, params);
       return;
     }
-    if (params && toolName === "computer_screenshot") {
+    if (params && toolName === CODEX_COMPUTER_SCREENSHOT_TOOL_NAME) {
       await this.handleComputerScreenshotCall(message.id, activeTurn, params);
       return;
     }
@@ -1400,7 +1573,11 @@ export class PolynetCodexWorkerRuntime {
       await this.handlePlatformToolCall(message.id, activeTurn, toolName, params);
       return;
     }
-    if (!params || toolName !== "workspace_bash") {
+    if (
+      !params ||
+      toolName !== CODEX_WORKSPACE_BASH_TOOL_NAME ||
+      activeTurn.workspaceHostId === "daytona"
+    ) {
       this.client.respondError(message.id, -32601, "unsupported dynamic tool");
       return;
     }
@@ -2110,8 +2287,22 @@ function summarizeIngestPushError(error: unknown): {
 function validateProbeProof(params: {
   toolCalls: BlaxelToolCallSummary[];
   workspaceRoot: string | null;
+  workspaceHostId: WorkerWorkspaceHostId;
+  assistantText: string;
 }): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
+  if (params.workspaceHostId === "daytona") {
+    if (params.toolCalls.length !== 0) failures.push("unexpected_duplicate_workspace_tool_call");
+    const expectedWorkspaceRoot = String(params.workspaceRoot ?? getDaytonaWorkspaceRoot());
+    if (!params.assistantText.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE")) {
+      failures.push("probe_marker_missing");
+    }
+    if (!params.assistantText.includes(expectedWorkspaceRoot)) failures.push("workspace_root_missing");
+    return {
+      ok: failures.length === 0,
+      failures,
+    };
+  }
   if (params.toolCalls.length !== 1) failures.push("expected_exactly_one_workspace_tool_call");
   const first = params.toolCalls[0] ?? null;
   if (!first?.ok) failures.push("workspace_tool_call_not_ok");
@@ -2149,7 +2340,14 @@ function validatePlatformToolProbeProof(params: {
   return { ok: failures.length === 0, failures };
 }
 
-function buildProbePrompt(command: string): string {
+function buildProbePrompt(command: string, workspaceHostId: WorkerWorkspaceHostId): string {
+  if (workspaceHostId === "daytona") {
+    return [
+      "Use Codex's native workspace execution capabilities to run this shell command from the workspace root:",
+      command,
+      "Report the exact stdout. Do not call workspace_bash; that duplicate tool is intentionally unavailable in Daytona mode.",
+    ].join(" ");
+  }
   return [
     `Call workspace_bash exactly once with command \`${command}\`.`,
     "Then summarize the output and say whether it ran in the workspace.",
@@ -2174,7 +2372,10 @@ async function handleTurnEndpoint(params: {
   const body = asRecord(await readJsonBody(params.req)) ?? {};
   const url = new URL(params.req.url ?? "/", "http://localhost");
   const stream = body.stream === true || url.searchParams.get("stream") === "1";
-  const model = String(body.model ?? readEnv("POLYNET_CODEX_WORKER_MODEL") ?? "gpt-5.5").trim() || "gpt-5.5";
+  const defaultModelId = DAYTONA_RUNTIME_POLICY.nativeCodex.defaultModelId;
+  const model =
+    String(body.model ?? readEnv("POLYNET_CODEX_WORKER_MODEL") ?? defaultModelId).trim() ||
+    defaultModelId;
   const runId =
     String(body.run_id ?? body.runId ?? "").trim() || `polynet_codex_worker:${randomUUID()}`;
   const command = String(
@@ -2185,7 +2386,7 @@ async function handleTurnEndpoint(params: {
   const prompt = params.probeMode
     ? platformToolProbe
       ? buildPlatformToolProbePrompt(platformToolProbe)
-      : buildProbePrompt(command)
+      : buildProbePrompt(command, params.runtime.getWorkspaceHostId())
     : String(body.prompt ?? "").trim();
   const developerInstructions = params.probeMode
     ? null
@@ -2559,7 +2760,9 @@ export async function startPolynetCodexWorkerServer(): Promise<{
   const runtime = new PolynetCodexWorkerRuntime({
     cwd: readEnv("POLYNET_CODEX_WORKER_AGENT_CWD") || defaultAgentCwd,
     codexBin: readEnv("POLYNET_CODEX_WORKER_CODEX_BIN") || "codex",
-    model: readEnv("POLYNET_CODEX_WORKER_MODEL") || "gpt-5.5",
+    model:
+      readEnv("POLYNET_CODEX_WORKER_MODEL") ||
+      DAYTONA_RUNTIME_POLICY.nativeCodex.defaultModelId,
     authToken,
     workspaceHostId,
   });

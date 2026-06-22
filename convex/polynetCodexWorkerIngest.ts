@@ -18,6 +18,7 @@ import {
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceCodexRuntimeCredits,
 } from "../shared/workspaceCredits";
+import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -43,6 +44,15 @@ function asRecord(value: unknown): JsonRecord | null {
 function readPositiveNumber(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function addWorkspacePreviewReadyPort(target: Set<number>, payload: JsonRecord): void {
+  try {
+    const port = normalizeWorkspacePreviewPort(payload.port);
+    if (port !== null) target.add(port);
+  } catch {
+    // Ignore malformed worker evidence; the target finalizer remains best effort.
+  }
 }
 
 function readEnv(name: string): string {
@@ -177,6 +187,7 @@ export async function handlePolynetCodexWorkerIngest(
     runId: context.run_id,
   });
 
+  const activePreviewPorts = new Set<number>();
   let eventsAppended = 0;
   for (const rawEvent of events.slice(0, 500)) {
     const event = asRecord(rawEvent);
@@ -186,6 +197,9 @@ export async function handlePolynetCodexWorkerIngest(
     const seqRaw = Number(event.seq);
     const seq = Number.isFinite(seqRaw) ? Math.max(0, Math.floor(seqRaw)) : 0;
     const payload = asRecord(event.payload) ?? {};
+    if (eventType === "workspace_preview_ready") {
+      addWorkspacePreviewReadyPort(activePreviewPorts, payload);
+    }
     try {
       await appendRunEvent({
         eventType,
@@ -397,6 +411,27 @@ export async function handlePolynetCodexWorkerIngest(
     }
   }
 
+  const daytonaActivePreviewPorts = Array.from(activePreviewPorts);
+  let daytonaLifecycleFinalized = false;
+  let daytonaLifecycleFinalizeReason: string | null = null;
+  try {
+    const finalized = (await ctx.runAction(
+      (internal as any).daytonaCodexRuntimeTargetActions
+        .finalizeDaytonaCodexRuntimeTargetFromWorkerIngestInternal as any,
+      {
+        ownerId: context.owner_id,
+        runId: context.run_id,
+        status: status as "ok" | "error" | "cancelled",
+        activePreviewPorts: daytonaActivePreviewPorts,
+      },
+    )) as { finalized?: unknown; reason?: unknown };
+    daytonaLifecycleFinalized = finalized.finalized === true;
+    daytonaLifecycleFinalizeReason = String(finalized.reason ?? "");
+  } catch {
+    // Best effort: Daytona auto-stop/delete and the sweeper remain backstops.
+    daytonaLifecycleFinalizeReason = "finalize_failed";
+  }
+
   return json(200, {
     ok: true,
     run_id: context.run_id,
@@ -408,5 +443,8 @@ export async function handlePolynetCodexWorkerIngest(
     capacity_lease_release_reason: capacityLeaseReleaseReason,
     lease_settled: leaseSettled,
     lease_disposal_outcome: leaseDisposalOutcome,
+    daytona_lifecycle_finalized: daytonaLifecycleFinalized,
+    daytona_lifecycle_finalize_reason: daytonaLifecycleFinalizeReason,
+    daytona_active_preview_ports: daytonaActivePreviewPorts,
   });
 }

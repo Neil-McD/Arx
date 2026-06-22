@@ -3,6 +3,12 @@ import { readFileSync } from "node:fs";
 
 import { normalizeCommunityLensAuthority } from "../shared/communityLensAuthority.ts";
 import {
+  CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES,
+  CODEX_RUNTIME_ADAPTER_TOOL_NAMES,
+  buildCodexHarnessToolPolicyReceipt,
+  resolveCodexHarnessToolPolicy,
+} from "../shared/harnessToolPolicy.ts";
+import {
   buildPolynetPlatformToolNames,
   buildPolynetPlatformToolSpecs,
 } from "../shared/polynetPlatformToolSurface.ts";
@@ -13,9 +19,11 @@ function read(relativePath: string): string {
 }
 
 const packageJson = read("package.json");
+const harnessToolPolicySource = read("shared/harnessToolPolicy.ts");
 const workerServerSource = read("services/polynet-codex-worker/src/server.ts");
 const workerBridgeSource = read("convex/polynetCodexWorkerTool.ts");
 const runtimeAgentLoopSource = read("convex/runtimeAgentLoop.ts");
+const runtimeTurnHandlersSource = read("convex/runtimeTurnHandlers.ts");
 
 const productDocTools = ["search_product_docs", "get_product_doc"] as const;
 const communityReadTools = [
@@ -64,6 +72,16 @@ assert.match(
   packageJson,
   /"check:daytona-codex-tool-role-matrix-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/daytona_codex_tool_role_matrix_proof\.ts"/,
   "package.json must expose the Daytona Codex tool role matrix proof",
+);
+assert.match(
+  harnessToolPolicySource,
+  /CodexHarnessToolPolicy[\s\S]*workspaceAccess[\s\S]*polynetPlatformToolNames[\s\S]*runtimeAdapterToolNames/,
+  "shared harness policy must model Codex workspace, PolyNet platform, and runtime adapter tools separately",
+);
+assert.match(
+  harnessToolPolicySource,
+  /CODEX_WORKSPACE_BASH_TOOL_NAME = "workspace_bash"[\s\S]*CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES[\s\S]*CODEX_WORKSPACE_BASH_TOOL_NAME[\s\S]*terminal_stop/,
+  "shared harness policy must name the duplicate workspace tools that native Daytona Codex must not receive",
 );
 
 assertToolNames(
@@ -118,6 +136,69 @@ assertToolNames(
     ...productDocTools,
   ],
 );
+
+const daytonaCodexHarnessPolicy = resolveCodexHarnessToolPolicy({
+  workspaceHostId: "daytona",
+  polynetPlatformToolProjection: {
+    hasCommunity: true,
+    communityLensAuthority: {
+      relation: "owner",
+      effectiveRole: "owner",
+      canManage: true,
+      canModerate: true,
+      canManageResources: true,
+      canReviewJoinRequests: true,
+      communityResourceLane: {
+        lane: "builder",
+        can_read_live_resources: true,
+        can_use_resource_builder: true,
+      },
+    },
+    communityResourceLane: {
+      lane: "builder",
+      can_read_live_resources: true,
+      can_use_resource_builder: true,
+    },
+  },
+  workspaceServeAvailable: true,
+  computerAdaptersAvailable: true,
+});
+assert.equal(daytonaCodexHarnessPolicy.harnessKind, "codex");
+assert.deepEqual(daytonaCodexHarnessPolicy.workspaceAccess, {
+  mode: "native_codex",
+  nativeCodex: true,
+  duplicateShellTool: false,
+  shellTool: null,
+});
+assert.deepEqual(
+  daytonaCodexHarnessPolicy.runtimeAdapterToolNames,
+  [...CODEX_RUNTIME_ADAPTER_TOOL_NAMES],
+);
+assert.deepEqual(daytonaCodexHarnessPolicy.polynetPlatformToolNames, [
+  ...communityReadTools,
+  ...builderStageTools,
+  ...communityWriteTools,
+  ...productDocTools,
+]);
+const daytonaCodexPolicyReceipt =
+  buildCodexHarnessToolPolicyReceipt(daytonaCodexHarnessPolicy);
+assert.deepEqual(
+  daytonaCodexPolicyReceipt["runtime_adapter_tool_names"],
+  [...CODEX_RUNTIME_ADAPTER_TOOL_NAMES],
+  "Codex harness receipt must classify preview/computer tools as runtime adapters",
+);
+for (const forbiddenToolName of CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES) {
+  assert.equal(
+    daytonaCodexHarnessPolicy.polynetPlatformToolNames.includes(forbiddenToolName as any),
+    false,
+    `${forbiddenToolName} must not be projected as a Codex PolyNet platform tool`,
+  );
+  assert.equal(
+    daytonaCodexHarnessPolicy.runtimeAdapterToolNames.includes(forbiddenToolName as any),
+    false,
+    `${forbiddenToolName} must not be projected as a Codex runtime adapter`,
+  );
+}
 assertToolNames(
   "owner with resource management",
   projectedToolNames({
@@ -228,6 +309,7 @@ for (const forbiddenToolName of [
   "terminal_start",
   "terminal_read",
   "computer_open_url",
+  "workspace_bash",
   "list_dir",
   "read",
   "write",
@@ -270,8 +352,48 @@ assert.match(
 );
 assert.match(
   workerServerSource,
-  /toolName !== "workspace_bash"[\s\S]*unsupported dynamic tool/,
-  "worker server must not expose duplicate workspace or web tools through the PolyNet platform bridge",
+  /dynamicTools: codexDynamicTools\.dynamicTools/,
+  "worker server must not advertise duplicate workspace_bash in Daytona Codex mode",
+);
+assert.match(
+  workerServerSource,
+  /function buildCodexDynamicTools\(activeTurn: ActiveTurn\)[\s\S]*activeTurn\.workspaceHostId !== "daytona"[\s\S]*buildWorkspaceBashDynamicToolSpec/,
+  "worker server must build Codex dynamic tools through one helper and include workspace_bash only outside Daytona mode",
+);
+assert.match(
+  workerServerSource,
+  /CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES[\s\S]*CODEX_RUNTIME_ADAPTER_TOOL_NAMES[\s\S]*CODEX_WORKSPACE_BASH_TOOL_NAME[\s\S]*from "\.\.\/\.\.\/\.\.\/shared\/harnessToolPolicy\.ts"/,
+  "worker server must import Codex tool-policy constants from the shared harness policy",
+);
+assert.doesNotMatch(
+  workerServerSource,
+  /const CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES = \[/,
+  "worker server must not define a duplicate Codex native workspace forbidden tool list",
+);
+assert.match(
+  workerServerSource,
+  /CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES[\s\S]*forbidden_tool_names_present/,
+  "worker server must summarize forbidden duplicate workspace tools from the actual advertised dynamic tools",
+);
+assert.match(
+  workerServerSource,
+  /emitWorkerEvent\("codex_dynamic_tools_advertised"[\s\S]*codexDynamicTools\.receipt[\s\S]*dynamicTools: codexDynamicTools\.dynamicTools/,
+  "worker server must emit the actual Codex dynamic tool receipt before thread/start uses that same tool array",
+);
+assert.match(
+  workerServerSource,
+  /toolName !== CODEX_WORKSPACE_BASH_TOOL_NAME[\s\S]*activeTurn\.workspaceHostId === "daytona"[\s\S]*unsupported dynamic tool/,
+  "worker server must reject workspace_bash calls in Daytona Codex mode",
+);
+assert.match(
+  runtimeTurnHandlersSource,
+  /resolveCodexHarnessToolPolicy[\s\S]*codex_harness_tool_policy_resolved[\s\S]*buildCodexHarnessToolPolicyReceipt/,
+  "runtime handler must emit a first-class Codex harness tool policy receipt",
+);
+assert.match(
+  runtimeTurnHandlersSource,
+  /runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
+  "runtime handler must project Codex runtime adapter tools from the Codex harness policy",
 );
 
 console.log("daytona_codex_tool_role_matrix_proof: ok");

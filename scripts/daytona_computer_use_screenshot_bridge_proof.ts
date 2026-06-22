@@ -193,13 +193,13 @@ assert.match(
 
 assert.match(
   worker,
-  /buildComputerScreenshotDynamicToolSpec[\s\S]*name: "computer_screenshot"[\s\S]*inputImage/,
+  /buildComputerScreenshotDynamicToolSpec[\s\S]*name: CODEX_COMPUTER_SCREENSHOT_TOOL_NAME[\s\S]*inputImage/,
   "Daytona Codex worker must advertise computer_screenshot as a model-visible dynamic tool and return an image observation",
 );
 
 assert.match(
   worker,
-  /buildComputerOpenUrlDynamicToolSpec[\s\S]*name: "computer_open_url"[\s\S]*required: \["url"\]/,
+  /buildComputerOpenUrlDynamicToolSpec[\s\S]*name: CODEX_COMPUTER_OPEN_URL_TOOL_NAME[\s\S]*required: \["url"\]/,
   "Daytona Codex worker must advertise computer_open_url as a model-visible dynamic tool",
 );
 
@@ -211,13 +211,13 @@ assert.match(
 
 assert.match(
   worker,
-  /toolName === "computer_screenshot"[\s\S]*handleComputerScreenshotCall/,
+  /toolName === CODEX_COMPUTER_SCREENSHOT_TOOL_NAME[\s\S]*handleComputerScreenshotCall/,
   "Daytona Codex worker must route computer_screenshot dynamic tool calls",
 );
 
 assert.match(
   worker,
-  /toolName === "computer_open_url"[\s\S]*handleComputerOpenUrlCall/,
+  /toolName === CODEX_COMPUTER_OPEN_URL_TOOL_NAME[\s\S]*handleComputerOpenUrlCall/,
   "Daytona Codex worker must route computer_open_url dynamic tool calls",
 );
 
@@ -235,7 +235,7 @@ assert.match(
 
 assert.match(
   runtimeTurnHandlers,
-  /workerRuntimeToolBridgeRequired[\s\S]*provider === "daytona_direct"[\s\S]*buildPolynetCodexWorkerToolTarget[\s\S]*computer_open_url[\s\S]*computer_screenshot/,
+  /workerRuntimeToolBridgeRequired[\s\S]*provider === "daytona_direct"[\s\S]*resolveCodexHarnessToolPolicy\(\{[\s\S]*computerAdaptersAvailable: workerRuntimeToolBridgeRequired[\s\S]*workerPlatformTools\.length > 0 \|\| workerRuntimeToolBridgeRequired[\s\S]*buildPolynetCodexWorkerToolTarget[\s\S]*runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
   "Daytona worker turns must mint the tool bridge even when no PolyNet platform tools are projected",
 );
 

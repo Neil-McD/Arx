@@ -10,8 +10,7 @@ export const POLYNET_CODEX_WORKER_DEPLOYMENT_CONCURRENT_RUN_LIMIT = 10;
 // A single user can occupy at most the deployment pool in this staging slice.
 export const POLYNET_CODEX_WORKER_USER_CONCURRENT_RUN_LIMIT = 10;
 
-// A run counts as active when it is still "running" and started within this
-// window. The worker turn timeout is 15 minutes, so anything older is a
-// zombie (e.g. a Convex action that died before the ingest backstop landed)
-// and must not eat a concurrency slot forever.
+// A run counts against admission while it is still "running" and started
+// within this window. This is a zombie-accounting backstop, not an active
+// agent-turn timeout; Codex turns have no product hard cap by default.
 export const POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS = 20 * 60 * 1000;

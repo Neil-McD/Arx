@@ -1,3 +1,5 @@
+import { DAYTONA_CODEX_WORKSPACE_ROOT } from "../../../shared/daytonaCodexRuntimePolicy.ts";
+
 type DaytonaCodexConfigParams = {
   polynetDeveloperInstructions: string | null;
   workspaceRoot: string;
@@ -5,6 +7,8 @@ type DaytonaCodexConfigParams = {
   platformToolsAvailable: boolean;
   workspaceServeAvailable: boolean;
 };
+
+const DEFAULT_DAYTONA_WORKSPACE_ROOT = DAYTONA_CODEX_WORKSPACE_ROOT;
 
 function normalizeBlock(value: string | null | undefined): string | null {
   const normalized = String(value ?? "").trim();
@@ -25,7 +29,7 @@ function tomlString(value: string): string {
 export function buildDaytonaCodexDeveloperInstructions(
   params: DaytonaCodexConfigParams,
 ): string {
-  const workspaceRoot = normalizeBlock(params.workspaceRoot) ?? "/home/daytona";
+  const workspaceRoot = normalizeBlock(params.workspaceRoot) ?? DEFAULT_DAYTONA_WORKSPACE_ROOT;
   return joinBlocks([
     params.polynetDeveloperInstructions,
     [
@@ -33,15 +37,15 @@ export function buildDaytonaCodexDeveloperInstructions(
       "These service instructions only describe execution mechanics; they do not replace PolyNet developer instructions, identity, tone, community context, project context, or user intent.",
       `Your workspace is a full-access remote Linux environment rooted at ${workspaceRoot}.`,
       "You may create and edit files inside that workspace when the user asks.",
-      "Use the dynamic tool named workspace_bash for shell commands; it can read, write, install, and run anything in that workspace.",
+      "Use Codex's native file editing, patching, and shell capabilities for workspace work. Do not look for a PolyNet-provided shell tool.",
       params.workspaceServeAvailable
-        ? "To run a server or app the user can see, call workspace_serve with the start command and port. PolyNet attaches the app to the user's preview panel. Never start servers with workspace_bash. For visual inspection after workspace_serve, open http://localhost:<port>/ with computer_open_url, then call computer_screenshot. Never print raw provider preview URLs."
+        ? "To run a server or app the user can see, call workspace_serve with the start command and port. PolyNet attaches the app to the user's preview panel. Prefer workspace_serve over a long-running shell command for preview servers. For visual inspection after workspace_serve, open http://localhost:<port>/ with computer_open_url, then call computer_screenshot. Never print raw provider preview URLs."
         : null,
       params.platformToolsAvailable
         ? "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform."
         : null,
       "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
-      "The host service environment is not separate user context: use only the configured workspace root for file and shell work.",
+      "The host service environment is not separate user context: use only the configured workspace root for file and shell work. Do not inspect sibling or parent directories unless the user explicitly asks.",
       "Report tool output clearly and only with the detail the user needs.",
     ]
       .filter((line): line is string => Boolean(line))
@@ -64,7 +68,7 @@ export function buildDaytonaCodexConfigToml(params: DaytonaCodexConfigParams): {
     configToml: `developer_instructions = ${tomlString(developerInstructions)}\n`,
     developerInstructions,
     receipt: {
-      workspaceRoot: normalizeBlock(params.workspaceRoot) ?? "/home/daytona",
+      workspaceRoot: normalizeBlock(params.workspaceRoot) ?? DEFAULT_DAYTONA_WORKSPACE_ROOT,
       previewUrlPattern: normalizeBlock(params.previewUrlPattern),
       developerInstructionChars: developerInstructions.length,
       polynetDeveloperInstructionsApplied: Boolean(

@@ -54,7 +54,6 @@ export POLYNET_DEPLOYMENT_KIND="${POLYNET_DEPLOYMENT_KIND:-staging}"
 export CONVEX_DEPLOYMENT="${CONVEX_DEPLOYMENT:-dev:quick-porcupine-949}"
 export POLYNET_CODEX_WORKER_CODEX_BIN="${POLYNET_CODEX_WORKER_CODEX_BIN:-codex}"
 export POLYNET_CODEX_WORKER_HOST="${POLYNET_CODEX_WORKER_HOST:-127.0.0.1}"
-export POLYNET_CODEX_WORKER_MODEL="${POLYNET_CODEX_WORKER_MODEL:-gpt-5.5}"
 export POLYNET_CODEX_WORKSPACE_HOST="${POLYNET_CODEX_WORKSPACE_HOST:-blaxel}"
 
 if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
@@ -67,8 +66,7 @@ if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
 fi
 
 if [[ "$POLYNET_CODEX_WORKSPACE_HOST" == "daytona" ]]; then
-  DAYTONA_WORKSPACE_ROOT="${POLYNET_DAYTONA_WORKSPACE_ROOT:-/home/daytona}"
-  CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-"$DAYTONA_WORKSPACE_ROOT/.polynet-codex-home"}"
+  CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-/home/daytona/.polynet-codex-home}"
 else
   CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-"${TMPDIR:-/tmp}/polynet-codex-worker-local/codex-home"}"
 fi
@@ -84,12 +82,12 @@ const { pathToFileURL } = await import("node:url");
 const rootDir = process.env.POLYNET_WORKER_ROOT_DIR;
 if (!rootDir) throw new Error("POLYNET_WORKER_ROOT_DIR is required.");
 const moduleUrl = pathToFileURL(
-  join(rootDir, "services/polynet-codex-worker/src/daytonaRuntimePolicy.ts"),
+  join(rootDir, "shared/daytonaCodexRuntimePolicy.ts"),
 ).href;
 const { renderDaytonaCodexCliConfigToml } = await import(moduleUrl);
 process.stdout.write(
   renderDaytonaCodexCliConfigToml({
-    model: process.env.POLYNET_CODEX_WORKER_MODEL || "gpt-5.5",
+    model: process.env.POLYNET_CODEX_WORKER_MODEL || null,
   }),
 );
 NODE

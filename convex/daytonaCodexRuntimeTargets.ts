@@ -1,8 +1,18 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import {
+  DAYTONA_CODEX_DEFAULT_AUTO_ARCHIVE_MINUTES,
+  DAYTONA_CODEX_DEFAULT_AUTO_DELETE_MINUTES,
+  DAYTONA_CODEX_DEFAULT_AUTO_STOP_MINUTES,
+  DAYTONA_CODEX_DEFAULT_PREVIEW_LEASE_MINUTES,
+  DAYTONA_CODEX_WORKER_PORT,
+} from "../shared/daytonaCodexRuntimePolicy";
 
-const WORKER_PORT = 8877;
+const WORKER_PORT = DAYTONA_CODEX_WORKER_PORT;
 const READY_URL_REFRESH_BUFFER_MS = 60_000;
+const DEFAULT_PREVIEW_LEASE_MINUTES =
+  DAYTONA_CODEX_DEFAULT_PREVIEW_LEASE_MINUTES;
+const DEFAULT_EXPIRED_TARGET_SWEEP_LIMIT = 20;
 
 function readEnv(name: string): string {
   try {
@@ -31,6 +41,50 @@ export const getDaytonaCodexRuntimeTargetByRunIdInternal = internalQuery({
   },
 });
 
+export const getDaytonaCodexRuntimeTargetByIdInternal = internalQuery({
+  args: {
+    targetId: v.id("daytonaCodexRuntimeTargets"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.targetId);
+  },
+});
+
+export const listExpiredDaytonaCodexRuntimeTargetsInternal = internalQuery({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.min(
+      100,
+      Math.max(1, Math.floor(args.limit ?? DEFAULT_EXPIRED_TARGET_SWEEP_LIMIT)),
+    );
+    const expiredRetentionTargets = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_workspaceRetentionState_expiresAt", (q: any) =>
+        q
+          .eq("workspaceRetentionState", "human_save_pending")
+          .lte("workspaceRetentionExpiresAt", nowMs),
+      )
+      .take(limit);
+    const remaining = Math.max(0, limit - expiredRetentionTargets.length);
+    const expiredPreviewLeaseTargets =
+      remaining > 0
+        ? await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+            .withIndex("by_previewLeaseState_expiresAt", (q: any) =>
+              q.eq("previewLeaseState", "active").lte("previewLeaseExpiresAt", nowMs),
+            )
+            .take(remaining)
+        : [];
+    return {
+      nowMs,
+      expiredRetentionTargets,
+      expiredPreviewLeaseTargets,
+    };
+  },
+});
+
 export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
   args: {
     ownerId: v.id("users"),
@@ -39,7 +93,13 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
     projectId: v.optional(v.id("cloudProjects")),
     snapshotId: v.optional(v.string()),
     targetRegion: v.optional(v.string()),
-    lifecycleMode: v.union(v.literal("prepared_staging_reuse"), v.literal("per_turn_ephemeral")),
+    lifecycleMode: v.union(
+      v.literal("prepared_staging_reuse"),
+      v.literal("thread_ephemeral"),
+      v.literal("per_turn_ephemeral"),
+    ),
+    providerEphemeral: v.boolean(),
+    workspaceRoot: v.optional(v.string()),
     autoStopMinutes: v.optional(v.number()),
     autoArchiveMinutes: v.optional(v.number()),
     autoDeleteMinutes: v.optional(v.number()),
@@ -47,54 +107,171 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const expectedWorkspaceRoot = String(args.workspaceRoot ?? "").trim() || null;
+    const workspaceRootMatches = (target: any) =>
+      !expectedWorkspaceRoot || String(target.workspaceRoot ?? "").trim() === expectedWorkspaceRoot;
+    const resetWorkspaceLifecyclePatch = {
+      workspaceChangeState: undefined,
+      workspaceRetentionState: undefined,
+      workspaceRetentionExpiresAt: undefined,
+      workspaceMeaningfulFileCount: undefined,
+      workspaceMeaningfulFilePreview: undefined,
+      lastWorkspaceScanAt: undefined,
+      activePreviewPorts: [],
+      previewLeaseState: "none",
+      previewLeaseExpiresAt: undefined,
+      cleanupDecision: undefined,
+      cleanupEligibleAt: undefined,
+    };
+    const retireIncompatibleTarget = async (target: any) => {
+      await ctx.db.patch(target._id, {
+        workerState: "released",
+        leaseRunId: undefined,
+        releasedAt: nowMs,
+        releaseReason: "workspace_root_changed",
+        lastUsedAt: nowMs,
+        updatedAt: nowMs,
+      });
+    };
+    const claimExistingTarget = async (target: any) => {
+      if (
+        String(target.workerState ?? "") === "ready" &&
+        String(target.workerUrl ?? "").trim() &&
+        Number(target.signedPreviewExpiresAt ?? 0) > nowMs + READY_URL_REFRESH_BUFFER_MS
+      ) {
+        await ctx.db.patch(target._id, {
+          threadId: args.threadId,
+          ...(args.projectId ? { projectId: args.projectId } : { projectId: undefined }),
+          runId: args.runId,
+          scope: args.lifecycleMode === "thread_ephemeral" ? "thread" : "run",
+          leaseRunId: args.runId,
+          lifecycleMode: args.lifecycleMode,
+          providerEphemeral: args.providerEphemeral,
+          ...(expectedWorkspaceRoot ? { workspaceRoot: expectedWorkspaceRoot } : {}),
+          lastUsedAt: nowMs,
+          updatedAt: nowMs,
+          releasedAt: undefined,
+          releaseReason: undefined,
+          providerTeardownState: "pending",
+          providerTeardownReason: undefined,
+          providerTeardownAt: undefined,
+          providerTeardownErrorCode: undefined,
+          providerTeardownErrorMessage: undefined,
+          ...resetWorkspaceLifecyclePatch,
+          errorCode: undefined,
+          errorMessage: undefined,
+        });
+        return {
+          ok: true,
+          targetId: String(target._id),
+          ready: true,
+          target: await ctx.db.get(target._id),
+        };
+      }
+      await ctx.db.patch(target._id, {
+        threadId: args.threadId,
+        ...(args.projectId ? { projectId: args.projectId } : { projectId: undefined }),
+        runId: args.runId,
+        scope: args.lifecycleMode === "thread_ephemeral" ? "thread" : "run",
+        workerState: "starting",
+        leaseRunId: args.runId,
+        lifecycleMode: args.lifecycleMode,
+        providerEphemeral: args.providerEphemeral,
+        ...(expectedWorkspaceRoot ? { workspaceRoot: expectedWorkspaceRoot } : {}),
+        lastUsedAt: nowMs,
+        updatedAt: nowMs,
+        releasedAt: undefined,
+        releaseReason: undefined,
+        providerTeardownState: "pending",
+        providerTeardownReason: undefined,
+        providerTeardownAt: undefined,
+        providerTeardownErrorCode: undefined,
+        providerTeardownErrorMessage: undefined,
+        ...resetWorkspaceLifecyclePatch,
+        errorCode: undefined,
+        errorMessage: undefined,
+      });
+      return {
+        ok: true,
+        targetId: String(target._id),
+        ready: false,
+        target: await ctx.db.get(target._id),
+      };
+    };
+
     const existing = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
       .withIndex("by_owner_runId", (q: any) =>
         q.eq("ownerId", args.ownerId).eq("runId", args.runId),
       )
       .unique();
     if (existing) {
-      if (
-        String(existing.workerState ?? "") === "ready" &&
-        String(existing.workerUrl ?? "").trim() &&
-        Number(existing.signedPreviewExpiresAt ?? 0) > nowMs + READY_URL_REFRESH_BUFFER_MS
-      ) {
-        return { ok: true, targetId: String(existing._id), ready: true, target: existing };
-      }
-      await ctx.db.patch(existing._id, {
-        workerState: "starting",
-        leaseRunId: args.runId,
-        lifecycleMode: args.lifecycleMode,
-        lastUsedAt: nowMs,
-        updatedAt: nowMs,
-        errorCode: undefined,
-        errorMessage: undefined,
-        providerTeardownErrorCode: undefined,
-        providerTeardownErrorMessage: undefined,
-      });
-      return {
-        ok: true,
-        targetId: String(existing._id),
-        ready: false,
-        target: await ctx.db.get(existing._id),
-      };
+      if (workspaceRootMatches(existing)) return await claimExistingTarget(existing);
+      await retireIncompatibleTarget(existing);
     }
+
+    if (args.lifecycleMode === "thread_ephemeral") {
+      const threadTargets = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+        .withIndex("by_owner_threadId", (q: any) =>
+          q.eq("ownerId", args.ownerId).eq("threadId", args.threadId),
+        )
+        .collect();
+      const reusable = threadTargets
+        .filter((target: any) => {
+          const sandboxId = String(target.sandboxId ?? "").trim();
+          if (!sandboxId) return false;
+          if (String(target.scope ?? "") !== "thread") return false;
+          if (String(target.lifecycleMode ?? "") !== "thread_ephemeral") return false;
+          if (target.providerEphemeral !== args.providerEphemeral) return false;
+          if (!workspaceRootMatches(target)) return false;
+          if (String(target.workerState ?? "") === "error") return false;
+          if (String(target.sandboxState ?? "") === "deleted") return false;
+          if (String(target.providerTeardownState ?? "") === "deleted") return false;
+          return true;
+        })
+        .sort(
+          (left: any, right: any) =>
+            Number(right.lastUsedAt ?? right.updatedAt ?? 0) -
+            Number(left.lastUsedAt ?? left.updatedAt ?? 0),
+        )[0];
+      if (reusable) {
+        return await claimExistingTarget(reusable);
+      }
+    }
+
     const targetId = await (ctx.db.insert as any)("daytonaCodexRuntimeTargets", {
       ownerId: args.ownerId,
       threadId: args.threadId,
       ...(args.projectId ? { projectId: args.projectId } : {}),
       runId: args.runId,
-      scope: "run",
+      scope: args.lifecycleMode === "thread_ephemeral" ? "thread" : "run",
       provider: "daytona",
       workerState: "creating",
       workerPort: WORKER_PORT,
       workerAuthMode: "shared_env_token",
+      ...(expectedWorkspaceRoot ? { workspaceRoot: expectedWorkspaceRoot } : {}),
       ...(args.snapshotId ? { snapshotId: args.snapshotId } : {}),
       ...(args.targetRegion ? { targetRegion: args.targetRegion } : {}),
       leaseRunId: args.runId,
       lifecycleMode: args.lifecycleMode,
-      autoStopMinutes: args.autoStopMinutes ?? readIntegerEnv("POLYNET_DAYTONA_DIRECT_AUTO_STOP_MINUTES", 5),
-      autoArchiveMinutes: args.autoArchiveMinutes ?? readIntegerEnv("POLYNET_DAYTONA_DIRECT_AUTO_ARCHIVE_MINUTES", 60),
-      autoDeleteMinutes: args.autoDeleteMinutes ?? readIntegerEnv("POLYNET_DAYTONA_DIRECT_AUTO_DELETE_MINUTES", 180),
+      providerEphemeral: args.providerEphemeral,
+      autoStopMinutes:
+        args.autoStopMinutes ??
+        readIntegerEnv(
+          "POLYNET_DAYTONA_DIRECT_AUTO_STOP_MINUTES",
+          DAYTONA_CODEX_DEFAULT_AUTO_STOP_MINUTES,
+        ),
+      autoArchiveMinutes:
+        args.autoArchiveMinutes ??
+        readIntegerEnv(
+          "POLYNET_DAYTONA_DIRECT_AUTO_ARCHIVE_MINUTES",
+          DAYTONA_CODEX_DEFAULT_AUTO_ARCHIVE_MINUTES,
+        ),
+      autoDeleteMinutes:
+        args.autoDeleteMinutes ??
+        readIntegerEnv(
+          "POLYNET_DAYTONA_DIRECT_AUTO_DELETE_MINUTES",
+          DAYTONA_CODEX_DEFAULT_AUTO_DELETE_MINUTES,
+        ),
       providerTeardownState: "pending",
       lastUsedAt: nowMs,
       createdAt: nowMs,
@@ -173,6 +350,8 @@ export const releaseDaytonaCodexRuntimeTargetInternal = internalMutation({
     ownerId: v.id("users"),
     runId: v.string(),
     reason: v.string(),
+    activePreviewPorts: v.optional(v.array(v.number())),
+    previewLeaseExpiresAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -186,14 +365,136 @@ export const releaseDaytonaCodexRuntimeTargetInternal = internalMutation({
     if (String(target.workerState ?? "") === "released") {
       return { ok: true, released: false, reason: "target_already_released" };
     }
+    const activePreviewPorts = Array.isArray(args.activePreviewPorts)
+      ? Array.from(
+          new Set(
+            args.activePreviewPorts
+              .filter((port) => Number.isFinite(port) && port > 0)
+              .map((port) => Math.floor(port)),
+          ),
+        )
+      : [];
+    const previewLeaseExpiresAt =
+      activePreviewPorts.length > 0
+        ? args.previewLeaseExpiresAt ??
+          nowMs + readIntegerEnv("POLYNET_DAYTONA_PREVIEW_LEASE_MINUTES", DEFAULT_PREVIEW_LEASE_MINUTES) * 60_000
+        : undefined;
     await ctx.db.patch(target._id, {
       workerState: "released",
       leaseRunId: undefined,
       releasedAt: nowMs,
       releaseReason: args.reason,
+      activePreviewPorts,
+      previewLeaseState: activePreviewPorts.length > 0 ? "active" : "none",
+      previewLeaseExpiresAt,
       updatedAt: nowMs,
     });
     return { ok: true, released: true, targetId: String(target._id) };
+  },
+});
+
+export const markDaytonaCodexRuntimeTargetWorkspaceLifecycleInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    workspaceChangeState: v.union(
+      v.literal("unknown"),
+      v.literal("clean"),
+      v.literal("dirty"),
+      v.literal("scan_failed"),
+    ),
+    workspaceRetentionState: v.union(
+      v.literal("none"),
+      v.literal("human_save_pending"),
+      v.literal("discarded"),
+      v.literal("saved"),
+      v.literal("expired"),
+    ),
+    workspaceRetentionExpiresAt: v.optional(v.number()),
+    workspaceMeaningfulFileCount: v.optional(v.number()),
+    workspaceMeaningfulFilePreview: v.optional(v.array(v.string())),
+    cleanupDecision: v.union(
+      v.literal("delete_clean_workspace"),
+      v.literal("stop_for_human_save"),
+      v.literal("keep_running_active_preview"),
+      v.literal("skip_prepared_staging_reuse"),
+      v.literal("retain_scan_failed"),
+      v.literal("delete_expired_retention"),
+      v.literal("cleanup_failed"),
+    ),
+    cleanupEligibleAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const target = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_owner_runId", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", args.runId),
+      )
+      .unique();
+    if (!target) return { ok: true, updated: false, reason: "target_missing" };
+    await ctx.db.patch(target._id, {
+      workspaceChangeState: args.workspaceChangeState,
+      workspaceRetentionState: args.workspaceRetentionState,
+      workspaceRetentionExpiresAt: args.workspaceRetentionExpiresAt,
+      workspaceMeaningfulFileCount: args.workspaceMeaningfulFileCount,
+      workspaceMeaningfulFilePreview: args.workspaceMeaningfulFilePreview,
+      lastWorkspaceScanAt: nowMs,
+      cleanupDecision: args.cleanupDecision,
+      cleanupEligibleAt: args.cleanupEligibleAt,
+      updatedAt: nowMs,
+    });
+    return { ok: true, updated: true, targetId: String(target._id) };
+  },
+});
+
+export const markDaytonaCodexRuntimeTargetPreviewLeaseExpiredInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const target = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_owner_runId", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", args.runId),
+      )
+      .unique();
+    if (!target) return { ok: true, updated: false, reason: "target_missing" };
+    if (String(target.previewLeaseState ?? "") !== "active") {
+      return { ok: true, updated: false, reason: "preview_lease_not_active" };
+    }
+    await ctx.db.patch(target._id, {
+      previewLeaseState: "expired",
+      cleanupEligibleAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true, updated: true, targetId: String(target._id) };
+  },
+});
+
+export const markDaytonaCodexRuntimeTargetRetentionExpiredInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const target = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_owner_runId", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", args.runId),
+      )
+      .unique();
+    if (!target) return { ok: true, updated: false, reason: "target_missing" };
+    await ctx.db.patch(target._id, {
+      workspaceRetentionState: "expired",
+      cleanupDecision: "delete_expired_retention",
+      cleanupEligibleAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true, updated: true, targetId: String(target._id) };
   },
 });
 

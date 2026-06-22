@@ -91,9 +91,11 @@ import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTermi
 import { buildPolynetCodexWorkerToolTarget } from "./polynetCodexWorkerTool";
 import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken";
 import {
-  buildPolynetPlatformToolNames,
-  buildPolynetPlatformToolSpecs,
-} from "../shared/polynetPlatformToolSurface";
+  buildCodexHarnessToolPolicyReceipt,
+  buildPolynetHarnessToolPolicyReceipt,
+  resolveCodexHarnessToolPolicy,
+  resolvePolynetHarnessToolPolicy,
+} from "../shared/harnessToolPolicy";
 import { reservePaidToolCredits } from "./paidToolCreditReservation";
 import {
   settleReservedCreditsBestEffort,
@@ -1137,12 +1139,19 @@ export async function handleRuntimeTurnRequest(args: {
         disabled_reason: runtimeEngineResolution.disabledReason,
       },
     });
+    const polynetHarnessToolPolicy = resolvePolynetHarnessToolPolicy({
+      allowedToolNames,
+    });
     await appendRunEvent({
       eventType: "tool_policy_resolved",
       eventKey: `${runId}:tool_policy_resolved:1`,
       payload: {
         run_id: runId,
-        allowed_tool_names: allowedToolNames,
+        ...buildPolynetHarnessToolPolicyReceipt(polynetHarnessToolPolicy),
+        policy_scope: usePolynetCodexWorkerBridge
+          ? "polynet_harness_candidate"
+          : "active_harness",
+        allowed_tool_names: polynetHarnessToolPolicy.fixedRuntimeToolNames,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
       },
@@ -1485,12 +1494,18 @@ export async function handleRuntimeTurnRequest(args: {
               runtimeCommunityLensAuthority?.communityResourceLane ?? null,
             communityLensAuthority: runtimeCommunityLensAuthority,
           };
-          const workerPlatformTools = buildPolynetPlatformToolSpecs(
-            codexPlatformToolProjection,
-          );
-          const codexVisiblePolynetToolNames = buildPolynetPlatformToolNames(
-            codexPlatformToolProjection,
-          );
+          const workerRuntimeToolBridgeRequired =
+            workerBridgeConfig.provider === "daytona_direct";
+          const codexHarnessToolPolicy = resolveCodexHarnessToolPolicy({
+            workspaceHostId: workerRuntimeToolBridgeRequired ? "daytona" : "legacy",
+            polynetPlatformToolProjection: codexPlatformToolProjection,
+            workspaceServeAvailable:
+              workerRuntimeToolBridgeRequired || Boolean(workerWorkspaceSession),
+            computerAdaptersAvailable: workerRuntimeToolBridgeRequired,
+          });
+          const workerPlatformTools = codexHarnessToolPolicy.polynetPlatformTools;
+          const codexVisiblePolynetToolNames =
+            codexHarnessToolPolicy.polynetPlatformToolNames;
           const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope({
             latestUserText,
             threadWorkingState: ownedThread.workingState ?? null,
@@ -1599,21 +1614,25 @@ export async function handleRuntimeTurnRequest(args: {
           const workerTerminalTarget = workerWorkspaceSession
             ? buildPolynetCodexWorkerTerminalTarget()
             : null;
-          const workerRuntimeToolBridgeRequired =
-            workerBridgeConfig.provider === "daytona_direct";
           const workerToolTarget =
             workerPlatformTools.length > 0 || workerRuntimeToolBridgeRequired
               ? buildPolynetCodexWorkerToolTarget()
               : null;
+          await streamAppendRunEvent({
+            eventType: "codex_harness_tool_policy_resolved",
+            eventKey: `${runId}:codex_harness_tool_policy_resolved:1`,
+            payload: {
+              run_id: runId,
+              ...buildCodexHarnessToolPolicyReceipt(codexHarnessToolPolicy),
+            },
+          });
           await streamAppendRunEvent({
             eventType: "polynet_codex_worker_tools_projected",
             eventKey: `${runId}:polynet_codex_worker_tools_projected:1`,
             payload: {
               run_id: runId,
               tool_bridge_configured: Boolean(workerToolTarget),
-              runtime_tool_names: workerRuntimeToolBridgeRequired
-                ? ["computer_open_url", "computer_screenshot"]
-                : [],
+              runtime_tool_names: codexHarnessToolPolicy.runtimeAdapterToolNames,
               platform_tool_count: workerPlatformTools.length,
               platform_tool_names: workerPlatformTools.map((tool) => tool.name),
               platform_tool_policies: workerPlatformTools.map((tool) => ({
@@ -1681,7 +1700,7 @@ export async function handleRuntimeTurnRequest(args: {
                   run_id: runId,
                   provider: "daytona",
                   transport: "daytona_direct",
-                  scope: "run",
+                  scope: "pending",
                 },
               });
               const resolved = (await ctx.runAction(
@@ -1705,6 +1724,8 @@ export async function handleRuntimeTurnRequest(args: {
                 autoArchiveMinutes?: unknown;
                 autoDeleteMinutes?: unknown;
                 workerPort?: unknown;
+                lifecycleMode?: unknown;
+                providerEphemeral?: unknown;
                 timing?: unknown;
               };
               workerResolvedTarget = {
@@ -1732,6 +1753,14 @@ export async function handleRuntimeTurnRequest(args: {
                 resolved.autoDeleteMinutes,
               );
               const resolvedWorkerPort = readPositiveNumber(resolved.workerPort);
+              const resolvedLifecycleMode =
+                String(resolved.lifecycleMode ?? "").trim() || null;
+              const resolvedProviderEphemeral =
+                typeof resolved.providerEphemeral === "boolean"
+                  ? resolved.providerEphemeral
+                  : null;
+              const resolvedScope =
+                resolvedLifecycleMode === "thread_ephemeral" ? "thread" : "run";
               workerMachineId = workerResolvedTarget.sandboxId;
               polynetCodexRuntimeWorkerMachineId = workerResolvedTarget.sandboxId;
               await streamAppendRunEvent({
@@ -1741,9 +1770,11 @@ export async function handleRuntimeTurnRequest(args: {
                   run_id: runId,
                   provider: "daytona",
                   transport: "daytona_direct",
-                  scope: "run",
+                  scope: resolvedScope,
                   target_id: workerResolvedTarget.targetId,
                   sandbox_id: workerResolvedTarget.sandboxId,
+                  lifecycle_mode: resolvedLifecycleMode,
+                  provider_ephemeral: resolvedProviderEphemeral,
                   snapshot_id: resolvedSnapshotId,
                   target_region: resolvedTargetRegion,
                   auto_stop_minutes: resolvedAutoStopMinutes,
@@ -1849,6 +1880,7 @@ export async function handleRuntimeTurnRequest(args: {
             })();
           }, 3_000);
 
+          const workerActivePreviewPorts = new Set<number>();
           let workerResult;
           try {
             workerResult = await streamPolynetCodexWorkerTurn({
@@ -1944,6 +1976,12 @@ export async function handleRuntimeTurnRequest(args: {
                     !Array.isArray(event.data.payload)
                       ? (event.data.payload as Record<string, unknown>)
                       : {};
+                  if (workerEventType === "workspace_preview_ready") {
+                    const previewPort = Number(workerPayload.port);
+                    if (Number.isFinite(previewPort) && previewPort > 0) {
+                      workerActivePreviewPorts.add(Math.floor(previewPort));
+                    }
+                  }
                   await streamAppendRunEvent({
                     eventType: workerEventType,
                     eventKey: `${runId}:polynet_codex_worker:${workerSeq}:${workerEventType}`,
@@ -2014,6 +2052,7 @@ export async function handleRuntimeTurnRequest(args: {
                   ownerId: actor.dbUserId,
                   runId,
                   reason: teardownReason,
+                  activePreviewPorts: Array.from(workerActivePreviewPorts),
                 },
               );
             } catch {
