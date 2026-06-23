@@ -135,9 +135,19 @@ async function proveReleaseDidNotPortRuntimeSubstrate() {
     "Codex worker bridge boundary must stay substrate-neutral in this slice",
   );
   assert.equal(
-    bridge.includes("fetch("),
+    bridge.includes("polynetCodexWorkerAdmission") ||
+      bridge.includes("polynetCodexWorkerRunToken") ||
+      bridge.includes("polynetCodexWorkerTerminal") ||
+      bridge.includes("polynetCodexWorkerTool"),
     false,
-    "Codex worker bridge boundary must not add network transport before the transport slice",
+    "Codex worker bridge boundary must not import substrate lifecycle/tool stacks",
+  );
+  assert.equal(
+    bridge.includes("POLYNET_CODEX_WORKER_RUNTIME_ENABLED") &&
+      bridge.includes("POLYNET_CODEX_WORKER_URL") &&
+      bridge.includes("new AbortController()"),
+    true,
+    "Codex worker transport must remain feature-gated and bounded",
   );
 }
 

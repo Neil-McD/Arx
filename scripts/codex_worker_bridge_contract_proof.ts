@@ -78,11 +78,72 @@ assertContains(
 );
 assertContains(
   bridge,
-  'code: "codex_worker_transport_not_implemented"',
-  "Codex worker bridge fails closed when config exists before transport is implemented",
+  'code: "codex_worker_transport_failed"',
+  "Codex worker bridge has a structured transport failure",
+);
+assertContains(
+  bridge,
+  'code: "codex_worker_invalid_response"',
+  "Codex worker bridge rejects invalid worker responses",
+);
+assertContains(
+  bridge,
+  "POLYNET_CODEX_WORKER_URL",
+  "Codex worker bridge requires a configured worker URL",
+);
+assertContains(
+  bridge,
+  "must be an https URL",
+  "Codex worker bridge requires HTTPS worker URLs",
+);
+assertContains(
+  bridge,
+  "POLYNET_CODEX_WORKER_TIMEOUT_MS",
+  "Codex worker bridge has a configurable bounded timeout",
+);
+assertContains(
+  bridge,
+  "new AbortController()",
+  "Codex worker bridge uses AbortController for bounded transport",
+);
+assertContains(
+  bridge,
+  "await fetchFn(config.url",
+  "Codex worker bridge performs a feature-gated worker POST",
+);
+assertContains(
+  bridge,
+  'eventType: "codex_worker_transport_started"',
+  "Codex worker bridge emits transport-started evidence",
+);
+assertContains(
+  bridge,
+  'eventType: result.ok',
+  "Codex worker bridge emits finished or failed transport evidence",
+);
+assertContains(
+  bridge,
+  '"x-polynet-worker-contract"',
+  "Codex worker bridge sends worker contract header",
+);
+assertContains(
+  bridge,
+  "developer_instructions",
+  "Codex worker transport payload carries developer instructions",
+);
+assertContains(
+  bridge,
+  "max_tokens",
+  "Codex worker transport payload carries the bounded output token budget",
+);
+assertContains(
+  bridge,
+  "polynet_platform_tool_names",
+  "Codex worker transport payload carries filtered PolyNet platform tools",
 );
 assertNotContains(bridge, "Daytona", "Daytona substrate coupling in bridge slice");
 assertNotContains(bridge, "daytona", "Daytona env coupling in bridge slice");
+assertNotContains(bridge, "OPENAI_API_KEY", "OpenAI API key coupling in worker bridge");
 assertNotContains(
   bridge,
   "polynetCodexWorkerAdmission",
@@ -103,7 +164,6 @@ assertNotContains(
   "polynetCodexWorkerTool",
   "tool bridge import in bridge slice",
 );
-assertNotContains(bridge, "fetch(", "network transport before transport slice");
 
 assertContains(
   handler,
@@ -129,6 +189,11 @@ assertContains(
   handler,
   "startPolynetCodexWorkerRun({",
   "runtime handler calls the Codex worker bridge",
+);
+assertContains(
+  handler,
+  "appendRunEvent,",
+  "runtime handler passes run-event persistence into the Codex worker bridge",
 );
 assertContains(
   handler,

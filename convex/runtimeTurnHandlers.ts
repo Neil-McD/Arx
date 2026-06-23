@@ -1007,6 +1007,7 @@ export async function handleRuntimeTurnRequest(args: {
         requestId,
         runtimeEngine,
         modelId: requestedModelId,
+        maxTokens,
         lane,
         inferenceSource,
         allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames,
@@ -1038,6 +1039,9 @@ export async function handleRuntimeTurnRequest(args: {
           conversationMessages,
           latestUserText,
         },
+        appendRunEvent: async (event): Promise<void> => {
+          await appendRunEvent(event);
+        },
       });
       await appendRunEvent({
         eventType: "codex_runtime_route_selected",
@@ -1064,6 +1068,7 @@ export async function handleRuntimeTurnRequest(args: {
             worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
             disabled_reason: codexBridgeResult.disabledReason,
             error_code: codexBridgeResult.code,
+            retryable: codexBridgeResult.retryable,
             prompt_projection_receipt:
               codexBridgeResult.promptProjectionReceipt,
           },
@@ -1085,6 +1090,7 @@ export async function handleRuntimeTurnRequest(args: {
           contract_name: codexBridgeResult.contractName,
           contract_version: codexBridgeResult.contractVersion,
           worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
+          retryable: codexBridgeResult.retryable,
         });
       }
       content = codexBridgeResult.assistantText;
