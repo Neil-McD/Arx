@@ -390,10 +390,23 @@ export async function runCodexStdioAppServerRequest(params: {
       closedError = error;
     },
     onNotification: (message) => {
-      if (message.method === "agent-message/delta") {
+      if (
+        message.method === "agent-message/delta" ||
+        message.method === "item/agentMessage/delta"
+      ) {
         const body = asRecord(message.params);
         if (readString(body?.turnId) === activeTurnId && typeof body?.delta === "string") {
           assistantText += body.delta;
+        }
+        return;
+      }
+      if (message.method === "item/completed") {
+        const body = asRecord(message.params);
+        if (readString(body?.turnId) !== activeTurnId) return;
+        const item = asRecord(body?.item);
+        if (item?.type !== "agentMessage") return;
+        if (typeof item.text === "string" && item.text.trim()) {
+          assistantText = item.text.trim();
         }
         return;
       }
@@ -425,7 +438,6 @@ export async function runCodexStdioAppServerRequest(params: {
         approvalPolicy: "on-request",
         sandbox: "read-only",
         ephemeral: true,
-        config: { web_search: false },
         developerInstructions: params.payload.developer_instructions,
       },
       params.config.timeoutMs,

@@ -94,7 +94,7 @@ class FakeCodexStdioClient {
           this,
         );
         this.options.onNotification({
-          method: "agent-message/delta",
+          method: "item/agentMessage/delta",
           params: {
             threadId: "codex_thread_fake",
             turnId: "codex_turn_fake",
@@ -103,12 +103,26 @@ class FakeCodexStdioClient {
           },
         });
         this.options.onNotification({
-          method: "agent-message/delta",
+          method: "item/agentMessage/delta",
           params: {
             threadId: "codex_thread_fake",
             turnId: "codex_turn_fake",
             itemId: "agent_message_fake",
             delta: "from Codex.",
+          },
+        });
+        this.options.onNotification({
+          method: "item/completed",
+          params: {
+            threadId: "codex_thread_fake",
+            turnId: "codex_turn_fake",
+            item: {
+              type: "agentMessage",
+              id: "agent_message_fake",
+              text: "Hello from Codex.",
+              phase: "final_answer",
+              memoryCitation: null,
+            },
           },
         });
         this.options.onNotification({
@@ -164,7 +178,8 @@ function proveSourceBoundary(): void {
   assert.ok(clientSource.includes('"app-server", "--listen", "stdio://"'));
   assert.ok(clientSource.includes('"thread/start"'));
   assert.ok(clientSource.includes('"turn/start"'));
-  assert.ok(clientSource.includes('"agent-message/delta"'));
+  assert.ok(clientSource.includes('"item/agentMessage/delta"'));
+  assert.ok(clientSource.includes('"item/completed"'));
   assert.ok(clientSource.includes('"turn/completed"'));
   assert.ok(clientSource.includes("approvalPolicy: \"on-request\""));
   assert.ok(clientSource.includes("sandbox: \"read-only\""));
@@ -205,7 +220,6 @@ async function proveRunContractWithFakeClient(): Promise<void> {
   assert.equal(threadStart.approvalPolicy, "on-request");
   assert.equal(threadStart.sandbox, "read-only");
   assert.equal(threadStart.ephemeral, true);
-  assert.equal(asRecord(threadStart.config).web_search, false);
   assert.equal(
     threadStart.developerInstructions,
     "Use the PolyNet Codex runtime authority.",
