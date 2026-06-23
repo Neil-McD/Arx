@@ -27,6 +27,24 @@ function readIntegerEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function normalizeActivePreviewPorts(rawPorts: unknown): number[] {
+  if (!Array.isArray(rawPorts)) return [];
+  const ports = new Set<number>();
+  for (const rawPort of rawPorts) {
+    const port = Number(rawPort);
+    if (Number.isFinite(port) && port > 0) ports.add(Math.floor(port));
+  }
+  return Array.from(ports);
+}
+
+function defaultPreviewLeaseExpiresAt(nowMs: number): number {
+  return (
+    nowMs +
+    readIntegerEnv("POLYNET_DAYTONA_PREVIEW_LEASE_MINUTES", DEFAULT_PREVIEW_LEASE_MINUTES) *
+      60_000
+  );
+}
+
 export const getDaytonaCodexRuntimeTargetByRunIdInternal = internalQuery({
   args: {
     ownerId: v.id("users"),
@@ -108,21 +126,11 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const expectedWorkspaceRoot = String(args.workspaceRoot ?? "").trim() || null;
+    const expectedSnapshotId = String(args.snapshotId ?? "").trim() || null;
     const workspaceRootMatches = (target: any) =>
       !expectedWorkspaceRoot || String(target.workspaceRoot ?? "").trim() === expectedWorkspaceRoot;
-    const resetWorkspaceLifecyclePatch = {
-      workspaceChangeState: undefined,
-      workspaceRetentionState: undefined,
-      workspaceRetentionExpiresAt: undefined,
-      workspaceMeaningfulFileCount: undefined,
-      workspaceMeaningfulFilePreview: undefined,
-      lastWorkspaceScanAt: undefined,
-      activePreviewPorts: [],
-      previewLeaseState: "none",
-      previewLeaseExpiresAt: undefined,
-      cleanupDecision: undefined,
-      cleanupEligibleAt: undefined,
-    };
+    const snapshotMatches = (target: any) =>
+      (String(target.snapshotId ?? "").trim() || null) === expectedSnapshotId;
     const retireIncompatibleTarget = async (target: any) => {
       await ctx.db.patch(target._id, {
         workerState: "released",
@@ -157,7 +165,6 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
           providerTeardownAt: undefined,
           providerTeardownErrorCode: undefined,
           providerTeardownErrorMessage: undefined,
-          ...resetWorkspaceLifecyclePatch,
           errorCode: undefined,
           errorMessage: undefined,
         });
@@ -187,7 +194,6 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
         providerTeardownAt: undefined,
         providerTeardownErrorCode: undefined,
         providerTeardownErrorMessage: undefined,
-        ...resetWorkspaceLifecyclePatch,
         errorCode: undefined,
         errorMessage: undefined,
       });
@@ -223,6 +229,7 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
           if (String(target.lifecycleMode ?? "") !== "thread_ephemeral") return false;
           if (target.providerEphemeral !== args.providerEphemeral) return false;
           if (!workspaceRootMatches(target)) return false;
+          if (!snapshotMatches(target)) return false;
           if (String(target.workerState ?? "") === "error") return false;
           if (String(target.sandboxState ?? "") === "deleted") return false;
           if (String(target.providerTeardownState ?? "") === "deleted") return false;
@@ -362,23 +369,45 @@ export const releaseDaytonaCodexRuntimeTargetInternal = internalMutation({
       )
       .unique();
     if (!target) return { ok: true, released: false, reason: "target_missing" };
-    if (String(target.workerState ?? "") === "released") {
-      return { ok: true, released: false, reason: "target_already_released" };
-    }
-    const activePreviewPorts = Array.isArray(args.activePreviewPorts)
-      ? Array.from(
-          new Set(
-            args.activePreviewPorts
-              .filter((port) => Number.isFinite(port) && port > 0)
-              .map((port) => Math.floor(port)),
-          ),
-        )
-      : [];
+    const incomingPreviewPorts = normalizeActivePreviewPorts(args.activePreviewPorts);
+    const existingPreviewPorts =
+      String(target.previewLeaseState ?? "") === "active"
+        ? normalizeActivePreviewPorts(target.activePreviewPorts)
+        : [];
+    const activePreviewPorts = Array.from(
+      new Set([...existingPreviewPorts, ...incomingPreviewPorts]),
+    );
+    const requestedPreviewLeaseExpiresAt = Number(args.previewLeaseExpiresAt ?? 0);
+    const existingPreviewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
     const previewLeaseExpiresAt =
       activePreviewPorts.length > 0
-        ? args.previewLeaseExpiresAt ??
-          nowMs + readIntegerEnv("POLYNET_DAYTONA_PREVIEW_LEASE_MINUTES", DEFAULT_PREVIEW_LEASE_MINUTES) * 60_000
+        ? Math.max(
+            defaultPreviewLeaseExpiresAt(nowMs),
+            Number.isFinite(requestedPreviewLeaseExpiresAt)
+              ? requestedPreviewLeaseExpiresAt
+              : 0,
+            Number.isFinite(existingPreviewLeaseExpiresAt)
+              ? existingPreviewLeaseExpiresAt
+              : 0,
+          )
         : undefined;
+    if (String(target.workerState ?? "") === "released") {
+      if (incomingPreviewPorts.length === 0) {
+        return { ok: true, released: false, reason: "target_already_released" };
+      }
+      await ctx.db.patch(target._id, {
+        activePreviewPorts,
+        previewLeaseState: "active",
+        previewLeaseExpiresAt,
+        updatedAt: nowMs,
+      });
+      return {
+        ok: true,
+        released: false,
+        reason: "target_already_released_preview_merged",
+        targetId: String(target._id),
+      };
+    }
     await ctx.db.patch(target._id, {
       workerState: "released",
       leaseRunId: undefined,

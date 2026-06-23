@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGING_ENV_FILE="${POLYNET_STAGING_ENV_FILE:-"$ROOT_DIR/.env.staging.local"}"
-BLAXEL_ENV_FILE="${BLAXEL_ENV_FILE:-"$ROOT_DIR/.env.blaxel.local"}"
 
 load_env_if_present() {
   local file="$1"
@@ -39,7 +38,6 @@ for var in "${PRESET_VARS[@]}"; do
 done
 
 load_env_if_present "$STAGING_ENV_FILE"
-load_env_if_present "$BLAXEL_ENV_FILE"
 
 for var in "${PRESET_VARS[@]}"; do
   snapshot_var="PRESET_SNAPSHOT_${var}"
@@ -48,13 +46,16 @@ for var in "${PRESET_VARS[@]}"; do
   fi
 done
 
-export POLYNET_WORKSPACE_COMPUTER_PROVIDER="${POLYNET_WORKSPACE_COMPUTER_PROVIDER:-blaxel}"
-export POLYNET_ENABLE_BLAXEL_WORKSPACE_PROVIDER="${POLYNET_ENABLE_BLAXEL_WORKSPACE_PROVIDER:-true}"
 export POLYNET_DEPLOYMENT_KIND="${POLYNET_DEPLOYMENT_KIND:-staging}"
 export CONVEX_DEPLOYMENT="${CONVEX_DEPLOYMENT:-dev:quick-porcupine-949}"
 export POLYNET_CODEX_WORKER_CODEX_BIN="${POLYNET_CODEX_WORKER_CODEX_BIN:-codex}"
 export POLYNET_CODEX_WORKER_HOST="${POLYNET_CODEX_WORKER_HOST:-127.0.0.1}"
-export POLYNET_CODEX_WORKSPACE_HOST="${POLYNET_CODEX_WORKSPACE_HOST:-blaxel}"
+export POLYNET_CODEX_WORKSPACE_HOST="${POLYNET_CODEX_WORKSPACE_HOST:-daytona}"
+
+if [[ "$POLYNET_CODEX_WORKSPACE_HOST" != "daytona" ]]; then
+  echo "FAIL: POLYNET_CODEX_WORKSPACE_HOST must be daytona for the Codex worker" >&2
+  exit 1
+fi
 
 if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
   if [[ "$POLYNET_CODEX_WORKER_HOST" == "127.0.0.1" || "$POLYNET_CODEX_WORKER_HOST" == "localhost" ]]; then
@@ -65,17 +66,17 @@ if [[ -z "${POLYNET_CODEX_WORKER_AUTH_TOKEN:-}" ]]; then
   fi
 fi
 
-if [[ "$POLYNET_CODEX_WORKSPACE_HOST" == "daytona" ]]; then
-  CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-/home/daytona/.polynet-codex-home}"
+if [[ -d "/home/daytona" ]]; then
+  DEFAULT_CODEX_HOME_DIR="/home/daytona/.polynet-codex-home"
 else
-  CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-"${TMPDIR:-/tmp}/polynet-codex-worker-local/codex-home"}"
+  DEFAULT_CODEX_HOME_DIR="${TMPDIR:-/tmp}/polynet-codex-worker-local/codex-home"
 fi
+CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-$DEFAULT_CODEX_HOME_DIR}"
 mkdir -p "$CODEX_HOME_DIR"
-if [[ "$POLYNET_CODEX_WORKSPACE_HOST" == "daytona" ]]; then
-  POLYNET_WORKER_ROOT_DIR="$ROOT_DIR" node \
-    --experimental-strip-types \
-    --experimental-specifier-resolution=node \
-    --input-type=module <<'NODE' > "$CODEX_HOME_DIR/config.toml"
+POLYNET_WORKER_ROOT_DIR="$ROOT_DIR" node \
+  --experimental-strip-types \
+  --experimental-specifier-resolution=node \
+  --input-type=module <<'NODE' > "$CODEX_HOME_DIR/config.toml"
 const { join } = await import("node:path");
 const { pathToFileURL } = await import("node:url");
 
@@ -91,8 +92,7 @@ process.stdout.write(
   }),
 );
 NODE
-  chmod 600 "$CODEX_HOME_DIR/config.toml" || true
-fi
+chmod 600 "$CODEX_HOME_DIR/config.toml" || true
 if [[ -z "${CODEX_ACCESS_TOKEN:-}" && -f "$HOME/.codex/auth.json" && ! -f "$CODEX_HOME_DIR/auth.json" ]]; then
   cp "$HOME/.codex/auth.json" "$CODEX_HOME_DIR/auth.json"
   chmod 600 "$CODEX_HOME_DIR/auth.json" || true
@@ -100,10 +100,6 @@ fi
 export CODEX_HOME="$CODEX_HOME_DIR"
 
 cd "$ROOT_DIR"
-
-if [[ "$POLYNET_CODEX_WORKSPACE_HOST" != "daytona" ]]; then
-  bash "$ROOT_DIR/scripts/daytona_codex_runtime_staging_guard.sh"
-fi
 
 exec node \
   --experimental-strip-types \

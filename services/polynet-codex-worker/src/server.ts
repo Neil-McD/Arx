@@ -12,27 +12,16 @@ import {
   DAYTONA_RUNTIME_POLICY,
 } from "../../../shared/daytonaCodexRuntimePolicy.ts";
 import {
-  buildWorkspaceBashDynamicToolSpec,
-  buildWorkspaceServeDynamicToolSpec,
-  destroyBlaxelSandboxBestEffort,
-  ensureBlaxelSandbox,
-  normalizeToolCommand,
-  previewText,
-  readBlaxelEnvStatus,
-  runBlaxelBash,
-  safeResourceName,
-  type BlaxelToolCallSummary,
-} from "./blaxelTool.ts";
-import {
   destroyDaytonaLocalWorkspaceBestEffort,
   ensureDaytonaLocalWorkspace,
   getDaytonaPreviewUrlPattern,
   getDaytonaWorkspaceRoot,
   readDaytonaLocalEnvStatus,
-  runDaytonaLocalBash,
   startDaytonaLocalServer,
 } from "./daytonaLocalWorkspaceTool.ts";
 import { TimingCollector, elapsedMs, nowMs } from "./timing.ts";
+import { neutralizeWorkspaceText, previewText, safeResourceName } from "./workerText.ts";
+import { buildWorkspaceServeDynamicToolSpec } from "./workerToolSpecs.ts";
 import {
   formatWorkspacePreviewPortRange,
   normalizeWorkspacePreviewPort,
@@ -42,13 +31,13 @@ import {
   CODEX_COMPUTER_SCREENSHOT_TOOL_NAME,
   CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES,
   CODEX_RUNTIME_ADAPTER_TOOL_NAMES,
-  CODEX_WORKSPACE_BASH_TOOL_NAME,
   CODEX_WORKSPACE_SERVE_TOOL_NAME,
 } from "../../../shared/harnessToolPolicy.ts";
 
 type JsonRecord = Record<string, unknown>;
 
-type WorkerWorkspaceHostId = "blaxel" | "daytona";
+const WORKER_WORKSPACE_HOST_ID = "daytona" as const;
+type WorkerWorkspaceHostId = typeof WORKER_WORKSPACE_HOST_ID;
 
 type RuntimeEvent = {
   id: string;
@@ -67,7 +56,6 @@ type ActiveTurn = {
   runId: string;
   codexThreadId: string | null;
   cancelRequested: boolean;
-  serve: WorkerIngestConfig | null;
   platformTools: WorkerPlatformToolSpec[];
   platformToolBridge: {
     url: string;
@@ -85,17 +73,12 @@ type ActiveTurn = {
   sandboxName: string;
   workspaceHostId: WorkerWorkspaceHostId;
   workspaceRoot: string | null;
-  localServeAvailable: boolean;
-  fallbackCommand: string;
-  commandTimeoutSeconds: number;
   timing: TimingCollector;
-  toolCalls: BlaxelToolCallSummary[];
   assistantText: string;
   turnId: string | null;
   firstCodexEventAtMs: number | null;
   firstAssistantDeltaAtMs: number | null;
   lastAgentMessageItemId: string | null;
-  firstWorkspaceToolRequestAtMs: number | null;
   completedAtMs: number | null;
   eventSeq: number;
   eventLog: RuntimeEvent[];
@@ -113,9 +96,7 @@ type WorkerIngestConfig = {
   url: string;
   token: string;
   runToken: string | null;
-  terminalRunToken: string | null;
   toolRunToken: string | null;
-  terminalUrl: string | null;
   toolUrl: string | null;
   context: JsonRecord;
 };
@@ -173,13 +154,8 @@ function readDynamicToolName(tool: Record<string, unknown>): string {
 
 function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildResult {
   const dynamicTools: Record<string, unknown>[] = [];
-  if (activeTurn.workspaceHostId !== "daytona") {
-    dynamicTools.push(buildWorkspaceBashDynamicToolSpec());
-  }
-  if (activeTurn.serve || activeTurn.localServeAvailable) {
-    dynamicTools.push(buildWorkspaceServeDynamicToolSpec());
-  }
-  if (activeTurn.runtimeToolBridge && activeTurn.workspaceHostId.startsWith("daytona")) {
+  dynamicTools.push(buildWorkspaceServeDynamicToolSpec());
+  if (activeTurn.runtimeToolBridge) {
     dynamicTools.push(
       buildComputerOpenUrlDynamicToolSpec(),
       buildComputerScreenshotDynamicToolSpec(),
@@ -201,15 +177,12 @@ function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildR
 
   const toolNames = dynamicTools.map(readDynamicToolName).filter(Boolean);
   const forbiddenToolNameSet = new Set<string>(CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES);
-  const forbiddenToolNamesPresent =
-    activeTurn.workspaceHostId === "daytona"
-      ? toolNames
-          .map((name) => name.replace(/^polynet\./, ""))
-          .filter(
-            (name, index, list) =>
-              forbiddenToolNameSet.has(name) && list.indexOf(name) === index,
-          )
-      : [];
+  const forbiddenToolNamesPresent = toolNames
+    .map((name) => name.replace(/^polynet\./, ""))
+    .filter(
+      (name, index, list) =>
+        forbiddenToolNameSet.has(name) && list.indexOf(name) === index,
+    );
   const polynetPlatformToolNames = dynamicTools
     .filter((tool) => String(tool.namespace ?? "").trim() === "polynet")
     .map((tool) => String(tool.name ?? "").trim())
@@ -218,16 +191,15 @@ function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildR
   const runtimeAdapterToolNames = toolNames.filter((name) =>
     runtimeAdapterToolNameSet.has(name),
   );
-  const duplicateShellTool = toolNames.includes(CODEX_WORKSPACE_BASH_TOOL_NAME);
+  const duplicateShellTool = toolNames.includes("workspace_bash");
 
   return {
     dynamicTools,
     receipt: {
       workspace_host_id: activeTurn.workspaceHostId,
-      workspace_access_mode:
-        activeTurn.workspaceHostId === "daytona" ? "native_codex" : "dynamic_workspace_bash",
+      workspace_access_mode: "native_codex",
       duplicate_shell_tool: duplicateShellTool,
-      shell_tool: duplicateShellTool ? CODEX_WORKSPACE_BASH_TOOL_NAME : null,
+      shell_tool: null,
       tool_names: toolNames,
       runtime_adapter_tool_names: runtimeAdapterToolNames,
       polynet_platform_tool_names: polynetPlatformToolNames,
@@ -272,8 +244,6 @@ type RunTurnParams = {
   model: string;
   sandboxName: string;
   sandboxProvided: boolean;
-  command: string;
-  commandTimeoutSeconds: number;
   destroyAfterRun: boolean;
   probeMode: boolean;
   platformToolProbe: string | null;
@@ -287,9 +257,8 @@ type WorkspaceProbeParams = {
   runId: string;
   sandboxName: string;
   sandboxProvided: boolean;
-  command: string;
-  commandTimeoutSeconds: number;
   destroyAfterRun: boolean;
+  probeDelayMs: number;
 };
 
 type WorkerRuntimeOptions = {
@@ -297,7 +266,6 @@ type WorkerRuntimeOptions = {
   codexBin: string;
   model: string;
   authToken: string;
-  workspaceHostId: WorkerWorkspaceHostId;
 };
 
 const CODEX_APPROVAL_POLICY = DAYTONA_RUNTIME_POLICY.nativeCodex.approvalPolicy;
@@ -322,7 +290,6 @@ type WorkerRuntimeHealth = {
     platform_family: string | null;
     platform_os: string | null;
   };
-  blaxel: ReturnType<typeof readBlaxelEnvStatus>;
   daytona: ReturnType<typeof readDaytonaLocalEnvStatus>;
   workspace_host: {
     id: WorkerWorkspaceHostId;
@@ -341,9 +308,9 @@ type WorkerRuntimeHealth = {
       };
     };
     workspace_tool_access: {
-      mode: "native_codex" | "dynamic_workspace_bash";
-      shell_tool: typeof CODEX_WORKSPACE_BASH_TOOL_NAME | null;
-      access: "native" | "full";
+      mode: "native_codex";
+      shell_tool: null;
+      access: "native";
       workspace_root: string | null;
     };
   };
@@ -383,12 +350,6 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
   if (["1", "true", "yes", "on"].includes(value)) return true;
   if (["0", "false", "no", "off"].includes(value)) return false;
   return fallback;
-}
-
-function readWorkspaceHostId(): WorkerWorkspaceHostId {
-  const raw = readEnv("POLYNET_CODEX_WORKSPACE_HOST").toLowerCase();
-  if (raw === "daytona") return "daytona";
-  return "blaxel";
 }
 
 function readIntegerEnv(name: string, fallback: number): number {
@@ -582,26 +543,15 @@ export class PolynetCodexWorkerRuntime {
     return Boolean(this.options.authToken) && token === this.options.authToken;
   }
 
-  getWorkspaceHostId(): WorkerWorkspaceHostId {
-    return this.options.workspaceHostId;
-  }
-
   isBusy(): boolean {
     return this.activeTurn !== null || this.activeWorkspaceProbeRunId !== null;
   }
 
   health(): WorkerRuntimeHealth {
     const init = this.client?.initResult ?? null;
-    const blaxel = readBlaxelEnvStatus();
     const daytona = readDaytonaLocalEnvStatus();
-    const workspaceConfigured =
-      this.options.workspaceHostId === "daytona" ? daytona.configured : blaxel.configured;
-    const workspaceRoot =
-      this.options.workspaceHostId === "daytona"
-        ? daytona.workspaceRoot
-        : blaxel.configured
-          ? "/workspace"
-          : null;
+    const workspaceConfigured = daytona.configured;
+    const workspaceRoot = daytona.workspaceRoot;
     const initialized = this.client?.isInitialized === true;
     const initializing =
       this.initializePromise !== null && !initialized && this.initializeError === null;
@@ -636,10 +586,9 @@ export class PolynetCodexWorkerRuntime {
         platform_family: init?.platformFamily ?? null,
         platform_os: init?.platformOs ?? null,
       },
-      blaxel,
       daytona,
       workspace_host: {
-        id: this.options.workspaceHostId,
+        id: WORKER_WORKSPACE_HOST_ID,
         configured: workspaceConfigured,
         workspace_root: workspaceRoot,
       },
@@ -657,15 +606,9 @@ export class PolynetCodexWorkerRuntime {
           },
         },
         workspace_tool_access: {
-          mode:
-            this.options.workspaceHostId === "daytona"
-              ? "native_codex"
-              : "dynamic_workspace_bash",
-          shell_tool:
-            this.options.workspaceHostId === "daytona"
-              ? null
-              : CODEX_WORKSPACE_BASH_TOOL_NAME,
-          access: this.options.workspaceHostId === "daytona" ? "native" : "full",
+          mode: "native_codex",
+          shell_tool: null,
+          access: "native",
           workspace_root: workspaceRoot,
         },
       },
@@ -675,18 +618,10 @@ export class PolynetCodexWorkerRuntime {
   private async ensureWorkspace(params: {
     sandboxName: string;
     sandboxProvided: boolean;
-    labels?: Record<string, string>;
   }): Promise<{ providerSandboxId: string | null; workspaceRoot: string | null }> {
-    if (this.options.workspaceHostId === "daytona") {
-      return await ensureDaytonaLocalWorkspace({
-        sandboxName: params.sandboxName,
-        requireExisting: params.sandboxProvided,
-      });
-    }
-    return await ensureBlaxelSandbox({
+    return await ensureDaytonaLocalWorkspace({
       sandboxName: params.sandboxName,
       requireExisting: params.sandboxProvided,
-      labels: params.labels,
     });
   }
 
@@ -694,23 +629,8 @@ export class PolynetCodexWorkerRuntime {
     ok: boolean;
     failureCode: string | null;
   }> {
-    if (this.options.workspaceHostId === "daytona") {
-      return await destroyDaytonaLocalWorkspaceBestEffort();
-    }
-    return await destroyBlaxelSandboxBestEffort(sandboxName);
-  }
-
-  private async runWorkspaceBash(params: {
-    sandboxName: string;
-    turnId: string | null;
-    callId: string | null;
-    command: string;
-    timeoutSeconds: number;
-  }) {
-    if (this.options.workspaceHostId === "daytona") {
-      return await runDaytonaLocalBash(params);
-    }
-    return await runBlaxelBash(params);
+    void sandboxName;
+    return await destroyDaytonaLocalWorkspaceBestEffort();
   }
 
   private buildCodexDeveloperInstructions(params: {
@@ -719,41 +639,14 @@ export class PolynetCodexWorkerRuntime {
     workspaceServeAvailable: boolean;
     platformToolsAvailable: boolean;
   }): string {
-    if (this.options.workspaceHostId === "daytona") {
-      const rendered = buildDaytonaCodexConfigToml({
-        polynetDeveloperInstructions: params.polynetDeveloperInstructions,
-        workspaceRoot: params.workspaceRoot ?? getDaytonaWorkspaceRoot(),
-        previewUrlPattern: getDaytonaPreviewUrlPattern(),
-        workspaceServeAvailable: params.workspaceServeAvailable,
-        platformToolsAvailable: params.platformToolsAvailable,
-      });
-      return rendered.developerInstructions;
-    }
-    return [
-      params.polynetDeveloperInstructions,
-      [
-        "You are running inside the PolyNet Codex worker service.",
-        "These service instructions only describe execution mechanics; they do not replace PolyNet developer instructions, identity, tone, community context, project context, or user intent.",
-        "Your workspace is a full-access remote Linux environment rooted at /workspace.",
-        "You may create and edit files inside that workspace when the user asks.",
-        "Use the dynamic tool named workspace_bash for shell commands; it can read, write, install, and run anything in that workspace.",
-        ...(params.workspaceServeAvailable
-          ? [
-              "To run a server or app the user can see, call workspace_serve with the start command and port. PolyNet attaches the app to the user's preview panel. Never start servers with workspace_bash. Never print raw provider preview URLs.",
-            ]
-          : []),
-        ...(params.platformToolsAvailable
-          ? [
-              "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform.",
-            ]
-          : []),
-        "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
-        "The local environment is not your workspace: never use local shell commands, local file edits, or local paths.",
-        "Report tool output clearly and only with the detail the user needs.",
-      ].join(" "),
-    ]
-      .filter((line) => String(line ?? "").trim().length > 0)
-      .join("\n\n");
+    const rendered = buildDaytonaCodexConfigToml({
+      polynetDeveloperInstructions: params.polynetDeveloperInstructions,
+      workspaceRoot: params.workspaceRoot ?? getDaytonaWorkspaceRoot(),
+      previewUrlPattern: getDaytonaPreviewUrlPattern(),
+      workspaceServeAvailable: params.workspaceServeAvailable,
+      platformToolsAvailable: params.platformToolsAvailable,
+    });
+    return rendered.developerInstructions;
   }
 
   async runWorkspaceProbe(params: WorkspaceProbeParams): Promise<JsonRecord> {
@@ -776,73 +669,45 @@ export class PolynetCodexWorkerRuntime {
     };
 
     let sandboxEnsured = false;
-    let toolCall: BlaxelToolCallSummary | null = null;
     try {
       emitEvent("workspace_probe_started", {
         engine_id: "polynet_codex_worker",
         machine_id: readMachineId(),
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
       });
 
       timing.startBucket("sandbox_ensure_ms");
       emitEvent("sandbox_ensure_started", {
         sandbox_name: params.sandboxName,
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
       });
       const ensured = await this.ensureWorkspace({
         sandboxName: params.sandboxName,
         sandboxProvided: params.sandboxProvided,
-        labels: {
-          run_id: safeResourceName(params.runId) || "unknown-run",
-          purpose: "polynet-codex-worker-workspace-probe",
-        },
       });
       sandboxEnsured = true;
       emitEvent("sandbox_ensure_finished", {
         sandbox_name: params.sandboxName,
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
         provider_sandbox_id: ensured.providerSandboxId,
         workspace_root: ensured.workspaceRoot,
         latency_ms: timing.endBucket("sandbox_ensure_ms"),
       });
 
-      timing.startBucket("workspace_exec_ms");
-      emitEvent("workspace_exec_requested", {
-        sandbox_name: params.sandboxName,
-        workspace_host_id: this.options.workspaceHostId,
-        command: params.command,
-      });
-      const result = await this.runWorkspaceBash({
-        sandboxName: params.sandboxName,
-        turnId: null,
-        callId: "workspace_probe",
-        command: params.command,
-        timeoutSeconds: params.commandTimeoutSeconds,
-      });
-      toolCall = result.summary;
-      timing.setBucket("workspace_exec_ms", result.summary.latencyMs);
-      emitEvent("workspace_exec_finished", {
-        ok: result.summary.ok,
-        latency_ms: result.summary.latencyMs,
-        exit_code: result.summary.exitCode,
-        provider_command_id: result.summary.providerCommandId,
-        stdout_preview: previewText(result.summary.stdout),
-        stderr_preview: previewText(result.summary.stderr),
-      });
+      if (params.probeDelayMs > 0) {
+        timing.startBucket("workspace_probe_delay_ms");
+        await new Promise((resolve) => setTimeout(resolve, params.probeDelayMs));
+        timing.endBucket("workspace_probe_delay_ms");
+      }
 
-      const combined = `${toolCall.stdout}\n${toolCall.stderr}`;
-      const expectedWorkspaceRoot = String(ensured.workspaceRoot ?? "/workspace");
+      const expectedWorkspaceRoot = String(ensured.workspaceRoot ?? getDaytonaWorkspaceRoot());
       const proof = {
         ok:
-          toolCall.ok &&
-          combined.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE") &&
-          combined.includes(expectedWorkspaceRoot),
+          ensured.workspaceRoot === expectedWorkspaceRoot &&
+          readDaytonaLocalEnvStatus().configured,
         failures: [
-          ...(toolCall.ok ? [] : ["workspace_probe_command_not_ok"]),
-          ...(combined.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE")
-            ? []
-            : ["probe_marker_missing"]),
-          ...(combined.includes(expectedWorkspaceRoot) ? [] : ["workspace_root_missing"]),
+          ...(ensured.workspaceRoot === expectedWorkspaceRoot ? [] : ["workspace_root_missing"]),
+          ...(readDaytonaLocalEnvStatus().configured ? [] : ["workspace_not_configured"]),
         ],
       };
       emitEvent("workspace_probe_finished", {
@@ -855,7 +720,7 @@ export class PolynetCodexWorkerRuntime {
         const cleanup = await this.destroyWorkspaceBestEffort(params.sandboxName);
         emitEvent("sandbox_destroy_finished", {
           sandbox_name: params.sandboxName,
-          workspace_host_id: this.options.workspaceHostId,
+          workspace_host_id: WORKER_WORKSPACE_HOST_ID,
           ok: cleanup.ok,
           failure_code: cleanup.failureCode,
           latency_ms: timing.endBucket("sandbox_destroy_ms"),
@@ -869,22 +734,9 @@ export class PolynetCodexWorkerRuntime {
         engine_id: "polynet_codex_worker",
         probe_kind: "workspace",
         machine_id: readMachineId(),
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
         workspace_root: ensured.workspaceRoot,
         sandbox_name: params.sandboxName,
-        tool_calls: [
-          {
-            turn_id: toolCall.turnId,
-            call_id: toolCall.callId,
-            command: toolCall.command,
-            latency_ms: toolCall.latencyMs,
-            ok: toolCall.ok,
-            exit_code: toolCall.exitCode,
-            stdout_preview: previewText(toolCall.stdout, 1000),
-            stderr_preview: previewText(toolCall.stderr, 1000),
-            provider_command_id: toolCall.providerCommandId,
-          },
-        ],
         proof,
         timing: timing.summary(),
         events: eventLog.map((event) => ({
@@ -900,7 +752,7 @@ export class PolynetCodexWorkerRuntime {
         const cleanup = await this.destroyWorkspaceBestEffort(params.sandboxName);
         emitEvent("sandbox_destroy_finished", {
           sandbox_name: params.sandboxName,
-          workspace_host_id: this.options.workspaceHostId,
+          workspace_host_id: WORKER_WORKSPACE_HOST_ID,
           ok: cleanup.ok,
           failure_code: cleanup.failureCode,
           latency_ms: timing.endBucket("sandbox_destroy_ms"),
@@ -917,10 +769,6 @@ export class PolynetCodexWorkerRuntime {
       runId: params.runId,
       codexThreadId: null,
       cancelRequested: false,
-      // Serving requires a project workspace (the sandbox outlives the turn)
-      // and the Convex terminal bridge.
-      serve:
-        params.sandboxProvided && params.ingest?.terminalUrl ? params.ingest : null,
       platformTools: params.platformTools,
       platformToolBridge:
         params.ingest?.toolUrl && params.platformTools.length > 0
@@ -942,19 +790,14 @@ export class PolynetCodexWorkerRuntime {
           : null,
       platformToolProbe: params.platformToolProbe,
       sandboxName: params.sandboxName,
-      workspaceHostId: this.options.workspaceHostId,
+      workspaceHostId: WORKER_WORKSPACE_HOST_ID,
       workspaceRoot: null,
-      localServeAvailable: this.options.workspaceHostId === "daytona",
-      fallbackCommand: params.command,
-      commandTimeoutSeconds: params.commandTimeoutSeconds,
       timing: new TimingCollector(),
-      toolCalls: [],
       assistantText: "",
       turnId: null,
       firstCodexEventAtMs: null,
       firstAssistantDeltaAtMs: null,
       lastAgentMessageItemId: null,
-      firstWorkspaceToolRequestAtMs: null,
       completedAtMs: null,
       eventSeq: 0,
       eventLog: [],
@@ -1051,7 +894,7 @@ export class PolynetCodexWorkerRuntime {
         engine_id: "polynet_codex_worker",
         model_id: params.model,
         machine_id: readMachineId(),
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
         stage: "start",
       });
       activeTurn.timing.mark("worker_turn_started", {
@@ -1063,21 +906,18 @@ export class PolynetCodexWorkerRuntime {
       activeTurn.timing.startBucket("sandbox_ensure_ms");
       emitWorkerEvent("sandbox_ensure_started", {
         sandbox_name: params.sandboxName,
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
       });
       const ensured = await this.ensureWorkspace({
         sandboxName: params.sandboxName,
         sandboxProvided: params.sandboxProvided,
-        labels: {
-          run_id: safeResourceName(params.runId) || "unknown-run",
-        },
       });
       sandboxEnsured = true;
       activeTurn.workspaceRoot = ensured.workspaceRoot;
       const sandboxEnsureMs = activeTurn.timing.endBucket("sandbox_ensure_ms");
       emitWorkerEvent("sandbox_ensure_finished", {
         sandbox_name: params.sandboxName,
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
         provider_sandbox_id: ensured.providerSandboxId,
         workspace_root: ensured.workspaceRoot,
         latency_ms: sandboxEnsureMs,
@@ -1086,13 +926,10 @@ export class PolynetCodexWorkerRuntime {
       const codexDeveloperInstructions = this.buildCodexDeveloperInstructions({
         polynetDeveloperInstructions: params.developerInstructions,
         workspaceRoot: activeTurn.workspaceRoot,
-        workspaceServeAvailable: Boolean(activeTurn.serve || activeTurn.localServeAvailable),
+        workspaceServeAvailable: true,
         platformToolsAvailable: Boolean(activeTurn.platformToolBridge),
       });
-      const codexThreadCwd =
-        activeTurn.workspaceHostId === "daytona"
-          ? (activeTurn.workspaceRoot ?? getDaytonaWorkspaceRoot())
-          : this.options.cwd;
+      const codexThreadCwd = activeTurn.workspaceRoot ?? getDaytonaWorkspaceRoot();
       const codexDynamicTools = buildCodexDynamicTools(activeTurn);
       emitWorkerEvent("codex_dynamic_tools_advertised", {
         ...codexDynamicTools.receipt,
@@ -1163,13 +1000,10 @@ export class PolynetCodexWorkerRuntime {
         ? params.platformToolProbe
           ? validatePlatformToolProbeProof({
               eventLog: activeTurn.eventLog,
-              toolCalls: activeTurn.toolCalls,
               toolName: params.platformToolProbe,
             })
           : validateProbeProof({
-              toolCalls: activeTurn.toolCalls,
               workspaceRoot: activeTurn.workspaceRoot,
-              workspaceHostId: activeTurn.workspaceHostId,
               assistantText: activeTurn.assistantText,
             })
         : { ok: true, failures: [] as string[] };
@@ -1180,21 +1014,10 @@ export class PolynetCodexWorkerRuntime {
         model_id: params.model,
         machine_id: readMachineId(),
         sandbox_name: params.sandboxName,
-        workspace_host_id: this.options.workspaceHostId,
+        workspace_host_id: WORKER_WORKSPACE_HOST_ID,
         workspace_root: activeTurn.workspaceRoot,
         codex_turn_id: activeTurn.turnId,
         assistant_text: activeTurn.assistantText,
-        tool_calls: activeTurn.toolCalls.map((call) => ({
-          turn_id: call.turnId,
-          call_id: call.callId,
-          command: call.command,
-          latency_ms: call.latencyMs,
-          ok: call.ok,
-          exit_code: call.exitCode,
-          stdout_preview: previewText(call.stdout, 1000),
-          stderr_preview: previewText(call.stderr, 1000),
-          provider_command_id: call.providerCommandId,
-        })),
         proof,
         timing: activeTurn.timing.summary(),
         events: activeTurn.eventLog.map((event) => ({
@@ -1249,7 +1072,7 @@ export class PolynetCodexWorkerRuntime {
         const sandboxDestroyMs = activeTurn.timing.endBucket("sandbox_destroy_ms");
         emitWorkerEvent("sandbox_destroy_finished", {
           sandbox_name: params.sandboxName,
-          workspace_host_id: this.options.workspaceHostId,
+          workspace_host_id: WORKER_WORKSPACE_HOST_ID,
           ok: cleanup.ok,
           failure_code: cleanup.failureCode,
           latency_ms: sandboxDestroyMs,
@@ -1269,21 +1092,10 @@ export class PolynetCodexWorkerRuntime {
             model_id: params.model,
             machine_id: readMachineId(),
             sandbox_name: params.sandboxName,
-            workspace_host_id: this.options.workspaceHostId,
+            workspace_host_id: WORKER_WORKSPACE_HOST_ID,
             workspace_root: activeTurn.workspaceRoot,
             codex_turn_id: activeTurn.turnId,
             assistant_text: activeTurn.assistantText,
-            tool_calls: activeTurn.toolCalls.map((call) => ({
-              turn_id: call.turnId,
-              call_id: call.callId,
-              command: call.command,
-              latency_ms: call.latencyMs,
-              ok: call.ok,
-              exit_code: call.exitCode,
-              stdout_preview: previewText(call.stdout, 1000),
-              stderr_preview: previewText(call.stderr, 1000),
-              provider_command_id: call.providerCommandId,
-            })),
             proof,
             error: describeError(pendingError),
             timing: activeTurn.timing.summary(),
@@ -1573,51 +1385,7 @@ export class PolynetCodexWorkerRuntime {
       await this.handlePlatformToolCall(message.id, activeTurn, toolName, params);
       return;
     }
-    if (
-      !params ||
-      toolName !== CODEX_WORKSPACE_BASH_TOOL_NAME ||
-      activeTurn.workspaceHostId === "daytona"
-    ) {
-      this.client.respondError(message.id, -32601, "unsupported dynamic tool");
-      return;
-    }
-    const command = normalizeToolCommand(params.arguments, activeTurn.fallbackCommand);
-    if (activeTurn.firstWorkspaceToolRequestAtMs === null) {
-      activeTurn.firstWorkspaceToolRequestAtMs = nowMs();
-      activeTurn.timing.setBucket(
-        "first_workspace_exec_ms",
-        activeTurn.firstWorkspaceToolRequestAtMs - activeTurn.timing.startedAtMs,
-      );
-    }
-    this.emitRuntimeEvent("workspace_exec_requested", {
-      codex_turn_id: typeof params.turnId === "string" ? params.turnId : null,
-      call_id: typeof params.callId === "string" ? params.callId : null,
-      sandbox_name: activeTurn.sandboxName,
-      workspace_host_id: activeTurn.workspaceHostId,
-      command,
-    });
-    const result = await this.runWorkspaceBash({
-      sandboxName: activeTurn.sandboxName,
-      turnId: typeof params.turnId === "string" ? params.turnId : null,
-      callId: typeof params.callId === "string" ? params.callId : null,
-      command,
-      timeoutSeconds: activeTurn.commandTimeoutSeconds,
-    });
-    activeTurn.toolCalls.push(result.summary);
-    activeTurn.timing.setBucket("latest_workspace_exec_latency_ms", result.summary.latencyMs);
-    this.emitRuntimeEvent("workspace_exec_finished", {
-      ok: result.summary.ok,
-      latency_ms: result.summary.latencyMs,
-      exit_code: result.summary.exitCode,
-      workspace_host_id: activeTurn.workspaceHostId,
-      provider_command_id: result.summary.providerCommandId,
-      stdout_preview: previewText(result.summary.stdout),
-      stderr_preview: previewText(result.summary.stderr),
-    });
-    this.client.respond(message.id, {
-      success: result.summary.ok,
-      contentItems: [{ type: "inputText", text: result.contentText }],
-    });
+    this.client.respondError(message.id, -32601, "unsupported dynamic tool");
   }
 
   private async handleComputerScreenshotCall(
@@ -1973,15 +1741,19 @@ export class PolynetCodexWorkerRuntime {
         text = String(payload.output ?? "");
       } else {
         failureCode = String(payload.code ?? `http_${response.status}`);
-        text = `${toolName} failed (${failureCode}): ${String(
-          payload.message ?? "Platform tool call failed.",
-        )}`.replace(/blaxel/gi, "workspace");
+        text = neutralizeWorkspaceText(
+          `${toolName} failed (${failureCode}): ${String(
+            payload.message ?? "Platform tool call failed.",
+          )}`,
+        );
       }
     } catch (error) {
       failureCode = "platform_tool_bridge_unreachable";
-      text = `${toolName} failed: ${
-        error instanceof Error ? error.message : "platform tool bridge unreachable"
-      }`.replace(/blaxel/gi, "workspace");
+      text = neutralizeWorkspaceText(
+        `${toolName} failed: ${
+          error instanceof Error ? error.message : "platform tool bridge unreachable"
+        }`,
+      );
     }
     this.emitRuntimeEvent("platform_tool_finished", {
       tool_name: toolName,
@@ -2014,16 +1786,6 @@ export class PolynetCodexWorkerRuntime {
         contentItems: [{ type: "inputText", text: JSON.stringify(payload, null, 2) }],
       });
     };
-    const serve = activeTurn.serve;
-    if (!serve && !activeTurn.localServeAvailable) {
-      respondTool(false, {
-        ok: false,
-        failureCode: "project_workspace_required",
-        failureMessage:
-          "Serving an app requires a project-bound workspace. Ask the user to open this thread in a project.",
-      });
-      return;
-    }
     const args = asRecord(params.arguments) ?? {};
     const command = String(args.command ?? "").trim();
     let port: number | null = null;
@@ -2042,115 +1804,44 @@ export class PolynetCodexWorkerRuntime {
     }
     this.emitRuntimeEvent("workspace_serve_requested", { command, port });
     const startedAtMs = nowMs();
-    if (activeTurn.localServeAvailable) {
-      const served = await startDaytonaLocalServer({ command, port });
-      this.emitRuntimeEvent("workspace_serve_finished", {
-        ok: served.ok,
-        port,
-        latency_ms: elapsedMs(startedAtMs),
+    const served = await startDaytonaLocalServer({ command, port });
+    this.emitRuntimeEvent("workspace_serve_finished", {
+      ok: served.ok,
+      port,
+      latency_ms: elapsedMs(startedAtMs),
+      workspace_host_id: activeTurn.workspaceHostId,
+      terminal_session_id: served.ok ? served.pid : null,
+      failure_code: served.ok ? null : served.failureCode,
+    });
+    if (served.ok) {
+      this.emitRuntimeEvent("workspace_preview_ready", {
+        provider: "daytona",
         workspace_host_id: activeTurn.workspaceHostId,
-        terminal_session_id: served.ok ? served.pid : null,
-        failure_code: served.ok ? null : served.failureCode,
+        sandbox_id: served.providerSandboxId,
+        url: served.previewUrl,
+        preview_url_hint: served.previewUrlHint,
+        port,
+        terminal_session_id: served.pid,
       });
-      if (served.ok) {
-        this.emitRuntimeEvent("workspace_preview_ready", {
-          provider: "daytona",
-          workspace_host_id: activeTurn.workspaceHostId,
-          sandbox_id: served.providerSandboxId,
-          url: served.previewUrl,
-          preview_url_hint: served.previewUrlHint,
-          port,
-          terminal_session_id: served.pid,
-        });
-        respondTool(true, {
-          ok: true,
-          preview_url: served.previewUrl,
-          preview_pending: served.previewUrl ? false : true,
-          port,
-          process_id: served.pid,
-          note: served.previewUrl
-            ? "The app is running; the user can open it from the preview panel or this URL."
-            : "The app is running; PolyNet is attaching the Daytona preview panel.",
-          ...(served.outputTail ? { server_output: served.outputTail } : {}),
-        });
-        return;
-      }
-      respondTool(false, {
-        ok: false,
-        failureCode: served.failureCode,
-        failureMessage: served.failureMessage.replace(/daytona/gi, "workspace"),
+      respondTool(true, {
+        ok: true,
+        preview_url: served.previewUrl,
+        preview_pending: served.previewUrl ? false : true,
+        port,
+        process_id: served.pid,
+        note: served.previewUrl
+          ? "The app is running; the user can open it from the preview panel or this URL."
+          : "The app is running; PolyNet is attaching the Daytona preview panel.",
         ...(served.outputTail ? { server_output: served.outputTail } : {}),
       });
       return;
     }
-    try {
-      const response = await fetch(serve.terminalUrl as string, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${serve.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          run_token: serve.terminalRunToken,
-          context: serve.context,
-          command,
-          port,
-          label: "codex-serve",
-        }),
-        signal: AbortSignal.timeout(90_000),
-      });
-      const payload = (await response.json().catch(() => ({}))) as JsonRecord;
-      const ok = response.ok && payload.ok === true;
-      const previewUrl = String(payload.preview_url ?? "").trim();
-      this.emitRuntimeEvent("workspace_serve_finished", {
-        ok,
-        port,
-        latency_ms: elapsedMs(startedAtMs),
-        terminal_session_id: payload.terminal_session_id ?? null,
-        failure_code: ok ? null : String(payload.code ?? `http_${response.status}`),
-      });
-      if (ok && previewUrl) {
-        this.emitRuntimeEvent("workspace_preview_ready", {
-          url: previewUrl,
-          port,
-          terminal_session_id: payload.terminal_session_id ?? null,
-        });
-        respondTool(true, {
-          ok: true,
-          preview_url: previewUrl,
-          port,
-          note: "The app is running; the user can open it from the preview panel or this URL.",
-        });
-        return;
-      }
-      respondTool(false, {
-        ok: false,
-        failureCode: String(payload.code ?? `http_${response.status}`).replace(/blaxel/gi, "workspace"),
-        failureMessage: String(payload.message ?? "The app could not be started.").replace(/blaxel/gi, "workspace"),
-        ...(typeof payload.output_tail === "string" && payload.output_tail
-          ? { server_output: String(payload.output_tail).replace(/blaxel/gi, "workspace") }
-          : {}),
-        ...(typeof payload.terminal_session_id === "string" && payload.terminal_session_id
-          ? { terminal_session_id: payload.terminal_session_id }
-          : {}),
-        ...(typeof payload.server_status === "string" && payload.server_status
-          ? { server_status: payload.server_status }
-          : {}),
-      });
-    } catch (error) {
-      this.emitRuntimeEvent("workspace_serve_finished", {
-        ok: false,
-        port,
-        latency_ms: elapsedMs(startedAtMs),
-        failure_code: "serve_bridge_unreachable",
-      });
-      respondTool(false, {
-        ok: false,
-        failureCode: "serve_bridge_unreachable",
-        failureMessage:
-          error instanceof Error ? error.message.replace(/blaxel/gi, "workspace") : "Serve failed.",
-      });
-    }
+    respondTool(false, {
+      ok: false,
+      failureCode: served.failureCode,
+      failureMessage: served.failureMessage.replace(/daytona/gi, "workspace"),
+      ...(served.outputTail ? { server_output: served.outputTail } : {}),
+    });
   }
 
   private emitRuntimeEvent(eventType: string, payload: JsonRecord): void {
@@ -2285,33 +1976,15 @@ function summarizeIngestPushError(error: unknown): {
 }
 
 function validateProbeProof(params: {
-  toolCalls: BlaxelToolCallSummary[];
   workspaceRoot: string | null;
-  workspaceHostId: WorkerWorkspaceHostId;
   assistantText: string;
 }): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
-  if (params.workspaceHostId === "daytona") {
-    if (params.toolCalls.length !== 0) failures.push("unexpected_duplicate_workspace_tool_call");
-    const expectedWorkspaceRoot = String(params.workspaceRoot ?? getDaytonaWorkspaceRoot());
-    if (!params.assistantText.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE")) {
-      failures.push("probe_marker_missing");
-    }
-    if (!params.assistantText.includes(expectedWorkspaceRoot)) failures.push("workspace_root_missing");
-    return {
-      ok: failures.length === 0,
-      failures,
-    };
-  }
-  if (params.toolCalls.length !== 1) failures.push("expected_exactly_one_workspace_tool_call");
-  const first = params.toolCalls[0] ?? null;
-  if (!first?.ok) failures.push("workspace_tool_call_not_ok");
-  const combined = `${first?.stdout ?? ""}\n${first?.stderr ?? ""}`;
-  if (!combined.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE")) {
+  const expectedWorkspaceRoot = String(params.workspaceRoot ?? getDaytonaWorkspaceRoot());
+  if (!params.assistantText.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE")) {
     failures.push("probe_marker_missing");
   }
-  const expectedWorkspaceRoot = String(params.workspaceRoot ?? "/workspace");
-  if (!combined.includes(expectedWorkspaceRoot)) failures.push("workspace_root_missing");
+  if (!params.assistantText.includes(expectedWorkspaceRoot)) failures.push("workspace_root_missing");
   return {
     ok: failures.length === 0,
     failures,
@@ -2320,7 +1993,6 @@ function validateProbeProof(params: {
 
 function validatePlatformToolProbeProof(params: {
   eventLog: RuntimeEvent[];
-  toolCalls: BlaxelToolCallSummary[];
   toolName: string;
 }): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
@@ -2336,22 +2008,14 @@ function validatePlatformToolProbeProof(params: {
   );
   if (requested.length === 0) failures.push("platform_tool_request_missing");
   if (finished.length === 0) failures.push("platform_tool_finish_missing");
-  if (params.toolCalls.length !== 0) failures.push("unexpected_workspace_exec");
   return { ok: failures.length === 0, failures };
 }
 
-function buildProbePrompt(command: string, workspaceHostId: WorkerWorkspaceHostId): string {
-  if (workspaceHostId === "daytona") {
-    return [
-      "Use Codex's native workspace execution capabilities to run this shell command from the workspace root:",
-      command,
-      "Report the exact stdout. Do not call workspace_bash; that duplicate tool is intentionally unavailable in Daytona mode.",
-    ].join(" ");
-  }
+function buildProbePrompt(command: string): string {
   return [
-    `Call workspace_bash exactly once with command \`${command}\`.`,
-    "Then summarize the output and say whether it ran in the workspace.",
-    "Do not call any other tools.",
+    "Use Codex's native workspace execution capabilities to run this shell command from the workspace root:",
+    command,
+    "Report the exact stdout. Do not call workspace_bash; that duplicate tool is intentionally unavailable.",
   ].join(" ");
 }
 
@@ -2386,7 +2050,7 @@ async function handleTurnEndpoint(params: {
   const prompt = params.probeMode
     ? platformToolProbe
       ? buildPlatformToolProbePrompt(platformToolProbe)
-      : buildProbePrompt(command, params.runtime.getWorkspaceHostId())
+      : buildProbePrompt(command)
     : String(body.prompt ?? "").trim();
   const developerInstructions = params.probeMode
     ? null
@@ -2425,10 +2089,6 @@ async function handleTurnEndpoint(params: {
     });
     return;
   }
-  const commandTimeoutSeconds =
-    typeof body.command_timeout_seconds === "number" && Number.isFinite(body.command_timeout_seconds)
-      ? Math.max(1, Math.floor(body.command_timeout_seconds))
-      : readIntegerEnv("POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS", 60);
   const destroyAfterRun =
     typeof body.destroy_after_run === "boolean"
       ? body.destroy_after_run
@@ -2450,11 +2110,8 @@ async function handleTurnEndpoint(params: {
   const ingestUrl = String(rawIngest?.url ?? "").trim();
   const ingestToken = String(rawIngest?.token ?? "").trim();
   const ingestRunToken = String(rawIngest?.run_token ?? "").trim() || null;
-  const ingestTerminalRunToken =
-    String(rawIngest?.terminal_run_token ?? "").trim() || null;
   const ingestToolRunToken = String(rawIngest?.tool_run_token ?? "").trim() || null;
   const ingestContext = asRecord(rawIngest?.context);
-  const ingestTerminalUrl = String(rawIngest?.terminal_url ?? "").trim() || null;
   const ingestToolUrl = String(rawIngest?.tool_url ?? "").trim() || null;
   const ingest: WorkerIngestConfig | null =
     ingestUrl && ingestToken && ingestContext
@@ -2462,9 +2119,7 @@ async function handleTurnEndpoint(params: {
           url: ingestUrl,
           token: ingestToken,
           runToken: ingestRunToken,
-          terminalRunToken: ingestTerminalRunToken,
           toolRunToken: ingestToolRunToken,
-          terminalUrl: ingestTerminalUrl,
           toolUrl: ingestToolUrl,
           context: ingestContext,
         }
@@ -2513,8 +2168,6 @@ async function handleTurnEndpoint(params: {
         model,
         sandboxName,
         sandboxProvided,
-        command,
-        commandTimeoutSeconds,
         destroyAfterRun,
         probeMode: params.probeMode,
         platformToolProbe: params.probeMode ? platformToolProbe || null : null,
@@ -2548,8 +2201,6 @@ async function handleTurnEndpoint(params: {
       model,
       sandboxName,
       sandboxProvided,
-      command,
-      commandTimeoutSeconds,
       destroyAfterRun,
       probeMode: params.probeMode,
       platformToolProbe: params.probeMode ? platformToolProbe || null : null,
@@ -2584,10 +2235,6 @@ async function handleWorkspaceProbeEndpoint(params: {
   const body = asRecord(await readJsonBody(params.req)) ?? {};
   const runId =
     String(body.run_id ?? body.runId ?? "").trim() || `polynet_workspace_probe:${randomUUID()}`;
-  const command = String(
-    body.command ??
-      "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && uname -s",
-  ).trim();
   const providedSandboxName = String(body.sandbox_name ?? body.sandboxName ?? "").trim();
   const sandboxProvided = providedSandboxName.length > 0;
   const sandboxName = sandboxProvided
@@ -2611,10 +2258,10 @@ async function handleWorkspaceProbeEndpoint(params: {
     });
     return;
   }
-  const commandTimeoutSeconds =
-    typeof body.command_timeout_seconds === "number" && Number.isFinite(body.command_timeout_seconds)
-      ? Math.max(1, Math.floor(body.command_timeout_seconds))
-      : readIntegerEnv("POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS", 60);
+  const probeDelayMs =
+    typeof body.probe_delay_ms === "number" && Number.isFinite(body.probe_delay_ms)
+      ? Math.max(0, Math.min(10_000, Math.floor(body.probe_delay_ms)))
+      : 0;
   const destroyAfterRun =
     typeof body.destroy_after_run === "boolean"
       ? body.destroy_after_run
@@ -2625,9 +2272,8 @@ async function handleWorkspaceProbeEndpoint(params: {
       runId,
       sandboxName,
       sandboxProvided,
-      command,
-      commandTimeoutSeconds,
       destroyAfterRun,
+      probeDelayMs,
     });
     sendJson(params.res, 200, result);
   } catch (error) {
@@ -2645,8 +2291,8 @@ export function createPolynetCodexWorkerServer(runtime: PolynetCodexWorkerRuntim
       const url = new URL(req.url ?? "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/healthz") {
         const health = runtime.health();
-        // Public health is minimal; machine ids, codex home, and Blaxel
-        // workspace details are diagnostics for authenticated callers only.
+        // Public health is minimal; machine ids, codex home, and workspace
+        // details are diagnostics for authenticated callers only.
         if (!runtime.isAuthorizedBearer(readBearer(req))) {
           sendJson(res, 200, { ok: health.ok, status: health.status });
           return;
@@ -2754,9 +2400,11 @@ export async function startPolynetCodexWorkerServer(): Promise<{
   const host = readEnv("POLYNET_CODEX_WORKER_HOST") || "127.0.0.1";
   const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
   if (!authToken) throw new Error("POLYNET_CODEX_WORKER_AUTH_TOKEN is required.");
-  const workspaceHostId = readWorkspaceHostId();
-  const defaultAgentCwd =
-    workspaceHostId === "daytona" ? getDaytonaWorkspaceRoot() : process.cwd();
+  const configuredWorkspaceHost = readEnv("POLYNET_CODEX_WORKSPACE_HOST").toLowerCase();
+  if (configuredWorkspaceHost && configuredWorkspaceHost !== WORKER_WORKSPACE_HOST_ID) {
+    throw new Error("POLYNET_CODEX_WORKSPACE_HOST must be daytona for the Codex worker.");
+  }
+  const defaultAgentCwd = getDaytonaWorkspaceRoot();
   const runtime = new PolynetCodexWorkerRuntime({
     cwd: readEnv("POLYNET_CODEX_WORKER_AGENT_CWD") || defaultAgentCwd,
     codexBin: readEnv("POLYNET_CODEX_WORKER_CODEX_BIN") || "codex",
@@ -2764,7 +2412,6 @@ export async function startPolynetCodexWorkerServer(): Promise<{
       readEnv("POLYNET_CODEX_WORKER_MODEL") ||
       DAYTONA_RUNTIME_POLICY.nativeCodex.defaultModelId,
     authToken,
-    workspaceHostId,
   });
   const server = createPolynetCodexWorkerServer(runtime);
   await new Promise<void>((resolve) => {

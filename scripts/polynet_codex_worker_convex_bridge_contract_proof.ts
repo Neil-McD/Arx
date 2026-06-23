@@ -44,7 +44,6 @@ assert.match(
 );
 for (const requiredEnvName of [
   "POLYNET_CODEX_WORKER_RUNTIME_ENABLED",
-  "POLYNET_CODEX_RUNTIME_PROVIDER",
   "POLYNET_DEPLOYMENT_KIND",
   "POLYNET_CODEX_WORKER_AUTH_TOKEN",
 ]) {
@@ -52,18 +51,18 @@ for (const requiredEnvName of [
 }
 assert.match(
   bridge,
-  /function readCodexRuntimeProvider\(\)[\s\S]*return "daytona_direct"/,
-  "bridge must default to direct Daytona runtime provider",
+  /type PolynetCodexWorkerTransportProvider = "daytona_direct"/,
+  "bridge must expose only the direct Daytona runtime provider",
+);
+assert.doesNotMatch(
+  bridge,
+  /worker_url|legacy_url|POLYNET_CODEX_RUNTIME_PROVIDER|POLYNET_CODEX_WORKER_URL|readCodexRuntimeProvider|workerUrlDeploymentMismatch/,
+  "bridge must not retain the legacy worker_url transport rail",
 );
 assert.match(
   bridge,
   /DAYTONA_API_KEY[\s\S]*DAYTONA_JWT_TOKEN[\s\S]*daytona_direct_credentials_missing/,
   "direct Daytona provider must fail closed without Daytona credentials",
-);
-assert.match(
-  bridge,
-  /proxy\\\.daytona\\\.works[\s\S]*app\\\.daytona\\\.io[\s\S]*polynet_codex_worker_ephemeral_daytona_url_invalid/,
-  "legacy URL mode must reject raw Daytona ephemeral URLs as canonical worker URLs",
 );
 assert.doesNotMatch(
   bridge,
@@ -100,13 +99,18 @@ assert.match(
 
 assert.match(
   handlers,
-  /getPolynetCodexWorkerBridgeConfig\(\)[\s\S]*workerBridgeConfig\.provider === "daytona_direct"[\s\S]*ensureDaytonaCodexRuntimeTargetInternal/,
-  "runtime handler must resolve a Daytona runtime target for direct Daytona turns",
+  /daytona_codex_runtime_target_resolve_started[\s\S]*ensureDaytonaCodexRuntimeTargetInternal/,
+  "runtime handler must unconditionally resolve a Daytona runtime target for Codex worker turns",
 );
 assert.match(
   handlers,
-  /runtimeProjectId && workerBridgeConfig\.provider === "daytona_direct"[\s\S]*workspace_session_skipped[\s\S]*daytona_direct_uses_runtime_workspace/,
+  /if \(runtimeProjectId\)[\s\S]*workspace_session_skipped[\s\S]*daytona_direct_uses_runtime_workspace/,
   "direct Daytona turns must not adopt the legacy project workspace session",
+);
+assert.doesNotMatch(
+  handlers,
+  /createProjectRuntimeWorkspaceSession|workspace_session_adopted|workerWorkspaceSession|disposeRuntimeWorkspaceSession|workerBridgeConfig|getPolynetCodexWorkerBridgeConfig/,
+  "runtime handler must not retain the legacy project-workspace adoption branch or handler-local transport branch for Codex worker turns",
 );
 assert.match(
   handlers,
@@ -163,7 +167,7 @@ assert.match(
 );
 assert.match(
   harnessToolPolicy,
-  /resolvePolynetHarnessToolPolicy[\s\S]*fixedRuntimeToolNames[\s\S]*resolveCodexHarnessToolPolicy[\s\S]*workspaceHostId[\s\S]*native_codex/,
+  /resolvePolynetHarnessToolPolicy[\s\S]*fixedRuntimeToolNames[\s\S]*resolveCodexHarnessToolPolicy[\s\S]*mode: "native_codex"[\s\S]*duplicateShellTool: false/,
   "shared harness policy must split PolyNet fixed runtime tools from Codex native workspace policy",
 );
 assert.match(
@@ -203,18 +207,28 @@ assert.match(
 );
 assert.match(
   worker,
-  /type WorkerWorkspaceHostId = "blaxel" \| "daytona"[\s\S]*readWorkspaceHostId\(\)[\s\S]*POLYNET_CODEX_WORKSPACE_HOST/,
-  "worker service must select Daytona as a first-class workspace host",
+  /const WORKER_WORKSPACE_HOST_ID = "daytona" as const[\s\S]*POLYNET_CODEX_WORKSPACE_HOST must be daytona/,
+  "worker service must be a Daytona-native Codex host",
 );
 assert.match(
   worker,
-  /buildDaytonaCodexConfigToml[\s\S]*ensureDaytonaLocalWorkspace[\s\S]*runDaytonaLocalBash/,
+  /buildDaytonaCodexConfigToml[\s\S]*ensureDaytonaLocalWorkspace[\s\S]*startDaytonaLocalServer/,
   "worker service must render Daytona Codex config and use local Daytona workspace tools",
 );
 assert.match(
   worker,
-  /function buildCodexDynamicTools\(activeTurn: ActiveTurn\)[\s\S]*activeTurn\.workspaceHostId !== "daytona"[\s\S]*buildWorkspaceBashDynamicToolSpec[\s\S]*forbidden_tool_names_present/,
-  "worker service must derive actual Codex dynamic tools through one receipt-producing helper",
+  /function buildCodexDynamicTools\(activeTurn: ActiveTurn\)[\s\S]*buildWorkspaceServeDynamicToolSpec[\s\S]*forbidden_tool_names_present/,
+  "worker service must derive actual Codex adapter tools through one receipt-producing helper",
+);
+assert.doesNotMatch(
+  worker,
+  /buildWorkspaceBashDynamicToolSpec|runDaytonaLocalBash|runBlaxelBash|CODEX_WORKSPACE_BASH_TOOL_NAME/,
+  "worker service must not retain duplicate shell tool branches",
+);
+assert.doesNotMatch(
+  worker,
+  /WorkerToolCallSummary|toolCalls|workspace_exec|command_timeout_seconds|POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS/,
+  "worker service must not retain legacy worker-managed workspace exec evidence shape",
 );
 assert.match(
   worker,
@@ -223,7 +237,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /const codexThreadCwd =[\s\S]*activeTurn\.workspaceHostId === "daytona"[\s\S]*activeTurn\.workspaceRoot \?\? getDaytonaWorkspaceRoot\(\)[\s\S]*cwd: codexThreadCwd[\s\S]*codex_thread_cwd: codexThreadCwd/,
+  /const codexThreadCwd = activeTurn\.workspaceRoot \?\? getDaytonaWorkspaceRoot\(\)[\s\S]*cwd: codexThreadCwd[\s\S]*codex_thread_cwd: codexThreadCwd/,
   "worker service must start Daytona Codex threads in the same workspace root used by workspace tools",
 );
 assert.match(
@@ -248,8 +262,8 @@ assert.match(
 );
 assert.match(
   daytonaWorkspace,
-  /getDaytonaWorkspaceRoot[\s\S]*runDaytonaLocalBash[\s\S]*startDaytonaLocalServer/,
-  "Daytona local workspace adapter must expose root, shell, and serve operations",
+  /getDaytonaWorkspaceRoot[\s\S]*ensureDaytonaLocalWorkspace[\s\S]*startDaytonaLocalServer/,
+  "Daytona local workspace adapter must expose root, ensure, and serve operations",
 );
 
 for (const requiredPath of [

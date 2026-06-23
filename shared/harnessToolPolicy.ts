@@ -13,10 +13,8 @@ export type PolynetHarnessToolPolicy = {
   fixedRuntimeToolNames: RetrievalToolName[];
 };
 
-export type CodexWorkspaceToolAccessMode = "native_codex" | "dynamic_workspace_bash";
-export type CodexWorkspaceHostId = "daytona" | "legacy";
+export type CodexWorkspaceToolAccessMode = "native_codex";
 
-export const CODEX_WORKSPACE_BASH_TOOL_NAME = "workspace_bash" as const;
 export const CODEX_WORKSPACE_SERVE_TOOL_NAME = "workspace_serve" as const;
 export const CODEX_COMPUTER_OPEN_URL_TOOL_NAME = "computer_open_url" as const;
 export const CODEX_COMPUTER_SCREENSHOT_TOOL_NAME = "computer_screenshot" as const;
@@ -36,7 +34,7 @@ export type CodexHarnessToolPolicy = {
     mode: CodexWorkspaceToolAccessMode;
     nativeCodex: boolean;
     duplicateShellTool: boolean;
-    shellTool: typeof CODEX_WORKSPACE_BASH_TOOL_NAME | null;
+    shellTool: null;
   };
   polynetPlatformToolNames: RetrievalToolName[];
   polynetPlatformTools: PolynetPlatformToolSpec[];
@@ -44,7 +42,7 @@ export type CodexHarnessToolPolicy = {
 };
 
 export const CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES = [
-  CODEX_WORKSPACE_BASH_TOOL_NAME,
+  "workspace_bash",
   "list_dir",
   "read",
   "glob",
@@ -80,7 +78,6 @@ export function resolvePolynetHarnessToolPolicy(params: {
 }
 
 export function resolveCodexHarnessToolPolicy(params: {
-  workspaceHostId: CodexWorkspaceHostId;
   polynetPlatformToolProjection: PolynetPlatformToolProjectionParams;
   workspaceServeAvailable: boolean;
   computerAdaptersAvailable: boolean;
@@ -98,14 +95,13 @@ export function resolveCodexHarnessToolPolicy(params: {
       CODEX_COMPUTER_SCREENSHOT_TOOL_NAME,
     );
   }
-  const nativeCodexWorkspace = params.workspaceHostId === "daytona";
   return {
     harnessKind: "codex",
     workspaceAccess: {
-      mode: nativeCodexWorkspace ? "native_codex" : "dynamic_workspace_bash",
-      nativeCodex: nativeCodexWorkspace,
-      duplicateShellTool: !nativeCodexWorkspace,
-      shellTool: nativeCodexWorkspace ? null : CODEX_WORKSPACE_BASH_TOOL_NAME,
+      mode: "native_codex",
+      nativeCodex: true,
+      duplicateShellTool: false,
+      shellTool: null,
     },
     polynetPlatformToolNames: buildPolynetPlatformToolNames(
       params.polynetPlatformToolProjection,

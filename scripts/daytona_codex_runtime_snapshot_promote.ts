@@ -595,9 +595,6 @@ async function runWorkspaceProbe(params: {
   const body = JSON.stringify({
     run_id: `daytona_snapshot_workspace_probe_${Date.now()}`,
     sandbox_name: "polynet-daytona-snapshot-workspace-probe",
-    command:
-      "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && printf daytona-snapshot > daytona-snapshot-marker.txt && cat daytona-snapshot-marker.txt",
-    command_timeout_seconds: 60,
     destroy_after_run: false,
   });
   const result = await runRemote(
@@ -631,7 +628,6 @@ async function runNativeCodexWorkspaceProbe(params: {
     model: DEFAULT_CODEX_MODEL_ID,
     sandbox_name: "polynet-daytona-snapshot-native-probe",
     destroy_after_run: false,
-    command_timeout_seconds: 90,
     developer_instructions: [
       "POLYNET_DAYTONA_SNAPSHOT_NATIVE_WORKSPACE_PROBE: this is a staging-only Codex native workspace proof.",
       "Use only Codex native workspace capabilities for file and shell work.",

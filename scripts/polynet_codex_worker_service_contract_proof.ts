@@ -16,10 +16,6 @@ const serverSource = readFileSync(
   path.join(rootDir, "services/polynet-codex-worker/src/server.ts"),
   "utf8",
 );
-const blaxelToolSource = readFileSync(
-  path.join(rootDir, "services/polynet-codex-worker/src/blaxelTool.ts"),
-  "utf8",
-);
 const port = readIntegerEnv("POLYNET_CODEX_WORKER_PROOF_PORT", 8800 + Math.floor(Math.random() * 500));
 const authToken = `polynet-worker-proof-${randomUUID()}`;
 const serviceUrl = `http://127.0.0.1:${port}`;
@@ -65,11 +61,6 @@ function serviceEvents(): JsonRecord[] {
   });
 }
 
-assert.match(
-  blaxelToolSource,
-  /resolveBlaxelWorkspaceComputerIfReady[\s\S]*params\.requireExisting === true[\s\S]*ensureBlaxelWorkspaceComputer/,
-  "provided project sandboxes must be adopted/resolved by the worker, not recreated from runtime defaults",
-);
 assert.match(
   serverSource,
   /const server = createPolynetCodexWorkerServer\(runtime\)[\s\S]*server\.listen\(port, host, resolve\)[\s\S]*void runtime[\s\S]*\.start\(\)[\s\S]*codex_app_server_background_init_finished/,
@@ -169,7 +160,6 @@ async function runWorkspaceProbe(): Promise<JsonRecord> {
       body: JSON.stringify({
         run_id: `polynet-worker-service-workspace-proof-${randomUUID().slice(0, 8)}`,
         destroy_after_run: true,
-        command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && uname -s",
       }),
     },
     180_000,
@@ -191,24 +181,22 @@ function assertWorkspaceProbeBody(body: JsonRecord, expectedWorkspaceRoot: strin
   assert.equal(proof?.ok, true, `workspace proof must pass: ${JSON.stringify(proof)}`);
   assert.deepEqual(asArray(proof?.failures), [], "workspace proof must have no failures");
 
-  const toolCalls = asArray(body.tool_calls);
-  assert.equal(toolCalls.length, 1, "workspace probe must execute exactly one workspace command");
-  const toolCall = asRecord(toolCalls[0]);
-  assert.equal(toolCall?.ok, true, `workspace command must succeed: ${JSON.stringify(toolCall)}`);
-  const stdout = String(toolCall?.stdout_preview ?? "");
-  assert.ok(
-    stdout.includes("POLYNET_CODEX_WORKER_SERVICE_PROBE"),
-    `workspace stdout must include probe marker: ${stdout}`,
+  assert.equal(body.workspace_host_id, "daytona", "workspace probe must be Daytona-native");
+  assert.equal(body.workspace_root, expectedWorkspaceRoot, "workspace probe root mismatch");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(body, "tool_calls"),
+    false,
+    "workspace readiness probe must not expose a legacy worker-managed shell tool_calls field",
   );
   assert.ok(
-    stdout.includes(expectedWorkspaceRoot),
-    `workspace stdout must include ${expectedWorkspaceRoot}: ${stdout}`,
+    String(body.workspace_root ?? "").includes(expectedWorkspaceRoot),
+    `workspace root must include ${expectedWorkspaceRoot}`,
   );
 
   const timing = asRecord(body.timing);
   const buckets = asRecord(timing?.buckets);
   assert.ok(buckets, "workspace probe timing must include buckets");
-  for (const key of ["sandbox_ensure_ms", "workspace_exec_ms", "sandbox_destroy_ms"]) {
+  for (const key of ["sandbox_ensure_ms", "sandbox_destroy_ms"]) {
     assert.equal(typeof buckets[key], "number", `workspace timing bucket missing: ${key}`);
   }
 
@@ -219,8 +207,6 @@ function assertWorkspaceProbeBody(body: JsonRecord, expectedWorkspaceRoot: strin
     "workspace_probe_started",
     "sandbox_ensure_started",
     "sandbox_ensure_finished",
-    "workspace_exec_requested",
-    "workspace_exec_finished",
     "workspace_probe_finished",
     "sandbox_destroy_finished",
   ]) {
@@ -320,7 +306,7 @@ async function assertBusyWhileWorkspaceProbeInFlight(): Promise<void> {
       body: JSON.stringify({
         run_id: `polynet-worker-service-blocking-proof-${randomUUID().slice(0, 8)}`,
         destroy_after_run: true,
-        command: "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && uname -s && sleep 8",
+        probe_delay_ms: 8_000,
       }),
     },
     180_000,
@@ -360,7 +346,6 @@ async function main() {
       POLYNET_CODEX_WORKER_AUTH_TOKEN: authToken,
       POLYNET_CODEX_WORKER_CODEX_HOME: codexHome,
       POLYNET_CODEX_WORKER_DESTROY_AFTER_RUN: "true",
-      POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS: process.env.POLYNET_CODEX_WORKER_COMMAND_TIMEOUT_SECONDS ?? "60",
       POLYNET_CODEX_WORKER_HOST: "127.0.0.1",
       POLYNET_CODEX_WORKSPACE_HOST: "daytona",
       POLYNET_DAYTONA_WORKSPACE_ROOT: workspaceRoot,

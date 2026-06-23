@@ -80,13 +80,18 @@ assert.match(
 );
 assert.match(
   state,
-  /threadTargets[\s\S]*by_owner_threadId[\s\S]*String\(target\.scope[\s\S]*!== "thread"[\s\S]*String\(target\.lifecycleMode[\s\S]*!== "thread_ephemeral"[\s\S]*target\.providerEphemeral !== args\.providerEphemeral[\s\S]*return await claimExistingTarget\(reusable\)/,
-  "thread_ephemeral targets must reuse the latest non-deleted sandbox for the same owner, thread, workspace root, and provider persistence only",
+  /expectedSnapshotId[\s\S]*snapshotMatches[\s\S]*threadTargets[\s\S]*by_owner_threadId[\s\S]*String\(target\.scope[\s\S]*!== "thread"[\s\S]*String\(target\.lifecycleMode[\s\S]*!== "thread_ephemeral"[\s\S]*target\.providerEphemeral !== args\.providerEphemeral[\s\S]*!snapshotMatches\(target\)[\s\S]*return await claimExistingTarget\(reusable\)/,
+  "thread_ephemeral targets must reuse only same-snapshot non-deleted sandboxes for the same owner, thread, workspace root, and provider persistence",
+);
+assert.doesNotMatch(
+  state,
+  /resetWorkspaceLifecyclePatch/,
+  "target reclaim must not use a blanket reset patch that erases preview leases or human-save retention",
 );
 assert.match(
   state,
-  /const resetWorkspaceLifecyclePatch = \{[\s\S]*workspaceRetentionState: undefined[\s\S]*workspaceRetentionExpiresAt: undefined[\s\S]*activePreviewPorts: \[\][\s\S]*previewLeaseState: "none"[\s\S]*cleanupDecision: undefined[\s\S]*cleanupEligibleAt: undefined[\s\S]*providerEphemeral: args\.providerEphemeral[\s\S]*\.\.\.resetWorkspaceLifecyclePatch/,
-  "target state must clear stale workspace retention and preview lease state when reclaiming a retained target",
+  /claimExistingTarget[\s\S]*providerTeardownState: "pending"[\s\S]*errorCode: undefined[\s\S]*errorMessage: undefined[\s\S]*target: await ctx\.db\.get\(target\._id\)/,
+  "target reclaim must update run ownership and worker teardown fields while preserving independent lifecycle facts",
 );
 assert.match(
   state,
@@ -95,8 +100,8 @@ assert.match(
 );
 assert.match(
   state,
-  /releaseDaytonaCodexRuntimeTargetInternal = internalMutation[\s\S]*activePreviewPorts: v\.optional\(v\.array\(v\.number\(\)\)\)[\s\S]*workerState: "released"[\s\S]*releaseReason[\s\S]*previewLeaseState: activePreviewPorts\.length > 0 \? "active" : "none"[\s\S]*previewLeaseExpiresAt/,
-  "target state must release run ownership and persist active preview lease evidence before provider teardown",
+  /releaseDaytonaCodexRuntimeTargetInternal = internalMutation[\s\S]*incomingPreviewPorts[\s\S]*existingPreviewPorts[\s\S]*new Set\(\[\.\.\.existingPreviewPorts, \.\.\.incomingPreviewPorts\]\)[\s\S]*target_already_released_preview_merged[\s\S]*workerState: "released"[\s\S]*releaseReason[\s\S]*previewLeaseState: activePreviewPorts\.length > 0 \? "active" : "none"[\s\S]*previewLeaseExpiresAt/,
+  "target release must merge active preview lease evidence, including late durable-ingest evidence after the live path released",
 );
 assert.match(
   state,
@@ -284,10 +289,10 @@ assert.match(
   /const DEFAULT_REMOTE_ROOT = DAYTONA_CODEX_REMOTE_ROOT;[\s\S]*const DEFAULT_WORKSPACE_ROOT = DAYTONA_CODEX_WORKSPACE_ROOT;[\s\S]*mkdir -p \$\{shellQuote\(workerEnv\.POLYNET_DAYTONA_WORKSPACE_ROOT\)\}/,
   "Daytona direct action must keep the runtime repo and user workspace in separate roots and create the user workspace before starting the worker",
 );
-assertIncludes(
+assert.match(
   workerRunner,
-  'CODEX_HOME_DIR="${POLYNET_CODEX_WORKER_CODEX_HOME:-/home/daytona/.polynet-codex-home}"',
-  "Daytona worker runner must keep Codex home outside the user workspace by default",
+  /DEFAULT_CODEX_HOME_DIR="\/home\/daytona\/\.polynet-codex-home"[\s\S]*DEFAULT_CODEX_HOME_DIR="\$\{TMPDIR:-\/tmp\}\/polynet-codex-worker-local\/codex-home"[\s\S]*CODEX_HOME_DIR="\$\{POLYNET_CODEX_WORKER_CODEX_HOME:-\$DEFAULT_CODEX_HOME_DIR\}"/,
+  "Daytona worker runner must keep Codex home outside the user workspace by default while supporting local proofs",
 );
 assert.match(
   workerRunner,
@@ -614,31 +619,13 @@ assert.match(
 
 assert.match(
   bridge,
-  /type PolynetCodexWorkerTransportProvider = "worker_url" \| "daytona_direct"/,
-  "bridge must model direct Daytona as a transport provider, not a second prompt system",
+  /type PolynetCodexWorkerTransportProvider = "daytona_direct"/,
+  "bridge must model direct Daytona as the only Codex runtime transport provider",
 );
-assert.match(
-  bridge,
-  /POLYNET_CODEX_RUNTIME_PROVIDER[\s\S]*return "daytona_direct"/,
-  "bridge must default to direct Daytona when no stable worker URL is configured",
-);
-const providerFunctionIndex = bridge.indexOf("function readCodexRuntimeProvider()");
-assert.notEqual(providerFunctionIndex, -1, "bridge must define runtime provider selection");
-const providerFunctionBlock = bridge.slice(providerFunctionIndex, providerFunctionIndex + 600);
 assert.doesNotMatch(
-  providerFunctionBlock,
-  /POLYNET_CODEX_WORKER_URL/,
-  "stale worker URL env must not silently select the deleted worker URL rail",
-);
-assertIncludes(
   bridge,
-  '/\\.proxy\\.daytona\\.works|app\\.daytona\\.io/',
-  "bridge must reject ephemeral Daytona preview URLs and deleted Fly hosts on the explicit URL rail",
-);
-assertIncludes(
-  bridge,
-  '/\\.fly\\.dev/',
-  "bridge must reject deleted Fly hosts on the explicit URL rail",
+  /worker_url|legacy_url|POLYNET_CODEX_RUNTIME_PROVIDER|POLYNET_CODEX_WORKER_URL|readCodexRuntimeProvider|workerUrlDeploymentMismatch|polynet_codex_worker_deleted_host_url/,
+  "bridge must not retain the deleted worker URL transport rail",
 );
 assert.match(
   bridge,
@@ -658,8 +645,8 @@ assert.match(
 
 assert.match(
   handlers,
-  /getPolynetCodexWorkerBridgeConfig\(\)[\s\S]*provider === "daytona_direct"[\s\S]*daytona_codex_runtime_target_resolve_started[\s\S]*daytonaCodexRuntimeTargetActions[\s\S]*ensureDaytonaCodexRuntimeTargetInternal/,
-  "runtime handler must resolve a Daytona target before streaming direct Codex turns",
+  /daytona_codex_runtime_target_resolve_started[\s\S]*daytonaCodexRuntimeTargetActions[\s\S]*ensureDaytonaCodexRuntimeTargetInternal/,
+  "runtime handler must unconditionally resolve a Daytona target before streaming Codex worker turns",
 );
 assert.match(
   handlers,
@@ -668,8 +655,13 @@ assert.match(
 );
 assert.match(
   handlers,
-  /runtimeProjectId && workerBridgeConfig\.provider === "daytona_direct"[\s\S]*eventType: "workspace_session_skipped"[\s\S]*transport: "daytona_direct"[\s\S]*daytona_direct_uses_runtime_workspace/,
+  /if \(runtimeProjectId\)[\s\S]*eventType: "workspace_session_skipped"[\s\S]*transport: "daytona_direct"[\s\S]*daytona_direct_uses_runtime_workspace/,
   "direct Daytona turns must not create or require a legacy project workspace session",
+);
+assert.doesNotMatch(
+  handlers,
+  /createProjectRuntimeWorkspaceSession|workspace_session_adopted|workerWorkspaceSession|disposeRuntimeWorkspaceSession|workerBridgeConfig|getPolynetCodexWorkerBridgeConfig/,
+  "runtime handler must not retain the legacy project-workspace adoption branch or handler-local transport branch for Codex worker turns",
 );
 const readyEventIndex = handlers.indexOf('eventType: "daytona_codex_runtime_target_ready"');
 assert.notEqual(readyEventIndex, -1, "runtime handler must emit Daytona readiness evidence");

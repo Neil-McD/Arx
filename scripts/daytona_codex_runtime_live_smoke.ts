@@ -692,9 +692,6 @@ async function runWorkspaceProbe(params: {
   const body = JSON.stringify({
     run_id: `daytona_live_smoke_${Date.now()}`,
     sandbox_name: "polynet-daytona-live-smoke",
-    command:
-      "pwd && echo POLYNET_CODEX_WORKER_SERVICE_PROBE && printf daytona-live > daytona-live-marker.txt && cat daytona-live-marker.txt",
-    command_timeout_seconds: 60,
     destroy_after_run: false,
   });
   const result = await runRemote(
@@ -747,7 +744,6 @@ async function runRealCodexTurnProof(params: {
     model: DEFAULT_CODEX_MODEL_ID,
     sandbox_name: "polynet-daytona-live-turn-smoke",
     destroy_after_run: false,
-    command_timeout_seconds: 90,
     developer_instructions: [
       "POLYNET_DAYTONA_TURN_SENTINEL: this is a staging-only Daytona real-turn proof.",
       `After the native Codex workspace proof succeeds, include the exact text ${TURN_PROOF_ASSISTANT_SENTINEL} in the final answer.`,
@@ -804,7 +800,6 @@ async function runNativeCodexWorkspaceProbe(params: {
     model: DEFAULT_CODEX_MODEL_ID,
     sandbox_name: "polynet-daytona-native-workspace-probe",
     destroy_after_run: false,
-    command_timeout_seconds: 90,
     developer_instructions: [
       "POLYNET_DAYTONA_NATIVE_WORKSPACE_PROBE: this is a staging-only Codex native workspace proof.",
       "Use only Codex native workspace capabilities for file and shell work.",
@@ -903,7 +898,6 @@ async function runInteractivePreviewCodexProbe(params: {
     model: DEFAULT_CODEX_MODEL_ID,
     sandbox_name: "polynet-daytona-interactive-preview-probe",
     destroy_after_run: false,
-    command_timeout_seconds: 120,
     developer_instructions: [
       "POLYNET_DAYTONA_INTERACTIVE_PREVIEW_PROBE: this is a staging-only Codex preview proof.",
       "Use Codex native file editing and shell execution for workspace work.",

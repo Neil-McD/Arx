@@ -22,7 +22,7 @@ const POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS = new Set([
 
 type JsonRecord = Record<string, unknown>;
 type PolynetCodexWorkerDeploymentKind = "staging" | "production";
-type PolynetCodexWorkerTransportProvider = "worker_url" | "daytona_direct";
+type PolynetCodexWorkerTransportProvider = "daytona_direct";
 
 export type PolynetCodexWorkerResolvedTarget = {
   provider: "daytona";
@@ -77,13 +77,6 @@ function readBooleanEnv(name: string): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-function readCodexRuntimeProvider(): PolynetCodexWorkerTransportProvider {
-  const raw = readEnv("POLYNET_CODEX_RUNTIME_PROVIDER").toLowerCase();
-  if (raw === "worker_url" || raw === "url" || raw === "legacy_url") return "worker_url";
-  if (raw === "daytona_direct" || raw === "daytona") return "daytona_direct";
-  return "daytona_direct";
-}
-
 function hasDaytonaCredentials(): boolean {
   return Boolean(readEnv("DAYTONA_API_KEY") || readEnv("DAYTONA_JWT_TOKEN"));
 }
@@ -97,27 +90,6 @@ function readWorkerDeploymentKind(): PolynetCodexWorkerDeploymentKind | null {
     : null;
 }
 
-function workerUrlDeploymentMismatch(params: {
-  deploymentKind: PolynetCodexWorkerDeploymentKind;
-  baseUrl: string;
-}): string | null {
-  const normalizedUrl = params.baseUrl.toLowerCase();
-  if (/\.proxy\.daytona\.works|app\.daytona\.io/.test(normalizedUrl)) {
-    return "polynet_codex_worker_ephemeral_daytona_url_invalid";
-  }
-  if (/\.fly\.dev/.test(normalizedUrl)) {
-    return "polynet_codex_worker_deleted_host_url";
-  }
-  if (params.deploymentKind === "production") {
-    return /staging|quick-porcupine-949/.test(normalizedUrl)
-      ? "polynet_codex_worker_production_env_mismatch"
-      : null;
-  }
-  return /wry-hawk-715|www\.polynet\.ai/.test(normalizedUrl)
-    ? "polynet_codex_worker_staging_env_mismatch"
-    : null;
-}
-
 export function getPolynetCodexWorkerBridgeConfig(): {
   enabled: boolean;
   provider: PolynetCodexWorkerTransportProvider;
@@ -125,7 +97,7 @@ export function getPolynetCodexWorkerBridgeConfig(): {
   authToken: string | null;
   disabledReason: string | null;
 } {
-  const provider = readCodexRuntimeProvider();
+  const provider = "daytona_direct";
   if (!readBooleanEnv("POLYNET_CODEX_WORKER_RUNTIME_ENABLED")) {
     return {
       enabled: false,
@@ -145,59 +117,29 @@ export function getPolynetCodexWorkerBridgeConfig(): {
       disabledReason: "polynet_codex_worker_deployment_kind_invalid",
     };
   }
-  if (provider === "daytona_direct") {
-    const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
-    if (!authToken) {
-      return {
-        enabled: false,
-        provider,
-        baseUrl: null,
-        authToken: null,
-        disabledReason: "polynet_codex_worker_auth_token_missing",
-      };
-    }
-    if (!hasDaytonaCredentials()) {
-      return {
-        enabled: false,
-        provider,
-        baseUrl: null,
-        authToken,
-        disabledReason: "daytona_direct_credentials_missing",
-      };
-    }
+  const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
+  if (!authToken) {
     return {
-      enabled: true,
+      enabled: false,
+      provider,
+      baseUrl: null,
+      authToken: null,
+      disabledReason: "polynet_codex_worker_auth_token_missing",
+    };
+  }
+  if (!hasDaytonaCredentials()) {
+    return {
+      enabled: false,
       provider,
       baseUrl: null,
       authToken,
-      disabledReason: null,
-    };
-  }
-  const baseUrl = readEnv("POLYNET_CODEX_WORKER_URL").replace(/\/+$/, "");
-  const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
-  if (!baseUrl || !authToken) {
-    return {
-      enabled: false,
-      provider,
-      baseUrl: baseUrl || null,
-      authToken: authToken || null,
-      disabledReason: "polynet_codex_worker_env_missing",
-    };
-  }
-  const mismatch = workerUrlDeploymentMismatch({ deploymentKind, baseUrl });
-  if (mismatch) {
-    return {
-      enabled: false,
-      provider,
-      baseUrl,
-      authToken,
-      disabledReason: mismatch,
+      disabledReason: "daytona_direct_credentials_missing",
     };
   }
   return {
     enabled: true,
     provider,
-    baseUrl,
+    baseUrl: null,
     authToken,
     disabledReason: null,
   };
@@ -458,10 +400,9 @@ function resolveWorkerTransport(params?: {
     enabled: config.enabled,
     baseUrl: config.baseUrl,
     authToken: config.authToken,
-    disabledReason:
-      config.provider === "daytona_direct" && config.enabled
-        ? "daytona_direct_target_missing"
-        : config.disabledReason,
+    disabledReason: config.enabled
+      ? "daytona_direct_target_missing"
+      : config.disabledReason,
   };
 }
 
@@ -526,9 +467,7 @@ export async function streamPolynetCodexWorkerTurn(params: {
     url: string;
     token: string;
     run_token?: string | null;
-    terminal_run_token?: string | null;
     tool_run_token?: string | null;
-    terminal_url?: string | null;
     tool_url?: string | null;
     context: Record<string, unknown>;
   } | null;
@@ -591,9 +530,7 @@ export async function streamPolynetCodexWorkerTurn(params: {
               url: params.ingest.url,
               token: params.ingest.token,
               run_token: params.ingest.run_token ?? null,
-              terminal_run_token: params.ingest.terminal_run_token ?? null,
               tool_run_token: params.ingest.tool_run_token ?? null,
-              terminal_url: params.ingest.terminal_url ?? null,
               tool_url: params.ingest.tool_url ?? null,
               context: params.ingest.context,
             },

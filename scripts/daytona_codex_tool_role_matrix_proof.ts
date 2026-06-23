@@ -80,7 +80,7 @@ assert.match(
 );
 assert.match(
   harnessToolPolicySource,
-  /CODEX_WORKSPACE_BASH_TOOL_NAME = "workspace_bash"[\s\S]*CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES[\s\S]*CODEX_WORKSPACE_BASH_TOOL_NAME[\s\S]*terminal_stop/,
+  /CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES = \[[\s\S]*"workspace_bash"[\s\S]*terminal_stop/,
   "shared harness policy must name the duplicate workspace tools that native Daytona Codex must not receive",
 );
 
@@ -138,7 +138,6 @@ assertToolNames(
 );
 
 const daytonaCodexHarnessPolicy = resolveCodexHarnessToolPolicy({
-  workspaceHostId: "daytona",
   polynetPlatformToolProjection: {
     hasCommunity: true,
     communityLensAuthority: {
@@ -353,16 +352,16 @@ assert.match(
 assert.match(
   workerServerSource,
   /dynamicTools: codexDynamicTools\.dynamicTools/,
-  "worker server must not advertise duplicate workspace_bash in Daytona Codex mode",
+  "worker server must pass the actual Codex dynamic tool array into thread/start",
+);
+assert.doesNotMatch(
+  workerServerSource,
+  /buildWorkspaceBashDynamicToolSpec|CODEX_WORKSPACE_BASH_TOOL_NAME|toolName !== CODEX_WORKSPACE_BASH_TOOL_NAME/,
+  "worker server must not retain a duplicate workspace_bash advertisement or handler branch",
 );
 assert.match(
   workerServerSource,
-  /function buildCodexDynamicTools\(activeTurn: ActiveTurn\)[\s\S]*activeTurn\.workspaceHostId !== "daytona"[\s\S]*buildWorkspaceBashDynamicToolSpec/,
-  "worker server must build Codex dynamic tools through one helper and include workspace_bash only outside Daytona mode",
-);
-assert.match(
-  workerServerSource,
-  /CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES[\s\S]*CODEX_RUNTIME_ADAPTER_TOOL_NAMES[\s\S]*CODEX_WORKSPACE_BASH_TOOL_NAME[\s\S]*from "\.\.\/\.\.\/\.\.\/shared\/harnessToolPolicy\.ts"/,
+  /CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES[\s\S]*CODEX_RUNTIME_ADAPTER_TOOL_NAMES[\s\S]*from "\.\.\/\.\.\/\.\.\/shared\/harnessToolPolicy\.ts"/,
   "worker server must import Codex tool-policy constants from the shared harness policy",
 );
 assert.doesNotMatch(
@@ -382,8 +381,8 @@ assert.match(
 );
 assert.match(
   workerServerSource,
-  /toolName !== CODEX_WORKSPACE_BASH_TOOL_NAME[\s\S]*activeTurn\.workspaceHostId === "daytona"[\s\S]*unsupported dynamic tool/,
-  "worker server must reject workspace_bash calls in Daytona Codex mode",
+  /String\(params\.namespace \?\? ""\)\.trim\(\) === "polynet"[\s\S]*this\.client\.respondError\(message\.id, -32601, "unsupported dynamic tool"\)/,
+  "worker server must reject all non-advertised dynamic tools, including workspace_bash",
 );
 assert.match(
   runtimeTurnHandlersSource,

@@ -6,11 +6,7 @@ import { DAYTONA_CODEX_WORKSPACE_ROOT } from "../../../shared/daytonaCodexRuntim
 import {
   neutralizeWorkspaceText,
   previewText,
-  safeResourceName,
-  type BlaxelToolCallSummary,
-  type BlaxelToolResult,
-} from "./blaxelTool.ts";
-import { elapsedMs, nowMs } from "./timing.ts";
+} from "./workerText.ts";
 
 const MAX_OUTPUT_CHARS = 120_000;
 const DEFAULT_DAYTONA_WORKSPACE_ROOT = DAYTONA_CODEX_WORKSPACE_ROOT;
@@ -101,95 +97,6 @@ function appendBounded(target: { value: string }, chunk: unknown): void {
   if (target.value.length >= MAX_OUTPUT_CHARS) return;
   const next = String(chunk ?? "");
   target.value = `${target.value}${next}`.slice(0, MAX_OUTPUT_CHARS);
-}
-
-export async function runDaytonaLocalBash(params: {
-  sandboxName: string;
-  turnId: string | null;
-  callId: string | null;
-  command: string;
-  timeoutSeconds: number;
-}): Promise<BlaxelToolResult> {
-  const startedAtMs = nowMs();
-  const workspaceRoot = resolveDaytonaWorkspaceRoot();
-  await mkdir(workspaceRoot, { recursive: true });
-  const processName = safeResourceName(`polynet-daytona-${Date.now()}`);
-  const stdout = { value: "" };
-  const stderr = { value: "" };
-
-  const result = await new Promise<{
-    exitCode: number | null;
-    timedOut: boolean;
-    error: Error | null;
-  }>((resolve) => {
-    let settled = false;
-    let timedOut = false;
-    const child = spawn("/bin/sh", ["-lc", params.command], {
-      cwd: workspaceRoot,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const finish = (payload: {
-      exitCode: number | null;
-      timedOut: boolean;
-      error: Error | null;
-    }) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      resolve(payload);
-    };
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-      }, 1000);
-    }, Math.max(1, params.timeoutSeconds) * 1000);
-    child.stdout.on("data", (chunk) => appendBounded(stdout, chunk));
-    child.stderr.on("data", (chunk) => appendBounded(stderr, chunk));
-    child.on("error", (error) => finish({ exitCode: null, timedOut, error }));
-    child.on("exit", (code) => finish({ exitCode: code, timedOut, error: null }));
-  });
-
-  if (result.timedOut && !stderr.value.includes("timed out")) {
-    stderr.value = `${stderr.value}\nCommand timed out after ${params.timeoutSeconds}s.`;
-  }
-  const latencyMs = elapsedMs(startedAtMs);
-  const ok = !result.error && !result.timedOut && (result.exitCode ?? 0) === 0;
-  const failureMessage = result.error
-    ? neutralizeWorkspaceText(result.error.message)
-    : result.timedOut
-      ? `workspace command timed out after ${params.timeoutSeconds}s`
-      : "";
-  const summary: BlaxelToolCallSummary = {
-    turnId: params.turnId,
-    callId: params.callId,
-    command: params.command,
-    latencyMs,
-    ok,
-    exitCode: result.exitCode,
-    stdout: stdout.value,
-    stderr: failureMessage ? `${stderr.value}\n${failureMessage}`.trim() : stderr.value,
-    providerCommandId: processName,
-  };
-  return {
-    summary,
-    contentText: JSON.stringify(
-      {
-        command: params.command,
-        ok,
-        exitCode: result.exitCode,
-        stdout: summary.stdout,
-        stderr: summary.stderr,
-        workspaceRoot,
-        stdoutPreview: previewText(summary.stdout, 1000),
-        stderrPreview: previewText(summary.stderr, 1000),
-      },
-      null,
-      2,
-    ),
-  };
 }
 
 export async function startDaytonaLocalServer(params: {

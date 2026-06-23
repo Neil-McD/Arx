@@ -70,7 +70,6 @@ import {
 import {
   buildPolynetCodexWorkerTurnInputs,
   cancelPolynetCodexWorkerTurn,
-  getPolynetCodexWorkerBridgeConfig,
   POLYNET_CODEX_WORKER_CONTRACT_NAME,
   POLYNET_CODEX_WORKER_CONTRACT_VERSION,
   POLYNET_CODEX_WORKER_ENGINE_ID,
@@ -79,15 +78,8 @@ import {
   streamPolynetCodexWorkerTurn,
   type PolynetCodexWorkerResolvedTarget,
 } from "./polynetCodexWorkerBridge";
-import {
-  createProjectRuntimeWorkspaceSession,
-  type RuntimeWorkspaceSession,
-} from "./workspaceRuntimeSession";
-import { disposeRuntimeWorkspaceSession } from "./runtimeWorkspaceSessionDisposal";
-import { buildBlaxelProjectWorkspaceNames } from "./blaxelWorkspaceProjectNames";
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import { buildPolynetCodexWorkerIngestTarget } from "./polynetCodexWorkerIngest";
-import { buildPolynetCodexWorkerTerminalTarget } from "./polynetCodexWorkerTerminal";
 import { buildPolynetCodexWorkerToolTarget } from "./polynetCodexWorkerTool";
 import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken";
 import {
@@ -1402,7 +1394,6 @@ export async function handleRuntimeTurnRequest(args: {
           }
           polynetCodexRuntimeCreditKey = codexRuntimeCreditKey;
           polynetCodexRuntimeCreditsReserved = codexRuntimeReserveCredits;
-          const workerBridgeConfig = getPolynetCodexWorkerBridgeConfig();
           try {
             await streamAppendRunEvent({
               eventType: "polynet_codex_runtime_credit_reserved",
@@ -1419,59 +1410,7 @@ export async function handleRuntimeTurnRequest(args: {
             // Reservation is authoritative; audit event write is best-effort.
           }
 
-          let workerWorkspaceSession: RuntimeWorkspaceSession | null = null;
-          let workerSandboxName: string | null = null;
-          if (runtimeProjectId && workerBridgeConfig.provider !== "daytona_direct") {
-            const createdWorkspace = await createProjectRuntimeWorkspaceSession({
-              ctx,
-              authSubject: actor.authSubject,
-              userId: actor.dbUserId,
-              projectId: runtimeProjectId,
-              runId,
-            });
-            if (!createdWorkspace.ok) {
-              await persistPartialAssistantMessageBestEffort({
-                content: "",
-                status: "error",
-                reason: createdWorkspace.code,
-                errorCode: createdWorkspace.code,
-                errorMessage: createdWorkspace.message,
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-              await finishRunBestEffortForRun({
-                status: "error",
-                reason: createdWorkspace.code,
-                errorCode: createdWorkspace.code,
-                errorMessage: createdWorkspace.message,
-              });
-              writer.send({
-                event: "error",
-                data: {
-                  code: createdWorkspace.code,
-                  error: createdWorkspace.message,
-                  message: createdWorkspace.message,
-                  status: createdWorkspace.status,
-                  details: createdWorkspace.details ?? null,
-                },
-              });
-              return;
-            }
-            workerWorkspaceSession = createdWorkspace.session;
-            workerSandboxName = buildBlaxelProjectWorkspaceNames(runtimeProjectId).sandboxName;
-            await streamAppendRunEvent({
-              eventType: "workspace_session_adopted",
-              eventKey: `${runId}:workspace_session_adopted:polynet_codex_worker`,
-              payload: {
-                run_id: runId,
-                sandbox_id: workerWorkspaceSession.providerSandboxId,
-                project_id: runtimeProjectId,
-                source: "polynet_codex_worker",
-                provider_id: workerWorkspaceSession.providerId,
-                toolbox_proxy_url: null,
-              },
-            });
-          } else if (runtimeProjectId && workerBridgeConfig.provider === "daytona_direct") {
+          if (runtimeProjectId) {
             await streamAppendRunEvent({
               eventType: "workspace_session_skipped",
               eventKey: `${runId}:workspace_session_skipped:daytona_direct`,
@@ -1494,13 +1433,10 @@ export async function handleRuntimeTurnRequest(args: {
               runtimeCommunityLensAuthority?.communityResourceLane ?? null,
             communityLensAuthority: runtimeCommunityLensAuthority,
           };
-          const workerRuntimeToolBridgeRequired =
-            workerBridgeConfig.provider === "daytona_direct";
+          const workerRuntimeToolBridgeRequired = true;
           const codexHarnessToolPolicy = resolveCodexHarnessToolPolicy({
-            workspaceHostId: workerRuntimeToolBridgeRequired ? "daytona" : "legacy",
             polynetPlatformToolProjection: codexPlatformToolProjection,
-            workspaceServeAvailable:
-              workerRuntimeToolBridgeRequired || Boolean(workerWorkspaceSession),
+            workspaceServeAvailable: workerRuntimeToolBridgeRequired,
             computerAdaptersAvailable: workerRuntimeToolBridgeRequired,
           });
           const workerPlatformTools = codexHarnessToolPolicy.polynetPlatformTools;
@@ -1611,9 +1547,6 @@ export async function handleRuntimeTurnRequest(args: {
             });
             return;
           }
-          const workerTerminalTarget = workerWorkspaceSession
-            ? buildPolynetCodexWorkerTerminalTarget()
-            : null;
           const workerToolTarget =
             workerPlatformTools.length > 0 || workerRuntimeToolBridgeRequired
               ? buildPolynetCodexWorkerToolTarget()
@@ -1650,14 +1583,12 @@ export async function handleRuntimeTurnRequest(args: {
           });
           let workerRunTokens: {
             ingest: string;
-            terminal: string | null;
             tool: string | null;
           } | null = null;
           const mintedWorkerRunTokens = await mintPolynetCodexWorkerRunTokenSet({
             ownerId: String(actor.dbUserId),
             threadId: String(ownedThread._id),
             runId,
-            includeTerminal: Boolean(workerTerminalTarget),
             includeTool: Boolean(workerToolTarget),
           });
           if (!mintedWorkerRunTokens.ok) {
@@ -1691,137 +1622,135 @@ export async function handleRuntimeTurnRequest(args: {
 
           let workerMachineId: string | null = null;
           let workerResolvedTarget: PolynetCodexWorkerResolvedTarget | null = null;
-          if (workerBridgeConfig.provider === "daytona_direct") {
-            try {
-              await streamAppendRunEvent({
-                eventType: "daytona_codex_runtime_target_resolve_started",
-                eventKey: `${runId}:daytona_codex_runtime_target_resolve_started:1`,
-                payload: {
-                  run_id: runId,
-                  provider: "daytona",
-                  transport: "daytona_direct",
-                  scope: "pending",
-                },
-              });
-              const resolved = (await ctx.runAction(
-                (internal as any).daytonaCodexRuntimeTargetActions
-                  .ensureDaytonaCodexRuntimeTargetInternal as any,
-                {
-                  ownerId: actor.dbUserId,
-                  threadId: ownedThread._id,
-                  runId,
-                  ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
-                },
-              )) as {
-                targetId?: unknown;
-                sandboxId?: unknown;
-                workerUrl?: unknown;
-                authToken?: unknown;
-                signedPreviewExpiresAt?: unknown;
-                snapshotId?: unknown;
-                targetRegion?: unknown;
-                autoStopMinutes?: unknown;
-                autoArchiveMinutes?: unknown;
-                autoDeleteMinutes?: unknown;
-                workerPort?: unknown;
-                lifecycleMode?: unknown;
-                providerEphemeral?: unknown;
-                timing?: unknown;
-              };
-              workerResolvedTarget = {
+          try {
+            await streamAppendRunEvent({
+              eventType: "daytona_codex_runtime_target_resolve_started",
+              eventKey: `${runId}:daytona_codex_runtime_target_resolve_started:1`,
+              payload: {
+                run_id: runId,
                 provider: "daytona",
-                targetId: String(resolved.targetId ?? ""),
-                sandboxId: String(resolved.sandboxId ?? "") || null,
-                workerUrl: String(resolved.workerUrl ?? ""),
-                authToken: String(resolved.authToken ?? ""),
-                signedPreviewExpiresAt:
-                  typeof resolved.signedPreviewExpiresAt === "number"
-                    ? resolved.signedPreviewExpiresAt
-                    : null,
-              };
-              const resolvedSnapshotId =
-                String(resolved.snapshotId ?? "").trim() || null;
-              const resolvedTargetRegion =
-                String(resolved.targetRegion ?? "").trim() || null;
-              const resolvedAutoStopMinutes = readPositiveNumber(
-                resolved.autoStopMinutes,
-              );
-              const resolvedAutoArchiveMinutes = readPositiveNumber(
-                resolved.autoArchiveMinutes,
-              );
-              const resolvedAutoDeleteMinutes = readPositiveNumber(
-                resolved.autoDeleteMinutes,
-              );
-              const resolvedWorkerPort = readPositiveNumber(resolved.workerPort);
-              const resolvedLifecycleMode =
-                String(resolved.lifecycleMode ?? "").trim() || null;
-              const resolvedProviderEphemeral =
-                typeof resolved.providerEphemeral === "boolean"
-                  ? resolved.providerEphemeral
-                  : null;
-              const resolvedScope =
-                resolvedLifecycleMode === "thread_ephemeral" ? "thread" : "run";
-              workerMachineId = workerResolvedTarget.sandboxId;
-              polynetCodexRuntimeWorkerMachineId = workerResolvedTarget.sandboxId;
-              await streamAppendRunEvent({
-                eventType: "daytona_codex_runtime_target_ready",
-                eventKey: `${runId}:daytona_codex_runtime_target_ready:1`,
-                payload: {
-                  run_id: runId,
-                  provider: "daytona",
-                  transport: "daytona_direct",
-                  scope: resolvedScope,
-                  target_id: workerResolvedTarget.targetId,
-                  sandbox_id: workerResolvedTarget.sandboxId,
-                  lifecycle_mode: resolvedLifecycleMode,
-                  provider_ephemeral: resolvedProviderEphemeral,
-                  snapshot_id: resolvedSnapshotId,
-                  target_region: resolvedTargetRegion,
-                  auto_stop_minutes: resolvedAutoStopMinutes,
-                  auto_archive_minutes: resolvedAutoArchiveMinutes,
-                  auto_delete_minutes: resolvedAutoDeleteMinutes,
-                  worker_port: resolvedWorkerPort,
-                  signed_preview_expires_at:
-                    workerResolvedTarget.signedPreviewExpiresAt ?? null,
-                  timing: resolved.timing ?? null,
-                },
-              });
-            } catch (error) {
-              const targetFailureCode =
-                error instanceof Error && error.message
-                  ? error.message.split(/\s|\n/)[0]
-                  : "daytona_codex_runtime_target_failed";
-              const targetFailureMessage =
-                error instanceof Error
-                  ? error.message
-                  : "Daytona Codex runtime target failed.";
-              await persistPartialAssistantMessageBestEffort({
-                content: "",
-                status: "error",
-                reason: targetFailureCode,
-                errorCode: targetFailureCode,
-                errorMessage: targetFailureMessage,
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-              await finishRunBestEffortForRun({
-                status: "error",
-                reason: targetFailureCode,
-                errorCode: targetFailureCode,
-                errorMessage: targetFailureMessage,
-              });
-              writer.send({
-                event: "error",
-                data: {
-                  code: targetFailureCode,
-                  error: targetFailureMessage,
-                  message: targetFailureMessage,
-                  status: 503,
-                  provider: "daytona",
-                },
-              });
-              return;
-            }
+                transport: "daytona_direct",
+                scope: "pending",
+              },
+            });
+            const resolved = (await ctx.runAction(
+              (internal as any).daytonaCodexRuntimeTargetActions
+                .ensureDaytonaCodexRuntimeTargetInternal as any,
+              {
+                ownerId: actor.dbUserId,
+                threadId: ownedThread._id,
+                runId,
+                ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+              },
+            )) as {
+              targetId?: unknown;
+              sandboxId?: unknown;
+              workerUrl?: unknown;
+              authToken?: unknown;
+              signedPreviewExpiresAt?: unknown;
+              snapshotId?: unknown;
+              targetRegion?: unknown;
+              autoStopMinutes?: unknown;
+              autoArchiveMinutes?: unknown;
+              autoDeleteMinutes?: unknown;
+              workerPort?: unknown;
+              lifecycleMode?: unknown;
+              providerEphemeral?: unknown;
+              timing?: unknown;
+            };
+            workerResolvedTarget = {
+              provider: "daytona",
+              targetId: String(resolved.targetId ?? ""),
+              sandboxId: String(resolved.sandboxId ?? "") || null,
+              workerUrl: String(resolved.workerUrl ?? ""),
+              authToken: String(resolved.authToken ?? ""),
+              signedPreviewExpiresAt:
+                typeof resolved.signedPreviewExpiresAt === "number"
+                  ? resolved.signedPreviewExpiresAt
+                  : null,
+            };
+            const resolvedSnapshotId =
+              String(resolved.snapshotId ?? "").trim() || null;
+            const resolvedTargetRegion =
+              String(resolved.targetRegion ?? "").trim() || null;
+            const resolvedAutoStopMinutes = readPositiveNumber(
+              resolved.autoStopMinutes,
+            );
+            const resolvedAutoArchiveMinutes = readPositiveNumber(
+              resolved.autoArchiveMinutes,
+            );
+            const resolvedAutoDeleteMinutes = readPositiveNumber(
+              resolved.autoDeleteMinutes,
+            );
+            const resolvedWorkerPort = readPositiveNumber(resolved.workerPort);
+            const resolvedLifecycleMode =
+              String(resolved.lifecycleMode ?? "").trim() || null;
+            const resolvedProviderEphemeral =
+              typeof resolved.providerEphemeral === "boolean"
+                ? resolved.providerEphemeral
+                : null;
+            const resolvedScope =
+              resolvedLifecycleMode === "thread_ephemeral" ? "thread" : "run";
+            workerMachineId = workerResolvedTarget.sandboxId;
+            polynetCodexRuntimeWorkerMachineId = workerResolvedTarget.sandboxId;
+            await streamAppendRunEvent({
+              eventType: "daytona_codex_runtime_target_ready",
+              eventKey: `${runId}:daytona_codex_runtime_target_ready:1`,
+              payload: {
+                run_id: runId,
+                provider: "daytona",
+                transport: "daytona_direct",
+                scope: resolvedScope,
+                target_id: workerResolvedTarget.targetId,
+                sandbox_id: workerResolvedTarget.sandboxId,
+                lifecycle_mode: resolvedLifecycleMode,
+                provider_ephemeral: resolvedProviderEphemeral,
+                snapshot_id: resolvedSnapshotId,
+                target_region: resolvedTargetRegion,
+                auto_stop_minutes: resolvedAutoStopMinutes,
+                auto_archive_minutes: resolvedAutoArchiveMinutes,
+                auto_delete_minutes: resolvedAutoDeleteMinutes,
+                worker_port: resolvedWorkerPort,
+                signed_preview_expires_at:
+                  workerResolvedTarget.signedPreviewExpiresAt ?? null,
+                timing: resolved.timing ?? null,
+              },
+            });
+          } catch (error) {
+            const targetFailureCode =
+              error instanceof Error && error.message
+                ? error.message.split(/\s|\n/)[0]
+                : "daytona_codex_runtime_target_failed";
+            const targetFailureMessage =
+              error instanceof Error
+                ? error.message
+                : "Daytona Codex runtime target failed.";
+            await persistPartialAssistantMessageBestEffort({
+              content: "",
+              status: "error",
+              reason: targetFailureCode,
+              errorCode: targetFailureCode,
+              errorMessage: targetFailureMessage,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: targetFailureCode,
+              errorCode: targetFailureCode,
+              errorMessage: targetFailureMessage,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: targetFailureCode,
+                error: targetFailureMessage,
+                message: targetFailureMessage,
+                status: 503,
+                provider: "daytona",
+              },
+            });
+            return;
           }
 
           let workerCancelFired = false;
@@ -1888,8 +1817,8 @@ export async function handleRuntimeTurnRequest(args: {
               prompt: workerTurnInputs.prompt,
               developerInstructions: workerTurnInputs.developerInstructions,
               model: requestedModelId,
-              sandboxName: workerSandboxName,
-              destroyAfterRun: !workerWorkspaceSession,
+              sandboxName: null,
+              destroyAfterRun: true,
               chatgptAuth: {
                 accessToken: workerChatgptAuth.accessToken,
                 accountId: workerChatgptAccountId,
@@ -1899,9 +1828,7 @@ export async function handleRuntimeTurnRequest(args: {
                 ? {
                     ...workerIngestTarget,
                     run_token: workerRunTokens?.ingest ?? null,
-                    terminal_run_token: workerRunTokens?.terminal ?? null,
                     tool_run_token: workerRunTokens?.tool ?? null,
-                    terminal_url: workerTerminalTarget,
                     tool_url: workerToolTarget,
                     context: {
                       owner_id: String(actor.dbUserId),
@@ -1925,20 +1852,6 @@ export async function handleRuntimeTurnRequest(args: {
                               sandbox_id: workerResolvedTarget.sandboxId,
                               signed_preview_expires_at:
                                 workerResolvedTarget.signedPreviewExpiresAt,
-                            },
-                          }
-                        : {}),
-                      ...(workerWorkspaceSession
-                        ? {
-                            lease: {
-                              credit_reservation_key:
-                                workerWorkspaceSession.creditReservationKey ?? null,
-                              started_at: workerWorkspaceSession.startedAt,
-                              project_id: String(workerWorkspaceSession.projectId),
-                              provider_sandbox_id: workerWorkspaceSession.providerSandboxId,
-                              sandbox_cpu: workerWorkspaceSession.sandboxCpu,
-                              sandbox_memory_gib: workerWorkspaceSession.sandboxMemoryGiB,
-                              sandbox_disk_gib: workerWorkspaceSession.sandboxDiskGiB,
                             },
                           }
                         : {}),
@@ -2099,26 +2012,6 @@ export async function handleRuntimeTurnRequest(args: {
                       ? teardownError.message.slice(0, 1000)
                       : String(teardownError ?? "teardown_failed").slice(0, 1000),
                 },
-              });
-            }
-          }
-
-          if (workerWorkspaceSession) {
-            try {
-              await disposeRuntimeWorkspaceSession({
-                ctx,
-                userId: actor.dbUserId,
-                runId,
-                session: workerWorkspaceSession,
-                projectId: runtimeProjectId,
-                finalState: "released",
-                appendRunEvent: streamAppendRunEvent,
-                source: "polynet_codex_worker",
-              });
-            } catch (error) {
-              logStructuredError("polynet_codex_worker_workspace_dispose_failed", {
-                error,
-                run_id: runId,
               });
             }
           }

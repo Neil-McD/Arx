@@ -22,6 +22,7 @@ const daytonaActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
 const cloudThreadsRead = read("shared/cloudThreadsRead.ts");
 const daytonaCodexConfig = read("services/polynet-codex-worker/src/daytonaCodexConfig.ts");
 const workerServer = read("services/polynet-codex-worker/src/server.ts");
+const workerToolSpecs = read("services/polynet-codex-worker/src/workerToolSpecs.ts");
 const daytonaRuntimeAppPreview = read("apps/web/src/components/DaytonaRuntimeAppPreview.tsx");
 const previewProxy = read("apps/preview-proxy/server.js");
 const previewProxySessionToken = read("apps/preview-proxy/previewProxySessionToken.js");
@@ -137,7 +138,7 @@ assertNotMatch(
 );
 
 assertMatch(
-  workerServer,
+  workerToolSpecs,
   /PolyNet attaches the app to the user's preview panel[\s\S]*Never print raw provider preview URLs/,
   "worker tool guidance must route preview UX through PolyNet",
 );
