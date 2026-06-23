@@ -68,6 +68,86 @@ export const getDaytonaCodexRuntimeTargetByIdInternal = internalQuery({
   },
 });
 
+export const getActiveDaytonaCodexRuntimeSubstrateForThreadInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const targets = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_owner_threadId", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("threadId", args.threadId),
+      )
+      .collect();
+    const candidates = targets
+      .filter((target: any) => {
+        const sandboxId = String(target.sandboxId ?? "").trim();
+        if (!sandboxId) return false;
+        if (
+          String(target.sandboxState ?? "") === "deleted" ||
+          String(target.sandboxState ?? "") === "stopped"
+        ) return false;
+        if (
+          String(target.providerTeardownState ?? "") === "deleted" ||
+          String(target.providerTeardownState ?? "") === "stopped"
+        ) return false;
+        if (String(target.workerState ?? "") === "error") return false;
+        const previewLeaseActive =
+          String(target.previewLeaseState ?? "") === "active" &&
+          Number(target.previewLeaseExpiresAt ?? 0) > nowMs &&
+          normalizeActivePreviewPorts(target.activePreviewPorts).length > 0;
+        return String(target.workerState ?? "") === "ready" || previewLeaseActive;
+      })
+      .sort((left: any, right: any) => {
+        const leftPreviewActive =
+          String(left.previewLeaseState ?? "") === "active" &&
+          Number(left.previewLeaseExpiresAt ?? 0) > nowMs
+            ? 1
+            : 0;
+        const rightPreviewActive =
+          String(right.previewLeaseState ?? "") === "active" &&
+          Number(right.previewLeaseExpiresAt ?? 0) > nowMs
+            ? 1
+            : 0;
+        if (leftPreviewActive !== rightPreviewActive) {
+          return rightPreviewActive - leftPreviewActive;
+        }
+        return (
+          Number(right.lastUsedAt ?? right.updatedAt ?? 0) -
+          Number(left.lastUsedAt ?? left.updatedAt ?? 0)
+        );
+      });
+    const target = candidates[0];
+    if (!target) return null;
+    const activePreviewPorts = normalizeActivePreviewPorts(target.activePreviewPorts);
+    const previewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
+    const previewLeaseActive =
+      String(target.previewLeaseState ?? "") === "active" &&
+      Number.isFinite(previewLeaseExpiresAt) &&
+      previewLeaseExpiresAt > nowMs &&
+      activePreviewPorts.length > 0;
+    return {
+      provider: "daytona",
+      targetId: String(target._id),
+      runId: String(target.runId ?? ""),
+      scope: String(target.scope ?? ""),
+      lifecycleMode: String(target.lifecycleMode ?? ""),
+      sandboxId: String(target.sandboxId ?? ""),
+      sandboxState: String(target.sandboxState ?? ""),
+      workerState: String(target.workerState ?? ""),
+      workspaceRoot: String(target.workspaceRoot ?? ""),
+      activePreviewPorts,
+      previewLeaseState: String(target.previewLeaseState ?? "none"),
+      previewLeaseExpiresAt: Number.isFinite(previewLeaseExpiresAt)
+        ? previewLeaseExpiresAt
+        : null,
+      previewLeaseActive,
+    };
+  },
+});
+
 export const listExpiredDaytonaCodexRuntimeTargetsInternal = internalQuery({
   args: {
     nowMs: v.optional(v.number()),
@@ -444,6 +524,7 @@ export const markDaytonaCodexRuntimeTargetWorkspaceLifecycleInternal = internalM
     workspaceMeaningfulFilePreview: v.optional(v.array(v.string())),
     cleanupDecision: v.union(
       v.literal("delete_clean_workspace"),
+      v.literal("delete_without_active_lease"),
       v.literal("stop_for_human_save"),
       v.literal("keep_running_active_preview"),
       v.literal("skip_prepared_staging_reuse"),
@@ -500,6 +581,52 @@ export const markDaytonaCodexRuntimeTargetPreviewLeaseExpiredInternal = internal
       updatedAt: nowMs,
     });
     return { ok: true, updated: true, targetId: String(target._id) };
+  },
+});
+
+export const markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    stoppedPreviewPorts: v.array(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const target = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_owner_runId", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", args.runId),
+      )
+      .unique();
+    if (!target) return { ok: true, updated: false, reason: "target_missing" };
+    const stoppedPreviewPorts = new Set(
+      normalizeActivePreviewPorts(args.stoppedPreviewPorts),
+    );
+    if (stoppedPreviewPorts.size === 0) {
+      return { ok: true, updated: false, reason: "no_stopped_preview_ports" };
+    }
+    const remainingPreviewPorts = normalizeActivePreviewPorts(
+      target.activePreviewPorts,
+    ).filter((port) => !stoppedPreviewPorts.has(port));
+    const previewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
+    const previewLeaseStillActive =
+      remainingPreviewPorts.length > 0 &&
+      String(target.previewLeaseState ?? "") === "active" &&
+      Number.isFinite(previewLeaseExpiresAt) &&
+      previewLeaseExpiresAt > nowMs;
+    await ctx.db.patch(target._id, {
+      activePreviewPorts: remainingPreviewPorts,
+      previewLeaseState: previewLeaseStillActive ? "active" : "expired",
+      ...(previewLeaseStillActive ? {} : { cleanupEligibleAt: nowMs }),
+      updatedAt: nowMs,
+    });
+    return {
+      ok: true,
+      updated: true,
+      targetId: String(target._id),
+      remainingPreviewPorts,
+      previewLeaseState: previewLeaseStillActive ? "active" : "expired",
+    };
   },
 });
 

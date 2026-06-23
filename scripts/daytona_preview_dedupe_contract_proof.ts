@@ -37,9 +37,33 @@ assert.match(
 );
 
 assert.match(
+  workspaceHost,
+  /parseDaytonaPreviewStoppedAnchorIds[\s\S]*event_type !== "workspace_preview_stopped"[\s\S]*target_run_id[\s\S]*stopped\.add\(stoppedAnchorId\)[\s\S]*next\.delete\(stoppedAnchorId\)[\s\S]*if \(stopped\.has\(anchor\.id\)\) continue;/,
+  "Daytona preview projection must tombstone stopped anchors by target run id and port.",
+);
+
+assert.match(
   daytonaRuntimeAppPreview,
-  /anchors\.map\(\(anchor\) =>[\s\S]*key=\{anchor\.id\}/,
+  /visibleAnchors\.map\(\(anchor\) =>[\s\S]*key=\{anchor\.id\}/,
   "Daytona preview rendering must key cards by the deduped anchor id.",
+);
+
+assert.match(
+  daytonaRuntimeAppPreview,
+  /function shouldHideUnavailableDaytonaPreview\(code: string \| null\): boolean \{[\s\S]*runtime_run_not_found[\s\S]*daytona_runtime_target_not_found[\s\S]*daytona_sandbox_not_available[\s\S]*daytona_preview_not_authorized/,
+  "Daytona preview cards must hide when the backing sandbox/run is no longer live.",
+);
+
+assert.match(
+  daytonaRuntimeAppPreview,
+  /if \(!result\.ok\) \{[\s\S]*shouldHideUnavailableDaytonaPreview\(result\.code\)[\s\S]*props\.onUnavailable\(props\.anchor\);[\s\S]*return;/,
+  "Daytona preview resolver failures for non-live sandboxes must tombstone the visible card.",
+);
+
+assert.match(
+  daytonaRuntimeAppPreview,
+  /const visibleAnchors = useMemo\([\s\S]*hiddenAnchorKeys\.has\(buildDaytonaPreviewVisibilityKey\(anchor\)\)[\s\S]*if \(visibleAnchors\.length === 0\) return null;[\s\S]*visibleAnchors\.map/,
+  "Daytona preview stack must disappear when every anchor has been tombstoned as unavailable.",
 );
 
 type Event = {
@@ -48,19 +72,32 @@ type Event = {
   created_at: string;
   payload: {
     provider: string;
-    port: number;
+    port?: number;
+    preview_ports?: number[];
+    target_run_id?: string;
     terminal_session_id?: string;
   };
 };
 
 function project(events: Event[]): Array<{ id: string; runId: string; port: number; terminalSessionId: string | null; updatedAt: number }> {
   const next = new Map<string, { id: string; runId: string; port: number; terminalSessionId: string | null; updatedAt: number }>();
+  const stopped = new Set<string>();
   for (const event of events) {
+    if (event.event_type === "workspace_preview_stopped" && event.payload.provider === "daytona") {
+      const targetRunId = event.payload.target_run_id || event.run_id;
+      for (const port of event.payload.preview_ports ?? []) {
+        const id = `${targetRunId}:${Math.floor(Number(port))}`;
+        stopped.add(id);
+        next.delete(id);
+      }
+      continue;
+    }
     if (event.event_type !== "workspace_preview_ready") continue;
     if (event.payload.provider !== "daytona") continue;
     const runId = event.run_id;
     const port = Math.floor(Number(event.payload.port));
     const id = `${runId}:${port}`;
+    if (stopped.has(id)) continue;
     const anchor = {
       id,
       runId,
@@ -107,6 +144,33 @@ assert.equal(
   projected[0]?.terminalSessionId,
   "terminal_new",
   "same run + port should keep the newest preview event payload.",
+);
+
+const projectedAfterStop = project([
+  {
+    event_type: "workspace_preview_ready",
+    run_id: "run_a",
+    created_at: "2026-06-21T10:00:00.000Z",
+    payload: { provider: "daytona", port: 3000, terminal_session_id: "terminal_old" },
+  },
+  {
+    event_type: "workspace_preview_stopped",
+    run_id: "run_b",
+    created_at: "2026-06-21T10:01:00.000Z",
+    payload: { provider: "daytona", target_run_id: "run_a", preview_ports: [3000] },
+  },
+  {
+    event_type: "workspace_preview_ready",
+    run_id: "run_a",
+    created_at: "2026-06-21T10:00:00.000Z",
+    payload: { provider: "daytona", port: 3000, terminal_session_id: "terminal_old" },
+  },
+]);
+
+assert.equal(
+  projectedAfterStop.length,
+  0,
+  "workspace_preview_stopped should remove stale Daytona preview cards even if old ready events are replayed later.",
 );
 
 console.log("daytona_preview_dedupe_contract_proof: ok");

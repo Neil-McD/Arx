@@ -145,17 +145,6 @@ export function getPolynetCodexWorkerBridgeConfig(): {
   };
 }
 
-export function shouldUsePolynetCodexWorkerBridge(params: {
-  runtimeExecutionMode: "agentic" | "chat";
-  stream: boolean;
-  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
-}): boolean {
-  if (params.runtimeExecutionMode !== "agentic") return false;
-  if (!params.stream) return false;
-  if (params.inferenceSource !== "chatgpt") return false;
-  return getPolynetCodexWorkerBridgeConfig().enabled;
-}
-
 export type PolynetRuntimeEngineResolution =
   | {
       ok: true;
@@ -231,25 +220,16 @@ export function resolvePolynetRuntimeEngine(params: {
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
 }): PolynetRuntimeEngineResolution {
-  if (params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET) {
-    return {
-      ok: true,
-      requestedRuntimeEngine: RUNTIME_ENGINE_POLYNET,
-      resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET,
-      runtimeEngineSource: "request",
-      engineId: "runtime_turn",
-      usePolynetCodexWorkerBridge: false,
-      disabledReason: null,
-    };
-  }
-
-  if (params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX) {
+  if (
+    params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET ||
+    params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX
+  ) {
     const failure = resolveExplicitCodexWorkerFailure(params);
     if (failure) {
       return {
         ok: false,
         ...failure,
-        requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+        requestedRuntimeEngine: params.requestedRuntimeEngine,
         resolvedRuntimeEngine: null,
         runtimeEngineSource: "request",
         engineId: null,
@@ -258,7 +238,7 @@ export function resolvePolynetRuntimeEngine(params: {
     }
     return {
       ok: true,
-      requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+      requestedRuntimeEngine: params.requestedRuntimeEngine,
       resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX,
       runtimeEngineSource: "request",
       engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
@@ -267,26 +247,26 @@ export function resolvePolynetRuntimeEngine(params: {
     };
   }
 
-  const usePolynetCodexWorkerBridge = shouldUsePolynetCodexWorkerBridge(params);
-  const legacyCodexEligible =
-    params.runtimeExecutionMode === "agentic" &&
-    params.stream &&
-    params.inferenceSource === "chatgpt";
+  const failure = resolveExplicitCodexWorkerFailure(params);
+  if (failure) {
+    return {
+      ok: false,
+      ...failure,
+      requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+      resolvedRuntimeEngine: null,
+      runtimeEngineSource: "request",
+      engineId: null,
+      usePolynetCodexWorkerBridge: false,
+    };
+  }
   return {
     ok: true,
     requestedRuntimeEngine: null,
-    resolvedRuntimeEngine: usePolynetCodexWorkerBridge
-      ? RUNTIME_ENGINE_CODEX
-      : RUNTIME_ENGINE_POLYNET,
+    resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX,
     runtimeEngineSource: "legacy_inference",
-    engineId: usePolynetCodexWorkerBridge
-      ? POLYNET_CODEX_WORKER_ENGINE_ID
-      : "runtime_turn",
-    usePolynetCodexWorkerBridge,
-    disabledReason:
-      !usePolynetCodexWorkerBridge && legacyCodexEligible
-        ? getPolynetCodexWorkerBridgeConfig().disabledReason
-        : null,
+    engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+    usePolynetCodexWorkerBridge: true,
+    disabledReason: null,
   };
 }
 

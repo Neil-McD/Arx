@@ -85,21 +85,25 @@ import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken"
 import {
   buildCodexHarnessToolPolicyReceipt,
   buildPolynetHarnessToolPolicyReceipt,
+  POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
   resolveCodexHarnessToolPolicy,
   resolvePolynetHarnessToolPolicy,
 } from "../shared/harnessToolPolicy";
+import {
+  type RetrievalToolName,
+} from "../shared/retrievalTools";
 import { reservePaidToolCredits } from "./paidToolCreditReservation";
 import {
   settleReservedCreditsBestEffort,
   settleReservedCreditsStrict,
 } from "./workspaceCreditSettlement";
 import {
-  CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
   creditsToUsd,
-  estimateCodexRuntimeVendorCostUsd,
+  DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
+  estimateDaytonaWorkspaceComputeVendorCostUsd,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-  priceCodexRuntimeCredits,
+  priceDaytonaWorkspaceComputeCredits,
 } from "../shared/workspaceCredits";
 import {
   POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS,
@@ -127,6 +131,41 @@ type RuntimeCompletionFailure = {
   code: string;
   message: string;
 };
+
+type RuntimeSubstrateResolution = {
+  provider: "daytona" | "project_workspace" | "none";
+  status:
+    | "required_for_codex"
+    | "polynet_harness_isolated"
+    | "legacy_project_workspace";
+  targetId: string | null;
+  runId: string | null;
+  sandboxId: string | null;
+  workspaceRoot: string | null;
+  activePreviewPorts: number[];
+  previewLeaseActive: boolean;
+  polyNetWorkspaceToolsSuppressed: boolean;
+  suppressedToolNames: RetrievalToolName[];
+};
+
+const POLYNET_WORKSPACE_SUBSTRATE_TOOL_NAMES = new Set<RetrievalToolName>([
+  ...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
+]);
+
+function isolatePolynetHarnessToolNames(params: {
+  allowedToolNames: readonly RetrievalToolName[];
+}): { allowedToolNames: RetrievalToolName[]; suppressedToolNames: RetrievalToolName[] } {
+  const allowedToolNames: RetrievalToolName[] = [];
+  const suppressedToolNames: RetrievalToolName[] = [];
+  for (const toolName of params.allowedToolNames) {
+    if (POLYNET_WORKSPACE_SUBSTRATE_TOOL_NAMES.has(toolName)) {
+      suppressedToolNames.push(toolName);
+    } else {
+      allowedToolNames.push(toolName);
+    }
+  }
+  return { allowedToolNames, suppressedToolNames };
+}
 
 function buildCommunityLensAuthorityReceipt(
   authority: CommunityLensAuthority | null | undefined,
@@ -740,9 +779,11 @@ export async function handleRuntimeTurnRequest(args: {
           ctx,
           creditKey: polynetCodexRuntimeCreditKey,
           status: "refunded",
-          failureReason: terminalReason || "codex_runtime_not_started",
+          failureReason: terminalReason || "workspace_compute_not_started",
           metadata: {
             pricing_version: PAID_TOOL_PRICING_VERSION,
+            billing_product: "workspace_compute",
+            harness: "codex",
             provider: "daytona",
             pricing_model: "daytona_runtime_seconds_estimate",
             worker_started: false,
@@ -752,10 +793,10 @@ export async function handleRuntimeTurnRequest(args: {
         return;
       }
 
-      const rawVendorCostUsd = estimateCodexRuntimeVendorCostUsd({
+      const rawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
         durationSeconds,
       });
-      const creditsSettled = priceCodexRuntimeCredits({ durationSeconds });
+      const creditsSettled = priceDaytonaWorkspaceComputeCredits({ durationSeconds });
       try {
         await settleReservedCreditsStrict({
           ctx,
@@ -765,17 +806,21 @@ export async function handleRuntimeTurnRequest(args: {
           rawVendorCostUsd,
           metadata: {
             pricing_version: PAID_TOOL_PRICING_VERSION,
+            billing_product: "workspace_compute",
+            harness: "codex",
             target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
             provider: "daytona",
             pricing_model: "daytona_runtime_seconds_estimate",
             provider_billing_reconciliation: "pending",
             provider_billing_evidence: "estimated_from_runtime_duration",
-            daytona_runtime_usd_per_second: CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+            daytona_workspace_compute_usd_per_second:
+              DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
             duration_seconds: durationSeconds,
             duration_source:
               polynetCodexRuntimeTimingTotalMs !== null
                 ? "worker_timing_total_ms"
                 : "convex_observed_start_elapsed",
+            sandbox_id: polynetCodexRuntimeWorkerMachineId,
             worker_machine_id: polynetCodexRuntimeWorkerMachineId,
             reserved_credits: polynetCodexRuntimeCreditsReserved,
             terminal_reason: terminalReason,
@@ -1097,6 +1142,96 @@ export async function handleRuntimeTurnRequest(args: {
         return null;
       }
     };
+    const activeDaytonaRuntimeSubstrate = usePolynetCodexWorkerBridge
+      ? ((await ctx.runQuery(
+          (internal as any).daytonaCodexRuntimeTargets
+            .getActiveDaytonaCodexRuntimeSubstrateForThreadInternal as any,
+          {
+            ownerId: actor.dbUserId,
+            threadId: ownedThread._id as any,
+          },
+        )) as {
+          provider?: unknown;
+          targetId?: unknown;
+          runId?: unknown;
+          sandboxId?: unknown;
+          workspaceRoot?: unknown;
+          activePreviewPorts?: unknown;
+          previewLeaseActive?: unknown;
+        } | null)
+      : null;
+    const polynetToolSurface = isolatePolynetHarnessToolNames({
+      allowedToolNames,
+    });
+    const polynetAllowedToolNamesForRun = polynetToolSurface.allowedToolNames;
+    const suppressedPolynetToolNames = polynetToolSurface.suppressedToolNames;
+    const runtimeSubstrateResolution: RuntimeSubstrateResolution =
+      usePolynetCodexWorkerBridge
+        ? {
+            provider: "daytona",
+            status: "required_for_codex",
+            targetId:
+              String(activeDaytonaRuntimeSubstrate?.targetId ?? "").trim() ||
+              null,
+            runId:
+              String(activeDaytonaRuntimeSubstrate?.runId ?? "").trim() ||
+              null,
+            sandboxId:
+              String(activeDaytonaRuntimeSubstrate?.sandboxId ?? "").trim() ||
+              null,
+            workspaceRoot:
+              String(activeDaytonaRuntimeSubstrate?.workspaceRoot ?? "").trim() ||
+              null,
+            activePreviewPorts: Array.isArray(
+              activeDaytonaRuntimeSubstrate?.activePreviewPorts,
+            )
+              ? activeDaytonaRuntimeSubstrate.activePreviewPorts
+                  .map((port) => Number(port))
+                  .filter((port) => Number.isFinite(port) && port > 0)
+              : [],
+            previewLeaseActive:
+              activeDaytonaRuntimeSubstrate?.previewLeaseActive === true,
+            polyNetWorkspaceToolsSuppressed: false,
+            suppressedToolNames: [],
+          }
+        : {
+            provider:
+              runtimeExecutionMode === "agentic" ? "none" : "project_workspace",
+            status:
+              runtimeExecutionMode === "agentic"
+                ? "polynet_harness_isolated"
+                : "legacy_project_workspace",
+            targetId: null,
+            runId: null,
+            sandboxId: null,
+            workspaceRoot: null,
+            activePreviewPorts: [],
+            previewLeaseActive: false,
+            polyNetWorkspaceToolsSuppressed:
+              suppressedPolynetToolNames.length > 0,
+            suppressedToolNames: suppressedPolynetToolNames,
+          };
+    const activeDaytonaRuntimeSubstrateForPolynetTools = null;
+    await appendRunEvent({
+      eventType: "runtime_substrate_resolved",
+      eventKey: `${runId}:runtime_substrate_resolved:1`,
+      payload: {
+        run_id: runId,
+        provider: runtimeSubstrateResolution.provider,
+        status: runtimeSubstrateResolution.status,
+        target_id: runtimeSubstrateResolution.targetId,
+        substrate_run_id: runtimeSubstrateResolution.runId,
+        sandbox_id: runtimeSubstrateResolution.sandboxId,
+        workspace_root: runtimeSubstrateResolution.workspaceRoot,
+        active_preview_ports: runtimeSubstrateResolution.activePreviewPorts,
+        preview_lease_active: runtimeSubstrateResolution.previewLeaseActive,
+        polynet_workspace_tools_suppressed:
+          runtimeSubstrateResolution.polyNetWorkspaceToolsSuppressed,
+        suppressed_tool_names: runtimeSubstrateResolution.suppressedToolNames,
+        runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
+        codex_worker_bridge: usePolynetCodexWorkerBridge,
+      },
+    });
     await appendRunEvent({
       eventType: "runtime_context_resolved",
       eventKey: `${runId}:runtime_context_resolved:1`,
@@ -1132,7 +1267,7 @@ export async function handleRuntimeTurnRequest(args: {
       },
     });
     const polynetHarnessToolPolicy = resolvePolynetHarnessToolPolicy({
-      allowedToolNames,
+      allowedToolNames: polynetAllowedToolNamesForRun,
     });
     await appendRunEvent({
       eventType: "tool_policy_resolved",
@@ -1325,21 +1460,21 @@ export async function handleRuntimeTurnRequest(args: {
           const codexRuntimeReserveDurationSeconds =
             POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS / 1000;
           const codexRuntimeReserveRawVendorCostUsd =
-            estimateCodexRuntimeVendorCostUsd({
+            estimateDaytonaWorkspaceComputeVendorCostUsd({
               durationSeconds: codexRuntimeReserveDurationSeconds,
             });
-          const codexRuntimeReserveCredits = priceCodexRuntimeCredits({
+          const codexRuntimeReserveCredits = priceDaytonaWorkspaceComputeCredits({
             durationSeconds: codexRuntimeReserveDurationSeconds,
           });
-          const codexRuntimeCreditKey = `codex_runtime:${runId}`;
+          const codexRuntimeCreditKey = `workspace_compute:daytona:${runId}`;
           const codexRuntimeReservation = await reservePaidToolCredits({
             ctx,
             creditKey: codexRuntimeCreditKey,
             userId: actor.dbUserId,
             projectId: runtimeProjectId ?? undefined,
             runId,
-            toolKind: "codex_runtime",
-            toolName: "codex_runtime",
+            toolKind: "workspace_tools",
+            toolName: "workspace_compute",
             action: "turn",
             vendor: "daytona",
             credits: codexRuntimeReserveCredits,
@@ -1347,12 +1482,15 @@ export async function handleRuntimeTurnRequest(args: {
             polynetPriceUsd: creditsToUsd(codexRuntimeReserveCredits),
             metadata: {
               pricing_version: PAID_TOOL_PRICING_VERSION,
+              billing_product: "workspace_compute",
+              harness: "codex",
               target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
               provider: "daytona",
               pricing_model: "daytona_runtime_seconds_estimate",
               provider_billing_reconciliation: "pending",
               provider_billing_evidence: "estimated_from_runtime_duration",
-              daytona_runtime_usd_per_second: CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+              daytona_workspace_compute_usd_per_second:
+                DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
               reserve_duration_seconds: codexRuntimeReserveDurationSeconds,
               reserve_raw_vendor_cost_usd: codexRuntimeReserveRawVendorCostUsd,
               lease_id: leaseAcquireResult.leaseId ?? null,
@@ -1385,7 +1523,7 @@ export async function handleRuntimeTurnRequest(args: {
                 error: codexRuntimeReservation.message,
                 message: codexRuntimeReservation.message,
                 status: 402,
-                tool_kind: "codex_runtime",
+                tool_kind: "workspace_tools",
                 required_credits: codexRuntimeReserveCredits,
                 paid_usage_billing_mode: billingMode,
               },
@@ -1839,11 +1977,11 @@ export async function handleRuntimeTurnRequest(args: {
                       model_id: requestedModelId,
                       lane,
                       inference_source: streamedInferenceSource,
-                      codex_runtime_billing: {
+                      workspace_compute_billing: {
                         credit_key: polynetCodexRuntimeCreditKey,
                         reserved_credits: polynetCodexRuntimeCreditsReserved,
-                        daytona_runtime_usd_per_second:
-                          CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
+                        daytona_workspace_compute_usd_per_second:
+                          DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
                       },
                       ...(workerResolvedTarget
                         ? {
@@ -2230,7 +2368,9 @@ export async function handleRuntimeTurnRequest(args: {
               agentName: runtimeAgentProfile.agentName,
               agentSoul: runtimeAgentProfile.agentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
-              allowedToolNames,
+              allowedToolNames: polynetAllowedToolNamesForRun,
+              activeDaytonaRuntimeSubstrate:
+                activeDaytonaRuntimeSubstrateForPolynetTools,
               apiKeyOverride: providerApiKeyOverride,
               appendRunEvent: streamAppendRunEvent,
               refreshRuntimeContextSnapshot: async (
@@ -2526,7 +2666,9 @@ export async function handleRuntimeTurnRequest(args: {
           agentName: runtimeAgentProfile.agentName,
           agentSoul: runtimeAgentProfile.agentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
-          allowedToolNames,
+          allowedToolNames: polynetAllowedToolNamesForRun,
+          activeDaytonaRuntimeSubstrate:
+            activeDaytonaRuntimeSubstrateForPolynetTools,
           apiKeyOverride: providerApiKeyOverride,
           appendRunEvent: async (event): Promise<void> => {
             await appendRunEvent(event);

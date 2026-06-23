@@ -1,8 +1,7 @@
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
 import { resolveCloudModelSelection } from "./inferenceLaneResolver";
 import {
-  RUNTIME_ENGINE_POLYNET,
-  normalizeRuntimeEngine,
+  normalizeActiveWorkspaceRuntimeEngine,
   type RuntimeEngine,
 } from "./runtimeEngine";
 import type { GuestInferenceIssue } from "./webTurnRunnerCore";
@@ -247,11 +246,7 @@ export function resolvePreferredRuntimeEngineFromArgs<
   threadId: string,
 ): RuntimeEngine {
   const threadEngine = args.threads.find((thread) => thread.id === threadId)?.runtime_engine;
-  return (
-    normalizeRuntimeEngine(threadEngine) ??
-    normalizeRuntimeEngine(args.activeRuntimeEngine) ??
-    RUNTIME_ENGINE_POLYNET
-  );
+  return normalizeActiveWorkspaceRuntimeEngine(threadEngine ?? args.activeRuntimeEngine);
 }
 
 export function mapRequestedFundingSourceToInferenceSource(
@@ -322,15 +317,16 @@ export function syncThreadRuntimeEngineSelectionInState<
   runtimeEngine: RuntimeEngine,
   session: SessionT | null,
 ): void {
+  const normalizedRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(runtimeEngine);
   args.setThreads((prev) =>
     prev.map((thread) =>
       thread.id === threadId
-        ? ({ ...thread, runtime_engine: runtimeEngine } as ThreadRecordT)
+        ? ({ ...thread, runtime_engine: normalizedRuntimeEngine } as ThreadRecordT)
         : thread,
     ),
   );
   if (!session) return;
-  void args.updateThreadRuntimeEngine(threadId, runtimeEngine, session).catch((error) => {
+  void args.updateThreadRuntimeEngine(threadId, normalizedRuntimeEngine, session).catch((error) => {
     console.warn("Failed to persist thread runtime engine selection:", error);
   });
 }

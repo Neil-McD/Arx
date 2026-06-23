@@ -82,6 +82,15 @@ crons.interval(
 );
 
 crons.interval(
+  "execute workspace auto recharge",
+  { minutes: 15 },
+  (internal as any).workspaceAutoRecharge.sweepWorkspaceAutoRechargeExecutionsInternal,
+  {
+    limit: 20,
+  },
+);
+
+crons.interval(
   "record blaxel storage provider costs",
   { minutes: 60 },
   (internal as any).workspaceCredits.recordBlaxelStorageProviderCostsInternal,

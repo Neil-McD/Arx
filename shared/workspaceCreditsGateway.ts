@@ -44,6 +44,7 @@ export type WorkspaceBillingOverview = {
   };
   history: WorkspaceBillingMonthSummary[];
   scan: {
+    creditLedgerEntriesTruncated: boolean;
     workspaceChargesTruncated: boolean;
     usageCollectionsTruncated: boolean;
     topupsTruncated: boolean;
@@ -151,6 +152,7 @@ function normalizeWorkspaceBillingOverview(row: unknown): WorkspaceBillingOvervi
     },
     history,
     scan: {
+      creditLedgerEntriesTruncated: scan.creditLedgerEntriesTruncated === true,
       workspaceChargesTruncated: scan.workspaceChargesTruncated === true,
       usageCollectionsTruncated: scan.usageCollectionsTruncated === true,
       topupsTruncated: scan.topupsTruncated === true,

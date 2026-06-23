@@ -100,6 +100,16 @@ const PROVIDER_COST_RECONCILIATION_DEFAULT_COMPUTE_LIMIT_PER_DEBIT_SOURCE = 100;
 const PROVIDER_COST_RECONCILIATION_MAX_COMPUTE_LIMIT_PER_DEBIT_SOURCE = 250;
 const PROVIDER_COST_RECONCILIATION_DEFAULT_SAMPLE_LIMIT = 25;
 const PROVIDER_COST_RECONCILIATION_MAX_SAMPLE_LIMIT = 50;
+const WORKSPACE_ACCOUNTING_RECONCILIATION_DEFAULT_LIMIT = 25;
+const WORKSPACE_ACCOUNTING_RECONCILIATION_MAX_LIMIT = 100;
+const WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
+const WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS =
+  5 * 60 * 1000;
+const WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS =
+  12 * 60 * 60 * 1000;
+const WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS = 30 * 60 * 1000;
+const WORKSPACE_ACCOUNTING_INVARIANT_DEFAULT_LIMIT = 25;
+const WORKSPACE_ACCOUNTING_INVARIANT_MAX_LIMIT = 100;
 const WORKSPACE_COMPUTE_DEBIT_SOURCES = [
   "included",
   "purchased",
@@ -181,6 +191,17 @@ function roundDiagnosticUsd(value: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 0;
   return Math.round(parsed * 100000000) / 100000000;
+}
+
+function diagnosticAgeMs(nowMs: number, value: unknown): number | null {
+  const timestamp = normalizeOptionalNumber(value);
+  if (timestamp === undefined || !(timestamp > 0)) return null;
+  return Math.max(0, nowMs - timestamp);
+}
+
+function diagnosticTimestamp(value: unknown): number | null {
+  const timestamp = normalizeOptionalNumber(value);
+  return timestamp !== undefined && timestamp > 0 ? timestamp : null;
 }
 
 function allocateProviderCostToDiagnosticPeriod(args: {
@@ -568,6 +589,20 @@ async function readProviderCostEntryByCostKey(ctx: any, costKey: string): Promis
     .first();
 }
 
+async function readProviderCostEntryByLinkedCreditKey(
+  ctx: any,
+  creditKey: string,
+): Promise<any | null> {
+  const normalizedCreditKey = normalizeOptionalString(creditKey);
+  if (!normalizedCreditKey) return null;
+  return await ctx.db
+    .query("providerCostEntries")
+    .withIndex("by_linkedCreditKey", (q: any) =>
+      q.eq("linkedCreditKey", normalizedCreditKey),
+    )
+    .first();
+}
+
 function resolveCreditLedgerProviderCostEntry(params: {
   entry: any;
   settlementMetadata: unknown;
@@ -609,6 +644,37 @@ function resolveCreditLedgerProviderCostEntry(params: {
       periodEnd: params.nowMs,
       quantityKind: "memory_gib_seconds",
       quantity: durationSeconds * sandboxMemoryGiB,
+      rawVendorCostUsd,
+      evidence: "estimated",
+      billingDisposition: "rolled_into_user_usage",
+      linkedCreditKey: params.entry.creditKey,
+      metadata: {
+        ...metadata,
+        provider_cost_source: "credit_ledger_settlement",
+        provider_cost_action: action ?? null,
+      },
+      nowMs: params.nowMs,
+    };
+  }
+
+  if (toolName === "workspace_compute" && vendor === "daytona") {
+    return {
+      costKey: `credit_ledger:${params.entry.creditKey}:provider_cost`,
+      userId: params.entry.userId,
+      projectId: params.entry.projectId,
+      runId: normalizeOptionalString(params.entry.runId),
+      category: "workspace",
+      component: "daytona_codex_runtime_active",
+      provider: "daytona",
+      resourceId:
+        normalizeOptionalString(metadata.sandbox_id) ??
+        normalizeOptionalString(metadata.worker_machine_id) ??
+        normalizeOptionalString(metadata.provider_sandbox_id) ??
+        normalizeOptionalString(metadata.target_id),
+      periodStart: durationSeconds > 0 ? params.nowMs - durationSeconds * 1000 : params.nowMs,
+      periodEnd: params.nowMs,
+      quantityKind: "runtime_seconds",
+      quantity: durationSeconds,
       rawVendorCostUsd,
       evidence: "estimated",
       billingDisposition: "rolled_into_user_usage",
@@ -701,6 +767,7 @@ export const recordProviderCostInternal = internalMutation({
       v.literal("web_research_call"),
       v.literal("web_crawl_provider_call"),
       v.literal("fly_crawler"),
+      v.literal("daytona_codex_runtime_active"),
       v.literal("voice_transcription"),
       v.literal("knowledge_model_inference"),
     ),
@@ -1005,6 +1072,7 @@ export const getProviderCostReconciliationDiagnosticInternal = internalQuery({
     let computeChargeScanLimitReached = false;
     const computeMissingSamples: any[] = [];
 
+    // Legacy Blaxel/runtime mirror: canonical paid-tool usage lives in creditLedgerEntries.
     for (const debitSource of WORKSPACE_COMPUTE_DEBIT_SOURCES) {
       const rows = await ctx.db
         .query("workspaceComputeCharges")
@@ -1097,6 +1165,580 @@ export const getProviderCostReconciliationDiagnosticInternal = internalQuery({
         ledgerLimit,
         computeChargeLimitPerDebitSource,
         sampleLimit,
+      },
+    };
+  },
+});
+
+export const getWorkspaceAccountingReconciliationDiagnosticsForOperator = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = boundedLimit(
+      args.limit,
+      WORKSPACE_ACCOUNTING_RECONCILIATION_DEFAULT_LIMIT,
+      WORKSPACE_ACCOUNTING_RECONCILIATION_MAX_LIMIT,
+    );
+    const lookbackStart = Math.max(
+      0,
+      nowMs - WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS,
+    );
+
+    const activeAutoRechargeAttempts: any[] = [];
+    const preparedAutoRechargeAttempts = await ctx.db
+      .query("workspaceAutoRechargeAttempts")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
+      .order("asc")
+      .take(limit);
+    const processingAutoRechargeAttempts = await ctx.db
+      .query("workspaceAutoRechargeAttempts")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
+      .order("asc")
+      .take(limit);
+    activeAutoRechargeAttempts.push(
+      ...preparedAutoRechargeAttempts,
+      ...processingAutoRechargeAttempts,
+    );
+    const autoRechargeFailedRows = await ctx.db
+      .query("workspaceAutoRechargeAttempts")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "failed"))
+      .order("desc")
+      .take(limit);
+
+    const autoRechargeProcessingWithoutProviderId = processingAutoRechargeAttempts
+      .filter((attempt: any) => !normalizeStripePaymentIntentId(attempt.providerPaymentId))
+      .map((attempt: any) => {
+        const createdAgeMs = diagnosticAgeMs(nowMs, attempt.createdAt);
+        const updatedAgeMs = diagnosticAgeMs(nowMs, attempt.updatedAt);
+        const expired =
+          createdAgeMs === null ||
+          createdAgeMs >=
+            WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS;
+        const stale =
+          updatedAgeMs !== null &&
+          updatedAgeMs >=
+            WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS;
+        return {
+          attemptKey: attempt.attemptKey,
+          userId: String(attempt.userId),
+          status: attempt.status,
+          createdAt: diagnosticTimestamp(attempt.createdAt),
+          updatedAt: diagnosticTimestamp(attempt.updatedAt),
+          createdAgeMs,
+          updatedAgeMs,
+          providerIdempotencyKey: normalizeOptionalString(attempt.providerIdempotencyKey) ?? null,
+          providerCustomerId: normalizeOptionalString(attempt.providerCustomerId) ?? null,
+          providerPaymentMethodId: normalizeOptionalString(attempt.providerPaymentMethodId) ?? null,
+          failureReason: normalizeOptionalString(attempt.failureReason) ?? null,
+          severity: expired ? "manual_review" : stale ? "retryable" : "fresh",
+          recommendedAction: expired
+            ? "review_stripe_by_idempotency_key_then_fail_or_finalize"
+            : stale
+              ? "retry_provider_create_with_frozen_attempt_params"
+              : "wait_for_executor_or_sweep",
+        };
+      });
+
+    const autoRechargeProcessingWithProviderIdStale = processingAutoRechargeAttempts
+      .filter((attempt: any) => normalizeStripePaymentIntentId(attempt.providerPaymentId))
+      .filter((attempt: any) => {
+        const updatedAgeMs = diagnosticAgeMs(nowMs, attempt.updatedAt);
+        return (
+          updatedAgeMs !== null &&
+          updatedAgeMs >= WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS
+        );
+      })
+      .map((attempt: any) => ({
+        attemptKey: attempt.attemptKey,
+        userId: String(attempt.userId),
+        providerPaymentId: normalizeStripePaymentIntentId(attempt.providerPaymentId) ?? null,
+        providerIdempotencyKey: normalizeOptionalString(attempt.providerIdempotencyKey) ?? null,
+        updatedAt: diagnosticTimestamp(attempt.updatedAt),
+        updatedAgeMs: diagnosticAgeMs(nowMs, attempt.updatedAt),
+        recommendedAction: "retrieve_payment_intent_and_finalize_attempt",
+      }));
+
+    const activeAttemptsByUser = new Map<string, any[]>();
+    for (const attempt of activeAutoRechargeAttempts) {
+      const key = String(attempt.userId);
+      activeAttemptsByUser.set(key, [...(activeAttemptsByUser.get(key) ?? []), attempt]);
+    }
+    const duplicateActiveAutoRechargeAttempts = Array.from(activeAttemptsByUser.entries())
+      .filter(([, rows]) => rows.length > 1)
+      .slice(0, limit)
+      .map(([userId, rows]) => ({
+        userId,
+        activeAttempts: rows.length,
+        attemptKeys: rows.slice(0, 5).map((row) => row.attemptKey),
+        statuses: rows.slice(0, 5).map((row) => row.status),
+        recommendedAction: "inspect_user_auto_recharge_attempts_before_next_charge",
+      }));
+
+    const usageCollectionsProcessing = await ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
+      .order("asc")
+      .take(limit);
+    const usageCollectionsStalePrepared = await ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_status_updatedAt", (q: any) =>
+        q
+          .eq("status", "prepared")
+          .lt("updatedAt", nowMs - WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS),
+      )
+      .order("asc")
+      .take(limit);
+    const usageCollectionsFailed = await ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "failed"))
+      .order("desc")
+      .take(limit);
+
+    const usageProcessingWithoutProviderPaymentIntent = usageCollectionsProcessing
+      .filter((collection: any) =>
+        !normalizeStripePaymentIntentId(collection.providerPaymentIntentId),
+      )
+      .map((collection: any) => ({
+        collectionKey: collection.collectionKey,
+        userId: String(collection.userId),
+        creditsAmount: roundCredits(collection.creditsAmount),
+        providerCustomerId: normalizeOptionalString(collection.providerCustomerId) ?? null,
+        createdAt: diagnosticTimestamp(collection.createdAt),
+        updatedAt: diagnosticTimestamp(collection.updatedAt),
+        updatedAgeMs: diagnosticAgeMs(nowMs, collection.updatedAt),
+        recommendedAction: "release_collection_or_reconcile_provider_attempt",
+      }));
+    const usageProcessingWithProviderPaymentIntentStale = usageCollectionsProcessing
+      .filter((collection: any) =>
+        normalizeStripePaymentIntentId(collection.providerPaymentIntentId),
+      )
+      .filter((collection: any) => {
+        const updatedAgeMs = diagnosticAgeMs(nowMs, collection.updatedAt);
+        return (
+          updatedAgeMs !== null &&
+          updatedAgeMs >= WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS
+        );
+      })
+      .map((collection: any) => ({
+        collectionKey: collection.collectionKey,
+        userId: String(collection.userId),
+        creditsAmount: roundCredits(collection.creditsAmount),
+        providerPaymentIntentId:
+          normalizeStripePaymentIntentId(collection.providerPaymentIntentId) ?? null,
+        updatedAt: diagnosticTimestamp(collection.updatedAt),
+        updatedAgeMs: diagnosticAgeMs(nowMs, collection.updatedAt),
+        recommendedAction: "retrieve_payment_intent_and_finalize_collection",
+      }));
+
+    const pendingSettlementRows = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_pendingSettlementStatus_nextAttemptAt", (q: any) =>
+        q
+          .eq("pendingSettlementStatus", "succeeded")
+          .lt("pendingSettlementNextAttemptAt", nowMs),
+      )
+      .order("asc")
+      .take(limit);
+    const staleReservedLedgerRows = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_status_expiresAt", (q: any) =>
+        q.eq("status", "reserved").lt("expiresAt", nowMs),
+      )
+      .order("asc")
+      .take(limit);
+
+    const paidToolNames = new Set<string>(PAID_TOOL_LEDGER_TOOL_NAMES);
+    const recentSucceededLedgerRows = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_status_settledAt", (q: any) =>
+        q
+          .eq("status", "succeeded")
+          .gte("settledAt", lookbackStart)
+          .lt("settledAt", nowMs),
+      )
+      .order("desc")
+      .take(limit);
+    let paidLedgerRowsInspected = 0;
+    const missingProviderCostMirrors: any[] = [];
+    for (const row of recentSucceededLedgerRows) {
+      const toolName = normalizeOptionalString(row.toolName) ?? "unknown";
+      if (!paidToolNames.has(toolName)) continue;
+      const rawVendorCostUsd = normalizeOptionalNumber(row.rawVendorCostUsd) ?? 0;
+      if (!(rawVendorCostUsd > 0)) continue;
+      paidLedgerRowsInspected += 1;
+      const creditKey = normalizeOptionalString(row.creditKey);
+      if (!creditKey) continue;
+      const providerCostEntry = await readProviderCostEntryByLinkedCreditKey(ctx, creditKey);
+      if (providerCostEntry) continue;
+      if (missingProviderCostMirrors.length < limit) {
+        missingProviderCostMirrors.push({
+          creditKey,
+          userId: String(row.userId),
+          toolName,
+          action: normalizeOptionalString(row.action) ?? null,
+          vendor: normalizeOptionalString(row.vendor) ?? null,
+          runId: normalizeOptionalString(row.runId) ?? null,
+          rawVendorCostUsd: roundDiagnosticUsd(rawVendorCostUsd),
+          settledAt: diagnosticTimestamp(row.settledAt),
+          expectedLinkedCreditKey: creditKey,
+          recommendedAction: "record_or_reconcile_provider_cost_mirror",
+        });
+      }
+    }
+
+    let legacyComputeChargesScanned = 0;
+    let legacyComputeChargesWithoutCreditReservationKey = 0;
+    let legacyComputeChargeScanLimitReached = false;
+    const legacyComputeChargeSamples: any[] = [];
+    for (const debitSource of WORKSPACE_COMPUTE_DEBIT_SOURCES) {
+      const rows = await ctx.db
+        .query("workspaceComputeCharges")
+        .withIndex("by_debitSource_createdAt", (q: any) =>
+          q
+            .eq("debitSource", debitSource)
+            .gte("createdAt", lookbackStart)
+            .lt("createdAt", nowMs),
+        )
+        .order("desc")
+        .take(limit);
+      legacyComputeChargesScanned += rows.length;
+      if (rows.length >= limit) legacyComputeChargeScanLimitReached = true;
+      for (const row of rows) {
+        if (!normalizeOptionalString(row.creditReservationKey)) {
+          legacyComputeChargesWithoutCreditReservationKey += 1;
+        }
+        if (legacyComputeChargeSamples.length < limit) {
+          legacyComputeChargeSamples.push({
+            chargeKey: row.chargeKey,
+            userId: String(row.userId),
+            runId: normalizeOptionalString(row.runId) ?? null,
+            debitSource,
+            creditReservationKey: normalizeOptionalString(row.creditReservationKey) ?? null,
+            createdAt: diagnosticTimestamp(row.createdAt),
+            recommendedAction: "confirm_legacy_charge_is_not_active_billing_truth",
+          });
+        }
+      }
+    }
+
+    return {
+      scope: "workspace_accounting_reconciliation",
+      generatedAt: nowMs,
+      operator: {
+        userId: operator.userId,
+        role: operator.role,
+      },
+      limits: {
+        limit,
+        lookbackStart,
+        lookbackMs: WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS,
+        autoRechargeProcessingWithoutPaymentIdStaleMs:
+          WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS,
+        autoRechargeProcessingWithoutPaymentIdExpiredMs:
+          WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS,
+        paymentIntentProcessingStaleMs:
+          WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS,
+        usageCollectionStalePreparedMs: WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS,
+      },
+      autoRecharge: {
+        activePreparedRowsScanned: preparedAutoRechargeAttempts.length,
+        activeProcessingRowsScanned: processingAutoRechargeAttempts.length,
+        processingWithoutProviderPaymentId: {
+          rows: autoRechargeProcessingWithoutProviderId.length,
+          staleRows: autoRechargeProcessingWithoutProviderId.filter(
+            (row) => row.severity === "retryable",
+          ).length,
+          expiredRows: autoRechargeProcessingWithoutProviderId.filter(
+            (row) => row.severity === "manual_review",
+          ).length,
+          samples: autoRechargeProcessingWithoutProviderId.slice(0, limit),
+        },
+        processingWithProviderPaymentIdStale: {
+          rows: autoRechargeProcessingWithProviderIdStale.length,
+          samples: autoRechargeProcessingWithProviderIdStale.slice(0, limit),
+        },
+        duplicateActiveAttempts: {
+          users: duplicateActiveAutoRechargeAttempts.length,
+          samples: duplicateActiveAutoRechargeAttempts,
+        },
+        recentFailed: {
+          rows: autoRechargeFailedRows.length,
+          samples: autoRechargeFailedRows.slice(0, limit).map((attempt: any) => ({
+            attemptKey: attempt.attemptKey,
+            userId: String(attempt.userId),
+            providerPaymentId: normalizeStripePaymentIntentId(attempt.providerPaymentId) ?? null,
+            failureReason: normalizeOptionalString(attempt.failureReason) ?? null,
+            updatedAt: diagnosticTimestamp(attempt.updatedAt),
+            recommendedAction: "inspect_failure_reason_before_reenable",
+          })),
+        },
+      },
+      usageCollections: {
+        processingRowsScanned: usageCollectionsProcessing.length,
+        stalePrepared: {
+          rows: usageCollectionsStalePrepared.length,
+          samples: usageCollectionsStalePrepared.slice(0, limit).map((collection: any) => ({
+            collectionKey: collection.collectionKey,
+            userId: String(collection.userId),
+            creditsAmount: roundCredits(collection.creditsAmount),
+            providerCustomerId: normalizeOptionalString(collection.providerCustomerId) ?? null,
+            updatedAt: diagnosticTimestamp(collection.updatedAt),
+            updatedAgeMs: diagnosticAgeMs(nowMs, collection.updatedAt),
+            recommendedAction: "retry_or_release_prepared_collection",
+          })),
+        },
+        processingWithoutProviderPaymentIntent: {
+          rows: usageProcessingWithoutProviderPaymentIntent.length,
+          samples: usageProcessingWithoutProviderPaymentIntent.slice(0, limit),
+        },
+        processingWithProviderPaymentIntentStale: {
+          rows: usageProcessingWithProviderPaymentIntentStale.length,
+          samples: usageProcessingWithProviderPaymentIntentStale.slice(0, limit),
+        },
+        recentFailed: {
+          rows: usageCollectionsFailed.length,
+          samples: usageCollectionsFailed.slice(0, limit).map((collection: any) => ({
+            collectionKey: collection.collectionKey,
+            userId: String(collection.userId),
+            creditsAmount: roundCredits(collection.creditsAmount),
+            providerPaymentIntentId:
+              normalizeStripePaymentIntentId(collection.providerPaymentIntentId) ?? null,
+            failureReason: normalizeOptionalString(collection.failureReason) ?? null,
+            updatedAt: diagnosticTimestamp(collection.updatedAt),
+            recommendedAction: "inspect_failure_reason_and_balance_restore",
+          })),
+        },
+      },
+      ledgerSettlements: {
+        pendingRetriesDue: {
+          rows: pendingSettlementRows.length,
+          samples: pendingSettlementRows.map((entry: any) => ({
+            creditKey: entry.creditKey,
+            userId: String(entry.userId),
+            toolName: entry.toolName,
+            runId: normalizeOptionalString(entry.runId) ?? null,
+            attempts: entry.pendingSettlementAttempts ?? 0,
+            nextAttemptAt: diagnosticTimestamp(entry.pendingSettlementNextAttemptAt),
+            error: normalizeOptionalString(entry.pendingSettlementError) ?? null,
+            recommendedAction: "rerun_or_inspect_pending_settlement_retry",
+          })),
+        },
+        staleReserved: {
+          rows: staleReservedLedgerRows.length,
+          samples: staleReservedLedgerRows.map((entry: any) => ({
+            creditKey: entry.creditKey,
+            userId: String(entry.userId),
+            toolName: entry.toolName,
+            runId: normalizeOptionalString(entry.runId) ?? null,
+            expiresAt: diagnosticTimestamp(entry.expiresAt),
+            expiredAgeMs: diagnosticAgeMs(nowMs, entry.expiresAt),
+            recommendedAction: "refund_or_finalize_expired_reservation",
+          })),
+        },
+      },
+      providerCostMirrors: {
+        recentSucceededLedgerRowsScanned: recentSucceededLedgerRows.length,
+        paidLedgerRowsInspected,
+        missingRows: missingProviderCostMirrors.length,
+        samples: missingProviderCostMirrors,
+        scanLimitReached: recentSucceededLedgerRows.length >= limit,
+      },
+      legacyDrift: {
+        workspaceComputeCharges: {
+          rowsScanned: legacyComputeChargesScanned,
+          rowsWithoutCreditReservationKey: legacyComputeChargesWithoutCreditReservationKey,
+          samples: legacyComputeChargeSamples,
+          scanLimitReached: legacyComputeChargeScanLimitReached,
+          canonicalUsageTruth: "creditLedgerEntries",
+        },
+      },
+    };
+  },
+});
+
+export const getWorkspaceAccountingInvariantDiagnosticsForOperator = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = boundedLimit(
+      args.limit,
+      WORKSPACE_ACCOUNTING_INVARIANT_DEFAULT_LIMIT,
+      WORKSPACE_ACCOUNTING_INVARIANT_MAX_LIMIT,
+    );
+
+    const recentBalanceRows = await readRecentWorkspaceCreditBalanceRows(ctx, limit * 5);
+    const balanceRowsById = new Map<string, any>();
+    for (const row of recentBalanceRows) {
+      balanceRowsById.set(String(row._id), row);
+      const userRows = await readWorkspaceCreditBalanceRowsByUser(ctx, row.userId, 5);
+      for (const userRow of userRows) {
+        balanceRowsById.set(String(userRow._id), userRow);
+      }
+    }
+    const balanceDiagnostics = buildWorkspaceCreditBalanceDiagnostics(
+      [...balanceRowsById.values()],
+      nowMs,
+      limit,
+    );
+
+    const autoRechargeSettingsRows: any[] = [];
+    for (const status of ["active", "paused_payment_failed", "disabled"] as const) {
+      const rows = await ctx.db
+        .query("workspaceAutoRechargeSettings")
+        .withIndex("by_status_updatedAt", (q: any) => q.eq("status", status))
+        .order("desc")
+        .take(limit);
+      autoRechargeSettingsRows.push(...rows);
+    }
+    const autoRechargeSettingsByUser = new Map<string, any[]>();
+    for (const row of autoRechargeSettingsRows) {
+      const key = String(row.userId);
+      autoRechargeSettingsByUser.set(key, [
+        ...(autoRechargeSettingsByUser.get(key) ?? []),
+        row,
+      ]);
+    }
+    const duplicateAutoRechargeSettings = Array.from(autoRechargeSettingsByUser.entries())
+      .filter(([, rows]) => rows.length > 1)
+      .slice(0, limit)
+      .map(([userId, rows]) => ({
+        userId,
+        rows: rows.length,
+        statuses: rows.slice(0, 5).map((row) => row.status),
+        enabledValues: rows.slice(0, 5).map((row) => row.enabled === true),
+        recommendedAction: "block_auto_recharge_until_settings_are_canonical",
+      }));
+
+    const preparedAutoRechargeAttempts = await ctx.db
+      .query("workspaceAutoRechargeAttempts")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
+      .order("asc")
+      .take(limit);
+    const processingAutoRechargeAttempts = await ctx.db
+      .query("workspaceAutoRechargeAttempts")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
+      .order("asc")
+      .take(limit);
+    const activeAutoRechargeAttemptsByUser = new Map<string, any[]>();
+    for (const row of [...preparedAutoRechargeAttempts, ...processingAutoRechargeAttempts]) {
+      const key = String(row.userId);
+      activeAutoRechargeAttemptsByUser.set(key, [
+        ...(activeAutoRechargeAttemptsByUser.get(key) ?? []),
+        row,
+      ]);
+    }
+    const duplicateActiveAutoRechargeAttempts = Array.from(
+      activeAutoRechargeAttemptsByUser.entries(),
+    )
+      .filter(([, rows]) => rows.length > 1)
+      .slice(0, limit)
+      .map(([userId, rows]) => ({
+        userId,
+        rows: rows.length,
+        attemptKeys: rows.slice(0, 5).map((row) => row.attemptKey),
+        statuses: rows.slice(0, 5).map((row) => row.status),
+        providerPaymentIds: rows
+          .slice(0, 5)
+          .map((row) => normalizeStripePaymentIntentId(row.providerPaymentId) ?? null),
+        recommendedAction: "block_new_auto_recharge_charge_until_attempts_are_reconciled",
+      }));
+
+    const preparedUsageCollections = await ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
+      .order("asc")
+      .take(limit);
+    const processingUsageCollections = await ctx.db
+      .query("workspaceUsageCollections")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
+      .order("asc")
+      .take(limit);
+    const activeUsageCollectionsByUser = new Map<string, any[]>();
+    for (const row of [...preparedUsageCollections, ...processingUsageCollections]) {
+      const key = String(row.userId);
+      activeUsageCollectionsByUser.set(key, [
+        ...(activeUsageCollectionsByUser.get(key) ?? []),
+        row,
+      ]);
+    }
+    const duplicateActiveUsageCollections = Array.from(activeUsageCollectionsByUser.entries())
+      .filter(([, rows]) => rows.length > 1)
+      .slice(0, limit)
+      .map(([userId, rows]) => ({
+        userId,
+        rows: rows.length,
+        collectionKeys: rows.slice(0, 5).map((row) => row.collectionKey),
+        statuses: rows.slice(0, 5).map((row) => row.status),
+        providerPaymentIntentIds: rows
+          .slice(0, 5)
+          .map((row) => normalizeStripePaymentIntentId(row.providerPaymentIntentId) ?? null),
+        recommendedAction: "block_new_usage_collection_charge_until_collections_are_reconciled",
+      }));
+
+    const repairableIssueCount = balanceDiagnostics.duplicateUsers;
+    const blockedClosedIssueCount =
+      balanceDiagnostics.negativeBalanceRows +
+      duplicateAutoRechargeSettings.length +
+      duplicateActiveAutoRechargeAttempts.length +
+      duplicateActiveUsageCollections.length;
+    const disposition =
+      blockedClosedIssueCount > 0
+        ? "blocked_closed"
+        : repairableIssueCount > 0
+          ? "repairable"
+          : "clean";
+
+    return {
+      scope: "workspace_accounting_invariants",
+      generatedAt: nowMs,
+      disposition,
+      operator: {
+        userId: operator.userId,
+        role: operator.role,
+      },
+      limits: {
+        limit,
+        balanceRowsScanned: recentBalanceRows.length,
+        autoRechargeSettingsRowsScanned: autoRechargeSettingsRows.length,
+        activeAutoRechargeAttemptsScanned:
+          preparedAutoRechargeAttempts.length + processingAutoRechargeAttempts.length,
+        activeUsageCollectionsScanned:
+          preparedUsageCollections.length + processingUsageCollections.length,
+      },
+      balances: {
+        policy: "duplicate_rows_are_repairable_negative_rows_block_closed",
+        duplicateUsers: balanceDiagnostics.duplicateUsers,
+        duplicateRows: balanceDiagnostics.duplicateRows,
+        negativeBalanceRows: balanceDiagnostics.negativeBalanceRows,
+        duplicateSamples: balanceDiagnostics.duplicateSamples,
+        negativeBalanceSamples: balanceDiagnostics.negativeBalanceSamples,
+      },
+      autoRechargeSettings: {
+        policy: "duplicate_settings_block_auto_recharge",
+        duplicateUsers: duplicateAutoRechargeSettings.length,
+        samples: duplicateAutoRechargeSettings,
+      },
+      autoRechargeAttempts: {
+        policy: "duplicate_active_attempts_block_new_auto_recharge_charges",
+        activeUsers: activeAutoRechargeAttemptsByUser.size,
+        duplicateActiveUsers: duplicateActiveAutoRechargeAttempts.length,
+        samples: duplicateActiveAutoRechargeAttempts,
+      },
+      usageCollections: {
+        policy: "active_collection_blocks_new_collection_duplicate_active_blocks_charging",
+        activeUsers: activeUsageCollectionsByUser.size,
+        duplicateActiveUsers: duplicateActiveUsageCollections.length,
+        samples: duplicateActiveUsageCollections,
       },
     };
   },
@@ -1536,6 +2178,42 @@ async function readCanonicalWorkspaceCreditBalance(ctx: any, userId: any) {
   return rows[0] ?? null;
 }
 
+async function scheduleWorkspaceAutoRechargeAfterSettlementBestEffort(
+  ctx: any,
+  userId: any,
+  nowMs: number,
+): Promise<void> {
+  try {
+    const settingsRows = await ctx.db
+      .query("workspaceAutoRechargeSettings")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .take(2);
+    if (settingsRows.length !== 1) return;
+    const settings = settingsRows[0];
+    if (settings.enabled !== true || settings.status !== "active") return;
+    const balance = await readCanonicalWorkspaceCreditBalance(ctx, userId);
+    if (!balance) return;
+    const spendableCredits = getSpendableWorkspaceToolBalanceCredits(balance);
+    const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(balance);
+    const pendingCollectionCredits = getPendingCardCollectionWorkspaceToolBalanceCredits(balance);
+    if (spendableCredits > Number(settings.thresholdCredits ?? 0)) return;
+    if (uncollectedCredits > 0 || pendingCollectionCredits > 0) return;
+    await ctx.scheduler.runAfter(
+      0,
+      (internal as any).workspaceAutoRecharge.executeWorkspaceAutoRechargeForUserInternal,
+      {
+        userId,
+        nowMs,
+      },
+    );
+  } catch (error) {
+    console.warn("workspace_auto_recharge_settlement_schedule_failed", {
+      user_id: String(userId ?? ""),
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+}
+
 function cardBackedReservationExposureCredits(entry: any, nowMs: number): number {
   if (normalizeOptionalString(entry?.status) !== "reserved") return 0;
   const expiresAt = Number(entry?.expiresAt ?? 0);
@@ -1703,6 +2381,13 @@ function workspaceBillingMonthToPublic(bucket: ReturnType<typeof buildWorkspaceB
   };
 }
 
+function readCreditLedgerBillingUsageCredits(row: any): number {
+  const metadata = normalizeObjectMetadata(row?.metadata);
+  const requestedCreditsSettled = normalizeOptionalNumber(metadata.requested_credits_settled);
+  const creditsSettled = normalizeOptionalNumber(row?.creditsSettled);
+  return roundCredits(Math.max(0, requestedCreditsSettled ?? creditsSettled ?? 0));
+}
+
 function effectiveWorkspaceCreditTopupCheckoutExpiresAt(row: any): number {
   const storedExpiresAt = normalizeBalanceNumber(row?.expiresAt);
   const createdAt = normalizeBalanceNumber(row?.createdAt);
@@ -1850,6 +2535,29 @@ async function readWorkspaceUsageCollectionByKey(ctx: any, collectionKey: string
     .first();
 }
 
+async function readActiveWorkspaceUsageCardCollectionsForUser(
+  ctx: any,
+  userId: any,
+  limit = 3,
+) {
+  const bounded = Math.max(1, Math.min(10, Math.floor(limit)));
+  const prepared = await ctx.db
+    .query("workspaceUsageCollections")
+    .withIndex("by_user_status", (q: any) =>
+      q.eq("userId", userId).eq("status", "prepared"),
+    )
+    .order("asc")
+    .take(bounded);
+  const processing = await ctx.db
+    .query("workspaceUsageCollections")
+    .withIndex("by_user_status", (q: any) =>
+      q.eq("userId", userId).eq("status", "processing"),
+    )
+    .order("asc")
+    .take(bounded);
+  return [...prepared, ...processing].slice(0, bounded);
+}
+
 function hasActiveWorkspaceCardOnFile(stripeCustomer: any): boolean {
   return (
     stripeCustomer?.paymentMethodStatus === "active" &&
@@ -1964,6 +2672,12 @@ async function listActiveWorkspaceUsageCardCollectionCandidates(params: {
   for (const balance of rows) {
     if (readUncollectedCreditsBalance(balance) < minCredits) continue;
     if (readPendingCardCollectionCreditsBalance(balance) > 0) continue;
+    const activeCollections = await readActiveWorkspaceUsageCardCollectionsForUser(
+      params.ctx,
+      balance.userId,
+      2,
+    );
+    if (activeCollections.length > 0) continue;
     const stripeCustomer = await params.ctx.db
       .query("userStripeCustomers")
       .withIndex("by_user", (q: any) => q.eq("userId", balance.userId))
@@ -2021,6 +2735,19 @@ export const listWorkspaceUsageCardCollectionsByStatusInternal = internalQuery({
   },
 });
 
+export const listActiveWorkspaceUsageCardCollectionsForUserInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await readActiveWorkspaceUsageCardCollectionsForUser(
+      ctx,
+      args.userId,
+      args.limit ?? 3,
+    ),
+});
+
 export const prepareWorkspaceUsageCardCollectionInternal = internalMutation({
   args: {
     collectionKey: v.string(),
@@ -2046,6 +2773,29 @@ export const prepareWorkspaceUsageCardCollectionInternal = internalMutation({
         collectionKey,
         creditsAmount: roundCredits(existing.creditsAmount),
         status: existing.status,
+      };
+    }
+
+    const activeCollections = await readActiveWorkspaceUsageCardCollectionsForUser(
+      ctx,
+      args.userId,
+      3,
+    );
+    if (activeCollections.length > 0) {
+      return {
+        ok: false,
+        reason: activeCollections.length > 1
+          ? "duplicate_active_workspace_usage_collections"
+          : "active_workspace_usage_collection_exists",
+        collectionKey,
+        creditsAmount: 0,
+        activeCollections: activeCollections.map((collection: any) => ({
+          collectionKey: collection.collectionKey,
+          status: collection.status,
+          providerPaymentIntentId:
+            normalizeStripePaymentIntentId(collection.providerPaymentIntentId) ?? null,
+          updatedAt: diagnosticTimestamp(collection.updatedAt),
+        })),
       };
     }
 
@@ -2480,6 +3230,24 @@ export const collectWorkspaceUsageByCardInternal = internalAction({
       },
     ) as any[];
     for (const collection of stalePrepared) {
+      const activeCollections = await ctx.runQuery(
+        (internal as any).workspaceCredits
+          .listActiveWorkspaceUsageCardCollectionsForUserInternal,
+        {
+          userId: collection.userId,
+          limit: 3,
+        },
+      ) as any[];
+      if (activeCollections.length > 1) {
+        skipped += 1;
+        if (failedSamples.length < 5) {
+          failedSamples.push({
+            collectionKey: collection.collectionKey,
+            failureReason: "duplicate_active_workspace_usage_collections",
+          });
+        }
+        continue;
+      }
       const metadata = normalizeObjectMetadata(collection?.metadata);
       const providerCustomerId =
         normalizeStripeCustomerId(collection?.providerCustomerId) ??
@@ -2545,8 +3313,18 @@ export const collectWorkspaceUsageByCardInternal = internalAction({
         continue;
       }
       const collectionKey = buildWorkspaceUsageCollectionKey(candidate);
-      const stripeClient = readStripeForCollection(collectionKey);
-      if (!stripeClient) continue;
+      const activeBeforePrepare = await ctx.runQuery(
+        (internal as any).workspaceCredits
+          .listActiveWorkspaceUsageCardCollectionsForUserInternal,
+        {
+          userId: candidate.userId,
+          limit: 2,
+        },
+      ) as any[];
+      if (activeBeforePrepare.length > 0) {
+        skipped += 1;
+        continue;
+      }
       const collectionResult = await ctx.runMutation(
         (internal as any).workspaceCredits.prepareWorkspaceUsageCardCollectionInternal,
         {
@@ -2574,6 +3352,26 @@ export const collectWorkspaceUsageByCardInternal = internalAction({
         skipped += 1;
         continue;
       }
+      const activeAfterPrepare = await ctx.runQuery(
+        (internal as any).workspaceCredits
+          .listActiveWorkspaceUsageCardCollectionsForUserInternal,
+        {
+          userId: candidate.userId,
+          limit: 3,
+        },
+      ) as any[];
+      if (activeAfterPrepare.length > 1) {
+        skipped += 1;
+        if (failedSamples.length < 5) {
+          failedSamples.push({
+            collectionKey,
+            failureReason: "duplicate_active_workspace_usage_collections",
+          });
+        }
+        continue;
+      }
+      const stripeClient = readStripeForCollection(collectionKey);
+      if (!stripeClient) continue;
       prepared += collectionResult.alreadyExists ? 0 : 1;
       const attempt = await attemptWorkspaceUsageStripeCollection({
         ctx,
@@ -2736,13 +3534,43 @@ export const getWorkspaceBillingOverview = query({
       buildWorkspaceBillingMonthBucket(addUtcMonths(currentMonthStart, -index)),
     );
     const bucketsByKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+    const paidToolLedgerToolNames = new Set<string>(PAID_TOOL_LEDGER_TOOL_NAMES);
+    const canonicalPaidToolCreditKeys = new Set<string>();
 
+    const creditLedgerEntries = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_user_createdAt", (q) => q.eq("userId", actor.dbUserId))
+      .order("desc")
+      .take(WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT);
+    for (const entry of creditLedgerEntries) {
+      if (entry.status !== "succeeded") continue;
+      const toolName = normalizeOptionalString(entry.toolName);
+      if (!toolName || !paidToolLedgerToolNames.has(toolName)) continue;
+      const creditKey = normalizeOptionalString(entry.creditKey);
+      if (creditKey) canonicalPaidToolCreditKeys.add(creditKey);
+      const bucket = findWorkspaceBillingMonthBucket(
+        bucketsByKey,
+        entry.settledAt ?? entry.updatedAt ?? entry.createdAt,
+      );
+      if (!bucket) continue;
+      const usageCredits = readCreditLedgerBillingUsageCredits(entry);
+      if (!(usageCredits > 0)) continue;
+      bucket.workspaceUsageCredits = roundCredits(
+        bucket.workspaceUsageCredits + usageCredits,
+      );
+    }
+
+    // Legacy billing fallback: creditLedgerEntries above is the canonical paid-tool usage source.
     const workspaceCharges = await ctx.db
       .query("workspaceComputeCharges")
       .withIndex("by_user", (q) => q.eq("userId", actor.dbUserId))
       .order("desc")
       .take(WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT);
     for (const charge of workspaceCharges) {
+      const creditReservationKey = normalizeOptionalString(charge.creditReservationKey);
+      if (creditReservationKey && canonicalPaidToolCreditKeys.has(creditReservationKey)) {
+        continue;
+      }
       const bucket = findWorkspaceBillingMonthBucket(
         bucketsByKey,
         charge.endedAt ?? charge.createdAt,
@@ -2817,6 +3645,8 @@ export const getWorkspaceBillingOverview = query({
       },
       history,
       scan: {
+        creditLedgerEntriesTruncated:
+          creditLedgerEntries.length >= WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT,
         workspaceChargesTruncated:
           workspaceCharges.length >= WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT,
         usageCollectionsTruncated:
@@ -3506,6 +4336,8 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
   },
 });
 
+// Legacy Blaxel/runtime compatibility writer. New paid-tool usage should reserve and
+// settle creditLedgerEntries directly; this remains for older workspace-session evidence.
 export const recordWorkspaceComputeChargeInternal = internalMutation({
   args: {
     chargeKey: v.string(),
@@ -4072,6 +4904,7 @@ export const settleCreditsInternal = internalMutation({
         rawVendorCostUsd: settledRawVendorCostUsd,
         nowMs,
       });
+      await scheduleWorkspaceAutoRechargeAfterSettlementBestEffort(ctx, entry.userId, nowMs);
     }
     return await ctx.db.get(entry._id);
   },

@@ -8,6 +8,8 @@ import {
   estimateWorkspaceComputeUsd,
   estimateWorkspaceReservationCredits,
   getSpendableWorkspaceToolBalanceCredits,
+  normalizePaidToolKind,
+  PAID_TOOL_LEDGER_TOOL_NAMES,
   paidToolKindForLedgerToolName,
   priceWorkspaceUsageCredits,
   WORKSPACE_CARD_BACKED_UNCOLLECTED_LIMIT_CREDITS,
@@ -52,6 +54,14 @@ type CheckoutSession = {
   workspaceCreditsGrantedAt?: number;
   workspaceCreditsUncollectedPaid?: number;
 };
+
+function assertBefore(source: string, first: string, second: string, message: string) {
+  const firstIndex = source.indexOf(first);
+  const secondIndex = source.indexOf(second);
+  assert.notEqual(firstIndex, -1, `${first} missing`);
+  assert.notEqual(secondIndex, -1, `${second} missing`);
+  assert.ok(firstIndex < secondIndex, message);
+}
 
 type WorkspaceUsageCollection = {
   collectionKey: string;
@@ -723,6 +733,13 @@ function testBlaxelWorkspacePricingUsesMemorySeconds() {
 
 function testWorkspaceLedgerNameMapsToWorkspaceTools() {
   assert.equal(paidToolKindForLedgerToolName("workspace_compute"), "workspace_tools");
+  assert.equal(paidToolKindForLedgerToolName("codex_runtime"), "workspace_tools");
+  assert.equal(normalizePaidToolKind("codex_runtime"), "workspace_tools");
+  assert.deepEqual(PAID_TOOL_LEDGER_TOOL_NAMES, [
+    "workspace_compute",
+    "web_research",
+    "voice_transcribe",
+  ]);
 }
 
 function testBillingUiDoesNotSurfaceIncludedCredits() {
@@ -741,6 +758,147 @@ function testBillingUiDoesNotSurfaceIncludedCredits() {
     workspaceCreditsGatewaySource,
     /normalizeNumber\(value\.includedCreditsBalance\) \+ normalizeNumber\(value\.purchasedCreditsBalance\)/,
   );
+}
+
+function testBillingOverviewUsesCanonicalPaidToolLedger() {
+  const workspaceCreditsSource = readFileSync(
+    join(process.cwd(), "convex/workspaceCredits.ts"),
+    "utf8",
+  );
+  const workspaceCreditsGatewaySource = readFileSync(
+    join(process.cwd(), "shared/workspaceCreditsGateway.ts"),
+    "utf8",
+  );
+  const payAsYouGoPanelSource = readFileSync(
+    join(process.cwd(), "apps/web/src/components/WorkspacePayAsYouGoPanel.tsx"),
+    "utf8",
+  );
+
+  const usageHelperStart = workspaceCreditsSource.indexOf(
+    "function readCreditLedgerBillingUsageCredits",
+  );
+  assert.ok(usageHelperStart >= 0, "billing usage helper must exist");
+  const usageHelperEnd = workspaceCreditsSource.indexOf(
+    "\n}\n\nfunction effectiveWorkspaceCreditTopupCheckoutExpiresAt",
+    usageHelperStart,
+  );
+  assert.ok(usageHelperEnd > usageHelperStart, "billing usage helper must be bounded");
+  const usageHelperSource = workspaceCreditsSource.slice(usageHelperStart, usageHelperEnd);
+  assert.match(usageHelperSource, /requested_credits_settled/);
+  assert.match(usageHelperSource, /creditsSettled/);
+  assert.match(
+    usageHelperSource,
+    /requestedCreditsSettled \?\? creditsSettled/,
+    "card-backed usage must count consumed usage even when the paid ledger settle amount is zero",
+  );
+
+  const overviewStart = workspaceCreditsSource.indexOf("export const getWorkspaceBillingOverview");
+  assert.ok(overviewStart >= 0, "billing overview query must exist");
+  const overviewEnd = workspaceCreditsSource.indexOf(
+    "\nexport const upsertWorkspaceCreditBalanceInternal",
+    overviewStart,
+  );
+  assert.ok(overviewEnd > overviewStart, "billing overview query must be bounded");
+  const overviewSource = workspaceCreditsSource.slice(overviewStart, overviewEnd);
+
+  assert.match(overviewSource, /query\("creditLedgerEntries"\)[\s\S]*withIndex\("by_user_createdAt"/);
+  assert.match(overviewSource, /new Set<string>\(PAID_TOOL_LEDGER_TOOL_NAMES\)/);
+  assert.match(overviewSource, /entry\.status !== "succeeded"/);
+  assert.match(overviewSource, /paidToolLedgerToolNames\.has\(toolName\)/);
+  assert.match(overviewSource, /canonicalPaidToolCreditKeys\.add\(creditKey\)/);
+  assert.match(overviewSource, /readCreditLedgerBillingUsageCredits\(entry\)/);
+  assert.ok(
+    overviewSource.includes("bucket.workspaceUsageCredits + usageCredits"),
+    "canonical paid-tool ledger usage must be added to billing buckets",
+  );
+  assert.match(overviewSource, /query\("workspaceComputeCharges"\)/);
+  assert.match(
+    overviewSource,
+    /creditReservationKey && canonicalPaidToolCreditKeys\.has\(creditReservationKey\)[\s\S]*continue/,
+    "legacy workspace charges must not double-count rows already represented by the canonical ledger",
+  );
+  assert.match(overviewSource, /creditLedgerEntriesTruncated/);
+
+  assert.match(workspaceCreditsGatewaySource, /creditLedgerEntriesTruncated: boolean/);
+  assert.match(
+    workspaceCreditsGatewaySource,
+    /creditLedgerEntriesTruncated: scan\.creditLedgerEntriesTruncated === true/,
+  );
+  assert.match(
+    payAsYouGoPanelSource,
+    /workspaceBillingOverview\?\.scan\.creditLedgerEntriesTruncated/,
+  );
+}
+
+function testWorkspaceComputeChargesAreLegacyCompatibilityOnly() {
+  const workspaceCreditsSource = readFileSync(
+    join(process.cwd(), "convex/workspaceCredits.ts"),
+    "utf8",
+  );
+  const runtimeTurnHandlersSource = readFileSync(
+    join(process.cwd(), "convex/runtimeTurnHandlers.ts"),
+    "utf8",
+  );
+  const workerIngestSource = readFileSync(
+    join(process.cwd(), "convex/polynetCodexWorkerIngest.ts"),
+    "utf8",
+  );
+
+  assert.match(
+    workspaceCreditsSource,
+    /Legacy billing fallback: creditLedgerEntries above is the canonical paid-tool usage source/,
+  );
+  assert.match(
+    workspaceCreditsSource,
+    /Legacy Blaxel\/runtime mirror: canonical paid-tool usage lives in creditLedgerEntries/,
+  );
+  assert.match(
+    workspaceCreditsSource,
+    /Legacy Blaxel\/runtime compatibility writer[\s\S]*New paid-tool usage should reserve and[\s\S]*settle creditLedgerEntries directly/,
+  );
+
+  const overviewStart = workspaceCreditsSource.indexOf("export const getWorkspaceBillingOverview");
+  const overviewEnd = workspaceCreditsSource.indexOf(
+    "\nexport const upsertWorkspaceCreditBalanceInternal",
+    overviewStart,
+  );
+  assert.ok(overviewStart >= 0 && overviewEnd > overviewStart, "billing overview must be bounded");
+  const overviewSource = workspaceCreditsSource.slice(overviewStart, overviewEnd);
+  const overviewLedgerIndex = overviewSource.indexOf('query("creditLedgerEntries")');
+  const overviewLegacyIndex = overviewSource.indexOf('query("workspaceComputeCharges")');
+  assert.ok(overviewLedgerIndex >= 0, "billing overview must read canonical credit ledger");
+  assert.ok(overviewLegacyIndex > overviewLedgerIndex, "legacy workspace charges must be fallback after ledger");
+  assert.match(overviewSource, /canonicalPaidToolCreditKeys/);
+  assert.match(overviewSource, /creditReservationKey && canonicalPaidToolCreditKeys\.has\(creditReservationKey\)/);
+
+  const diagnosticStart = workspaceCreditsSource.indexOf("let computeChargesScanned = 0");
+  const diagnosticEnd = workspaceCreditsSource.indexOf(
+    "const totalMissingProviderCostUsd",
+    diagnosticStart,
+  );
+  assert.ok(diagnosticStart >= 0 && diagnosticEnd > diagnosticStart, "provider mirror diagnostic must be bounded");
+  const diagnosticSource = workspaceCreditsSource.slice(diagnosticStart, diagnosticEnd);
+  assert.match(diagnosticSource, /workspaceComputeCharges/);
+  assert.match(diagnosticSource, /expectedProviderCostKey = creditReservationKey/);
+
+  const writerStart = workspaceCreditsSource.indexOf("export const recordWorkspaceComputeChargeInternal");
+  const writerEnd = workspaceCreditsSource.indexOf(
+    "\nexport const reserveCreditsInternal",
+    writerStart,
+  );
+  assert.ok(writerStart >= 0 && writerEnd > writerStart, "legacy workspace compute writer must be bounded");
+  const writerSource = workspaceCreditsSource.slice(writerStart, writerEnd);
+  assert.match(writerSource, /query\("workspaceComputeCharges"\)/);
+  assert.match(writerSource, /query\("creditLedgerEntries"\)/);
+  assert.match(writerSource, /provider_cost_source: "workspace_compute_charge"/);
+
+  assert.match(runtimeTurnHandlersSource, /const codexRuntimeCreditKey = `workspace_compute:daytona:\$\{runId\}`/);
+  assert.match(runtimeTurnHandlersSource, /toolName: "workspace_compute"/);
+  assert.match(runtimeTurnHandlersSource, /settleReservedCreditsStrict/);
+  assert.doesNotMatch(runtimeTurnHandlersSource, /recordWorkspaceComputeChargeInternal/);
+  assert.match(workerIngestSource, /asRecord\(contextRecord\?\.workspace_compute_billing\)/);
+  assert.match(workerIngestSource, /settleReservedCreditsStrict/);
+  assert.doesNotMatch(workerIngestSource, /recordWorkspaceComputeChargeInternal/);
 }
 
 function testBlaxelRuntimeReservationAndSettlementAreWired() {
@@ -774,7 +932,37 @@ function testBlaxelRuntimeReservationAndSettlementAreWired() {
   assert.match(workspaceCreditsSource, /pendingCardCollectionCreditsBalance[\s\S]*uncollectedCreditsBalance/);
   assert.match(workspaceCreditsSource, /completeWorkspaceUsageCardCollectionInternal/);
   assert.match(workspaceCreditsSource, /collectWorkspaceUsageByCardInternal/);
-  assert.match(workspaceCreditsSource, /readStripeForCollection[\s\S]*const collectionKey = buildWorkspaceUsageCollectionKey\(candidate\)[\s\S]*const stripeClient = readStripeForCollection\(collectionKey\)[\s\S]*prepareWorkspaceUsageCardCollectionInternal/);
+  const collectionStart = workspaceCreditsSource.indexOf("export const collectWorkspaceUsageByCardInternal");
+  const collectionEnd = workspaceCreditsSource.indexOf(
+    "\nexport const getWorkspaceCreditBalanceInternal",
+    collectionStart,
+  );
+  assert.ok(collectionStart >= 0 && collectionEnd > collectionStart, "usage collection action must be bounded");
+  const collectionActionSource = workspaceCreditsSource.slice(collectionStart, collectionEnd);
+  const candidateBlock = collectionActionSource.slice(
+    collectionActionSource.indexOf("const candidateResult"),
+    collectionActionSource.indexOf("return {"),
+  );
+  assert.match(candidateBlock, /activeBeforePrepare[\s\S]*activeBeforePrepare\.length > 0/);
+  assert.match(candidateBlock, /activeAfterPrepare[\s\S]*activeAfterPrepare\.length > 1/);
+  assertBefore(
+    candidateBlock,
+    "activeBeforePrepare",
+    "prepareWorkspaceUsageCardCollectionInternal",
+    "usage collection must check active collection state before preparing a candidate",
+  );
+  assertBefore(
+    candidateBlock,
+    "prepareWorkspaceUsageCardCollectionInternal",
+    "readStripeForCollection(collectionKey)",
+    "usage collection must prepare DB state before reading Stripe",
+  );
+  assertBefore(
+    candidateBlock,
+    "activeAfterPrepare",
+    "readStripeForCollection(collectionKey)",
+    "usage collection must recheck active collection state before reading Stripe",
+  );
   assert.match(workspaceCreditsSource, /paymentIntents\.create/);
   assert.match(workspaceCreditsSource, /confirm: true/);
   assert.match(workspaceCreditsSource, /off_session: true/);
@@ -1007,6 +1195,8 @@ function main() {
   testBlaxelWorkspacePricingUsesMemorySeconds();
   testWorkspaceLedgerNameMapsToWorkspaceTools();
   testBillingUiDoesNotSurfaceIncludedCredits();
+  testBillingOverviewUsesCanonicalPaidToolLedger();
+  testWorkspaceComputeChargesAreLegacyCompatibilityOnly();
   testBlaxelRuntimeReservationAndSettlementAreWired();
   testRuntimeAccountingReleaseAlwaysChecksCurrentTerminalTruth();
   testReusableWorkspaceLeaseRequiresReservedLedgerEntry();

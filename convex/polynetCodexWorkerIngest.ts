@@ -12,11 +12,11 @@ import {
   settleReservedCreditsStrict,
 } from "./workspaceCreditSettlement";
 import {
-  CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
-  estimateCodexRuntimeVendorCostUsd,
+  DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
+  estimateDaytonaWorkspaceComputeVendorCostUsd,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-  priceCodexRuntimeCredits,
+  priceDaytonaWorkspaceComputeCredits,
 } from "../shared/workspaceCredits";
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 
@@ -281,9 +281,11 @@ export async function handlePolynetCodexWorkerIngest(
 
   let codexRuntimeCreditsSettled = false;
   let codexRuntimeCreditsOutcome: string | null = null;
-  const codexRuntimeBilling = asRecord(
-    body.context && (body.context as JsonRecord).codex_runtime_billing,
-  );
+  const contextRecord = asRecord(body.context);
+  const codexRuntimeBilling =
+    asRecord(contextRecord?.workspace_compute_billing) ??
+    asRecord(contextRecord?.codex_runtime_billing);
+  const daytonaRuntimeTarget = asRecord(contextRecord?.daytona_runtime_target);
   const codexRuntimeCreditKey = String(codexRuntimeBilling?.credit_key ?? "").trim();
   if (codexRuntimeCreditKey) {
     const timing = asRecord(body.timing);
@@ -298,10 +300,10 @@ export async function handlePolynetCodexWorkerIngest(
           ? "cancelled"
           : String(errorRecord?.code ?? "polynet_codex_worker_turn_failed");
     if (durationSeconds > 0) {
-      const rawVendorCostUsd = estimateCodexRuntimeVendorCostUsd({
+      const rawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
         durationSeconds,
       });
-      const creditsSettled = priceCodexRuntimeCredits({ durationSeconds });
+      const creditsSettled = priceDaytonaWorkspaceComputeCredits({ durationSeconds });
       try {
         await settleReservedCreditsStrict({
           ctx,
@@ -309,17 +311,22 @@ export async function handlePolynetCodexWorkerIngest(
           status: "succeeded",
           creditsSettled,
           rawVendorCostUsd,
-        metadata: {
-          pricing_version: PAID_TOOL_PRICING_VERSION,
-          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-          provider: "daytona",
-          pricing_model: "daytona_runtime_seconds_estimate",
-          provider_billing_reconciliation: "pending",
-          provider_billing_evidence: "estimated_from_runtime_duration",
-          daytona_runtime_usd_per_second: CODEX_RUNTIME_DAYTONA_USD_PER_SECOND,
-          duration_seconds: durationSeconds,
-          duration_source: "worker_ingest_timing_total_ms",
-            worker_machine_id: null,
+          metadata: {
+            pricing_version: PAID_TOOL_PRICING_VERSION,
+            billing_product: "workspace_compute",
+            harness: "codex",
+            target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+            provider: "daytona",
+            pricing_model: "daytona_runtime_seconds_estimate",
+            provider_billing_reconciliation: "pending",
+            provider_billing_evidence: "estimated_from_runtime_duration",
+            daytona_workspace_compute_usd_per_second:
+              DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
+            duration_seconds: durationSeconds,
+            duration_source: "worker_ingest_timing_total_ms",
+            target_id: daytonaRuntimeTarget?.target_id ?? null,
+            sandbox_id: daytonaRuntimeTarget?.sandbox_id ?? null,
+            worker_machine_id: daytonaRuntimeTarget?.sandbox_id ?? null,
             reserved_credits: readPositiveNumber(codexRuntimeBilling?.reserved_credits),
             terminal_reason: terminalReason,
           },
@@ -334,9 +341,11 @@ export async function handlePolynetCodexWorkerIngest(
         ctx,
         creditKey: codexRuntimeCreditKey,
         status: "refunded",
-        failureReason: terminalReason || "codex_runtime_not_started",
+        failureReason: terminalReason || "workspace_compute_not_started",
         metadata: {
           pricing_version: PAID_TOOL_PRICING_VERSION,
+          billing_product: "workspace_compute",
+          harness: "codex",
           provider: "daytona",
           pricing_model: "daytona_runtime_seconds_estimate",
           worker_started: false,

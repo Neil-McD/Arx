@@ -13,8 +13,7 @@ import {
   setCloudThreadContext,
 } from "./cloudThreadContextGateway";
 import {
-  RUNTIME_ENGINE_POLYNET,
-  normalizeRuntimeEngine,
+  normalizeActiveWorkspaceRuntimeEngine,
   type RuntimeEngine,
 } from "./runtimeEngine";
 import { syncThreadCommunityLensCloud, type ThreadContextCloudState } from "./threadContextCloudSync";
@@ -82,8 +81,9 @@ export function useWebThreadMutationController<SessionT>(
       enabled.find((toggle) => toggle.id === current.defaultActiveModelId)?.id ||
       enabled[0]?.id ||
       current.defaultActiveModelId;
-    const preferredRuntimeEngine =
-      normalizeRuntimeEngine(current.activeRuntimeEngine) ?? RUNTIME_ENGINE_POLYNET;
+    const preferredRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(
+      current.activeRuntimeEngine,
+    );
     const projectId = (current.activeProjectId ?? "").trim() || null;
     try {
       await ensureCloudThreadRecord({
@@ -130,8 +130,7 @@ export function useWebThreadMutationController<SessionT>(
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(session, current.ensureSession);
       if (!usableSession) return;
-      const normalizedRuntimeEngine = normalizeRuntimeEngine(runtimeEngine);
-      if (!normalizedRuntimeEngine) return;
+      const normalizedRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(runtimeEngine);
       const hasConvex = isConvexCloudThreadsEnabled();
       if (!hasConvex) {
         console.warn("Convex is required for cloud thread runtime engine updates in this build.");

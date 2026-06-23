@@ -501,8 +501,8 @@ import {
   uploadCloudThreadAttachmentFile,
 } from "../../../shared/cloudThreadsGateway";
 import {
-  RUNTIME_ENGINE_POLYNET,
-  normalizeRuntimeEngine,
+  RUNTIME_ENGINE_CODEX,
+  normalizeActiveWorkspaceRuntimeEngine,
   type RuntimeEngine,
 } from "../../../shared/runtimeEngine";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
@@ -746,6 +746,8 @@ const MODEL_TOGGLES_STORAGE_KEY = "polynet_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "polynet_active_model_id";
 const LEGACY_ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 const ACTIVE_RUNTIME_ENGINE_STORAGE_KEY = "polynet_active_runtime_engine";
+const ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY =
+  "polynet_active_runtime_engine_codex_default_v1";
 const APP_THEME_STORAGE_KEY = "polynet-theme";
 const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
@@ -2058,16 +2060,23 @@ export default function App() {
   });
   const [activeRuntimeEngine, setActiveRuntimeEngineState] = useState<RuntimeEngine>(() => {
     try {
-      return (
-        normalizeRuntimeEngine(localStorage.getItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY)) ??
-        RUNTIME_ENGINE_POLYNET
-      );
+      const stored = localStorage.getItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY);
+      const normalized = normalizeActiveWorkspaceRuntimeEngine(stored);
+      const migrationApplied =
+        localStorage.getItem(ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY) === "1";
+      if (!migrationApplied) {
+        localStorage.setItem(ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY, "1");
+      }
+      if (stored !== normalized) {
+        localStorage.setItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized);
+      }
+      return normalized;
     } catch {
-      return RUNTIME_ENGINE_POLYNET;
+      return RUNTIME_ENGINE_CODEX;
     }
   });
   const setActiveRuntimeEngine = useCallback((next: RuntimeEngine): void => {
-    const normalized = normalizeRuntimeEngine(next) ?? RUNTIME_ENGINE_POLYNET;
+    const normalized = normalizeActiveWorkspaceRuntimeEngine(next);
     setActiveRuntimeEngineState(normalized);
     try {
       localStorage.setItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized);
@@ -4675,7 +4684,7 @@ export default function App() {
   } = workspaceCore.threadMutation;
   const handleWorkspaceRuntimeEngineChange = useCallback(
     (next: RuntimeEngine): void => {
-      const runtimeEngine = normalizeRuntimeEngine(next) ?? RUNTIME_ENGINE_POLYNET;
+      const runtimeEngine = normalizeActiveWorkspaceRuntimeEngine(next);
       setActiveRuntimeEngine(runtimeEngine);
       if (workspaceWantsNewChat || !activeThreadId) return;
       const session = sessionRef.current;
@@ -7498,14 +7507,16 @@ export default function App() {
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
   const activeRuntimeEngineForWorkspace =
     !workspaceWantsNewChat && activeThreadId
-      ? normalizeRuntimeEngine(
-          threads.find((thread) => thread.id === activeThreadId)?.runtime_engine,
-        ) ?? activeRuntimeEngine
+      ? normalizeActiveWorkspaceRuntimeEngine(
+          threads.find((thread) => thread.id === activeThreadId)?.runtime_engine ??
+            activeRuntimeEngine,
+        )
       : activeRuntimeEngine;
   useEffect(() => {
     if (workspaceWantsNewChat || !activeThreadId) return;
-    const threadRuntimeEngine = normalizeRuntimeEngine(
-      threads.find((thread) => thread.id === activeThreadId)?.runtime_engine,
+    const threadRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(
+      threads.find((thread) => thread.id === activeThreadId)?.runtime_engine ??
+        activeRuntimeEngine,
     );
     if (!threadRuntimeEngine || threadRuntimeEngine === activeRuntimeEngine) return;
     setActiveRuntimeEngine(threadRuntimeEngine);

@@ -87,14 +87,24 @@ assert.match(
   "Daytona target mutations must claim, mark ready, and release target rows",
 );
 assert.match(
+  targets,
+  /getActiveDaytonaCodexRuntimeSubstrateForThreadInternal[\s\S]*by_owner_threadId[\s\S]*sandboxState[\s\S]*"stopped"[\s\S]*providerTeardownState[\s\S]*"stopped"[\s\S]*previewLeaseActive[\s\S]*workerState[\s\S]*"ready"/,
+  "Daytona target queries must expose only running active thread substrate before harness tool policy is resolved",
+);
+assert.match(
   targetActions,
   /ensureDaytonaCodexRuntimeTargetInternal[\s\S]*new Daytona\(buildDaytonaConfig\(\)\)[\s\S]*markDaytonaCodexRuntimeTargetReadyInternal/,
   "Daytona target action must create a provider sandbox and mark it ready",
 );
 assert.match(
   targetActions,
-  /scanDaytonaWorkspaceForMeaningfulFiles[\s\S]*stopDaytonaSandboxForRetention[\s\S]*deleteDaytonaSandbox[\s\S]*teardownDaytonaCodexRuntimeTargetInternal[\s\S]*markDaytonaCodexRuntimeTargetProviderTeardownInternal/,
-  "Daytona target teardown must classify workspace state, delete clean sandboxes, stop dirty sandboxes for retention, and record teardown state",
+  /teardownDaytonaCodexRuntimeTargetInternal[\s\S]*scanDaytonaWorkspaceForMeaningfulFiles[\s\S]*deleteDaytonaSandbox[\s\S]*cleanupDecision: "delete_without_active_lease"[\s\S]*markDaytonaCodexRuntimeTargetProviderTeardownInternal/,
+  "Daytona target teardown must classify workspace state as telemetry, delete sandboxes without active leases, and record teardown state",
+);
+assert.match(
+  targetActions,
+  /stopDaytonaAppPreviewInternal[\s\S]*getDaytonaWorkspacePreviewReadyEventInternal[\s\S]*buildStopDaytonaAppPreviewCommand[\s\S]*markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal[\s\S]*teardownAndRecordDaytonaCodexRuntimeTargetInternal/,
+  "Daytona target actions must stop active app preview processes, mark stopped preview ports, and reuse teardown governance",
 );
 
 assert.match(
@@ -106,6 +116,26 @@ assert.match(
   handlers,
   /if \(runtimeProjectId\)[\s\S]*workspace_session_skipped[\s\S]*daytona_direct_uses_runtime_workspace/,
   "direct Daytona turns must not adopt the legacy project workspace session",
+);
+assert.match(
+  handlers,
+  /reservePaidToolCredits\(\{[\s\S]*creditKey: codexRuntimeCreditKey[\s\S]*toolKind: "workspace_tools"[\s\S]*toolName: "workspace_compute"[\s\S]*vendor: "daytona"/,
+  "Daytona-backed Codex turns must reserve canonical workspace compute credits",
+);
+assert.doesNotMatch(
+  handlers,
+  /toolKind: "codex_runtime"|toolName: "codex_runtime"|tool_kind: "codex_runtime"/,
+  "Codex runtime must not reappear as a separate paid tool lane",
+);
+assert.match(
+  handlers,
+  /isolatePolynetHarnessToolNames[\s\S]*polynetAllowedToolNamesForRun[\s\S]*runtime_substrate_resolved/,
+  "runtime handler must isolate PolyNet workspace tools before tool policy",
+);
+assert.match(
+  handlers,
+  /"polynet_harness_isolated"[\s\S]*const activeDaytonaRuntimeSubstrateForPolynetTools = null[\s\S]*activeDaytonaRuntimeSubstrate:\s*activeDaytonaRuntimeSubstrateForPolynetTools/,
+  "runtime handler must keep the PolyNet harness isolated from Daytona substrate tools",
 );
 assert.doesNotMatch(
   handlers,
@@ -167,8 +197,13 @@ assert.match(
 );
 assert.match(
   harnessToolPolicy,
-  /resolvePolynetHarnessToolPolicy[\s\S]*fixedRuntimeToolNames[\s\S]*resolveCodexHarnessToolPolicy[\s\S]*mode: "native_codex"[\s\S]*duplicateShellTool: false/,
-  "shared harness policy must split PolyNet fixed runtime tools from Codex native workspace policy",
+  /resolvePolynetHarnessToolPolicy[\s\S]*fixedRuntimeToolNames[\s\S]*runtimeCapabilities[\s\S]*resolveCodexHarnessToolPolicy[\s\S]*mode: "native_codex"[\s\S]*duplicateShellTool: false[\s\S]*runtimeCapabilities/,
+  "shared harness policy must split isolated PolyNet tools from Codex native workspace policy",
+);
+assert.match(
+  harnessToolPolicy,
+  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*SANDBOX_TOOL_NAMES[\s\S]*excludePolynetRuntimeSubstrateToolNames/,
+  "shared harness policy must strip sandbox substrate tools from PolyNet",
 );
 assert.match(
   harnessToolPolicy,

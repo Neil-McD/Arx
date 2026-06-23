@@ -30,8 +30,8 @@ import {
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import {
+  ACTIVE_WORKSPACE_RUNTIME_ENGINES,
   RUNTIME_ENGINE_CODEX,
-  RUNTIME_ENGINE_POLYNET,
   type RuntimeEngine,
 } from "../../../../shared/runtimeEngine";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
@@ -469,6 +469,32 @@ function parseDaytonaPreviewRunAnchor(
   };
 }
 
+function parseDaytonaPreviewStoppedAnchorIds(
+  event: ThreadStreamingRuntimeEvent,
+): string[] {
+  if (event.event_type !== "workspace_preview_stopped") return [];
+  const payload =
+    event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : null;
+  if (!payload) return [];
+  if (String(payload.provider ?? "").trim() !== "daytona") return [];
+  const targetRunId =
+    String(payload.target_run_id ?? "").trim() ||
+    String(payload.substrate_run_id ?? "").trim() ||
+    String(event.run_id ?? "").trim();
+  if (!targetRunId) return [];
+  const ports = Array.isArray(payload.preview_ports)
+    ? payload.preview_ports
+    : Array.isArray(payload.stopped_preview_ports)
+      ? payload.stopped_preview_ports
+      : [payload.port ?? payload.preview_port];
+  return ports
+    .map((port) => Math.floor(Number(port)))
+    .filter((port) => Number.isFinite(port) && port > 0 && port <= 65535)
+    .map((port) => buildDaytonaPreviewAnchorDedupeKey(targetRunId, port));
+}
+
 function buildDaytonaPreviewAnchorDedupeKey(runId: string, port: number): string {
   return `${runId}:${port}`;
 }
@@ -480,11 +506,17 @@ function buildLatestDaytonaPreviewAnchorsByRunId(params: {
 }): Record<string, DaytonaRuntimePreviewAnchor[]> {
   const runtimeEventBatches = Object.values(params.runtimeEventsByRunId ?? {});
   const next = new Map<string, DaytonaRuntimePreviewAnchor>();
+  const stopped = new Set<string>();
   const ingest = (events: readonly ThreadStreamingRuntimeEvent[] | null | undefined) => {
     if (!Array.isArray(events)) return;
     for (const event of events) {
+      for (const stoppedAnchorId of parseDaytonaPreviewStoppedAnchorIds(event)) {
+        stopped.add(stoppedAnchorId);
+        next.delete(stoppedAnchorId);
+      }
       const anchor = parseDaytonaPreviewRunAnchor(event);
       if (!anchor) continue;
+      if (stopped.has(anchor.id)) continue;
       const current = next.get(anchor.id);
       if (!current || anchor.updatedAt >= current.updatedAt) {
         next.set(anchor.id, anchor);
@@ -1115,10 +1147,17 @@ function WorkspaceRuntimeEngineSelector(props: {
   disabled: boolean;
   onChange: (engine: RuntimeEngine) => void;
 }) {
-  const options: Array<{ value: RuntimeEngine; label: string }> = [
-    { value: RUNTIME_ENGINE_POLYNET, label: "PolyNet" },
-    { value: RUNTIME_ENGINE_CODEX, label: "Codex" },
-  ];
+  const runtimeEngineLabels: Partial<Record<RuntimeEngine, string>> = {
+    codex: "Codex",
+  };
+  const options = ACTIVE_WORKSPACE_RUNTIME_ENGINES.map((value) => ({
+    value,
+    label: runtimeEngineLabels[value] ?? value,
+  }));
+  if (options.length <= 1) return null;
+  const selectedValue = options.some((option) => option.value === props.value)
+    ? props.value
+    : RUNTIME_ENGINE_CODEX;
   const handleChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
     props.onChange(event.currentTarget.value as RuntimeEngine);
   };
@@ -1127,7 +1166,7 @@ function WorkspaceRuntimeEngineSelector(props: {
     <label className="ask-engine-selector" title="Choose runtime">
       <select
         className="ask-engine-select"
-        value={props.value}
+        value={selectedValue}
         disabled={props.disabled}
         onChange={handleChange}
         aria-label="Choose runtime"

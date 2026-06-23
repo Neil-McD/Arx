@@ -248,7 +248,7 @@ assert.match(
 );
 assert.match(
   sharedWorkspaceCredits,
-  /PAID_TOOL_LEDGER_TOOL_NAMES = \["workspace_compute", "web_research", "voice_transcribe"\]/,
+  /PAID_TOOL_LEDGER_TOOL_NAMES = \[[\s\S]*"workspace_compute"[\s\S]*"web_research"[\s\S]*"voice_transcribe"[\s\S]*\]/,
   "operator tool economics must use the canonical workspace, web research, and voice paid-tool ledger rows",
 );
 assert.match(

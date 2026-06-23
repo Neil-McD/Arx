@@ -6,7 +6,9 @@ import {
   CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES,
   CODEX_RUNTIME_ADAPTER_TOOL_NAMES,
   buildCodexHarnessToolPolicyReceipt,
+  buildPolynetHarnessToolPolicyReceipt,
   resolveCodexHarnessToolPolicy,
+  resolvePolynetHarnessToolPolicy,
 } from "../shared/harnessToolPolicy.ts";
 import {
   buildPolynetPlatformToolNames,
@@ -181,10 +183,51 @@ assert.deepEqual(daytonaCodexHarnessPolicy.polynetPlatformToolNames, [
 ]);
 const daytonaCodexPolicyReceipt =
   buildCodexHarnessToolPolicyReceipt(daytonaCodexHarnessPolicy);
+const daytonaCodexRuntimeCapabilityNames = (
+  daytonaCodexPolicyReceipt["runtime_capabilities"] as Array<{ name: string }>
+).map((capability) => capability.name);
+assert.deepEqual(
+  daytonaCodexRuntimeCapabilityNames,
+  ["workspace_files", "workspace_shell", "app_preview", "computer_use"],
+  "Codex harness must advertise native workspace, shell, preview, and computer capabilities",
+);
 assert.deepEqual(
   daytonaCodexPolicyReceipt["runtime_adapter_tool_names"],
   [...CODEX_RUNTIME_ADAPTER_TOOL_NAMES],
   "Codex harness receipt must classify preview/computer tools as runtime adapters",
+);
+const polynetWorkspaceHarnessPolicy = resolvePolynetHarnessToolPolicy({
+  allowedToolNames: [
+    "list_dir",
+    "read",
+    "glob",
+    "grep",
+    "sha256",
+    "write",
+    "edit",
+    "bash",
+    "terminal_start",
+    "terminal_read",
+    "terminal_write",
+    "terminal_stop",
+    "computer_open_url",
+    "computer_screenshot",
+  ],
+});
+assert.deepEqual(
+  polynetWorkspaceHarnessPolicy.fixedRuntimeToolNames,
+  [],
+  "PolyNet harness policy must strip sandbox workspace, terminal, preview, and computer tools",
+);
+const polynetRuntimeCapabilityNames = (
+  buildPolynetHarnessToolPolicyReceipt(polynetWorkspaceHarnessPolicy)[
+    "runtime_capabilities"
+  ] as Array<{ name: string }>
+).map((capability) => capability.name);
+assert.deepEqual(
+  polynetRuntimeCapabilityNames,
+  [],
+  "PolyNet harness must not advertise Codex-style runtime capabilities",
 );
 for (const forbiddenToolName of CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES) {
   assert.equal(
@@ -393,6 +436,11 @@ assert.match(
   runtimeTurnHandlersSource,
   /runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
   "runtime handler must project Codex runtime adapter tools from the Codex harness policy",
+);
+assert.match(
+  runtimeTurnHandlersSource,
+  /isolatePolynetHarnessToolNames[\s\S]*const activeDaytonaRuntimeSubstrateForPolynetTools = null/,
+  "runtime handler must isolate the PolyNet harness instead of injecting Daytona preview tools into it",
 );
 
 console.log("daytona_codex_tool_role_matrix_proof: ok");

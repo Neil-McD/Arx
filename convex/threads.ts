@@ -16,6 +16,7 @@ import {
 import { requireCommunityChatAccess } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import {
+  normalizeActiveWorkspaceRuntimeEngine,
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
@@ -304,7 +305,7 @@ function normalizeOptionalRuntimeEngine(raw: unknown): RuntimeEngine | undefined
   if (!value) return undefined;
   const engine = normalizeRuntimeEngine(value);
   if (!engine) throw new Error("invalid_runtime_engine");
-  return engine;
+  return normalizeActiveWorkspaceRuntimeEngine(engine);
 }
 
 function normalizeThreadTitle(raw: unknown): string | undefined {

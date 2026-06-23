@@ -1,4 +1,4 @@
-export const PROVIDER_COST_CATEGORIES = ["workspace", "web", "voice", "runtime"] as const;
+export const PROVIDER_COST_CATEGORIES = ["workspace", "web", "voice"] as const;
 
 export type ProviderCostCategory = (typeof PROVIDER_COST_CATEGORIES)[number];
 

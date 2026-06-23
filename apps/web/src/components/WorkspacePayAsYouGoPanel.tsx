@@ -586,7 +586,8 @@ export function WorkspacePayAsYouGoPanel({
               ) : (
                 <div className="model-note">No completed workspace billing months yet.</div>
               )}
-              {workspaceBillingOverview?.scan.workspaceChargesTruncated ||
+              {workspaceBillingOverview?.scan.creditLedgerEntriesTruncated ||
+              workspaceBillingOverview?.scan.workspaceChargesTruncated ||
               workspaceBillingOverview?.scan.usageCollectionsTruncated ||
               workspaceBillingOverview?.scan.topupsTruncated ? (
                 <div className="model-note">Some older billing history may be omitted.</div>

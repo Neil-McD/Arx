@@ -14,6 +14,7 @@ import {
   computeWorkspaceAutoRechargeAttemptPlan,
   isWorkspaceAutoRechargeAttemptStatusActive,
   resolveWorkspaceAutoRechargeMonthKey,
+  workspaceAutoRechargeCreditsToAmountCents,
   type WorkspaceAutoRechargeAttemptStatus,
 } from "../shared/workspaceAutoRechargeAttempts";
 import {
@@ -70,6 +71,8 @@ type WorkspaceAutoRechargeAttemptRow = {
   uncollectedCreditsBalance: number;
   pendingCardCollectionCreditsBalance: number;
   provider?: string;
+  providerCustomerId?: string;
+  providerPaymentMethodId?: string;
   providerPaymentId?: string;
   providerIdempotencyKey?: string;
   failureReason?: string;
@@ -87,9 +90,20 @@ const DUPLICATE_WORKSPACE_AUTO_RECHARGE_SETTINGS_ERROR =
   "duplicate_auto_recharge_settings";
 const DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR = "duplicate_workspace_credit_balance";
 const WORKSPACE_AUTO_RECHARGE_MONTH_ATTEMPT_SCAN_LIMIT = 200;
+const WORKSPACE_AUTO_RECHARGE_SWEEP_LIMIT_DEFAULT = 20;
+const WORKSPACE_AUTO_RECHARGE_SWEEP_LIMIT_MAX = 100;
+const WORKSPACE_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS = 5 * 60 * 1000;
+const WORKSPACE_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_MAX_RETRY_AGE_MS =
+  12 * 60 * 60 * 1000;
 
 function roundCredits(value: number): number {
   return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function normalizeSweepLimit(value: unknown): number {
+  const parsed = Math.floor(Number(value ?? WORKSPACE_AUTO_RECHARGE_SWEEP_LIMIT_DEFAULT));
+  if (!Number.isFinite(parsed)) return WORKSPACE_AUTO_RECHARGE_SWEEP_LIMIT_DEFAULT;
+  return Math.max(1, Math.min(WORKSPACE_AUTO_RECHARGE_SWEEP_LIMIT_MAX, parsed));
 }
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -310,9 +324,71 @@ function buildWorkspaceAutoRechargePaymentIntentMetadata(params: {
   };
 }
 
+async function scheduleWorkspaceAutoRechargeExecutionBestEffort(
+  ctx: any,
+  params: {
+    userId: Id<"users">;
+    nowMs: number;
+    reason: string;
+  },
+): Promise<boolean> {
+  try {
+    await ctx.scheduler.runAfter(
+      0,
+      (internal as any).workspaceAutoRecharge.executeWorkspaceAutoRechargeForUserInternal,
+      {
+        userId: params.userId,
+        nowMs: params.nowMs,
+      },
+    );
+    return true;
+  } catch (error) {
+    console.warn("workspace_auto_recharge_schedule_failed", {
+      user_id: String(params.userId ?? ""),
+      reason: params.reason,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+    return false;
+  }
+}
+
 function normalizeStripePaymentIntentId(value: unknown): string | undefined {
   const normalized = normalizeOptionalString(value);
   return normalized?.startsWith("pi_") ? normalized : undefined;
+}
+
+function isWorkspaceAutoRechargeProcessingWithoutPaymentIdStale(
+  attempt: WorkspaceAutoRechargeAttemptRow,
+  nowMs: number,
+): boolean {
+  if (attempt.status !== "processing") return false;
+  if (normalizeStripePaymentIntentId(attempt.providerPaymentId)) return false;
+  const updatedAt = Number(attempt.updatedAt ?? 0);
+  return Number.isFinite(updatedAt)
+    && nowMs - updatedAt >= WORKSPACE_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS;
+}
+
+function isWorkspaceAutoRechargeProcessingWithoutPaymentIdExpired(
+  attempt: WorkspaceAutoRechargeAttemptRow,
+  nowMs: number,
+): boolean {
+  if (attempt.status !== "processing") return false;
+  if (normalizeStripePaymentIntentId(attempt.providerPaymentId)) return false;
+  const createdAt = Number(attempt.createdAt ?? 0);
+  return (
+    !Number.isFinite(createdAt)
+    || nowMs - createdAt >= WORKSPACE_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_MAX_RETRY_AGE_MS
+  );
+}
+
+function readStoredWorkspaceAutoRechargePaymentMethod(
+  attempt: WorkspaceAutoRechargeAttemptRow,
+): WorkspaceAutoRechargePaymentMethod | null {
+  const providerCustomerId = normalizeStripeCustomerId(attempt.providerCustomerId);
+  const providerPaymentMethodId = normalizeStripePaymentMethodId(attempt.providerPaymentMethodId);
+  return providerCustomerId && providerPaymentMethodId
+    ? { providerCustomerId, providerPaymentMethodId }
+    : null;
 }
 
 function readStripeErrorPaymentIntent(error: unknown): any | null {
@@ -434,20 +510,30 @@ export const saveWorkspaceAutoRechargeSettings = mutation({
       failureReason: undefined,
       updatedAt: nowMs,
     };
+    let projection: ReturnType<typeof buildWorkspaceAutoRechargeSettingsProjection>;
     if (existing?._id) {
       await ctx.db.patch(existing._id, patch);
-      return buildWorkspaceAutoRechargeSettingsProjection({
+      projection = buildWorkspaceAutoRechargeSettingsProjection({
         ...existing,
         ...patch,
       });
+    } else {
+      const row = {
+        userId: actor.dbUserId,
+        ...patch,
+        createdAt: nowMs,
+      };
+      await ctx.db.insert("workspaceAutoRechargeSettings", row);
+      projection = buildWorkspaceAutoRechargeSettingsProjection(row);
     }
-    const row = {
-      userId: actor.dbUserId,
-      ...patch,
-      createdAt: nowMs,
-    };
-    await ctx.db.insert("workspaceAutoRechargeSettings", row);
-    return buildWorkspaceAutoRechargeSettingsProjection(row);
+    if (validation.value.enabled) {
+      await scheduleWorkspaceAutoRechargeExecutionBestEffort(ctx, {
+        userId: actor.dbUserId,
+        nowMs,
+        reason: "settings_enabled",
+      });
+    }
+    return projection;
   },
 });
 
@@ -625,9 +711,65 @@ export const prepareWorkspaceAutoRechargeAttemptInternal = internalMutation({
   },
 });
 
+async function markWorkspaceAutoRechargeAttemptReleasedFromMutation(
+  ctx: any,
+  attempt: WorkspaceAutoRechargeAttemptRow,
+  failureReason: string,
+  nowMs: number,
+) {
+  await ctx.db.patch(attempt._id, {
+    status: "released",
+    failureReason,
+    completedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return {
+    ok: true,
+    disposition: "released",
+    attemptKey: attempt.attemptKey,
+    failureReason,
+  };
+}
+
+async function markWorkspaceAutoRechargeAttemptFailedFromMutation(
+  ctx: any,
+  attempt: WorkspaceAutoRechargeAttemptRow,
+  failureReason: string,
+  nowMs: number,
+) {
+  await ctx.db.patch(attempt._id, {
+    status: "failed",
+    provider: "stripe",
+    providerIdempotencyKey: attempt.providerIdempotencyKey ?? attempt.attemptKey,
+    failureReason,
+    completedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  const { row: settings, duplicate } = await readCanonicalWorkspaceAutoRechargeSettingsRow(
+    ctx,
+    attempt.userId,
+  );
+  if (!duplicate && settings?._id) {
+    await ctx.db.patch(settings._id, {
+      ...(settings.enabled ? { status: "paused_payment_failed" as const } : {}),
+      lastFailureAt: nowMs,
+      failureReason,
+      updatedAt: nowMs,
+    });
+  }
+  return {
+    ok: true,
+    disposition: "failed",
+    attemptKey: attempt.attemptKey,
+    failureReason,
+  };
+}
+
 export const markWorkspaceAutoRechargeAttemptProcessingInternal = internalMutation({
   args: {
     attemptKey: v.string(),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerPaymentMethodId: v.optional(v.union(v.string(), v.null())),
     providerPaymentId: v.optional(v.union(v.string(), v.null())),
     providerIdempotencyKey: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
@@ -647,6 +789,11 @@ export const markWorkspaceAutoRechargeAttemptProcessingInternal = internalMutati
     await ctx.db.patch(attempt._id, {
       status: "processing",
       provider: "stripe",
+      providerCustomerId:
+        normalizeStripeCustomerId(args.providerCustomerId) ?? attempt.providerCustomerId,
+      providerPaymentMethodId:
+        normalizeStripePaymentMethodId(args.providerPaymentMethodId) ??
+        attempt.providerPaymentMethodId,
       providerPaymentId:
         normalizeStripePaymentIntentId(args.providerPaymentId) ?? attempt.providerPaymentId,
       providerIdempotencyKey:
@@ -850,6 +997,292 @@ async function finalizeWorkspaceAutoRechargePaymentIntent(params: {
   return { disposition: "skipped", reason: "payment_intent_status_missing" };
 }
 
+export const sweepWorkspaceAutoRechargeExecutionsInternal = internalMutation({
+  args: {
+    limit: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = normalizeSweepLimit(args.limit);
+    const candidateUsers = new Map<string, Id<"users">>();
+    const addCandidate = (userId: Id<"users"> | undefined | null) => {
+      if (!userId || candidateUsers.size >= limit) return;
+      candidateUsers.set(String(userId), userId);
+    };
+
+    const preparedAttempts = await ctx.db
+      .query("workspaceAutoRechargeAttempts")
+      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
+      .order("asc")
+      .take(limit);
+    for (const attempt of preparedAttempts as WorkspaceAutoRechargeAttemptRow[]) {
+      addCandidate(attempt.userId);
+    }
+
+    if (candidateUsers.size < limit) {
+      const processingAttempts = await ctx.db
+        .query("workspaceAutoRechargeAttempts")
+        .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
+        .order("asc")
+        .take(limit);
+      for (const attempt of processingAttempts as WorkspaceAutoRechargeAttemptRow[]) {
+        const existingPaymentIntentId = normalizeStripePaymentIntentId(attempt.providerPaymentId);
+        if (
+          !existingPaymentIntentId
+          && !isWorkspaceAutoRechargeProcessingWithoutPaymentIdStale(attempt, nowMs)
+        ) {
+          continue;
+        }
+        addCandidate(attempt.userId);
+      }
+    }
+
+    if (candidateUsers.size < limit) {
+      const recentBalances = await ctx.db
+        .query("workspaceCreditBalances")
+        .withIndex("by_updatedAt")
+        .order("desc")
+        .take(limit * 5);
+      for (const balance of recentBalances as WorkspaceCreditBalanceRow[]) {
+        if (candidateUsers.size >= limit) break;
+        const userId = balance.userId;
+        if (candidateUsers.has(String(userId))) continue;
+        const { row: settings, duplicate } = await readCanonicalWorkspaceAutoRechargeSettingsRow(
+          ctx,
+          userId,
+        );
+        if (duplicate || !settings) continue;
+        if (settings.enabled !== true || settings.status !== "active") continue;
+        const spendableCredits = getSpendableWorkspaceToolBalanceCredits(balance);
+        const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(balance);
+        const pendingCollectionCredits =
+          getPendingCardCollectionWorkspaceToolBalanceCredits(balance);
+        if (spendableCredits > settings.thresholdCredits) continue;
+        if (uncollectedCredits > 0 || pendingCollectionCredits > 0) continue;
+        addCandidate(userId);
+      }
+    }
+
+    let scheduled = 0;
+    let failed = 0;
+    for (const userId of candidateUsers.values()) {
+      const ok = await scheduleWorkspaceAutoRechargeExecutionBestEffort(ctx, {
+        userId,
+        nowMs,
+        reason: "sweep",
+      });
+      if (ok) scheduled += 1;
+      else failed += 1;
+    }
+
+    return {
+      ok: true,
+      candidates: candidateUsers.size,
+      scheduled,
+      failed,
+    };
+  },
+});
+
+export const authorizeWorkspaceAutoRechargeAttemptPaymentInternal = internalMutation({
+  args: {
+    attemptKey: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const attempt = await readWorkspaceAutoRechargeAttemptByKey(ctx, args.attemptKey);
+    if (!attempt) {
+      return {
+        ok: false,
+        disposition: "skipped",
+        reason: "auto_recharge_attempt_not_found",
+      };
+    }
+
+    const providerIdempotencyKey = attempt.providerIdempotencyKey ?? attempt.attemptKey;
+    const existingPaymentIntentId = normalizeStripePaymentIntentId(attempt.providerPaymentId);
+    if (existingPaymentIntentId) {
+      return {
+        ok: true,
+        disposition: "reconcile_existing",
+        attempt,
+        attemptKey: attempt.attemptKey,
+        providerPaymentId: existingPaymentIntentId,
+        providerIdempotencyKey,
+      };
+    }
+    if (!isWorkspaceAutoRechargeAttemptStatusActive(attempt.status)) {
+      return {
+        ok: true,
+        disposition: "completed_attempt",
+        attempt,
+        attemptKey: attempt.attemptKey,
+        status: attempt.status,
+      };
+    }
+
+    const amountCents = Math.max(0, Math.floor(Number(attempt.amountCents ?? 0)));
+    if (!(amountCents > 0)) {
+      return await markWorkspaceAutoRechargeAttemptFailedFromMutation(
+        ctx,
+        attempt,
+        "auto_recharge_attempt_amount_invalid",
+        nowMs,
+      );
+    }
+
+    if (attempt.status === "processing") {
+      if (!isWorkspaceAutoRechargeProcessingWithoutPaymentIdStale(attempt, nowMs)) {
+        return {
+          ok: true,
+          disposition: "needs_reconciliation",
+          attemptKey: attempt.attemptKey,
+          failureReason: "auto_recharge_processing_payment_intent_missing",
+        };
+      }
+      if (isWorkspaceAutoRechargeProcessingWithoutPaymentIdExpired(attempt, nowMs)) {
+        return await markWorkspaceAutoRechargeAttemptFailedFromMutation(
+          ctx,
+          attempt,
+          "auto_recharge_processing_payment_intent_missing_expired",
+          nowMs,
+        );
+      }
+      const paymentMethod = readStoredWorkspaceAutoRechargePaymentMethod(attempt);
+      if (!paymentMethod) {
+        return {
+          ok: true,
+          disposition: "needs_reconciliation",
+          attemptKey: attempt.attemptKey,
+          failureReason: "auto_recharge_processing_payment_method_missing",
+        };
+      }
+      await ctx.db.patch(attempt._id, {
+        status: "processing",
+        provider: "stripe",
+        providerCustomerId: paymentMethod.providerCustomerId,
+        providerPaymentMethodId: paymentMethod.providerPaymentMethodId,
+        providerIdempotencyKey,
+        updatedAt: nowMs,
+      });
+      return {
+        ok: true,
+        disposition: "authorized",
+        attempt: await ctx.db.get(attempt._id),
+        attemptKey: attempt.attemptKey,
+        providerCustomerId: paymentMethod.providerCustomerId,
+        providerPaymentMethodId: paymentMethod.providerPaymentMethodId,
+        providerIdempotencyKey,
+      };
+    }
+
+    const paymentMethod = await readActiveWorkspaceAutoRechargePaymentMethod(ctx, attempt.userId);
+    const { row: settings, duplicate } = await readCanonicalWorkspaceAutoRechargeSettingsRow(
+      ctx,
+      attempt.userId,
+    );
+    if (duplicate) {
+      return await markWorkspaceAutoRechargeAttemptReleasedFromMutation(
+        ctx,
+        attempt,
+        DUPLICATE_WORKSPACE_AUTO_RECHARGE_SETTINGS_ERROR,
+        nowMs,
+      );
+    }
+
+    const balance = await readCanonicalWorkspaceCreditBalance(ctx, attempt.userId);
+    const balanceProjection = balance ?? {
+      includedCreditsBalance: 0,
+      purchasedCreditsBalance: 0,
+      uncollectedCreditsBalance: 0,
+      pendingCardCollectionCreditsBalance: 0,
+    };
+    const monthAttempts = await readWorkspaceAutoRechargeMonthAttempts(
+      ctx,
+      attempt.userId,
+      attempt.monthKey,
+    );
+    const plan = computeWorkspaceAutoRechargeAttemptPlan({
+      userId: attempt.userId,
+      settings: settings
+        ? {
+            enabled: settings.enabled,
+            status: settings.status,
+            thresholdCredits: settings.thresholdCredits,
+            restoreToCredits: settings.restoreToCredits,
+            monthlyLimitCredits: settings.monthlyLimitCredits ?? null,
+          }
+        : null,
+      spendableCreditsBalance: getSpendableWorkspaceToolBalanceCredits(balanceProjection),
+      uncollectedCreditsBalance: getUncollectedWorkspaceToolBalanceCredits(balanceProjection),
+      pendingCardCollectionCreditsBalance:
+        getPendingCardCollectionWorkspaceToolBalanceCredits(balanceProjection),
+      monthlySucceededRechargeCredits: sumSucceededWorkspaceAutoRechargeCredits(monthAttempts),
+      hasActiveAttempt: false,
+      hasCardOnFile: Boolean(paymentMethod),
+      nowMs,
+      sequence: attempt.sequence,
+    });
+    if (!plan.shouldPrepare) {
+      if (plan.reason === "skip_no_card") {
+        return await markWorkspaceAutoRechargeAttemptFailedFromMutation(
+          ctx,
+          attempt,
+          "auto_recharge_card_required",
+          nowMs,
+        );
+      }
+      return await markWorkspaceAutoRechargeAttemptReleasedFromMutation(
+        ctx,
+        attempt,
+        `auto_recharge_${plan.reason}_before_payment`,
+        nowMs,
+      );
+    }
+    if (
+      plan.attemptKey !== attempt.attemptKey
+      || workspaceAutoRechargeCreditsToAmountCents(plan.rechargeCredits) !== amountCents
+      || roundCredits(plan.rechargeCredits) !== roundCredits(attempt.rechargeCredits)
+      || plan.currency !== attempt.currency
+    ) {
+      return await markWorkspaceAutoRechargeAttemptReleasedFromMutation(
+        ctx,
+        attempt,
+        "auto_recharge_plan_changed_before_payment",
+        nowMs,
+      );
+    }
+    if (!paymentMethod) {
+      return await markWorkspaceAutoRechargeAttemptFailedFromMutation(
+        ctx,
+        attempt,
+        "auto_recharge_card_required",
+        nowMs,
+      );
+    }
+
+    await ctx.db.patch(attempt._id, {
+      status: "processing",
+      provider: "stripe",
+      providerCustomerId: paymentMethod.providerCustomerId,
+      providerPaymentMethodId: paymentMethod.providerPaymentMethodId,
+      providerIdempotencyKey,
+      updatedAt: nowMs,
+    });
+    return {
+      ok: true,
+      disposition: "authorized",
+      attempt: await ctx.db.get(attempt._id),
+      attemptKey: attempt.attemptKey,
+      providerCustomerId: paymentMethod.providerCustomerId,
+      providerPaymentMethodId: paymentMethod.providerPaymentMethodId,
+      providerIdempotencyKey,
+    };
+  },
+});
+
 export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
   args: {
     userId: v.id("users"),
@@ -870,23 +1303,10 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
 
     const attempt = prepared?.attempt as WorkspaceAutoRechargeAttemptRow | null;
     const attemptKey = normalizeOptionalString(prepared?.attemptKey ?? attempt?.attemptKey);
-    const providerCustomerId = normalizeStripeCustomerId(prepared?.providerCustomerId);
-    const providerPaymentMethodId = normalizeStripePaymentMethodId(prepared?.providerPaymentMethodId);
     const providerIdempotencyKey =
       normalizeOptionalString(prepared?.providerIdempotencyKey) ?? attemptKey;
     if (!attempt || !attemptKey || !providerIdempotencyKey) {
       return { ok: false, disposition: "skipped", reason: "auto_recharge_attempt_missing" };
-    }
-    if (!providerCustomerId || !providerPaymentMethodId) {
-      return await ctx.runMutation(
-        (internal as any).workspaceAutoRecharge.finalizeWorkspaceAutoRechargeAttemptFailedInternal,
-        {
-          attemptKey,
-          providerIdempotencyKey,
-          failureReason: "auto_recharge_card_required",
-          nowMs,
-        },
-      );
     }
 
     const stripe = getStripeClient();
@@ -912,7 +1332,10 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
       }
     }
 
-    if (attempt.status === "processing") {
+    if (
+      attempt.status === "processing"
+      && !isWorkspaceAutoRechargeProcessingWithoutPaymentIdStale(attempt, nowMs)
+    ) {
       return {
         ok: true,
         disposition: "needs_reconciliation",
@@ -921,27 +1344,73 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
       };
     }
 
-    const amountCents = Math.max(0, Math.floor(Number(attempt.amountCents ?? 0)));
+    const authorization = await ctx.runMutation(
+      (internal as any).workspaceAutoRecharge.authorizeWorkspaceAutoRechargeAttemptPaymentInternal,
+      {
+        attemptKey,
+        nowMs,
+      },
+    ) as any;
+    if (authorization?.disposition === "reconcile_existing") {
+      const providerPaymentId = normalizeStripePaymentIntentId(authorization.providerPaymentId);
+      const reconciledAttempt =
+        (authorization.attempt as WorkspaceAutoRechargeAttemptRow | null) ?? attempt;
+      const reconciledIdempotencyKey =
+        normalizeOptionalString(authorization.providerIdempotencyKey) ?? providerIdempotencyKey;
+      if (!providerPaymentId) return authorization;
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(providerPaymentId);
+        return await finalizeWorkspaceAutoRechargePaymentIntent({
+          ctx,
+          attempt: reconciledAttempt,
+          paymentIntent,
+          providerIdempotencyKey: reconciledIdempotencyKey,
+          nowMs,
+        });
+      } catch (error) {
+        return {
+          ok: true,
+          disposition: "retry_later",
+          attemptKey,
+          providerPaymentId,
+          failureReason: readStripeErrorCode(error),
+        };
+      }
+    }
+    if (authorization?.disposition !== "authorized") {
+      return authorization;
+    }
+
+    const authorizedAttempt =
+      (authorization.attempt as WorkspaceAutoRechargeAttemptRow | null) ?? attempt;
+    const authorizedIdempotencyKey =
+      normalizeOptionalString(authorization.providerIdempotencyKey) ?? providerIdempotencyKey;
+    const providerCustomerId = normalizeStripeCustomerId(authorization.providerCustomerId);
+    const providerPaymentMethodId = normalizeStripePaymentMethodId(
+      authorization.providerPaymentMethodId,
+    );
+    if (!providerCustomerId || !providerPaymentMethodId) {
+      return {
+        ok: true,
+        disposition: "needs_reconciliation",
+        attemptKey,
+        failureReason: "auto_recharge_authorized_payment_method_missing",
+      };
+    }
+
+    const amountCents = Math.max(0, Math.floor(Number(authorizedAttempt.amountCents ?? 0)));
     if (!(amountCents > 0)) {
       return await ctx.runMutation(
         (internal as any).workspaceAutoRecharge.finalizeWorkspaceAutoRechargeAttemptFailedInternal,
         {
           attemptKey,
-          providerIdempotencyKey,
+          providerIdempotencyKey: authorizedIdempotencyKey,
           failureReason: "auto_recharge_attempt_amount_invalid",
           nowMs,
         },
       );
     }
 
-    await ctx.runMutation(
-      (internal as any).workspaceAutoRecharge.markWorkspaceAutoRechargeAttemptProcessingInternal,
-      {
-        attemptKey,
-        providerIdempotencyKey,
-        nowMs,
-      },
-    );
     let createdPaymentIntent: any | null = null;
     try {
       const paymentIntent = await stripe.paymentIntents.create(
@@ -955,12 +1424,12 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
           description: "Polynet workspace auto recharge",
           metadata: buildWorkspaceAutoRechargePaymentIntentMetadata({
             attemptKey,
-            userId: attempt.userId,
-            rechargeCredits: attempt.rechargeCredits,
+            userId: authorizedAttempt.userId,
+            rechargeCredits: authorizedAttempt.rechargeCredits,
           }),
         },
         {
-          idempotencyKey: providerIdempotencyKey,
+          idempotencyKey: authorizedIdempotencyKey,
         },
       );
       createdPaymentIntent = paymentIntent;
@@ -970,17 +1439,19 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
           (internal as any).workspaceAutoRecharge.markWorkspaceAutoRechargeAttemptProcessingInternal,
           {
             attemptKey,
+            providerCustomerId,
+            providerPaymentMethodId,
             providerPaymentId: createdPaymentIntentId,
-            providerIdempotencyKey,
+            providerIdempotencyKey: authorizedIdempotencyKey,
             nowMs,
           },
         );
       }
       return await finalizeWorkspaceAutoRechargePaymentIntent({
         ctx,
-        attempt,
+        attempt: authorizedAttempt,
         paymentIntent,
-        providerIdempotencyKey,
+        providerIdempotencyKey: authorizedIdempotencyKey,
         nowMs,
       });
     } catch (error) {
@@ -988,9 +1459,9 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
       if (paymentIntent) {
         return await finalizeWorkspaceAutoRechargePaymentIntent({
           ctx,
-          attempt,
+          attempt: authorizedAttempt,
           paymentIntent,
-          providerIdempotencyKey,
+          providerIdempotencyKey: authorizedIdempotencyKey,
           nowMs,
         });
       }
@@ -1008,7 +1479,7 @@ export const executeWorkspaceAutoRechargeForUserInternal = internalAction({
           (internal as any).workspaceAutoRecharge.finalizeWorkspaceAutoRechargeAttemptFailedInternal,
           {
             attemptKey,
-            providerIdempotencyKey,
+            providerIdempotencyKey: authorizedIdempotencyKey,
             failureReason,
             nowMs,
           },

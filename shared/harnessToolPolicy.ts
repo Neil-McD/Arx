@@ -1,4 +1,7 @@
-import type { RetrievalToolName } from "./retrievalTools.ts";
+import {
+  SANDBOX_TOOL_NAMES,
+  type RetrievalToolName,
+} from "./retrievalTools.ts";
 import {
   buildPolynetPlatformToolNames,
   buildPolynetPlatformToolSpecs,
@@ -8,9 +11,21 @@ import {
 
 export type RuntimeHarnessKind = "polynet" | "codex";
 
+export type HarnessRuntimeCapabilityName =
+  | "workspace_files"
+  | "workspace_shell"
+  | "app_preview"
+  | "computer_use";
+
+export type HarnessRuntimeCapability = {
+  name: HarnessRuntimeCapabilityName;
+  toolNames: string[];
+};
+
 export type PolynetHarnessToolPolicy = {
   harnessKind: "polynet";
   fixedRuntimeToolNames: RetrievalToolName[];
+  runtimeCapabilities: HarnessRuntimeCapability[];
 };
 
 export type CodexWorkspaceToolAccessMode = "native_codex";
@@ -39,6 +54,7 @@ export type CodexHarnessToolPolicy = {
   polynetPlatformToolNames: RetrievalToolName[];
   polynetPlatformTools: PolynetPlatformToolSpec[];
   runtimeAdapterToolNames: CodexRuntimeAdapterToolName[];
+  runtimeCapabilities: HarnessRuntimeCapability[];
 };
 
 export const CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES = [
@@ -57,6 +73,9 @@ export const CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES = [
   "terminal_stop",
 ] as const;
 
+export const POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES: readonly RetrievalToolName[] =
+  SANDBOX_TOOL_NAMES;
+
 function uniqueRetrievalToolNames(values: readonly RetrievalToolName[]): RetrievalToolName[] {
   const seen = new Set<string>();
   const out: RetrievalToolName[] = [];
@@ -68,12 +87,68 @@ function uniqueRetrievalToolNames(values: readonly RetrievalToolName[]): Retriev
   return out;
 }
 
+function selectIncludedToolNames<T extends string>(
+  candidates: readonly T[],
+  available: ReadonlySet<string>,
+): T[] {
+  return candidates.filter((toolName) => available.has(toolName));
+}
+
+function buildCodexRuntimeCapabilities(
+  runtimeAdapterToolNames: readonly CodexRuntimeAdapterToolName[],
+): HarnessRuntimeCapability[] {
+  const available = new Set<string>(runtimeAdapterToolNames);
+  const capabilities: HarnessRuntimeCapability[] = [
+    {
+      name: "workspace_files",
+      toolNames: ["native_codex_workspace"],
+    },
+    {
+      name: "workspace_shell",
+      toolNames: ["native_codex_shell"],
+    },
+  ];
+  if (available.has(CODEX_WORKSPACE_SERVE_TOOL_NAME)) {
+    capabilities.push({
+      name: "app_preview",
+      toolNames: [CODEX_WORKSPACE_SERVE_TOOL_NAME],
+    });
+  }
+  const computerToolNames = selectIncludedToolNames(
+    [
+      CODEX_COMPUTER_OPEN_URL_TOOL_NAME,
+      CODEX_COMPUTER_SCREENSHOT_TOOL_NAME,
+    ] as const,
+    available,
+  );
+  if (computerToolNames.length > 0) {
+    capabilities.push({ name: "computer_use", toolNames: computerToolNames });
+  }
+  return capabilities;
+}
+
+const POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAME_SET = new Set<RetrievalToolName>(
+  POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
+);
+
+function excludePolynetRuntimeSubstrateToolNames(
+  values: readonly RetrievalToolName[],
+): RetrievalToolName[] {
+  return values.filter(
+    (toolName) => !POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAME_SET.has(toolName),
+  );
+}
+
 export function resolvePolynetHarnessToolPolicy(params: {
   allowedToolNames: readonly RetrievalToolName[];
 }): PolynetHarnessToolPolicy {
+  const fixedRuntimeToolNames = uniqueRetrievalToolNames(
+    excludePolynetRuntimeSubstrateToolNames(params.allowedToolNames),
+  );
   return {
     harnessKind: "polynet",
-    fixedRuntimeToolNames: uniqueRetrievalToolNames(params.allowedToolNames),
+    fixedRuntimeToolNames,
+    runtimeCapabilities: [],
   };
 }
 
@@ -108,6 +183,7 @@ export function resolveCodexHarnessToolPolicy(params: {
     ),
     polynetPlatformTools,
     runtimeAdapterToolNames,
+    runtimeCapabilities: buildCodexRuntimeCapabilities(runtimeAdapterToolNames),
   };
 }
 
@@ -117,6 +193,7 @@ export function buildPolynetHarnessToolPolicyReceipt(
   return {
     harness_kind: policy.harnessKind,
     fixed_runtime_tool_names: policy.fixedRuntimeToolNames,
+    runtime_capabilities: policy.runtimeCapabilities,
   };
 }
 
@@ -133,5 +210,6 @@ export function buildCodexHarnessToolPolicyReceipt(
     },
     polynet_platform_tool_names: policy.polynetPlatformToolNames,
     runtime_adapter_tool_names: policy.runtimeAdapterToolNames,
+    runtime_capabilities: policy.runtimeCapabilities,
   };
 }

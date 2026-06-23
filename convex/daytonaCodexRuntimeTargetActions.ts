@@ -539,6 +539,65 @@ function normalizeDaytonaAppPreviewPort(value: unknown): number {
   return port;
 }
 
+function isDaytonaSandboxUnavailableForPreviewState(value: unknown): boolean {
+  const state = String(value ?? "").trim().toLowerCase();
+  return (
+    state === "stopping" ||
+    state === "stopped" ||
+    state === "archiving" ||
+    state === "archived" ||
+    state === "pausing" ||
+    state === "paused" ||
+    state === "destroying" ||
+    state === "destroyed" ||
+    state === "error" ||
+    state === "build_failed"
+  );
+}
+
+function normalizeDaytonaWorkspaceRelativePath(
+  value: unknown,
+  fallback = ".",
+): string {
+  const candidate = String(value ?? "").trim().replaceAll("\\", "/");
+  if (!candidate) return fallback;
+  if (candidate.startsWith("/")) throw new Error("path_outside_workspace");
+  const parts = candidate
+    .split("/")
+    .filter((part) => part.length > 0 && part !== ".");
+  if (parts.some((part) => part === "..")) {
+    throw new Error("path_outside_workspace");
+  }
+  const segments =
+    parts[0]?.toLowerCase() === "workspace" ? parts.slice(1) : parts;
+  return segments.length > 0 ? segments.join("/") : fallback;
+}
+
+function readDaytonaWorkspaceReadLimit(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 200;
+  return Math.min(400, Math.max(1, Math.floor(parsed)));
+}
+
+function readDaytonaWorkspaceReadOffset(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.floor(parsed));
+}
+
+function normalizeDaytonaPreviewPath(value: unknown): string | null {
+  const path = String(value ?? "").trim();
+  if (!path) return null;
+  if (path.includes("://") || path.startsWith("//")) {
+    throw new Error("invalid_preview_path");
+  }
+  return path.startsWith("/") ? path.slice(0, 1024) : `/${path.slice(0, 1023)}`;
+}
+
+function normalizeDaytonaPreviewLabel(value: unknown, port: number): string {
+  return String(value ?? "").trim().slice(0, 120) || `Daytona app :${port}`;
+}
+
 function normalizeSandboxName(value: string): string {
   const suffix =
     value
@@ -614,7 +673,7 @@ function readDaytonaTargetLifecycleMode(): DaytonaTargetLifecycleMode {
   const explicit = readEnv("POLYNET_DAYTONA_DIRECT_LIFECYCLE_MODE");
   if (explicit === "per_turn_ephemeral") return "per_turn_ephemeral";
   if (explicit === "thread_ephemeral") return "thread_ephemeral";
-  return "thread_ephemeral";
+  return "per_turn_ephemeral";
 }
 
 function normalizeDaytonaTargetLifecycleMode(
@@ -630,7 +689,7 @@ function normalizeDaytonaTargetLifecycleMode(
   }
   const configuredSandboxId = readConfiguredReusableSandboxId();
   if (configuredSandboxId && sandboxId === configuredSandboxId) return "prepared_staging_reuse";
-  return "thread_ephemeral";
+  return "per_turn_ephemeral";
 }
 
 function isDaytonaNotFoundError(value: unknown): boolean {
@@ -783,16 +842,6 @@ async function scanDaytonaWorkspaceForMeaningfulFiles(params: {
   return parseWorkspaceScanOutput(result.output, result.exitCode);
 }
 
-async function stopDaytonaSandboxForRetention(params: {
-  sandbox: DaytonaSandbox;
-  timeoutSeconds: number;
-}): Promise<void> {
-  if (typeof params.sandbox.stop !== "function") {
-    throw new Error("daytona_direct_provider_stop_unsupported_for_retention");
-  }
-  await params.sandbox.stop(params.timeoutSeconds, true);
-}
-
 async function deleteDaytonaSandbox(params: {
   daytona: DaytonaClient;
   sandbox: DaytonaSandbox;
@@ -886,6 +935,9 @@ async function createOrGetSandbox(params: {
       ephemeral: params.lifecycle.providerEphemeral,
       autoStopInterval: params.lifecycle.autoStopMinutes,
       autoArchiveInterval: params.lifecycle.autoArchiveMinutes,
+      autoDeleteInterval: params.lifecycle.providerEphemeral
+        ? 0
+        : params.lifecycle.autoDeleteMinutes,
       ...(snapshot ? { snapshot } : { resources: params.lifecycle.resources }),
     },
     {
@@ -1199,6 +1251,504 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
   },
 });
 
+async function ensureDaytonaWorkspaceSandboxForRun(params: {
+  ctx: any;
+  ownerId: any;
+  threadId: any;
+  runId: string;
+  projectId?: any;
+}): Promise<{
+  targetId: string;
+  sandboxId: string;
+  workspaceRoot: string;
+  sandbox: DaytonaSandbox;
+}> {
+  const target = (await params.ctx.runAction(
+    (internal as any).daytonaCodexRuntimeTargetActions
+      .ensureDaytonaCodexRuntimeTargetInternal as any,
+    {
+      ownerId: params.ownerId,
+      threadId: params.threadId,
+      runId: params.runId,
+      ...(params.projectId ? { projectId: params.projectId } : {}),
+    },
+  )) as JsonRecord;
+  const sandboxId = String(target.sandboxId ?? "").trim();
+  if (!sandboxId) throw new Error("daytona_sandbox_not_available");
+  const { Daytona } = await loadDaytona();
+  const daytona = new Daytona(buildDaytonaConfig());
+  const sandbox = await daytona.get(sandboxId);
+  await ensureSandboxStarted(
+    sandbox,
+    readIntegerEnv("POLYNET_DAYTONA_DIRECT_START_TIMEOUT_SECONDS", 180),
+  );
+  return {
+    targetId: String(target.targetId ?? "").trim(),
+    sandboxId,
+    workspaceRoot: String(target.workspaceRoot ?? "").trim() || DEFAULT_WORKSPACE_ROOT,
+    sandbox,
+  };
+}
+
+function buildDaytonaSafePathPrelude(relPath: string): string {
+  return [
+    "set -euo pipefail",
+    'ROOT="$(pwd -P)"',
+    `REL_PATH=${shellQuote(relPath)}`,
+    'REAL_PATH="$(realpath -m -- "$REL_PATH")"',
+    'case "$REAL_PATH" in "$ROOT"|"$ROOT"/*) ;; *) echo "path_outside_workspace" >&2; exit 42;; esac',
+  ].join("\n");
+}
+
+function buildDaytonaSafeFilePrelude(relPath: string): string {
+  return [
+    buildDaytonaSafePathPrelude(relPath),
+    'if [ -L "$REL_PATH" ]; then echo "workspace_symlink_refused" >&2; exit 43; fi',
+  ].join("\n");
+}
+
+async function runDaytonaWorkspaceToolCommand(params: {
+  sandbox: DaytonaSandbox;
+  workspaceRoot: string;
+  relPath?: string;
+  script: string;
+  timeoutSeconds?: number;
+  allowFailure?: boolean;
+}): Promise<{ exitCode: number; output: string }> {
+  return await runRemoteBash(params.sandbox, params.script, {
+    cwd: params.workspaceRoot,
+    timeoutSeconds: params.timeoutSeconds ?? 60,
+    allowFailure: params.allowFailure ?? true,
+  });
+}
+
+export const executeDaytonaWorkspaceToolInternal = internalAction({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    projectId: v.optional(v.id("cloudProjects")),
+    toolName: v.string(),
+    normalizedArgs: v.any(),
+  },
+  handler: async (ctx, args): Promise<JsonRecord> => {
+    try {
+      const toolName = String(args.toolName ?? "").trim();
+      const normalizedArgs = asRecord(args.normalizedArgs) ?? {};
+      const target = await ensureDaytonaWorkspaceSandboxForRun({
+        ctx,
+        ownerId: args.ownerId,
+        threadId: args.threadId,
+        runId: args.runId,
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+      });
+
+      const basePayload = {
+        provider_id: "daytona",
+        target_run_id: args.runId,
+        target_id: target.targetId || null,
+        sandbox_id: target.sandboxId,
+        workspace_root: target.workspaceRoot,
+      };
+
+      if (toolName === "list_dir") {
+        const relPath = normalizeDaytonaWorkspaceRelativePath(normalizedArgs.path);
+        const script = [
+          buildDaytonaSafePathPrelude(relPath),
+          'if [ ! -d "$REAL_PATH" ]; then echo "workspace_path_not_directory" >&2; exit 44; fi',
+          'cd -- "$REAL_PATH"',
+          "find . -mindepth 1 -maxdepth 2 -print",
+          "| sed 's#^\\./##'",
+          "| while IFS= read -r path; do",
+          '  [ -n "$path" ] || continue;',
+          '  if [ -d "$path" ]; then printf "dir\\t%s\\n" "$path";',
+          '  elif [ -f "$path" ]; then printf "file\\t%s\\n" "$path"; fi;',
+          "done",
+          "| LC_ALL=C sort",
+          "| head -n 200",
+        ].join("\n");
+        const result = await runDaytonaWorkspaceToolCommand({
+          sandbox: target.sandbox,
+          workspaceRoot: target.workspaceRoot,
+          script,
+          timeoutSeconds: 20,
+        });
+        if (result.exitCode !== 0) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "daytona_workspace_list_failed",
+            message: `Failed to list Daytona workspace directory '${relPath}'.`,
+            exit_code: result.exitCode,
+            output_preview: result.output.slice(0, 2000),
+          };
+        }
+        return {
+          ok: true,
+          ...basePayload,
+          rel_path: relPath,
+          output_text: result.output.trim() || "(empty directory)",
+          exit_code: 0,
+        };
+      }
+
+      if (toolName === "read") {
+        const relPath = normalizeDaytonaWorkspaceRelativePath(normalizedArgs.path);
+        const offset = readDaytonaWorkspaceReadOffset(normalizedArgs.offset);
+        const limit = readDaytonaWorkspaceReadLimit(normalizedArgs.limit);
+        const end = offset + limit - 1;
+        const script = [
+          buildDaytonaSafeFilePrelude(relPath),
+          'if [ -d "$REAL_PATH" ]; then',
+          '  cd -- "$REAL_PATH"',
+          "  find . -mindepth 1 -maxdepth 2 -print | sed 's#^\\./##' | LC_ALL=C sort | head -n 200",
+          "  exit 0",
+          "fi",
+          'if [ ! -f "$REAL_PATH" ]; then echo "workspace_path_not_found" >&2; exit 45; fi',
+          `sed -n ${shellQuote(`${offset},${end}p`)} -- "$REAL_PATH"`,
+        ].join("\n");
+        const result = await runDaytonaWorkspaceToolCommand({
+          sandbox: target.sandbox,
+          workspaceRoot: target.workspaceRoot,
+          script,
+          timeoutSeconds: 20,
+        });
+        if (result.exitCode !== 0) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "daytona_workspace_read_failed",
+            message: `Failed to read Daytona workspace path '${relPath}'.`,
+            exit_code: result.exitCode,
+            output_preview: result.output.slice(0, 2000),
+          };
+        }
+        return {
+          ok: true,
+          ...basePayload,
+          rel_path: relPath,
+          output_text: result.output.trim() || "(empty file)",
+          exit_code: 0,
+        };
+      }
+
+      if (toolName === "glob" || toolName === "grep" || toolName === "sha256" || toolName === "bash") {
+        const relPath = normalizeDaytonaWorkspaceRelativePath(
+          toolName === "bash" ? normalizedArgs.cwd : normalizedArgs.path,
+        );
+        const pattern = String(normalizedArgs.pattern ?? "").trim();
+        const command =
+          toolName === "glob"
+            ? [
+                buildDaytonaSafePathPrelude(relPath),
+                'cd -- "$REAL_PATH"',
+                `find . -mindepth 1 \\( -type f -o -type d \\) -path ${shellQuote(`./${pattern}`)} -print`,
+                "| sed 's#^\\./##'",
+                "| LC_ALL=C sort",
+                "| head -n 200",
+              ].join("\n")
+            : toolName === "grep"
+              ? [
+                  buildDaytonaSafePathPrelude(relPath),
+                  'cd -- "$REAL_PATH"',
+                  "if command -v rg >/dev/null 2>&1; then",
+                  `  rg --no-heading --line-number --color never --max-count 200 ${shellQuote(pattern)} .`,
+                  "else",
+                  `  grep -Rns -m 200 -- ${shellQuote(pattern)} .`,
+                  "fi",
+                ].join("\n")
+              : toolName === "sha256"
+                ? [
+                    buildDaytonaSafeFilePrelude(normalizeDaytonaWorkspaceRelativePath(normalizedArgs.path)),
+                    'if [ ! -f "$REAL_PATH" ]; then echo "workspace_path_not_file" >&2; exit 45; fi',
+                    `(sha256sum "$REAL_PATH" 2>/dev/null || shasum -a 256 "$REAL_PATH" 2>/dev/null) | awk '{print $1}'`,
+                  ].join("\n")
+                : [
+                    buildDaytonaSafePathPrelude(relPath),
+                    'cd -- "$REAL_PATH"',
+                    String(normalizedArgs.command ?? ""),
+                  ].join("\n");
+        const result = await runDaytonaWorkspaceToolCommand({
+          sandbox: target.sandbox,
+          workspaceRoot: target.workspaceRoot,
+          script: command,
+          timeoutSeconds: toolName === "bash" ? 60 : 20,
+        });
+        if (result.exitCode !== 0 && !(toolName === "grep" && result.exitCode === 1)) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: `daytona_workspace_${toolName}_failed`,
+            message: `Daytona workspace ${toolName} failed.`,
+            exit_code: result.exitCode,
+            output_preview: result.output.slice(0, 2000),
+          };
+        }
+        return {
+          ok: true,
+          ...basePayload,
+          rel_path: relPath,
+          output_text:
+            toolName === "grep" && result.exitCode === 1
+              ? "(no matches)"
+              : result.output.trim() || (toolName === "glob" ? "(no matches)" : "(no output)"),
+          exit_code: 0,
+        };
+      }
+
+      if (toolName === "write") {
+        const relPath = normalizeDaytonaWorkspaceRelativePath(normalizedArgs.path);
+        if (relPath === ".") throw new Error("write_path_required");
+        const content = String(normalizedArgs.content ?? "");
+        const encoded = Buffer.from(content, "utf8").toString("base64");
+        const script = [
+          buildDaytonaSafeFilePrelude(relPath),
+          'PARENT="$(dirname -- "$REL_PATH")"',
+          'mkdir -p -- "$PARENT"',
+          'REAL_PARENT="$(realpath -m -- "$PARENT")"',
+          'case "$REAL_PARENT" in "$ROOT"|"$ROOT"/*) ;; *) echo "path_outside_workspace" >&2; exit 42;; esac',
+          'EXISTED=0; [ -e "$REAL_PATH" ] && EXISTED=1',
+          `base64 -d > "$REAL_PATH" <<'POLYNET_DAYTONA_FILE_EOF'\n${encoded}\nPOLYNET_DAYTONA_FILE_EOF`,
+          `ACTUAL_SHA="$(sha256sum "$REAL_PATH" 2>/dev/null | awk '{print $1}')"`,
+          `EXPECTED_SHA="$(printf %s ${shellQuote(encoded)} | base64 -d | sha256sum 2>/dev/null | awk '{print $1}')"`,
+          '[ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] || { echo "write_verification_failed" >&2; exit 46; }',
+          'BYTES="$(wc -c < "$REAL_PATH" | tr -d " ")"',
+          'if [ "$EXISTED" = "1" ]; then printf "overwrote %s (%s bytes)\\n" "$REL_PATH" "$BYTES"; else printf "created %s (%s bytes)\\n" "$REL_PATH" "$BYTES"; fi',
+        ].join("\n");
+        const result = await runDaytonaWorkspaceToolCommand({
+          sandbox: target.sandbox,
+          workspaceRoot: target.workspaceRoot,
+          script,
+          timeoutSeconds: 30,
+        });
+        if (result.exitCode !== 0) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "daytona_workspace_write_failed",
+            message: `Failed to write Daytona workspace file '${relPath}'.`,
+            exit_code: result.exitCode,
+            output_preview: result.output.slice(0, 2000),
+          };
+        }
+        return {
+          ok: true,
+          ...basePayload,
+          rel_path: relPath,
+          output_text: result.output.trim() || `wrote ${relPath}`,
+          exit_code: 0,
+        };
+      }
+
+      if (toolName === "edit") {
+        const relPath = normalizeDaytonaWorkspaceRelativePath(normalizedArgs.path);
+        const oldText = String(normalizedArgs.old_text ?? "");
+        const newText = String(normalizedArgs.new_text ?? "");
+        const sourceResult = await runDaytonaWorkspaceToolCommand({
+          sandbox: target.sandbox,
+          workspaceRoot: target.workspaceRoot,
+          script: [
+            buildDaytonaSafeFilePrelude(relPath),
+            'if [ ! -f "$REAL_PATH" ]; then echo "workspace_path_not_file" >&2; exit 45; fi',
+            'cat -- "$REAL_PATH"',
+          ].join("\n"),
+          timeoutSeconds: 20,
+        });
+        if (sourceResult.exitCode !== 0) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "daytona_workspace_edit_failed",
+            message: `Failed to read Daytona workspace file '${relPath}' for edit.`,
+            exit_code: sourceResult.exitCode,
+            output_preview: sourceResult.output.slice(0, 2000),
+          };
+        }
+        const source = sourceResult.output;
+        const matches = oldText ? source.split(oldText).length - 1 : 0;
+        if (matches < 1) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "edit_target_not_found",
+            message: "edit could not find old_text in the target file.",
+            output_preview: source.slice(0, 2000),
+          };
+        }
+        if (matches > 1 && normalizedArgs.replace_all !== true) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "edit_target_ambiguous",
+            message: "edit found multiple matches for old_text. Use replace_all or narrow the selection.",
+            output_preview: source.slice(0, 2000),
+          };
+        }
+        const next =
+          normalizedArgs.replace_all === true
+            ? source.split(oldText).join(newText)
+            : source.replace(oldText, newText);
+        const encoded = Buffer.from(next, "utf8").toString("base64");
+        const writeResult = await runDaytonaWorkspaceToolCommand({
+          sandbox: target.sandbox,
+          workspaceRoot: target.workspaceRoot,
+          script: [
+            buildDaytonaSafeFilePrelude(relPath),
+            `base64 -d > "$REAL_PATH" <<'POLYNET_DAYTONA_FILE_EOF'\n${encoded}\nPOLYNET_DAYTONA_FILE_EOF`,
+          ].join("\n"),
+          timeoutSeconds: 30,
+        });
+        if (writeResult.exitCode !== 0) {
+          return {
+            ok: false,
+            ...basePayload,
+            code: "daytona_workspace_edit_failed",
+            message: `Failed to write edited Daytona workspace file '${relPath}'.`,
+            exit_code: writeResult.exitCode,
+            output_preview: writeResult.output.slice(0, 2000),
+          };
+        }
+        return {
+          ok: true,
+          ...basePayload,
+          rel_path: relPath,
+          output_text: `edited ${relPath} (${normalizedArgs.replace_all === true ? matches : 1} replacement${matches === 1 ? "" : "s"})`,
+          exit_code: 0,
+        };
+      }
+
+      return {
+        ok: false,
+        ...basePayload,
+        code: "daytona_workspace_tool_not_supported",
+        message: `${toolName} is not supported by the Daytona workspace tool executor.`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        code: daytonaRuntimeErrorCode(error),
+        message: sanitizeDaytonaRuntimeError(error),
+      };
+    }
+  },
+});
+
+export const startDaytonaAppPreviewInternal = internalAction({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    projectId: v.optional(v.id("cloudProjects")),
+    command: v.string(),
+    cwd: v.optional(v.string()),
+    previewPort: v.number(),
+    previewPath: v.optional(v.string()),
+    previewLabel: v.optional(v.string()),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<JsonRecord> => {
+    try {
+      const command = String(args.command ?? "").trim();
+      if (!command) {
+        return {
+          ok: false,
+          code: "command_required",
+          message: "terminal_start requires command.",
+        };
+      }
+      const port = normalizeDaytonaAppPreviewPort(args.previewPort);
+      const previewPath = normalizeDaytonaPreviewPath(args.previewPath);
+      const previewLabel = normalizeDaytonaPreviewLabel(args.previewLabel, port);
+      const relCwd = normalizeDaytonaWorkspaceRelativePath(args.cwd);
+      const target = await ensureDaytonaWorkspaceSandboxForRun({
+        ctx,
+        ownerId: args.ownerId,
+        threadId: args.threadId,
+        runId: args.runId,
+        ...(args.projectId ? { projectId: args.projectId } : {}),
+      });
+      const logPath = `/tmp/polynet-daytona-preview-${port}.log`;
+      const pidPath = `/tmp/polynet-daytona-preview-${port}.pid`;
+      const urlPath = previewPath ?? "/";
+      const script = [
+        buildDaytonaSafePathPrelude(relCwd),
+        'if [ ! -d "$REAL_PATH" ]; then echo "workspace_cwd_not_directory" >&2; exit 44; fi',
+        'cd -- "$REAL_PATH"',
+        `APP_COMMAND=${shellQuote(command)}`,
+        `APP_PORT=${port}`,
+        `APP_PATH=${shellQuote(urlPath)}`,
+        `LOG_PATH=${shellQuote(logPath)}`,
+        `PID_PATH=${shellQuote(pidPath)}`,
+        'if command -v fuser >/dev/null 2>&1; then fuser -k "$APP_PORT"/tcp >/dev/null 2>&1 || true; fi',
+        'rm -f "$LOG_PATH" "$PID_PATH"',
+        'setsid bash -lc "$APP_COMMAND" >"$LOG_PATH" 2>&1 &',
+        'PID="$!"',
+        'echo "$PID" > "$PID_PATH"',
+        'READY=0',
+        'for attempt in $(seq 1 20); do',
+        '  if ! kill -0 "$PID" 2>/dev/null; then break; fi',
+        '  if command -v curl >/dev/null 2>&1; then',
+        '    if curl -fsS "http://127.0.0.1:${APP_PORT}${APP_PATH}" >/tmp/polynet-daytona-preview-probe.out 2>/tmp/polynet-daytona-preview-probe.err; then READY=1; break; fi',
+        "  fi",
+        "  sleep 0.5",
+        "done",
+        'if ! kill -0 "$PID" 2>/dev/null; then echo "process_exited"; tail -80 "$LOG_PATH" || true; exit 47; fi',
+        'printf "terminal_session_id=%s\\n" "$PID"',
+        'printf "preview_port=%s\\n" "$APP_PORT"',
+        'printf "ready=%s\\n" "$READY"',
+        'tail -80 "$LOG_PATH" || true',
+      ].join("\n");
+      const result = await runDaytonaWorkspaceToolCommand({
+        sandbox: target.sandbox,
+        workspaceRoot: target.workspaceRoot,
+        script,
+        timeoutSeconds: readIntegerEnv("POLYNET_DAYTONA_PREVIEW_START_TIMEOUT_SECONDS", 20),
+      });
+      const terminalSessionId =
+        result.output.match(/terminal_session_id=(\d+)/)?.[1] ?? "";
+      if (result.exitCode !== 0 || !terminalSessionId) {
+        return {
+          ok: false,
+          provider_id: "daytona",
+          target_run_id: args.runId,
+          target_id: target.targetId || null,
+          sandbox_id: target.sandboxId,
+          code: "daytona_preview_start_failed",
+          message: `Failed to start Daytona preview on port ${port}.`,
+          exit_code: result.exitCode,
+          output_tail: result.output.slice(-4000),
+        };
+      }
+      return {
+        ok: true,
+        provider_id: "daytona",
+        target_run_id: args.runId,
+        target_id: target.targetId || null,
+        sandbox_id: target.sandboxId,
+        workspace_root: target.workspaceRoot,
+        terminal_session_id: terminalSessionId,
+        status: "running",
+        command,
+        cwd: relCwd,
+        preview_port: port,
+        preview_path: previewPath,
+        preview_label: previewLabel,
+        preview_status: "running",
+        preview_transport_status: "pending",
+        preview_inspection_status: "not_attempted",
+        preview_render_status: "unknown",
+        output_tail: result.output.slice(-4000),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        code: daytonaRuntimeErrorCode(error),
+        message: sanitizeDaytonaRuntimeError(error),
+      };
+    }
+  },
+});
+
 export const resolveDaytonaCodexRuntimePreviewInternal = internalAction({
   args: {
     ownerId: v.id("users"),
@@ -1248,17 +1798,104 @@ export const resolveDaytonaCodexRuntimePreviewInternal = internalAction({
         };
       }
       const sandboxId = String(target.sandboxId ?? "").trim();
-      if (!sandboxId || String(target.sandboxState ?? "").trim() === "deleted") {
+      const sandboxState = String(target.sandboxState ?? "").trim();
+      const providerTeardownState = String(target.providerTeardownState ?? "").trim();
+      if (
+        !sandboxId ||
+        sandboxState === "deleted" ||
+        sandboxState === "stopped" ||
+        providerTeardownState === "deleted" ||
+        providerTeardownState === "stopped"
+      ) {
         return {
           ok: false,
           code: "daytona_sandbox_not_available",
           message: "Daytona sandbox is no longer available for this run.",
         };
       }
+      const previewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
+      const previewLeaseActive =
+        String(target.previewLeaseState ?? "") === "active" &&
+        Number.isFinite(previewLeaseExpiresAt) &&
+        previewLeaseExpiresAt > Date.now();
+      const activePreviewPorts = normalizeActivePreviewPorts(target.activePreviewPorts);
+      if (!previewLeaseActive || !activePreviewPorts.includes(port)) {
+        return {
+          ok: false,
+          code: "daytona_preview_not_authorized",
+          message: "This Daytona app preview is no longer active.",
+        };
+      }
 
       const { Daytona } = await loadDaytona();
       const daytona = new Daytona(buildDaytonaConfig());
-      const sandbox = await daytona.get(sandboxId);
+      let sandbox: DaytonaSandbox;
+      try {
+        sandbox = await daytona.get(sandboxId);
+      } catch (error) {
+        if (!isDaytonaNotFoundError(error)) throw error;
+        const nowMs = Date.now();
+        await ctx.runMutation(
+          (internal as any).daytonaCodexRuntimeTargets
+            .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
+          {
+            ownerId: args.ownerId,
+            runId: args.runId,
+            state: "deleted",
+            reason: "preview_resolution:sandbox_missing",
+            nowMs,
+          },
+        );
+        await appendDaytonaPreviewStoppedEventBestEffort({
+          ctx,
+          ownerId: args.ownerId,
+          runId: args.runId,
+          target,
+          reason: "preview_resolution:sandbox_missing",
+          source: "preview_resolution_sandbox_missing",
+          ports: activePreviewPorts,
+          nowMs,
+        });
+        return {
+          ok: false,
+          code: "daytona_sandbox_not_available",
+          message: "Daytona sandbox is no longer available for this run.",
+        };
+      }
+      const providerSandboxState = String(sandbox.state ?? "").trim();
+      if (isDaytonaSandboxUnavailableForPreviewState(providerSandboxState)) {
+        const providerState =
+          providerSandboxState === "destroyed" || providerSandboxState === "destroying"
+            ? "deleted"
+            : "stopped";
+        const nowMs = Date.now();
+        await ctx.runMutation(
+          (internal as any).daytonaCodexRuntimeTargets
+            .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
+          {
+            ownerId: args.ownerId,
+            runId: args.runId,
+            state: providerState,
+            reason: `preview_resolution:${providerSandboxState || "unavailable"}`,
+            nowMs,
+          },
+        );
+        await appendDaytonaPreviewStoppedEventBestEffort({
+          ctx,
+          ownerId: args.ownerId,
+          runId: args.runId,
+          target,
+          reason: `preview_resolution:${providerSandboxState || "unavailable"}`,
+          source: "preview_resolution_provider_state",
+          ports: activePreviewPorts,
+          nowMs,
+        });
+        return {
+          ok: false,
+          code: "daytona_sandbox_not_available",
+          message: "Daytona sandbox is no longer available for this run.",
+        };
+      }
       const signedPreview =
         typeof sandbox.getSignedPreviewUrl === "function"
           ? await sandbox.getSignedPreviewUrl(port, expiresInSeconds)
@@ -1431,8 +2068,8 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
         workspaceRoot,
       });
       const decisionNowMs = Date.now();
-      const retentionExpiresAt = resolveHumanSaveRetentionExpiresAt(target, decisionNowMs);
       const previewLeaseActive = isActivePreviewLease(target, decisionNowMs);
+      const previewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
 
       if (previewLeaseActive) {
         await ctx.runMutation(
@@ -1442,14 +2079,10 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
             ownerId: args.ownerId,
             runId: args.runId,
             workspaceChangeState: workspaceScan.changeState,
-            workspaceRetentionState:
-              workspaceScan.changeState === "clean" ? "none" : "human_save_pending",
-            ...(workspaceScan.changeState === "clean"
-              ? {}
-              : {
-                  workspaceRetentionExpiresAt: retentionExpiresAt,
-                  cleanupEligibleAt: retentionExpiresAt,
-                }),
+            workspaceRetentionState: "none",
+            ...(Number.isFinite(previewLeaseExpiresAt) && previewLeaseExpiresAt > decisionNowMs
+              ? { cleanupEligibleAt: previewLeaseExpiresAt }
+              : {}),
             workspaceMeaningfulFileCount: workspaceScan.meaningfulFileCount,
             workspaceMeaningfulFilePreview: workspaceScan.meaningfulFilePreview,
             cleanupDecision: "keep_running_active_preview",
@@ -1477,49 +2110,6 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
         };
       }
 
-      if (workspaceScan.changeState === "dirty" || workspaceScan.changeState === "scan_failed") {
-        await stopDaytonaSandboxForRetention({ sandbox, timeoutSeconds });
-        const cleanupDecision =
-          workspaceScan.changeState === "scan_failed"
-            ? "retain_scan_failed"
-            : "stop_for_human_save";
-        await ctx.runMutation(
-          (internal as any).daytonaCodexRuntimeTargets
-            .markDaytonaCodexRuntimeTargetWorkspaceLifecycleInternal as any,
-          {
-            ownerId: args.ownerId,
-            runId: args.runId,
-            workspaceChangeState: workspaceScan.changeState,
-            workspaceRetentionState: "human_save_pending",
-            workspaceRetentionExpiresAt: retentionExpiresAt,
-            cleanupEligibleAt: retentionExpiresAt,
-            workspaceMeaningfulFileCount: workspaceScan.meaningfulFileCount,
-            workspaceMeaningfulFilePreview: workspaceScan.meaningfulFilePreview,
-            cleanupDecision,
-            nowMs: Date.now(),
-          },
-        );
-        await ctx.runMutation(
-          (internal as any).daytonaCodexRuntimeTargets
-            .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
-          {
-            ownerId: args.ownerId,
-            runId: args.runId,
-            state: "stopped",
-            reason: `${args.reason}:${cleanupDecision}`,
-            nowMs: Date.now(),
-          },
-        );
-        return {
-          ok: true,
-          state: "stopped",
-          lifecycleMode,
-          sandboxId,
-          reason: cleanupDecision,
-          timing: timing(),
-        };
-      }
-
       await deleteDaytonaSandbox({ daytona, sandbox, timeoutSeconds });
       await ctx.runMutation(
         (internal as any).daytonaCodexRuntimeTargets
@@ -1527,11 +2117,11 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
         {
           ownerId: args.ownerId,
           runId: args.runId,
-          workspaceChangeState: "clean",
+          workspaceChangeState: workspaceScan.changeState,
           workspaceRetentionState: "none",
           workspaceMeaningfulFileCount: workspaceScan.meaningfulFileCount,
           workspaceMeaningfulFilePreview: workspaceScan.meaningfulFilePreview,
-          cleanupDecision: "delete_clean_workspace",
+          cleanupDecision: "delete_without_active_lease",
           nowMs: Date.now(),
         },
       );
@@ -1542,16 +2132,24 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
           ownerId: args.ownerId,
           runId: args.runId,
           state: "deleted",
-          reason: `${args.reason}:clean_workspace`,
+          reason: `${args.reason}:delete_without_active_lease`,
           nowMs: Date.now(),
         },
       );
+      await appendDaytonaPreviewStoppedEventBestEffort({
+        ctx,
+        ownerId: args.ownerId,
+        runId: args.runId,
+        target,
+        reason: "delete_without_active_lease",
+        source: "provider_teardown_deleted",
+      });
       return {
         ok: true,
         state: "deleted",
         lifecycleMode,
         sandboxId,
-        reason: "clean_workspace",
+        reason: "delete_without_active_lease",
         timing: timing(),
       };
     } catch (error) {
@@ -1567,6 +2165,14 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
             nowMs: Date.now(),
           },
         );
+        await appendDaytonaPreviewStoppedEventBestEffort({
+          ctx,
+          ownerId: args.ownerId,
+          runId: args.runId,
+          target,
+          reason: "sandbox_missing",
+          source: "provider_teardown_missing",
+        });
         return {
           ok: true,
           state: "deleted",
@@ -1643,6 +2249,58 @@ async function appendTeardownRuntimeEventBestEffort(params: {
   }
 }
 
+async function appendDaytonaPreviewStoppedEventBestEffort(params: {
+  ctx: any;
+  ownerId: any;
+  runId: string;
+  target: JsonRecord | null;
+  reason: string;
+  source: string;
+  ports?: readonly number[];
+  nowMs?: number;
+}): Promise<number[]> {
+  const ports = normalizeActivePreviewPorts(
+    params.ports ?? params.target?.activePreviewPorts,
+  );
+  if (ports.length === 0) return [];
+  const nowMs = params.nowMs ?? Date.now();
+  try {
+    await params.ctx.runMutation(
+      (internal as any).daytonaCodexRuntimeTargets
+        .markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal as any,
+      {
+        ownerId: params.ownerId,
+        runId: params.runId,
+        stoppedPreviewPorts: ports,
+        nowMs,
+      },
+    );
+  } catch {
+    // Best effort; preview UI cleanup should not block provider cleanup.
+  }
+  await appendTeardownRuntimeEventBestEffort({
+    ctx: params.ctx,
+    ownerId: String(params.ownerId),
+    runId: params.runId,
+    target: params.target,
+    eventType: "workspace_preview_stopped",
+    eventKey: `${params.runId}:workspace_preview_stopped:${params.source}:${ports.join("-")}`,
+    payload: {
+      run_id: params.runId,
+      provider: "daytona",
+      transport: "daytona_direct",
+      target_run_id: params.runId,
+      target_id: String(params.target?._id ?? "") || null,
+      sandbox_id: String(params.target?.sandboxId ?? "").trim() || null,
+      preview_ports: ports,
+      stopped_preview_ports: ports,
+      reason: params.reason,
+      source: params.source,
+    },
+  });
+  return ports;
+}
+
 function shouldSkipExpiredTargetCleanup(target: JsonRecord, nowMs: number): string | null {
   const sandboxId = String(target.sandboxId ?? "").trim();
   const lifecycleMode = normalizeDaytonaTargetLifecycleMode(target.lifecycleMode, sandboxId);
@@ -1665,6 +2323,50 @@ function normalizeActivePreviewPorts(rawPorts: unknown): number[] {
     }
   }
   return Array.from(ports);
+}
+
+function normalizeDaytonaPreviewProcessId(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const integer = Math.floor(parsed);
+  return integer > 1 ? integer : null;
+}
+
+function buildStopDaytonaAppPreviewCommand(params: {
+  ports: readonly number[];
+  processIds: readonly number[];
+}): string {
+  const ports = Array.from(new Set(params.ports)).filter((port) => port > 0);
+  const processIds = Array.from(new Set(params.processIds)).filter((pid) => pid > 1);
+  return [
+    "set +e",
+    `PIDS=${shellQuote(processIds.join(" "))}`,
+    `PORTS=${shellQuote(ports.join(" "))}`,
+    'for pid in $PIDS; do',
+    '  if kill -0 "$pid" 2>/dev/null; then',
+    '    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true',
+    "  fi",
+    "done",
+    "sleep 0.3",
+    'for port in $PORTS; do',
+    '  if command -v lsof >/dev/null 2>&1; then',
+    '    for pid in $(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null); do',
+    '      kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true',
+    "    done",
+    "  fi",
+    '  if command -v fuser >/dev/null 2>&1; then',
+    '    fuser -k "$port"/tcp >/dev/null 2>&1 || true',
+    "  fi",
+    "done",
+    "sleep 0.3",
+    'for pid in $PIDS; do',
+    '  if kill -0 "$pid" 2>/dev/null; then',
+    '    kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true',
+    "  fi",
+    "done",
+    'printf "stopped_daytona_preview ports=%s pids=%s\\n" "$PORTS" "$PIDS"',
+    "exit 0",
+  ].join("\n");
 }
 
 function daytonaTeardownReasonForWorkerStatus(status: string): string {
@@ -1735,6 +2437,15 @@ async function deleteExpiredHumanSaveRetentionTarget(params: {
         nowMs: params.nowMs,
       },
     );
+    await appendDaytonaPreviewStoppedEventBestEffort({
+      ctx: params.ctx,
+      ownerId,
+      runId,
+      target: params.target,
+      reason: params.reason,
+      source: "expired_retention_deleted",
+      nowMs: params.nowMs,
+    });
     await appendTeardownRuntimeEventBestEffort({
       ctx: params.ctx,
       ownerId: String(ownerId),
@@ -1961,6 +2672,205 @@ export const sweepExpiredDaytonaCodexRuntimeTargetsInternal = internalAction({
       skipped,
       failed,
     };
+  },
+});
+
+export const stopDaytonaAppPreviewInternal = internalAction({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    previewPort: v.optional(v.number()),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    target_run_id?: string;
+    target_id?: string | null;
+    sandbox_id?: string | null;
+    stopped_preview_ports?: number[];
+    stopped_process_ids?: number[];
+    stop_output?: string | null;
+    teardown_ok?: boolean;
+    teardown_state?: string | null;
+    teardown_reason?: string | null;
+  }> => {
+    try {
+      if (!hasDaytonaCredentials()) {
+        return {
+          ok: false,
+          code: "daytona_direct_credentials_missing",
+          message: "Daytona credentials are not configured.",
+        };
+      }
+      const target = (await ctx.runQuery(
+        (internal as any).daytonaCodexRuntimeTargets
+          .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
+        {
+          ownerId: args.ownerId,
+          runId: args.runId,
+        },
+      )) as JsonRecord | null;
+      if (!target) {
+        return {
+          ok: false,
+          code: "daytona_runtime_target_not_found",
+          message: "Daytona runtime target was not found for this run.",
+        };
+      }
+      const sandboxId = String(target.sandboxId ?? "").trim();
+      let requestedPort: number | null = null;
+      if (args.previewPort !== undefined) {
+        requestedPort = normalizeDaytonaAppPreviewPort(args.previewPort);
+      }
+      const activePreviewPorts = normalizeActivePreviewPorts(target.activePreviewPorts);
+      const ports =
+        requestedPort !== null
+          ? activePreviewPorts.includes(requestedPort)
+            ? [requestedPort]
+            : []
+          : activePreviewPorts;
+      const sandboxState = String(target.sandboxState ?? "").trim();
+      const providerTeardownState = String(target.providerTeardownState ?? "").trim();
+      if (
+        !sandboxId ||
+        sandboxState === "deleted" ||
+        sandboxState === "stopped" ||
+        providerTeardownState === "deleted" ||
+        providerTeardownState === "stopped"
+      ) {
+        if (ports.length > 0) {
+          await appendDaytonaPreviewStoppedEventBestEffort({
+            ctx,
+            ownerId: args.ownerId,
+            runId: args.runId,
+            target,
+            reason: String(args.reason ?? "").trim() || "polynet_terminal_stop",
+            source: "preview_stop_unavailable_sandbox",
+            ports,
+          });
+          return {
+            ok: true,
+            target_run_id: args.runId,
+            target_id: String(target._id ?? "").trim() || null,
+            sandbox_id: sandboxId || null,
+            stopped_preview_ports: ports,
+            stopped_process_ids: [],
+            stop_output: "Daytona sandbox was already stopped; preview was removed.",
+            teardown_ok: true,
+            teardown_state:
+              providerTeardownState === "deleted" || sandboxState === "deleted"
+                ? "deleted"
+                : "stopped",
+            teardown_reason: "preview_stop_unavailable_sandbox",
+          };
+        }
+        return {
+          ok: false,
+          code: "daytona_sandbox_not_available",
+          message: "Daytona sandbox is no longer available for this run.",
+          target_run_id: args.runId,
+          target_id: String(target._id ?? "").trim() || null,
+          sandbox_id: sandboxId || null,
+        };
+      }
+      if (requestedPort !== null && !activePreviewPorts.includes(requestedPort)) {
+        return {
+          ok: false,
+          code: "daytona_preview_port_not_active",
+          message: `Daytona preview port ${requestedPort} is not active for this run.`,
+          target_run_id: args.runId,
+          target_id: String(target._id ?? "").trim() || null,
+          sandbox_id: sandboxId,
+          stopped_preview_ports: [],
+          stopped_process_ids: [],
+        };
+      }
+      if (ports.length === 0) {
+        return {
+          ok: true,
+          target_run_id: args.runId,
+          target_id: String(target._id ?? "").trim() || null,
+          sandbox_id: sandboxId,
+          stopped_preview_ports: [],
+          stopped_process_ids: [],
+          stop_output: "No active Daytona preview ports were recorded.",
+          teardown_ok: true,
+          teardown_state: "skipped",
+          teardown_reason: "no_active_preview_ports",
+        };
+      }
+
+      const processIds = new Set<number>();
+      for (const port of ports) {
+        const previewEvent = (await ctx.runQuery(
+          (internal as any).threads.getDaytonaWorkspacePreviewReadyEventInternal as any,
+          {
+            ownerId: args.ownerId,
+            runId: args.runId,
+            port,
+          },
+        )) as JsonRecord | null;
+        const payload = asRecord(previewEvent?.payload);
+        const processId = normalizeDaytonaPreviewProcessId(
+          payload?.terminal_session_id ?? payload?.process_id,
+        );
+        if (processId !== null) processIds.add(processId);
+      }
+
+      const { Daytona } = await loadDaytona();
+      const daytona = new Daytona(buildDaytonaConfig());
+      const sandbox = await daytona.get(sandboxId);
+      const stopCommand = buildStopDaytonaAppPreviewCommand({
+        ports,
+        processIds: Array.from(processIds),
+      });
+      const stopped = await runRemoteBash(sandbox, stopCommand, {
+        cwd: String(target.workspaceRoot ?? "").trim() || DEFAULT_WORKSPACE_ROOT,
+        timeoutSeconds: readIntegerEnv("POLYNET_DAYTONA_PREVIEW_STOP_TIMEOUT_SECONDS", 20),
+        allowFailure: true,
+      });
+      const nowMs = Date.now();
+      await ctx.runMutation(
+        (internal as any).daytonaCodexRuntimeTargets
+          .markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal as any,
+        {
+          ownerId: args.ownerId,
+          runId: args.runId,
+          stoppedPreviewPorts: ports,
+          nowMs,
+        },
+      );
+      const teardown = (await ctx.runAction(
+        (internal as any).daytonaCodexRuntimeTargetActions
+          .teardownAndRecordDaytonaCodexRuntimeTargetInternal as any,
+        {
+          ownerId: args.ownerId,
+          runId: args.runId,
+          reason: String(args.reason ?? "").trim() || "polynet_terminal_stop",
+        },
+      )) as JsonRecord;
+      return {
+        ok: true,
+        target_run_id: args.runId,
+        target_id: String(target._id ?? "").trim() || null,
+        sandbox_id: sandboxId,
+        stopped_preview_ports: ports,
+        stopped_process_ids: Array.from(processIds),
+        stop_output: stopped.output.slice(0, 2000) || null,
+        teardown_ok: teardown.ok === true,
+        teardown_state: String(teardown.state ?? "").trim() || null,
+        teardown_reason: String(teardown.reason ?? "").trim() || null,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        code: "daytona_preview_stop_failed",
+        message: sanitizeDaytonaRuntimeError(error),
+        target_run_id: args.runId,
+      };
+    }
   },
 });
 

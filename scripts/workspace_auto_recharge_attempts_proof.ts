@@ -13,10 +13,23 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
+function sourceFromExport(source: string, exportName: string, nextMarker: string): string {
+  const start = source.indexOf(`export const ${exportName}`);
+  assert.notEqual(start, -1, `${exportName} export missing`);
+  const end = source.indexOf(nextMarker, start + 1);
+  assert.notEqual(end, -1, `${exportName} end marker missing`);
+  return source.slice(start, end);
+}
+
 const packageJson = read("package.json");
 const schemaSource = read("convex/schema.ts");
 const attemptPlannerSource = read("shared/workspaceAutoRechargeAttempts.ts");
-const workspaceCreditsSource = read("convex/workspaceCredits.ts");
+const workspaceAutoRechargeSource = read("convex/workspaceAutoRecharge.ts");
+const prepareAttemptSource = sourceFromExport(
+  workspaceAutoRechargeSource,
+  "prepareWorkspaceAutoRechargeAttemptInternal",
+  "export const markWorkspaceAutoRechargeAttemptProcessingInternal",
+);
 
 assert.equal(resolveWorkspaceAutoRechargeMonthKey(Date.UTC(2026, 0, 1)), "2026-01");
 assert.equal(resolveWorkspaceAutoRechargeMonthKey(Date.UTC(2026, 11, 31, 23, 59)), "2026-12");
@@ -119,6 +132,11 @@ assert.match(
   "package script must expose the workspace auto recharge attempts proof",
 );
 assert.match(schemaSource, /workspaceAutoRechargeAttempts: defineTable\(/);
+assert.match(
+  schemaSource,
+  /workspaceAutoRechargeAttempts: defineTable\(\{[\s\S]*providerCustomerId: v\.optional\(v\.string\(\)\)[\s\S]*providerPaymentMethodId: v\.optional\(v\.string\(\)\)[\s\S]*providerPaymentId: v\.optional\(v\.string\(\)\)/,
+  "auto recharge attempts must persist frozen Stripe customer and payment method ids before provider create",
+);
 for (const requiredIndex of [
   '.index("by_attemptKey", ["attemptKey"])',
   '.index("by_user_status", ["userId", "status"])',
@@ -146,8 +164,8 @@ assert.doesNotMatch(
   "attempt planner must not execute provider payments or mutate balances",
 );
 assert.doesNotMatch(
-  workspaceCreditsSource,
-  /workspaceAutoRechargeAttempts[\s\S]*ctx\.db\.patch\([\s\S]*workspaceCreditBalances/,
+  prepareAttemptSource,
+  /ctx\.db\.insert\("workspaceCreditBalances"|ctx\.db\.patch\(balance\._id|paymentIntents\.create|checkout\.sessions\.create/,
   "workspace credit balance mutation must not be introduced by the attempt foundation",
 );
 

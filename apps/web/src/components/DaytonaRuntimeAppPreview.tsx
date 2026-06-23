@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { getConvexCloudRuntimeRunDaytonaPreviewSession } from "../../../../shared/cloudThreadsRead";
 import { buildWorkspacePreviewProxyUrl } from "../lib/workspacePreviewProxy";
@@ -33,9 +33,25 @@ function describePreviewError(code: string | null): string {
   return "The Daytona app preview could not be attached.";
 }
 
+function shouldHideUnavailableDaytonaPreview(code: string | null): boolean {
+  const normalized = String(code ?? "").trim();
+  return (
+    normalized === "runtime_run_not_found" ||
+    normalized === "daytona_runtime_target_not_found" ||
+    normalized === "daytona_sandbox_not_available" ||
+    normalized === "daytona_preview_not_authorized" ||
+    normalized === "invalid_preview_port"
+  );
+}
+
+function buildDaytonaPreviewVisibilityKey(anchor: DaytonaRuntimePreviewAnchor): string {
+  return `${anchor.id}:${Math.floor(Number(anchor.updatedAt) || 0)}`;
+}
+
 function DaytonaRuntimeAppPreviewCard(props: {
   anchor: DaytonaRuntimePreviewAnchor;
   session: AuthSessionLike | null;
+  onUnavailable: (anchor: DaytonaRuntimePreviewAnchor) => void;
 }): JSX.Element {
   const [state, setState] = useState<DaytonaPreviewState>({
     phase: "loading",
@@ -69,6 +85,10 @@ function DaytonaRuntimeAppPreviewCard(props: {
       .then((result) => {
         if (cancelled) return;
         if (!result.ok) {
+          if (shouldHideUnavailableDaytonaPreview(result.code)) {
+            props.onUnavailable(props.anchor);
+            return;
+          }
           setState((prev) => ({
             ...prev,
             phase: "error",
@@ -108,7 +128,14 @@ function DaytonaRuntimeAppPreviewCard(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.anchor.port, props.anchor.runId, props.session, state.attempt]);
+  }, [
+    props.anchor,
+    props.anchor.port,
+    props.anchor.runId,
+    props.onUnavailable,
+    props.session,
+    state.attempt,
+  ]);
 
   const title = state.label || `Daytona app :${props.anchor.port}`;
   return (
@@ -195,6 +222,7 @@ export function DaytonaRuntimeAppPreview(props: {
   anchors: DaytonaRuntimePreviewAnchor[];
   session: AuthSessionLike | null;
 }): JSX.Element | null {
+  const [hiddenAnchorKeys, setHiddenAnchorKeys] = useState<Set<string>>(() => new Set());
   const anchors = useMemo(
     () =>
       props.anchors
@@ -202,17 +230,46 @@ export function DaytonaRuntimeAppPreview(props: {
         .sort((a, b) => a.port - b.port),
     [props.anchors],
   );
-  if (anchors.length === 0) return null;
+  useEffect(() => {
+    const liveKeys = new Set(anchors.map(buildDaytonaPreviewVisibilityKey));
+    setHiddenAnchorKeys((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (liveKeys.has(key)) {
+          next.add(key);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [anchors]);
+  const handleUnavailableAnchor = useCallback((anchor: DaytonaRuntimePreviewAnchor) => {
+    const key = buildDaytonaPreviewVisibilityKey(anchor);
+    setHiddenAnchorKeys((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }, []);
+  const visibleAnchors = useMemo(
+    () => anchors.filter((anchor) => !hiddenAnchorKeys.has(buildDaytonaPreviewVisibilityKey(anchor))),
+    [anchors, hiddenAnchorKeys],
+  );
+  if (visibleAnchors.length === 0) return null;
   return (
     <section
       className="workspace-app-preview-stack"
       aria-label="Running Daytona apps"
     >
-      {anchors.map((anchor) => (
+      {visibleAnchors.map((anchor) => (
         <DaytonaRuntimeAppPreviewCard
           key={anchor.id}
           anchor={anchor}
           session={props.session}
+          onUnavailable={handleUnavailableAnchor}
         />
       ))}
     </section>

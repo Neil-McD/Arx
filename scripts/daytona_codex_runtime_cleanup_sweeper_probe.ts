@@ -257,62 +257,36 @@ function assertPreviewExpiryResult(result: SweeperResult): void {
   }
 }
 
-function assertStoppedForHumanSave(target: DaytonaTarget): number {
+function assertDeletedAfterPreviewExpiry(target: DaytonaTarget): void {
   if (readString(target.previewLeaseState) !== "expired") {
     fail(`previewLeaseState must be expired, got ${readString(target.previewLeaseState) || "<empty>"}.`);
   }
-  if (readString(target.providerTeardownState) !== "stopped") {
+  if (readString(target.providerTeardownState) !== "deleted") {
     fail(
-      `providerTeardownState must be stopped after preview expiry, got ${
+      `providerTeardownState must be deleted after preview expiry, got ${
         readString(target.providerTeardownState) || "<empty>"
       }.`,
     );
   }
-  if (readString(target.sandboxState) !== "stopped") {
-    fail(`sandboxState must be stopped after preview expiry, got ${readString(target.sandboxState) || "<empty>"}.`);
+  if (readString(target.sandboxState) !== "deleted") {
+    fail(`sandboxState must be deleted after preview expiry, got ${readString(target.sandboxState) || "<empty>"}.`);
   }
-  if (readString(target.workspaceChangeState) !== "dirty") {
-    fail(`workspaceChangeState must be dirty, got ${readString(target.workspaceChangeState) || "<empty>"}.`);
-  }
-  if (readString(target.workspaceRetentionState) !== "human_save_pending") {
+  if (readString(target.workspaceRetentionState) !== "none") {
     fail(
-      `workspaceRetentionState must be human_save_pending, got ${
+      `workspaceRetentionState must be none after preview expiry, got ${
         readString(target.workspaceRetentionState) || "<empty>"
       }.`,
     );
   }
-  if (readString(target.cleanupDecision) !== "stop_for_human_save") {
-    fail(`cleanupDecision must be stop_for_human_save, got ${readString(target.cleanupDecision) || "<empty>"}.`);
+  if (readString(target.cleanupDecision) !== "delete_without_active_lease") {
+    fail(
+      `cleanupDecision must be delete_without_active_lease, got ${
+        readString(target.cleanupDecision) || "<empty>"
+      }.`,
+    );
   }
   if (readNumber(target.workspaceMeaningfulFileCount) < 1) {
     fail("workspaceMeaningfulFileCount must show at least one meaningful file.");
-  }
-  return requireNumber(target.workspaceRetentionExpiresAt, "workspaceRetentionExpiresAt");
-}
-
-function assertRetentionExpiryResult(result: SweeperResult): void {
-  if (result.ok !== true) fail(`retention expiry sweep failed: ${JSON.stringify(result)}`);
-  if (result.scanned !== 1) fail(`retention expiry sweep scanned ${result.scanned}, expected 1.`);
-  if (result.deleted !== 1) fail(`retention expiry sweep deleted ${result.deleted}, expected 1.`);
-  if (Number(result.failed ?? 0) !== 0) {
-    fail(`retention expiry sweep failed count was ${result.failed}.`);
-  }
-}
-
-function assertDeletedAfterRetention(target: DaytonaTarget): void {
-  if (readString(target.providerTeardownState) !== "deleted") {
-    fail(`providerTeardownState must be deleted, got ${readString(target.providerTeardownState) || "<empty>"}.`);
-  }
-  if (readString(target.sandboxState) !== "deleted") {
-    fail(`sandboxState must be deleted, got ${readString(target.sandboxState) || "<empty>"}.`);
-  }
-  if (readString(target.workspaceRetentionState) !== "expired") {
-    fail(
-      `workspaceRetentionState must be expired, got ${readString(target.workspaceRetentionState) || "<empty>"}.`,
-    );
-  }
-  if (readString(target.cleanupDecision) !== "delete_expired_retention") {
-    fail(`cleanupDecision must be delete_expired_retention, got ${readString(target.cleanupDecision) || "<empty>"}.`);
   }
 }
 
@@ -331,15 +305,7 @@ async function main(): Promise<void> {
   assertPreviewExpiryResult(previewSweep);
 
   const afterPreviewExpiry = await readTarget(args.targetId);
-  const retentionExpiresAt = assertStoppedForHumanSave(afterPreviewExpiry);
-  const stoppedSandbox = await requireSandboxPresent(daytona, sandboxId);
-
-  const retentionSweepNowMs = retentionExpiresAt + 1;
-  const retentionSweep = await runTargetedSweeper(args.targetId, retentionSweepNowMs);
-  assertRetentionExpiryResult(retentionSweep);
-
-  const afterRetentionExpiry = await readTarget(args.targetId);
-  assertDeletedAfterRetention(afterRetentionExpiry);
+  assertDeletedAfterPreviewExpiry(afterPreviewExpiry);
   await requireSandboxDeleted(daytona, sandboxId);
 
   console.log(
@@ -350,12 +316,10 @@ async function main(): Promise<void> {
         run_id: readString(initialTarget.runId),
         sandbox_id: sandboxId,
         preview_sweep: previewSweep,
-        retention_sweep: retentionSweep,
-        stopped_sandbox_state: readString(stoppedSandbox.state) || null,
-        final_provider_teardown_state: readString(afterRetentionExpiry.providerTeardownState),
-        final_sandbox_state: readString(afterRetentionExpiry.sandboxState),
-        final_workspace_retention_state: readString(afterRetentionExpiry.workspaceRetentionState),
-        final_cleanup_decision: readString(afterRetentionExpiry.cleanupDecision),
+        final_provider_teardown_state: readString(afterPreviewExpiry.providerTeardownState),
+        final_sandbox_state: readString(afterPreviewExpiry.sandboxState),
+        final_workspace_retention_state: readString(afterPreviewExpiry.workspaceRetentionState),
+        final_cleanup_decision: readString(afterPreviewExpiry.cleanupDecision),
       },
       null,
       2,

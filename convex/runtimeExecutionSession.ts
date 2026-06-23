@@ -68,8 +68,54 @@ type TerminalToolName =
   | "terminal_write"
   | "terminal_stop";
 
+export type ActiveDaytonaRuntimeSubstrateForTools = {
+  provider: "daytona";
+  targetId: string | null;
+  runId: string | null;
+  sandboxId: string | null;
+  workspaceRoot: string | null;
+  activePreviewPorts: number[];
+  previewLeaseActive: boolean;
+  previewStartAvailable?: boolean;
+};
+
 function isTerminalToolName(toolName: string): toolName is TerminalToolName {
   return TERMINAL_TOOL_NAMES.has(toolName as TerminalToolName);
+}
+
+function normalizeInferredDaytonaPreviewPort(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const port = Math.floor(parsed);
+  return port >= 3000 && port <= 9999 ? port : null;
+}
+
+function inferDaytonaPreviewPortFromCommand(command: string): number {
+  const normalized = String(command ?? "");
+  const explicitPatterns = [
+    /\b(?:PORT|VITE_PORT|NEXT_PORT)=["']?(\d{2,5})\b/i,
+    /\b--port(?:=|\s+)(\d{2,5})\b/i,
+    /\b-p\s+(\d{2,5})\b/i,
+    /\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d{2,5})\b/i,
+  ];
+  for (const pattern of explicitPatterns) {
+    const match = normalized.match(pattern);
+    const port = normalizeInferredDaytonaPreviewPort(match?.[1]);
+    if (port !== null) return port;
+  }
+
+  const pythonHttpServer = normalized.match(
+    /\b(?:python3?|python)\s+-m\s+http\.server(?:\s+(\d{2,5}))?\b/i,
+  );
+  if (pythonHttpServer) {
+    return normalizeInferredDaytonaPreviewPort(pythonHttpServer[1]) ?? 8000;
+  }
+
+  if (/\b(?:vite|vite\s+--host|npm\s+run\s+dev|pnpm\s+dev|yarn\s+dev)\b/i.test(normalized)) {
+    return 5173;
+  }
+  if (/\bastro\b/i.test(normalized)) return 4321;
+  return 3000;
 }
 
 function formatJsonToolOutput(value: unknown): string {
@@ -148,6 +194,14 @@ function buildTerminalToolResultDetails(
     "message",
     "tool_kind",
     "required_credits",
+    "provider_id",
+    "target_run_id",
+    "target_id",
+    "sandbox_id",
+    "stopped_preview_ports",
+    "stopped_process_ids",
+    "teardown_state",
+    "teardown_reason",
   ]) {
     const value = payload[key];
     if (value !== undefined && value !== null && value !== "") {
@@ -212,6 +266,7 @@ export function createPolyNetExecutionSession(params: {
   mountedToolDiscoveryCatalog?: RuntimeMountedMcpTool[] | null;
   mountedPromptSuffix?: string | null;
   initialWorkspaceSession?: RuntimeWorkspaceSession | null;
+  activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
   appendRunEvent: (event: RuntimeExecutionSessionRunEvent) => Promise<void>;
   touchRunHeartbeat?: () => Promise<void>;
   loadConnectionBundle: (params: {
@@ -232,6 +287,10 @@ export function createPolyNetExecutionSession(params: {
     params.mountedTools.map((tool) => [tool.runtime_tool_name, tool]),
   );
   let workspaceSession = params.initialWorkspaceSession ?? null;
+  let daytonaRuntimeSubstrate = params.activeDaytonaRuntimeSubstrate
+    ? { ...params.activeDaytonaRuntimeSubstrate }
+    : null;
+  let daytonaRuntimeSubstrateUsed = false;
   let workspaceSessionFailure: {
     status: number;
     code: string;
@@ -270,6 +329,28 @@ export function createPolyNetExecutionSession(params: {
       });
     } catch {
       // Best-effort runtime evidence only.
+    }
+  };
+
+  const updateDaytonaRuntimeSubstrateFromPayload = (
+    payload: Record<string, unknown> | null,
+  ) => {
+    if (!daytonaRuntimeSubstrate || !payload) return;
+    daytonaRuntimeSubstrateUsed = true;
+    const targetId = String(payload.target_id ?? "").trim();
+    const runId = String(payload.target_run_id ?? payload.run_id ?? "").trim();
+    const sandboxId = String(payload.sandbox_id ?? "").trim();
+    const workspaceRoot = String(payload.workspace_root ?? "").trim();
+    if (targetId) daytonaRuntimeSubstrate.targetId = targetId;
+    if (runId) daytonaRuntimeSubstrate.runId = runId;
+    if (sandboxId) daytonaRuntimeSubstrate.sandboxId = sandboxId;
+    if (workspaceRoot) daytonaRuntimeSubstrate.workspaceRoot = workspaceRoot;
+    const previewPort = Math.floor(Number(payload.preview_port ?? payload.port));
+    if (Number.isFinite(previewPort) && previewPort > 0) {
+      const ports = new Set(daytonaRuntimeSubstrate.activePreviewPorts);
+      ports.add(previewPort);
+      daytonaRuntimeSubstrate.activePreviewPorts = Array.from(ports);
+      daytonaRuntimeSubstrate.previewLeaseActive = true;
     }
   };
 
@@ -406,6 +487,74 @@ export function createPolyNetExecutionSession(params: {
     },
     getWorkspaceSession(): RuntimeWorkspaceSession | null {
       return workspaceSessionFailure ? null : workspaceSession;
+    },
+    getActiveDaytonaRuntimeSubstrate(): ActiveDaytonaRuntimeSubstrateForTools | null {
+      return daytonaRuntimeSubstrate;
+    },
+    async executeDaytonaWorkspaceTool(paramsForTool: {
+      toolName: RetrievalToolName | string;
+      normalizedArgs: Record<string, unknown>;
+    }): Promise<NativeToolExecutionResult> {
+      if (daytonaRuntimeSubstrate?.provider !== "daytona") {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "daytona_workspace_unavailable",
+          errorMessage: "Daytona workspace is not active for this run.",
+        };
+      }
+      const threadId = String(params.threadId ?? "").trim();
+      if (!threadId) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "thread_required",
+          errorMessage: "Daytona workspace tools require a thread.",
+        };
+      }
+      const payload = (await params.ctx.runAction(
+        (internal as any).daytonaCodexRuntimeTargetActions
+          .executeDaytonaWorkspaceToolInternal as any,
+        {
+          ownerId: params.userId,
+          threadId: threadId as any,
+          runId: params.runId,
+          ...(params.projectId ? { projectId: params.projectId as any } : {}),
+          toolName: paramsForTool.toolName,
+          normalizedArgs: paramsForTool.normalizedArgs,
+        },
+      )) as Record<string, unknown>;
+      updateDaytonaRuntimeSubstrateFromPayload(payload);
+      if (payload?.ok !== true) {
+        return {
+          status: "error",
+          exitCode:
+            typeof payload?.exit_code === "number" &&
+            Number.isFinite(payload.exit_code)
+              ? Math.floor(payload.exit_code)
+              : null,
+          outputText: String(payload?.output_preview ?? ""),
+          errorCode: String(payload?.code ?? "daytona_workspace_tool_failed"),
+          errorMessage: String(payload?.message ?? "Daytona workspace tool failed."),
+          details:
+            payload && typeof payload === "object" && !Array.isArray(payload)
+              ? payload
+              : null,
+        };
+      }
+      return {
+        status: "ok",
+        exitCode:
+          typeof payload.exit_code === "number" && Number.isFinite(payload.exit_code)
+            ? Math.floor(payload.exit_code)
+            : 0,
+        outputText: String(payload.output_text ?? "(no output)"),
+        errorCode: null,
+        errorMessage: null,
+        details: payload,
+      };
     },
     async createWorkspaceSession(paramsForCreate?: {
       toolName?: string | null;
@@ -562,6 +711,65 @@ export function createPolyNetExecutionSession(params: {
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
+      }
+      if (daytonaRuntimeSubstrateUsed && daytonaRuntimeSubstrate?.runId) {
+        const targetRunId = String(daytonaRuntimeSubstrate.runId ?? "").trim();
+        try {
+          await params.ctx.runMutation(
+            (internal as any).daytonaCodexRuntimeTargets
+              .releaseDaytonaCodexRuntimeTargetInternal as any,
+            {
+              ownerId: params.userId,
+              runId: targetRunId,
+              reason: workspaceSessionFailure
+                ? "polynet_turn_failed"
+                : "polynet_turn_finished",
+              activePreviewPorts: daytonaRuntimeSubstrate.activePreviewPorts,
+            },
+          );
+          await emitRunEvent(
+            "daytona_codex_runtime_provider_teardown_started",
+            {
+              run_id: params.runId,
+              provider: "daytona",
+              transport: "daytona_direct",
+              target_id: daytonaRuntimeSubstrate.targetId,
+              sandbox_id: daytonaRuntimeSubstrate.sandboxId,
+              reason: workspaceSessionFailure
+                ? "polynet_turn_failed"
+                : "polynet_turn_finished",
+              cleanup_mode: "scheduled",
+              active_preview_ports: daytonaRuntimeSubstrate.activePreviewPorts,
+            },
+            `${params.runId}:daytona_codex_runtime_provider_teardown_started:polynet`,
+          );
+          await params.ctx.scheduler.runAfter(
+            0,
+            (internal as any).daytonaCodexRuntimeTargetActions
+              .teardownAndRecordDaytonaCodexRuntimeTargetInternal as any,
+            {
+              ownerId: params.userId,
+              runId: targetRunId,
+              reason: workspaceSessionFailure
+                ? "polynet_turn_failed"
+                : "polynet_turn_finished",
+            },
+          );
+        } catch (error) {
+          await emitRunEvent(
+            "daytona_codex_runtime_provider_teardown_failed",
+            {
+              run_id: params.runId,
+              provider: "daytona",
+              transport: "daytona_direct",
+              target_id: daytonaRuntimeSubstrate.targetId,
+              sandbox_id: daytonaRuntimeSubstrate.sandboxId,
+              reason: "polynet_dispose_failed",
+              message: error instanceof Error ? error.message : String(error ?? ""),
+            },
+            `${params.runId}:daytona_codex_runtime_provider_teardown_failed:polynet_dispose`,
+          );
+        }
       }
       const finalWorkspaceState: "released" | "failed" =
         workspaceSessionFailure ? "failed" : "released";
@@ -801,6 +1009,123 @@ export function createPolyNetExecutionSession(params: {
       const projectId = String(params.projectId ?? "").trim();
       if (
         paramsForTool.toolName === "terminal_start" &&
+        daytonaRuntimeSubstrate?.provider === "daytona"
+      ) {
+        let terminalStartArgs:
+          | ReturnType<typeof normalizeWorkspaceTerminalStartArgs>
+          | null = null;
+        try {
+          terminalStartArgs = normalizeWorkspaceTerminalStartArgs(
+            paramsForTool.normalizedArgs,
+          );
+        } catch {
+          return {
+            status: "error",
+            exitCode: null,
+            outputText: "",
+            errorCode: "invalid_tool_args",
+            errorMessage: "Terminal cwd or preview settings are invalid.",
+          };
+        }
+        const threadId = String(params.threadId ?? "").trim();
+        if (!threadId) {
+          return {
+            status: "error",
+            exitCode: null,
+            outputText: "",
+            errorCode: "thread_required",
+            errorMessage: "Daytona terminal_start requires a thread.",
+          };
+        }
+        const previewPort =
+          terminalStartArgs.previewPort ??
+          inferDaytonaPreviewPortFromCommand(terminalStartArgs.command);
+        const terminalStartedAt = Date.now();
+        const payload = (await params.ctx.runAction(
+          (internal as any).daytonaCodexRuntimeTargetActions
+            .startDaytonaAppPreviewInternal as any,
+          {
+            ownerId: params.userId,
+            threadId: threadId as any,
+            runId: params.runId,
+            ...(projectId ? { projectId: projectId as any } : {}),
+            command: terminalStartArgs.command,
+            ...(terminalStartArgs.cwd ? { cwd: terminalStartArgs.cwd } : {}),
+            previewPort,
+            ...(terminalStartArgs.previewPath
+              ? { previewPath: terminalStartArgs.previewPath }
+              : {}),
+            ...(terminalStartArgs.previewLabel
+              ? { previewLabel: terminalStartArgs.previewLabel }
+              : {}),
+            reason: "polynet_terminal_start",
+          },
+        )) as Record<string, unknown>;
+        updateDaytonaRuntimeSubstrateFromPayload(payload);
+        const payloadRecord =
+          payload && typeof payload === "object" && !Array.isArray(payload)
+            ? payload
+            : null;
+        if (payload?.ok !== true) {
+          await emitRunEvent("terminal_tool_completed", {
+            run_id: params.runId,
+            tool_name: paramsForTool.toolName,
+            latency_ms: Date.now() - terminalStartedAt,
+            status: "error",
+            terminal_session_id:
+              typeof payload?.terminal_session_id === "string"
+                ? payload.terminal_session_id
+                : null,
+          });
+          return {
+            status: "error",
+            exitCode:
+              typeof payload?.exit_code === "number" &&
+              Number.isFinite(payload.exit_code)
+                ? Math.floor(payload.exit_code)
+                : null,
+            outputText: formatTerminalStartToolOutput(payload),
+            errorCode: String(payload?.code ?? "daytona_preview_start_failed"),
+            errorMessage: String(payload?.message ?? "Daytona preview failed to start."),
+            details: buildTerminalToolResultDetails(payloadRecord),
+          };
+        }
+        await emitRunEvent("workspace_preview_ready", {
+          run_id: params.runId,
+          provider: "daytona",
+          transport: "daytona_direct",
+          target_run_id: params.runId,
+          target_id: payload.target_id ?? null,
+          sandbox_id: payload.sandbox_id ?? null,
+          terminal_session_id: payload.terminal_session_id ?? null,
+          port: payload.preview_port,
+          preview_port: payload.preview_port,
+          preview_path: payload.preview_path ?? null,
+          preview_label: payload.preview_label ?? null,
+          command: payload.command ?? terminalStartArgs.command,
+          cwd: payload.cwd ?? terminalStartArgs.cwd ?? null,
+        });
+        await emitRunEvent("terminal_tool_completed", {
+          run_id: params.runId,
+          tool_name: paramsForTool.toolName,
+          latency_ms: Date.now() - terminalStartedAt,
+          status: "ok",
+          terminal_session_id:
+            typeof payload.terminal_session_id === "string"
+              ? payload.terminal_session_id
+              : null,
+        });
+        return {
+          status: "ok",
+          exitCode: 0,
+          outputText: formatTerminalStartToolOutput(payload),
+          errorCode: null,
+          errorMessage: null,
+          details: buildTerminalToolResultDetails(payloadRecord),
+        };
+      }
+      if (
+        paramsForTool.toolName === "terminal_start" &&
         (!projectId || !authSubject)
       ) {
         return {
@@ -894,6 +1219,120 @@ export function createPolyNetExecutionSession(params: {
                 terminal: terminalStartArgs,
                 providerSessionIdPrefix:
                   "pn-bg-term",
+              });
+            }
+          }
+        } else if (
+          paramsForTool.toolName === "terminal_stop" &&
+          daytonaRuntimeSubstrate?.provider === "daytona"
+        ) {
+          const activeDaytona = daytonaRuntimeSubstrate;
+          const targetRunId = String(activeDaytona.runId ?? "").trim();
+          const requestedTerminalSessionId = String(
+            paramsForTool.normalizedArgs.terminal_session_id ?? "",
+          ).trim();
+          const requestedPreviewPortRaw = Number(
+            paramsForTool.normalizedArgs.preview_port,
+          );
+          const requestedPreviewPort =
+            Number.isFinite(requestedPreviewPortRaw) && requestedPreviewPortRaw > 0
+              ? Math.floor(requestedPreviewPortRaw)
+              : null;
+          if (!targetRunId) {
+            payload = {
+              ok: false,
+              status: 404,
+              code: "daytona_runtime_target_not_found",
+              message: "No active Daytona runtime target is available to stop.",
+            };
+          } else if (
+            requestedPreviewPort !== null &&
+            !activeDaytona.activePreviewPorts.includes(requestedPreviewPort)
+          ) {
+            payload = {
+              ok: false,
+              status: 404,
+              code: "daytona_preview_port_not_active",
+              message: `Daytona preview port ${requestedPreviewPort} is not active for this thread.`,
+              provider_id: "daytona",
+              target_run_id: targetRunId,
+              target_id: activeDaytona.targetId,
+              sandbox_id: activeDaytona.sandboxId,
+            };
+          } else if (
+            requestedTerminalSessionId !== "active_daytona_preview" &&
+            requestedTerminalSessionId !== String(activeDaytona.targetId ?? "") &&
+            requestedTerminalSessionId !== String(activeDaytona.runId ?? "")
+          ) {
+            payload = {
+              ok: false,
+              status: 400,
+              code: "daytona_preview_stop_selector_required",
+              message:
+                'Use terminal_session_id "active_daytona_preview" to stop the active Daytona app preview.',
+              provider_id: "daytona",
+              target_run_id: targetRunId,
+              target_id: activeDaytona.targetId,
+              sandbox_id: activeDaytona.sandboxId,
+            };
+          } else {
+            const stopped = (await params.ctx.runAction(
+              (internal as any).daytonaCodexRuntimeTargetActions
+                .stopDaytonaAppPreviewInternal as any,
+              {
+                ownerId: params.userId,
+                runId: targetRunId,
+                ...(requestedPreviewPort !== null
+                  ? { previewPort: requestedPreviewPort }
+                  : {}),
+                reason: "polynet_terminal_stop",
+              },
+            )) as Record<string, unknown>;
+            payload = {
+              ok: stopped.ok === true,
+              provider_id: "daytona",
+              terminal_session_id:
+                requestedTerminalSessionId || "active_daytona_preview",
+              target_run_id: targetRunId,
+              target_id: activeDaytona.targetId,
+              sandbox_id: activeDaytona.sandboxId,
+              ...(stopped &&
+              typeof stopped === "object" &&
+              !Array.isArray(stopped)
+                ? stopped
+                : {}),
+            };
+            if (payload.ok === true) {
+              const stoppedPorts = Array.isArray(payload.stopped_preview_ports)
+                ? payload.stopped_preview_ports
+                    .map((port) => Math.floor(Number(port)))
+                    .filter((port) => Number.isFinite(port) && port > 0)
+                : activeDaytona.activePreviewPorts;
+              if (stoppedPorts.length > 0) {
+                const stopped = new Set(stoppedPorts);
+                daytonaRuntimeSubstrate.activePreviewPorts =
+                  daytonaRuntimeSubstrate.activePreviewPorts.filter(
+                    (port) => !stopped.has(port),
+                  );
+                daytonaRuntimeSubstrate.previewLeaseActive =
+                  daytonaRuntimeSubstrate.activePreviewPorts.length > 0;
+              }
+              await emitRunEvent("workspace_preview_stopped", {
+                run_id: params.runId,
+                provider: "daytona",
+                target_run_id: targetRunId,
+                target_id: activeDaytona.targetId,
+                sandbox_id: activeDaytona.sandboxId,
+                preview_ports: Array.isArray(payload.stopped_preview_ports)
+                  ? payload.stopped_preview_ports
+                  : activeDaytona.activePreviewPorts,
+                terminal_session_id:
+                  requestedTerminalSessionId || "active_daytona_preview",
+                reason: "polynet_terminal_stop",
+                teardown_state:
+                  typeof payload.teardown_state === "string"
+                    ? payload.teardown_state
+                    : null,
               });
             }
           }

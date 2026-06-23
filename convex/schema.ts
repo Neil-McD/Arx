@@ -392,6 +392,8 @@ export default defineSchema({
     uncollectedCreditsBalance: v.number(),
     pendingCardCollectionCreditsBalance: v.number(),
     provider: v.optional(v.string()),
+    providerCustomerId: v.optional(v.string()),
+    providerPaymentMethodId: v.optional(v.string()),
     providerPaymentId: v.optional(v.string()),
     providerIdempotencyKey: v.optional(v.string()),
     failureReason: v.optional(v.string()),
@@ -443,7 +445,6 @@ export default defineSchema({
       v.literal("workspace"),
       v.literal("web"),
       v.literal("voice"),
-      v.literal("runtime"),
     ),
     component: v.union(
       v.literal("blaxel_active_runtime"),
@@ -2687,6 +2688,7 @@ export default defineSchema({
     cleanupDecision: v.optional(
       v.union(
         v.literal("delete_clean_workspace"),
+        v.literal("delete_without_active_lease"),
         v.literal("stop_for_human_save"),
         v.literal("keep_running_active_preview"),
         v.literal("skip_prepared_staging_reuse"),

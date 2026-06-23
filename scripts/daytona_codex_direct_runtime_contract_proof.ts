@@ -205,6 +205,16 @@ assert.match(
   "Daytona direct targets must read lazy lifecycle economics from the canonical policy with staging env overrides",
 );
 assert.match(
+  daytonaRuntimePolicy,
+  /DAYTONA_CODEX_DEFAULT_PREVIEW_LEASE_MINUTES = 30/,
+  "Daytona preview leases must default to 30 minutes before system cleanup expires them",
+);
+assert.match(
+  daytonaRuntimePolicy,
+  /DAYTONA_CODEX_DEFAULT_AUTO_STOP_MINUTES = 30/,
+  "Daytona provider auto-stop must not undercut the 30-minute PolyNet preview lease",
+);
+assert.match(
   actions,
   /POLYNET_DAYTONA_DIRECT_PUBLIC_PREVIEW[\s\S]*policy\.publicPreview[\s\S]*resources: \{[\s\S]*POLYNET_DAYTONA_DIRECT_CPU[\s\S]*policy\.defaultResources\.cpu[\s\S]*POLYNET_DAYTONA_DIRECT_MEMORY[\s\S]*policy\.defaultResources\.memory[\s\S]*POLYNET_DAYTONA_DIRECT_DISK[\s\S]*policy\.defaultResources\.disk/,
   "Daytona direct targets must derive preview and resource defaults from the canonical policy",
@@ -226,8 +236,8 @@ assert.doesNotMatch(
 );
 assert.match(
   actions,
-  /function readConfiguredReusableSandboxId\(\): string[\s\S]*POLYNET_DAYTONA_DIRECT_SANDBOX_ID[\s\S]*function readDaytonaTargetLifecycleMode\(\): DaytonaTargetLifecycleMode[\s\S]*readConfiguredReusableSandboxId\(\)[\s\S]*prepared_staging_reuse[\s\S]*POLYNET_DAYTONA_DIRECT_LIFECYCLE_MODE[\s\S]*per_turn_ephemeral[\s\S]*thread_ephemeral[\s\S]*return "thread_ephemeral"/,
-  "Daytona direct targets must default to thread-scoped sandboxes while preserving explicit staging reuse and per-turn overrides",
+  /function readConfiguredReusableSandboxId\(\): string[\s\S]*POLYNET_DAYTONA_DIRECT_SANDBOX_ID[\s\S]*function readDaytonaTargetLifecycleMode\(\): DaytonaTargetLifecycleMode[\s\S]*readConfiguredReusableSandboxId\(\)[\s\S]*prepared_staging_reuse[\s\S]*POLYNET_DAYTONA_DIRECT_LIFECYCLE_MODE[\s\S]*per_turn_ephemeral[\s\S]*thread_ephemeral[\s\S]*return "per_turn_ephemeral"/,
+  "Daytona direct targets must default to per-turn provider-ephemeral sandboxes while preserving explicit staging reuse and thread overrides",
 );
 assert.match(
   actions,
@@ -241,8 +251,8 @@ assert.doesNotMatch(
 );
 assert.match(
   actions,
-  /public: params\.lifecycle\.publicPreview[\s\S]*ephemeral: params\.lifecycle\.providerEphemeral[\s\S]*autoStopInterval: params\.lifecycle\.autoStopMinutes[\s\S]*autoArchiveInterval: params\.lifecycle\.autoArchiveMinutes[\s\S]*\.\.\.\(snapshot \? \{ snapshot \} : \{ resources: params\.lifecycle\.resources \}\)/,
-  "Daytona direct sandbox creation must use policy-backed preview and lifecycle defaults, while keeping snapshot and resources mutually exclusive",
+  /public: params\.lifecycle\.publicPreview[\s\S]*ephemeral: params\.lifecycle\.providerEphemeral[\s\S]*autoStopInterval: params\.lifecycle\.autoStopMinutes[\s\S]*autoArchiveInterval: params\.lifecycle\.autoArchiveMinutes[\s\S]*autoDeleteInterval: params\.lifecycle\.providerEphemeral[\s\S]*\? 0[\s\S]*: params\.lifecycle\.autoDeleteMinutes[\s\S]*\.\.\.\(snapshot \? \{ snapshot \} : \{ resources: params\.lifecycle\.resources \}\)/,
+  "Daytona direct sandbox creation must use policy-backed preview and lifecycle defaults, including explicit provider auto-delete behavior, while keeping snapshot and resources mutually exclusive",
 );
 assert.match(
   actions,
@@ -486,13 +496,13 @@ assert.match(
 );
 assert.match(
   actions,
-  /workspaceScan\.changeState === "dirty" \|\| workspaceScan\.changeState === "scan_failed"[\s\S]*stopDaytonaSandboxForRetention[\s\S]*workspaceRetentionState: "human_save_pending"[\s\S]*cleanupEligibleAt: retentionExpiresAt[\s\S]*state: "stopped"/,
-  "Daytona teardown must stop and retain dirty or unscannable workspaces for the human save path",
+  /deleteDaytonaSandbox[\s\S]*workspaceChangeState: workspaceScan\.changeState[\s\S]*workspaceRetentionState: "none"[\s\S]*cleanupDecision: "delete_without_active_lease"[\s\S]*state: "deleted"[\s\S]*appendDaytonaPreviewStoppedEventBestEffort/,
+  "Daytona teardown must delete released sandboxes without an active preview lease even when workspace files are dirty or unscannable",
 );
-assert.match(
+assert.doesNotMatch(
   actions,
-  /deleteDaytonaSandbox[\s\S]*workspaceChangeState: "clean"[\s\S]*workspaceRetentionState: "none"[\s\S]*cleanupDecision: "delete_clean_workspace"[\s\S]*state: "deleted"/,
-  "Daytona teardown must delete clean workspaces immediately after the agent turn releases",
+  /stopDaytonaSandboxForRetention|cleanupDecision: "stop_for_human_save"[\s\S]*state: "stopped"/,
+  "Daytona teardown must not stop and retain dirty files by default; dirty workspace state is telemetry only",
 );
 assert.match(
   actions,
@@ -501,8 +511,8 @@ assert.match(
 );
 assert.match(
   actions,
-  /isDaytonaNotFoundError\(error\)[\s\S]*state: "deleted"[\s\S]*reason: `\$\{args\.reason\}:sandbox_missing`/,
-  "Daytona teardown must treat already-missing sandboxes as deleted for idempotent cleanup",
+  /isDaytonaNotFoundError\(error\)[\s\S]*state: "deleted"[\s\S]*reason: `\$\{args\.reason\}:sandbox_missing`[\s\S]*appendDaytonaPreviewStoppedEventBestEffort/,
+  "Daytona teardown must treat already-missing sandboxes as deleted for idempotent cleanup and tombstone active previews",
 );
 assert.match(
   actions,
@@ -523,6 +533,16 @@ assert.match(
   actions,
   /appendTeardownRuntimeEventBestEffort[\s\S]*threads\.appendCloudRuntimeRunEventInternal/,
   "scheduled Daytona teardown audit events must use the trusted internal append path instead of the authenticated public mutation",
+);
+assert.match(
+  actions,
+  /appendDaytonaPreviewStoppedEventBestEffort[\s\S]*markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal[\s\S]*eventType: "workspace_preview_stopped"[\s\S]*target_run_id: params\.runId/,
+  "provider stop/delete cleanup must append workspace_preview_stopped so stale Daytona preview cards leave the UI",
+);
+assert.match(
+  actions,
+  /isDaytonaSandboxUnavailableForPreviewState[\s\S]*state === "archived"[\s\S]*state === "destroyed"[\s\S]*resolveDaytonaCodexRuntimePreviewInternal[\s\S]*isDaytonaNotFoundError\(error\)[\s\S]*preview_resolution_sandbox_missing[\s\S]*providerSandboxState[\s\S]*markDaytonaCodexRuntimeTargetProviderTeardownInternal[\s\S]*appendDaytonaPreviewStoppedEventBestEffort[\s\S]*source: "preview_resolution_provider_state"[\s\S]*code: "daytona_sandbox_not_available"[\s\S]*getSignedPreviewUrl\(port, expiresInSeconds\)/,
+  "Daytona preview resolution must reconcile provider-stopped sandbox state before minting a stale iframe URL",
 );
 assert.match(
   actions,
@@ -572,18 +592,13 @@ assert.match(
 );
 assert.match(
   cleanupSweeperProbe,
-  /assertInitialTarget[\s\S]*previewLeaseState[\s\S]*active[\s\S]*previewLeaseExpiresAt \+ 1[\s\S]*assertStoppedForHumanSave[\s\S]*workspaceRetentionState[\s\S]*human_save_pending[\s\S]*cleanupDecision[\s\S]*stop_for_human_save/,
-  "cleanup sweeper probe must prove active preview expiry stops a dirty workspace for human save",
+  /assertInitialTarget[\s\S]*previewLeaseState[\s\S]*active[\s\S]*previewLeaseExpiresAt \+ 1[\s\S]*assertDeletedAfterPreviewExpiry[\s\S]*workspaceRetentionState[\s\S]*none[\s\S]*cleanupDecision[\s\S]*delete_without_active_lease/,
+  "cleanup sweeper probe must prove active preview expiry deletes the sandbox instead of retaining dirty files",
 );
-assert.match(
+assert.doesNotMatch(
   cleanupSweeperProbe,
-  /assertDeletedAfterRetention[\s\S]*workspaceRetentionState[\s\S]*expired[\s\S]*cleanupDecision[\s\S]*delete_expired_retention/,
-  "cleanup sweeper probe must assert expired human-save retention state",
-);
-assert.match(
-  cleanupSweeperProbe,
-  /const retentionSweepNowMs = retentionExpiresAt \+ 1[\s\S]*runTargetedSweeper\(args\.targetId, retentionSweepNowMs\)[\s\S]*assertRetentionExpiryResult[\s\S]*assertDeletedAfterRetention[\s\S]*requireSandboxDeleted/,
-  "cleanup sweeper probe must prove expired human-save retention deletes the Daytona sandbox",
+  /assertStoppedForHumanSave|assertRetentionExpiryResult|assertDeletedAfterRetention|retentionSweepNowMs/,
+  "cleanup sweeper probe must not require a second human-save retention sweep after preview expiry",
 );
 
 assert.match(
@@ -680,6 +695,16 @@ assert.match(
   handlers,
   /streamPolynetCodexWorkerTurn\(\{[\s\S]*target: workerResolvedTarget/,
   "runtime handler must pass the resolved Daytona target into the stream transport",
+);
+assert.match(
+  handlers,
+  /workspace_compute_billing: \{[\s\S]*credit_key: polynetCodexRuntimeCreditKey[\s\S]*daytona_workspace_compute_usd_per_second/,
+  "runtime handler must pass canonical workspace compute billing context to worker ingest",
+);
+assert.match(
+  ingest,
+  /asRecord\(contextRecord\?\.workspace_compute_billing\) \?\?[\s\S]*asRecord\(contextRecord\?\.codex_runtime_billing\)/,
+  "worker ingest must prefer workspace compute billing while accepting legacy Codex billing context",
 );
 assert.match(
   handlers,

@@ -91,8 +91,8 @@ assertMatch(
 
 assertMatch(
   daytonaActions,
-  /getSignedPreviewUrl\(port, expiresInSeconds\)[\s\S]*mintPreviewProxySessionToken\([\s\S]*previewUrl[\s\S]*preview_proxy_token: minted\.token[\s\S]*preview_transport: "polynet_preview_gateway"/,
-  "Daytona preview resolver must wrap signed preview URLs in the PolyNet preview gateway transport",
+  /sandboxState === "stopped"[\s\S]*providerTeardownState === "stopped"[\s\S]*daytona_sandbox_not_available[\s\S]*previewLeaseActive[\s\S]*activePreviewPorts\.includes\(port\)[\s\S]*providerSandboxState[\s\S]*preview_resolution_provider_state[\s\S]*getSignedPreviewUrl\(port, expiresInSeconds\)[\s\S]*mintPreviewProxySessionToken\([\s\S]*previewUrl[\s\S]*preview_proxy_token: minted\.token[\s\S]*preview_transport: "polynet_preview_gateway"/,
+  "Daytona preview resolver must reject stopped or inactive previews before minting gateway URLs",
 );
 
 assertNotMatch(

@@ -623,6 +623,28 @@ const TERMINAL_SESSION_ID_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const TERMINAL_STOP_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["terminal_session_id"],
+  properties: {
+    terminal_session_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description:
+        "Legacy terminal session id, or active_daytona_preview when stopping the active Daytona app preview.",
+    },
+    preview_port: {
+      type: "integer",
+      minimum: 3000,
+      maximum: 9999,
+      description:
+        "Optional Daytona preview port to stop when terminal_session_id is active_daytona_preview.",
+    },
+  },
+};
+
 const TERMINAL_WRITE_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -902,8 +924,9 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   terminal_stop: {
     name: "terminal_stop",
-    description: "Stop a background terminal and release it when no longer needed.",
-    inputSchema: TERMINAL_SESSION_ID_TOOL_SCHEMA,
+    description:
+      "Stop a background terminal and release it when no longer needed. If the active app preview is Daytona-backed, use terminal_session_id active_daytona_preview.",
+    inputSchema: TERMINAL_STOP_TOOL_SCHEMA,
   },
   computer_open_url: {
     name: "computer_open_url",
@@ -1745,8 +1768,16 @@ export function normalizeToolArguments(
   if (toolName === "terminal_read" || toolName === "terminal_stop") {
     const terminalSessionId = normalizeString(args.terminal_session_id);
     if (!terminalSessionId) throw new Error(`${toolName} requires terminal_session_id.`);
+    const previewPort =
+      toolName === "terminal_stop"
+        ? normalizePositiveInteger(args.preview_port, "preview_port", 9999)
+        : null;
+    if (previewPort !== null && previewPort < 3000) {
+      throw new Error("preview_port must be between 3000 and 9999.");
+    }
     return {
       terminal_session_id: terminalSessionId.slice(0, 128),
+      ...(previewPort ? { preview_port: previewPort } : null),
     };
   }
   if (toolName === "terminal_write") {

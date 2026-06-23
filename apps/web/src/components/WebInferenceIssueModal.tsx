@@ -52,7 +52,6 @@ function paidToolUiLabel(kind: PaidToolKind | null): string {
   if (kind === "workspace_tools") return "workspace tools";
   if (kind === "web_research") return "web research";
   if (kind === "voice_input") return "voice input";
-  if (kind === "codex_runtime") return "Codex runtime";
   return "premium tools";
 }
 

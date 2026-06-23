@@ -99,7 +99,10 @@ import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryE
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
-import { createPolyNetExecutionSession } from "./runtimeExecutionSession";
+import {
+  createPolyNetExecutionSession,
+  type ActiveDaytonaRuntimeSubstrateForTools,
+} from "./runtimeExecutionSession";
 import {
   type ActiveRuntimeToolBatchTelemetry,
   type RuntimeToolBatchExecutionMode,
@@ -252,6 +255,11 @@ export async function executeRetrievalHarnessTool(params: {
   toolName: RetrievalToolName;
   args: Record<string, unknown>;
   workspaceSession?: RuntimeWorkspaceSession | null;
+  activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
+  executeDaytonaWorkspaceTool?: (params: {
+    toolName: RetrievalToolName | string;
+    normalizedArgs: Record<string, unknown>;
+  }) => Promise<NativeToolExecutionResult>;
   signal?: AbortSignal;
 }): Promise<NativeToolExecutionResult> {
   let normalizedArgs: Record<string, unknown>;
@@ -1143,6 +1151,15 @@ export async function executeRetrievalHarnessTool(params: {
     params.toolName === "edit" ||
     params.toolName === "bash"
   ) {
+    if (
+      params.activeDaytonaRuntimeSubstrate?.provider === "daytona" &&
+      params.executeDaytonaWorkspaceTool
+    ) {
+      return await params.executeDaytonaWorkspaceTool({
+        toolName: params.toolName,
+        normalizedArgs,
+      });
+    }
     const workspaceSession = params.workspaceSession ?? null;
     const projectId = String(
       params.projectId ?? workspaceSession?.projectId ?? "",
@@ -1332,6 +1349,7 @@ async function executeRetrievalAgentLoop(
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
     workspaceSession?: RuntimeWorkspaceSession | null;
+    activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
@@ -1418,6 +1436,7 @@ async function executeRetrievalAgentLoop(
     mountedToolDiscoveryCatalog: resolvedHarness.discoveryMountedTools,
     mountedPromptSuffix: resolvedHarness.systemPromptSuffix,
     initialWorkspaceSession: params.workspaceSession ?? null,
+    activeDaytonaRuntimeSubstrate: params.activeDaytonaRuntimeSubstrate ?? null,
     appendRunEvent: params.appendRunEvent,
     touchRunHeartbeat: params.touchRunHeartbeat,
     loadConnectionBundle: async ({ developerAppId }) =>
@@ -2345,6 +2364,10 @@ async function executeRetrievalAgentLoop(
                 toolName: toolName as RetrievalToolName,
                 args: normalizedArgs,
                 workspaceSession: executionSession.getWorkspaceSession(),
+                activeDaytonaRuntimeSubstrate:
+                  executionSession.getActiveDaytonaRuntimeSubstrate(),
+                executeDaytonaWorkspaceTool: async (toolParams) =>
+                  await executionSession.executeDaytonaWorkspaceTool(toolParams),
                 signal,
               }),
           });
@@ -2596,6 +2619,7 @@ async function executeChatToolsAgentLoop(
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
+    activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
