@@ -19,6 +19,7 @@ import {
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
+import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 
 type ThreadLike = {
   _id: any;
@@ -1874,6 +1875,36 @@ export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   },
 });
 
+export const getDaytonaWorkspacePreviewReadyEventInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    port: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const runId = normalizeRunId(args.runId);
+    const port = normalizeWorkspacePreviewPort(args.port);
+    if (port === null) return null;
+    const rows = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", runId),
+      )
+      .order("desc")
+      .take(500)) as RuntimeRunEventLike[];
+    for (const row of rows) {
+      if (row.eventType !== "workspace_preview_ready") continue;
+      const payload = asRecord(row.payload);
+      if (!payload) continue;
+      if (String(payload.provider ?? "").trim() !== "daytona") continue;
+      const eventPort = normalizeWorkspacePreviewPort(payload.port);
+      if (eventPort !== port) continue;
+      return row;
+    }
+    return null;
+  },
+});
+
 export const listStaleRunningRuntimeRunsInternal = internalQuery({
   args: {
     nowMs: v.optional(v.number()),
@@ -2214,6 +2245,77 @@ export const appendCloudRuntimeRunEvent = mutation({
     });
     const id = await ctx.db.insert("runtimeRunEvents", {
       ownerId,
+      threadId: thread._id,
+      runId,
+      seq,
+      eventType,
+      eventKey,
+      payload: args.payload,
+      createdAt,
+    });
+    await ctx.db.patch(run._id, {
+      lastEventSeq: seq,
+      runtimeHarnessTelemetrySummary,
+      updatedAt: nowMs,
+    });
+    const created = (await ctx.db.get(id)) as RuntimeRunEventLike | null;
+    if (!created) throw new Error("runtime_event_create_failed");
+    return created;
+  },
+});
+
+export const appendCloudRuntimeRunEventInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    eventType: v.string(),
+    eventKey: v.optional(v.string()),
+    payload: v.any(),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) throw new Error("runtime_run_not_found");
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+
+    const eventType = String(args.eventType ?? "").trim();
+    if (!eventType) throw new Error("runtime_event_type_required");
+    const eventKey = String(args.eventKey ?? "").trim() || undefined;
+    if (eventKey) {
+      const existing = (await ctx.db
+        .query("runtimeRunEvents")
+        .withIndex("by_owner_run_eventKey", (q: any) =>
+          q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
+        )
+        .first()) as RuntimeRunEventLike | null;
+      if (existing) return existing;
+    }
+
+    const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
+    const createdAt =
+      typeof args.createdAt === "number" && Number.isFinite(args.createdAt)
+        ? Math.floor(args.createdAt)
+        : nowMs;
+    const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
+      summary: run.runtimeHarnessTelemetrySummary,
+      eventType,
+      payload: args.payload,
+    });
+    const id = await ctx.db.insert("runtimeRunEvents", {
+      ownerId: args.ownerId,
       threadId: thread._id,
       runId,
       seq,
