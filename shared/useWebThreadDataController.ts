@@ -9,6 +9,7 @@ import {
   listConvexCloudThreadMessagesPageByThreadKey,
   listConvexCloudThreadRows,
 } from "./cloudThreadsRead";
+import type { RuntimeEngine } from "./runtimeEngine";
 
 const MAX_DERIVED_THREAD_TITLES_PER_LIST = 120;
 const TITLE_DERIVATION_CHUNK_SIZE = 25;
@@ -49,6 +50,7 @@ type ThreadRecord = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: RuntimeEngine | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -147,6 +149,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
           id: row.id,
           title: row.title ?? null,
           model_id: row.model_id ?? null,
+          runtime_engine: row.runtime_engine ?? null,
           project_id: row.project_id ?? null,
           community_id: row.community_id ?? null,
           context_version: Number.isFinite(row.context_version) ? row.context_version : 0,

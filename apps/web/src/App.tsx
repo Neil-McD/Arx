@@ -685,6 +685,7 @@ type ThreadRecord = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: "polynet" | "codex" | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;

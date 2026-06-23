@@ -1,4 +1,5 @@
 import { type AuthSessionLike } from "./authSession";
+import { normalizeRuntimeEngine, type RuntimeEngine } from "./runtimeEngine";
 import {
   bootstrapConvexAuthenticatedClient,
   hasConvexUrl,
@@ -11,6 +12,7 @@ type ConvexThreadRow = {
   threadKey?: string | null;
   title?: string | null;
   modelId?: string | null;
+  runtimeEngine?: string | null;
   projectId?: string | null;
   communityId?: string | null;
   contextVersion?: number | null;
@@ -62,6 +64,7 @@ export type CloudThreadTransportRow = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: RuntimeEngine | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -165,6 +168,7 @@ function mapConvexThreadRow(row: ConvexThreadRow): CloudThreadTransportRow | nul
     id,
     title: typeof row.title === "string" ? row.title : null,
     model_id: typeof row.modelId === "string" ? row.modelId : null,
+    runtime_engine: normalizeRuntimeEngine(row.runtimeEngine),
     project_id: typeof row.projectId === "string" ? row.projectId : null,
     community_id: typeof row.communityId === "string" ? row.communityId : null,
     context_version: Math.max(0, Math.floor(toFiniteNumber(row.contextVersion, 0))),

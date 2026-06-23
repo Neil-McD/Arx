@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
+import { DEFAULT_ACTIVE_RUNTIME_ENGINE, type RuntimeEngine } from "../../../../shared/runtimeEngine";
 import { useWebThreadMutationController } from "../../../../shared/useWebThreadMutationController";
 import {
   emitWorkspaceEvent,
@@ -13,6 +14,7 @@ type ThreadLike = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: RuntimeEngine | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -64,6 +66,7 @@ type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> =
   toEpochSeconds: (value: string) => number;
   activeCommunityId: string | null;
   activeModelId: string | null;
+  activeRuntimeEngine?: RuntimeEngine | null;
   modelToggles: ModelToggle[];
   defaultActiveModelId: string;
 };
@@ -93,6 +96,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     activeCommunityId: params.activeCommunityId,
     activeProjectId: params.project.state.activeProjectId,
     activeModelId: params.activeModelId,
+    activeRuntimeEngine: params.activeRuntimeEngine ?? DEFAULT_ACTIVE_RUNTIME_ENGINE,
     modelToggles: params.modelToggles,
     threads: params.threads,
     defaultActiveModelId: params.defaultActiveModelId,
@@ -512,6 +516,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     threadMutation: {
       ...rawThreadMutation,
       createThread,
+      updateThreadRuntimeEngine: rawThreadMutation.updateThreadRuntimeEngine,
       updateThreadModel,
       maybeSetThreadTitleFromText,
       setThreadCommunityLens,

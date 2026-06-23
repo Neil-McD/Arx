@@ -12,12 +12,17 @@ import {
   fetchCloudThreadContextById,
   setCloudThreadContext,
 } from "./cloudThreadContextGateway";
+import {
+  normalizeActiveWorkspaceRuntimeEngine,
+  type RuntimeEngine,
+} from "./runtimeEngine";
 import { syncThreadCommunityLensCloud, type ThreadContextCloudState } from "./threadContextCloudSync";
 
 type ThreadRecord = {
   id: string;
   title: string | null;
   model_id: string | null;
+  runtime_engine: RuntimeEngine | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -41,6 +46,7 @@ type UseWebThreadMutationControllerArgs<SessionT> = {
   activeCommunityId: string | null;
   activeProjectId?: string | null;
   activeModelId: string | null;
+  activeRuntimeEngine?: RuntimeEngine | null;
   modelToggles: ModelToggle[];
   threads: ThreadRecord[];
   defaultActiveModelId: string;
@@ -75,6 +81,9 @@ export function useWebThreadMutationController<SessionT>(
       enabled.find((toggle) => toggle.id === current.defaultActiveModelId)?.id ||
       enabled[0]?.id ||
       current.defaultActiveModelId;
+    const preferredRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(
+      current.activeRuntimeEngine,
+    );
     const projectId = (current.activeProjectId ?? "").trim() || null;
     try {
       await ensureCloudThreadRecord({
@@ -83,6 +92,7 @@ export function useWebThreadMutationController<SessionT>(
           threadId: id,
           title: null,
           modelId: preferredModelId,
+          runtimeEngine: preferredRuntimeEngine,
           projectId: projectId || null,
           communityId,
           contextVersion: 0,
@@ -96,6 +106,7 @@ export function useWebThreadMutationController<SessionT>(
         id: convexRow?.id ?? id,
         title: convexRow?.title ?? null,
         model_id: convexRow?.model_id ?? preferredModelId,
+        runtime_engine: convexRow?.runtime_engine ?? preferredRuntimeEngine,
         project_id: convexRow?.project_id ?? projectId,
         community_id: convexRow?.community_id ?? communityId,
         context_version: Number.isFinite(convexRow?.context_version) ? convexRow!.context_version : 0,
@@ -113,6 +124,39 @@ export function useWebThreadMutationController<SessionT>(
       return null;
     }
   }, []);
+
+  const updateThreadRuntimeEngine = useCallback(
+    async (threadId: string, runtimeEngine: RuntimeEngine, session: SessionT): Promise<void> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (!usableSession) return;
+      const normalizedRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(runtimeEngine);
+      const hasConvex = isConvexCloudThreadsEnabled();
+      if (!hasConvex) {
+        console.warn("Convex is required for cloud thread runtime engine updates in this build.");
+        return;
+      }
+      try {
+        await updateCloudThreadRecord({
+          session: usableSession as any,
+          thread: {
+            threadId,
+            runtimeEngine: normalizedRuntimeEngine,
+          },
+        });
+        current.setThreads((prev) =>
+          prev.map((thread) =>
+            thread.id === threadId
+              ? { ...thread, runtime_engine: normalizedRuntimeEngine }
+              : thread,
+          ),
+        );
+      } catch (error) {
+        console.warn("Failed to update Convex thread runtime engine:", error);
+      }
+    },
+    [],
+  );
 
   const updateThreadModel = useCallback(async (threadId: string, modelId: string, session: SessionT): Promise<void> => {
     const current = argsRef.current;
@@ -238,6 +282,7 @@ export function useWebThreadMutationController<SessionT>(
 
   return {
     createThread,
+    updateThreadRuntimeEngine,
     updateThreadModel,
     maybeSetThreadTitleFromText,
     setThreadCommunityLens,

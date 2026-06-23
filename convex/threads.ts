@@ -15,6 +15,10 @@ import {
 } from "../shared/runtimeWorkingStateLedger";
 import { requireCommunityChatAccess } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
+import {
+  normalizeRuntimeEngine,
+  type RuntimeEngine,
+} from "../shared/runtimeEngine";
 
 type ThreadLike = {
   _id: any;
@@ -24,6 +28,7 @@ type ThreadLike = {
   projectId?: any;
   communityId?: string;
   modelId?: string;
+  runtimeEngine?: RuntimeEngine;
   contextVersion?: number;
   workingState?: ThreadWorkingStateLike;
   latestUserVisibleCompletedRunId?: string;
@@ -74,6 +79,7 @@ type RuntimeRunLike = {
   communityContextVersion?: number;
   modelId?: string;
   engineId?: string;
+  runtimeEngine?: RuntimeEngine;
   executionMode?: string;
   sandboxMode?: string;
   contractName?: string;
@@ -297,6 +303,10 @@ function normalizeThreadTitle(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!value) return undefined;
   return value.slice(0, 140);
+}
+
+function normalizeOptionalRuntimeEngine(raw: unknown): RuntimeEngine | undefined {
+  return normalizeRuntimeEngine(raw) ?? undefined;
 }
 
 async function validateThreadCommunityLensAccess(args: {
@@ -1222,6 +1232,7 @@ export const ensureCloudThread = mutation({
     title: v.optional(v.string()),
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
@@ -1235,6 +1246,7 @@ export const ensureCloudThread = mutation({
     });
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
+    const requestedRuntimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
     const requestedProjectId = args.projectId
       ? await validateOwnedCloudProjectId({
           ctx,
@@ -1254,6 +1266,9 @@ export const ensureCloudThread = mutation({
       }
       if (typeof args.modelId === "string" && args.modelId.trim() && existing.modelId !== args.modelId.trim()) {
         patch.modelId = args.modelId.trim();
+      }
+      if (requestedRuntimeEngine && existing.runtimeEngine !== requestedRuntimeEngine) {
+        patch.runtimeEngine = requestedRuntimeEngine;
       }
       if (
         typeof args.contextVersion === "number" &&
@@ -1282,6 +1297,7 @@ export const ensureCloudThread = mutation({
       ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
       communityId: initialCommunityId,
       modelId: String(args.modelId ?? "").trim() || undefined,
+      runtimeEngine: requestedRuntimeEngine,
       contextVersion:
         typeof args.contextVersion === "number" && Number.isFinite(args.contextVersion)
           ? Math.floor(args.contextVersion)
@@ -1304,6 +1320,7 @@ export const updateCloudThread = mutation({
     title: v.optional(v.string()),
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     projectId: v.optional(v.id("cloudProjects")),
     lastSeq: v.optional(v.number()),
     archivedAt: v.optional(v.union(v.number(), v.null())),
@@ -1336,6 +1353,8 @@ export const updateCloudThread = mutation({
     }
     if (args.titleSource) patch.titleSource = args.titleSource;
     if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
+    const requestedRuntimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
+    if (requestedRuntimeEngine) patch.runtimeEngine = requestedRuntimeEngine;
     if (requestedProjectId) patch.projectId = requestedProjectId;
     if (typeof args.lastSeq === "number" && Number.isFinite(args.lastSeq)) {
       patch.lastSeq = Math.max(0, Math.floor(args.lastSeq));
@@ -1964,6 +1983,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
     communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     executionMode: v.optional(v.string()),
     sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
@@ -2048,6 +2068,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
     const modelId = String(args.modelId ?? "").trim() || undefined;
     const engineId = String(args.engineId ?? "").trim() || undefined;
+    const runtimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
     const projectId = args.projectId;
     const communityId = runtimeCommunityLens.communityId;
     const communityContextVersion = runtimeCommunityLens.communityContextVersion;
@@ -2080,6 +2101,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
       communityContextVersion,
       modelId,
       engineId,
+      runtimeEngine,
       executionMode,
       sandboxMode,
       contractName,
@@ -2114,6 +2136,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
         community_context_version: communityContextVersion ?? null,
         model_id: modelId ?? null,
         engine_id: engineId ?? null,
+        runtime_engine: runtimeEngine ?? null,
         execution_mode: executionMode,
         sandbox_mode: sandboxMode ?? null,
         contract_name: contractName,

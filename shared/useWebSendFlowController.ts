@@ -10,8 +10,10 @@ import {
   mapRequestedFundingSourceToInferenceSource,
   persistGuestThreadStorageFromMessages,
   resolvePreferredModelSelectionFromArgs,
+  resolvePreferredRuntimeEngineFromArgs,
   showAccountLimitInfoIfNeeded,
   syncThreadModelSelectionInState,
+  syncThreadRuntimeEngineSelectionInState,
 } from "./webSendFlowCore";
 
 function resolveAuthenticatedTurnRuntimeFlags(): {
@@ -37,6 +39,11 @@ export function useWebSendFlowController<
 
   const resolvePreferredModelSelection = useCallback(() => resolvePreferredModelSelectionFromArgs(argsRef.current), []);
 
+  const resolvePreferredRuntimeEngine = useCallback(
+    (threadId: string) => resolvePreferredRuntimeEngineFromArgs(argsRef.current, threadId),
+    [],
+  );
+
   const persistGuestFromMessages = useCallback((messages: ThreadMessageT[]): void => {
     persistGuestThreadStorageFromMessages(argsRef.current, messages);
   }, []);
@@ -46,6 +53,13 @@ export function useWebSendFlowController<
       syncThreadModelSelectionInState(argsRef.current, threadId, modelId, session);
     },
     [],
+  );
+
+  const syncThreadRuntimeEngineSelection = useCallback(
+    (threadId: string, runtimeEngine: ReturnType<typeof resolvePreferredRuntimeEngine>, session: SessionT | null): void => {
+      syncThreadRuntimeEngineSelectionInState(argsRef.current, threadId, runtimeEngine, session);
+    },
+    [resolvePreferredRuntimeEngine],
   );
 
   const isThreadBusy = useCallback((threadId: string | null): boolean => {
@@ -206,6 +220,11 @@ export function useWebSendFlowController<
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
+      const preferredRuntimeEngine = resolvePreferredRuntimeEngine(threadId);
+      const currentThreadRuntimeEngine = current.threads.find((thread) => thread.id === threadId)?.runtime_engine;
+      if (currentThreadRuntimeEngine !== preferredRuntimeEngine) {
+        syncThreadRuntimeEngineSelection(threadId, preferredRuntimeEngine, usableSession);
+      }
 
       await current.ensureWorkspaceThreadLensBeforeSend(threadId, usableSession);
       await current.maybeSetThreadTitleFromText(threadId, text, usableSession);
@@ -296,6 +315,7 @@ export function useWebSendFlowController<
         userMessageKey: messageId,
         systemPrompt: null,
         inferenceSource,
+        runtimeEngine: preferredRuntimeEngine,
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: messageId,
@@ -333,7 +353,9 @@ export function useWebSendFlowController<
     maybeShowAccountLimitInfo,
     persistGuestFromMessages,
     resolvePreferredModelSelection,
+    resolvePreferredRuntimeEngine,
     syncThreadModelSelection,
+    syncThreadRuntimeEngineSelection,
   ]);
 
   const retryLastTurn = useCallback(async () => {
@@ -376,6 +398,11 @@ export function useWebSendFlowController<
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
+      const preferredRuntimeEngine = resolvePreferredRuntimeEngine(threadId);
+      const currentThreadRuntimeEngine = current.threads.find((thread) => thread.id === threadId)?.runtime_engine;
+      if (currentThreadRuntimeEngine !== preferredRuntimeEngine) {
+        syncThreadRuntimeEngineSelection(threadId, preferredRuntimeEngine, usableSession);
+      }
 
       const latestUserText = current.extractTextFromContentJson(
         currentThreadMessages[currentThreadMessages.length - 1]?.content_json,
@@ -390,6 +417,7 @@ export function useWebSendFlowController<
         inferenceSource: mapRequestedFundingSourceToInferenceSource(
           preferredModelSelection.fundingSource,
         ),
+        runtimeEngine: preferredRuntimeEngine,
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
@@ -408,7 +436,9 @@ export function useWebSendFlowController<
     isThreadBusy,
     maybeShowAccountLimitInfo,
     resolvePreferredModelSelection,
+    resolvePreferredRuntimeEngine,
     syncThreadModelSelection,
+    syncThreadRuntimeEngineSelection,
   ]);
 
   const regenerateLastTurn = useCallback(async () => {
@@ -450,6 +480,11 @@ export function useWebSendFlowController<
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
+      const preferredRuntimeEngine = resolvePreferredRuntimeEngine(threadId);
+      const currentThreadRuntimeEngine = current.threads.find((thread) => thread.id === threadId)?.runtime_engine;
+      if (currentThreadRuntimeEngine !== preferredRuntimeEngine) {
+        syncThreadRuntimeEngineSelection(threadId, preferredRuntimeEngine, usableSession);
+      }
 
       let messagesForTurn = currentThreadMessages;
 
@@ -484,6 +519,7 @@ export function useWebSendFlowController<
         inferenceSource: mapRequestedFundingSourceToInferenceSource(
           preferredModelSelection.fundingSource,
         ),
+        runtimeEngine: preferredRuntimeEngine,
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
@@ -502,7 +538,9 @@ export function useWebSendFlowController<
     isThreadBusy,
     maybeShowAccountLimitInfo,
     resolvePreferredModelSelection,
+    resolvePreferredRuntimeEngine,
     syncThreadModelSelection,
+    syncThreadRuntimeEngineSelection,
   ]);
 
   return {

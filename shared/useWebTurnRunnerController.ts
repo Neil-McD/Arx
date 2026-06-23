@@ -336,6 +336,7 @@ export function useWebTurnRunnerController<
           threadId,
           title: thread?.title ?? null,
           modelId: thread?.model_id ?? null,
+          runtimeEngine: thread?.runtime_engine ?? null,
           projectId: thread?.project_id ?? null,
           communityId: thread?.community_id ?? null,
           contextVersion:
@@ -739,6 +740,7 @@ export function useWebTurnRunnerController<
               stream: streamRuntimeTurn,
               surface: "web",
               model_id: params.preferredModelId,
+              ...(params.runtimeEngine ? { runtime_engine: params.runtimeEngine } : null),
               requested_funding_source: params.requestedFundingSource,
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,

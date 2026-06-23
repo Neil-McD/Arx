@@ -1,5 +1,6 @@
 import { api, internal } from "./_generated/api";
 import type { RuntimeTurnContextSnapshotV1 } from "../shared/runtimeTurnContextPacket";
+import type { RuntimeEngine } from "../shared/runtimeEngine";
 
 type RuntimeLane = "public" | "platform" | "chatgpt";
 type RuntimeInferenceSource = "free" | "platform" | "user_key" | "chatgpt";
@@ -55,6 +56,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
   runId: string;
   requestId: string;
   lane: RuntimeLane;
+  runtimeEngine: RuntimeEngine;
   requestedModelId: string | null;
   jsonResponse: JsonResponseFn;
   sseResponse: SseResponseFn;
@@ -66,6 +68,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
         run_id: params.runId,
         request_id: params.requestId,
         lane: params.lane,
+        runtime_engine: params.runtimeEngine,
         engine_id: "runtime_convex",
         model_id: params.requestedModelId,
         inference_source: payload.resolvedInferenceSource,
@@ -89,6 +92,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
           request_id: params.requestId,
           stage: "start",
           lane: params.lane,
+          runtime_engine: params.runtimeEngine,
           engine_id: "runtime_convex",
           model_id: params.requestedModelId,
           inference_source: payload.resolvedInferenceSource,
@@ -115,6 +119,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
           request_id: params.requestId,
           stage: "done",
           lane: params.lane,
+          runtime_engine: params.runtimeEngine,
           engine_id: "runtime_convex",
           model_id: params.requestedModelId,
           inference_source: payload.resolvedInferenceSource,

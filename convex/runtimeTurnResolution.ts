@@ -23,6 +23,11 @@ import {
   parseRequestedFundingSource,
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
+import {
+  RUNTIME_ENGINE_POLYNET,
+  normalizeRuntimeEngine,
+  type RuntimeEngine,
+} from "../shared/runtimeEngine";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -31,6 +36,7 @@ export type RuntimeTurnInput = {
   model_id?: string | null;
   surface?: "web";
   requested_agentic_tools?: boolean | null;
+  runtime_engine?: string | null;
   requested_funding_source?:
     | "demo_public"
     | "user_key"
@@ -80,6 +86,7 @@ export type RuntimeTurnResolution = {
     communityId?: unknown;
     contextVersion?: unknown;
     projectId?: unknown;
+    runtimeEngine?: unknown;
     workingState?: ThreadWorkingStatePrompt | null;
   };
   conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -90,6 +97,7 @@ export type RuntimeTurnResolution = {
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
   providerApiKeyOverride: string | null;
+  runtimeEngine: RuntimeEngine;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
   runtimeCommunitySlug: string | null;
@@ -106,6 +114,22 @@ export type RuntimeTurnResolution = {
 
 function resolveRequestedAgenticTools(raw: unknown): boolean {
   return raw === true;
+}
+
+function resolveRuntimeEngineSelection(params: {
+  requestedRuntimeEngine: unknown;
+  storedRuntimeEngine: unknown;
+}): { ok: true; runtimeEngine: RuntimeEngine } | { ok: false } {
+  const requestedRaw = String(params.requestedRuntimeEngine ?? "").trim();
+  if (requestedRaw) {
+    const requested = normalizeRuntimeEngine(requestedRaw);
+    return requested ? { ok: true, runtimeEngine: requested } : { ok: false };
+  }
+  return {
+    ok: true,
+    runtimeEngine:
+      normalizeRuntimeEngine(params.storedRuntimeEngine) ?? RUNTIME_ENGINE_POLYNET,
+  };
 }
 
 function readEnv(name: string): string {
@@ -301,7 +325,14 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       ownerId: actor.dbUserId,
       threadKey,
     },
-  )) as { _id?: string; communityId?: unknown; contextVersion?: unknown; projectId?: unknown; workingState?: unknown } | null;
+  )) as {
+    _id?: string;
+    communityId?: unknown;
+    contextVersion?: unknown;
+    projectId?: unknown;
+    runtimeEngine?: unknown;
+    workingState?: unknown;
+  } | null;
   if (!ownedThread?._id) {
     return {
       ok: false,
@@ -310,6 +341,22 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         code: "thread_not_found",
         error: "thread_not_found",
         message: "Cloud thread not found.",
+      }),
+    };
+  }
+
+  const runtimeEngineSelection = resolveRuntimeEngineSelection({
+    requestedRuntimeEngine: input.runtime_engine,
+    storedRuntimeEngine: ownedThread.runtimeEngine,
+  });
+  if (!runtimeEngineSelection.ok) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "unsupported_runtime_engine",
+        error: "unsupported_runtime_engine",
+        message: "runtime_engine must be either polynet or codex.",
       }),
     };
   }
@@ -537,6 +584,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       stream,
       inferenceSource,
       providerApiKeyOverride,
+      runtimeEngine: runtimeEngineSelection.runtimeEngine,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,

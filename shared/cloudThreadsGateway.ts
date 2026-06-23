@@ -4,11 +4,13 @@ import {
   bootstrapGatewayAuthContextIfAvailable,
   readGatewayConvexIdMaybe,
 } from "./cloudGateway";
+import type { RuntimeEngine } from "./runtimeEngine";
 
 export type CloudThreadRecordInput = {
   threadId: string;
   title?: string | null;
   modelId?: string | null;
+  runtimeEngine?: RuntimeEngine | null;
   projectId?: string | null;
   communityId?: string | null;
   contextVersion?: number | null;
@@ -56,6 +58,7 @@ export async function ensureCloudThreadRecord(params: {
     title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
+    runtimeEngine: String(params.thread.runtimeEngine ?? "").trim() || undefined,
     projectId: maybeProjectId ?? undefined,
     communityId: String(params.thread.communityId ?? "").trim() || undefined,
     contextVersion:
@@ -96,6 +99,7 @@ export async function updateCloudThreadRecord(params: {
     title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
+    runtimeEngine: String(params.thread.runtimeEngine ?? "").trim() || undefined,
     projectId: maybeProjectId ?? undefined,
     nowMs: params.nowMs ?? Date.now(),
   });

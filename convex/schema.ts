@@ -2547,6 +2547,7 @@ export default defineSchema({
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     contextVersion: v.optional(v.number()),
     workingState: v.optional(
       v.object({
@@ -2627,6 +2628,7 @@ export default defineSchema({
     communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     executionMode: v.optional(v.string()),
     sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),

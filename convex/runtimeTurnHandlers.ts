@@ -31,6 +31,11 @@ import {
   composePlatformChatRuntimeSystemPrompt,
 } from "../shared/runtimePrompt";
 import {
+  buildCodexHarnessToolPolicyReceipt,
+  resolveCodexHarnessToolPolicy,
+} from "../shared/harnessToolPolicy";
+import {
+  DEFAULT_RUNTIME_KERNEL_BUDGET,
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
 import {
@@ -55,11 +60,21 @@ import {
   RuntimeTurnInput,
 } from "./runtimeTurnResolution";
 import {
+  RUNTIME_ENGINE_CODEX,
+} from "../shared/runtimeEngine";
+import {
+  POLYNET_CODEX_WORKER_CONTRACT_NAME,
+  POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+  POLYNET_CODEX_WORKER_ENGINE_ID,
+  startPolynetCodexWorkerRun,
+} from "./polynetCodexWorkerBridge";
+import {
   ensureRuntimeRunStarted,
   lookupExistingRuntimeReplay,
   persistRuntimeAssistantMessage,
   persistRuntimeUserMessage,
 } from "./runtimeTurnPersistence";
+import { normalizeRuntimeSkillResolution } from "./runtimeHarnessShaping";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
 
@@ -449,6 +464,7 @@ export async function handleRuntimeTurnRequest(args: {
       stream,
       inferenceSource,
       providerApiKeyOverride,
+      runtimeEngine,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,
@@ -482,6 +498,20 @@ export async function handleRuntimeTurnRequest(args: {
       sessionId: String(ownedThread._id),
       threadId: String(ownedThread._id),
     };
+    const runtimeEngineId =
+      runtimeEngine === RUNTIME_ENGINE_CODEX
+        ? POLYNET_CODEX_WORKER_ENGINE_ID
+        : "runtime_turn";
+    const runtimeContractName =
+      runtimeEngine === RUNTIME_ENGINE_CODEX
+        ? POLYNET_CODEX_WORKER_CONTRACT_NAME
+        : runtimeExecutionMode === "agentic"
+          ? "capability_composed_tools_v1"
+          : "capability_composed_chat_v1";
+    const runtimeContractVersion =
+      runtimeEngine === RUNTIME_ENGINE_CODEX
+        ? POLYNET_CODEX_WORKER_CONTRACT_VERSION
+        : "v1";
     const persistVisibleUserMessage = true;
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
@@ -496,6 +526,10 @@ export async function handleRuntimeTurnRequest(args: {
       requestedModelId,
       lane,
       inferenceSource,
+      runtimeEngine,
+      engineId: runtimeEngineId,
+      contractName: runtimeContractName,
+      contractVersion: runtimeContractVersion,
       executionMode: runtimeExecutionMode,
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
@@ -510,14 +544,12 @@ export async function handleRuntimeTurnRequest(args: {
       communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
       communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
       modelId: requestedModelId,
-      engineId: "runtime_turn",
+      engineId: runtimeEngineId,
+      runtimeEngine,
       executionMode: runtimeExecutionMode,
       sandboxMode: runtimeSandboxMode,
-      contractName:
-        runtimeExecutionMode === "agentic"
-          ? "capability_composed_tools_v1"
-          : "capability_composed_chat_v1",
-      contractVersion: "v1",
+      contractName: runtimeContractName,
+      contractVersion: runtimeContractVersion,
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
@@ -679,6 +711,7 @@ export async function handleRuntimeTurnRequest(args: {
       runId,
       requestId,
       lane,
+      runtimeEngine,
       requestedModelId,
       jsonResponse: (_req, status, payload) =>
         runtimeJsonResponse(status, payload as Record<string, unknown>),
@@ -894,6 +927,7 @@ export async function handleRuntimeTurnRequest(args: {
         project_id: runtimeProjectId ?? null,
         community_id: runtimeCommunityId ?? null,
         community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
+        runtime_engine: runtimeEngine,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
       },
@@ -903,12 +937,160 @@ export async function handleRuntimeTurnRequest(args: {
       eventKey: `${runId}:tool_policy_resolved:1`,
       payload: {
         run_id: runId,
+        runtime_engine: runtimeEngine,
         allowed_tool_names: allowedToolNames,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
       },
     });
-    if (runtimeExecutionMode === "agentic") {
+    if (runtimeEngine === RUNTIME_ENGINE_CODEX) {
+      runtimeTurnStage = "codex_worker_bridge";
+      const now = new Date();
+      const runtimeTimeZone = "UTC";
+      const codexSkillResolution = normalizeRuntimeSkillResolution(
+        await ctx.runQuery(
+          internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal as any,
+          {
+            userId: actor.dbUserId as any,
+            authSubject: actor.authSubject,
+            communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
+            messages: conversationMessages.map((message) => ({
+              role: message.role,
+              content: message.content,
+            })),
+          },
+        ),
+      );
+      const codexCommunityResourceLane =
+        codexSkillResolution.community_resource_lane;
+      const codexHarnessPolicy = resolveCodexHarnessToolPolicy({
+        polynetPlatformToolProjection: {
+          hasCommunity: Boolean(runtimeCommunityId),
+          communityResourceLane: codexCommunityResourceLane,
+          canModerateCommunity: allowedToolNames.includes("community_write"),
+          canManageCommunity: false,
+          canManageResources: codexCommunityResourceLane.can_use_resource_builder,
+        },
+        workspaceServeAvailable: true,
+        computerAdaptersAvailable: inferenceSource === "chatgpt",
+      });
+      await appendRunEvent({
+        eventType: "codex_harness_policy_resolved",
+        eventKey: `${runId}:codex_harness_policy_resolved:1`,
+        payload: {
+          run_id: runId,
+          runtime_engine: runtimeEngine,
+          community_resource_lane: codexCommunityResourceLane,
+          policy: buildCodexHarnessToolPolicyReceipt(codexHarnessPolicy),
+        },
+      });
+      const codexRuntimeContext = (
+        await loadRuntimeTurnContextPacketForRun({
+          ctx,
+          ownerId: actor.dbUserId,
+          threadId: ownedThread._id,
+          projectId: runtimeProjectId,
+          authSubject: actor.authSubject,
+          runId,
+          latestUserText,
+          runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
+          threadWorkingState: ownedThread.workingState ?? null,
+          summarizeCurrentRunEvents: true,
+          runtimeStop: null,
+        })
+      ).packet;
+      const codexProjectContext = codexRuntimeContext.projectContext ?? null;
+      const codexBridgeResult = await startPolynetCodexWorkerRun({
+        ownerId: actor.dbUserId,
+        threadId: String(ownedThread._id),
+        runId,
+        requestId,
+        runtimeEngine,
+        modelId: requestedModelId,
+        lane,
+        inferenceSource,
+        allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames,
+        conversationMessages,
+        latestUserText,
+        promptParams: {
+          loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+          allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames,
+          communityResourceLane: codexCommunityResourceLane,
+          harnessName: "chat_tools",
+          communityId: runtimeCommunityId,
+          communityName: runtimeCommunityName,
+          communitySlug: runtimeCommunitySlug,
+          communityOneLiner: runtimeCommunityOneLiner,
+          communityAbout: runtimeCommunityAbout,
+          communitySystemPrompt: runtimeCommunitySystemPrompt,
+          agentName: runtimeAgentProfile.agentName,
+          agentSoul: runtimeAgentProfile.agentSoul,
+          projectLabel: codexProjectContext?.label ?? null,
+          projectDescription: codexProjectContext?.description ?? null,
+          runtimeTurnContext: codexRuntimeContext,
+          currentDateTimeIso: now.toISOString(),
+          currentDateLabel: new Intl.DateTimeFormat("en-US", {
+            dateStyle: "full",
+            timeStyle: "long",
+            timeZone: runtimeTimeZone,
+          }).format(now),
+          currentTimeZone: runtimeTimeZone,
+          conversationMessages,
+          latestUserText,
+        },
+      });
+      await appendRunEvent({
+        eventType: "codex_runtime_route_selected",
+        eventKey: `${runId}:codex_runtime_route_selected:1`,
+        payload: {
+          run_id: runId,
+          runtime_engine: runtimeEngine,
+          engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+          contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+          contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+          worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
+        },
+      });
+      if (!codexBridgeResult.ok) {
+        await appendRunEvent({
+          eventType: "codex_worker_bridge_unavailable",
+          eventKey: `${runId}:codex_worker_bridge_unavailable:1`,
+          payload: {
+            run_id: runId,
+            runtime_engine: runtimeEngine,
+            engine_id: codexBridgeResult.engineId,
+            contract_name: codexBridgeResult.contractName,
+            contract_version: codexBridgeResult.contractVersion,
+            worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
+            disabled_reason: codexBridgeResult.disabledReason,
+            error_code: codexBridgeResult.code,
+            prompt_projection_receipt:
+              codexBridgeResult.promptProjectionReceipt,
+          },
+        });
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: codexBridgeResult.code,
+          errorCode: codexBridgeResult.code,
+          errorMessage: codexBridgeResult.message,
+        });
+        return runtimeJsonResponse(codexBridgeResult.status, {
+          ok: false,
+          code: codexBridgeResult.code,
+          error: codexBridgeResult.code,
+          message: codexBridgeResult.message,
+          run_id: runId,
+          runtime_engine: runtimeEngine,
+          engine_id: codexBridgeResult.engineId,
+          contract_name: codexBridgeResult.contractName,
+          contract_version: codexBridgeResult.contractVersion,
+          worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
+        });
+      }
+      content = codexBridgeResult.assistantText;
+      promptTokens = codexBridgeResult.promptTokens;
+      completionTokens = codexBridgeResult.completionTokens;
+    } else if (runtimeExecutionMode === "agentic") {
       if (stream) {
         return runtimeSseResponse(async (writer) => {
           let streamedContent = "";
@@ -950,6 +1132,7 @@ export async function handleRuntimeTurnRequest(args: {
             data: {
               run_id: runId,
               lane,
+              runtime_engine: runtimeEngine,
               engine_id: "runtime_convex",
               model_id: requestedModelId,
               inference_source: streamedInferenceSource,
@@ -1108,6 +1291,7 @@ export async function handleRuntimeTurnRequest(args: {
                 data: {
                   run_id: runId,
                   lane,
+                  runtime_engine: runtimeEngine,
                   engine_id: "runtime_convex",
                   model_id: requestedModelId,
                   inference_source: streamedInferenceSource,
@@ -1234,6 +1418,7 @@ export async function handleRuntimeTurnRequest(args: {
             data: {
               run_id: runId,
               lane,
+              runtime_engine: runtimeEngine,
               engine_id: "runtime_convex",
               model_id: requestedModelId,
               inference_source: streamedInferenceSource,
@@ -1485,6 +1670,7 @@ export async function handleRuntimeTurnRequest(args: {
             data: {
               run_id: runId,
               lane,
+              runtime_engine: runtimeEngine,
               engine_id: "runtime_convex",
               model_id: requestedModelId,
               inference_source: streamedInferenceSource,
@@ -1720,6 +1906,7 @@ export async function handleRuntimeTurnRequest(args: {
             data: {
               run_id: runId,
               lane,
+              runtime_engine: runtimeEngine,
               engine_id: "runtime_convex",
               model_id: requestedModelId,
               inference_source: streamedInferenceSource,
