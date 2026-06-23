@@ -8,12 +8,23 @@ import {
   POLYNET_CODEX_WORKER_ENGINE_ID,
   type PolynetCodexWorkerTransportPayload,
 } from "../../../convex/polynetCodexWorkerBridge.ts";
+import {
+  runCodexAppServerRequest,
+  type CodexAppServerClientConfig,
+} from "./codexAppServerClient.ts";
 
 type JsonRecord = Record<string, unknown>;
 
+export type PolynetCodexWorkerExecutionMode =
+  | "disabled"
+  | "static"
+  | "app_server";
+
 export type PolynetCodexWorkerServiceConfig = {
   authToken: string | null;
+  executionMode: PolynetCodexWorkerExecutionMode;
   staticAssistantText: string | null;
+  appServer: CodexAppServerClientConfig | null;
   maxBodyBytes: number;
 };
 
@@ -23,6 +34,9 @@ export type PolynetCodexWorkerServiceResponse = {
 };
 
 const DEFAULT_MAX_BODY_BYTES = 1_000_000;
+const DEFAULT_APP_SERVER_TIMEOUT_MS = 120_000;
+const MIN_APP_SERVER_TIMEOUT_MS = 1_000;
+const MAX_APP_SERVER_TIMEOUT_MS = 300_000;
 
 function jsonResponse(
   response: ServerResponse,
@@ -45,10 +59,50 @@ function readPositiveIntegerEnv(name: string, fallback: number): number {
   return Math.floor(parsed);
 }
 
+function normalizeBoundedMs(value: string | null, fallback: number): number {
+  const parsed = Number(value ?? "");
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(
+    MIN_APP_SERVER_TIMEOUT_MS,
+    Math.min(MAX_APP_SERVER_TIMEOUT_MS, Math.floor(parsed)),
+  );
+}
+
+function normalizeExecutionMode(raw: string | null): PolynetCodexWorkerExecutionMode {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "static") return "static";
+  if (value === "app_server") return "app_server";
+  return "disabled";
+}
+
+function isValidHttpUrl(value: string | null): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function readPolynetCodexWorkerServiceConfig(): PolynetCodexWorkerServiceConfig {
+  const appServerUrl = readEnvValue("POLYNET_CODEX_APP_SERVER_URL");
   return {
     authToken: readEnvValue("POLYNET_CODEX_WORKER_AUTH_TOKEN"),
+    executionMode: normalizeExecutionMode(
+      readEnvValue("POLYNET_CODEX_WORKER_EXECUTION_MODE"),
+    ),
     staticAssistantText: readEnvValue("POLYNET_CODEX_WORKER_STATIC_ASSISTANT_TEXT"),
+    appServer: isValidHttpUrl(appServerUrl)
+      ? {
+          url: appServerUrl as string,
+          authToken: readEnvValue("POLYNET_CODEX_APP_SERVER_AUTH_TOKEN"),
+          timeoutMs: normalizeBoundedMs(
+            readEnvValue("POLYNET_CODEX_APP_SERVER_TIMEOUT_MS"),
+            DEFAULT_APP_SERVER_TIMEOUT_MS,
+          ),
+        }
+      : null,
     maxBodyBytes: readPositiveIntegerEnv(
       "POLYNET_CODEX_WORKER_MAX_BODY_BYTES",
       DEFAULT_MAX_BODY_BYTES,
@@ -230,7 +284,7 @@ export async function runPolynetCodexWorkerRequest(
   payload: PolynetCodexWorkerTransportPayload,
   config: PolynetCodexWorkerServiceConfig,
 ): Promise<PolynetCodexWorkerServiceResponse> {
-  if (config.staticAssistantText) {
+  if (config.executionMode === "static" && config.staticAssistantText) {
     return {
       status: 200,
       body: {
@@ -238,6 +292,59 @@ export async function runPolynetCodexWorkerRequest(
         assistant_text: config.staticAssistantText,
         prompt_tokens: null,
         completion_tokens: null,
+        engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+        contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+        contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+        run_id: payload.run_id,
+        request_id: payload.request_id,
+      },
+    };
+  }
+  if (config.executionMode === "app_server") {
+    if (!config.appServer) {
+      return {
+        status: 503,
+        body: {
+          ok: false,
+          code: "codex_app_server_not_configured",
+          message:
+            "Codex worker app-server mode is enabled, but POLYNET_CODEX_APP_SERVER_URL is missing or invalid.",
+          retryable: false,
+          engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+          contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+          contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+          run_id: payload.run_id,
+          request_id: payload.request_id,
+        },
+      };
+    }
+    const result = await runCodexAppServerRequest({
+      payload,
+      config: config.appServer,
+    });
+    if (result.ok) {
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          assistant_text: result.assistantText,
+          prompt_tokens: result.promptTokens,
+          completion_tokens: result.completionTokens,
+          engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+          contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+          contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+          run_id: payload.run_id,
+          request_id: payload.request_id,
+        },
+      };
+    }
+    return {
+      status: result.status,
+      body: {
+        ok: false,
+        code: result.code,
+        message: result.message,
+        retryable: result.retryable,
         engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
         contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
         contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
@@ -334,7 +441,13 @@ export function createPolynetCodexWorkerServer(
           contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
           contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
           auth_required: Boolean(config.authToken),
-          execution_configured: Boolean(config.staticAssistantText),
+          execution_mode: config.executionMode,
+          execution_configured:
+            config.executionMode === "static"
+              ? Boolean(config.staticAssistantText)
+              : config.executionMode === "app_server"
+                ? Boolean(config.appServer)
+                : false,
         });
         return;
       }
