@@ -210,6 +210,12 @@ export function getPolynetCodexWorkerBridgeConfig(
   };
 }
 
+export function isPolynetCodexWorkerBridgeConfigured(
+  env: Record<string, string | undefined> = readRuntimeEnv(),
+): boolean {
+  return getPolynetCodexWorkerBridgeConfig(env).workerBridgeConfigured;
+}
+
 function buildPolynetCodexWorkerTransportPayload(
   request: PolynetCodexWorkerBridgeRequest,
   communityResourceLane: CommunityResourceRuntimeLaneState,

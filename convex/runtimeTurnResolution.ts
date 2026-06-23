@@ -24,10 +24,12 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 import {
+  RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
+import { isPolynetCodexWorkerBridgeConfigured } from "./polynetCodexWorkerBridge";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -98,6 +100,8 @@ export type RuntimeTurnResolution = {
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
   providerApiKeyOverride: string | null;
   runtimeEngine: RuntimeEngine;
+  runtimeEngineFallbackReason: string | null;
+  codexWorkerBridgeConfigured: boolean;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
   runtimeCommunitySlug: string | null;
@@ -119,16 +123,45 @@ function resolveRequestedAgenticTools(raw: unknown): boolean {
 function resolveRuntimeEngineSelection(params: {
   requestedRuntimeEngine: unknown;
   storedRuntimeEngine: unknown;
-}): { ok: true; runtimeEngine: RuntimeEngine } | { ok: false } {
+  codexWorkerBridgeConfigured: boolean;
+}):
+  | {
+      ok: true;
+      runtimeEngine: RuntimeEngine;
+      fallbackReason: string | null;
+    }
+  | { ok: false } {
   const requestedRaw = String(params.requestedRuntimeEngine ?? "").trim();
   if (requestedRaw) {
     const requested = normalizeRuntimeEngine(requestedRaw);
-    return requested ? { ok: true, runtimeEngine: requested } : { ok: false };
+    if (!requested) return { ok: false };
+    if (
+      requested === RUNTIME_ENGINE_CODEX &&
+      !params.codexWorkerBridgeConfigured
+    ) {
+      return {
+        ok: true,
+        runtimeEngine: RUNTIME_ENGINE_POLYNET,
+        fallbackReason: "codex_worker_bridge_not_configured",
+      };
+    }
+    return { ok: true, runtimeEngine: requested, fallbackReason: null };
+  }
+  const storedRuntimeEngine = normalizeRuntimeEngine(params.storedRuntimeEngine);
+  if (
+    storedRuntimeEngine === RUNTIME_ENGINE_CODEX &&
+    !params.codexWorkerBridgeConfigured
+  ) {
+    return {
+      ok: true,
+      runtimeEngine: RUNTIME_ENGINE_POLYNET,
+      fallbackReason: "codex_worker_bridge_not_configured",
+    };
   }
   return {
     ok: true,
-    runtimeEngine:
-      normalizeRuntimeEngine(params.storedRuntimeEngine) ?? RUNTIME_ENGINE_POLYNET,
+    runtimeEngine: storedRuntimeEngine ?? RUNTIME_ENGINE_POLYNET,
+    fallbackReason: null,
   };
 }
 
@@ -345,9 +378,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
 
+  const codexWorkerBridgeConfigured = isPolynetCodexWorkerBridgeConfigured();
   const runtimeEngineSelection = resolveRuntimeEngineSelection({
     requestedRuntimeEngine: input.runtime_engine,
     storedRuntimeEngine: ownedThread.runtimeEngine,
+    codexWorkerBridgeConfigured,
   });
   if (!runtimeEngineSelection.ok) {
     return {
@@ -585,6 +620,8 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       inferenceSource,
       providerApiKeyOverride,
       runtimeEngine: runtimeEngineSelection.runtimeEngine,
+      runtimeEngineFallbackReason: runtimeEngineSelection.fallbackReason,
+      codexWorkerBridgeConfigured,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,

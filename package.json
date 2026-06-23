@@ -171,6 +171,7 @@
     "check:runtime-provider-tool-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_provider_tool_surface_proof.ts",
     "check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_harness_isolation_contract_proof.ts",
     "check:codex-runtime-routing-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_runtime_routing_contract_proof.ts",
+    "check:codex-runtime-activation-gate-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_runtime_activation_gate_contract_proof.ts",
     "check:codex-worker-bridge-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_worker_bridge_contract_proof.ts",
     "check:codex-worker-transport-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_worker_transport_contract_proof.ts",
     "check:community-context-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_context_tool_proof.ts",

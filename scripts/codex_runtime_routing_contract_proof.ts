@@ -61,7 +61,7 @@ assertContains(
 );
 assertContains(
   resolution,
-  "normalizeRuntimeEngine(params.storedRuntimeEngine) ?? RUNTIME_ENGINE_POLYNET",
+  "runtimeEngine: storedRuntimeEngine ?? RUNTIME_ENGINE_POLYNET",
   "runtime turn resolution preserves legacy PolyNet default when no runtime engine is requested or stored",
 );
 assertContains(
