@@ -12,19 +12,25 @@ import {
   runCodexAppServerRequest,
   type CodexAppServerClientConfig,
 } from "./codexAppServerClient.ts";
+import {
+  runCodexStdioAppServerRequest,
+  type CodexStdioAppServerClientConfig,
+} from "./codexStdioAppServerClient.ts";
 
 type JsonRecord = Record<string, unknown>;
 
 export type PolynetCodexWorkerExecutionMode =
   | "disabled"
   | "static"
-  | "app_server";
+  | "app_server"
+  | "codex_stdio";
 
 export type PolynetCodexWorkerServiceConfig = {
   authToken: string | null;
   executionMode: PolynetCodexWorkerExecutionMode;
   staticAssistantText: string | null;
   appServer: CodexAppServerClientConfig | null;
+  codexStdio: CodexStdioAppServerClientConfig | null;
   maxBodyBytes: number;
 };
 
@@ -72,6 +78,7 @@ function normalizeExecutionMode(raw: string | null): PolynetCodexWorkerExecution
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "static") return "static";
   if (value === "app_server") return "app_server";
+  if (value === "codex_stdio") return "codex_stdio";
   return "disabled";
 }
 
@@ -103,6 +110,15 @@ export function readPolynetCodexWorkerServiceConfig(): PolynetCodexWorkerService
           ),
         }
       : null,
+    codexStdio: {
+      codexBin: readEnvValue("POLYNET_CODEX_WORKER_CODEX_BIN") ?? "codex",
+      cwd: readEnvValue("POLYNET_CODEX_WORKER_AGENT_CWD") ?? process.cwd(),
+      timeoutMs: normalizeBoundedMs(
+        readEnvValue("POLYNET_CODEX_STDIO_TIMEOUT_MS") ??
+          readEnvValue("POLYNET_CODEX_APP_SERVER_TIMEOUT_MS"),
+        DEFAULT_APP_SERVER_TIMEOUT_MS,
+      ),
+    },
     maxBodyBytes: readPositiveIntegerEnv(
       "POLYNET_CODEX_WORKER_MAX_BODY_BYTES",
       DEFAULT_MAX_BODY_BYTES,
@@ -353,6 +369,59 @@ export async function runPolynetCodexWorkerRequest(
       },
     };
   }
+  if (config.executionMode === "codex_stdio") {
+    if (!config.codexStdio) {
+      return {
+        status: 503,
+        body: {
+          ok: false,
+          code: "codex_stdio_not_configured",
+          message:
+            "Codex worker stdio mode is enabled, but the local Codex app-server adapter is not configured.",
+          retryable: false,
+          engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+          contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+          contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+          run_id: payload.run_id,
+          request_id: payload.request_id,
+        },
+      };
+    }
+    const result = await runCodexStdioAppServerRequest({
+      payload,
+      config: config.codexStdio,
+    });
+    if (result.ok) {
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          assistant_text: result.assistantText,
+          prompt_tokens: result.promptTokens,
+          completion_tokens: result.completionTokens,
+          engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+          contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+          contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+          run_id: payload.run_id,
+          request_id: payload.request_id,
+        },
+      };
+    }
+    return {
+      status: result.status,
+      body: {
+        ok: false,
+        code: result.code,
+        message: result.message,
+        retryable: result.retryable,
+        engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+        contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+        contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+        run_id: payload.run_id,
+        request_id: payload.request_id,
+      },
+    };
+  }
   return {
     status: 503,
     body: {
@@ -447,6 +516,8 @@ export function createPolynetCodexWorkerServer(
               ? Boolean(config.staticAssistantText)
               : config.executionMode === "app_server"
                 ? Boolean(config.appServer)
+                : config.executionMode === "codex_stdio"
+                  ? Boolean(config.codexStdio)
                 : false,
         });
         return;

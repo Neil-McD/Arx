@@ -171,6 +171,7 @@ async function proveEndToEndWorkerChain(): Promise<void> {
           authToken: appServerAuthToken,
           timeoutMs: 10_000,
         },
+        codexStdio: null,
         maxBodyBytes: 1_000_000,
       },
       async (workerBaseUrl) => {

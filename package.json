@@ -177,6 +177,7 @@
     "check:codex-worker-transport-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_worker_transport_contract_proof.ts",
     "check:polynet-codex-worker-service-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts",
     "check:polynet-codex-worker-e2e-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_end_to_end_contract_proof.ts",
+    "check:polynet-codex-worker-codex-stdio-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_codex_stdio_contract_proof.ts",
     "check:community-context-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_context_tool_proof.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
     "check:community-app-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_app_lifecycle_contract_proof.ts",

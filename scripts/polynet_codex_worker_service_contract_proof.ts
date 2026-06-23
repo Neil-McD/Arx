@@ -196,6 +196,7 @@ function proveServiceIsMinimal(): void {
   assert.ok(source.includes("POST") && source.includes("/runtime"));
   assert.ok(source.includes("POLYNET_CODEX_WORKER_EXECUTION_MODE"));
   assert.ok(source.includes("POLYNET_CODEX_APP_SERVER_URL"));
+  assert.ok(source.includes("codex_stdio"));
   assert.ok(source.includes("codex_execution_not_configured"));
   assert.ok(
     packageJson.includes(
@@ -224,6 +225,7 @@ async function proveExecutionDisabledIsExplicit(): Promise<void> {
     executionMode: "disabled",
     staticAssistantText: null,
     appServer: null,
+    codexStdio: null,
     maxBodyBytes: 1_000_000,
   });
   assert.equal(result.status, 503);
@@ -239,6 +241,7 @@ async function proveHttpContract(): Promise<void> {
       executionMode: "static",
       staticAssistantText: "Worker service contract response.",
       appServer: null,
+      codexStdio: null,
       maxBodyBytes: 1_000_000,
     },
     async (baseUrl) => {
@@ -308,6 +311,7 @@ async function proveAppServerAdapterContract(): Promise<void> {
         authToken: appServerAuthToken,
         timeoutMs: 10_000,
       },
+      codexStdio: null,
       maxBodyBytes: 1_000_000,
     });
     assert.equal(result.status, 200);
@@ -344,6 +348,7 @@ async function proveAppServerModeFailsClosedWithoutUrl(): Promise<void> {
     executionMode: "app_server",
     staticAssistantText: null,
     appServer: null,
+    codexStdio: null,
     maxBodyBytes: 1_000_000,
   });
   assert.equal(result.status, 503);
@@ -363,6 +368,7 @@ async function proveAppServerErrorDoesNotLeakPrompt(): Promise<void> {
         authToken: null,
         timeoutMs: 10_000,
       },
+      codexStdio: null,
       maxBodyBytes: 1_000_000,
     });
     assert.equal(result.status, 500);
