@@ -176,9 +176,7 @@
     "check:codex-worker-bridge-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_worker_bridge_contract_proof.ts",
     "check:codex-worker-transport-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_worker_transport_contract_proof.ts",
     "check:polynet-codex-worker-service-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts",
-    "check:polynet-codex-worker-e2e-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_end_to_end_contract_proof.ts",
-    "check:polynet-codex-worker-codex-stdio-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_codex_stdio_contract_proof.ts",
-    "smoke:polynet-codex-worker-codex-stdio-live": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_codex_stdio_live_smoke.ts",
+    "check:polynet-codex-worker-harness-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_harness_contract_proof.ts",
     "check:daytona-runtime-substrate-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_runtime_substrate_contract_proof.ts",
     "check:community-context-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_context_tool_proof.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
@@ -220,7 +218,8 @@
     "check:runtime-context-manifest-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_manifest_proof.ts",
     "check:runtime-context-integrity-proof": "tsx scripts/runtime_context_integrity_proof.ts",
     "check:runtime-agent-loop-context-receipt-smoke": "tsx scripts/runtime_agent_loop_context_receipt_smoke.ts",
-    "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts"
+    "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts",
+    "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh"
   },
   "dependencies": {
     "@blaxel/core": "^0.2.84",

@@ -2616,6 +2616,29 @@ export default defineSchema({
     .index("by_thread_seq", ["threadId", "seq"])
     .index("by_owner_messageKey", ["ownerId", "messageKey"]),
 
+  polynetCodexWorkerCapacityLeases: defineTable({
+    runId: v.string(),
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    projectId: v.optional(v.id("cloudProjects")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("released"),
+      v.literal("expired"),
+    ),
+    acquiredAt: v.number(),
+    expiresAt: v.number(),
+    releasedAt: v.optional(v.number()),
+    releaseReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_owner_runId", ["ownerId", "runId"])
+    .index("by_status_expiresAt", ["status", "expiresAt"])
+    .index("by_owner_status_expiresAt", ["ownerId", "status", "expiresAt"])
+    .index("by_project_status_expiresAt", ["projectId", "status", "expiresAt"]),
+
   daytonaCodexRuntimeTargets: defineTable({
     ownerId: v.id("users"),
     threadId: v.id("threads"),

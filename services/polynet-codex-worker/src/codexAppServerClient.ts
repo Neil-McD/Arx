@@ -1,45 +1,31 @@
-import type { PolynetCodexWorkerTransportPayload } from "../../../convex/polynetCodexWorkerBridge.ts";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 
 type JsonRecord = Record<string, unknown>;
 
-export type CodexAppServerClientConfig = {
-  url: string;
-  authToken: string | null;
-  timeoutMs: number;
+type PendingRequest = {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timeout: NodeJS.Timeout;
 };
 
-export type CodexAppServerRunSuccess = {
-  ok: true;
-  assistantText: string;
-  promptTokens: number | null;
-  completionTokens: number | null;
+export type CodexAppServerClientOptions = {
+  codexBin?: string;
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+  onNotification: (message: JsonRecord) => void;
+  onServerRequest: (message: JsonRecord) => Promise<void>;
+  onTrace?: (event: string, data?: JsonRecord) => void;
+  onStderr?: (line: string) => void;
+  onClosed?: (error: Error) => void;
 };
 
-export type CodexAppServerRunFailure = {
-  ok: false;
-  status: number;
-  code: string;
-  message: string;
-  retryable: boolean;
+export type CodexAppServerInitializeResult = {
+  codexHome: string | null;
+  platformFamily: string | null;
+  platformOs: string | null;
+  userAgent: string | null;
 };
-
-export type CodexAppServerRunResult =
-  | CodexAppServerRunSuccess
-  | CodexAppServerRunFailure;
-
-type WorkerFetchFn = (
-  input: string,
-  init: {
-    method: "POST";
-    headers: Record<string, string>;
-    body: string;
-    signal?: AbortSignal;
-  },
-) => Promise<{
-  ok: boolean;
-  status: number;
-  text: () => Promise<string>;
-}>;
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -47,145 +33,254 @@ function asRecord(value: unknown): JsonRecord | null {
     : null;
 }
 
-function normalizeTokenCount(value: unknown): number | null {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 0) return null;
-  return Math.floor(numberValue);
+function previewText(value: unknown, max = 800): string {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
 }
 
-function parseJsonObject(text: string): JsonRecord | null {
-  try {
-    return asRecord(JSON.parse(text));
-  } catch {
-    return null;
-  }
-}
+export class CodexAppServerClient {
+  private proc: ChildProcessWithoutNullStreams | null = null;
+  private rl: ReadlineInterface | null = null;
+  private nextId = 1;
+  private pending = new Map<number, PendingRequest>();
+  private closed = false;
+  private initialized = false;
+  private initializeResult: CodexAppServerInitializeResult | null = null;
+  private readonly options: CodexAppServerClientOptions;
 
-function buildCodexAppServerRequest(
-  payload: PolynetCodexWorkerTransportPayload,
-): JsonRecord {
-  return {
-    run_id: payload.run_id,
-    thread_id: payload.thread_id,
-    request_id: payload.request_id,
-    model_id: payload.model_id,
-    max_tokens: payload.max_tokens,
-    developer_instructions: payload.developer_instructions,
-    prompt: payload.prompt,
-    metadata: {
-      runtime_engine: payload.runtime_engine,
-      lane: payload.lane,
-      inference_source: payload.inference_source,
-      polynet_platform_tool_names: payload.polynet_platform_tool_names,
-      community_resource_lane: payload.community_resource_lane,
-      prompt_projection_receipt: payload.prompt_projection_receipt,
-    },
-  };
-}
+  constructor(options: CodexAppServerClientOptions) {
+    this.options = options;
+  }
 
-function parseCodexAppServerResponse(params: {
-  ok: boolean;
-  status: number;
-  text: string;
-}): CodexAppServerRunResult {
-  const body = parseJsonObject(params.text);
-  if (!body) {
-    return {
-      ok: false,
-      status: params.ok ? 502 : params.status || 502,
-      code: "codex_app_server_invalid_response",
-      message: "Codex app-server returned a non-JSON response.",
-      retryable: true,
-    };
+  get isRunning(): boolean {
+    return Boolean(this.proc) && !this.closed;
   }
-  if (params.ok && body.ok === true) {
-    const assistantText =
-      typeof body.assistant_text === "string"
-        ? body.assistant_text
-        : typeof body.assistantText === "string"
-          ? body.assistantText
-          : "";
-    if (!assistantText.trim()) {
-      return {
-        ok: false,
-        status: 502,
-        code: "codex_app_server_invalid_response",
-        message: "Codex app-server success response did not include assistant text.",
-        retryable: true,
-      };
-    }
-    return {
-      ok: true,
-      assistantText,
-      promptTokens: normalizeTokenCount(body.prompt_tokens ?? body.promptTokens),
-      completionTokens: normalizeTokenCount(
-        body.completion_tokens ?? body.completionTokens,
-      ),
-    };
-  }
-  const status = params.status >= 400 && params.status < 600
-    ? params.status
-    : 502;
-  const code = String(body.code ?? body.error ?? "").trim() ||
-    "codex_app_server_failed";
-  return {
-    ok: false,
-    status,
-    code,
-    message: `Codex app-server request failed with code ${code}.`,
-    retryable: body.retryable !== false,
-  };
-}
 
-export async function runCodexAppServerRequest(params: {
-  payload: PolynetCodexWorkerTransportPayload;
-  config: CodexAppServerClientConfig;
-  fetchFn?: WorkerFetchFn | null;
-}): Promise<CodexAppServerRunResult> {
-  const fetchFn =
-    params.fetchFn ??
-    (typeof fetch === "function" ? (fetch as WorkerFetchFn) : null);
-  if (!fetchFn) {
-    return {
-      ok: false,
-      status: 503,
-      code: "codex_app_server_fetch_unavailable",
-      message: "Codex app-server fetch transport is unavailable.",
-      retryable: true,
-    };
+  get isInitialized(): boolean {
+    return this.initialized;
   }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), params.config.timeoutMs);
-  try {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      "x-polynet-codex-worker-run-id": params.payload.run_id,
-      "x-polynet-codex-worker-request-id": params.payload.request_id,
-    };
-    if (params.config.authToken) {
-      headers.authorization = `Bearer ${params.config.authToken}`;
-    }
-    const response = await fetchFn(params.config.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(buildCodexAppServerRequest(params.payload)),
-      signal: controller.signal,
+
+  get initResult(): CodexAppServerInitializeResult | null {
+    return this.initializeResult;
+  }
+
+  start(): void {
+    if (this.proc) return;
+    this.closed = false;
+    const codexBin = String(this.options.codexBin ?? "codex").trim() || "codex";
+    this.proc = spawn(codexBin, ["app-server", "--listen", "stdio://"], {
+      cwd: this.options.cwd,
+      env: this.options.env ?? process.env,
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    const text = await response.text();
-    return parseCodexAppServerResponse({
-      ok: response.ok,
-      status: response.status,
-      text,
+    this.trace("codex_app_server_spawned", {
+      pid: this.proc.pid ?? null,
+      codex_bin: codexBin,
+      transport: "stdio://",
     });
-  } catch (error) {
-    return {
-      ok: false,
-      status: 504,
-      code: "codex_app_server_transport_failed",
-      message: error instanceof Error ? error.message : "Codex app-server transport failed.",
-      retryable: true,
+    this.proc.stderr.on("data", (chunk) => {
+      const text = String(chunk ?? "").trim();
+      if (!text) return;
+      for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed) this.options.onStderr?.(trimmed);
+      }
+    });
+    this.proc.on("error", (error) => {
+      this.closed = true;
+      this.initialized = false;
+      this.failPending(error);
+      this.trace("codex_app_server_process_error", {
+        message: error.message,
+      });
+    });
+    this.proc.on("exit", (code, signal) => {
+      this.closed = true;
+      this.initialized = false;
+      const error = new Error(`codex app-server exited: code=${code ?? "null"} signal=${signal ?? "null"}`);
+      this.failPending(error);
+      this.trace("codex_app_server_exited", {
+        code: code ?? null,
+        signal: signal ?? null,
+      });
+      this.options.onClosed?.(error);
+    });
+    this.proc.stdin.on("error", (error) => {
+      this.closed = true;
+      this.initialized = false;
+      this.failPending(error);
+      this.trace("codex_app_server_stdin_error", {
+        message: error.message,
+      });
+    });
+    this.rl = createInterface({ input: this.proc.stdout });
+    this.rl.on("line", (line) => {
+      void this.handleLine(line).catch((error) => {
+        this.trace("codex_app_server_line_handler_error", {
+          message: error instanceof Error ? error.message : String(error ?? "line handler failed"),
+        });
+      });
+    });
+  }
+
+  async initialize(params?: {
+    clientName?: string;
+    clientTitle?: string;
+    clientVersion?: string;
+    experimentalApi?: boolean;
+  }): Promise<CodexAppServerInitializeResult> {
+    this.start();
+    const response = asRecord(
+      await this.request("initialize", {
+        clientInfo: {
+          name: params?.clientName ?? "polynet_codex_worker",
+          title: params?.clientTitle ?? "PolyNet Codex Worker",
+          version: params?.clientVersion ?? "0.1.0",
+        },
+        capabilities: {
+          experimentalApi: params?.experimentalApi !== false,
+        },
+      }),
+    );
+    this.notify("initialized");
+    this.initialized = true;
+    this.initializeResult = {
+      codexHome: typeof response?.codexHome === "string" ? response.codexHome : null,
+      platformFamily: typeof response?.platformFamily === "string" ? response.platformFamily : null,
+      platformOs: typeof response?.platformOs === "string" ? response.platformOs : null,
+      userAgent: typeof response?.userAgent === "string" ? response.userAgent : null,
     };
-  } finally {
-    clearTimeout(timeout);
+    this.trace("codex_app_server_initialized", this.initializeResult as JsonRecord);
+    return this.initializeResult;
+  }
+
+  async stop(): Promise<void> {
+    this.closed = true;
+    this.initialized = false;
+    if (this.rl) {
+      this.rl.close();
+      this.rl = null;
+    }
+    const proc = this.proc;
+    if (!proc) return;
+    this.proc = null;
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+    proc.kill("SIGTERM");
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (proc.exitCode === null && proc.signalCode === null) {
+          proc.kill("SIGKILL");
+        }
+        resolve();
+      }, 1500);
+      proc.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+  }
+
+  request(method: string, params: unknown, timeoutMs = 300_000): Promise<unknown> {
+    if (!this.proc || this.closed) {
+      return Promise.reject(new Error("codex app-server is not running."));
+    }
+    const id = this.nextId;
+    this.nextId += 1;
+    const message = { method, id, params };
+    const promise = new Promise<unknown>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`codex app-server request timed out: ${method}`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timeout });
+    });
+    this.send(message);
+    return promise;
+  }
+
+  notify(method: string, params?: unknown): void {
+    this.send(params === undefined ? { method } : { method, params });
+  }
+
+  respond(id: unknown, result: unknown): void {
+    this.send({ id, result });
+  }
+
+  respondError(id: unknown, code: number, message: string): void {
+    this.send({ id, error: { code, message } });
+  }
+
+  private send(message: unknown): void {
+    if (!this.proc || this.closed) {
+      throw new Error("cannot send to stopped codex app-server.");
+    }
+    try {
+      this.proc.stdin.write(`${JSON.stringify(message)}\n`);
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error ?? "codex app-server write failed"));
+      this.closed = true;
+      this.initialized = false;
+      this.failPending(normalized);
+      throw normalized;
+    }
+  }
+
+  private failPending(error: Error): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+      this.pending.delete(id);
+    }
+  }
+
+  private async handleLine(line: string): Promise<void> {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      this.trace("codex_app_server_non_json_line", {
+        text: previewText(trimmed),
+      });
+      return;
+    }
+    const message = asRecord(parsed);
+    if (!message) return;
+    const id = typeof message.id === "number" ? message.id : null;
+    const method = typeof message.method === "string" ? message.method : null;
+    if (id !== null && !method && ("result" in message || "error" in message)) {
+      const pending = this.pending.get(id);
+      if (!pending) return;
+      clearTimeout(pending.timeout);
+      this.pending.delete(id);
+      if ("error" in message && message.error) {
+        pending.reject(new Error(`codex app-server error for request ${id}: ${JSON.stringify(message.error)}`));
+      } else {
+        pending.resolve(message.result);
+      }
+      return;
+    }
+    if (method && "id" in message) {
+      try {
+        await this.options.onServerRequest(message);
+      } catch (error) {
+        this.respondError(
+          message.id,
+          -32000,
+          error instanceof Error ? error.message : String(error ?? "server request failed"),
+        );
+      }
+      return;
+    }
+    if (method) {
+      this.options.onNotification(message);
+    }
+  }
+
+  private trace(event: string, data?: JsonRecord): void {
+    this.options.onTrace?.(event, data);
   }
 }

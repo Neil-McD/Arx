@@ -114,34 +114,45 @@ function proveCodexHarnessOwnsWorkspaceRuntimeWithoutDuplicateShell() {
   }
 }
 
-async function proveReleaseDidNotPortRuntimeSubstrate() {
-  const forbiddenPaths = [
-    "convex/daytonaCodexRuntimeTargets.ts",
-    "services/polynet-codex-worker/src/index.ts",
-  ];
-  for (const relativePath of forbiddenPaths) {
-    try {
-      await readRepoFile(relativePath);
-      assert.fail(`${relativePath} should not be part of the runtime-boundary release slice`);
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      if (code !== "ENOENT") throw error;
-    }
-  }
+async function proveDaytonaRuntimeSubstrateIsIsolatedFromHarnessPolicy() {
+  const targetStore = await readRepoFile("convex/daytonaCodexRuntimeTargets.ts");
+  assert.equal(
+    targetStore.includes("daytonaCodexRuntimeTargets") &&
+      targetStore.includes("getActiveDaytonaCodexRuntimeSubstrateForThreadInternal") &&
+      targetStore.includes("previewLeaseState") &&
+      targetStore.includes("providerTeardownState"),
+    true,
+    "Daytona runtime target storage must be first-class operational substrate state",
+  );
+
+  const targetActions = await readRepoFile("convex/daytonaCodexRuntimeTargetActions.ts");
+  assert.equal(
+    targetActions.includes("DAYTONA_API_KEY") &&
+      targetActions.includes("DAYTONA_JWT_TOKEN") &&
+      targetActions.includes("POLYNET_CODEX_WORKER_AUTH_TOKEN") &&
+      targetActions.includes("DAYTONA_CODEX_WORKSPACE_ROOT"),
+    true,
+    "Daytona runtime actions must own provider credentials, worker auth, and workspace setup",
+  );
+  assert.equal(
+    targetActions.includes("sanitizeDaytonaRuntimeError") &&
+      targetActions.includes("readFirstEnv") &&
+      targetActions.includes("ensureDaytonaCodexRuntimeTargetInternal"),
+    true,
+    "Daytona runtime actions must sanitize provider errors and expose explicit target ensure lifecycle",
+  );
+
+  const runtimePolicy = await readRepoFile("shared/daytonaCodexRuntimePolicy.ts");
+  assert.equal(
+    runtimePolicy.includes('mode: "native_codex"') &&
+      runtimePolicy.includes("duplicateShellTool: false") &&
+      runtimePolicy.includes("publicPreview: false") &&
+      runtimePolicy.includes("providerEphemeralByLifecycle"),
+    true,
+    "Daytona runtime policy must keep Codex native workspace access, no duplicate shell, private previews, and explicit lifecycle ephemerality",
+  );
+
   const bridge = await readRepoFile("convex/polynetCodexWorkerBridge.ts");
-  assert.equal(
-    bridge.includes("Daytona") || bridge.includes("daytona"),
-    false,
-    "Codex worker bridge boundary must stay substrate-neutral in this slice",
-  );
-  assert.equal(
-    bridge.includes("polynetCodexWorkerAdmission") ||
-      bridge.includes("polynetCodexWorkerRunToken") ||
-      bridge.includes("polynetCodexWorkerTerminal") ||
-      bridge.includes("polynetCodexWorkerTool"),
-    false,
-    "Codex worker bridge boundary must not import substrate lifecycle/tool stacks",
-  );
   assert.equal(
     bridge.includes("POLYNET_CODEX_WORKER_RUNTIME_ENABLED") &&
       bridge.includes("POLYNET_CODEX_WORKER_URL") &&
@@ -155,7 +166,7 @@ async function main() {
   proveRuntimeEngineBoundary();
   provePolynetHarnessCannotExposeRuntimeSubstrateTools();
   proveCodexHarnessOwnsWorkspaceRuntimeWithoutDuplicateShell();
-  await proveReleaseDidNotPortRuntimeSubstrate();
+  await proveDaytonaRuntimeSubstrateIsIsolatedFromHarnessPolicy();
   console.log("polynet_harness_isolation_contract_proof: ok");
 }
 

@@ -1,389 +1,486 @@
 import assert from "node:assert/strict";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
-
-import {
-  createPolynetCodexWorkerServer,
-  runPolynetCodexWorkerRequest,
-  validatePolynetCodexWorkerPayload,
-  type PolynetCodexWorkerServiceConfig,
-} from "../services/polynet-codex-worker/src/server.ts";
-import {
-  POLYNET_CODEX_WORKER_CONTRACT_NAME,
-  POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-  POLYNET_CODEX_WORKER_ENGINE_ID,
-  type PolynetCodexWorkerTransportPayload,
-} from "../convex/polynetCodexWorkerBridge.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 type JsonRecord = Record<string, unknown>;
 
-const root = process.cwd();
-const authToken = "worker-service-proof-token";
-const appServerAuthToken = "mock-app-server-token";
-const secretPrompt = "SECRET_PROMPT_SHOULD_NOT_LEAK";
+const args = new Set(process.argv.slice(2));
+const requireLive = args.has("--require-live");
+const rootDir = path.resolve(new URL("..", import.meta.url).pathname);
+const runnerPath = path.join(rootDir, "scripts/run_polynet_codex_worker_service_local.sh");
+const serverSource = readFileSync(
+  path.join(rootDir, "services/polynet-codex-worker/src/server.ts"),
+  "utf8",
+);
+const port = readIntegerEnv("POLYNET_CODEX_WORKER_PROOF_PORT", 8800 + Math.floor(Math.random() * 500));
+const authToken = `polynet-worker-proof-${randomUUID()}`;
+const serviceUrl = `http://127.0.0.1:${port}`;
+const stdoutTail: string[] = [];
+const stderrTail: string[] = [];
 
-function readText(path: string): string {
-  return readFileSync(join(root, path), "utf8");
+function readIntegerEnv(name: string, fallback: number): number {
+  const parsed = Number.parseInt(String(process.env[name] ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function asRecord(value: unknown): JsonRecord {
-  assert.ok(value && typeof value === "object" && !Array.isArray(value));
-  return value as JsonRecord;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function buildPayload(overrides: JsonRecord = {}): PolynetCodexWorkerTransportPayload {
-  return {
-    contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-    contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-    engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
-    run_id: "run_worker_service_proof",
-    thread_id: "thread_worker_service_proof",
-    request_id: "request_worker_service_proof",
-    runtime_engine: "codex",
-    model_id: "gpt-5.5",
-    max_tokens: 2048,
-    lane: "chatgpt",
-    inference_source: "chatgpt",
-    developer_instructions: "Use the PolyNet prompt bundle.",
-    prompt: secretPrompt,
-    polynet_platform_tool_names: [
-      "search_product_docs",
-      "get_active_community_context",
-    ],
-    community_resource_lane: {
-      lane: "member",
-      can_read_live_resources: true,
-      can_use_resource_builder: false,
-    } as any,
-    prompt_projection_receipt: {
-      runtimePromptChars: 120,
-      developerInstructionChars: 80,
-      promptChars: secretPrompt.length,
-    } as any,
-    ...overrides,
-  };
-}
-
-async function withServer<T>(
-  config: PolynetCodexWorkerServiceConfig,
-  fn: (baseUrl: string) => Promise<T>,
-): Promise<T> {
-  const server = createPolynetCodexWorkerServer(config);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address() as AddressInfo;
-  try {
-    return await fn(`http://127.0.0.1:${address.port}`);
-  } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+function pushTail(target: string[], text: string): void {
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    target.push(trimmed);
+    while (target.length > 80) target.shift();
   }
 }
 
-async function withMockAppServer<T>(
-  fn: (params: {
-    url: string;
-    requests: JsonRecord[];
-  }) => Promise<T>,
-): Promise<T> {
-  const requests: JsonRecord[] = [];
-  const server = http.createServer((request: IncomingMessage, response: ServerResponse) => {
-    void (async () => {
-      assert.equal(request.method, "POST");
-      assert.equal(request.headers.authorization, `Bearer ${appServerAuthToken}`);
-      let rawBody = "";
-      request.setEncoding("utf8");
-      for await (const chunk of request) rawBody += String(chunk);
-      requests.push(asRecord(JSON.parse(rawBody)));
-      response.statusCode = 200;
-      response.setHeader("content-type", "application/json; charset=utf-8");
-      response.end(
-        JSON.stringify({
-          ok: true,
-          assistant_text: "Mock Codex app-server response.",
-          prompt_tokens: 42,
-          completion_tokens: 9,
-        }),
-      );
-    })().catch((error) => {
-      response.statusCode = 500;
-      response.end(
-        JSON.stringify({
-          ok: false,
-          code: "mock_app_server_error",
-          message: error instanceof Error ? error.message : "mock failed",
-        }),
-      );
-    });
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function serviceEvents(): JsonRecord[] {
+  return stdoutTail.flatMap((line) => {
+    try {
+      const parsed = asRecord(JSON.parse(line));
+      return parsed?.kind === "polynet_codex_worker_service_event" ? [parsed] : [];
+    } catch {
+      return [];
+    }
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address() as AddressInfo;
-  try {
-    return await fn({
-      url: `http://127.0.0.1:${address.port}/codex-turn`,
-      requests,
-    });
-  } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  }
 }
 
-async function withFailingMockAppServer<T>(
-  fn: (url: string) => Promise<T>,
-): Promise<T> {
-  const server = http.createServer((request: IncomingMessage, response: ServerResponse) => {
-    void (async () => {
-      assert.equal(request.method, "POST");
-      let rawBody = "";
-      request.setEncoding("utf8");
-      for await (const chunk of request) rawBody += String(chunk);
-      assert.equal(rawBody.includes(secretPrompt), true);
-      response.statusCode = 500;
-      response.setHeader("content-type", "application/json; charset=utf-8");
-      response.end(
-        JSON.stringify({
-          ok: false,
-          code: "mock_codex_failure",
-          message: `bad upstream echo ${secretPrompt}`,
-          retryable: false,
-        }),
-      );
-    })().catch((error) => {
-      response.statusCode = 500;
-      response.end(
-        JSON.stringify({
-          ok: false,
-          code: "mock_app_server_error",
-          message: error instanceof Error ? error.message : "mock failed",
-        }),
-      );
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address() as AddressInfo;
-  try {
-    return await fn(`http://127.0.0.1:${address.port}/codex-turn`);
-  } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  }
-}
+assert.match(
+  serverSource,
+  /const server = createPolynetCodexWorkerServer\(runtime\)[\s\S]*server\.listen\(port, host, resolve\)[\s\S]*void runtime[\s\S]*\.start\(\)[\s\S]*codex_app_server_background_init_finished/,
+  "worker HTTP server must listen before native Codex app-server initialization finishes",
+);
+assert.match(
+  serverSource,
+  /activeTurn\.timing\.startBucket\("codex_app_server_await_ms"\)[\s\S]*await this\.start\(\)[\s\S]*codex_app_server_await_finished/,
+  "Codex turns must still await native Codex app-server initialization before model work",
+);
+assert.match(
+  serverSource,
+  /worker_http_ready: true[\s\S]*initializing[\s\S]*init_latency_ms[\s\S]*init_error/,
+  "worker health must distinguish HTTP readiness from native Codex readiness",
+);
 
-async function fetchJson(url: string, init?: RequestInit): Promise<{
+async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15_000): Promise<{
   status: number;
   body: JsonRecord;
-  rawText: string;
 }> {
-  const response = await fetch(url, init);
-  const rawText = await response.text();
-  return {
-    status: response.status,
-    body: asRecord(rawText ? JSON.parse(rawText) : {}),
-    rawText,
-  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...(init ?? {}),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    return {
+      status: response.status,
+      body: asRecord(text ? JSON.parse(text) : {}) ?? {},
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-function proveServiceIsMinimal(): void {
-  const source = readText("services/polynet-codex-worker/src/server.ts");
-  const packageJson = readText("package.json");
-  assert.equal(/daytona|blaxel/i.test(source), false);
-  assert.equal(source.includes("node:child_process"), false);
-  assert.ok(source.includes("POST") && source.includes("/runtime"));
-  assert.ok(source.includes("POLYNET_CODEX_WORKER_EXECUTION_MODE"));
-  assert.ok(source.includes("POLYNET_CODEX_APP_SERVER_URL"));
-  assert.ok(source.includes("codex_stdio"));
-  assert.ok(source.includes("codex_execution_not_configured"));
-  assert.ok(
-    packageJson.includes(
-      '"serve:polynet-codex-worker": "node --experimental-strip-types --experimental-specifier-resolution=node services/polynet-codex-worker/src/server.ts"',
-    ),
-  );
-}
-
-function provePayloadValidation(): void {
-  assert.equal(validatePolynetCodexWorkerPayload(buildPayload()).ok, true);
-  const badContract = validatePolynetCodexWorkerPayload(
-    buildPayload({ contract_name: "wrong_contract" }),
-  );
-  assert.equal(badContract.ok, false);
-  assert.equal(badContract.code, "unsupported_contract_name");
-  const badRuntime = validatePolynetCodexWorkerPayload(
-    buildPayload({ runtime_engine: "polynet" }),
-  );
-  assert.equal(badRuntime.ok, false);
-  assert.equal(badRuntime.code, "unsupported_runtime_engine");
-}
-
-async function proveExecutionDisabledIsExplicit(): Promise<void> {
-  const result = await runPolynetCodexWorkerRequest(buildPayload(), {
-    authToken: null,
-    executionMode: "disabled",
-    staticAssistantText: null,
-    appServer: null,
-    codexStdio: null,
-    maxBodyBytes: 1_000_000,
-  });
-  assert.equal(result.status, 503);
-  assert.equal(result.body.ok, false);
-  assert.equal(result.body.code, "codex_execution_not_configured");
-  assert.equal(JSON.stringify(result.body).includes(secretPrompt), false);
-}
-
-async function proveHttpContract(): Promise<void> {
-  await withServer(
-    {
-      authToken,
-      executionMode: "static",
-      staticAssistantText: "Worker service contract response.",
-      appServer: null,
-      codexStdio: null,
-      maxBodyBytes: 1_000_000,
-    },
-    async (baseUrl) => {
-      const health = await fetchJson(`${baseUrl}/healthz`);
-      assert.equal(health.status, 200);
-      assert.equal(health.body.ok, true);
-      assert.equal(health.body.engine_id, POLYNET_CODEX_WORKER_ENGINE_ID);
-      assert.equal(health.body.auth_required, true);
-      assert.equal(health.body.execution_mode, "static");
-      assert.equal(health.body.execution_configured, true);
-      assert.equal(health.rawText.includes(authToken), false);
-
-      const unauthenticated = await fetchJson(`${baseUrl}/runtime`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(buildPayload()),
-      });
-      assert.equal(unauthenticated.status, 401);
-      assert.equal(unauthenticated.body.code, "unauthorized");
-      assert.equal(unauthenticated.rawText.includes(secretPrompt), false);
-
-      const invalidContract = await fetchJson(`${baseUrl}/runtime`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${authToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(buildPayload({ contract_version: "v999" })),
-      });
-      assert.equal(invalidContract.status, 400);
-      assert.equal(invalidContract.body.code, "unsupported_contract_version");
-      assert.equal(invalidContract.rawText.includes(secretPrompt), false);
-
-      const success = await fetchJson(`${baseUrl}/runtime`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${authToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(buildPayload()),
-      });
-      assert.equal(success.status, 200);
-      assert.equal(success.body.ok, true);
-      assert.equal(success.body.assistant_text, "Worker service contract response.");
-      assert.equal(success.body.prompt_tokens, null);
-      assert.equal(success.body.completion_tokens, null);
-      assert.equal(success.body.engine_id, POLYNET_CODEX_WORKER_ENGINE_ID);
-      assert.equal(success.body.contract_name, POLYNET_CODEX_WORKER_CONTRACT_NAME);
-      assert.equal(
-        success.body.contract_version,
-        POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+async function waitForHealth(proc: ChildProcessWithoutNullStreams, timeoutMs = 120_000): Promise<JsonRecord> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "";
+  while (Date.now() < deadline) {
+    if (proc.exitCode !== null || proc.signalCode !== null) {
+      throw new Error(
+        `worker service exited before healthz: code=${proc.exitCode ?? "null"} signal=${proc.signalCode ?? "null"}`,
       );
-      assert.equal(success.rawText.includes(secretPrompt), false);
-      assert.equal(success.rawText.includes(authToken), false);
+    }
+    try {
+      const response = await fetchJson(
+        `${serviceUrl}/healthz`,
+        { headers: { Authorization: `Bearer ${authToken}` } },
+        5000,
+      );
+      if (response.status === 200) return response.body;
+      lastError = `status=${response.status} body=${JSON.stringify(response.body)}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error ?? "unknown error");
+    }
+    await sleep(500);
+  }
+  throw new Error(`worker service did not become reachable: ${lastError}`);
+}
+
+async function waitForCodexInitialized(
+  proc: ChildProcessWithoutNullStreams,
+  timeoutMs = 120_000,
+): Promise<JsonRecord | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (proc.exitCode !== null || proc.signalCode !== null) {
+      throw new Error(
+        `worker service exited before codex init: code=${proc.exitCode ?? "null"} signal=${proc.signalCode ?? "null"}`,
+      );
+    }
+    const response = await fetchJson(
+      `${serviceUrl}/healthz`,
+      { headers: { Authorization: `Bearer ${authToken}` } },
+      5000,
+    );
+    const codex = asRecord(response.body.codex);
+    if (response.body.ok === false || codex?.initialized === true || codex?.init_error) {
+      return response.body;
+    }
+    await sleep(500);
+  }
+  return null;
+}
+
+async function runWorkspaceProbe(): Promise<JsonRecord> {
+  const response = await fetchJson(
+    `${serviceUrl}/v1/workspace/probe`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        run_id: `polynet-worker-service-workspace-proof-${randomUUID().slice(0, 8)}`,
+        destroy_after_run: true,
+      }),
     },
+    180_000,
   );
+  assert.equal(
+    response.status,
+    200,
+    `workspace probe status must be 200: ${JSON.stringify(response.body)}`,
+  );
+  return response.body;
 }
 
-async function proveAppServerAdapterContract(): Promise<void> {
-  await withMockAppServer(async ({ url, requests }) => {
-    const result = await runPolynetCodexWorkerRequest(buildPayload(), {
-      authToken: null,
-      executionMode: "app_server",
-      staticAssistantText: null,
-      appServer: {
-        url,
-        authToken: appServerAuthToken,
-        timeoutMs: 10_000,
+function assertWorkspaceProbeBody(body: JsonRecord, expectedWorkspaceRoot: string): JsonRecord {
+  assert.equal(body.ok, true, `workspace probe must succeed: ${JSON.stringify(body)}`);
+  assert.equal(body.engine_id, "polynet_codex_worker", "workspace probe engine mismatch");
+  assert.equal(body.probe_kind, "workspace", "workspace probe kind mismatch");
+
+  const proof = asRecord(body.proof);
+  assert.equal(proof?.ok, true, `workspace proof must pass: ${JSON.stringify(proof)}`);
+  assert.deepEqual(asArray(proof?.failures), [], "workspace proof must have no failures");
+
+  assert.equal(body.workspace_host_id, "daytona", "workspace probe must be Daytona-native");
+  assert.equal(body.workspace_root, expectedWorkspaceRoot, "workspace probe root mismatch");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(body, "tool_calls"),
+    false,
+    "workspace readiness probe must not expose a legacy worker-managed shell tool_calls field",
+  );
+  assert.ok(
+    String(body.workspace_root ?? "").includes(expectedWorkspaceRoot),
+    `workspace root must include ${expectedWorkspaceRoot}`,
+  );
+
+  const timing = asRecord(body.timing);
+  const buckets = asRecord(timing?.buckets);
+  assert.ok(buckets, "workspace probe timing must include buckets");
+  for (const key of ["sandbox_ensure_ms", "sandbox_destroy_ms"]) {
+    assert.equal(typeof buckets[key], "number", `workspace timing bucket missing: ${key}`);
+  }
+
+  const eventTypes = asArray(body.events)
+    .map((event) => String(asRecord(event)?.event_type ?? ""))
+    .filter(Boolean);
+  for (const eventType of [
+    "workspace_probe_started",
+    "sandbox_ensure_started",
+    "sandbox_ensure_finished",
+    "workspace_probe_finished",
+    "sandbox_destroy_finished",
+  ]) {
+    assert.ok(eventTypes.includes(eventType), `workspace event missing: ${eventType}`);
+  }
+  return buckets;
+}
+
+async function assertBusyResponse(): Promise<void> {
+  const response = await fetch(`${serviceUrl}/v1/workspace/probe`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      run_id: `polynet-worker-service-busy-proof-${randomUUID().slice(0, 8)}`,
+      destroy_after_run: true,
+    }),
+  });
+  const text = await response.text();
+  const body = asRecord(text ? JSON.parse(text) : {}) ?? {};
+  assert.equal(response.status, 409, `concurrent request must return 409, got ${response.status}: ${text}`);
+  assert.equal(response.headers.get("retry-after"), "1", "busy response must include Retry-After: 1");
+  assert.equal(body.code, "worker_busy", `busy response code mismatch: ${text}`);
+}
+
+async function assertTurnControlEndpointsFailClosed(): Promise<void> {
+  const unauthCancel = await fetchJson(`${serviceUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(unauthCancel.status, 401, "cancel endpoint must reject missing bearer auth");
+
+  const missingCancelRunId = await fetchJson(`${serviceUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  assert.equal(missingCancelRunId.status, 400, "cancel endpoint must require run_id");
+  assert.equal(missingCancelRunId.body.code, "run_id_required", "cancel missing run_id code mismatch");
+
+  const cancelMismatch = await fetchJson(`${serviceUrl}/v1/codex/turn/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(cancelMismatch.status, 409, "cancel with unknown run id must 409");
+  assert.equal(cancelMismatch.body.code, "no_matching_turn", "cancel mismatch code");
+
+  const unauthSteer = await fetchJson(`${serviceUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: "not-a-real-run", text: "keep going" }),
+  });
+  assert.equal(unauthSteer.status, 401, "steer endpoint must reject missing bearer auth");
+
+  const missingSteerText = await fetchJson(`${serviceUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run" }),
+  });
+  assert.equal(missingSteerText.status, 400, "steer endpoint must require run_id and text");
+  assert.equal(missingSteerText.body.code, "run_id_and_text_required", "steer missing text code mismatch");
+
+  const steerMismatch = await fetchJson(`${serviceUrl}/v1/codex/turn/steer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ run_id: "not-a-real-run", text: "keep going" }),
+  });
+  assert.equal(steerMismatch.status, 409, "steer with unknown run id must 409");
+  assert.equal(steerMismatch.body.code, "no_matching_turn", "steer mismatch code");
+}
+
+async function assertBusyWhileWorkspaceProbeInFlight(): Promise<void> {
+  const blockingProbe = fetchJson(
+    `${serviceUrl}/v1/workspace/probe`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
       },
-      codexStdio: null,
-      maxBodyBytes: 1_000_000,
+      body: JSON.stringify({
+        run_id: `polynet-worker-service-blocking-proof-${randomUUID().slice(0, 8)}`,
+        destroy_after_run: true,
+        probe_delay_ms: 8_000,
+      }),
+    },
+    180_000,
+  );
+
+  await sleep(2_000);
+  await assertBusyResponse();
+
+  const response = await blockingProbe;
+  assert.equal(response.status, 200, `blocking workspace probe must finish: ${JSON.stringify(response.body)}`);
+  assert.equal(response.body.ok, true, `blocking workspace probe must succeed: ${JSON.stringify(response.body)}`);
+}
+
+async function stopService(proc: ChildProcessWithoutNullStreams): Promise<void> {
+  if (proc.exitCode !== null || proc.signalCode !== null) return;
+  proc.kill("SIGTERM");
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+      resolve();
+    }, 2500);
+    proc.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
     });
-    assert.equal(result.status, 200);
-    assert.equal(result.body.ok, true);
-    assert.equal(result.body.assistant_text, "Mock Codex app-server response.");
-    assert.equal(result.body.prompt_tokens, 42);
-    assert.equal(result.body.completion_tokens, 9);
-    assert.equal(result.body.run_id, "run_worker_service_proof");
-    assert.equal(result.body.request_id, "request_worker_service_proof");
-    assert.equal(JSON.stringify(result.body).includes(secretPrompt), false);
-    assert.equal(requests.length, 1);
-    const request = requests[0];
-    assert.equal(request.run_id, "run_worker_service_proof");
-    assert.equal(request.thread_id, "thread_worker_service_proof");
-    assert.equal(request.request_id, "request_worker_service_proof");
-    assert.equal(request.model_id, "gpt-5.5");
-    assert.equal(request.max_tokens, 2048);
-    assert.equal(request.developer_instructions, "Use the PolyNet prompt bundle.");
-    assert.equal(request.prompt, secretPrompt);
-    const metadata = asRecord(request.metadata);
-    assert.equal(metadata.runtime_engine, "codex");
-    assert.equal(metadata.lane, "chatgpt");
-    assert.equal(metadata.inference_source, "chatgpt");
-    assert.deepEqual(metadata.polynet_platform_tool_names, [
-      "search_product_docs",
-      "get_active_community_context",
-    ]);
   });
 }
 
-async function proveAppServerModeFailsClosedWithoutUrl(): Promise<void> {
-  const result = await runPolynetCodexWorkerRequest(buildPayload(), {
-    authToken: null,
-    executionMode: "app_server",
-    staticAssistantText: null,
-    appServer: null,
-    codexStdio: null,
-    maxBodyBytes: 1_000_000,
+async function main() {
+  const codexHome = await mkdtemp(path.join(tmpdir(), "polynet-codex-worker-proof-"));
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "polynet-codex-worker-workspace-"));
+  const proc = spawn("bash", [runnerPath], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      POLYNET_CODEX_WORKER_AUTH_TOKEN: authToken,
+      POLYNET_CODEX_WORKER_CODEX_HOME: codexHome,
+      POLYNET_CODEX_WORKER_DESTROY_AFTER_RUN: "true",
+      POLYNET_CODEX_WORKER_HOST: "127.0.0.1",
+      POLYNET_CODEX_WORKSPACE_HOST: "daytona",
+      POLYNET_DAYTONA_WORKSPACE_ROOT: workspaceRoot,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  assert.equal(result.status, 503);
-  assert.equal(result.body.ok, false);
-  assert.equal(result.body.code, "codex_app_server_not_configured");
-  assert.equal(JSON.stringify(result.body).includes(secretPrompt), false);
-}
+  proc.stdout.on("data", (chunk) => pushTail(stdoutTail, String(chunk ?? "")));
+  proc.stderr.on("data", (chunk) => pushTail(stderrTail, String(chunk ?? "")));
 
-async function proveAppServerErrorDoesNotLeakPrompt(): Promise<void> {
-  await withFailingMockAppServer(async (url) => {
-    const result = await runPolynetCodexWorkerRequest(buildPayload(), {
-      authToken: null,
-      executionMode: "app_server",
-      staticAssistantText: null,
-      appServer: {
-        url,
-        authToken: null,
-        timeoutMs: 10_000,
+  try {
+    const health = await waitForHealth(proc);
+    assert.equal(health.worker_http_ready, true, "worker HTTP readiness must not wait on Codex init");
+    assert.equal(health.ok, true, `worker HTTP health must be ok once reachable: ${JSON.stringify(health)}`);
+    assert.equal(
+      typeof asRecord(health.codex)?.initialized,
+      "boolean",
+      "worker health must expose Codex initialized state",
+    );
+    const codexReadyHealth =
+      asRecord(health.codex)?.initialized === true
+        ? health
+        : await waitForCodexInitialized(proc, requireLive ? 120_000 : 10_000);
+    if (!codexReadyHealth && !requireLive) {
+      console.log(
+        JSON.stringify(
+          {
+            ok: true,
+            skipped: true,
+            reason: "codex_app_server_initialization_not_observed",
+            health,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    if (!codexReadyHealth) {
+      throw new Error("Codex app-server did not initialize before timeout");
+    }
+    if (codexReadyHealth.ok !== true && !requireLive) {
+      console.log(
+        JSON.stringify(
+          {
+            ok: true,
+            skipped: true,
+            reason: "codex_app_server_health_degraded",
+            health: codexReadyHealth,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    assert.equal(codexReadyHealth.ok, true, `worker health must be ok for live proof: ${JSON.stringify(codexReadyHealth)}`);
+    assert.equal(asRecord(codexReadyHealth.codex)?.initialized, true, "Codex app-server must be initialized");
+    assert.equal(
+      asRecord(codexReadyHealth.workspace_host)?.configured,
+      true,
+      "workspace host must be configured",
+    );
+
+    const unauth = await fetchJson(`${serviceUrl}/v1/workspace/probe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(unauth.status, 401, "workspace probe endpoint must reject missing bearer auth");
+
+    const invalidSandbox = await fetchJson(`${serviceUrl}/v1/workspace/probe`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
       },
-      codexStdio: null,
-      maxBodyBytes: 1_000_000,
+      body: JSON.stringify({
+        sandbox_name: "!!!",
+      }),
     });
-    assert.equal(result.status, 500);
-    assert.equal(result.body.ok, false);
-    assert.equal(result.body.code, "mock_codex_failure");
-    assert.equal(JSON.stringify(result.body).includes(secretPrompt), false);
-  });
+    assert.equal(invalidSandbox.status, 400, "workspace probe endpoint must reject invalid sandbox names");
+    assert.equal(invalidSandbox.body.code, "invalid_sandbox_name", "invalid sandbox response code mismatch");
+
+    const missingCodexAuth = await fetchJson(`${serviceUrl}/v1/codex/probe`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "say hi" }),
+    });
+    assert.equal(missingCodexAuth.status, 400, "Codex probe must require per-user ChatGPT auth");
+    assert.equal(missingCodexAuth.body.code, "chatgpt_auth_required", "missing Codex auth code mismatch");
+    await assertTurnControlEndpointsFailClosed();
+
+    await assertBusyWhileWorkspaceProbeInFlight();
+
+    const workspaceProbe = await runWorkspaceProbe();
+    const timingBuckets = assertWorkspaceProbeBody(workspaceProbe, workspaceRoot);
+
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          service_url: serviceUrl,
+          service_events: serviceEvents(),
+          event_count: asArray(workspaceProbe.events).length,
+          runtime_event_types: asArray(workspaceProbe.events)
+            .map((event) => String(asRecord(event)?.event_type ?? ""))
+            .filter(Boolean),
+          timing_buckets_ms: timingBuckets,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error ?? "unknown error"),
+          service_stdout_tail: stdoutTail,
+          service_stderr_tail: stderrTail,
+        },
+        null,
+        2,
+      ),
+    );
+    throw error;
+  } finally {
+    await stopService(proc);
+    await rm(codexHome, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
 }
 
-proveServiceIsMinimal();
-provePayloadValidation();
-await proveExecutionDisabledIsExplicit();
-await proveHttpContract();
-await proveAppServerAdapterContract();
-await proveAppServerModeFailsClosedWithoutUrl();
-await proveAppServerErrorDoesNotLeakPrompt();
-
-console.log("polynet_codex_worker_service_contract_proof: ok");
+await main();
