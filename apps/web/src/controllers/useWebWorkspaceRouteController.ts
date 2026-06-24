@@ -21,6 +21,7 @@ type UseWebWorkspaceRouteControllerArgs = {
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveProjectId?: (value: string | null | ((prev: string | null) => string | null)) => void;
+  resetDraftRuntimeEngine?: () => void;
   syncCommunitySelection?: (opts: { communityId?: string | null; communitySlug?: string | null }) => void;
 };
 
@@ -79,6 +80,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       const requestedProjectId = normalizeWorkspaceDraftProjectId(
         opts?.projectId !== undefined ? opts.projectId : null,
       );
+      current.resetDraftRuntimeEngine?.();
       current.setActiveProjectId?.(requestedProjectId);
       current.setActivePage("workspace");
       current.setActiveView("home");
@@ -155,6 +157,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
         return;
       }
       if (!current.activeThreadId && current.activePage === "workspace" && current.activeView === "home") {
+        current.resetDraftRuntimeEngine?.();
         current.setWorkspaceWantsNewChatMode(true);
         current.setActiveProjectId?.(null);
         current.navigateTo(

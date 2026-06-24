@@ -29,6 +29,8 @@ function read(relativePath: string): string {
 const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
 const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
+const workspaceCoreController = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
+const workspaceRouteController = read("apps/web/src/controllers/useWebWorkspaceRouteController.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 const runtimeEngine = read("shared/runtimeEngine.ts");
 const webSendFlowCore = read("shared/webSendFlowCore.ts");
@@ -52,6 +54,21 @@ assert.match(
   app,
   /ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY[\s\S]*shouldRestorePolynetDefault[\s\S]*RUNTIME_ENGINE_POLYNET/,
   "web startup must restore the workspace runtime default back to PolyNet after the Codex-only migration",
+);
+assert.match(
+  app,
+  /resetDraftRuntimeEngine[\s\S]*setActiveRuntimeEngine\(DEFAULT_ACTIVE_RUNTIME_ENGINE\)[\s\S]*resetDraftRuntimeEngine/,
+  "fresh workspace drafts must reset the composer runtime to the shared default",
+);
+assert.match(
+  workspaceCoreController,
+  /resetDraftRuntimeEngine\?: \(\) => void[\s\S]*resetDraftRuntimeEngine: params\.resetDraftRuntimeEngine/,
+  "workspace core must forward the draft-runtime reset callback to route actions",
+);
+assert.match(
+  workspaceRouteController,
+  /resetDraftRuntimeEngine\?: \(\) => void[\s\S]*openWorkspaceDraft[\s\S]*current\.resetDraftRuntimeEngine\?\.\(\)[\s\S]*handleNewWorkspaceThread[\s\S]*current\.resetDraftRuntimeEngine\?\.\(\)/,
+  "workspace route actions must reset runtime on fresh draft/new-thread entry",
 );
 assert.match(
   app,

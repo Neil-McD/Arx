@@ -67,6 +67,7 @@ type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> =
   activeCommunityId: string | null;
   activeModelId: string | null;
   activeRuntimeEngine: RuntimeEngine;
+  resetDraftRuntimeEngine?: () => void;
   modelToggles: ModelToggle[];
   defaultActiveModelId: string;
 };
@@ -86,6 +87,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     setActiveThreadId: params.setActiveThreadId,
     setWorkspaceWantsNewChatMode: params.setWorkspaceWantsNewChatMode,
     setActiveProjectId: params.project.actions.setActiveProjectId,
+    resetDraftRuntimeEngine: params.resetDraftRuntimeEngine,
     syncCommunitySelection: params.syncCommunitySelection,
   });
 

@@ -501,6 +501,7 @@ import {
   uploadCloudThreadAttachmentFile,
 } from "../../../shared/cloudThreadsGateway";
 import {
+  DEFAULT_ACTIVE_RUNTIME_ENGINE,
   RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
   normalizeActiveWorkspaceRuntimeEngine,
@@ -2091,6 +2092,9 @@ export default function App() {
       // Local storage is best-effort; the cloud thread value remains canonical for saved threads.
     }
   }, []);
+  const resetDraftRuntimeEngine = useCallback((): void => {
+    setActiveRuntimeEngine(DEFAULT_ACTIVE_RUNTIME_ENGINE);
+  }, [setActiveRuntimeEngine]);
   const formatModelLabel = useCallback(
     (modelId: string | null | undefined): string | null => {
       const normalized = (modelId ?? "").trim();
@@ -3644,6 +3648,7 @@ export default function App() {
     activeCommunityId,
     activeModelId: DEFAULT_ACTIVE_MODEL_ID,
     activeRuntimeEngine,
+    resetDraftRuntimeEngine,
     modelToggles: platformModelToggles,
     defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
   });
