@@ -179,6 +179,7 @@
     "check:polynet-codex-worker-service-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_service_contract_proof.ts",
     "check:polynet-codex-worker-harness-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_codex_worker_harness_contract_proof.ts",
     "check:daytona-runtime-substrate-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_runtime_substrate_contract_proof.ts",
+    "check:daytona-preview-computer-lifecycle-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_preview_computer_lifecycle_contract_proof.ts",
     "check:community-context-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_context_tool_proof.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
     "check:community-app-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_app_lifecycle_contract_proof.ts",
