@@ -37,6 +37,16 @@ export type PolynetCodexWorkerRunTokenVerification =
   | { ok: true; payload: PolynetCodexWorkerRunTokenPayload }
   | PolynetCodexWorkerRunTokenFailure;
 
+export function isPolynetCodexWorkerRunTokenFailure(
+  value: unknown,
+): value is PolynetCodexWorkerRunTokenFailure {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as { ok?: unknown }).ok === false,
+  );
+}
+
 const RUN_TOKEN_AUDIENCES = new Set<PolynetCodexWorkerRunTokenAudience>([
   "ingest",
   "terminal",
@@ -174,7 +184,7 @@ async function mintPolynetCodexWorkerRunToken(params: {
   ttlMs?: number;
 }): Promise<{ ok: true; token: string } | PolynetCodexWorkerRunTokenFailure> {
   const secret = getRunTokenSecret();
-  if (!secret.ok) return secret;
+  if (isPolynetCodexWorkerRunTokenFailure(secret)) return secret;
   if (!RUN_TOKEN_AUDIENCES.has(params.audience)) {
     return {
       ok: false,
@@ -258,9 +268,9 @@ export async function mintPolynetCodexWorkerRunTokenSet(params: {
       ? mintPolynetCodexWorkerRunToken({ audience: "tool", context, nowMs: params.nowMs })
       : Promise.resolve({ ok: true as const, token: null as string | null }),
   ]);
-  if (!ingest.ok) return ingest;
-  if (!terminal.ok) return terminal;
-  if (!tool.ok) return tool;
+  if (isPolynetCodexWorkerRunTokenFailure(ingest)) return ingest;
+  if (isPolynetCodexWorkerRunTokenFailure(terminal)) return terminal;
+  if (isPolynetCodexWorkerRunTokenFailure(tool)) return tool;
   return {
     ok: true,
     tokens: {
@@ -278,7 +288,7 @@ export async function verifyPolynetCodexWorkerRunToken(params: {
   nowMs?: number;
 }): Promise<PolynetCodexWorkerRunTokenVerification> {
   const secret = getRunTokenSecret();
-  if (!secret.ok) return secret;
+  if (isPolynetCodexWorkerRunTokenFailure(secret)) return secret;
   const token = String(params.token ?? "").trim();
   if (!token) {
     return {

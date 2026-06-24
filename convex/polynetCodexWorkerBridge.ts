@@ -1,564 +1,678 @@
 import {
   buildRuntimeCodexPromptProjection,
   type RuntimeCodexPromptProjection,
-  type RuntimeCodexPromptProjectionMessage,
 } from "../shared/runtimeCodexPromptProjection.ts";
-import {
-  normalizeCommunityResourceRuntimeLaneState,
-  type CommunityResourceRuntimeLaneState,
-} from "../shared/communityResourceLane.ts";
+import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
+import type { RuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools.ts";
-import type { RuntimeEngine } from "../shared/runtimeEngine.ts";
-import type { RuntimePlatformHarnessPromptParams } from "../shared/runtimePrompt.ts";
+import {
+  RUNTIME_ENGINE_CODEX,
+  RUNTIME_ENGINE_POLYNET,
+  type RuntimeEngine,
+} from "../shared/runtimeEngine.ts";
+import type { CommunityResourceRuntimeLaneState } from "../shared/communityResourceLane.ts";
 
 export const POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker";
-export const POLYNET_CODEX_WORKER_CONTRACT_NAME =
-  "polynet_codex_worker_bridge_v1";
+export const POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_runtime_daytona_v1";
 export const POLYNET_CODEX_WORKER_CONTRACT_VERSION = "v1";
+const POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS = new Set([
+  "staging",
+  "production",
+] as const);
 
-const WORKER_RUNTIME_ENABLED_ENV = "POLYNET_CODEX_WORKER_RUNTIME_ENABLED";
-const WORKER_URL_ENV = "POLYNET_CODEX_WORKER_URL";
-const WORKER_AUTH_TOKEN_ENV = "POLYNET_CODEX_WORKER_AUTH_TOKEN";
-const WORKER_TIMEOUT_MS_ENV = "POLYNET_CODEX_WORKER_TIMEOUT_MS";
-const DEFAULT_WORKER_TIMEOUT_MS = 60_000;
-const MIN_WORKER_TIMEOUT_MS = 1_000;
-const MAX_WORKER_TIMEOUT_MS = 120_000;
+type JsonRecord = Record<string, unknown>;
+type PolynetCodexWorkerDeploymentKind = "staging" | "production";
+type PolynetCodexWorkerTransportProvider = "daytona_direct";
 
-export type PolynetCodexWorkerBridgeConfig = {
-  workerBridgeConfigured: boolean;
-  enabled: boolean;
-  url: string | null;
-  authToken: string | null;
-  timeoutMs: number;
-  disabledReason: string | null;
+export type PolynetCodexWorkerResolvedTarget = {
+  provider: "daytona";
+  targetId: string;
+  sandboxId: string | null;
+  workerUrl: string;
+  authToken: string;
+  signedPreviewExpiresAt: number | null;
 };
 
-export type PolynetCodexWorkerBridgeRequest = {
-  ownerId: string;
-  threadId: string;
-  runId: string;
-  requestId: string;
-  runtimeEngine: RuntimeEngine;
-  modelId: string;
-  maxTokens: number;
-  lane: string;
-  inferenceSource: string;
-  allowedToolNames: readonly RetrievalToolName[];
-  conversationMessages: readonly RuntimeCodexPromptProjectionMessage[];
-  latestUserText: string;
-  promptProjection: RuntimeCodexPromptProjection;
-};
-
-export type PolynetCodexWorkerTransportPayload = {
-  contract_name: typeof POLYNET_CODEX_WORKER_CONTRACT_NAME;
-  contract_version: typeof POLYNET_CODEX_WORKER_CONTRACT_VERSION;
-  engine_id: typeof POLYNET_CODEX_WORKER_ENGINE_ID;
-  run_id: string;
-  thread_id: string;
-  request_id: string;
-  runtime_engine: RuntimeEngine;
-  model_id: string;
-  max_tokens: number;
-  lane: string;
-  inference_source: string;
-  developer_instructions: string;
-  prompt: string;
-  polynet_platform_tool_names: readonly RetrievalToolName[];
-  community_resource_lane: CommunityResourceRuntimeLaneState;
-  prompt_projection_receipt: RuntimeCodexPromptProjection["receipt"];
-};
-
-export type PolynetCodexWorkerBridgeSuccess = {
-  ok: true;
-  workerBridgeConfigured: true;
-  request: PolynetCodexWorkerBridgeRequest;
-  assistantText: string;
-  promptTokens: number | null;
-  completionTokens: number | null;
-};
-
-export type PolynetCodexWorkerBridgeFailure = {
-  ok: false;
-  status: number;
-  code:
-    | "codex_worker_unavailable"
-    | "codex_worker_transport_failed"
-    | "codex_worker_invalid_response";
-  message: string;
-  retryable: boolean;
-  workerBridgeConfigured: boolean;
-  disabledReason: string | null;
-  engineId: typeof POLYNET_CODEX_WORKER_ENGINE_ID;
-  contractName: typeof POLYNET_CODEX_WORKER_CONTRACT_NAME;
-  contractVersion: typeof POLYNET_CODEX_WORKER_CONTRACT_VERSION;
-  promptProjectionReceipt: RuntimeCodexPromptProjection["receipt"];
+export type PolynetCodexWorkerSseEvent = {
+  event: string;
+  data: JsonRecord;
 };
 
 export type PolynetCodexWorkerBridgeResult =
-  | PolynetCodexWorkerBridgeSuccess
-  | PolynetCodexWorkerBridgeFailure;
+  | {
+      ok: true;
+      assistantText: string;
+      timing: JsonRecord | null;
+      proof: JsonRecord | null;
+      finalPayload: JsonRecord | null;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      assistantText: string;
+      timing: JsonRecord | null;
+      proof: JsonRecord | null;
+    };
 
-type WorkerFetchFn = (
-  input: string,
-  init: {
-    method: "POST";
-    headers: Record<string, string>;
-    body: string;
-    signal?: AbortSignal;
-  },
-) => Promise<{
-  ok: boolean;
-  status: number;
-  text: () => Promise<string>;
-}>;
-
-type AppendRunEventFn = (params: {
-  eventType: string;
-  eventKey?: string;
-  payload: Record<string, unknown>;
-}) => Promise<void>;
-
-function readEnvValue(
-  env: Record<string, string | undefined>,
-  name: string,
-): string | null {
-  const value = String(env[name] ?? "").trim();
-  return value || null;
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
 }
 
-function readRuntimeEnv(): Record<string, string | undefined> {
+function readEnv(name: string): string {
   try {
-    return typeof process !== "undefined" ? process.env : {};
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // Convex exposes environment variables through process.env in actions.
+  }
+  return "";
+}
+
+function readBooleanEnv(name: string): boolean {
+  const raw = readEnv(name).toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function hasDaytonaCredentials(): boolean {
+  return Boolean(readEnv("DAYTONA_API_KEY") || readEnv("DAYTONA_JWT_TOKEN"));
+}
+
+function readWorkerDeploymentKind(): PolynetCodexWorkerDeploymentKind | null {
+  const raw = readEnv("POLYNET_DEPLOYMENT_KIND");
+  return POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS.has(
+    raw as PolynetCodexWorkerDeploymentKind,
+  )
+    ? (raw as PolynetCodexWorkerDeploymentKind)
+    : null;
+}
+
+export function getPolynetCodexWorkerBridgeConfig(): {
+  enabled: boolean;
+  provider: PolynetCodexWorkerTransportProvider;
+  baseUrl: string | null;
+  authToken: string | null;
+  disabledReason: string | null;
+} {
+  const provider = "daytona_direct";
+  if (!readBooleanEnv("POLYNET_CODEX_WORKER_RUNTIME_ENABLED")) {
+    return {
+      enabled: false,
+      provider,
+      baseUrl: null,
+      authToken: null,
+      disabledReason: "polynet_codex_worker_runtime_disabled",
+    };
+  }
+  const deploymentKind = readWorkerDeploymentKind();
+  if (!deploymentKind) {
+    return {
+      enabled: false,
+      provider,
+      baseUrl: null,
+      authToken: null,
+      disabledReason: "polynet_codex_worker_deployment_kind_invalid",
+    };
+  }
+  const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
+  if (!authToken) {
+    return {
+      enabled: false,
+      provider,
+      baseUrl: null,
+      authToken: null,
+      disabledReason: "polynet_codex_worker_auth_token_missing",
+    };
+  }
+  if (!hasDaytonaCredentials()) {
+    return {
+      enabled: false,
+      provider,
+      baseUrl: null,
+      authToken,
+      disabledReason: "daytona_direct_credentials_missing",
+    };
+  }
+  return {
+    enabled: true,
+    provider,
+    baseUrl: null,
+    authToken,
+    disabledReason: null,
+  };
+}
+
+export function isPolynetCodexWorkerBridgeConfigured(): boolean {
+  return getPolynetCodexWorkerBridgeConfig().enabled;
+}
+
+export type PolynetRuntimeEngineResolution =
+  | {
+      ok: true;
+      requestedRuntimeEngine: RuntimeEngine | null;
+      resolvedRuntimeEngine: RuntimeEngine;
+      runtimeEngineSource: "request" | "legacy_inference";
+      engineId: string;
+      usePolynetCodexWorkerBridge: boolean;
+      disabledReason: string | null;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      requestedRuntimeEngine: RuntimeEngine;
+      resolvedRuntimeEngine: null;
+      runtimeEngineSource: "request";
+      engineId: null;
+      usePolynetCodexWorkerBridge: false;
+      disabledReason: string | null;
+    };
+
+function resolveExplicitCodexWorkerFailure(params: {
+  runtimeExecutionMode: "agentic" | "chat";
+  stream: boolean;
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+}): {
+  status: number;
+  code: string;
+  message: string;
+  disabledReason: string | null;
+} | null {
+  if (params.runtimeExecutionMode !== "agentic") {
+    return {
+      status: 400,
+      code: "polynet_codex_worker_requires_agentic_runtime",
+      message: "Codex runtime requires agentic workspace tools.",
+      disabledReason: null,
+    };
+  }
+  if (!params.stream) {
+    return {
+      status: 400,
+      code: "polynet_codex_worker_requires_streaming",
+      message: "Codex runtime requires streaming turns.",
+      disabledReason: null,
+    };
+  }
+  if (params.inferenceSource !== "chatgpt") {
+    return {
+      status: 403,
+      code: "polynet_codex_worker_requires_chatgpt",
+      message: "Codex runtime requires a connected ChatGPT account.",
+      disabledReason: null,
+    };
+  }
+  const config = getPolynetCodexWorkerBridgeConfig();
+  if (!config.enabled) {
+    return {
+      status: 503,
+      code: config.disabledReason ?? "polynet_codex_worker_env_missing",
+      message: "PolyNet Codex worker is not configured for this deployment.",
+      disabledReason: config.disabledReason,
+    };
+  }
+  return null;
+}
+
+export function resolvePolynetRuntimeEngine(params: {
+  requestedRuntimeEngine: RuntimeEngine | null;
+  runtimeExecutionMode: "agentic" | "chat";
+  stream: boolean;
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+}): PolynetRuntimeEngineResolution {
+  if (
+    params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET ||
+    params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX
+  ) {
+    const failure = resolveExplicitCodexWorkerFailure(params);
+    if (failure) {
+      return {
+        ok: false,
+        ...failure,
+        requestedRuntimeEngine: params.requestedRuntimeEngine,
+        resolvedRuntimeEngine: null,
+        runtimeEngineSource: "request",
+        engineId: null,
+        usePolynetCodexWorkerBridge: false,
+      };
+    }
+    return {
+      ok: true,
+      requestedRuntimeEngine: params.requestedRuntimeEngine,
+      resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+      runtimeEngineSource: "request",
+      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+      usePolynetCodexWorkerBridge: true,
+      disabledReason: null,
+    };
+  }
+
+  const failure = resolveExplicitCodexWorkerFailure(params);
+  if (failure) {
+    return {
+      ok: false,
+      ...failure,
+      requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+      resolvedRuntimeEngine: null,
+      runtimeEngineSource: "request",
+      engineId: null,
+      usePolynetCodexWorkerBridge: false,
+    };
+  }
+  return {
+    ok: true,
+    requestedRuntimeEngine: null,
+    resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+    runtimeEngineSource: "legacy_inference",
+    engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+    usePolynetCodexWorkerBridge: true,
+    disabledReason: null,
+  };
+}
+
+export type PolynetCodexWorkerChatgptAuth = {
+  accessToken: string;
+  accountId: string;
+  planType: string | null;
+};
+
+export type PolynetCodexWorkerTurnInputs = RuntimeCodexPromptProjection;
+
+export function buildPolynetCodexWorkerTurnInputs(params: {
+  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  latestUserText: string;
+  communityName: string | null;
+  communitySlug: string | null;
+  communityOneLiner: string | null;
+  communityAbout: string | null;
+  communitySystemPrompt: string | null;
+  agentName: string | null;
+  agentSoul: string | null;
+  runtimeTurnContext: RuntimeTurnContextPacket;
+  codexVisiblePolynetToolNames: readonly RetrievalToolName[];
+  communityResourceLane: CommunityResourceRuntimeLaneState | null;
+  currentDateTimeIso: string | null;
+  currentDateLabel: string | null;
+  currentTimeZone: string | null;
+}): PolynetCodexWorkerTurnInputs {
+  const projectContext = params.runtimeTurnContext.projectContext ?? null;
+  return buildRuntimeCodexPromptProjection({
+    loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+    allowedToolNames: params.codexVisiblePolynetToolNames,
+    harnessName: "chat_tools",
+    communityId: params.runtimeTurnContext.runtimeTurnEnvelope?.authority.communityId ?? null,
+    communityName: params.communityName,
+    communitySlug: params.communitySlug,
+    communityOneLiner: params.communityOneLiner,
+    communityAbout: params.communityAbout,
+    communitySystemPrompt: params.communitySystemPrompt,
+    communityResourceLane: params.communityResourceLane,
+    agentName: params.agentName,
+    agentSoul: params.agentSoul,
+    projectLabel: projectContext?.label ?? null,
+    projectDescription: projectContext?.description ?? null,
+    runtimeTurnContext: params.runtimeTurnContext,
+    currentDateTimeIso: params.currentDateTimeIso,
+    currentDateLabel: params.currentDateLabel,
+    currentTimeZone: params.currentTimeZone,
+    conversationMessages: params.conversationMessages,
+    latestUserText: params.latestUserText,
+  });
+}
+
+function parseSseBlock(block: string): PolynetCodexWorkerSseEvent | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith("event:")) {
+      event = line.slice("event:".length).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+  if (dataLines.length === 0) return null;
+  const parsed = asRecord(JSON.parse(dataLines.join("\n"))) ?? {};
+  return { event, data: parsed };
+}
+
+function findSseBlockSeparator(buffer: string): { index: number; length: number } | null {
+  const lfIndex = buffer.indexOf("\n\n");
+  const crlfIndex = buffer.indexOf("\r\n\r\n");
+  if (lfIndex < 0 && crlfIndex < 0) return null;
+  if (lfIndex < 0) return { index: crlfIndex, length: 4 };
+  if (crlfIndex < 0) return { index: lfIndex, length: 2 };
+  return lfIndex < crlfIndex
+    ? { index: lfIndex, length: 2 }
+    : { index: crlfIndex, length: 4 };
+}
+
+async function readResponseJson(response: Response): Promise<JsonRecord> {
+  try {
+    return asRecord(await response.json()) ?? {};
   } catch {
     return {};
   }
 }
 
-function envFlagEnabled(value: string | null): boolean {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  return (
-    normalized === "1" ||
-    normalized === "true" ||
-    normalized === "yes" ||
-    normalized === "on"
-  );
+function normalizeWorkerErrorPayload(payload: JsonRecord, fallbackStatus: number): {
+  code: string;
+  message: string;
+} {
+  const code =
+    String(payload.code ?? payload.error ?? "").trim() ||
+    (fallbackStatus === 409 ? "worker_busy" : "polynet_codex_worker_failed");
+  const message =
+    String(payload.message ?? payload.error ?? "").trim() ||
+    (fallbackStatus === 409
+      ? "PolyNet Codex worker is busy."
+      : "PolyNet Codex worker request failed.");
+  return { code, message };
 }
 
-function normalizeWorkerTimeoutMs(value: string | null): number {
-  const parsed = Number(value ?? "");
-  if (!Number.isFinite(parsed)) return DEFAULT_WORKER_TIMEOUT_MS;
-  return Math.max(
-    MIN_WORKER_TIMEOUT_MS,
-    Math.min(MAX_WORKER_TIMEOUT_MS, Math.floor(parsed)),
-  );
-}
-
-function isValidWorkerUrl(value: string | null): boolean {
-  if (!value) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-export function getPolynetCodexWorkerBridgeConfig(
-  env: Record<string, string | undefined> = readRuntimeEnv(),
-): PolynetCodexWorkerBridgeConfig {
-  const enabled = envFlagEnabled(readEnvValue(env, WORKER_RUNTIME_ENABLED_ENV));
-  const url = readEnvValue(env, WORKER_URL_ENV);
-  const authToken = readEnvValue(env, WORKER_AUTH_TOKEN_ENV);
-  const timeoutMs = normalizeWorkerTimeoutMs(readEnvValue(env, WORKER_TIMEOUT_MS_ENV));
-  if (!enabled) {
+function resolveWorkerTransport(params?: {
+  target?: PolynetCodexWorkerResolvedTarget | null;
+}): {
+  enabled: boolean;
+  baseUrl: string | null;
+  authToken: string | null;
+  disabledReason: string | null;
+} {
+  if (params?.target?.workerUrl && params.target.authToken) {
     return {
-      workerBridgeConfigured: false,
-      enabled,
-      url,
-      authToken,
-      timeoutMs,
-      disabledReason: `${WORKER_RUNTIME_ENABLED_ENV} is not enabled.`,
+      enabled: true,
+      baseUrl: params.target.workerUrl.replace(/\/+$/, ""),
+      authToken: params.target.authToken,
+      disabledReason: null,
     };
   }
-  if (!url) {
-    return {
-      workerBridgeConfigured: false,
-      enabled,
-      url: null,
-      authToken,
-      timeoutMs,
-      disabledReason: `${WORKER_URL_ENV} is not configured.`,
-    };
-  }
-  if (!isValidWorkerUrl(url)) {
-    return {
-      workerBridgeConfigured: false,
-      enabled,
-      url,
-      authToken,
-      timeoutMs,
-      disabledReason: `${WORKER_URL_ENV} must be an https URL.`,
-    };
-  }
+  const config = getPolynetCodexWorkerBridgeConfig();
   return {
-    workerBridgeConfigured: true,
-    enabled,
-    url,
-    authToken,
-    timeoutMs,
-    disabledReason: null,
+    enabled: config.enabled,
+    baseUrl: config.baseUrl,
+    authToken: config.authToken,
+    disabledReason: config.enabled
+      ? "daytona_direct_target_missing"
+      : config.disabledReason,
   };
 }
 
-export function isPolynetCodexWorkerBridgeConfigured(
-  env: Record<string, string | undefined> = readRuntimeEnv(),
-): boolean {
-  return getPolynetCodexWorkerBridgeConfig(env).workerBridgeConfigured;
-}
-
-function buildPolynetCodexWorkerTransportPayload(
-  request: PolynetCodexWorkerBridgeRequest,
-  communityResourceLane: CommunityResourceRuntimeLaneState,
-): PolynetCodexWorkerTransportPayload {
-  return {
-    contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-    contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-    engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
-    run_id: request.runId,
-    thread_id: request.threadId,
-    request_id: request.requestId,
-    runtime_engine: request.runtimeEngine,
-    model_id: request.modelId,
-    max_tokens: request.maxTokens,
-    lane: request.lane,
-    inference_source: request.inferenceSource,
-    developer_instructions: request.promptProjection.developerInstructions,
-    prompt: request.promptProjection.prompt,
-    polynet_platform_tool_names: request.allowedToolNames,
-    community_resource_lane: communityResourceLane,
-    prompt_projection_receipt: request.promptProjection.receipt,
-  };
-}
-
-function normalizeTokenCount(value: unknown): number | null {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 0) return null;
-  return Math.floor(numberValue);
-}
-
-function readWorkerResponseObject(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function parseWorkerResponseText(value: string): Record<string, unknown> | null {
+export async function cancelPolynetCodexWorkerTurn(params: {
+  runId: string;
+  machineId?: string | null;
+  target?: PolynetCodexWorkerResolvedTarget | null;
+}): Promise<{ ok: boolean; status: number }> {
+  const config = resolveWorkerTransport({ target: params.target ?? null });
+  if (!config.enabled || !config.baseUrl || !config.authToken) {
+    return { ok: false, status: 503 };
+  }
   try {
-    return readWorkerResponseObject(JSON.parse(value));
+    const response = await fetch(`${config.baseUrl}/v1/codex/turn/cancel`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ run_id: params.runId }),
+    });
+    return { ok: response.ok, status: response.status };
   } catch {
-    return null;
+    return { ok: false, status: 502 };
   }
 }
 
-function parsePolynetCodexWorkerTransportResponse(
-  params: {
-    status: number;
-    ok: boolean;
-    bodyText: string;
-    request: PolynetCodexWorkerBridgeRequest;
-  },
-): PolynetCodexWorkerBridgeResult {
-  const body = parseWorkerResponseText(params.bodyText);
-  if (!body) {
+export async function steerPolynetCodexWorkerTurn(params: {
+  runId: string;
+  machineId?: string | null;
+  text: string;
+  target?: PolynetCodexWorkerResolvedTarget | null;
+}): Promise<{ ok: boolean; status: number }> {
+  const config = resolveWorkerTransport({ target: params.target ?? null });
+  if (!config.enabled || !config.baseUrl || !config.authToken) {
+    return { ok: false, status: 503 };
+  }
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/codex/turn/steer`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ run_id: params.runId, text: params.text }),
+    });
+    return { ok: response.ok, status: response.status };
+  } catch {
+    return { ok: false, status: 502 };
+  }
+}
+
+export async function streamPolynetCodexWorkerTurn(params: {
+  runId: string;
+  prompt: string;
+  developerInstructions?: string | null;
+  model: string;
+  sandboxName?: string | null;
+  destroyAfterRun?: boolean;
+  chatgptAuth: PolynetCodexWorkerChatgptAuth;
+  ingest?: {
+    url: string;
+    token: string;
+    run_token?: string | null;
+    tool_run_token?: string | null;
+    tool_url?: string | null;
+    context: Record<string, unknown>;
+  } | null;
+  platformTools?: Array<{
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+  }> | null;
+  target?: PolynetCodexWorkerResolvedTarget | null;
+  onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
+}): Promise<PolynetCodexWorkerBridgeResult> {
+  const config = resolveWorkerTransport({ target: params.target ?? null });
+  if (!config.enabled || !config.baseUrl || !config.authToken) {
     return {
       ok: false,
-      status: params.ok ? 502 : params.status || 502,
-      code: "codex_worker_invalid_response",
-      message: "Codex worker returned a non-JSON response.",
-      retryable: true,
-      workerBridgeConfigured: true,
-      disabledReason: null,
-      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-      contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      promptProjectionReceipt: params.request.promptProjection.receipt,
+      status: 503,
+      code: config.disabledReason ?? "polynet_codex_worker_env_missing",
+      message: "PolyNet Codex worker is not configured for this deployment.",
+      assistantText: "",
+      timing: null,
+      proof: null,
     };
   }
-  if (params.ok && body.ok === true) {
-    const assistantText =
-      typeof body.assistant_text === "string"
-        ? body.assistant_text
-        : typeof body.assistantText === "string"
-          ? body.assistantText
-          : "";
-    if (!assistantText.trim()) {
+
+  // A 409 means the runtime target is mid-turn or the Daytona target is still
+  // warming, so retry briefly before declaring capacity unavailable. 409 is
+  // safe to retry: the turn never started.
+  const WORKER_BUSY_RETRY_DELAYS_MS = [1_500, 3_000, 4_500, 6_000];
+  let busyAttempt = 0;
+  let response: Response;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      response = await fetch(`${config.baseUrl}/v1/codex/turn?stream=1`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          run_id: params.runId,
+          model: params.model,
+          prompt: params.prompt,
+          ...(String(params.developerInstructions ?? "").trim()
+            ? { developer_instructions: String(params.developerInstructions ?? "").trim() }
+            : {}),
+          stream: true,
+          ...(String(params.sandboxName ?? "").trim()
+            ? { sandbox_name: String(params.sandboxName ?? "").trim() }
+            : {}),
+          destroy_after_run: params.destroyAfterRun ?? true,
+          chatgpt_auth: {
+            access_token: params.chatgptAuth.accessToken,
+            chatgpt_account_id: params.chatgptAuth.accountId,
+            chatgpt_plan_type: params.chatgptAuth.planType,
+          },
+          ...(params.ingest
+            ? {
+                ingest: {
+                  url: params.ingest.url,
+                  token: params.ingest.token,
+                  run_token: params.ingest.run_token ?? null,
+                  tool_run_token: params.ingest.tool_run_token ?? null,
+                  tool_url: params.ingest.tool_url ?? null,
+                  context: params.ingest.context,
+                },
+              }
+            : {}),
+          ...(Array.isArray(params.platformTools) && params.platformTools.length > 0
+            ? { platform_tools: params.platformTools }
+            : {}),
+        }),
+      });
+    } catch (error) {
       return {
         ok: false,
         status: 502,
-        code: "codex_worker_invalid_response",
-        message: "Codex worker success response did not include assistant text.",
-        retryable: true,
-        workerBridgeConfigured: true,
-        disabledReason: null,
-        engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-        contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-        contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-        promptProjectionReceipt: params.request.promptProjection.receipt,
+        code: "polynet_codex_worker_unreachable",
+        message: error instanceof Error ? error.message : "PolyNet Codex worker is unreachable.",
+        assistantText: "",
+        timing: null,
+        proof: null,
       };
     }
-    return {
-      ok: true,
-      workerBridgeConfigured: true,
-      request: params.request,
-      assistantText,
-      promptTokens: normalizeTokenCount(body.prompt_tokens ?? body.promptTokens),
-      completionTokens: normalizeTokenCount(
-        body.completion_tokens ?? body.completionTokens,
-      ),
-    };
-  }
-  const code = String(body.code ?? body.error ?? "").trim() ||
-    "codex_worker_transport_failed";
-  const message = String(body.message ?? "").trim() ||
-    `Codex worker request failed with HTTP ${params.status || 502}.`;
-  return {
-    ok: false,
-    status:
-      params.status >= 400 && params.status < 600
-        ? params.status
-        : 502,
-    code: "codex_worker_transport_failed",
-    message: `${code}: ${message}`,
-    retryable: body.retryable !== false,
-    workerBridgeConfigured: true,
-    disabledReason: null,
-    engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-    contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-    contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-    promptProjectionReceipt: params.request.promptProjection.receipt,
-  };
-}
-
-async function appendWorkerBridgeEventBestEffort(
-  appendRunEvent: AppendRunEventFn | null | undefined,
-  params: Parameters<AppendRunEventFn>[0],
-): Promise<void> {
-  if (!appendRunEvent) return;
-  try {
-    await appendRunEvent(params);
-  } catch {
-    // Transport evidence is operational metadata; worker execution should still
-    // return its structured result if event persistence fails.
-  }
-}
-
-async function postPolynetCodexWorkerTransport(params: {
-  config: PolynetCodexWorkerBridgeConfig;
-  request: PolynetCodexWorkerBridgeRequest;
-  payload: PolynetCodexWorkerTransportPayload;
-  fetchFn?: WorkerFetchFn | null;
-  appendRunEvent?: AppendRunEventFn | null;
-}): Promise<PolynetCodexWorkerBridgeResult> {
-  const fetchFn =
-    params.fetchFn ??
-    (typeof fetch === "function" ? (fetch as WorkerFetchFn) : null);
-  const config = params.config;
-  if (!fetchFn) {
-    return {
-      ok: false,
-      status: 503,
-      code: "codex_worker_unavailable",
-      message: "Codex worker transport is unavailable in this runtime.",
-      retryable: true,
-      workerBridgeConfigured: false,
-      disabledReason: "fetch is not available.",
-      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-      contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      promptProjectionReceipt: params.request.promptProjection.receipt,
-    };
-  }
-  if (!config.url) {
-    return {
-      ok: false,
-      status: 503,
-      code: "codex_worker_unavailable",
-      message: "Codex worker URL is unavailable.",
-      retryable: true,
-      workerBridgeConfigured: false,
-      disabledReason: config.disabledReason,
-      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-      contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      promptProjectionReceipt: params.request.promptProjection.receipt,
-    };
-  }
-  await appendWorkerBridgeEventBestEffort(params.appendRunEvent, {
-    eventType: "codex_worker_transport_started",
-    eventKey: `${params.request.runId}:codex_worker_transport_started:1`,
-    payload: {
-      run_id: params.request.runId,
-      runtime_engine: params.request.runtimeEngine,
-      engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
-      contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      worker_bridge_configured: true,
-      timeout_ms: config.timeoutMs,
-      auth_header_configured: Boolean(config.authToken),
-      polynet_platform_tool_count: params.request.allowedToolNames.length,
-      prompt_projection_receipt: params.request.promptProjection.receipt,
-    },
-  });
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
-  try {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      "x-polynet-worker-engine-id": POLYNET_CODEX_WORKER_ENGINE_ID,
-      "x-polynet-worker-contract": POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      "x-polynet-worker-contract-version": POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      "x-polynet-run-id": params.request.runId,
-      "x-polynet-request-id": params.request.requestId,
-    };
-    if (config.authToken) {
-      headers.authorization = `Bearer ${config.authToken}`;
+    if (response.status === 409 && busyAttempt < WORKER_BUSY_RETRY_DELAYS_MS.length) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, WORKER_BUSY_RETRY_DELAYS_MS[busyAttempt]),
+      );
+      busyAttempt += 1;
+      continue;
     }
-    const response = await fetchFn(config.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(params.payload),
-      signal: controller.signal,
-    });
-    const bodyText = await response.text();
-    const result = parsePolynetCodexWorkerTransportResponse({
-      status: response.status,
-      ok: response.ok,
-      bodyText,
-      request: params.request,
-    });
-    await appendWorkerBridgeEventBestEffort(params.appendRunEvent, {
-      eventType: result.ok
-        ? "codex_worker_transport_finished"
-        : "codex_worker_transport_failed",
-      eventKey: `${params.request.runId}:${
-        result.ok ? "codex_worker_transport_finished" : "codex_worker_transport_failed"
-      }:1`,
-      payload: {
-        run_id: params.request.runId,
-        runtime_engine: params.request.runtimeEngine,
-        engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
-        contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-        contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-        http_status: response.status,
-        ok: result.ok,
-        error_code: result.ok ? null : result.code,
-        retryable: result.ok ? null : result.retryable,
-        prompt_tokens: result.ok ? result.promptTokens : null,
-        completion_tokens: result.ok ? result.completionTokens : null,
-      },
-    });
-    return result;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const result: PolynetCodexWorkerBridgeFailure = {
-      ok: false,
-      status: 504,
-      code: "codex_worker_transport_failed",
-      message: message || "Codex worker transport failed.",
-      retryable: true,
-      workerBridgeConfigured: true,
-      disabledReason: null,
-      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-      contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      promptProjectionReceipt: params.request.promptProjection.receipt,
-    };
-    await appendWorkerBridgeEventBestEffort(params.appendRunEvent, {
-      eventType: "codex_worker_transport_failed",
-      eventKey: `${params.request.runId}:codex_worker_transport_failed:1`,
-      payload: {
-        run_id: params.request.runId,
-        runtime_engine: params.request.runtimeEngine,
-        engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
-        contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-        contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-        ok: false,
-        error_code: result.code,
-        retryable: result.retryable,
-      },
-    });
-    return result;
-  } finally {
-    clearTimeout(timeout);
+    break;
   }
-}
 
-export async function startPolynetCodexWorkerRun(params: {
-  ownerId: string;
-  threadId: string;
-  runId: string;
-  requestId: string;
-  runtimeEngine: RuntimeEngine;
-  modelId: string;
-  maxTokens: number;
-  lane: string;
-  inferenceSource: string;
-  allowedToolNames: readonly RetrievalToolName[];
-  conversationMessages: readonly RuntimeCodexPromptProjectionMessage[];
-  latestUserText: string;
-  promptParams: RuntimePlatformHarnessPromptParams & {
-    conversationMessages: readonly RuntimeCodexPromptProjectionMessage[];
-    latestUserText: string;
-  };
-  env?: Record<string, string | undefined>;
-  fetchFn?: WorkerFetchFn | null;
-  appendRunEvent?: AppendRunEventFn | null;
-}): Promise<PolynetCodexWorkerBridgeResult> {
-  const promptProjection = buildRuntimeCodexPromptProjection(params.promptParams);
-  const request: PolynetCodexWorkerBridgeRequest = {
-    ownerId: params.ownerId,
-    threadId: params.threadId,
-    runId: params.runId,
-    requestId: params.requestId,
-    runtimeEngine: params.runtimeEngine,
-    modelId: params.modelId,
-    maxTokens: params.maxTokens,
-    lane: params.lane,
-    inferenceSource: params.inferenceSource,
-    allowedToolNames: params.allowedToolNames,
-    conversationMessages: params.conversationMessages,
-    latestUserText: params.latestUserText,
-    promptProjection,
-  };
-  const config = getPolynetCodexWorkerBridgeConfig(params.env);
-  if (!config.workerBridgeConfigured) {
+  if (!response.ok) {
+    const payload = await readResponseJson(response);
+    const error = normalizeWorkerErrorPayload(payload, response.status);
     return {
       ok: false,
-      status: 503,
-      code: "codex_worker_unavailable",
-      message:
-        "Codex runtime routing is enabled, but the Codex worker bridge is not configured yet.",
-      retryable: true,
-      workerBridgeConfigured: false,
-      disabledReason: config.disabledReason,
-      engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-      contractName: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-      contractVersion: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-      promptProjectionReceipt: request.promptProjection.receipt,
+      status: response.status,
+      code: error.code,
+      message: error.message,
+      assistantText: "",
+      timing: asRecord(payload.timing) ?? null,
+      proof: asRecord(payload.proof) ?? null,
     };
   }
-  const payload = buildPolynetCodexWorkerTransportPayload(
-    request,
-    normalizeCommunityResourceRuntimeLaneState(
-      params.promptParams.communityResourceLane,
-    ),
-  );
-  return await postPolynetCodexWorkerTransport({
-    config,
-    request,
-    payload,
-    fetchFn: params.fetchFn,
-    appendRunEvent: params.appendRunEvent,
-  });
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return {
+      ok: false,
+      status: 502,
+      code: "polynet_codex_worker_stream_missing",
+      message: "PolyNet Codex worker response did not include a stream.",
+      assistantText: "",
+      timing: null,
+      proof: null,
+    };
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let assistantText = "";
+  let finalPayload: JsonRecord | null = null;
+  let timing: JsonRecord | null = null;
+  let proof: JsonRecord | null = null;
+  const streamState: {
+    errorPayload: { code: string; message: string } | null;
+  } = {
+    errorPayload: null,
+  };
+
+  const handleEvent = async (event: PolynetCodexWorkerSseEvent): Promise<void> => {
+    if (event.event === "delta") {
+      const full = typeof event.data.full_content === "string" ? event.data.full_content : null;
+      const delta = typeof event.data.delta === "string" ? event.data.delta : "";
+      if (full !== null) assistantText = full;
+      else if (delta) assistantText += delta;
+    } else if (event.event === "done") {
+      if (typeof event.data.full_content === "string") assistantText = event.data.full_content;
+      timing = asRecord(event.data.timing) ?? timing;
+      proof = asRecord(event.data.proof) ?? proof;
+      finalPayload = event.data;
+    } else if (event.event === "run_finalized") {
+      timing = asRecord(event.data.timing) ?? timing;
+      proof = asRecord(event.data.proof) ?? proof;
+      finalPayload = event.data;
+      if (event.data.ok === false) {
+        const workerError = asRecord(event.data.error);
+        streamState.errorPayload = {
+          code: String(workerError?.code ?? "polynet_codex_worker_turn_failed"),
+          message:
+            String(workerError?.message ?? workerError?.name ?? "").trim() ||
+            "PolyNet Codex worker turn failed.",
+        };
+      }
+    } else if (event.event === "error") {
+      streamState.errorPayload = normalizeWorkerErrorPayload(event.data, 502);
+    }
+    await params.onEvent(event);
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separator = findSseBlockSeparator(buffer);
+      while (separator) {
+        const rawBlock = buffer.slice(0, separator.index);
+        buffer = buffer.slice(separator.index + separator.length);
+        const parsed = parseSseBlock(rawBlock);
+        if (parsed) await handleEvent(parsed);
+        separator = findSseBlockSeparator(buffer);
+      }
+    }
+    if (buffer.trim()) {
+      const parsed = parseSseBlock(buffer);
+      if (parsed) await handleEvent(parsed);
+    }
+  } catch (error) {
+    // A dropped stream or a failing event callback must become a structured
+    // result so the caller settles leases and finishes the run.
+    return {
+      ok: false,
+      status: 502,
+      code: "polynet_codex_worker_stream_failed",
+      message: error instanceof Error ? error.message : "Worker stream failed.",
+      assistantText,
+      timing,
+      proof,
+    };
+  }
+
+  if (streamState.errorPayload) {
+    return {
+      ok: false,
+      status: 502,
+      code: streamState.errorPayload.code,
+      message: streamState.errorPayload.message,
+      assistantText,
+      timing,
+      proof,
+    };
+  }
+  return {
+    ok: true,
+    assistantText,
+    timing,
+    proof,
+    finalPayload,
+  };
 }

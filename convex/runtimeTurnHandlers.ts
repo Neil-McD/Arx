@@ -35,6 +35,9 @@ import {
   resolveCodexHarnessToolPolicy,
 } from "../shared/harnessToolPolicy";
 import {
+  buildRuntimeCodexPromptProjection,
+} from "../shared/runtimeCodexPromptProjection";
+import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
@@ -44,7 +47,10 @@ import {
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
-import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
+import {
+  buildRuntimeTurnEnvelope,
+  type RuntimeTurnEnvelopeV1,
+} from "../shared/runtimeTurnEnvelope";
 import {
   buildRuntimeFailureFinalAnswer,
   hasConnectedAppFailureEvidence,
@@ -66,8 +72,16 @@ import {
   POLYNET_CODEX_WORKER_CONTRACT_NAME,
   POLYNET_CODEX_WORKER_CONTRACT_VERSION,
   POLYNET_CODEX_WORKER_ENGINE_ID,
-  startPolynetCodexWorkerRun,
+  cancelPolynetCodexWorkerTurn,
+  steerPolynetCodexWorkerTurn,
+  streamPolynetCodexWorkerTurn,
+  type PolynetCodexWorkerResolvedTarget,
 } from "./polynetCodexWorkerBridge";
+import { getFreshChatgptAuthForUser } from "./chatgptAuth";
+import {
+  isPolynetCodexWorkerRunTokenFailure,
+  mintPolynetCodexWorkerRunTokenSet,
+} from "./polynetCodexWorkerRunToken";
 import {
   ensureRuntimeRunStarted,
   lookupExistingRuntimeReplay,
@@ -110,6 +124,44 @@ function isRuntimeCompletionFailure(
   completion: RuntimeCompletionSuccess | RuntimeCompletionFailure,
 ): completion is RuntimeCompletionFailure {
   return "ok" in completion && completion.ok === false;
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function readRuntimeEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    return typeof value === "string" ? value.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function readConvexSiteUrl(): string | null {
+  const siteUrl = readRuntimeEnv("CONVEX_SITE_URL").replace(/\/+$/, "");
+  return siteUrl || null;
+}
+
+function buildPolynetCodexWorkerIngestTarget(): {
+  url: string;
+  token: string;
+} | null {
+  const siteUrl = readConvexSiteUrl();
+  const token = readRuntimeEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
+  if (!siteUrl || !token) return null;
+  return {
+    url: `${siteUrl}/runtime/polynet_codex_worker_ingest`,
+    token,
+  };
+}
+
+function buildPolynetCodexWorkerToolTarget(): string | null {
+  const siteUrl = readConvexSiteUrl();
+  if (!siteUrl) return null;
+  return `${siteUrl}/runtime/polynet_codex_worker_tool`;
 }
 
 async function loadUserAgentProfileForRuntime(
@@ -651,6 +703,27 @@ export async function handleRuntimeTurnRequest(args: {
       activeSnapshotUpdatedAt = nowMs;
       await persistContextSnapshotBestEffort("active");
     };
+    let polynetCodexWorkerLeaseAcquired = false;
+    let polynetCodexWorkerLeaseReleased = false;
+    const releasePolynetCodexWorkerLeaseBestEffort = async (
+      reason: string,
+    ): Promise<void> => {
+      if (!polynetCodexWorkerLeaseAcquired || polynetCodexWorkerLeaseReleased) return;
+      polynetCodexWorkerLeaseReleased = true;
+      try {
+        await ctx.runMutation(
+          (internal as any).polynetCodexWorkerAdmission
+            .releasePolynetCodexWorkerLease as any,
+          {
+            ownerId: actor.dbUserId,
+            runId,
+            reason,
+          },
+        );
+      } catch {
+        // Lease TTL is the final backstop; do not fail terminal run finalization.
+      }
+    };
     type FinishRunBestEffortParams = Parameters<typeof finishRunBestEffortRaw>[0];
     const finishRunBestEffortForRun = async (
       params: FinishRunBestEffortParams,
@@ -687,10 +760,20 @@ export async function handleRuntimeTurnRequest(args: {
           contextSnapshot = null;
         }
       }
-      await finishRunBestEffortRaw({
-        ...params,
-        contextSnapshot,
-      });
+      try {
+        await finishRunBestEffortRaw({
+          ...params,
+          contextSnapshot,
+        });
+      } finally {
+        await releasePolynetCodexWorkerLeaseBestEffort(
+          params.status === "ok"
+            ? "completed"
+            : params.status === "cancelled"
+              ? "cancelled"
+              : params.errorCode || params.reason || "error",
+        );
+      }
     };
     finishRunBestEffort = finishRunBestEffortForRun;
     await persistContextSnapshotBestEffort("started");
@@ -790,6 +873,7 @@ export async function handleRuntimeTurnRequest(args: {
       errorCode?: string;
       errorMessage?: string;
       markPartialRun?: boolean;
+      engineIdOverride?: string | null;
       inferenceSourceOverride?: "free" | "platform" | "user_key" | "chatgpt";
       inferenceLaneFallbacksOverride?: Array<{
         from: "chatgpt" | "platform" | "public";
@@ -897,6 +981,7 @@ export async function handleRuntimeTurnRequest(args: {
           threadId: ownedThread._id,
           messageKey: assistantMessageKeyForRun,
           requestedModelId,
+          engineId: params.engineIdOverride,
           inferenceSource:
             params.inferenceSourceOverride ?? resolvedInferenceSource,
           lane,
@@ -950,76 +1035,259 @@ export async function handleRuntimeTurnRequest(args: {
       },
     });
     if (runtimeEngine === RUNTIME_ENGINE_CODEX) {
-      runtimeTurnStage = "codex_worker_bridge";
-      const now = new Date();
-      const runtimeTimeZone = "UTC";
-      const codexSkillResolution = normalizeRuntimeSkillResolution(
-        await ctx.runQuery(
-          internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal as any,
-          {
-            userId: actor.dbUserId as any,
-            authSubject: actor.authSubject,
-            communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
-            messages: conversationMessages.map((message) => ({
-              role: message.role,
-              content: message.content,
-            })),
-          },
-        ),
-      );
-      const codexCommunityResourceLane =
-        codexSkillResolution.community_resource_lane;
-      const codexHarnessPolicy = resolveCodexHarnessToolPolicy({
-        polynetPlatformToolProjection: {
-          hasCommunity: Boolean(runtimeCommunityId),
-          communityResourceLane: codexCommunityResourceLane,
-          canModerateCommunity: allowedToolNames.includes("community_write"),
-          canManageCommunity: false,
-          canManageResources: codexCommunityResourceLane.can_use_resource_builder,
-        },
-        workspaceServeAvailable: true,
-        computerAdaptersAvailable: inferenceSource === "chatgpt",
-      });
-      await appendRunEvent({
-        eventType: "codex_harness_policy_resolved",
-        eventKey: `${runId}:codex_harness_policy_resolved:1`,
-        payload: {
+      if (!stream || runtimeExecutionMode !== "agentic" || inferenceSource !== "chatgpt") {
+        const code = "polynet_codex_worker_requires_streaming_chatgpt_agentic";
+        const message =
+          "Codex runtime requires streaming, agentic workspace tools, and a connected ChatGPT account.";
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: code,
+          errorCode: code,
+          errorMessage: message,
+        });
+        return runtimeJsonResponse(400, {
+          ok: false,
+          code,
+          error: code,
+          message,
           run_id: runId,
           runtime_engine: runtimeEngine,
-          community_resource_lane: codexCommunityResourceLane,
-          policy: buildCodexHarnessToolPolicyReceipt(codexHarnessPolicy),
-        },
-      });
-      const codexRuntimeContext = (
-        await loadRuntimeTurnContextPacketForRun({
+        });
+      }
+
+      return runtimeSseResponse(async (writer) => {
+        let streamedContent = "";
+        let streamedInferenceSource = resolvedInferenceSource;
+        let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
+        let assistantMessageId: string | null = null;
+        let assistantMessageKey: string | null = null;
+        let assistantMessageSeq: number | null = null;
+
+        const emitWorkerDelta = (data: Record<string, unknown>) => {
+          const full =
+            typeof data.full_content === "string" ? data.full_content : null;
+          const delta = typeof data.delta === "string" ? data.delta : "";
+          if (full !== null) streamedContent = full;
+          else if (delta) streamedContent += delta;
+          writer.send({
+            event: "delta",
+            data: {
+              ...data,
+              run_id: runId,
+              engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+              model_id: requestedModelId,
+            },
+          });
+        };
+
+        const streamAppendRunEvent = async (event: {
+          eventType: string;
+          eventKey?: string;
+          payload: Record<string, unknown>;
+        }): Promise<void> => {
+          const created = await appendRunEvent(event);
+          await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
+          const mapped = mapPersistedRuntimeEventRow(created);
+          if (!mapped) return;
+          writer.send({
+            event: "runtime_event",
+            data: mapped,
+          });
+        };
+
+        const failWorkerTurn = async (params: {
+          status: number;
+          code: string;
+          message: string;
+          data?: Record<string, unknown>;
+        }): Promise<void> => {
+          await persistPartialAssistantMessageBestEffort({
+            content: streamedContent,
+            status: "error",
+            reason: params.code,
+            errorCode: params.code,
+            errorMessage: params.message,
+            engineIdOverride: POLYNET_CODEX_WORKER_ENGINE_ID,
+            inferenceSourceOverride: streamedInferenceSource,
+            inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+          });
+          await finishRunBestEffortForRun({
+            status: "error",
+            reason: params.code,
+            errorCode: params.code,
+            errorMessage: params.message,
+          });
+          writer.send({
+            event: "error",
+            data: {
+              code: params.code,
+              error: params.message,
+              message: params.message,
+              status: params.status,
+              ...(params.data ?? {}),
+            },
+          });
+        };
+
+        writer.send({
+          event: "start",
+          data: {
+            run_id: runId,
+            lane,
+            engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+            model_id: requestedModelId,
+            inference_source: streamedInferenceSource,
+            inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+          },
+        });
+
+        await streamAppendRunEvent({
+          eventType: "polynet_codex_worker_bridge_started",
+          eventKey: `${runId}:polynet_codex_worker_bridge_started:1`,
+          payload: {
+            run_id: runId,
+            runtime_engine: runtimeEngine,
+            engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+            contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
+            contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
+            model_id: requestedModelId,
+            daytona_runtime: true,
+          },
+        });
+
+        runtimeTurnStage = "polynet_codex_worker";
+        const workerChatgptAuth = await getFreshChatgptAuthForUser({
           ctx,
-          ownerId: actor.dbUserId,
-          threadId: ownedThread._id,
-          projectId: runtimeProjectId,
-          authSubject: actor.authSubject,
-          runId,
+          userId: String(actor.dbUserId),
+        });
+        const workerChatgptAccountId = String(workerChatgptAuth?.accountId ?? "").trim();
+        if (!workerChatgptAuth?.accessToken || !workerChatgptAccountId) {
+          await failWorkerTurn({
+            status: 403,
+            code: "provider_connection_required",
+            message: "Connect ChatGPT to run Codex turns with your own account.",
+            data: { cta: "connect_provider" },
+          });
+          return;
+        }
+
+        const leaseAcquireResult = (await ctx.runMutation(
+          (internal as any).polynetCodexWorkerAdmission
+            .tryAcquirePolynetCodexWorkerLease as any,
+          {
+            ownerId: actor.dbUserId,
+            threadId: ownedThread._id,
+            runId,
+            ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+          },
+        )) as {
+          ok: boolean;
+          status?: number;
+          code?: string;
+          message?: string;
+          leaseId?: string;
+          expiresAt?: number;
+          counts?: Record<string, unknown>;
+          limits?: Record<string, unknown>;
+        };
+        if (!leaseAcquireResult.ok) {
+          await failWorkerTurn({
+            status: leaseAcquireResult.status ?? 429,
+            code:
+              String(leaseAcquireResult.code ?? "").trim() ||
+              "codex_runtime_capacity_unavailable",
+            message:
+              String(leaseAcquireResult.message ?? "").trim() ||
+              "Codex runtime capacity is unavailable.",
+            data: {
+              counts: leaseAcquireResult.counts ?? null,
+              limits: leaseAcquireResult.limits ?? null,
+            },
+          });
+          return;
+        }
+        polynetCodexWorkerLeaseAcquired = true;
+        await streamAppendRunEvent({
+          eventType: "polynet_codex_worker_capacity_admitted",
+          eventKey: `${runId}:polynet_codex_worker_capacity_admitted:1`,
+          payload: {
+            run_id: runId,
+            lease_id: leaseAcquireResult.leaseId ?? null,
+            lease_expires_at: leaseAcquireResult.expiresAt ?? null,
+            counts: leaseAcquireResult.counts ?? null,
+            limits: leaseAcquireResult.limits ?? null,
+          },
+        });
+
+        const now = new Date();
+        const runtimeTimeZone = "UTC";
+        const codexSkillResolution = normalizeRuntimeSkillResolution(
+          await ctx.runQuery(
+            internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal as any,
+            {
+              userId: actor.dbUserId as any,
+              authSubject: actor.authSubject,
+              communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
+              messages: conversationMessages.map((message) => ({
+                role: message.role,
+                content: message.content,
+              })),
+            },
+          ),
+        );
+        const codexCommunityResourceLane =
+          codexSkillResolution.community_resource_lane;
+        const codexHarnessPolicy = resolveCodexHarnessToolPolicy({
+          polynetPlatformToolProjection: {
+            hasCommunity: Boolean(runtimeCommunityId),
+            communityResourceLane: codexCommunityResourceLane,
+            canModerateCommunity: allowedToolNames.includes("community_write"),
+            canManageCommunity: false,
+            canManageResources: codexCommunityResourceLane.can_use_resource_builder,
+          },
+          workspaceServeAvailable: true,
+          computerAdaptersAvailable: true,
+        });
+        await streamAppendRunEvent({
+          eventType: "codex_harness_policy_resolved",
+          eventKey: `${runId}:codex_harness_policy_resolved:1`,
+          payload: {
+            run_id: runId,
+            runtime_engine: runtimeEngine,
+            community_resource_lane: codexCommunityResourceLane,
+            policy: buildCodexHarnessToolPolicyReceipt(codexHarnessPolicy),
+          },
+        });
+
+        const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope({
           latestUserText,
-          runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
           threadWorkingState: ownedThread.workingState ?? null,
-          summarizeCurrentRunEvents: true,
-          runtimeStop: null,
-        })
-      ).packet;
-      const codexProjectContext = codexRuntimeContext.projectContext ?? null;
-      const codexBridgeResult = await startPolynetCodexWorkerRun({
-        ownerId: actor.dbUserId,
-        threadId: String(ownedThread._id),
-        runId,
-        requestId,
-        runtimeEngine,
-        modelId: requestedModelId,
-        maxTokens,
-        lane,
-        inferenceSource,
-        allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames,
-        conversationMessages,
-        latestUserText,
-        promptParams: {
+          threadId: String(ownedThread._id),
+          communityId: runtimeCommunityId,
+          projectId: runtimeProjectId,
+          communityResourceLane: codexCommunityResourceLane,
+          allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames,
+        });
+        runtimeTurnEnvelopeForRun = codexRuntimeTurnEnvelope;
+        await persistContextSnapshotBestEffort("active", codexRuntimeTurnEnvelope);
+
+        const codexRuntimeContext = (
+          await loadRuntimeTurnContextPacketForRun({
+            ctx,
+            ownerId: actor.dbUserId,
+            threadId: ownedThread._id,
+            projectId: runtimeProjectId,
+            authSubject: actor.authSubject,
+            runId,
+            latestUserText,
+            runtimeTurnEnvelope: codexRuntimeTurnEnvelope,
+            threadWorkingState: ownedThread.workingState ?? null,
+            summarizeCurrentRunEvents: true,
+            runtimeStop: null,
+          })
+        ).packet;
+        const codexProjectContext = codexRuntimeContext.projectContext ?? null;
+        const workerTurnInputs = buildRuntimeCodexPromptProjection({
           loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
           allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames,
           communityResourceLane: codexCommunityResourceLane,
@@ -1044,64 +1312,499 @@ export async function handleRuntimeTurnRequest(args: {
           currentTimeZone: runtimeTimeZone,
           conversationMessages,
           latestUserText,
-        },
-        appendRunEvent: async (event): Promise<void> => {
-          await appendRunEvent(event);
-        },
-      });
-      await appendRunEvent({
-        eventType: "codex_runtime_route_selected",
-        eventKey: `${runId}:codex_runtime_route_selected:1`,
-        payload: {
-          run_id: runId,
-          runtime_engine: runtimeEngine,
-          engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
-          contract_name: POLYNET_CODEX_WORKER_CONTRACT_NAME,
-          contract_version: POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-          worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
-        },
-      });
-      if (!codexBridgeResult.ok) {
-        await appendRunEvent({
-          eventType: "codex_worker_bridge_unavailable",
-          eventKey: `${runId}:codex_worker_bridge_unavailable:1`,
+        });
+        await streamAppendRunEvent({
+          eventType: "polynet_codex_worker_instructions_resolved",
+          eventKey: `${runId}:polynet_codex_worker_instructions_resolved:1`,
           payload: {
             run_id: runId,
-            runtime_engine: runtimeEngine,
-            engine_id: codexBridgeResult.engineId,
-            contract_name: codexBridgeResult.contractName,
-            contract_version: codexBridgeResult.contractVersion,
-            worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
-            disabled_reason: codexBridgeResult.disabledReason,
-            error_code: codexBridgeResult.code,
-            retryable: codexBridgeResult.retryable,
-            prompt_projection_receipt:
-              codexBridgeResult.promptProjectionReceipt,
+            agent_name_rendered: workerTurnInputs.receipt.agentNameRendered,
+            agent_soul_rendered: workerTurnInputs.receipt.agentSoulRendered,
+            runtime_prompt_chars: workerTurnInputs.receipt.runtimePromptChars,
+            runtime_prompt_section_ids: workerTurnInputs.receipt.runtimePromptSectionIds,
+            rendered_runtime_prompt_section_ids:
+              workerTurnInputs.receipt.renderedRuntimePromptSectionIds,
+            omitted_runtime_prompt_section_ids:
+              workerTurnInputs.receipt.omittedRuntimePromptSectionIds,
+            developer_instruction_chars: workerTurnInputs.receipt.developerInstructionChars,
+            prompt_chars: workerTurnInputs.receipt.promptChars,
           },
         });
-        await finishRunBestEffortForRun({
-          status: "error",
-          reason: codexBridgeResult.code,
-          errorCode: codexBridgeResult.code,
-          errorMessage: codexBridgeResult.message,
+
+        const workerIngestTarget = buildPolynetCodexWorkerIngestTarget();
+        if (!workerIngestTarget) {
+          await failWorkerTurn({
+            status: 503,
+            code: "polynet_codex_worker_ingest_unconfigured",
+            message: "PolyNet Codex worker ingest is not configured.",
+          });
+          return;
+        }
+        const workerPlatformTools = codexHarnessPolicy.polynetPlatformTools;
+        const workerRuntimeToolBridgeRequired = true;
+        const workerToolTarget =
+          workerPlatformTools.length > 0 || workerRuntimeToolBridgeRequired
+            ? buildPolynetCodexWorkerToolTarget()
+            : null;
+        if (workerRuntimeToolBridgeRequired && !workerToolTarget) {
+          await failWorkerTurn({
+            status: 503,
+            code: "polynet_codex_worker_tool_bridge_unconfigured",
+            message: "PolyNet Codex worker tool bridge is not configured.",
+          });
+          return;
+        }
+        await streamAppendRunEvent({
+          eventType: "polynet_codex_worker_tools_projected",
+          eventKey: `${runId}:polynet_codex_worker_tools_projected:1`,
+          payload: {
+            run_id: runId,
+            tool_bridge_configured: Boolean(workerToolTarget),
+            runtime_tool_names: codexHarnessPolicy.runtimeAdapterToolNames,
+            platform_tool_count: workerPlatformTools.length,
+            platform_tool_names: workerPlatformTools.map((tool) => tool.name),
+            platform_tool_policies: workerPlatformTools.map((tool) => ({
+              tool_name: tool.name,
+              billing_policy: tool.billing_policy,
+              risk_level: tool.risk_level,
+              required_community_resource_lane:
+                tool.required_community_resource_lane,
+              required_community_authority: tool.required_community_authority,
+            })),
+          },
         });
-        return runtimeJsonResponse(codexBridgeResult.status, {
-          ok: false,
-          code: codexBridgeResult.code,
-          error: codexBridgeResult.code,
-          message: codexBridgeResult.message,
-          run_id: runId,
-          runtime_engine: runtimeEngine,
-          engine_id: codexBridgeResult.engineId,
-          contract_name: codexBridgeResult.contractName,
-          contract_version: codexBridgeResult.contractVersion,
-          worker_bridge_configured: codexBridgeResult.workerBridgeConfigured,
-          retryable: codexBridgeResult.retryable,
+
+        const mintedWorkerRunTokens = await mintPolynetCodexWorkerRunTokenSet({
+          ownerId: String(actor.dbUserId),
+          threadId: String(ownedThread._id),
+          runId,
+          includeTool: Boolean(workerToolTarget),
         });
-      }
-      content = codexBridgeResult.assistantText;
-      promptTokens = codexBridgeResult.promptTokens;
-      completionTokens = codexBridgeResult.completionTokens;
+        if (isPolynetCodexWorkerRunTokenFailure(mintedWorkerRunTokens)) {
+          await failWorkerTurn({
+            status: mintedWorkerRunTokens.status,
+            code: mintedWorkerRunTokens.code,
+            message: mintedWorkerRunTokens.message,
+          });
+          return;
+        }
+        const workerRunTokens = mintedWorkerRunTokens.tokens;
+
+        let workerMachineId: string | null = null;
+        let workerResolvedTarget: PolynetCodexWorkerResolvedTarget | null = null;
+        try {
+          await streamAppendRunEvent({
+            eventType: "daytona_codex_runtime_target_resolve_started",
+            eventKey: `${runId}:daytona_codex_runtime_target_resolve_started:1`,
+            payload: {
+              run_id: runId,
+              provider: "daytona",
+              transport: "daytona_direct",
+            },
+          });
+          const resolved = (await ctx.runAction(
+            (internal as any).daytonaCodexRuntimeTargetActions
+              .ensureDaytonaCodexRuntimeTargetInternal as any,
+            {
+              ownerId: actor.dbUserId,
+              threadId: ownedThread._id,
+              runId,
+              ...(runtimeProjectId ? { projectId: runtimeProjectId } : {}),
+            },
+          )) as {
+            targetId?: unknown;
+            sandboxId?: unknown;
+            workerUrl?: unknown;
+            authToken?: unknown;
+            signedPreviewExpiresAt?: unknown;
+            lifecycleMode?: unknown;
+            providerEphemeral?: unknown;
+            workerPort?: unknown;
+            timing?: unknown;
+          };
+          workerResolvedTarget = {
+            provider: "daytona",
+            targetId: String(resolved.targetId ?? ""),
+            sandboxId: String(resolved.sandboxId ?? "") || null,
+            workerUrl: String(resolved.workerUrl ?? ""),
+            authToken: String(resolved.authToken ?? ""),
+            signedPreviewExpiresAt:
+              typeof resolved.signedPreviewExpiresAt === "number"
+                ? resolved.signedPreviewExpiresAt
+                : null,
+          };
+          workerMachineId = workerResolvedTarget.sandboxId;
+          await streamAppendRunEvent({
+            eventType: "daytona_codex_runtime_target_ready",
+            eventKey: `${runId}:daytona_codex_runtime_target_ready:1`,
+            payload: {
+              run_id: runId,
+              provider: "daytona",
+              transport: "daytona_direct",
+              target_id: workerResolvedTarget.targetId,
+              sandbox_id: workerResolvedTarget.sandboxId,
+              lifecycle_mode: String(resolved.lifecycleMode ?? "").trim() || null,
+              provider_ephemeral:
+                typeof resolved.providerEphemeral === "boolean"
+                  ? resolved.providerEphemeral
+                  : null,
+              worker_port: readPositiveNumber(resolved.workerPort),
+              signed_preview_expires_at:
+                workerResolvedTarget.signedPreviewExpiresAt ?? null,
+              timing: resolved.timing ?? null,
+            },
+          });
+        } catch (error) {
+          const targetFailureMessage =
+            error instanceof Error
+              ? error.message
+              : "Daytona Codex runtime target failed.";
+          await failWorkerTurn({
+            status: 503,
+            code: "daytona_codex_runtime_target_failed",
+            message: targetFailureMessage,
+            data: { provider: "daytona" },
+          });
+          return;
+        }
+
+        let workerCancelFired = false;
+        let workerSteeredCount = 0;
+        let workerWatcherBusy = false;
+        const workerCancelWatcher = setInterval(() => {
+          void (async () => {
+            if (workerCancelFired || workerWatcherBusy) return;
+            workerWatcherBusy = true;
+            try {
+              const row = (await ctx.runQuery(
+                (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
+                { ownerId: actor.dbUserId, runId },
+              )) as {
+                status?: unknown;
+                pendingUserSteering?: Array<{ text?: unknown }>;
+              } | null;
+              if (!row) return;
+              if (String(row.status ?? "") === "cancelled") {
+                workerCancelFired = true;
+                clearInterval(workerCancelWatcher);
+                await cancelPolynetCodexWorkerTurn({
+                  runId,
+                  machineId: workerMachineId,
+                  target: workerResolvedTarget,
+                });
+                return;
+              }
+              const steering = Array.isArray(row.pendingUserSteering)
+                ? row.pendingUserSteering
+                : [];
+              while (workerSteeredCount < steering.length) {
+                const entry = steering[workerSteeredCount];
+                const text = String(entry?.text ?? "").trim();
+                if (!text) {
+                  workerSteeredCount += 1;
+                  continue;
+                }
+                const delivery = await steerPolynetCodexWorkerTurn({
+                  runId,
+                  machineId: workerMachineId,
+                  text,
+                  target: workerResolvedTarget,
+                });
+                if (delivery.ok || delivery.status === 409) {
+                  workerSteeredCount += 1;
+                  continue;
+                }
+                break;
+              }
+            } catch {
+              // Best effort; the worker turn timeout is the backstop.
+            } finally {
+              workerWatcherBusy = false;
+            }
+          })();
+        }, 3_000);
+
+        const workerActivePreviewPorts = new Set<number>();
+        let workerResult;
+        try {
+          workerResult = await streamPolynetCodexWorkerTurn({
+            runId,
+            prompt: workerTurnInputs.prompt,
+            developerInstructions: workerTurnInputs.developerInstructions,
+            model: requestedModelId,
+            sandboxName: null,
+            destroyAfterRun: true,
+            chatgptAuth: {
+              accessToken: workerChatgptAuth.accessToken,
+              accountId: workerChatgptAccountId,
+              planType: null,
+            },
+            ingest: {
+              ...workerIngestTarget,
+              run_token: workerRunTokens.ingest,
+              tool_run_token: workerRunTokens.tool,
+              tool_url: workerToolTarget,
+              context: {
+                owner_id: String(actor.dbUserId),
+                auth_subject: actor.authSubject ?? null,
+                thread_id: String(ownedThread._id),
+                run_id: runId,
+                assistant_message_key: assistantMessageKeyForRun,
+                model_id: requestedModelId,
+                lane,
+                inference_source: streamedInferenceSource,
+                daytona_runtime_target: {
+                  target_id: workerResolvedTarget.targetId,
+                  sandbox_id: workerResolvedTarget.sandboxId,
+                  signed_preview_expires_at:
+                    workerResolvedTarget.signedPreviewExpiresAt,
+                },
+              },
+            },
+            platformTools: workerPlatformTools,
+            target: workerResolvedTarget,
+            onEvent: async (event) => {
+              if (event.event === "start") {
+                const machineId = String(event.data.machine_id ?? "").trim();
+                if (machineId) workerMachineId = machineId;
+                return;
+              }
+              if (event.event === "delta") {
+                emitWorkerDelta(event.data);
+                return;
+              }
+              if (event.event === "runtime_event") {
+                const workerEventType = String(event.data.event_type ?? "").trim();
+                if (!workerEventType) return;
+                const workerSeqRaw = Number(event.data.seq);
+                const workerSeq = Number.isFinite(workerSeqRaw)
+                  ? Math.max(0, Math.floor(workerSeqRaw))
+                  : 0;
+                const workerPayload =
+                  event.data.payload &&
+                  typeof event.data.payload === "object" &&
+                  !Array.isArray(event.data.payload)
+                    ? (event.data.payload as Record<string, unknown>)
+                    : {};
+                if (workerEventType === "workspace_preview_ready") {
+                  const previewPort = Number(workerPayload.port);
+                  if (Number.isFinite(previewPort) && previewPort > 0) {
+                    workerActivePreviewPorts.add(Math.floor(previewPort));
+                  }
+                }
+                await streamAppendRunEvent({
+                  eventType: workerEventType,
+                  eventKey: `${runId}:polynet_codex_worker:${workerSeq}:${workerEventType}`,
+                  payload: {
+                    ...workerPayload,
+                    run_id: runId,
+                    engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                    worker_event_id: event.data.id ?? null,
+                    worker_event_seq: workerSeq,
+                    worker_event_type: workerEventType,
+                    worker_event_created_at: event.data.created_at ?? null,
+                  },
+                });
+                return;
+              }
+              if (event.event === "run_model_finished" || event.event === "run_finalized") {
+                writer.send({
+                  event: event.event,
+                  data: {
+                    ...event.data,
+                    run_id: runId,
+                    engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+                    model_id: requestedModelId,
+                  },
+                });
+              }
+            },
+          });
+        } finally {
+          clearInterval(workerCancelWatcher);
+        }
+
+        if (
+          !workerResult.ok &&
+          (workerResult.code === "polynet_codex_worker_stream_failed" ||
+            workerResult.code === "polynet_codex_worker_unreachable")
+        ) {
+          try {
+            await cancelPolynetCodexWorkerTurn({
+              runId,
+              machineId: workerMachineId,
+              target: workerResolvedTarget,
+            });
+          } catch {
+            // Best effort; the worker turn timeout is the backstop.
+          }
+        }
+        streamedContent = workerResult.assistantText || streamedContent;
+
+        if (workerResolvedTarget) {
+          const teardownReason = workerResult.ok ? "turn_finished" : "turn_failed";
+          try {
+            await ctx.runMutation(
+              (internal as any).daytonaCodexRuntimeTargets
+                .releaseDaytonaCodexRuntimeTargetInternal as any,
+              {
+                ownerId: actor.dbUserId,
+                runId,
+                reason: teardownReason,
+                activePreviewPorts: Array.from(workerActivePreviewPorts),
+              },
+            );
+          } catch {
+            // Daytona auto-stop/delete is the runtime cleanup backstop.
+          }
+          try {
+            await streamAppendRunEvent({
+              eventType: "daytona_codex_runtime_provider_teardown_started",
+              eventKey: `${runId}:daytona_codex_runtime_provider_teardown_started:1`,
+              payload: {
+                run_id: runId,
+                provider: "daytona",
+                transport: "daytona_direct",
+                target_id: workerResolvedTarget.targetId,
+                sandbox_id: workerResolvedTarget.sandboxId,
+                reason: teardownReason,
+                cleanup_mode: "scheduled",
+              },
+            });
+            await ctx.scheduler.runAfter(
+              0,
+              (internal as any).daytonaCodexRuntimeTargetActions
+                .teardownAndRecordDaytonaCodexRuntimeTargetInternal as any,
+              {
+                ownerId: actor.dbUserId,
+                runId,
+                reason: teardownReason,
+              },
+            );
+          } catch {
+            // Best effort; provider retention policy is the cleanup backstop.
+          }
+        }
+
+        if (!workerResult.ok) {
+          const workerCancelled =
+            workerCancelFired || workerResult.code === USER_CANCELLED_RUNTIME_CODE;
+          if (workerCancelled) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "cancelled",
+              reason: USER_CANCELLED_RUNTIME_CODE,
+              errorCode: USER_CANCELLED_RUNTIME_CODE,
+              errorMessage: "Run cancelled by user.",
+              engineIdOverride: POLYNET_CODEX_WORKER_ENGINE_ID,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishCancelledRun();
+            return;
+          }
+          await failWorkerTurn({
+            status: workerResult.status,
+            code: workerResult.code,
+            message: workerResult.message,
+          });
+          return;
+        }
+
+        runtimeTurnStage = "assistant_persist";
+        if (persistVisibleAssistantMessage) {
+          try {
+            await throwIfRunCancelled();
+            ({
+              assistantMessageId,
+              assistantMessageKey,
+              assistantMessageSeq,
+            } = await persistRuntimeAssistantMessage({
+              ctx,
+              ownerId: actor.dbUserId,
+              threadId: ownedThread._id,
+              messageKey: assistantMessageKeyForRun,
+              requestedModelId,
+              engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
+              inferenceSource: streamedInferenceSource,
+              lane,
+              inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
+              runId,
+              content: streamedContent,
+            }));
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                engineIdOverride: POLYNET_CODEX_WORKER_ENGINE_ID,
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishCancelledRun();
+              return;
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: "assistant_message_persist_failed",
+              errorCode: "assistant_message_persist_failed",
+              errorMessage: message || "Failed to persist assistant message.",
+            });
+            writer.send({
+              event: "error",
+              data: {
+                error: message || "Failed to persist assistant message.",
+              },
+            });
+            return;
+          }
+        }
+
+        try {
+          await throwIfRunCancelled();
+        } catch (error) {
+          if (isRuntimeRunCancelledError(error)) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "cancelled",
+              reason: USER_CANCELLED_RUNTIME_CODE,
+              errorCode: USER_CANCELLED_RUNTIME_CODE,
+              errorMessage: "Run cancelled by user.",
+              engineIdOverride: POLYNET_CODEX_WORKER_ENGINE_ID,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishCancelledRun();
+            return;
+          }
+          throw error;
+        }
+        await finishRunBestEffortForRun({ status: "ok" });
+        writer.send({
+          event: "done",
+          data: {
+            run_id: runId,
+            lane,
+            engine_id: POLYNET_CODEX_WORKER_ENGINE_ID,
+            model_id: requestedModelId,
+            inference_source: streamedInferenceSource,
+            inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+            full_content: streamedContent,
+            prompt_tokens: null,
+            completion_tokens: null,
+            user_message_id: userMessageId,
+            user_message_key: userMessageKey,
+            user_message_seq: userMessageSeq,
+            assistant_message_id: assistantMessageId,
+            assistant_message_key: assistantMessageKey,
+            assistant_message_seq: assistantMessageSeq,
+          },
+        });
+      });
     } else if (runtimeExecutionMode === "agentic") {
       if (stream) {
         return runtimeSseResponse(async (writer) => {

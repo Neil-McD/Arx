@@ -33,6 +33,8 @@ const packageJson = readText("package.json");
 const projection = readText("shared/runtimeCodexPromptProjection.ts");
 const bridge = readText("convex/polynetCodexWorkerBridge.ts");
 const handler = readText("convex/runtimeTurnHandlers.ts");
+const worker = readText("services/polynet-codex-worker/src/server.ts");
+const toolEndpoint = readText("convex/polynetCodexWorkerTool.ts");
 
 assertContains(
   packageJson,
@@ -63,216 +65,169 @@ assertContains(
 );
 assertContains(
   bridge,
-  "startPolynetCodexWorkerRun",
-  "Codex worker bridge exposes a start boundary",
+  'POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_runtime_daytona_v1"',
+  "Codex worker bridge declares the Daytona runtime contract name",
 );
 assertContains(
   bridge,
-  "buildRuntimeCodexPromptProjection",
-  "Codex worker bridge builds prompt projection",
+  'type PolynetCodexWorkerTransportProvider = "daytona_direct"',
+  "Codex worker bridge declares Daytona-direct transport",
 );
 assertContains(
   bridge,
-  'code: "codex_worker_unavailable"',
-  "Codex worker bridge has a configured-unavailable failure",
+  "streamPolynetCodexWorkerTurn",
+  "Codex worker bridge exposes the streaming turn boundary",
 );
 assertContains(
   bridge,
-  'code: "codex_worker_transport_failed"',
-  "Codex worker bridge has a structured transport failure",
+  "cancelPolynetCodexWorkerTurn",
+  "Codex worker bridge exposes cancel steering boundary",
 );
 assertContains(
   bridge,
-  'code: "codex_worker_invalid_response"',
-  "Codex worker bridge rejects invalid worker responses",
+  "steerPolynetCodexWorkerTurn",
+  "Codex worker bridge exposes user steering boundary",
 );
 assertContains(
+  bridge,
+  "target?.workerUrl",
+  "Codex worker bridge resolves the Daytona target worker URL",
+);
+assertContains(
+  bridge,
+  'fetch(`${config.baseUrl}/v1/codex/turn?stream=1`',
+  "Codex worker bridge streams worker turns over the Daytona target",
+);
+assertContains(
+  bridge,
+  "WORKER_BUSY_RETRY_DELAYS_MS",
+  "Codex worker bridge retries transient worker_busy responses",
+);
+assertContains(
+  bridge,
+  "parseSseBlock",
+  "Codex worker bridge parses worker SSE events",
+);
+assertContains(
+  bridge,
+  "onEvent",
+  "Codex worker bridge forwards stream events to the runtime handler",
+);
+assertNotContains(
   bridge,
   "POLYNET_CODEX_WORKER_URL",
-  "Codex worker bridge requires a configured worker URL",
-);
-assertContains(
-  bridge,
-  "must be an https URL",
-  "Codex worker bridge requires HTTPS worker URLs",
-);
-assertContains(
-  bridge,
-  "POLYNET_CODEX_WORKER_TIMEOUT_MS",
-  "Codex worker bridge has a configurable bounded timeout",
-);
-assertContains(
-  bridge,
-  "new AbortController()",
-  "Codex worker bridge uses AbortController for bounded transport",
-);
-assertContains(
-  bridge,
-  "await fetchFn(config.url",
-  "Codex worker bridge performs a feature-gated worker POST",
-);
-assertContains(
-  bridge,
-  'eventType: "codex_worker_transport_started"',
-  "Codex worker bridge emits transport-started evidence",
-);
-assertContains(
-  bridge,
-  'eventType: result.ok',
-  "Codex worker bridge emits finished or failed transport evidence",
-);
-assertContains(
-  bridge,
-  '"x-polynet-worker-contract"',
-  "Codex worker bridge sends worker contract header",
-);
-assertContains(
-  bridge,
-  "developer_instructions",
-  "Codex worker transport payload carries developer instructions",
-);
-assertContains(
-  bridge,
-  "max_tokens",
-  "Codex worker transport payload carries the bounded output token budget",
-);
-assertContains(
-  bridge,
-  "polynet_platform_tool_names",
-  "Codex worker transport payload carries filtered PolyNet platform tools",
-);
-assertNotContains(bridge, "Daytona", "Daytona substrate coupling in bridge slice");
-assertNotContains(bridge, "daytona", "Daytona env coupling in bridge slice");
-assertNotContains(bridge, "OPENAI_API_KEY", "OpenAI API key coupling in worker bridge");
-assertNotContains(
-  bridge,
-  "polynetCodexWorkerAdmission",
-  "capacity admission import in bridge slice",
+  "legacy static worker URL transport",
 );
 assertNotContains(
   bridge,
-  "polynetCodexWorkerRunToken",
-  "run token import in bridge slice",
-);
-assertNotContains(
-  bridge,
-  "polynetCodexWorkerTerminal",
-  "terminal bridge import in bridge slice",
-);
-assertNotContains(
-  bridge,
-  "polynetCodexWorkerTool",
-  "tool bridge import in bridge slice",
+  "OPENAI_API_KEY",
+  "OpenAI API key coupling in worker bridge",
 );
 
 assertContains(
   handler,
-  "POLYNET_CODEX_WORKER_ENGINE_ID",
-  "runtime handler imports Codex worker engine id",
+  "getFreshChatgptAuthForUser",
+  "runtime handler uses ChatGPT auth for Codex worker turns",
 );
 assertContains(
   handler,
-  "const runtimeEngineId =",
-  "runtime handler derives runtime engine id before run start",
+  "tryAcquirePolynetCodexWorkerLease",
+  "runtime handler admits worker turns through capacity leases",
 );
 assertContains(
   handler,
-  "engineId: runtimeEngineId",
-  "runtime run start uses derived runtime engine id",
+  "mintPolynetCodexWorkerRunTokenSet",
+  "runtime handler mints run-scoped callback tokens",
 );
 assertContains(
   handler,
-  "contractName: runtimeContractName",
-  "runtime run start uses derived contract name",
-);
-assertContains(
-  handler,
-  "startPolynetCodexWorkerRun({",
-  "runtime handler calls the Codex worker bridge",
-);
-assertContains(
-  handler,
-  "appendRunEvent,",
-  "runtime handler passes run-event persistence into the Codex worker bridge",
-);
-assertContains(
-  handler,
-  "resolveCodexHarnessToolPolicy({",
-  "runtime handler resolves Codex harness policy before bridge start",
-);
-assertContains(
-  handler,
-  "buildCodexHarnessToolPolicyReceipt(codexHarnessPolicy)",
-  "runtime handler emits Codex harness policy receipt",
-);
-assertContains(
-  handler,
-  'eventType: "codex_harness_policy_resolved"',
-  "runtime handler emits Codex harness policy evidence",
-);
-assertContains(
-  handler,
-  "normalizeRuntimeSkillResolution(",
-  "runtime handler normalizes runtime skill resolution for Codex resource lane",
-);
-assertContains(
-  handler,
-  "internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal",
-  "runtime handler reuses runtime skill resolver for Codex resource lane",
-);
-assertContains(
-  handler,
-  "communityResourceLane: codexCommunityResourceLane",
-  "Codex prompt projection receives the resolved community resource lane",
+  "buildRuntimeTurnEnvelope",
+  "runtime handler stores the canonical turn authority envelope",
 );
 assertContains(
   handler,
   "allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames",
-  "Codex prompt projection receives filtered PolyNet platform tools",
+  "runtime handler stores filtered PolyNet platform tools in the turn envelope",
 );
 assertContains(
   handler,
-  'eventType: "codex_worker_bridge_unavailable"',
-  "runtime handler emits bridge-unavailable evidence",
+  "ensureDaytonaCodexRuntimeTargetInternal",
+  "runtime handler resolves a Daytona target before streaming",
 );
 assertContains(
   handler,
-  "prompt_projection_receipt",
-  "runtime handler stores prompt projection receipt without raw prompt text",
+  "streamPolynetCodexWorkerTurn({",
+  "runtime handler streams through the Codex worker bridge",
+);
+assertContains(
+  handler,
+  "engineId: POLYNET_CODEX_WORKER_ENGINE_ID",
+  "runtime handler persists Codex worker assistant messages with the Codex engine id",
+);
+assertContains(
+  handler,
+  "releaseDaytonaCodexRuntimeTargetInternal",
+  "runtime handler releases Daytona target state after the turn",
+);
+assertContains(
+  handler,
+  "teardownAndRecordDaytonaCodexRuntimeTargetInternal",
+  "runtime handler schedules provider teardown after the turn",
+);
+assertContains(
+  handler,
+  "releasePolynetCodexWorkerLeaseBestEffort",
+  "runtime handler releases capacity leases on terminal finalization",
+);
+assertNotContains(
+  handler,
+  "startPolynetCodexWorkerRun({",
+  "legacy one-shot worker bridge call",
 );
 assertNotContains(
   handler,
   'code: "codex_runtime_not_configured"',
-  "old Codex runtime placeholder error after bridge slice",
+  "old Codex runtime placeholder error",
 );
-assertNotContains(
+
+assertContains(
+  toolEndpoint,
+  "readRunAllowedToolNames",
+  "worker tool endpoint authorizes platform tools from the stored run envelope",
+);
+assertContains(
+  toolEndpoint,
+  "community_tool_not_authorized_for_run",
+  "worker tool endpoint fails closed for tools not projected into the turn",
+);
+assertContains(
+  worker,
+  "buildCodexDynamicTools",
+  "worker builds Codex dynamic tools",
+);
+assertContains(
+  worker,
+  'namespace: "polynet"',
+  "worker projects PolyNet platform tools under the polynet namespace",
+);
+
+assertOrdered(
   handler,
-  "communityResourceLane: null",
-  "Codex bridge prompt projection should not drop the community resource lane",
+  "tryAcquirePolynetCodexWorkerLease",
+  "ensureDaytonaCodexRuntimeTargetInternal",
+  "capacity admission happens before Daytona target execution",
 );
 assertOrdered(
   handler,
-  "if (runtimeEngine === RUNTIME_ENGINE_CODEX)",
-  "resolveCodexHarnessToolPolicy({",
-  "Codex harness policy resolves inside Codex branch",
+  "mintPolynetCodexWorkerRunTokenSet",
+  "streamPolynetCodexWorkerTurn({",
+  "run tokens are minted before worker stream starts",
 );
 assertOrdered(
   handler,
-  "resolveCodexHarnessToolPolicy({",
-  "executeChatToolsAgentLoop({",
-  "Codex harness policy resolves before any PolyNet agent-loop execution",
-);
-assertOrdered(
-  handler,
-  'eventType: "codex_harness_policy_resolved"',
-  "startPolynetCodexWorkerRun({",
-  "Codex harness policy evidence is emitted before bridge start",
-);
-assertOrdered(
-  handler,
-  "startPolynetCodexWorkerRun({",
-  "if (!codexBridgeResult.ok)",
-  "Codex bridge result is handled after bridge start",
+  "ensureDaytonaCodexRuntimeTargetInternal",
+  "streamPolynetCodexWorkerTurn({",
+  "Daytona target is ready before worker stream starts",
 );
 
 console.log("codex_worker_bridge_contract_proof: ok");

@@ -1,10 +1,9 @@
 import { internal } from "./_generated/api";
 import { buildRuntimeRunPersistenceHelpers } from "./httpRuntimeTurnState";
 import { persistRuntimeAssistantMessage } from "./runtimeTurnPersistence";
-import { disposeRuntimeWorkspaceSession } from "./runtimeWorkspaceSessionDisposal";
-import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 import {
+  isPolynetCodexWorkerRunTokenFailure,
   verifyPolynetCodexWorkerRunToken,
 } from "./polynetCodexWorkerRunToken";
 import {
@@ -143,7 +142,7 @@ export async function handlePolynetCodexWorkerIngest(
     expectedAudience: "ingest",
     context,
   });
-  if (!runTokenVerification.ok) {
+  if (isPolynetCodexWorkerRunTokenFailure(runTokenVerification)) {
     return json(runTokenVerification.status, {
       ok: false,
       code: runTokenVerification.code,
@@ -380,46 +379,6 @@ export async function handlePolynetCodexWorkerIngest(
     capacityLeaseReleaseReason = "release_failed";
   }
 
-  // Dispose the workspace lease if the live path never did. Disposal is
-  // terminal-aware, so app-preview terminals keep accounting alive instead of
-  // getting prematurely settled by this durable backstop.
-  let leaseSettled = false;
-  let leaseDisposalOutcome: string | null = null;
-  const lease = asRecord(body.context && (body.context as JsonRecord).lease);
-  const leaseReservationKey = String(lease?.credit_reservation_key ?? "").trim();
-  const leaseStartedAt = Number(lease?.started_at);
-  if (leaseReservationKey && Number.isFinite(leaseStartedAt)) {
-    try {
-      const disposal = await disposeRuntimeWorkspaceSession({
-        ctx,
-        userId: context.owner_id,
-        runId: context.run_id,
-        session: {
-          kind: "project_workspace",
-          providerId: "blaxel",
-          projectId: String(lease?.project_id ?? ""),
-          projectVolumeId: null,
-          providerSandboxId: String(lease?.provider_sandbox_id ?? ""),
-          workspaceRoot: "/workspace",
-          startedAt: leaseStartedAt,
-          creditReservationKey: leaseReservationKey,
-          sandboxCpu: Number(lease?.sandbox_cpu) || 1,
-          sandboxMemoryGiB: Number(lease?.sandbox_memory_gib) || 2,
-          sandboxDiskGiB: Number(lease?.sandbox_disk_gib) || 8,
-          lifecycleMode: "provider_standby",
-        } satisfies RuntimeWorkspaceSession,
-        finalState: "released",
-        appendRunEvent,
-        source: "polynet_codex_worker_ingest",
-      });
-      leaseDisposalOutcome = disposal.outcome;
-      leaseSettled = disposal.outcome === "settled";
-    } catch {
-      // Best effort: the reservation expiry remains the final backstop.
-      leaseDisposalOutcome = "disposal_failed";
-    }
-  }
-
   const daytonaActivePreviewPorts = Array.from(activePreviewPorts);
   let daytonaLifecycleFinalized = false;
   let daytonaLifecycleFinalizeReason: string | null = null;
@@ -450,8 +409,6 @@ export async function handlePolynetCodexWorkerIngest(
     codex_runtime_credits_outcome: codexRuntimeCreditsOutcome,
     capacity_lease_released: capacityLeaseReleased,
     capacity_lease_release_reason: capacityLeaseReleaseReason,
-    lease_settled: leaseSettled,
-    lease_disposal_outcome: leaseDisposalOutcome,
     daytona_lifecycle_finalized: daytonaLifecycleFinalized,
     daytona_lifecycle_finalize_reason: daytonaLifecycleFinalizeReason,
     daytona_active_preview_ports: daytonaActivePreviewPorts,

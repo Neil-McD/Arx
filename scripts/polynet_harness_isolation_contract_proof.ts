@@ -155,10 +155,12 @@ async function proveDaytonaRuntimeSubstrateIsIsolatedFromHarnessPolicy() {
   const bridge = await readRepoFile("convex/polynetCodexWorkerBridge.ts");
   assert.equal(
     bridge.includes("POLYNET_CODEX_WORKER_RUNTIME_ENABLED") &&
-      bridge.includes("POLYNET_CODEX_WORKER_URL") &&
-      bridge.includes("new AbortController()"),
+      bridge.includes("DAYTONA_API_KEY") &&
+      bridge.includes("DAYTONA_JWT_TOKEN") &&
+      bridge.includes("target?.workerUrl") &&
+      bridge.includes("WORKER_BUSY_RETRY_DELAYS_MS"),
     true,
-    "Codex worker transport must remain feature-gated and bounded",
+    "Codex worker transport must remain feature-gated, Daytona-backed, and bounded",
   );
 }
 

@@ -123,13 +123,13 @@ assertContains(
 );
 assertContains(
   handler,
-  'eventType: "codex_runtime_route_selected"',
-  "Codex routing branch emits route-selected evidence",
+  'eventType: "polynet_codex_worker_bridge_started"',
+  "Codex routing branch emits worker bridge started evidence",
 );
 assertContains(
   handler,
-  "startPolynetCodexWorkerRun({",
-  "Codex routing branch calls the worker bridge boundary",
+  "streamPolynetCodexWorkerTurn({",
+  "Codex routing branch calls the streaming worker bridge boundary",
 );
 assertContains(
   handler,
@@ -139,7 +139,7 @@ assertContains(
 assertContains(
   handler,
   "allowedToolNames: codexHarnessPolicy.polynetPlatformToolNames",
-  "Codex routing branch passes filtered PolyNet platform tools to the worker bridge",
+  "Codex routing branch stores filtered PolyNet platform tools in the turn envelope",
 );
 assertContains(
   handler,
@@ -148,8 +148,18 @@ assertContains(
 );
 assertContains(
   handler,
-  'eventType: "codex_worker_bridge_unavailable"',
-  "Codex routing branch fails closed through bridge-unavailable evidence until transport is attached",
+  "tryAcquirePolynetCodexWorkerLease",
+  "Codex routing branch gates worker turns through admission leases",
+);
+assertContains(
+  handler,
+  "ensureDaytonaCodexRuntimeTargetInternal",
+  "Codex routing branch resolves Daytona targets before worker streaming",
+);
+assertContains(
+  handler,
+  "mintPolynetCodexWorkerRunTokenSet",
+  "Codex routing branch mints scoped worker callback tokens",
 );
 assertOrdered(
   handler,
@@ -167,6 +177,11 @@ assertNotContains(
   handler,
   'code: "codex_runtime_not_configured"',
   "old Codex runtime placeholder error after bridge slice",
+);
+assertNotContains(
+  handler,
+  "startPolynetCodexWorkerRun({",
+  "legacy one-shot Codex worker route after Daytona stream bridge",
 );
 
 assertContains(

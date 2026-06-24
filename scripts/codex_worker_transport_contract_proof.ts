@@ -1,244 +1,158 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import {
-  startPolynetCodexWorkerRun,
-  POLYNET_CODEX_WORKER_CONTRACT_NAME,
-  POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-  POLYNET_CODEX_WORKER_ENGINE_ID,
-} from "../convex/polynetCodexWorkerBridge.ts";
+const root = process.cwd();
 
-type RecordedEvent = {
-  eventType: string;
-  eventKey?: string;
-  payload: Record<string, unknown>;
-};
-
-function buildBaseParams(overrides: Record<string, unknown> = {}) {
-  return {
-    ownerId: "user_1",
-    threadId: "thread_1",
-    runId: "run_1",
-    requestId: "request_1",
-    runtimeEngine: "codex" as const,
-    modelId: "gpt-5.5",
-    maxTokens: 2048,
-    lane: "chatgpt",
-    inferenceSource: "chatgpt",
-    allowedToolNames: ["search_product_docs", "get_active_community_context"] as const,
-    conversationMessages: [
-      { role: "user" as const, content: "Can you help onboard me?" },
-    ],
-    latestUserText: "Can you help onboard me?",
-    promptParams: {
-      loopBudget: {
-        maxToolSteps: 50,
-        maxRepeatedIdenticalCalls: 2,
-        maxConsecutiveFailures: 5,
-        maxNoProgressSteps: 5,
-      },
-      allowedToolNames: ["search_product_docs", "get_active_community_context"] as const,
-      communityResourceLane: {
-        lane: "member" as const,
-        can_read_live_resources: true,
-        can_use_resource_builder: false,
-      },
-      harnessName: "chat_tools" as const,
-      communityId: "community_1",
-      communityName: "Polynet",
-      communitySlug: "polynet",
-      communityOneLiner: "Collective intelligence.",
-      communityAbout: "A test community.",
-      communitySystemPrompt: "Help members use Polynet.",
-      agentName: "Atom",
-      agentSoul: "Direct and useful.",
-      projectLabel: "General",
-      projectDescription: "Default cloud project",
-      runtimeTurnContext: {
-        latestUserText: "Can you help onboard me?",
-        projectContext: null,
-        threadWorkingState: null,
-        activeBackgroundTerminals: [],
-        recentBackgroundProcessEvents: [],
-        recentToolAttempts: [],
-      },
-      currentDateTimeIso: "2026-06-23T12:00:00.000Z",
-      currentDateLabel: "Tuesday, June 23, 2026 at 12:00:00 PM UTC",
-      currentTimeZone: "UTC",
-      conversationMessages: [
-        { role: "user" as const, content: "Can you help onboard me?" },
-      ],
-      latestUserText: "Can you help onboard me?",
-    },
-    ...overrides,
-  };
+function readText(path: string): string {
+  return readFileSync(join(root, path), "utf8");
 }
 
-async function proveDisabledDoesNotFetch(): Promise<void> {
-  let fetched = false;
-  const result = await startPolynetCodexWorkerRun({
-    ...buildBaseParams(),
-    env: {},
-    fetchFn: async () => {
-      fetched = true;
-      throw new Error("fetch should not run when disabled");
-    },
-  });
-  assert.equal(fetched, false);
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "codex_worker_unavailable");
-  assert.equal(result.status, 503);
-  assert.equal(result.retryable, true);
+function assertContains(haystack: string, needle: string, label: string): void {
+  assert.ok(haystack.includes(needle), `expected ${label}`);
 }
 
-async function proveSuccessfulTransportContract(): Promise<void> {
-  const events: RecordedEvent[] = [];
-  let requestUrl = "";
-  let requestHeaders: Record<string, string> = {};
-  let requestBody: Record<string, unknown> = {};
-  const result = await startPolynetCodexWorkerRun({
-    ...buildBaseParams(),
-    env: {
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "https://worker.polynet.test/runtime",
-      POLYNET_CODEX_WORKER_AUTH_TOKEN: "service-token",
-      POLYNET_CODEX_WORKER_TIMEOUT_MS: "2500",
-    },
-    fetchFn: async (url, init) => {
-      requestUrl = url;
-      requestHeaders = init.headers;
-      requestBody = JSON.parse(init.body) as Record<string, unknown>;
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            ok: true,
-            assistant_text: "Onboarding started.",
-            prompt_tokens: 12,
-            completion_tokens: 5,
-          }),
-      };
-    },
-    appendRunEvent: async (event) => {
-      events.push(event);
-    },
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.assistantText, "Onboarding started.");
-  assert.equal(result.promptTokens, 12);
-  assert.equal(result.completionTokens, 5);
-  assert.equal(requestUrl, "https://worker.polynet.test/runtime");
-  assert.equal(requestHeaders.authorization, "Bearer service-token");
-  assert.equal(requestHeaders["x-polynet-worker-contract"], POLYNET_CODEX_WORKER_CONTRACT_NAME);
-  assert.equal(
-    requestHeaders["x-polynet-worker-contract-version"],
-    POLYNET_CODEX_WORKER_CONTRACT_VERSION,
-  );
-  assert.equal(requestBody.contract_name, POLYNET_CODEX_WORKER_CONTRACT_NAME);
-  assert.equal(requestBody.contract_version, POLYNET_CODEX_WORKER_CONTRACT_VERSION);
-  assert.equal(requestBody.engine_id, POLYNET_CODEX_WORKER_ENGINE_ID);
-  assert.equal(requestBody.run_id, "run_1");
-  assert.equal(requestBody.model_id, "gpt-5.5");
-  assert.equal(requestBody.max_tokens, 2048);
-  assert.equal(typeof requestBody.developer_instructions, "string");
-  assert.equal(typeof requestBody.prompt, "string");
-  assert.deepEqual(requestBody.polynet_platform_tool_names, [
-    "search_product_docs",
-    "get_active_community_context",
-  ]);
-  assert.deepEqual(requestBody.community_resource_lane, {
-    lane: "member",
-    can_read_live_resources: true,
-    can_use_resource_builder: false,
-  });
-  assert.deepEqual(
-    events.map((event) => event.eventType),
-    ["codex_worker_transport_started", "codex_worker_transport_finished"],
-  );
-  const serializedEvents = JSON.stringify(events);
-  assert.equal(
-    serializedEvents.includes("Latest user request"),
-    false,
-    "transport events must not persist raw prompt text",
-  );
+function assertNotContains(haystack: string, needle: string, label: string): void {
+  assert.ok(!haystack.includes(needle), `did not expect ${label}`);
 }
 
-async function proveWorkerFailureContract(): Promise<void> {
-  const events: RecordedEvent[] = [];
-  const result = await startPolynetCodexWorkerRun({
-    ...buildBaseParams(),
-    env: {
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "https://worker.polynet.test/runtime",
-    },
-    fetchFn: async () => ({
-      ok: false,
-      status: 503,
-      text: async () =>
-        JSON.stringify({
-          ok: false,
-          code: "worker_busy",
-          message: "worker is busy",
-          retryable: false,
-        }),
-    }),
-    appendRunEvent: async (event) => {
-      events.push(event);
-    },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "codex_worker_transport_failed");
-  assert.equal(result.status, 503);
-  assert.equal(result.retryable, false);
-  assert.ok(result.message.includes("worker_busy"));
-  assert.deepEqual(
-    events.map((event) => event.eventType),
-    ["codex_worker_transport_started", "codex_worker_transport_failed"],
-  );
+function assertOrdered(
+  haystack: string,
+  first: string,
+  second: string,
+  label: string,
+): void {
+  const firstIndex = haystack.indexOf(first);
+  const secondIndex = haystack.indexOf(second);
+  assert.notEqual(firstIndex, -1, `expected ${label} first marker`);
+  assert.notEqual(secondIndex, -1, `expected ${label} second marker`);
+  assert.ok(firstIndex < secondIndex, `expected ${label}`);
 }
 
-async function proveInvalidResponseFailsClosed(): Promise<void> {
-  const result = await startPolynetCodexWorkerRun({
-    ...buildBaseParams(),
-    env: {
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "https://worker.polynet.test/runtime",
-    },
-    fetchFn: async () => ({
-      ok: true,
-      status: 200,
-      text: async () => "not json",
-    }),
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "codex_worker_invalid_response");
-  assert.equal(result.status, 502);
-}
+const packageJson = readText("package.json");
+const bridge = readText("convex/polynetCodexWorkerBridge.ts");
+const handler = readText("convex/runtimeTurnHandlers.ts");
+const worker = readText("services/polynet-codex-worker/src/server.ts");
+const token = readText("convex/polynetCodexWorkerRunToken.ts");
 
-async function proveInsecureWorkerUrlFailsClosed(): Promise<void> {
-  let fetched = false;
-  const result = await startPolynetCodexWorkerRun({
-    ...buildBaseParams(),
-    env: {
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "http://worker.polynet.test/runtime",
-    },
-    fetchFn: async () => {
-      fetched = true;
-      throw new Error("fetch should not run for insecure worker URL");
-    },
-  });
-  assert.equal(fetched, false);
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "codex_worker_unavailable");
-  assert.ok(String(result.disabledReason ?? "").includes("https URL"));
-}
+assertContains(
+  packageJson,
+  '"check:codex-worker-transport-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/codex_worker_transport_contract_proof.ts"',
+  "package script for Codex worker transport proof",
+);
 
-await proveDisabledDoesNotFetch();
-await proveSuccessfulTransportContract();
-await proveWorkerFailureContract();
-await proveInvalidResponseFailsClosed();
-await proveInsecureWorkerUrlFailsClosed();
+assertContains(
+  bridge,
+  'fetch(`${config.baseUrl}/v1/codex/turn?stream=1`',
+  "bridge calls the worker stream endpoint",
+);
+assertContains(
+  bridge,
+  'Authorization: `Bearer ${config.authToken}`',
+  "bridge authenticates to the worker service",
+);
+assertContains(
+  bridge,
+  "chatgpt_auth",
+  "bridge sends ChatGPT auth into the worker request",
+);
+assertContains(
+  bridge,
+  "run_token: params.ingest.run_token",
+  "bridge forwards scoped ingest token",
+);
+assertContains(
+  bridge,
+  "tool_run_token: params.ingest.tool_run_token",
+  "bridge forwards scoped tool token",
+);
+assertContains(
+  bridge,
+  "platform_tools",
+  "bridge forwards projected platform tools",
+);
+assertContains(
+  bridge,
+  "parseSseBlock",
+  "bridge parses SSE response blocks",
+);
+assertContains(
+  bridge,
+  'event.event === "delta"',
+  "bridge accumulates assistant deltas",
+);
+assertContains(
+  bridge,
+  'event.event === "run_finalized"',
+  "bridge handles terminal worker events",
+);
+assertContains(
+  bridge,
+  "polynet_codex_worker_stream_failed",
+  "bridge maps stream failure to structured error",
+);
+assertNotContains(
+  bridge,
+  "startPolynetCodexWorkerRun",
+  "legacy one-shot transport helper",
+);
+assertNotContains(
+  bridge,
+  "POLYNET_CODEX_WORKER_URL",
+  "legacy static worker URL env",
+);
+
+assertContains(
+  handler,
+  "buildPolynetCodexWorkerIngestTarget",
+  "runtime handler resolves worker ingest callback target",
+);
+assertContains(
+  handler,
+  "buildPolynetCodexWorkerToolTarget",
+  "runtime handler resolves worker tool callback target",
+);
+assertContains(
+  handler,
+  "mintPolynetCodexWorkerRunTokenSet",
+  "runtime handler mints callback tokens before streaming",
+);
+assertContains(
+  handler,
+  "streamPolynetCodexWorkerTurn({",
+  "runtime handler starts worker stream through bridge",
+);
+assertOrdered(
+  handler,
+  "mintPolynetCodexWorkerRunTokenSet",
+  "streamPolynetCodexWorkerTurn({",
+  "handler mints run tokens before worker stream",
+);
+
+assertContains(
+  worker,
+  '"/v1/codex/turn"',
+  "worker exposes the Codex turn endpoint",
+);
+assertContains(
+  worker,
+  "chatgptAuth",
+  "worker receives ChatGPT auth",
+);
+assertContains(
+  worker,
+  "runToken: ingestRunToken",
+  "worker carries scoped ingest token",
+);
+assertContains(
+  worker,
+  "toolRunToken: ingestToolRunToken",
+  "worker carries scoped tool token",
+);
+assertContains(
+  token,
+  'PolynetCodexWorkerRunTokenAudience = "ingest" | "terminal" | "tool"',
+  "run tokens are audience scoped",
+);
 
 console.log("codex_worker_transport_contract_proof: ok");

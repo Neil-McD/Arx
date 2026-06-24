@@ -81,6 +81,7 @@ export const WORKSPACE_FILE_INSPECTION_RESERVATION_EXPIRY_MS =
 
 export const WORKSPACE_VCPU_USD_PER_SECOND = 0;
 export const WORKSPACE_MEMORY_GIB_USD_PER_SECOND = 0.0000115;
+export const DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND = 0.0082 / 3600;
 
 export type PaidToolKind = "workspace_tools" | "web_research" | "voice_input";
 export const PAID_TOOL_LEDGER_TOOL_NAMES = ["workspace_compute", "web_research", "voice_transcribe"] as const;
@@ -216,6 +217,21 @@ export function priceWebResearchCredits(action: WebResearchCreditAction): number
   return priceFixedPaidToolCredits({
     minimumCredits: WEB_RESEARCH_CREDITS_PER_CALL,
     estimatedVendorCostUsd: estimateWebResearchVendorCostUsd(action),
+  });
+}
+
+export function estimateDaytonaWorkspaceComputeVendorCostUsd(params: {
+  durationSeconds: number;
+}): number {
+  const durationSeconds = Math.max(0, Number(params.durationSeconds) || 0);
+  return durationSeconds * DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND;
+}
+
+export function priceDaytonaWorkspaceComputeCredits(params: {
+  durationSeconds: number;
+}): number {
+  return priceVendorCostUsdToWorkspaceCredits({
+    rawVendorCostUsd: estimateDaytonaWorkspaceComputeVendorCostUsd(params),
   });
 }
 

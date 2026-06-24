@@ -17,34 +17,92 @@ function assertContains(haystack: string, needle: string, label: string): void {
   assert.ok(haystack.includes(needle), `expected ${label}`);
 }
 
+function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
+  const keys = [
+    "POLYNET_CODEX_WORKER_RUNTIME_ENABLED",
+    "POLYNET_DEPLOYMENT_KIND",
+    "POLYNET_CODEX_WORKER_AUTH_TOKEN",
+    "DAYTONA_API_KEY",
+    "DAYTONA_JWT_TOKEN",
+  ];
+  const previous = new Map<string, string | undefined>();
+  for (const key of keys) {
+    previous.set(key, process.env[key]);
+    if (Object.prototype.hasOwnProperty.call(env, key)) {
+      const value = env[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    } else {
+      delete process.env[key];
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    for (const key of keys) {
+      const value = previous.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 function proveWorkerReadinessPredicate(): void {
-  assert.equal(isPolynetCodexWorkerBridgeConfigured({}), false);
+  assert.equal(withEnv({}, () => isPolynetCodexWorkerBridgeConfigured()), false);
   assert.equal(
-    isPolynetCodexWorkerBridgeConfigured({
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-    }),
+    withEnv(
+      {
+        POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
+      },
+      () => isPolynetCodexWorkerBridgeConfigured(),
+    ),
     false,
   );
   assert.equal(
-    isPolynetCodexWorkerBridgeConfigured({
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "http://worker.polynet.test/runtime",
-    }),
-    false,
+    withEnv(
+      {
+        POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
+        POLYNET_DEPLOYMENT_KIND: "development",
+        POLYNET_CODEX_WORKER_AUTH_TOKEN: "service-token",
+        DAYTONA_API_KEY: "daytona-token",
+      },
+      () => getPolynetCodexWorkerBridgeConfig().disabledReason,
+    ),
+    "polynet_codex_worker_deployment_kind_invalid",
   );
   assert.equal(
-    isPolynetCodexWorkerBridgeConfigured({
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "https://worker.polynet.test/runtime",
-    }),
+    withEnv(
+      {
+        POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
+        POLYNET_DEPLOYMENT_KIND: "staging",
+        DAYTONA_API_KEY: "daytona-token",
+      },
+      () => getPolynetCodexWorkerBridgeConfig().disabledReason,
+    ),
+    "polynet_codex_worker_auth_token_missing",
+  );
+  assert.equal(
+    withEnv(
+      {
+        POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
+        POLYNET_DEPLOYMENT_KIND: "staging",
+        POLYNET_CODEX_WORKER_AUTH_TOKEN: "service-token",
+      },
+      () => getPolynetCodexWorkerBridgeConfig().disabledReason,
+    ),
+    "daytona_direct_credentials_missing",
+  );
+  assert.equal(
+    withEnv(
+      {
+        POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
+        POLYNET_DEPLOYMENT_KIND: "staging",
+        POLYNET_CODEX_WORKER_AUTH_TOKEN: "service-token",
+        DAYTONA_API_KEY: "daytona-token",
+      },
+      () => isPolynetCodexWorkerBridgeConfigured(),
+    ),
     true,
-  );
-  assert.equal(
-    getPolynetCodexWorkerBridgeConfig({
-      POLYNET_CODEX_WORKER_RUNTIME_ENABLED: "true",
-      POLYNET_CODEX_WORKER_URL: "http://worker.polynet.test/runtime",
-    }).disabledReason,
-    "POLYNET_CODEX_WORKER_URL must be an https URL.",
   );
 }
 

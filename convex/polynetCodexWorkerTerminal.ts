@@ -9,6 +9,7 @@ import {
 } from "./polynetCodexWorkerIngest";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 import {
+  isPolynetCodexWorkerRunTokenFailure,
   verifyPolynetCodexWorkerRunToken,
 } from "./polynetCodexWorkerRunToken";
 import {
@@ -80,7 +81,7 @@ export async function handlePolynetCodexWorkerTerminal(
     expectedAudience: "terminal",
     context,
   });
-  if (!runTokenVerification.ok) {
+  if (isPolynetCodexWorkerRunTokenFailure(runTokenVerification)) {
     return json(runTokenVerification.status, {
       ok: false,
       code: runTokenVerification.code,

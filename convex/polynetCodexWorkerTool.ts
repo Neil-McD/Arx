@@ -4,6 +4,7 @@ import {
 } from "./polynetCodexWorkerIngest";
 import { POLYNET_CODEX_WORKER_ENGINE_ID } from "./polynetCodexWorkerBridge";
 import {
+  isPolynetCodexWorkerRunTokenFailure,
   verifyPolynetCodexWorkerRunToken,
 } from "./polynetCodexWorkerRunToken";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
@@ -97,7 +98,6 @@ function runAuthorityAllowsRequiredAuthority(
 function communityAuthorityFailureCode(
   requiredAuthority: PolynetPlatformToolRequiredCommunityAuthority,
 ): string {
-  if (requiredAuthority === "owner") return "community_owner_authority_required";
   if (requiredAuthority === "admin") return "community_admin_authority_required";
   if (requiredAuthority === "moderator") {
     return "community_moderator_authority_required";
@@ -121,6 +121,29 @@ function readRunCommunityResourceLane(runRow: {
   if (!snapshotCommunityId || snapshotCommunityId !== runCommunityId) return "none";
   if (!snapshotThreadId || snapshotThreadId !== runThreadId) return "none";
   return normalizeCommunityResourceRuntimeLane(authority?.communityResourceLane);
+}
+
+function readRunAllowedToolNames(runRow: {
+  activeContextSnapshot?: unknown;
+  communityId?: unknown;
+  threadId?: unknown;
+}): Set<string> | null {
+  const snapshot = asRecord(runRow.activeContextSnapshot);
+  const envelope = asRecord(snapshot?.runtimeTurnEnvelope);
+  const authority = asRecord(envelope?.authority);
+  const snapshotCommunityId = String(authority?.communityId ?? "").trim();
+  const snapshotThreadId = String(authority?.threadId ?? "").trim();
+  const runCommunityId = String(runRow.communityId ?? "").trim();
+  const runThreadId = String(runRow.threadId ?? "").trim();
+  if (!snapshotThreadId || snapshotThreadId !== runThreadId) return null;
+  if (runCommunityId && snapshotCommunityId !== runCommunityId) return null;
+  if (!Array.isArray(authority?.allowedToolNames)) return null;
+  const rawAllowedToolNames = authority.allowedToolNames;
+  return new Set(
+    rawAllowedToolNames
+      .map((toolName) => String(toolName ?? "").trim())
+      .filter(Boolean),
+  );
 }
 
 function readRunCommunityAuthority(runRow: {
@@ -207,7 +230,7 @@ export async function handlePolynetCodexWorkerTool(
     expectedAudience: "tool",
     context,
   });
-  if (!runTokenVerification.ok) {
+  if (isPolynetCodexWorkerRunTokenFailure(runTokenVerification)) {
     return json(runTokenVerification.status, {
       ok: false,
       code: runTokenVerification.code,
@@ -365,7 +388,18 @@ export async function handlePolynetCodexWorkerTool(
   }
   if (surfaceEntry.requiresCommunity && communityId) {
     const communityAuthority = readRunCommunityAuthority(runRow);
+    const allowedToolNames = readRunAllowedToolNames(runRow);
+    if (allowedToolNames && !allowedToolNames.has(surfaceEntry.toolName)) {
+      return json(200, {
+        ok: false,
+        code: "community_tool_not_authorized_for_run",
+        message: "This tool was not authorized for the active runtime turn.",
+        tool_name: surfaceEntry.toolName,
+        risk_level: surfaceEntry.riskLevel,
+      });
+    }
     if (
+      !allowedToolNames &&
       !runAuthorityAllowsRequiredAuthority(
         communityAuthority,
         surfaceEntry.requiredCommunityAuthority,
@@ -387,6 +421,7 @@ export async function handlePolynetCodexWorkerTool(
     }
     const communityResourceLane = readRunCommunityResourceLane(runRow);
     if (
+      !allowedToolNames &&
       !runAuthorityAllowsRequiredLane(
         communityResourceLane,
         surfaceEntry.requiredCommunityResourceLane,
