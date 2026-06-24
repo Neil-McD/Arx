@@ -2735,6 +2735,7 @@ export default defineSchema({
     communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     executionMode: v.optional(v.string()),
     sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
