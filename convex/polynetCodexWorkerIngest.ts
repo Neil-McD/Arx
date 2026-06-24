@@ -45,6 +45,28 @@ function readPositiveNumber(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function readWorkerTimingDuration(timing: JsonRecord | null): {
+  durationSeconds: number;
+  source: string | null;
+} {
+  const directTotalMs = readPositiveNumber(timing?.total_ms);
+  if (directTotalMs) {
+    return {
+      durationSeconds: Math.max(0, directTotalMs / 1000),
+      source: "worker_ingest_timing_total_ms",
+    };
+  }
+  const buckets = asRecord(timing?.buckets);
+  const codexTurnTotalMs = readPositiveNumber(buckets?.codex_turn_total_ms);
+  if (codexTurnTotalMs) {
+    return {
+      durationSeconds: Math.max(0, codexTurnTotalMs / 1000),
+      source: "worker_ingest_timing_buckets_codex_turn_total_ms",
+    };
+  }
+  return { durationSeconds: 0, source: null };
+}
+
 function addWorkspacePreviewReadyPort(target: Set<number>, payload: JsonRecord): void {
   try {
     const port = normalizeWorkspacePreviewPort(payload.port);
@@ -288,10 +310,8 @@ export async function handlePolynetCodexWorkerIngest(
   const codexRuntimeCreditKey = String(codexRuntimeBilling?.credit_key ?? "").trim();
   if (codexRuntimeCreditKey) {
     const timing = asRecord(body.timing);
-    const durationSeconds = Math.max(
-      0,
-      (readPositiveNumber(timing?.total_ms) ?? 0) / 1000,
-    );
+    const { durationSeconds, source: durationSource } =
+      readWorkerTimingDuration(timing);
     const terminalReason =
       status === "ok"
         ? "completed"
@@ -322,12 +342,14 @@ export async function handlePolynetCodexWorkerIngest(
             daytona_workspace_compute_usd_per_second:
               DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
             duration_seconds: durationSeconds,
-            duration_source: "worker_ingest_timing_total_ms",
+            duration_source: durationSource,
             target_id: daytonaRuntimeTarget?.target_id ?? null,
             sandbox_id: daytonaRuntimeTarget?.sandbox_id ?? null,
             worker_machine_id: daytonaRuntimeTarget?.sandbox_id ?? null,
             reserved_credits: readPositiveNumber(codexRuntimeBilling?.reserved_credits),
             terminal_reason: terminalReason,
+            reserve_duration_seconds:
+              readPositiveNumber(codexRuntimeBilling?.reserve_duration_seconds),
           },
         });
         codexRuntimeCreditsSettled = true;
@@ -349,6 +371,8 @@ export async function handlePolynetCodexWorkerIngest(
           pricing_model: "daytona_runtime_seconds_estimate",
           worker_started: false,
           terminal_reason: terminalReason,
+          reserve_duration_seconds:
+            readPositiveNumber(codexRuntimeBilling?.reserve_duration_seconds),
         },
       });
       codexRuntimeCreditsOutcome = "refunded_not_started";

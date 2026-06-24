@@ -83,6 +83,13 @@ import {
   mintPolynetCodexWorkerRunTokenSet,
 } from "./polynetCodexWorkerRunToken";
 import {
+  buildPolynetCodexRuntimeWorkspaceComputeBillingContext,
+  refundPolynetCodexRuntimeWorkspaceComputeBestEffort,
+  reservePolynetCodexRuntimeWorkspaceCompute,
+  settlePolynetCodexRuntimeWorkspaceComputeBestEffort,
+  type PolynetCodexRuntimeWorkspaceComputeReservation,
+} from "./polynetCodexRuntimeAccounting";
+import {
   ensureRuntimeRunStarted,
   lookupExistingRuntimeReplay,
   persistRuntimeAssistantMessage,
@@ -1390,6 +1397,45 @@ export async function handleRuntimeTurnRequest(args: {
         }
         const workerRunTokens = mintedWorkerRunTokens.tokens;
 
+        let codexRuntimeWorkspaceComputeReservation:
+          PolynetCodexRuntimeWorkspaceComputeReservation | null = null;
+        const codexRuntimeWorkspaceComputeReservationResult =
+          await reservePolynetCodexRuntimeWorkspaceCompute({
+            ctx,
+            userId: actor.dbUserId,
+            communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
+            projectId: runtimeProjectId ? (runtimeProjectId as any) : undefined,
+            runId,
+          });
+        if (!codexRuntimeWorkspaceComputeReservationResult.ok) {
+          await failWorkerTurn({
+            status: codexRuntimeWorkspaceComputeReservationResult.status,
+            code: codexRuntimeWorkspaceComputeReservationResult.code,
+            message: codexRuntimeWorkspaceComputeReservationResult.message,
+            data: codexRuntimeWorkspaceComputeReservationResult.details,
+          });
+          return;
+        }
+        codexRuntimeWorkspaceComputeReservation =
+          codexRuntimeWorkspaceComputeReservationResult.reservation;
+        await streamAppendRunEvent({
+          eventType: "polynet_codex_runtime_workspace_compute_reserved",
+          eventKey: `${runId}:polynet_codex_runtime_workspace_compute_reserved:1`,
+          payload: {
+            run_id: runId,
+            credit_key: codexRuntimeWorkspaceComputeReservation.creditKey,
+            reserved_credits:
+              codexRuntimeWorkspaceComputeReservation.reservedCredits,
+            reserved_at: codexRuntimeWorkspaceComputeReservation.reservedAt,
+            expires_at: codexRuntimeWorkspaceComputeReservation.expiresAt,
+            reserve_duration_seconds:
+              codexRuntimeWorkspaceComputeReservation.reserveDurationSeconds,
+            provider: "daytona",
+            harness: "codex",
+            billing_product: "workspace_compute",
+          },
+        });
+
         let workerMachineId: string | null = null;
         let workerResolvedTarget: PolynetCodexWorkerResolvedTarget | null = null;
         try {
@@ -1459,6 +1505,11 @@ export async function handleRuntimeTurnRequest(args: {
             error instanceof Error
               ? error.message
               : "Daytona Codex runtime target failed.";
+          await refundPolynetCodexRuntimeWorkspaceComputeBestEffort({
+            ctx,
+            reservation: codexRuntimeWorkspaceComputeReservation,
+            failureReason: "daytona_codex_runtime_target_failed",
+          });
           await failWorkerTurn({
             status: 503,
             code: "daytona_codex_runtime_target_failed",
@@ -1525,6 +1576,9 @@ export async function handleRuntimeTurnRequest(args: {
         }, 3_000);
 
         const workerActivePreviewPorts = new Set<number>();
+        let workerTurnStarted = false;
+        let workerTurnStartedAtMs = 0;
+        const workerStreamRequestedAtMs = Date.now();
         let workerResult;
         try {
           workerResult = await streamPolynetCodexWorkerTurn({
@@ -1559,12 +1613,18 @@ export async function handleRuntimeTurnRequest(args: {
                   signed_preview_expires_at:
                     workerResolvedTarget.signedPreviewExpiresAt,
                 },
+                workspace_compute_billing:
+                  buildPolynetCodexRuntimeWorkspaceComputeBillingContext(
+                    codexRuntimeWorkspaceComputeReservation,
+                  ),
               },
             },
             platformTools: workerPlatformTools,
             target: workerResolvedTarget,
             onEvent: async (event) => {
               if (event.event === "start") {
+                workerTurnStarted = true;
+                if (!workerTurnStartedAtMs) workerTurnStartedAtMs = Date.now();
                 const machineId = String(event.data.machine_id ?? "").trim();
                 if (machineId) workerMachineId = machineId;
                 return;
@@ -1574,6 +1634,8 @@ export async function handleRuntimeTurnRequest(args: {
                 return;
               }
               if (event.event === "runtime_event") {
+                workerTurnStarted = true;
+                if (!workerTurnStartedAtMs) workerTurnStartedAtMs = Date.now();
                 const workerEventType = String(event.data.event_type ?? "").trim();
                 if (!workerEventType) return;
                 const workerSeqRaw = Number(event.data.seq);
@@ -1640,6 +1702,52 @@ export async function handleRuntimeTurnRequest(args: {
           }
         }
         streamedContent = workerResult.assistantText || streamedContent;
+        const workerTerminalReason = workerResult.ok
+          ? "completed"
+          : workerCancelFired || workerResult.code === USER_CANCELLED_RUNTIME_CODE
+            ? "cancelled"
+            : workerResult.code || "polynet_codex_worker_turn_failed";
+        const workerFallbackDurationMs =
+          workerTurnStarted && workerTurnStartedAtMs > 0
+            ? Date.now() - workerTurnStartedAtMs
+            : !workerResult.ok &&
+                workerResult.code === "polynet_codex_worker_stream_failed"
+              ? Date.now() - workerStreamRequestedAtMs
+              : null;
+        const workspaceComputeSettlement =
+          await settlePolynetCodexRuntimeWorkspaceComputeBestEffort({
+            ctx,
+            reservation: codexRuntimeWorkspaceComputeReservation,
+            timing: workerResult.timing,
+            fallbackDurationMs: workerFallbackDurationMs,
+            terminalReason: workerTerminalReason,
+            targetId: workerResolvedTarget?.targetId ?? null,
+            sandboxId: workerResolvedTarget?.sandboxId ?? null,
+            workerMachineId,
+          });
+        if (workspaceComputeSettlement) {
+          await streamAppendRunEvent({
+            eventType: workspaceComputeSettlement.ok
+              ? "polynet_codex_runtime_workspace_compute_settled"
+              : "polynet_codex_runtime_workspace_compute_settlement_failed",
+            eventKey: `${runId}:polynet_codex_runtime_workspace_compute_settlement:1`,
+            payload: {
+              run_id: runId,
+              credit_key: codexRuntimeWorkspaceComputeReservation.creditKey,
+              outcome: workspaceComputeSettlement.outcome,
+              duration_seconds: workspaceComputeSettlement.durationSeconds,
+              credits_settled: workspaceComputeSettlement.creditsSettled,
+              raw_vendor_cost_usd: workspaceComputeSettlement.rawVendorCostUsd,
+              provider: "daytona",
+              harness: "codex",
+              billing_product: "workspace_compute",
+              terminal_reason: workerTerminalReason,
+              ...(workspaceComputeSettlement.ok
+                ? {}
+                : { message: workspaceComputeSettlement.message }),
+            },
+          });
+        }
 
         if (workerResolvedTarget) {
           const teardownReason = workerResult.ok ? "turn_finished" : "turn_failed";
