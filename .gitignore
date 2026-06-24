@@ -18,3 +18,4 @@ references/repos/*
 .env.blaxel.local
 .env.staging.local
 .vercel
+.env.local
