@@ -18,9 +18,11 @@ import {
   SetStateAction,
 } from "react";
 import {
+  getDaytonaCodexRuntimePreviewUrl,
   getProjectWorkspaceTerminalPreviewUrl,
   listProjectWorkspaceTerminalSnapshot,
   recordProjectWorkspaceTerminalPreviewObservation,
+  stopDaytonaCodexRuntimePreview,
   stopAllProjectWorkspaceTerminals,
   stopProjectWorkspaceTerminal,
   type WorkspaceTerminalPreview,
@@ -481,6 +483,12 @@ function resolveTerminalAccessRunId(
   return persistedRunId || null;
 }
 
+function isDaytonaPreviewRecord(
+  terminal: WorkspaceTerminalRecord,
+): boolean {
+  return terminal.preview_provider === "daytona";
+}
+
 function isRuntimeOwnedTerminalRecord(
   terminal: WorkspaceTerminalRecord,
 ): boolean {
@@ -503,6 +511,7 @@ function areTerminalRecordsEqual(
     if (
       a.id !== b.id ||
       a.started_by_run_id !== b.started_by_run_id ||
+      a.preview_provider !== b.preview_provider ||
       a.status !== b.status ||
       a.command !== b.command ||
       a.cwd !== b.cwd ||
@@ -1688,6 +1697,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     const accessRunId = targetTerminal
       ? resolveTerminalAccessRunId(targetTerminal)
       : null;
+    const isDaytonaPreview = targetTerminal ? isDaytonaPreviewRecord(targetTerminal) : false;
     emitWorkspaceEvent({
       scope: "preview",
       name: "terminal_stop",
@@ -1696,6 +1706,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       runId: owningRunId,
       detail: {
         terminalSessionId,
+        previewProvider: isDaytonaPreview ? "daytona" : "workspace_terminal",
       },
     });
     setBusyWorkspaceTerminalIds((prev) => (prev.includes(terminalSessionId) ? prev : [...prev, terminalSessionId]));
@@ -1709,15 +1720,32 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         props.showAppToastMessage("Authentication session not available.");
         return;
       }
-      await withTimeout(
-        stopProjectWorkspaceTerminal({
-          session,
-          terminalSessionId,
-          runId: accessRunId,
-        }),
-        PREVIEW_RESOLUTION_TIMEOUT_MS,
-        "Stopping terminal timed out.",
-      );
+      if (isDaytonaPreview) {
+        const previewPort = targetTerminal?.preview_port ?? null;
+        if (!owningRunId || typeof previewPort !== "number") {
+          throw new Error("Daytona preview target is missing run or port evidence.");
+        }
+        await withTimeout(
+          stopDaytonaCodexRuntimePreview({
+            session,
+            projectId: requestProjectId,
+            runId: owningRunId,
+            previewPort,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Stopping Daytona preview timed out.",
+        );
+      } else {
+        await withTimeout(
+          stopProjectWorkspaceTerminal({
+            session,
+            terminalSessionId,
+            runId: accessRunId,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Stopping terminal timed out.",
+        );
+      }
       if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
         const next = await withTimeout(
           listProjectWorkspaceTerminalSnapshot({
@@ -1739,6 +1767,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         runId: owningRunId,
         detail: {
           terminalSessionId,
+          previewProvider: isDaytonaPreview ? "daytona" : "workspace_terminal",
         },
       });
     } catch (error) {
@@ -1752,6 +1781,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         runId: owningRunId,
         detail: {
           terminalSessionId,
+          previewProvider: isDaytonaPreview ? "daytona" : "workspace_terminal",
         },
         error: formatWorkspaceInstrumentationError(error),
       });
@@ -1836,6 +1866,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         latestPreviewRunIdByTerminalId,
       );
       const accessRunId = resolveTerminalAccessRunId(terminal);
+      const isDaytonaPreview = isDaytonaPreviewRecord(terminal);
       const existing = previewStateByTerminalId[terminalSessionId] ?? null;
       if (!opts?.force && existing) {
         if (existing.phase === "resolving" || existing.phase === "loading" || existing.phase === "ready") {
@@ -1871,16 +1902,36 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           "Preview connection timed out.",
         );
         if (!session) throw new Error("Authentication session not available.");
-        const preview = await withTimeout(
-          getProjectWorkspaceTerminalPreviewUrl({
-            session,
-            terminalSessionId,
-            runId: accessRunId,
-          }),
-          PREVIEW_RESOLUTION_TIMEOUT_MS,
-          "Preview connection timed out.",
-        );
-        if (!preview?.preview_url) {
+        let preview: WorkspaceTerminalPreview | null;
+        if (isDaytonaPreview) {
+          const daytonaRunId = owningRunId;
+          const daytonaPreviewPort = terminal.preview_port;
+          if (!daytonaRunId || typeof daytonaPreviewPort !== "number") {
+            throw new Error("Daytona preview target is missing run or port evidence.");
+          }
+          preview = await withTimeout(
+            getDaytonaCodexRuntimePreviewUrl({
+              session,
+              projectId: props.activeProjectId,
+              runId: daytonaRunId,
+              previewPort: daytonaPreviewPort,
+              terminalSessionId,
+            }),
+            PREVIEW_RESOLUTION_TIMEOUT_MS,
+            "Preview connection timed out.",
+          );
+        } else {
+          preview = await withTimeout(
+            getProjectWorkspaceTerminalPreviewUrl({
+              session,
+              terminalSessionId,
+              runId: accessRunId,
+            }),
+            PREVIEW_RESOLUTION_TIMEOUT_MS,
+            "Preview connection timed out.",
+          );
+        }
+        if (!preview?.preview_proxy_token) {
           throw new Error("Preview is not ready yet.");
         }
         setPreviewStateByTerminalId((prev) => ({
@@ -1899,7 +1950,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           runId: owningRunId,
           detail: {
             terminalSessionId,
+            previewProvider: isDaytonaPreview ? "daytona" : "workspace_terminal",
             previewUrlPresent: Boolean(preview?.preview_url),
+            previewProxyTokenPresent: Boolean(preview?.preview_proxy_token),
           },
         });
         return preview;
@@ -1956,6 +2009,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       previewProbeSummary: string;
       browserObservationSummary?: string | null;
     }) => {
+      if (isDaytonaPreviewRecord(params.terminal)) return;
       const signature = [
         params.previewStatus,
         params.previewTransportStatus,

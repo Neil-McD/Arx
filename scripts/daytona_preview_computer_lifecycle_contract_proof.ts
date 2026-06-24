@@ -42,7 +42,10 @@ const packageJson = read("package.json");
 const handler = read("convex/runtimeTurnHandlers.ts");
 const targets = read("convex/daytonaCodexRuntimeTargets.ts");
 const actions = read("convex/daytonaCodexRuntimeTargetActions.ts");
+const workspaceTerminals = read("convex/workspaceTerminals.ts");
 const crons = read("convex/crons.ts");
+const workspaceGateway = read("shared/workspaceTerminalsGateway.ts");
+const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
 const worker = read("services/polynet-codex-worker/src/server.ts");
 const workerTool = read("convex/polynetCodexWorkerTool.ts");
 const config = read("services/polynet-codex-worker/src/daytonaCodexConfig.ts");
@@ -66,6 +69,16 @@ const expiredSweep = sliceBetween(
   actions,
   "export const sweepExpiredDaytonaCodexRuntimeTargetsInternal = internalAction({",
   "export const stopDaytonaAppPreviewInternal = internalAction({",
+);
+const activePreviewProjection = sliceBetween(
+  targets,
+  "export const listActiveDaytonaCodexRuntimePreviewsForProjectInternal = internalQuery({",
+  "export const listExpiredDaytonaCodexRuntimeTargetsInternal = internalQuery({",
+);
+const publicPreviewBridge = sliceBetween(
+  workspaceTerminals,
+  "export const resolveDaytonaCodexRuntimePreviewUrl = action({",
+  "export const startProjectWorkspaceComputer = action({",
 );
 
 assertContains(
@@ -166,6 +179,26 @@ assertContains(
   targets,
   "remainingPreviewPorts",
   "stopping previews preserves any remaining active ports",
+);
+assertContains(
+  activePreviewProjection,
+  "by_project_workerState_lastUsedAt",
+  "active Daytona preview projection is project-scoped",
+);
+assertContains(
+  activePreviewProjection,
+  'preview_provider: "daytona"',
+  "active Daytona preview projection marks synthetic preview provider",
+);
+assertContains(
+  activePreviewProjection,
+  "buildDaytonaCodexRuntimePreviewSyntheticId(runId, port)",
+  "active Daytona preview projection uses stable synthetic ids",
+);
+assertContains(
+  activePreviewProjection,
+  "previewLeaseActive",
+  "active Daytona preview projection only includes active preview leases",
 );
 
 assertContains(
@@ -290,6 +323,89 @@ assertNotContains(
   previewResolver,
   "preview_url:",
   "preview resolver should not return raw provider preview URL",
+);
+
+assertContains(
+  workspaceTerminals,
+  "listActiveDaytonaCodexRuntimePreviewsForProjectInternal",
+  "workspace terminal snapshot includes active Daytona previews",
+);
+assertContains(
+  publicPreviewBridge,
+  "resolveAuthenticatedActorForActionContext",
+  "public Daytona preview bridge resolves authenticated actor from auth subject",
+);
+assertContains(
+  publicPreviewBridge,
+  "getDaytonaCodexRuntimeTargetByRunIdInternal",
+  "public Daytona preview bridge validates target ownership before provider calls",
+);
+assertContains(
+  publicPreviewBridge,
+  "String(target.projectId ?? \"\") !== String(args.projectId)",
+  "public Daytona preview bridge validates project scope when supplied",
+);
+assertContains(
+  publicPreviewBridge,
+  "resolveDaytonaCodexRuntimePreviewInternal",
+  "public Daytona preview bridge delegates resolve to canonical internal action",
+);
+assertContains(
+  publicPreviewBridge,
+  "stopDaytonaAppPreviewInternal",
+  "public Daytona preview bridge delegates stop to canonical internal action",
+);
+assertContains(
+  workspaceGateway,
+  "getDaytonaCodexRuntimePreviewUrl",
+  "shared web gateway exposes Daytona preview resolve",
+);
+assertContains(
+  workspaceGateway,
+  "stopDaytonaCodexRuntimePreview",
+  "shared web gateway exposes Daytona preview stop",
+);
+assertContains(
+  workspaceGateway,
+  'client.action("workspaceTerminals:resolveDaytonaCodexRuntimePreviewUrl" as any',
+  "shared web gateway calls public Daytona resolve action",
+);
+assertContains(
+  workspaceGateway,
+  'client.action("workspaceTerminals:stopDaytonaCodexRuntimePreview" as any',
+  "shared web gateway calls public Daytona stop action",
+);
+assertContains(
+  workspaceHost,
+  "function isDaytonaPreviewRecord",
+  "workspace UI identifies Daytona preview records explicitly",
+);
+assertContains(
+  workspaceHost,
+  "getDaytonaCodexRuntimePreviewUrl({",
+  "workspace UI resolves Daytona previews through Daytona bridge",
+);
+assertContains(
+  workspaceHost,
+  "stopDaytonaCodexRuntimePreview({",
+  "workspace UI stops Daytona previews through Daytona bridge",
+);
+assertContains(
+  workspaceHost,
+  "if (isDaytonaPreviewRecord(params.terminal)) return;",
+  "workspace UI does not write terminal observations for synthetic Daytona previews",
+);
+assertOrdered(
+  workspaceHost,
+  "if (!daytonaRunId || typeof daytonaPreviewPort !== \"number\")",
+  "getDaytonaCodexRuntimePreviewUrl({",
+  "workspace UI fails closed before resolving Daytona preview without run or port evidence",
+);
+assertOrdered(
+  workspaceHost,
+  "stopDaytonaCodexRuntimePreview({",
+  "stopProjectWorkspaceTerminal({",
+  "workspace UI branches Daytona stop away from legacy terminal stop",
 );
 
 assertContains(

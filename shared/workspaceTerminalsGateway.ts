@@ -11,6 +11,7 @@ export type WorkspaceTerminalRecord = {
   started_by_thread_id: string | null;
   started_by_run_id: string | null;
   provider_sandbox_provider_id: "blaxel" | null;
+  preview_provider: "blaxel" | "daytona" | null;
   status: "starting" | "running" | "exited" | "failed" | "stopped";
   command: string;
   cwd: string | null;
@@ -126,6 +127,10 @@ function mapWorkspaceTerminalRow(
     provider_sandbox_provider_id:
       row?.provider_sandbox_provider_id === "blaxel"
         ? row.provider_sandbox_provider_id
+        : null,
+    preview_provider:
+      row?.preview_provider === "blaxel" || row?.preview_provider === "daytona"
+        ? row.preview_provider
         : null,
     status: (String(row?.status ?? "stopped").trim() || "stopped") as WorkspaceTerminalRecord["status"],
     command: String(row?.command ?? "").trim(),
@@ -290,6 +295,24 @@ export async function stopProjectWorkspaceTerminal<TSession>(params: {
   });
 }
 
+export async function stopDaytonaCodexRuntimePreview<TSession>(params: {
+  session: TSession;
+  projectId?: string | null;
+  runId: string;
+  previewPort: number;
+}): Promise<void> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
+  const payload = (await client.action("workspaceTerminals:stopDaytonaCodexRuntimePreview" as any, {
+    authSubject,
+    projectId: params.projectId ?? undefined,
+    runId: params.runId,
+    previewPort: params.previewPort,
+  })) as Record<string, unknown> | null;
+  if (!payload || payload.ok !== true) {
+    throw new Error(String(payload?.message ?? "Failed to stop Daytona preview."));
+  }
+}
+
 export async function stopAllProjectWorkspaceTerminals<TSession>(params: {
   session: TSession;
   projectId: string;
@@ -321,6 +344,38 @@ export async function getProjectWorkspaceTerminalPreviewUrl<TSession>(params: {
     terminal_session_id: String(payload.terminal_session_id ?? "").trim(),
     preview_port: Math.floor(previewPort),
     preview_url: previewUrl,
+    preview_proxy_token: previewProxyToken,
+    preview_path: typeof payload.preview_path === "string" && payload.preview_path.trim() ? payload.preview_path.trim() : null,
+    preview_label: typeof payload.preview_label === "string" && payload.preview_label.trim() ? payload.preview_label.trim() : null,
+    expires_in_seconds: Number(payload.expires_in_seconds ?? 0) || 0,
+  };
+}
+
+export async function getDaytonaCodexRuntimePreviewUrl<TSession>(params: {
+  session: TSession;
+  projectId?: string | null;
+  runId: string;
+  previewPort: number;
+  terminalSessionId?: string | null;
+}): Promise<WorkspaceTerminalPreview | null> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
+  const payload = (await client.action("workspaceTerminals:resolveDaytonaCodexRuntimePreviewUrl" as any, {
+    authSubject,
+    projectId: params.projectId ?? undefined,
+    runId: params.runId,
+    previewPort: params.previewPort,
+  })) as Record<string, unknown> | null;
+  if (!payload || payload.ok !== true) return null;
+  const previewProxyToken = String(payload.preview_proxy_token ?? "").trim();
+  const previewPort = Number(payload.preview_port ?? params.previewPort);
+  if (!previewProxyToken || !Number.isFinite(previewPort) || previewPort < 1) return null;
+  return {
+    terminal_session_id:
+      typeof payload.terminal_session_id === "string" && payload.terminal_session_id.trim()
+        ? payload.terminal_session_id.trim()
+        : String(params.terminalSessionId ?? "").trim(),
+    preview_port: Math.floor(previewPort),
+    preview_url: String(payload.preview_url ?? "polynet_preview_gateway"),
     preview_proxy_token: previewProxyToken,
     preview_path: typeof payload.preview_path === "string" && payload.preview_path.trim() ? payload.preview_path.trim() : null,
     preview_label: typeof payload.preview_label === "string" && payload.preview_label.trim() ? payload.preview_label.trim() : null,

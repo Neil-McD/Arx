@@ -56,6 +56,7 @@ type WorkspaceTerminalSummary = {
   started_by_thread_id: string | null;
   started_by_run_id: string | null;
   provider_sandbox_provider_id: "blaxel" | null;
+  preview_provider?: "blaxel" | "daytona" | null;
   status: WorkspaceTerminalStatus;
   command: string;
   cwd: string | null;
@@ -148,6 +149,16 @@ const workspaceTerminalCompletionReasonValidator = v.union(
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
+}
+
+function normalizePreviewPortArg(value: unknown): number | null {
+  const port = Number(value);
+  if (!Number.isFinite(port) || port < 1) return null;
+  return Math.floor(port);
+}
+
+function buildDaytonaCodexRuntimePreviewSyntheticId(runId: string, port: number): string {
+  return `daytona:${runId}:${port}`;
 }
 
 function normalizeObservationSummary(value: unknown, maxLen = 240): string | null {
@@ -921,9 +932,133 @@ export const listProjectWorkspaceTerminalSnapshot = action({
         projectId: args.projectId,
       },
     );
+    const daytonaPreviews = (await ctx.runQuery(
+      (internal as any).daytonaCodexRuntimeTargets
+        .listActiveDaytonaCodexRuntimePreviewsForProjectInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        projectId: args.projectId,
+      },
+    )) as any[];
     return {
-      active: Array.isArray(snapshot?.active) ? snapshot.active : [],
+      active: [
+        ...(Array.isArray(snapshot?.active) ? snapshot.active : []),
+        ...(Array.isArray(daytonaPreviews) ? daytonaPreviews : []),
+      ],
       recent: Array.isArray(snapshot?.recent) ? snapshot.recent : [],
+    };
+  },
+});
+
+export const resolveDaytonaCodexRuntimePreviewUrl = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.optional(v.id("cloudProjects")),
+    runId: v.string(),
+    previewPort: v.number(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const actor = await resolveAuthenticatedActorForActionContext({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const runId = normalizeOptionalString(args.runId);
+    const previewPort = normalizePreviewPortArg(args.previewPort);
+    if (!runId || previewPort === null) {
+      return {
+        ok: false,
+        status: 400,
+        code: "daytona_preview_invalid_request",
+        message: "Daytona preview requires a run id and preview port.",
+      };
+    }
+    const target = await ctx.runQuery(
+      (internal as any).daytonaCodexRuntimeTargets
+        .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        runId,
+      },
+    );
+    if (!target || (args.projectId && String(target.projectId ?? "") !== String(args.projectId))) {
+      return {
+        ok: false,
+        status: 404,
+        code: "daytona_preview_not_found",
+        message: "Daytona preview not found.",
+      };
+    }
+    const preview = (await ctx.runAction(
+      (internal as any).daytonaCodexRuntimeTargetActions
+        .resolveDaytonaCodexRuntimePreviewInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        runId,
+        port: previewPort,
+      },
+    )) as Record<string, unknown>;
+    if (preview?.ok !== true) return preview;
+    return {
+      ...preview,
+      terminal_session_id: buildDaytonaCodexRuntimePreviewSyntheticId(runId, previewPort),
+      preview_url: "polynet_preview_gateway",
+    };
+  },
+});
+
+export const stopDaytonaCodexRuntimePreview = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.optional(v.id("cloudProjects")),
+    runId: v.string(),
+    previewPort: v.number(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const actor = await resolveAuthenticatedActorForActionContext({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const runId = normalizeOptionalString(args.runId);
+    const previewPort = normalizePreviewPortArg(args.previewPort);
+    if (!runId || previewPort === null) {
+      return {
+        ok: false,
+        status: 400,
+        code: "daytona_preview_invalid_request",
+        message: "Daytona preview requires a run id and preview port.",
+      };
+    }
+    const target = await ctx.runQuery(
+      (internal as any).daytonaCodexRuntimeTargets
+        .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        runId,
+      },
+    );
+    if (!target || (args.projectId && String(target.projectId ?? "") !== String(args.projectId))) {
+      return {
+        ok: false,
+        status: 404,
+        code: "daytona_preview_not_found",
+        message: "Daytona preview not found.",
+      };
+    }
+    const stopped = await ctx.runAction(
+      (internal as any).daytonaCodexRuntimeTargetActions
+        .stopDaytonaAppPreviewInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        runId,
+        previewPort,
+        reason: "web_preview_stop",
+      },
+    );
+    return {
+      ...(stopped && typeof stopped === "object" && !Array.isArray(stopped)
+        ? (stopped as Record<string, unknown>)
+        : {}),
+      terminal_session_id: buildDaytonaCodexRuntimePreviewSyntheticId(runId, previewPort),
     };
   },
 });
