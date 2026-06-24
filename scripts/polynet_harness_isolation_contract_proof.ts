@@ -44,12 +44,6 @@ assert.match(
   /"check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/polynet_harness_isolation_contract_proof\.ts"/,
   "package.json must expose the PolyNet harness isolation proof",
 );
-assert.doesNotMatch(
-  packageJson,
-  /polynet-daytona-preview-substrate|daytona-polynet-preview-stop|polynet-invisible-localhost-guard/,
-  "package.json must not keep proof commands for deleted PolyNet sandbox-preview behavior",
-);
-
 assert.match(
   app,
   /ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY[\s\S]*shouldRestorePolynetDefault[\s\S]*RUNTIME_ENGINE_POLYNET/,

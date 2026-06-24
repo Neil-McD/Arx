@@ -53,8 +53,8 @@ type InspectorDiagnostic = {
 function usage() {
   return [
     "Usage:",
-    "  npm run diagnose:blaxel-workspace-inspector -- --project-id <cloudProjectId> --auth-subject <subject> [--owner-id <userId>] [--path .] [--no-push]",
-    "  npm run diagnose:blaxel-workspace-inspector -- --project-id <cloudProjectId> --owner-id <userId> --no-list [--no-push]",
+    "  node --experimental-strip-types --experimental-specifier-resolution=node scripts/blaxel_workspace_inspector_diagnostic.ts --project-id <cloudProjectId> --auth-subject <subject> [--owner-id <userId>] [--path .] [--no-push]",
+    "  node --experimental-strip-types --experimental-specifier-resolution=node scripts/blaxel_workspace_inspector_diagnostic.ts --project-id <cloudProjectId> --owner-id <userId> --no-list [--no-push]",
   ].join("\n");
 }
 
