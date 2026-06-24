@@ -232,6 +232,21 @@ assertContains(
   'cleanupDecision: "delete_without_active_lease"',
   "inactive preview leases allow provider delete",
 );
+assertContains(
+  teardownAction,
+  "if (isDaytonaNotFoundError(error))",
+  "teardown treats missing Daytona sandbox as cleanup success",
+);
+assertContains(
+  teardownAction,
+  "stoppedPreviewPorts: activePreviewPorts",
+  "missing Daytona sandbox clears recorded active preview ports",
+);
+assertContains(
+  teardownAction,
+  'workspaceRetentionState: "none"',
+  "missing Daytona sandbox clears human-save retention residue",
+);
 
 assertContains(
   expiredSweep,
@@ -287,6 +302,11 @@ assertContains(
   "markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal",
   "preview stop removes stopped ports from target state",
 );
+assertContains(
+  previewStop,
+  "preview_stop_unavailable_sandbox",
+  "preview stop handles already-unavailable Daytona sandboxes",
+);
 assertOrdered(
   previewStop,
   "markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal",
@@ -331,6 +351,26 @@ assertContains(
   "workspace terminal snapshot includes active Daytona previews",
 );
 assertContains(
+  activePreviewProjection,
+  "listActiveDaytonaCodexRuntimePreviewsForThreadInternal",
+  "Daytona preview projection includes projectless thread-scoped previews",
+);
+assertContains(
+  activePreviewProjection,
+  ".withIndex(\"by_owner_threadId\"",
+  "thread-scoped Daytona preview projection uses owner/thread index",
+);
+assertContains(
+  workspaceTerminals,
+  "listThreadDaytonaCodexRuntimePreviewSnapshot",
+  "workspace terminal bridge exposes projectless Daytona preview snapshot",
+);
+assertContains(
+  workspaceTerminals,
+  "getCloudThreadByThreadKey",
+  "projectless Daytona preview snapshot resolves thread key server-side",
+);
+assertContains(
   publicPreviewBridge,
   "resolveAuthenticatedActorForActionContext",
   "public Daytona preview bridge resolves authenticated actor from auth subject",
@@ -367,6 +407,16 @@ assertContains(
 );
 assertContains(
   workspaceGateway,
+  "listThreadDaytonaCodexRuntimePreviewSnapshot",
+  "shared web gateway exposes projectless Daytona preview snapshot",
+);
+assertContains(
+  workspaceGateway,
+  'client.action("workspaceTerminals:listThreadDaytonaCodexRuntimePreviewSnapshot" as any',
+  "shared web gateway calls public thread Daytona preview snapshot action",
+);
+assertContains(
+  workspaceGateway,
   'client.action("workspaceTerminals:resolveDaytonaCodexRuntimePreviewUrl" as any',
   "shared web gateway calls public Daytona resolve action",
 );
@@ -389,6 +439,21 @@ assertContains(
   workspaceHost,
   "stopDaytonaCodexRuntimePreview({",
   "workspace UI stops Daytona previews through Daytona bridge",
+);
+assertContains(
+  workspaceHost,
+  "listThreadDaytonaCodexRuntimePreviewSnapshot({",
+  "workspace UI polls projectless Daytona previews by active thread",
+);
+assertContains(
+  workspaceHost,
+  "buildWorkspaceTerminalScopeKey",
+  "workspace UI uses a project-or-thread terminal snapshot scope",
+);
+assertContains(
+  workspaceHost,
+  "if (!session) {",
+  "workspace UI Daytona stop is not gated on active project id",
 );
 assertContains(
   workspaceHost,

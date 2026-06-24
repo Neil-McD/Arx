@@ -950,6 +950,39 @@ export const listProjectWorkspaceTerminalSnapshot = action({
   },
 });
 
+export const listThreadDaytonaCodexRuntimePreviewSnapshot = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    threadKey: v.string(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const actor: { dbUserId: string } = await resolveAuthenticatedActorForActionContext({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const threadKey = normalizeOptionalString(args.threadKey);
+    if (!threadKey) return { active: [], recent: [] };
+    const thread = await ctx.runQuery(api.threads.getCloudThreadByThreadKey as any, {
+      authSubject: args.authSubject ?? null,
+      ownerId: actor.dbUserId,
+      threadKey,
+    });
+    if (!thread?._id) return { active: [], recent: [] };
+    const daytonaPreviews = (await ctx.runQuery(
+      (internal as any).daytonaCodexRuntimeTargets
+        .listActiveDaytonaCodexRuntimePreviewsForThreadInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        threadId: thread._id,
+      },
+    )) as any[];
+    return {
+      active: Array.isArray(daytonaPreviews) ? daytonaPreviews : [],
+      recent: [],
+    };
+  },
+});
+
 export const resolveDaytonaCodexRuntimePreviewUrl = action({
   args: {
     authSubject: v.optional(v.string()),

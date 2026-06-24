@@ -21,12 +21,14 @@ import {
   getDaytonaCodexRuntimePreviewUrl,
   getProjectWorkspaceTerminalPreviewUrl,
   listProjectWorkspaceTerminalSnapshot,
+  listThreadDaytonaCodexRuntimePreviewSnapshot,
   recordProjectWorkspaceTerminalPreviewObservation,
   stopDaytonaCodexRuntimePreview,
   stopAllProjectWorkspaceTerminals,
   stopProjectWorkspaceTerminal,
   type WorkspaceTerminalPreview,
   type WorkspaceTerminalRecord,
+  type WorkspaceTerminalSnapshot,
   type WorkspaceTerminalPreviewStatus,
 } from "../../../../shared/workspaceTerminalsGateway";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -544,6 +546,16 @@ function applyTerminalSnapshotIfChanged(
 ): void {
   const combined = [...next.active, ...(next.recent ?? [])];
   setActive((prev) => (areTerminalRecordsEqual(prev, combined) ? prev : combined));
+}
+
+function buildWorkspaceTerminalScopeKey(params: {
+  projectId: string | null;
+  threadKey: string | null;
+}): string {
+  const projectId = String(params.projectId ?? "").trim();
+  if (projectId) return `project:${projectId}`;
+  const threadKey = String(params.threadKey ?? "").trim();
+  return threadKey ? `thread:${threadKey}` : "";
 }
 
 function isPreviewCapableTerminal(terminal: WorkspaceTerminalRecord): boolean {
@@ -1215,7 +1227,12 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const workspacePinnedToBottomRef = useRef(true);
   const isLoadingThreadRef = useRef(false);
   const resolveWorkspaceSessionRef = useRef(props.resolveWorkspaceSession);
-  const activeProjectIdRef = useRef<string | null>(props.activeProjectId);
+  const activeTerminalScopeKeyRef = useRef(
+    buildWorkspaceTerminalScopeKey({
+      projectId: props.activeProjectId,
+      threadKey: props.activeThreadId,
+    }),
+  );
   const activeProjectInstanceRef = useRef(0);
   const [activeWorkspaceTerminals, setActiveWorkspaceTerminals] = useState<WorkspaceTerminalRecord[]>([]);
   const [busyWorkspaceTerminalIds, setBusyWorkspaceTerminalIds] = useState<string[]>([]);
@@ -1529,13 +1546,16 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   }, [focusWorkspaceComposerSafely, isDesktopViewport]);
 
   useEffect(() => {
-    activeProjectIdRef.current = props.activeProjectId;
+    activeTerminalScopeKeyRef.current = buildWorkspaceTerminalScopeKey({
+      projectId: props.activeProjectId,
+      threadKey: props.activeThreadId,
+    });
     activeProjectInstanceRef.current += 1;
     setActiveWorkspaceTerminals([]);
     setPreviewStateByTerminalId({});
     setBusyWorkspaceTerminalIds([]);
     setIsStoppingAllWorkspaceTerminals(false);
-  }, [props.activeProjectId]);
+  }, [props.activeProjectId, props.activeThreadId]);
 
   useEffect(() => {
     resolveWorkspaceSessionRef.current = props.resolveWorkspaceSession;
@@ -1569,9 +1589,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   }, [activePreviewCapableTerminals]);
 
   const isCurrentTerminalScope = useCallback(
-    (projectId: string | null, projectInstance: number): boolean =>
-      Boolean(projectId) &&
-      activeProjectIdRef.current === projectId &&
+    (scopeKey: string, projectInstance: number): boolean =>
+      Boolean(scopeKey) &&
+      activeTerminalScopeKeyRef.current === scopeKey &&
       activeProjectInstanceRef.current === projectInstance,
     [],
   );
@@ -1609,11 +1629,13 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   });
 
   useEffect(() => {
-    if (!props.session || !props.activeProjectId) {
+    const projectId = props.activeProjectId;
+    const threadKey = props.activeThreadId;
+    const scopeKey = buildWorkspaceTerminalScopeKey({ projectId, threadKey });
+    if (!props.session || !scopeKey) {
       return;
     }
     let cancelled = false;
-    const projectId = props.activeProjectId;
     const projectInstance = activeProjectInstanceRef.current;
     const poll = async () => {
       if (cancelled) return;
@@ -1623,16 +1645,25 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           PREVIEW_RESOLUTION_TIMEOUT_MS,
           "Workspace session timed out.",
         );
-        if (!session || !projectId || cancelled) return;
-        const next = await withTimeout(
-          listProjectWorkspaceTerminalSnapshot({
-            session,
-            projectId,
-          }),
-          PREVIEW_RESOLUTION_TIMEOUT_MS,
-          "Workspace terminal sync timed out.",
-        );
-        if (!cancelled && isCurrentTerminalScope(projectId, projectInstance)) {
+        if (!session || cancelled) return;
+        const next: WorkspaceTerminalSnapshot = projectId
+          ? await withTimeout(
+              listProjectWorkspaceTerminalSnapshot({
+                session,
+                projectId,
+              }),
+              PREVIEW_RESOLUTION_TIMEOUT_MS,
+              "Workspace terminal sync timed out.",
+            )
+          : await withTimeout(
+              listThreadDaytonaCodexRuntimePreviewSnapshot({
+                session,
+                threadKey: threadKey ?? "",
+              }),
+              PREVIEW_RESOLUTION_TIMEOUT_MS,
+              "Workspace preview sync timed out.",
+            );
+        if (!cancelled && isCurrentTerminalScope(scopeKey, projectInstance)) {
           applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
         }
       } catch (error) {
@@ -1658,6 +1689,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     activeWorkspaceTerminals,
     isCurrentTerminalScope,
     props.activeProjectId,
+    props.activeThreadId,
     props.session,
     props.isStreamingWorkspaceTurn,
   ]);
@@ -1688,6 +1720,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   const handleStopWorkspaceTerminal = async (terminalSessionId: string): Promise<void> => {
     const requestProjectId = props.activeProjectId;
+    const requestThreadKey = props.activeThreadId;
+    const requestScopeKey = buildWorkspaceTerminalScopeKey({
+      projectId: requestProjectId,
+      threadKey: requestThreadKey,
+    });
     const requestProjectInstance = activeProjectInstanceRef.current;
     const targetTerminal =
       activeWorkspaceTerminals.find((candidate) => candidate.id === terminalSessionId) ?? null;
@@ -1716,7 +1753,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         PREVIEW_RESOLUTION_TIMEOUT_MS,
         "Workspace session timed out.",
       );
-      if (!session || !requestProjectId) {
+      if (!session) {
         props.showAppToastMessage("Authentication session not available.");
         return;
       }
@@ -1736,6 +1773,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           "Stopping Daytona preview timed out.",
         );
       } else {
+        if (!requestProjectId) {
+          throw new Error("Workspace terminal stop requires an active project.");
+        }
         await withTimeout(
           stopProjectWorkspaceTerminal({
             session,
@@ -1746,16 +1786,25 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           "Stopping terminal timed out.",
         );
       }
-      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
-        const next = await withTimeout(
-          listProjectWorkspaceTerminalSnapshot({
-            session,
-            projectId: requestProjectId,
-          }),
-          PREVIEW_RESOLUTION_TIMEOUT_MS,
-          "Workspace terminal sync timed out.",
-        );
-        if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+      if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
+        const next: WorkspaceTerminalSnapshot = requestProjectId
+          ? await withTimeout(
+              listProjectWorkspaceTerminalSnapshot({
+                session,
+                projectId: requestProjectId,
+              }),
+              PREVIEW_RESOLUTION_TIMEOUT_MS,
+              "Workspace terminal sync timed out.",
+            )
+          : await withTimeout(
+              listThreadDaytonaCodexRuntimePreviewSnapshot({
+                session,
+                threadKey: requestThreadKey ?? "",
+              }),
+              PREVIEW_RESOLUTION_TIMEOUT_MS,
+              "Workspace preview sync timed out.",
+            );
+        if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
           applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
         }
       }
@@ -1786,7 +1835,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         error: formatWorkspaceInstrumentationError(error),
       });
     } finally {
-      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+      if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
         setBusyWorkspaceTerminalIds((prev) => prev.filter((value) => value !== terminalSessionId));
       }
     }
@@ -1794,6 +1843,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   const handleStopAllWorkspaceTerminals = async (): Promise<void> => {
     const requestProjectId = props.activeProjectId;
+    const requestScopeKey = buildWorkspaceTerminalScopeKey({
+      projectId: requestProjectId,
+      threadKey: props.activeThreadId,
+    });
     const requestProjectInstance = activeProjectInstanceRef.current;
     emitWorkspaceEvent({
       scope: "preview",
@@ -1820,7 +1873,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         PREVIEW_RESOLUTION_TIMEOUT_MS,
         "Stopping background terminals timed out.",
       );
-      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+      if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
         const next = await withTimeout(
           listProjectWorkspaceTerminalSnapshot({
             session,
@@ -1829,7 +1882,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           PREVIEW_RESOLUTION_TIMEOUT_MS,
           "Workspace terminal sync timed out.",
         );
-        if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+        if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
           applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
         }
       }
@@ -1850,7 +1903,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         error: formatWorkspaceInstrumentationError(error),
       });
     } finally {
-      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+      if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
         setIsStoppingAllWorkspaceTerminals(false);
         setBusyWorkspaceTerminalIds([]);
       }

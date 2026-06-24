@@ -233,6 +233,91 @@ export const listActiveDaytonaCodexRuntimePreviewsForProjectInternal = internalQ
   },
 });
 
+export const listActiveDaytonaCodexRuntimePreviewsForThreadInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.min(100, Math.max(1, Math.floor(args.limit ?? 50)));
+    const targets = await (ctx.db.query as any)("daytonaCodexRuntimeTargets")
+      .withIndex("by_owner_threadId", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("threadId", args.threadId),
+      )
+      .collect();
+    const rows: any[] = [];
+    for (const target of targets
+      .sort(
+        (left: any, right: any) =>
+          Number(right.updatedAt ?? right.lastUsedAt ?? 0) -
+          Number(left.updatedAt ?? left.lastUsedAt ?? 0),
+      )
+      .slice(0, limit)) {
+      const runId = String(target.runId ?? "").trim();
+      if (!runId) continue;
+      const sandboxId = String(target.sandboxId ?? "").trim();
+      if (!sandboxId) continue;
+      if (
+        String(target.sandboxState ?? "") === "deleted" ||
+        String(target.sandboxState ?? "") === "stopped" ||
+        String(target.providerTeardownState ?? "") === "deleted" ||
+        String(target.providerTeardownState ?? "") === "stopped" ||
+        String(target.workerState ?? "") === "error"
+      ) {
+        continue;
+      }
+      const previewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
+      const previewLeaseActive =
+        String(target.previewLeaseState ?? "") === "active" &&
+        Number.isFinite(previewLeaseExpiresAt) &&
+        previewLeaseExpiresAt > nowMs;
+      if (!previewLeaseActive) continue;
+      const activePreviewPorts = normalizeActivePreviewPorts(target.activePreviewPorts);
+      for (const port of activePreviewPorts) {
+        rows.push({
+          id: buildDaytonaCodexRuntimePreviewSyntheticId(runId, port),
+          lifecycle_owner: "project_background",
+          started_by_thread_id: String(target.threadId ?? "").trim() || null,
+          started_by_run_id: runId,
+          provider_sandbox_provider_id: null,
+          preview_provider: "daytona",
+          status: "running",
+          command: "workspace_serve",
+          cwd: String(target.workspaceRoot ?? "").trim() || null,
+          preview_port: port,
+          preview_path: null,
+          preview_label: `Daytona app :${port}`,
+          started_at: Number(target.createdAt ?? 0) || nowMs,
+          updated_at: Number(target.updatedAt ?? target.lastUsedAt ?? 0) || nowMs,
+          finished_at: null,
+          exit_code: null,
+          completion_recorded_at: null,
+          completion_reason: null,
+          output_tail: null,
+          last_heartbeat_at: Number(target.lastHealthAt ?? target.lastUsedAt ?? 0) || null,
+          health_status: "healthy",
+          health_summary: "Daytona preview lease is active.",
+          preview_status: "running",
+          last_preview_probe_at: null,
+          last_preview_probe_summary: null,
+          last_browser_observation_at: null,
+          last_browser_observation_summary: null,
+          preview_transport_status: "not_started",
+          preview_inspection_status: "not_attempted",
+          preview_render_status: "unknown",
+        });
+      }
+    }
+    return rows.sort(
+      (left, right) =>
+        Number(right.updated_at ?? 0) - Number(left.updated_at ?? 0),
+    );
+  },
+});
+
 export const listExpiredDaytonaCodexRuntimeTargetsInternal = internalQuery({
   args: {
     nowMs: v.optional(v.number()),

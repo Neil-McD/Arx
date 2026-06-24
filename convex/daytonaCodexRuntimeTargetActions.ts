@@ -2154,6 +2154,32 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
       };
     } catch (error) {
       if (isDaytonaNotFoundError(error)) {
+        const nowMs = Date.now();
+        const activePreviewPorts = normalizeActivePreviewPorts(target.activePreviewPorts);
+        if (activePreviewPorts.length > 0) {
+          await ctx.runMutation(
+            (internal as any).daytonaCodexRuntimeTargets
+              .markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal as any,
+            {
+              ownerId: args.ownerId,
+              runId: args.runId,
+              stoppedPreviewPorts: activePreviewPorts,
+              nowMs,
+            },
+          );
+        }
+        await ctx.runMutation(
+          (internal as any).daytonaCodexRuntimeTargets
+            .markDaytonaCodexRuntimeTargetWorkspaceLifecycleInternal as any,
+          {
+            ownerId: args.ownerId,
+            runId: args.runId,
+            workspaceChangeState: "unknown",
+            workspaceRetentionState: "none",
+            cleanupDecision: "delete_without_active_lease",
+            nowMs,
+          },
+        );
         await ctx.runMutation(
           (internal as any).daytonaCodexRuntimeTargets
             .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
@@ -2162,7 +2188,7 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
             runId: args.runId,
             state: "deleted",
             reason: `${args.reason}:sandbox_missing`,
-            nowMs: Date.now(),
+            nowMs,
           },
         );
         await appendDaytonaPreviewStoppedEventBestEffort({
@@ -2172,6 +2198,8 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
           target,
           reason: "sandbox_missing",
           source: "provider_teardown_missing",
+          ports: activePreviewPorts,
+          nowMs,
         });
         return {
           ok: true,
@@ -2741,6 +2769,17 @@ export const stopDaytonaAppPreviewInternal = internalAction({
         providerTeardownState === "stopped"
       ) {
         if (ports.length > 0) {
+          const nowMs = Date.now();
+          await ctx.runMutation(
+            (internal as any).daytonaCodexRuntimeTargets
+              .markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal as any,
+            {
+              ownerId: args.ownerId,
+              runId: args.runId,
+              stoppedPreviewPorts: ports,
+              nowMs,
+            },
+          );
           await appendDaytonaPreviewStoppedEventBestEffort({
             ctx,
             ownerId: args.ownerId,
@@ -2749,6 +2788,7 @@ export const stopDaytonaAppPreviewInternal = internalAction({
             reason: String(args.reason ?? "").trim() || "polynet_terminal_stop",
             source: "preview_stop_unavailable_sandbox",
             ports,
+            nowMs,
           });
           return {
             ok: true,

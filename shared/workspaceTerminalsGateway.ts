@@ -282,6 +282,24 @@ export async function listProjectWorkspaceTerminalSnapshot<TSession>(params: {
   };
 }
 
+export async function listThreadDaytonaCodexRuntimePreviewSnapshot<TSession>(params: {
+  session: TSession;
+  threadKey: string;
+}): Promise<WorkspaceTerminalSnapshot> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
+  const payload = (await client.action("workspaceTerminals:listThreadDaytonaCodexRuntimePreviewSnapshot" as any, {
+    authSubject,
+    threadKey: params.threadKey,
+  })) as {
+    active?: Array<Record<string, unknown>> | null;
+    recent?: Array<Record<string, unknown>> | null;
+  } | null;
+  return {
+    active: Array.isArray(payload?.active) ? payload.active.map((row) => mapWorkspaceTerminalRow(row)) : [],
+    recent: Array.isArray(payload?.recent) ? payload.recent.map((row) => mapWorkspaceTerminalRow(row)) : [],
+  };
+}
+
 export async function stopProjectWorkspaceTerminal<TSession>(params: {
   session: TSession;
   terminalSessionId: string;
