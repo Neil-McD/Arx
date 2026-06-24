@@ -32,6 +32,7 @@ import type { ModelToggle } from "../../../../shared/modelCatalog";
 import {
   ACTIVE_WORKSPACE_RUNTIME_ENGINES,
   RUNTIME_ENGINE_CODEX,
+  RUNTIME_ENGINE_POLYNET,
   type RuntimeEngine,
 } from "../../../../shared/runtimeEngine";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
@@ -1148,6 +1149,7 @@ function WorkspaceRuntimeEngineSelector(props: {
   onChange: (engine: RuntimeEngine) => void;
 }) {
   const runtimeEngineLabels: Partial<Record<RuntimeEngine, string>> = {
+    polynet: "PolyNet",
     codex: "Codex",
   };
   const options = ACTIVE_WORKSPACE_RUNTIME_ENGINES.map((value) => ({
@@ -1157,7 +1159,7 @@ function WorkspaceRuntimeEngineSelector(props: {
   if (options.length <= 1) return null;
   const selectedValue = options.some((option) => option.value === props.value)
     ? props.value
-    : RUNTIME_ENGINE_CODEX;
+    : RUNTIME_ENGINE_POLYNET;
   const handleChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
     props.onChange(event.currentTarget.value as RuntimeEngine);
   };

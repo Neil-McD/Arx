@@ -8,9 +8,10 @@ export const RUNTIME_ENGINES = [
 
 export type RuntimeEngine = (typeof RUNTIME_ENGINES)[number];
 
-export const DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_CODEX;
+export const DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_POLYNET;
 
 export const ACTIVE_WORKSPACE_RUNTIME_ENGINES = [
+  RUNTIME_ENGINE_POLYNET,
   RUNTIME_ENGINE_CODEX,
 ] as const satisfies readonly RuntimeEngine[];
 

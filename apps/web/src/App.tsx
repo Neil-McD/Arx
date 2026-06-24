@@ -502,6 +502,7 @@ import {
 } from "../../../shared/cloudThreadsGateway";
 import {
   RUNTIME_ENGINE_CODEX,
+  RUNTIME_ENGINE_POLYNET,
   normalizeActiveWorkspaceRuntimeEngine,
   type RuntimeEngine,
 } from "../../../shared/runtimeEngine";
@@ -748,6 +749,8 @@ const LEGACY_ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 const ACTIVE_RUNTIME_ENGINE_STORAGE_KEY = "polynet_active_runtime_engine";
 const ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY =
   "polynet_active_runtime_engine_codex_default_v1";
+const ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY =
+  "polynet_active_runtime_engine_polynet_default_restore_v1";
 const APP_THEME_STORAGE_KEY = "polynet-theme";
 const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
@@ -2061,18 +2064,22 @@ export default function App() {
   const [activeRuntimeEngine, setActiveRuntimeEngineState] = useState<RuntimeEngine>(() => {
     try {
       const stored = localStorage.getItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY);
-      const normalized = normalizeActiveWorkspaceRuntimeEngine(stored);
-      const migrationApplied =
-        localStorage.getItem(ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY) === "1";
-      if (!migrationApplied) {
-        localStorage.setItem(ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY, "1");
+      const shouldRestorePolynetDefault =
+        localStorage.getItem(ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY) === "1" &&
+        localStorage.getItem(ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY) !== "1" &&
+        normalizeActiveWorkspaceRuntimeEngine(stored) === RUNTIME_ENGINE_CODEX;
+      const normalized = shouldRestorePolynetDefault
+        ? RUNTIME_ENGINE_POLYNET
+        : normalizeActiveWorkspaceRuntimeEngine(stored);
+      if (shouldRestorePolynetDefault) {
+        localStorage.setItem(ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY, "1");
       }
       if (stored !== normalized) {
         localStorage.setItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized);
       }
       return normalized;
     } catch {
-      return RUNTIME_ENGINE_CODEX;
+      return RUNTIME_ENGINE_POLYNET;
     }
   });
   const setActiveRuntimeEngine = useCallback((next: RuntimeEngine): void => {

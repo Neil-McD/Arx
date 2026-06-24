@@ -13,6 +13,7 @@ import {
 } from "../shared/runtimeEngine";
 
 export const POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker";
+export const POLYNET_RUNTIME_ENGINE_ID = "runtime_convex";
 export const POLYNET_CODEX_WORKER_CONTRACT_NAME = "polynet_codex_runtime_daytona_v1";
 export const POLYNET_CODEX_WORKER_CONTRACT_VERSION = "v1";
 const POLYNET_CODEX_WORKER_ALLOWED_DEPLOYMENT_KINDS = new Set([
@@ -220,10 +221,19 @@ export function resolvePolynetRuntimeEngine(params: {
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
 }): PolynetRuntimeEngineResolution {
-  if (
-    params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET ||
-    params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX
-  ) {
+  if (params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET) {
+    return {
+      ok: true,
+      requestedRuntimeEngine: params.requestedRuntimeEngine,
+      resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET,
+      runtimeEngineSource: "request",
+      engineId: POLYNET_RUNTIME_ENGINE_ID,
+      usePolynetCodexWorkerBridge: false,
+      disabledReason: null,
+    };
+  }
+
+  if (params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX) {
     const failure = resolveExplicitCodexWorkerFailure(params);
     if (failure) {
       return {
@@ -247,25 +257,13 @@ export function resolvePolynetRuntimeEngine(params: {
     };
   }
 
-  const failure = resolveExplicitCodexWorkerFailure(params);
-  if (failure) {
-    return {
-      ok: false,
-      ...failure,
-      requestedRuntimeEngine: RUNTIME_ENGINE_CODEX,
-      resolvedRuntimeEngine: null,
-      runtimeEngineSource: "request",
-      engineId: null,
-      usePolynetCodexWorkerBridge: false,
-    };
-  }
   return {
     ok: true,
     requestedRuntimeEngine: null,
-    resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX,
+    resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET,
     runtimeEngineSource: "legacy_inference",
-    engineId: POLYNET_CODEX_WORKER_ENGINE_ID,
-    usePolynetCodexWorkerBridge: true,
+    engineId: POLYNET_RUNTIME_ENGINE_ID,
+    usePolynetCodexWorkerBridge: false,
     disabledReason: null,
   };
 }

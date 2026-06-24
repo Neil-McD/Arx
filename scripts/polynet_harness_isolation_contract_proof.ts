@@ -16,6 +16,7 @@ import {
 } from "../shared/retrievalTools.ts";
 import {
   ACTIVE_WORKSPACE_RUNTIME_ENGINES,
+  DEFAULT_ACTIVE_RUNTIME_ENGINE,
   RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
   normalizeActiveWorkspaceRuntimeEngine,
@@ -49,84 +50,84 @@ assert.doesNotMatch(
 
 assert.match(
   app,
-  /normalizeActiveWorkspaceRuntimeEngine\(stored\)[\s\S]*localStorage\.setItem\(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized\)/,
-  "saved workspace runtime-engine values must be coerced to the active Codex harness",
+  /ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY[\s\S]*shouldRestorePolynetDefault[\s\S]*RUNTIME_ENGINE_POLYNET/,
+  "web startup must restore the workspace runtime default back to PolyNet after the Codex-only migration",
 );
 assert.match(
   app,
   /const normalized = normalizeActiveWorkspaceRuntimeEngine\(next\)/,
-  "runtime engine state updates must coerce legacy PolyNet selections to Codex",
+  "runtime engine state updates must normalize explicit PolyNet or Codex selections",
 );
 assert.match(
   app,
   /normalizeActiveWorkspaceRuntimeEngine\([\s\S]*runtime_engine[\s\S]*activeRuntimeEngine/,
-  "stale PolyNet thread metadata must not drive the active workspace runtime",
+  "thread runtime metadata must normalize through the active runtime allowlist",
 );
 assert.match(
   workspaceHost,
-  /ACTIVE_WORKSPACE_RUNTIME_ENGINES\.map[\s\S]*if \(options\.length <= 1\) return null;/,
-  "the workspace composer must hide the runtime selector while Codex is the only active harness",
+  /runtimeEngineLabels[\s\S]*polynet: "PolyNet"[\s\S]*codex: "Codex"/,
+  "the workspace composer must label both PolyNet and Codex runtime options",
 );
-assert.doesNotMatch(
+assert.match(
   workspaceHost,
   /RUNTIME_ENGINE_POLYNET/,
-  "the workspace composer must not import or render PolyNet as an active runtime option",
+  "the workspace composer must render PolyNet as an active runtime option",
 );
 assert.deepEqual(
   [...ACTIVE_WORKSPACE_RUNTIME_ENGINES],
-  [RUNTIME_ENGINE_CODEX],
-  "Codex must be the only active workspace runtime harness",
+  [RUNTIME_ENGINE_POLYNET, RUNTIME_ENGINE_CODEX],
+  "PolyNet and Codex must both be active selectable runtime harnesses",
+);
+assert.equal(
+  DEFAULT_ACTIVE_RUNTIME_ENGINE,
+  RUNTIME_ENGINE_POLYNET,
+  "PolyNet must be the default active workspace runtime",
 );
 assert.equal(
   normalizeActiveWorkspaceRuntimeEngine(RUNTIME_ENGINE_POLYNET),
-  RUNTIME_ENGINE_CODEX,
-  "legacy PolyNet runtime selections must coerce to Codex",
+  RUNTIME_ENGINE_POLYNET,
+  "PolyNet runtime selections must remain PolyNet",
 );
 assert.equal(
   normalizeActiveWorkspaceRuntimeEngine("unknown"),
-  RUNTIME_ENGINE_CODEX,
-  "invalid runtime selections must fall back to Codex",
+  RUNTIME_ENGINE_POLYNET,
+  "invalid runtime selections must fall back to PolyNet",
 );
 assert.match(
   runtimeEngine,
-  /ACTIVE_WORKSPACE_RUNTIME_ENGINES = \[\s*RUNTIME_ENGINE_CODEX,\s*\]/,
-  "shared runtime-engine state must keep PolyNet out of the active harness allowlist",
+  /DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_POLYNET[\s\S]*ACTIVE_WORKSPACE_RUNTIME_ENGINES = \[\s*RUNTIME_ENGINE_POLYNET,\s*RUNTIME_ENGINE_CODEX,\s*\]/,
+  "shared runtime-engine state must default to PolyNet and expose Codex as the second selectable harness",
 );
 assert.match(
   webSendFlowCore,
   /resolvePreferredRuntimeEngineFromArgs[\s\S]*normalizeActiveWorkspaceRuntimeEngine\(threadEngine \?\? args\.activeRuntimeEngine\)/,
-  "send flow must coerce stale PolyNet thread preferences to Codex before starting a run",
-);
-assert.doesNotMatch(
-  webSendFlowCore,
-  /RUNTIME_ENGINE_POLYNET/,
-  "send flow must not retain PolyNet as a fallback runtime engine",
+  "send flow must honor normalized thread or active runtime-engine selection",
 );
 assert.match(
   webThreadMutationController,
   /preferredRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine[\s\S]*runtimeEngine: preferredRuntimeEngine/,
-  "new thread creation must persist Codex as the active runtime engine",
-);
-assert.doesNotMatch(
-  webThreadMutationController,
-  /RUNTIME_ENGINE_POLYNET/,
-  "thread mutation controller must not retain PolyNet as a fallback runtime engine",
+  "new thread creation must persist the active runtime engine, defaulting to PolyNet",
 );
 assert.match(
   threads,
   /normalizeOptionalRuntimeEngine[\s\S]*normalizeActiveWorkspaceRuntimeEngine\(engine\)/,
-  "cloud thread writes must coerce stale PolyNet runtime values to the active Codex harness",
+  "cloud thread writes must normalize explicit PolyNet or Codex runtime values",
 );
 
 assert.match(
   codexWorkerBridge,
-  /requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET[\s\S]*requestedRuntimeEngine === RUNTIME_ENGINE_CODEX[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX[\s\S]*engineId: POLYNET_CODEX_WORKER_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: true/,
-  "legacy PolyNet runtime requests must resolve through the Codex worker bridge",
+  /requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET[\s\S]*engineId: POLYNET_RUNTIME_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: false/,
+  "explicit PolyNet runtime requests must resolve through the PolyNet agent loop",
 );
-assert.doesNotMatch(
+assert.match(
   codexWorkerBridge,
-  /resolvedRuntimeEngine:\s*RUNTIME_ENGINE_POLYNET|engineId:\s*"runtime_turn"|shouldUsePolynetCodexWorkerBridge/,
-  "backend runtime resolution must not retain a PolyNet agent-loop fallback",
+  /requestedRuntimeEngine === RUNTIME_ENGINE_CODEX[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX[\s\S]*engineId: POLYNET_CODEX_WORKER_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: true/,
+  "explicit Codex runtime requests must resolve through the Codex worker bridge",
+);
+assert.match(
+  codexWorkerBridge,
+  /requestedRuntimeEngine: null[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET[\s\S]*engineId: POLYNET_RUNTIME_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: false/,
+  "missing runtime-engine requests must default to the PolyNet agent loop",
 );
 
 assert.deepEqual(
