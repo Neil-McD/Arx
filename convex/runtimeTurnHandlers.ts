@@ -1709,7 +1709,7 @@ export async function handleRuntimeTurnRequest(args: {
             : workerResult.code || "polynet_codex_worker_turn_failed";
         const workerFallbackDurationMs =
           workerTurnStarted && workerTurnStartedAtMs > 0
-            ? Date.now() - workerTurnStartedAtMs
+            ? Math.max(1, Date.now() - workerTurnStartedAtMs)
             : !workerResult.ok &&
                 workerResult.code === "polynet_codex_worker_stream_failed"
               ? Date.now() - workerStreamRequestedAtMs

@@ -451,6 +451,7 @@ export default defineSchema({
       v.literal("web_research_call"),
       v.literal("web_crawl_provider_call"),
       v.literal("fly_crawler"),
+      v.literal("daytona_codex_runtime_active"),
       v.literal("voice_transcription"),
       v.literal("knowledge_model_inference"),
     ),

@@ -31,6 +31,8 @@ const accounting = read("convex/polynetCodexRuntimeAccounting.ts");
 const handler = read("convex/runtimeTurnHandlers.ts");
 const ingest = read("convex/polynetCodexWorkerIngest.ts");
 const workspaceCredits = read("shared/workspaceCredits.ts");
+const workspaceCreditSettlement = read("convex/workspaceCreditSettlement.ts");
+const workspaceCreditsConvex = read("convex/workspaceCredits.ts");
 
 assertContains(
   packageJson,
@@ -109,6 +111,11 @@ assertContains(
   "worker_timing_buckets_codex_turn_total_ms",
   "Codex runtime accounting falls back to Codex turn timing bucket",
 );
+assertContains(
+  accounting,
+  'status: "refunded"',
+  "Codex runtime accounting can refund unused reservations before worker start",
+);
 
 assertContains(
   handler,
@@ -159,6 +166,11 @@ assertContains(
 );
 assertContains(
   handler,
+  "Math.max(1, Date.now() - workerTurnStartedAtMs)",
+  "started worker paths must settle a positive bounded fallback duration",
+);
+assertContains(
+  handler,
   "polynet_codex_runtime_workspace_compute_settled",
   "runtime handler records workspace compute settlement evidence",
 );
@@ -185,8 +197,33 @@ assertContains(
 );
 assertContains(
   ingest,
+  "worker_ingest_started_without_timing",
+  "worker ingest settles a minimal bounded duration when terminal evidence lacks timing",
+);
+assertContains(
+  ingest,
   "settleReservedCreditsStrict",
   "worker ingest keeps strict settlement backstop",
+);
+assertContains(
+  workspaceCreditSettlement,
+  "queueCreditSettlementRetryInternal",
+  "strict succeeded settlements queue retry evidence instead of silently dropping charges",
+);
+assertContains(
+  workspaceCreditsConvex,
+  'if (entry.status === args.status) return entry;',
+  "credit settlement is idempotent when the same terminal path retries",
+);
+assertContains(
+  workspaceCreditsConvex,
+  'if (entry.status === "refunded" || entry.status === "succeeded") return entry;',
+  "credit settlement is terminal and prevents double-settle or double-refund races",
+);
+assertContains(
+  workspaceCreditsConvex,
+  'if (!entry || entry.status !== "reserved") return null;',
+  "settlement retry queue only keeps active reserved entries",
 );
 
 console.log("codex_runtime_accounting_contract_proof: ok");

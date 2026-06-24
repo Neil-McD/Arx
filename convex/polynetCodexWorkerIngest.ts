@@ -64,7 +64,10 @@ function readWorkerTimingDuration(timing: JsonRecord | null): {
       source: "worker_ingest_timing_buckets_codex_turn_total_ms",
     };
   }
-  return { durationSeconds: 0, source: null };
+  return {
+    durationSeconds: 0.001,
+    source: "worker_ingest_started_without_timing",
+  };
 }
 
 function addWorkspacePreviewReadyPort(target: Set<number>, payload: JsonRecord): void {

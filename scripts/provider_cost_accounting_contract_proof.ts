@@ -42,6 +42,7 @@ assert.deepEqual(PROVIDER_COST_CATEGORIES, ["workspace", "web", "voice"]);
 assert.ok(PROVIDER_COST_COMPONENTS.includes("blaxel_active_runtime"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("blaxel_volume_storage"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("blaxel_standby_snapshot"));
+assert.ok(PROVIDER_COST_COMPONENTS.includes("daytona_codex_runtime_active"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("web_crawl_provider_call"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("fly_crawler"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("voice_transcription"));
@@ -84,8 +85,8 @@ assert.match(
 );
 assert.match(
   schema,
-  /component: v\.union\([\s\S]*v\.literal\("blaxel_active_runtime"\)[\s\S]*v\.literal\("blaxel_volume_storage"\)[\s\S]*v\.literal\("blaxel_standby_snapshot"\)[\s\S]*v\.literal\("web_crawl_provider_call"\)[\s\S]*v\.literal\("fly_crawler"\)[\s\S]*v\.literal\("voice_transcription"\)/,
-  "schema must include provider cost components for workspace, crawl, and voice costs",
+  /component: v\.union\([\s\S]*v\.literal\("blaxel_active_runtime"\)[\s\S]*v\.literal\("blaxel_volume_storage"\)[\s\S]*v\.literal\("blaxel_standby_snapshot"\)[\s\S]*v\.literal\("web_crawl_provider_call"\)[\s\S]*v\.literal\("fly_crawler"\)[\s\S]*v\.literal\("daytona_codex_runtime_active"\)[\s\S]*v\.literal\("voice_transcription"\)/,
+  "schema must include provider cost components for workspace, Daytona, crawl, and voice costs",
 );
 assert.match(
   schema,
@@ -257,6 +258,11 @@ assert.match(
   workspaceCredits,
   /recordWorkspaceComputeChargeInternal[\s\S]*recordProviderCostEntryBestEffort\(ctx, \{[\s\S]*component: "blaxel_active_runtime"[\s\S]*billingDisposition: "rolled_into_user_usage"/,
   "workspace compute settlement must mirror active Blaxel runtime cost into provider cost accounting",
+);
+assert.match(
+  workspaceCredits,
+  /resolveCreditLedgerProviderCostEntry[\s\S]*toolName === "workspace_compute" && vendor === "daytona"[\s\S]*category: "workspace"[\s\S]*component: "daytona_codex_runtime_active"[\s\S]*quantityKind: "runtime_seconds"/,
+  "Daytona-backed Codex turns must settle as canonical workspace compute provider cost",
 );
 assert.match(
   readFileSync(new URL("../convex/blaxelWorkspaceWake.ts", import.meta.url), "utf8"),

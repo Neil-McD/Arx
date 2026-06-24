@@ -622,6 +622,37 @@ function resolveCreditLedgerProviderCostEntry(params: {
     };
   }
 
+  if (toolName === "workspace_compute" && vendor === "daytona") {
+    return {
+      costKey: `credit_ledger:${params.entry.creditKey}:provider_cost`,
+      userId: params.entry.userId,
+      projectId: params.entry.projectId,
+      runId: normalizeOptionalString(params.entry.runId),
+      category: "workspace",
+      component: "daytona_codex_runtime_active",
+      provider: "daytona",
+      resourceId:
+        normalizeOptionalString(metadata.sandbox_id) ??
+        normalizeOptionalString(metadata.worker_machine_id) ??
+        normalizeOptionalString(metadata.provider_sandbox_id) ??
+        normalizeOptionalString(metadata.target_id),
+      periodStart: durationSeconds > 0 ? params.nowMs - durationSeconds * 1000 : params.nowMs,
+      periodEnd: params.nowMs,
+      quantityKind: "runtime_seconds",
+      quantity: durationSeconds,
+      rawVendorCostUsd,
+      evidence: "estimated",
+      billingDisposition: "rolled_into_user_usage",
+      linkedCreditKey: params.entry.creditKey,
+      metadata: {
+        ...metadata,
+        provider_cost_source: "credit_ledger_settlement",
+        provider_cost_action: action ?? null,
+      },
+      nowMs: params.nowMs,
+    };
+  }
+
   if (toolName === "web_research") {
     return {
       costKey: `credit_ledger:${params.entry.creditKey}:provider_cost`,
