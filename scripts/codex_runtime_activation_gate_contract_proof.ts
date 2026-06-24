@@ -6,6 +6,7 @@ import {
   getPolynetCodexWorkerBridgeConfig,
   isPolynetCodexWorkerBridgeConfigured,
 } from "../convex/polynetCodexWorkerBridge.ts";
+import { resolveRuntimeActivationForTurn } from "../shared/runtimeActivation.ts";
 
 const root = process.cwd();
 
@@ -15,6 +16,10 @@ function readText(path: string): string {
 
 function assertContains(haystack: string, needle: string, label: string): void {
   assert.ok(haystack.includes(needle), `expected ${label}`);
+}
+
+function assertNotContains(haystack: string, needle: string, label: string): void {
+  assert.ok(!haystack.includes(needle), `did not expect ${label}`);
 }
 
 function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
@@ -106,8 +111,71 @@ function proveWorkerReadinessPredicate(): void {
   );
 }
 
+function proveRuntimeActivationClassifier(): void {
+  assert.deepEqual(resolveRuntimeActivationForTurn({ latestUserText: "Yo, yo." }), {
+    requestedAgenticTools: false,
+    useWorkspaceRuntime: false,
+    reason: "simple_chat",
+  });
+  assert.equal(
+    resolveRuntimeActivationForTurn({
+      latestUserText: "build a mental model of this community",
+    }).useWorkspaceRuntime,
+    false,
+  );
+  assert.deepEqual(
+    resolveRuntimeActivationForTurn({
+      latestUserText: "research OpenAI current status",
+    }),
+    {
+      requestedAgenticTools: true,
+      useWorkspaceRuntime: false,
+      reason: "knowledge_tool_intent",
+    },
+  );
+  assert.deepEqual(
+    resolveRuntimeActivationForTurn({
+      latestUserText: "create a tiny HTML app and run it",
+    }),
+    {
+      requestedAgenticTools: true,
+      useWorkspaceRuntime: true,
+      reason: "workspace_runtime_intent",
+    },
+  );
+  assert.deepEqual(
+    resolveRuntimeActivationForTurn({
+      latestUserText: "go",
+      recentConversationText: [
+        "Can you create a tiny app and run the preview?",
+        "go",
+      ],
+    }),
+    {
+      requestedAgenticTools: true,
+      useWorkspaceRuntime: true,
+      reason: "workspace_runtime_continuation",
+    },
+  );
+}
+
 function proveRuntimeResolutionGate(): void {
   const resolution = readText("convex/runtimeTurnResolution.ts");
+  assertContains(
+    resolution,
+    'import { resolveRuntimeActivationForTurn } from "../shared/runtimeActivation";',
+    "runtime resolver imports runtime activation classifier",
+  );
+  assertContains(
+    resolution,
+    "runtimeActivation.reason",
+    "runtime resolution carries activation reason",
+  );
+  assertContains(
+    resolution,
+    "workspaceRuntimeRequired: runtimeActivation.useWorkspaceRuntime",
+    "runtime resolution carries workspace runtime requirement",
+  );
   assertContains(
     resolution,
     'import { isPolynetCodexWorkerBridgeConfigured } from "./polynetCodexWorkerBridge";',
@@ -122,6 +190,16 @@ function proveRuntimeResolutionGate(): void {
     resolution,
     "requested === RUNTIME_ENGINE_CODEX",
     "requested Codex runtime is explicitly checked",
+  );
+  assertContains(
+    resolution,
+    "!params.workspaceRuntimeRequired",
+    "requested Codex runtime depends on workspace activation",
+  );
+  assertContains(
+    resolution,
+    'fallbackReason: "codex_workspace_runtime_not_required"',
+    "non-workspace turns fall back from Codex to PolyNet",
   );
   assertContains(
     resolution,
@@ -158,6 +236,21 @@ function proveRuntimeResolutionGate(): void {
     "runtimeEngineFallbackReason: runtimeEngineSelection.fallbackReason",
     "runtime resolution exposes fallback reason",
   );
+  assertContains(
+    resolution,
+    "effectiveRequestedAgenticTools",
+    "runtime execution mode uses the effective activation decision",
+  );
+  assertContains(
+    resolution,
+    "const effectiveRequestedAgenticTools = runtimeActivation.requestedAgenticTools;",
+    "server activation classifier is authoritative for agentic mode",
+  );
+  assertNotContains(
+    resolution,
+    "requestedAgenticToolsFromInput ||",
+    "client agentic flag must not force agentic mode for simple chat",
+  );
 }
 
 function proveRuntimeHandlerEvidence(): void {
@@ -179,8 +272,42 @@ function proveRuntimeHandlerEvidence(): void {
   );
   assertContains(
     handler,
+    "runtime_activation_reason: runtimeActivationReason",
+    "runtime context evidence includes activation reason",
+  );
+  assertContains(
+    handler,
+    "workspace_runtime_required: workspaceRuntimeRequired",
+    "runtime context evidence includes workspace runtime requirement",
+  );
+  assertContains(
+    handler,
     "codex_worker_bridge_configured: codexWorkerBridgeConfigured",
     "runtime context evidence includes worker readiness",
+  );
+}
+
+function proveClientRuntimeActivation(): void {
+  const sendFlow = readText("shared/useWebSendFlowController.ts");
+  assertContains(
+    sendFlow,
+    'import { resolveRuntimeActivationForTurn } from "./runtimeActivation";',
+    "web send flow imports runtime activation classifier",
+  );
+  assertContains(
+    sendFlow,
+    "resolveRuntimeEngineForTurn",
+    "web send flow resolves per-turn runtime engine",
+  );
+  assertContains(
+    sendFlow,
+    "RUNTIME_ENGINE_POLYNET",
+    "web send flow can explicitly demote chat turns to PolyNet",
+  );
+  assertContains(
+    sendFlow,
+    "useWorkspaceRuntime: runtimeFlags.useWorkspaceRuntime",
+    "web send flow uses activation decision for runtime engine",
   );
 }
 
@@ -194,8 +321,10 @@ function provePackageScript(): void {
 }
 
 proveWorkerReadinessPredicate();
+proveRuntimeActivationClassifier();
 proveRuntimeResolutionGate();
 proveRuntimeHandlerEvidence();
+proveClientRuntimeActivation();
 provePackageScript();
 
 console.log("codex_runtime_activation_gate_contract_proof: ok");

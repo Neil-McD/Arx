@@ -3,6 +3,11 @@ import { formatSendFlowErrorMessage } from "./appErrorMappings";
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
 import { resolveUsableSession } from "./ensureUsableSession";
 import {
+  RUNTIME_ENGINE_POLYNET,
+  type RuntimeEngine,
+} from "./runtimeEngine";
+import { resolveRuntimeActivationForTurn } from "./runtimeActivation";
+import {
   type ThreadRecord,
   type ThreadMessage,
   type UseWebSendFlowControllerArgs,
@@ -16,12 +21,33 @@ import {
   syncThreadRuntimeEngineSelectionInState,
 } from "./webSendFlowCore";
 
-function resolveAuthenticatedTurnRuntimeFlags(): {
+function resolveAuthenticatedTurnRuntimeFlags<ThreadMessageT extends ThreadMessage>(params: {
+  latestUserText: string;
+  messages: ThreadMessageT[];
+  extractTextFromContentJson: (value: unknown) => string;
+  hasAttachments?: boolean;
+}): {
   requestedAgenticTools: boolean;
+  useWorkspaceRuntime: boolean;
+  reason: string;
 } {
-  return {
-    requestedAgenticTools: true,
-  };
+  const recentConversationText = params.messages
+    .slice(-8)
+    .map((message) => params.extractTextFromContentJson(message.content_json));
+  return resolveRuntimeActivationForTurn({
+    latestUserText: params.latestUserText,
+    recentConversationText,
+    hasAttachments: params.hasAttachments,
+  });
+}
+
+function resolveRuntimeEngineForTurn(params: {
+  preferredRuntimeEngine: RuntimeEngine;
+  useWorkspaceRuntime: boolean;
+}): RuntimeEngine {
+  return params.useWorkspaceRuntime
+    ? params.preferredRuntimeEngine
+    : RUNTIME_ENGINE_POLYNET;
 }
 
 export function useWebSendFlowController<
@@ -292,7 +318,12 @@ export function useWebSendFlowController<
       const optimisticThreadMessages = [...priorThreadMessages, syntheticUserMessage];
       current.setThreadMessages(optimisticThreadMessages);
 
-      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
+      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags({
+        latestUserText: text,
+        messages: optimisticThreadMessages,
+        extractTextFromContentJson: current.extractTextFromContentJson,
+        hasAttachments,
+      });
       const inferenceSource = mapRequestedFundingSourceToInferenceSource(
         preferredModelSelection.fundingSource,
       );
@@ -315,7 +346,10 @@ export function useWebSendFlowController<
         userMessageKey: messageId,
         systemPrompt: null,
         inferenceSource,
-        runtimeEngine: preferredRuntimeEngine,
+        runtimeEngine: resolveRuntimeEngineForTurn({
+          preferredRuntimeEngine,
+          useWorkspaceRuntime: runtimeFlags.useWorkspaceRuntime,
+        }),
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: messageId,
@@ -407,7 +441,11 @@ export function useWebSendFlowController<
       const latestUserText = current.extractTextFromContentJson(
         currentThreadMessages[currentThreadMessages.length - 1]?.content_json,
       );
-      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
+      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags({
+        latestUserText,
+        messages: currentThreadMessages,
+        extractTextFromContentJson: current.extractTextFromContentJson,
+      });
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "respond",
@@ -417,7 +455,10 @@ export function useWebSendFlowController<
         inferenceSource: mapRequestedFundingSourceToInferenceSource(
           preferredModelSelection.fundingSource,
         ),
-        runtimeEngine: preferredRuntimeEngine,
+        runtimeEngine: resolveRuntimeEngineForTurn({
+          preferredRuntimeEngine,
+          useWorkspaceRuntime: runtimeFlags.useWorkspaceRuntime,
+        }),
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
@@ -509,7 +550,11 @@ export function useWebSendFlowController<
       const latestUserText = current.extractTextFromContentJson(
         messagesForTurn[messagesForTurn.length - 1]?.content_json,
       );
-      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
+      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags({
+        latestUserText,
+        messages: messagesForTurn,
+        extractTextFromContentJson: current.extractTextFromContentJson,
+      });
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "regenerate",
@@ -519,7 +564,10 @@ export function useWebSendFlowController<
         inferenceSource: mapRequestedFundingSourceToInferenceSource(
           preferredModelSelection.fundingSource,
         ),
-        runtimeEngine: preferredRuntimeEngine,
+        runtimeEngine: resolveRuntimeEngineForTurn({
+          preferredRuntimeEngine,
+          useWorkspaceRuntime: runtimeFlags.useWorkspaceRuntime,
+        }),
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,

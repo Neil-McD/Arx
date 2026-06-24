@@ -29,6 +29,7 @@ import {
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
+import { resolveRuntimeActivationForTurn } from "../shared/runtimeActivation";
 import { isPolynetCodexWorkerBridgeConfigured } from "./polynetCodexWorkerBridge";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
@@ -101,6 +102,8 @@ export type RuntimeTurnResolution = {
   providerApiKeyOverride: string | null;
   runtimeEngine: RuntimeEngine;
   runtimeEngineFallbackReason: string | null;
+  runtimeActivationReason: string;
+  workspaceRuntimeRequired: boolean;
   codexWorkerBridgeConfigured: boolean;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
@@ -116,14 +119,11 @@ export type RuntimeTurnResolution = {
   runtimeExecutionMode: "agentic" | "chat";
 };
 
-function resolveRequestedAgenticTools(raw: unknown): boolean {
-  return raw === true;
-}
-
 function resolveRuntimeEngineSelection(params: {
   requestedRuntimeEngine: unknown;
   storedRuntimeEngine: unknown;
   codexWorkerBridgeConfigured: boolean;
+  workspaceRuntimeRequired: boolean;
 }):
   | {
       ok: true;
@@ -137,6 +137,16 @@ function resolveRuntimeEngineSelection(params: {
     if (!requested) return { ok: false };
     if (
       requested === RUNTIME_ENGINE_CODEX &&
+      !params.workspaceRuntimeRequired
+    ) {
+      return {
+        ok: true,
+        runtimeEngine: RUNTIME_ENGINE_POLYNET,
+        fallbackReason: "codex_workspace_runtime_not_required",
+      };
+    }
+    if (
+      requested === RUNTIME_ENGINE_CODEX &&
       !params.codexWorkerBridgeConfigured
     ) {
       return {
@@ -148,6 +158,16 @@ function resolveRuntimeEngineSelection(params: {
     return { ok: true, runtimeEngine: requested, fallbackReason: null };
   }
   const storedRuntimeEngine = normalizeRuntimeEngine(params.storedRuntimeEngine);
+  if (
+    storedRuntimeEngine === RUNTIME_ENGINE_CODEX &&
+    !params.workspaceRuntimeRequired
+  ) {
+    return {
+      ok: true,
+      runtimeEngine: RUNTIME_ENGINE_POLYNET,
+      fallbackReason: "codex_workspace_runtime_not_required",
+    };
+  }
   if (
     storedRuntimeEngine === RUNTIME_ENGINE_CODEX &&
     !params.codexWorkerBridgeConfigured
@@ -378,24 +398,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
 
-  const codexWorkerBridgeConfigured = isPolynetCodexWorkerBridgeConfigured();
-  const runtimeEngineSelection = resolveRuntimeEngineSelection({
-    requestedRuntimeEngine: input.runtime_engine,
-    storedRuntimeEngine: ownedThread.runtimeEngine,
-    codexWorkerBridgeConfigured,
-  });
-  if (!runtimeEngineSelection.ok) {
-    return {
-      ok: false,
-      response: fail(400, {
-        ok: false,
-        code: "unsupported_runtime_engine",
-        error: "unsupported_runtime_engine",
-        message: "runtime_engine must be either polynet or codex.",
-      }),
-    };
-  }
-
   setStage("messages");
   const runtimeMessages = asRuntimeMessages(input);
   const conversationMessages = stripSystemMessages(runtimeMessages);
@@ -413,15 +415,40 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
+  const latestUserTextForActivation = String(
+    conversationMessages[conversationMessages.length - 1]?.content ?? "",
+  );
+  const runtimeActivation = resolveRuntimeActivationForTurn({
+    latestUserText: latestUserTextForActivation,
+    recentConversationText: conversationMessages
+      .slice(-8)
+      .map((message) => message.content),
+  });
+  const effectiveRequestedAgenticTools = runtimeActivation.requestedAgenticTools;
+  const codexWorkerBridgeConfigured = isPolynetCodexWorkerBridgeConfigured();
+  const runtimeEngineSelection = resolveRuntimeEngineSelection({
+    requestedRuntimeEngine: input.runtime_engine,
+    storedRuntimeEngine: ownedThread.runtimeEngine,
+    codexWorkerBridgeConfigured,
+    workspaceRuntimeRequired: runtimeActivation.useWorkspaceRuntime,
+  });
+  if (!runtimeEngineSelection.ok) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "unsupported_runtime_engine",
+        error: "unsupported_runtime_engine",
+        message: "runtime_engine must be either polynet or codex.",
+      }),
+    };
+  }
 
   setStage("gate");
   const publicMap = loadPublicModelMap();
   const platformMap = loadPlatformModelMap();
   const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.5";
   const publicRef = publicMap[requestedModelId];
-  const requestedAgenticTools = resolveRequestedAgenticTools(
-    input.requested_agentic_tools,
-  );
   const requestedFundingSource = parseRequestedFundingSource(
     input.requested_funding_source,
     publicRef ? "demo_public" : "platform",
@@ -598,7 +625,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     inferenceSource,
   });
   const runtimeExecutionMode: "agentic" | "chat" =
-    requestedAgenticTools && allowedToolNames.length > 0
+    effectiveRequestedAgenticTools && allowedToolNames.length > 0
       ? "agentic"
       : "chat";
   return {
@@ -621,6 +648,8 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       providerApiKeyOverride,
       runtimeEngine: runtimeEngineSelection.runtimeEngine,
       runtimeEngineFallbackReason: runtimeEngineSelection.fallbackReason,
+      runtimeActivationReason: runtimeActivation.reason,
+      workspaceRuntimeRequired: runtimeActivation.useWorkspaceRuntime,
       codexWorkerBridgeConfigured,
       runtimeCommunityId,
       runtimeCommunityName,
