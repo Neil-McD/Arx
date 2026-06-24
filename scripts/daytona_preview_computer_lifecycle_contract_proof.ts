@@ -447,6 +447,21 @@ assertContains(
 );
 assertContains(
   workspaceHost,
+  "function mergeWorkspaceTerminalSnapshots",
+  "workspace UI merges project terminal snapshots with thread Daytona previews",
+);
+assertContains(
+  workspaceHost,
+  "loadWorkspaceTerminalSnapshotForScope({",
+  "workspace UI uses one project/thread snapshot resolver for preview polling and refresh",
+);
+assertContains(
+  workspaceHost,
+  "Promise.all([",
+  "workspace UI fetches project and thread preview evidence in the same polling pass",
+);
+assertContains(
+  workspaceHost,
   "buildWorkspaceTerminalScopeKey",
   "workspace UI uses a project-or-thread terminal snapshot scope",
 );

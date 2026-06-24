@@ -548,6 +548,52 @@ function applyTerminalSnapshotIfChanged(
   setActive((prev) => (areTerminalRecordsEqual(prev, combined) ? prev : combined));
 }
 
+function mergeWorkspaceTerminalRows(
+  rows: readonly WorkspaceTerminalRecord[],
+  extraRows: readonly WorkspaceTerminalRecord[],
+): WorkspaceTerminalRecord[] {
+  const byId = new Map<string, WorkspaceTerminalRecord>();
+  for (const row of [...rows, ...extraRows]) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  return Array.from(byId.values());
+}
+
+function mergeWorkspaceTerminalSnapshots(
+  primary: WorkspaceTerminalSnapshot,
+  extra: WorkspaceTerminalSnapshot,
+): WorkspaceTerminalSnapshot {
+  return {
+    active: mergeWorkspaceTerminalRows(primary.active, extra.active),
+    recent: mergeWorkspaceTerminalRows(primary.recent, extra.recent),
+  };
+}
+
+async function loadWorkspaceTerminalSnapshotForScope<TSession>(params: {
+  session: TSession;
+  projectId: string | null;
+  threadKey: string | null;
+}): Promise<WorkspaceTerminalSnapshot> {
+  const emptySnapshot: WorkspaceTerminalSnapshot = { active: [], recent: [] };
+  const projectSnapshotPromise = params.projectId
+    ? listProjectWorkspaceTerminalSnapshot({
+        session: params.session,
+        projectId: params.projectId,
+      })
+    : Promise.resolve(emptySnapshot);
+  const threadSnapshotPromise = params.threadKey
+    ? listThreadDaytonaCodexRuntimePreviewSnapshot({
+        session: params.session,
+        threadKey: params.threadKey,
+      })
+    : Promise.resolve(emptySnapshot);
+  const [projectSnapshot, threadSnapshot] = await Promise.all([
+    projectSnapshotPromise,
+    threadSnapshotPromise,
+  ]);
+  return mergeWorkspaceTerminalSnapshots(projectSnapshot, threadSnapshot);
+}
+
 function buildWorkspaceTerminalScopeKey(params: {
   projectId: string | null;
   threadKey: string | null;
@@ -1646,23 +1692,15 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           "Workspace session timed out.",
         );
         if (!session || cancelled) return;
-        const next: WorkspaceTerminalSnapshot = projectId
-          ? await withTimeout(
-              listProjectWorkspaceTerminalSnapshot({
-                session,
-                projectId,
-              }),
-              PREVIEW_RESOLUTION_TIMEOUT_MS,
-              "Workspace terminal sync timed out.",
-            )
-          : await withTimeout(
-              listThreadDaytonaCodexRuntimePreviewSnapshot({
-                session,
-                threadKey: threadKey ?? "",
-              }),
-              PREVIEW_RESOLUTION_TIMEOUT_MS,
-              "Workspace preview sync timed out.",
-            );
+        const next = await withTimeout(
+          loadWorkspaceTerminalSnapshotForScope({
+            session,
+            projectId,
+            threadKey,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Workspace terminal sync timed out.",
+        );
         if (!cancelled && isCurrentTerminalScope(scopeKey, projectInstance)) {
           applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
         }
@@ -1787,23 +1825,15 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         );
       }
       if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
-        const next: WorkspaceTerminalSnapshot = requestProjectId
-          ? await withTimeout(
-              listProjectWorkspaceTerminalSnapshot({
-                session,
-                projectId: requestProjectId,
-              }),
-              PREVIEW_RESOLUTION_TIMEOUT_MS,
-              "Workspace terminal sync timed out.",
-            )
-          : await withTimeout(
-              listThreadDaytonaCodexRuntimePreviewSnapshot({
-                session,
-                threadKey: requestThreadKey ?? "",
-              }),
-              PREVIEW_RESOLUTION_TIMEOUT_MS,
-              "Workspace preview sync timed out.",
-            );
+        const next = await withTimeout(
+          loadWorkspaceTerminalSnapshotForScope({
+            session,
+            projectId: requestProjectId,
+            threadKey: requestThreadKey,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Workspace terminal sync timed out.",
+        );
         if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
           applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
         }
@@ -1875,9 +1905,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       );
       if (isCurrentTerminalScope(requestScopeKey, requestProjectInstance)) {
         const next = await withTimeout(
-          listProjectWorkspaceTerminalSnapshot({
+          loadWorkspaceTerminalSnapshotForScope({
             session,
             projectId: requestProjectId,
+            threadKey: props.activeThreadId,
           }),
           PREVIEW_RESOLUTION_TIMEOUT_MS,
           "Workspace terminal sync timed out.",
