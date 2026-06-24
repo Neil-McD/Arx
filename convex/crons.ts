@@ -55,6 +55,16 @@ crons.interval(
 );
 
 crons.interval(
+  "sweep expired daytona codex runtime targets",
+  { minutes: 5 },
+  (internal as any).daytonaCodexRuntimeTargetActions
+    .sweepExpiredDaytonaCodexRuntimeTargetsInternal,
+  {
+    limit: 20,
+  },
+);
+
+crons.interval(
   "reconcile expired credit reservations",
   { minutes: 15 },
   (internal as any).workspaceCredits.reconcileExpiredCreditReservationsInternal,

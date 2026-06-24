@@ -42,6 +42,7 @@ const packageJson = read("package.json");
 const handler = read("convex/runtimeTurnHandlers.ts");
 const targets = read("convex/daytonaCodexRuntimeTargets.ts");
 const actions = read("convex/daytonaCodexRuntimeTargetActions.ts");
+const crons = read("convex/crons.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
 const workerTool = read("convex/polynetCodexWorkerTool.ts");
 const config = read("services/polynet-codex-worker/src/daytonaCodexConfig.ts");
@@ -209,6 +210,43 @@ assertOrdered(
   "markDaytonaCodexRuntimeTargetPreviewLeaseExpiredInternal",
   "teardownAndRecordDaytonaCodexRuntimeTargetInternal",
   "sweeper must expire preview lease before teardown",
+);
+assertContains(
+  crons,
+  "sweep expired daytona codex runtime targets",
+  "Convex cron schedules Daytona runtime target sweeper",
+);
+assertContains(
+  crons,
+  "{ minutes: 5 }",
+  "Daytona runtime target sweeper runs on a short bounded interval",
+);
+assertContains(
+  crons,
+  "daytonaCodexRuntimeTargetActions",
+  "Daytona runtime target sweeper cron calls the Daytona action module",
+);
+assertContains(
+  crons,
+  "sweepExpiredDaytonaCodexRuntimeTargetsInternal",
+  "Daytona runtime target sweeper cron calls the canonical internal action",
+);
+assertContains(
+  crons,
+  "limit: 20",
+  "Daytona runtime target sweeper cron is bounded",
+);
+assertOrdered(
+  crons,
+  "finalize expired blaxel project workspace leases",
+  "sweep expired daytona codex runtime targets",
+  "Daytona cleanup should not disturb existing Blaxel project lease finalization order",
+);
+assertOrdered(
+  crons,
+  "sweep expired daytona codex runtime targets",
+  "reconcile expired credit reservations",
+  "Daytona target cleanup should run before generic expired credit reservation cleanup",
 );
 
 assertContains(
