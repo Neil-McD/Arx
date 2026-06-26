@@ -43,7 +43,7 @@ This folder is the canonical Convex backend surface for Polynet. Runtime/product
    - WorkOS/AuthKit example:
      - `ARX_AUTH_JWT_ISSUER=https://<AUTHKIT_DOMAIN>`
      - `ARX_AUTH_JWT_JWKS_URL=https://<AUTHKIT_DOMAIN>/oauth2/jwks`
-   - These same OAuth envs are used by the remote PolyNet MCP surface to serve
+   - These same OAuth envs are used by the remote Polynet MCP surface to serve
      `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`
      for hosted MCP auth discovery.
 4. Validate auth env readiness:

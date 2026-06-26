@@ -2531,7 +2531,7 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     docsSource,
-    "preserve a 40% PolyNet retained-revenue floor",
+    "preserve a 40% Polynet retained-revenue floor",
     "Builder Partner payout docs",
   );
   assertIncludes(

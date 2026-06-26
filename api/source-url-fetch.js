@@ -4,7 +4,7 @@ import net from "node:net";
 import { timingSafeEqual } from "node:crypto";
 
 const BROKER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
-const USER_AGENT = "PolyNet Community Source Ingestion/1.0";
+const USER_AGENT = "Polynet Community Source Ingestion/1.0";
 const MAX_REQUEST_BODY_BYTES = 24_000;
 const DEFAULT_MAX_BYTES = 2_500_000;
 const DEFAULT_MAX_CHARS = 50_000;

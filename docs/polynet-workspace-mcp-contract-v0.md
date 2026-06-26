@@ -1,19 +1,19 @@
-# PolyNet Workspace MCP Provider Contract v0
+# Polynet Workspace MCP Provider Contract v0
 
 Status: active contract
 
 ## First Principle
 
-PolyNet Workspace MCP is a provider surface. It lets an external agent harness access a server-authoritative PolyNet workspace projection.
+Polynet Workspace MCP is a provider surface. It lets an external agent harness access a server-authoritative Polynet workspace projection.
 
-It is not the existing PolyNet MCP app consumer path.
+It is not the existing Polynet MCP app consumer path.
 
 ```text
-PolyNet consumes MCPs:
-  third-party MCP app -> PolyNet runtime harness
+Polynet consumes MCPs:
+  third-party MCP app -> Polynet runtime harness
 
-PolyNet exposes MCP:
-  external agent harness -> PolyNet workspace MCP -> PolyNet community workspace
+Polynet exposes MCP:
+  external agent harness -> Polynet workspace MCP -> Polynet community workspace
 ```
 
 ## Scope
@@ -89,7 +89,7 @@ pending
 no_access
 ```
 
-`available_toolsets` names authority-enabled PolyNet tool families. It does not mean every family has a public MCP tool in this v0 slice. Current canonical toolset names are:
+`available_toolsets` names authority-enabled Polynet tool families. It does not mean every family has a public MCP tool in this v0 slice. Current canonical toolset names are:
 
 ```text
 workspace_context
@@ -136,12 +136,12 @@ An unauthenticated MCP connection or protected call must return `401` with a `WW
 The protected resource metadata document must return:
 
 ```text
-resource: <canonical PolyNet MCP endpoint URL, including /runtime/mcp>
+resource: <canonical Polynet MCP endpoint URL, including /runtime/mcp>
 authorization_servers: [<upstream OAuth issuer/AuthKit domain>]
 bearer_methods_supported: ["header"]
 ```
 
-PolyNet may also expose `/.well-known/oauth-authorization-server` at the MCP server origin as a compatibility proxy for clients that try authorization-server discovery from the resource origin, but the protected resource metadata must name the real upstream issuer as the authorization server.
+Polynet may also expose `/.well-known/oauth-authorization-server` at the MCP server origin as a compatibility proxy for clients that try authorization-server discovery from the resource origin, but the protected resource metadata must name the real upstream issuer as the authorization server.
 
 Production should set `ARX_MCP_RESOURCE_URL` to the canonical public MCP endpoint, for example:
 
@@ -167,6 +167,67 @@ The authorization-server compatibility metadata must only advertise `registratio
 
 Auth proves user identity only. Workspace access remains server-authorized per call through the existing community access and entitlement gates.
 
+## OAuth Continuity Model
+
+The target Polynet MCP user experience is:
+
+```text
+Settings -> Integrations -> Copy setup -> paste into harness -> one OAuth login -> durable MCP access
+```
+
+Polynet must not ask users to paste bearer tokens. Polynet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client that owns local credential persistence.
+
+For a single harness profile/device, one successful OAuth login should survive new chats, app restarts, and normal access-token expiry. The harness should store refresh-capable credentials and refresh access tokens silently. Re-authentication is expected only after logout, token revocation, refresh-token expiry, account switch, a new harness profile/device, or lost local credentials.
+
+The local OAuth callback completion page is owned by the external MCP client or adapter, not by Polynet. Polynet-owned UX should explain the handoff: if the browser shows a plain local page such as `Authentication complete. You may close this window.`, the user should close that tab, return to the harness, and start a fresh chat or reconnect MCP if the current thread was already running before login.
+
+The copied setup should be a self-contained setup packet for the receiving agent. It should tell the harness to identify itself, use the matching setup path, start Polynet sign-in, verify the connection by listing Polynet workspaces, and report when Polynet is connected.
+
+The packet must keep the receiving agent focused on the Polynet connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If Polynet is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
+
+New harness setup should use `polynet` as the canonical local server alias. Existing harnesses that already have `polymcp` configured should treat it as the same Polynet MCP server. The copied setup must not tell users to install both aliases unless the user explicitly wants to migrate the local alias.
+
+If the receiving harness gets a Polynet authorization URL, the packet should prefer automatic browser opening or a clean markdown link such as `[Sign in to Polynet](AUTHORIZATION_URL)`. It should not paste the raw full OAuth URL unless no cleaner link path is available. It should only ask the user to paste the localhost callback URL back if the browser callback fails or cannot be reached.
+
+Claude Code setup should use native remote HTTP MCP:
+
+```bash
+claude mcp add --transport http polynet https://www.polynet.ai/runtime/mcp
+```
+
+Then the receiving harness should use Claude Code's `/mcp` flow to select `polynet` and complete Polynet sign-in. If the harness already has the legacy `polymcp` alias, it should authenticate that existing server instead of installing a duplicate.
+
+Recommended Codex credential persistence should be configured before OAuth when available:
+
+```toml
+mcp_oauth_credentials_store = "keyring"
+```
+
+Codex setup should use native Streamable HTTP OAuth as the canonical path. Run `add` first:
+
+```bash
+codex mcp add polynet --url https://www.polynet.ai/runtime/mcp
+```
+
+Only if Codex does not open OAuth during `add`, run the login fallback:
+
+```bash
+codex mcp login polynet --scopes openid,profile,email,offline_access
+```
+
+`mcp-remote` is a compatibility fallback only. It is not the canonical Codex setup path and its stored OAuth credentials should not be treated as proof that native Codex MCP OAuth is authenticated.
+
+Continuity acceptance requires a clean native Codex profile to:
+
+1. add Polynet with native Streamable HTTP,
+2. authenticate once,
+3. call `tools/list`,
+4. open a workspace,
+5. restart the harness,
+6. call `tools/list` again without another browser login,
+7. wait past normal access-token expiry,
+8. call `tools/list` again and confirm refresh happened silently.
+
 ## Tool Surface
 
 Provider v0 adds:
@@ -175,12 +236,18 @@ Provider v0 adds:
 polynet_list_workspaces
 polynet_open_workspace
 polynet_get_workspace_context
+polynet_product_docs_search
+polynet_product_doc_read
 polynet_workspace_memory_search
 polynet_workspace_memory_read
 polynet_workspace_record_outcome
+polynet_workspace_resources_map
 polynet_workspace_resources_list
 polynet_workspace_resource_read
 polynet_workspace_resources_search
+polynet_workspace_builder_resources_map
+polynet_workspace_builder_resources_list
+polynet_workspace_builder_resource_read
 ```
 
 Existing community-named tools may remain for compatibility, but v0 product semantics should prefer the workspace-named provider tools.
@@ -220,15 +287,18 @@ POLYNET_MCP_COMMUNITY_SLUG=<community-slug>
 POLYNET_MCP_MEMORY_QUERY=<query>
 POLYNET_MCP_MEMORY_NODE_ID=<node-id>
 POLYNET_MCP_RETRIEVAL_LOG_ID=<retrieval-log-id>
+POLYNET_MCP_RESOURCE_QUERY=<query>
 POLYNET_MCP_EXPECT_RELATION=<owner|admin|moderator|member|pending|no_access>
 POLYNET_MCP_EXPECT_AUTHORITY_LENS=<owner_builder|owner|admin_builder|admin|moderator|member|pending|no_access>
 POLYNET_MCP_EXPECT_TOOLSETS=<comma-separated required toolsets>
 POLYNET_MCP_REQUIRE_MEMORY=1
+POLYNET_MCP_REQUIRE_RESOURCES=1
+POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1
 POLYNET_MCP_RECORD_OUTCOME=1
 POLYNET_MCP_TIMEOUT_MS=15000
 ```
 
-Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> list/open/context/authority/search and does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, and required toolsets for a known test account/workspace. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
+Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> tools/list -> list/open/context/authority/product docs/search and, when `member_resources` is available, resource map/list/search/read. When `builder_resources` is available, authenticated smoke also calls the read-only builder resource map/list/read path and verifies that map returns builder scope. It does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, required toolsets, and a resource search query for a known test account/workspace. `POLYNET_MCP_REQUIRE_RESOURCES=1` makes authenticated smoke fail if `member_resources` is missing or no readable member-visible resource can be found. `POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1` makes authenticated smoke fail if `builder_resources` is missing, if the builder resource map does not return builder scope, or if no readable builder resource can be found. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
 
 ## Memory Boundary
 
@@ -242,21 +312,42 @@ It must use the same accepted-memory backend path as the internal member-agent `
 
 Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
 
+## Product Docs Boundary
+
+`polynet_product_docs_search` and `polynet_product_doc_read` expose canonical Polynet product documentation to external harnesses. They are authenticated, read-only, and do not require a workspace selector because product documentation is platform context rather than community state.
+
 ## Resource Boundary
 
-`polynet_workspace_resources_list`, `polynet_workspace_resource_read`, and `polynet_workspace_resources_search` expose live member-visible community resources through an opened workspace.
+`polynet_workspace_resources_map`, `polynet_workspace_resources_list`, `polynet_workspace_resource_read`, and `polynet_workspace_resources_search` expose community resources through an opened workspace.
 
 They must:
 
 - require `workspace_context_id`,
 - re-resolve and revalidate the workspace selector server-side,
 - require the `member_resources` authority toolset,
-- use only the member-visible directory internals:
+- use only bounded resource-tool internals:
+  - `mapCommunityResourcesForToolInternal`,
   - `listCommunityResourceDirectoryInternal`,
   - `readCommunityResourceDirectoryInternal`,
   - `searchCommunityResourceDirectoryInternal`.
 
-They must not expose resource map, batch read, draft modules, draft resources, source inbox as builder state, builder health/preflight metadata, staged changesets, apply changesets, or any resource mutation path.
+The map tool may return member scope or builder scope according to server authority. Member-only users must see live member-visible resources only. Managers may see builder-visible draft/source/health state only through server-validated authority.
+
+They must not expose resource batch read, staged changesets, apply changesets, or any resource mutation path.
+
+`polynet_workspace_builder_resources_map`, `polynet_workspace_builder_resources_list`, and `polynet_workspace_builder_resource_read` expose read-only builder resource inspection through an opened workspace. They exist so an external harness can inspect the current resource structure, draft/source state, suggested read targets, individual builder-visible records, and builder health without receiving mutation tools.
+
+They must:
+
+- require `workspace_context_id`,
+- re-resolve and revalidate the workspace selector server-side,
+- require the `builder_resources` authority toolset,
+- use only read-only resource inspection paths:
+  - `mapCommunityResourcesForToolInternal`,
+  - `listCommunityResourceBuilderDirectory`,
+  - `readCommunityResourceBuilderResource`.
+
+They must not expose staged changesets, apply changesets, or any resource mutation path.
 
 ## Non-Goals
 
@@ -273,8 +364,7 @@ This slice does not change or extend:
 - local stdio MCP support,
 - workspace filesystem or shell tools,
 - community writes,
-- resource builder tools,
-- resource map or batch read tools,
+- resource batch read tools,
 - resource staging or apply mutations,
 - compiler controls,
 - candidate or draft intelligence review,
@@ -284,23 +374,32 @@ This slice does not change or extend:
 
 The slice is done when a real external MCP client can:
 
-1. initialize the PolyNet MCP server,
+1. initialize the Polynet MCP server,
 2. list workspaces,
 3. open a community workspace,
 4. get workspace context,
 5. search accepted community memory,
 6. read one memory node,
 7. record an outcome against the retrieval log,
-8. list, read, and search member-visible workspace resources when the workspace authority includes `member_resources`.
+8. search and read Polynet product docs,
+9. map, list, read, and search workspace resources when the workspace authority includes `member_resources`,
+10. inspect read-only builder resource map/list/read state when the workspace authority includes `builder_resources`.
 
 Focused proofs must show:
 
 - provider tools are advertised by MCP tool discovery,
-- `initialize` and `tools/list` are public,
-- protected `tools/call` requires authentication,
-- unauthenticated protected calls return a MCP-compatible OAuth `WWW-Authenticate` challenge,
+- `initialize`, `tools/list`, and `tools/call` require authentication,
+- unauthenticated MCP calls return a MCP-compatible OAuth `WWW-Authenticate` challenge,
 - protected resource metadata names `/runtime/mcp` as the resource and the upstream issuer as authorization server,
 - authorization-server metadata supports authorization code, PKCE, refresh, and public-client token exchange,
+- setup copy is a self-contained setup packet for the receiving agent,
+- setup copy includes a Claude Code remote HTTP setup path,
+- setup copy uses native Codex OAuth with `offline_access`,
+- setup copy recommends durable MCP credential storage,
+- setup copy puts durable credential storage before OAuth,
+- setup copy presents `codex mcp login` as fallback only,
+- setup copy explains the harness-owned local callback completion page and the close-tab/return-to-harness next action,
+- `mcp-remote` remains non-canonical compatibility only,
 - memory tools require `workspace_context_id`,
 - `workspace_context_id` is parsed as a selector and revalidated server-side,
 - workspace context returns `authority_lens` and `available_toolsets`,
@@ -308,8 +407,14 @@ Focused proofs must show:
 - accepted memory search uses `searchCommunityMemoryInternal`,
 - accepted memory read uses `readCommunityMemoryInternal`,
 - outcome feedback uses `recordCommunityOutcomeObservationInternal`,
+- product docs tools use the canonical product docs index helpers,
 - resource tools require `member_resources`,
-- resource tools use only live member-visible directory internals,
-- resource tools do not expose map, batch read, builder, staging, apply, or mutation internals,
+- resource tools use only bounded read/map/list/search internals,
+- member resource tools do not expose batch read, staging, apply, or mutation internals,
+- builder resource map/list/read require `builder_resources`,
+- builder resource map/list/read use only read-only builder internals,
+- builder resource tools do not expose staging, apply, or mutation internals,
+- authenticated smoke calls resource map, list, search, and read when `member_resources` is available,
+- authenticated smoke calls builder resource map, list, and read when `builder_resources` is available,
 - raw `polynet_community_search` remains separate from accepted memory,
 - provider implementation does not import or mutate the internal MCP consumer/runtime path.

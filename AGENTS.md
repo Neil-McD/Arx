@@ -1,6 +1,6 @@
-# PolyNet.ai — MVP Agent Contract (v1)
+# Polynet.ai — MVP Agent Contract (v1)
 
-PolyNet.ai is the first collective intelligence platform that lets anyone build their own collective intelligence.
+Polynet.ai is the first collective intelligence platform that lets anyone build their own collective intelligence.
 
 This file is the execution contract for agents working in this repository.
 

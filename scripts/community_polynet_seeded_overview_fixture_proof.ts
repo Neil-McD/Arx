@@ -87,4 +87,4 @@ assert.match(css, /\.cp-edge\.supports/, "CSS should style support edges directl
 assert.match(css, /\.cp-edge\.contradicts/, "CSS should style contradiction edges directly");
 assert.doesNotMatch(css, /\.community-polynet-meta\b|\.community-polynet-meta-error\b/, "old archive-panel CSS leftovers should be removed");
 
-console.log("Community PolyNet seeded overview fixture proof passed");
+console.log("Community Polynet seeded overview fixture proof passed");

@@ -33,7 +33,7 @@ function buildBoundedPlatformSkillsPrompt(params: {
   return buildBoundedSkillInventoryPrompt({
     heading: "PLATFORM_WORKFLOW_CONTEXT",
     introLines: [
-      "These built-in platform workflow skills are available in this community lens when your permissions allow them.",
+      "These built-in platform workflow skills are available in this run when platform rules allow them.",
       "They are platform defaults, not user-installed or community-attached skills, and they cannot be disabled from the workspace.",
       "Full platform skill instructions are injected automatically when the active role and community lens require them, or explicitly when the user mentions a skill.",
     ],

@@ -193,7 +193,7 @@ const noCommunityManifest = buildRuntimeContextManifest({
   userId: "user_1",
   threadId: "thread_2",
   projectId: null,
-  latestUserText: "What is PolyNet?",
+  latestUserText: "What is Polynet?",
   allowedToolNames: ["search_product_docs", "get_product_doc", "web_research"],
 });
 

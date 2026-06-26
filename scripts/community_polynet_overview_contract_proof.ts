@@ -50,7 +50,7 @@ const overviewStatusesStart = directory.indexOf("const POLYNET_OVERVIEW_STATUSES
 const overviewStatusesEnd = directory.indexOf("];", overviewStatusesStart);
 const overviewStatuses = directory.slice(overviewStatusesStart, overviewStatusesEnd);
 
-assert.match(overview, /export const getCommunityPolynetOverview = query/, "PolyNet overview should be a read-only query");
+assert.match(overview, /export const getCommunityPolynetOverview = query/, "Polynet overview should be a read-only query");
 assert.match(overview, /communityId: v\.id\("communities"\)/, "overview should be scoped by one explicit community id");
 assert.match(overview, /requireCommunityManager/, "overview should require owner/admin community access");
 assert.match(overview, /const isManager = true/, "overview should treat authorized viewers as managers after the manager gate");
@@ -92,4 +92,4 @@ assert.match(overview, /row\.agentKey === "community_agent"/, "overview should s
 assert.match(overview, /recent_actions_summary/, "overview should summarize recent community-agent actions for the future tab");
 assert.match(overview, /summarizePolynetOverviewMemory/, "overview should expose memory health counts from visible directory nodes");
 
-console.log("Community PolyNet overview contract proof passed");
+console.log("Community Polynet overview contract proof passed");

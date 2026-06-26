@@ -456,7 +456,7 @@ export function useWebPublicFunnelActions<
               current.setPublicCommunityAccess(null);
               current.setMyPublicCommunityJoinRequest(null);
               current.setPublicCommunityError(
-                "You are signed in, but PolyNet could not verify your community access. Refresh and try again.",
+                "You are signed in, but Polynet could not verify your community access. Refresh and try again.",
               );
               console.warn("Failed to verify signed-in community access:", error);
             }

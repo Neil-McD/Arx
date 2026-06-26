@@ -20,53 +20,170 @@ import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMa
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
-const POLYMCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
-const POLYMCP_TOOL_COUNT_LABEL = "9 workspace tools";
-const POLYMCP_CODEX_SETUP_COMMANDS = [
-  `codex mcp add polymcp --url ${POLYMCP_ENDPOINT_URL}`,
-  "codex mcp login polymcp",
+const POLYNET_MCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
+const POLYNET_MCP_TOOL_COUNT_LABEL = "15 workspace tools";
+const POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND = `claude mcp add --transport http polynet ${POLYNET_MCP_ENDPOINT_URL}`;
+const POLYNET_MCP_CODEX_ADD_COMMAND = `codex mcp add polynet --url ${POLYNET_MCP_ENDPOINT_URL}`;
+const POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND =
+  "codex mcp login polynet --scopes openid,profile,email,offline_access";
+const POLYNET_MCP_CODEX_DURABLE_CONFIG = [
+  '# Recommended: keep MCP OAuth credentials in the OS keychain when available.',
+  'mcp_oauth_credentials_store = "keyring"',
 ].join("\n");
-const POLYMCP_GENERIC_HTTP_CONFIG = JSON.stringify(
+const POLYNET_MCP_GENERIC_HTTP_CONFIG = JSON.stringify(
   {
     mcpServers: {
-      polymcp: {
+      polynet: {
         type: "http",
-        url: POLYMCP_ENDPOINT_URL,
+        url: POLYNET_MCP_ENDPOINT_URL,
       },
     },
   },
   null,
   2,
 );
-const POLYMCP_SETUP_INSTRUCTIONS = [
-  "Use this setup in the agent harness you want to connect to PolyNet.",
+const POLYNET_MCP_SETUP_BUNDLE = [
+  "# Polynet Setup Packet",
   "",
-  "PolyNet does not ask you to paste an access token. Your harness starts OAuth, opens the browser for PolyNet sign-in, and stores its own token after the browser callback completes.",
+  "You are helping the user connect this AI harness to Polynet.",
   "",
-  "After login completes, open a new Codex thread and ask: List my PolyNet workspaces.",
-].join("\n");
-const POLYMCP_SETUP_BUNDLE = [
-  "# PolyMCP Setup",
+  "Goal:",
+  "Connect Polynet so this harness can access the user's Polynet communities, resources, and workspace memory.",
   "",
-  "## Setup instructions",
+  "Polynet MCP endpoint:",
+  POLYNET_MCP_ENDPOINT_URL,
   "",
-  POLYMCP_SETUP_INSTRUCTIONS,
+  "## Operating Rules",
+  "",
+  "- Keep the setup focused on Polynet.",
+  "- Do not ask for or paste access tokens.",
+  "- Do not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
+  "- If this harness cannot run a setup command or open an interactive auth panel, give the user the exact next command or click path and stop.",
+  "- If Polynet is already configured but says it needs authentication, skip setup debugging and move directly to sign-in.",
+  "",
+  "## Existing `polymcp` Installs",
+  "",
+  "New setup should use the server alias `polynet`.",
+  "",
+  "If this harness already has `polymcp` configured, treat it as the same Polynet server. Do not install both unless the user explicitly wants to migrate the local alias.",
+  "",
+  "If `polymcp` needs authentication, authenticate that existing server instead of re-adding `polynet`.",
+  "",
+  "## OAuth Link Handling",
+  "",
+  "If this harness receives a Polynet authorization URL, do not paste the raw full URL unless there is no other option.",
+  "",
+  "Prefer this order:",
+  "1. Open the authorization URL automatically if this harness can open browser links.",
+  "2. Otherwise show a markdown link: [Sign in to Polynet](AUTHORIZATION_URL).",
+  "3. Only show the raw authorization URL if the harness cannot open links and cannot render markdown links.",
+  "",
+  "Only ask the user to paste the localhost callback URL back if the browser callback fails or says the page cannot be reached.",
+  "",
+  "If the user pastes a callback URL that contains a `code`, treat it as a one-time OAuth credential and use it only to complete sign-in.",
+  "",
+  "## What To Do",
+  "",
+  "1. Identify which harness you are running in.",
+  "2. Add Polynet with the matching setup path below, unless `polynet` or legacy `polymcp` is already configured.",
+  "3. If authentication is needed, give the user one clear sign-in action for this harness.",
+  "4. After sign-in, verify the connection by listing the user's Polynet workspaces.",
+  "5. If this already-open chat cannot see the tools after sign-in, tell the user to start a fresh chat or reconnect tools.",
+  "6. Tell the user when Polynet is connected.",
+  "",
+  "## Claude Code",
+  "",
+  "Add Polynet:",
+  "",
+  "```bash",
+  POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND,
+  "```",
+  "",
+  "If that command is not available in this session, ask the user to run the same command in an interactive Claude Code terminal. Do not troubleshoot Claude installation paths unless the user asks.",
+  "",
+  "Authenticate:",
+  "",
+  "```text",
+  "/mcp",
+  "```",
+  "",
+  "Run `/mcp`, select `polynet`, then complete Polynet sign-in in the browser.",
+  "",
+  "If Claude Code gives you an authorization URL, open it if possible. If you must show it to the user, show it as [Sign in to Polynet](AUTHORIZATION_URL), not as a raw URL block.",
+  "",
+  "If `polynet` or legacy `polymcp` already appears as `Needs authentication`, do not re-add it. Ask the user to run `/mcp`, select that server, and sign in.",
   "",
   "## Codex",
   "",
-  "Run:",
+  "Optional before OAuth, in `~/.codex/config.toml`:",
+  "",
+  "```toml",
+  POLYNET_MCP_CODEX_DURABLE_CONFIG,
+  "```",
+  "",
+  "Add Polynet:",
   "",
   "```bash",
-  POLYMCP_CODEX_SETUP_COMMANDS,
+  POLYNET_MCP_CODEX_ADD_COMMAND,
   "```",
   "",
-  "## Generic MCP JSON",
+  "If `polynet` or legacy `polymcp` is already configured, do not add it again.",
   "",
-  "Use this if your harness asks for MCP JSON instead of CLI commands.",
+  "Only if Codex does not open OAuth during add, run:",
+  "",
+  "```bash",
+  POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND,
+  "```",
+  "",
+  "## Cursor Or Other JSON-Based Harnesses",
+  "",
+  "Use this HTTP MCP config:",
   "",
   "```json",
-  POLYMCP_GENERIC_HTTP_CONFIG,
+  POLYNET_MCP_GENERIC_HTTP_CONFIG,
   "```",
+  "",
+  "## After Sign-In",
+  "",
+  "If the browser shows:",
+  "",
+  "```text",
+  "Authentication complete. You may close this window.",
+  "```",
+  "",
+  "Close that tab and return to this harness.",
+  "",
+  "The harness owns local credential storage. One successful sign-in should persist for that harness profile or device.",
+  "",
+  "If this chat was already open before sign-in, start a fresh chat or reconnect tools so the harness picks up the new connection.",
+  "",
+  "## Verify",
+  "",
+  "After setup, use Polynet to list the user's Polynet workspaces.",
+  "",
+  "If Polynet tools are not visible after sign-in, tell the user to start a fresh chat or reconnect tools. Do not repeat OAuth unless the harness still says authentication is required.",
+  "",
+  "If successful, tell the user:",
+  "",
+  "```text",
+  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory.",
+  "```",
+  "",
+  "## Usage Guidance",
+  "",
+  "Use Polynet when the user asks about:",
+  "- Polynet communities",
+  "- workspace memory",
+  "- accepted community context",
+  "- resources",
+  "- prior decisions",
+  "- playbooks",
+  "- warnings",
+  "- outcomes",
+  "",
+  "Before using workspace-specific memory, list or open the relevant Polynet workspace.",
+  "",
+  "Treat workspace context IDs as opaque selectors. Do not invent them.",
 ].join("\n");
 
 type SessionLike = {
@@ -349,7 +466,7 @@ export function WebIntegrationsSettingsSection(
 
   const handleCopyPolyMcpSetup = async () => {
     try {
-      const copied = await tryCopyTextToClipboard(POLYMCP_SETUP_BUNDLE);
+      const copied = await tryCopyTextToClipboard(POLYNET_MCP_SETUP_BUNDLE);
       setPolyMcpCopyState(copied ? "copied" : "error");
     } catch {
       setPolyMcpCopyState("error");
@@ -377,33 +494,33 @@ export function WebIntegrationsSettingsSection(
               <path d="M4 12h16" />
               <path d="M7 7h10v10H7z" />
             </svg>
-            PolyMCP
+            Polynet
           </div>
           <div className="settings-section-desc">
-            Connect Codex, Claude Code, Cursor, or another MCP client to your
-            PolyNet workspace memory.
+            Connect Codex, Claude Code, Cursor, or another AI harness to your
+            Polynet workspace memory.
           </div>
           <div className="integrations-app-list">
             <div className="integration-mounted-row polymcp-access-row">
               <div className="integration-mounted-top">
                 <div className="integration-mounted-identity">
                   <DiscoverCatalogLogo
-                    name="PolyMCP"
+                    name="Polynet"
                     logoUrl="/landing-polynet/logo.png"
                   />
                   <div className="integration-mounted-main">
                     <div className="integration-mounted-title-row">
-                      <strong>PolyMCP</strong>
+                      <strong>Polynet</strong>
                       <span className="integration-status-pill">
-                        {POLYMCP_TOOL_COUNT_LABEL}
+                        {POLYNET_MCP_TOOL_COUNT_LABEL}
                       </span>
                       <span className="integration-status-pill">
                         OAuth protected
                       </span>
                     </div>
                     <div className="integration-mounted-detail">
-                      Copy the setup, let your harness complete OAuth in the
-                      browser, then ask it to list your PolyNet workspaces.
+                      Copy one setup packet, paste it into Codex, Claude Code,
+                      Cursor, or another AI harness, then sign in once.
                     </div>
                   </div>
                 </div>
@@ -412,7 +529,7 @@ export function WebIntegrationsSettingsSection(
                     type="button"
                     className="settings-cta polymcp-copy-action"
                     onClick={() => void handleCopyPolyMcpSetup()}
-                    aria-label="Copy PolyMCP setup"
+                    aria-label="Copy Polynet setup"
                   >
                     <Copy aria-hidden="true" />
                     {polyMcpCopyState === "copied"

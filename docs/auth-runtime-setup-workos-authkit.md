@@ -61,9 +61,70 @@ https://<POLYNET_ORIGIN>/runtime/mcp
 
 Set `ARX_MCP_RESOURCE_URL` to that exact value in production so OAuth protected-resource metadata does not drift when requests pass through Vercel, Convex, or another proxy origin. Set `ARX_MCP_AUTH_JWT_AUDIENCE` to the same value when MCP access tokens carry the resource URL as their `aud` claim. Keep `ARX_AUTH_JWT_AUDIENCE` for the primary web/session JWT audience if it differs.
 
-Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dynamic registration endpoint. PolyNet must not infer one from the token endpoint.
+Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dynamic registration endpoint. Polynet must not infer one from the token endpoint.
 
-## 4) Redirect URI
+## 4) Hosted MCP OAuth Continuity
+
+The hosted Polynet MCP continuity invariant is:
+
+```text
+one harness profile + one Polynet MCP config + one successful OAuth login
+= durable access across new chats, harness restarts, and normal access-token expiry
+```
+
+Polynet is the OAuth resource server. WorkOS/AuthKit is the authorization server. The external harness is the OAuth client and owns local credential persistence. Polynet must not ask users to paste bearer tokens for normal MCP setup.
+
+WorkOS/AuthKit should be configured so MCP clients can identify themselves and receive refresh-capable credentials:
+
+1. enable Client ID Metadata Document support when available,
+2. keep Dynamic Client Registration enabled as a compatibility fallback for older MCP clients,
+3. include `refresh_token` in authorization-server `grant_types_supported`,
+4. include `offline_access` in authorization-server `scopes_supported`,
+5. keep the MCP Resource Indicator equal to `https://<POLYNET_ORIGIN>/runtime/mcp`.
+
+Recommended Codex credential persistence should be configured before OAuth when available:
+
+```toml
+mcp_oauth_credentials_store = "keyring"
+```
+
+Codex native Streamable HTTP OAuth is the canonical setup path. Run `add` first:
+
+```bash
+codex mcp add polynet --url https://<POLYNET_ORIGIN>/runtime/mcp
+```
+
+Only if Codex does not open OAuth during `add`, run the login fallback:
+
+```bash
+codex mcp login polynet --scopes openid,profile,email,offline_access
+```
+
+New harness setup should use `polynet` as the local server alias. Existing harnesses that already have `polymcp` configured may keep using it as the same Polynet MCP server; do not install both aliases unless intentionally migrating the local alias.
+
+`mcp-remote` may remain useful for legacy clients, but it is not proof that native Codex MCP OAuth is authenticated. A native Codex harness and an `mcp-remote` adapter can use different client registrations and credential stores.
+
+Re-authentication should be treated as a bug unless one of these is true:
+
+1. the user is using a new harness profile or device,
+2. the user explicitly logged out,
+3. the user switched accounts,
+4. the authorization grant or refresh token was revoked,
+5. the refresh token expired,
+6. local credential storage was cleared or unavailable.
+
+Continuity validation:
+
+1. create or use a clean Codex profile,
+2. add Polynet with native Streamable HTTP,
+3. complete OAuth during `codex mcp add`, or run the login fallback if `add` did not open OAuth,
+4. confirm authenticated `tools/list` works,
+5. close and reopen Codex,
+6. confirm authenticated `tools/list` works without a browser login,
+7. wait past normal access-token expiry,
+8. confirm authenticated `tools/list` works without a browser login.
+
+## 5) Redirect URI
 
 The hosted WorkOS Google flow should redirect back to the same-origin callback route.
 
@@ -72,7 +133,7 @@ Examples:
 1. Local: `http://localhost:5174/api/auth/google/callback`
 2. Production: `https://www.polynet.ai/api/auth/google/callback`
 
-## 5) Local Validation
+## 6) Local Validation
 
 Run:
 
@@ -87,7 +148,7 @@ This check now catches:
 3. missing JWT verifier configuration
 4. fail-open verified-identity posture
 
-## 6) Continuity Validation
+## 7) Web Session Continuity Validation
 
 After the env posture is aligned, verify the actual failure seam:
 
@@ -97,7 +158,7 @@ After the env posture is aligned, verify the actual failure seam:
 4. leave the session idle past access-token expiry
 5. confirm bootstrap recovers without a manual sign-in click
 
-## 7) Session Maintenance
+## 8) Session Maintenance
 
 Revoked rotated session rows are safe to prune after a retention window.
 

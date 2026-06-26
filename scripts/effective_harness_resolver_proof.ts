@@ -142,6 +142,9 @@ function provePlatformSkillsArePermanentHarnessInventory() {
           description: "Organize community Resources.",
           requires_capability: "community_resources_manage",
           instructions_md: "Refactor community Resources from source evidence.",
+          activation_route: "platform_required",
+          activation_reason:
+            "active builder community resource lane requires this platform workflow",
         },
       ],
     },
@@ -192,6 +195,8 @@ function proveCommunitySkillsStillActivateWithoutCommunityMcpRuntime() {
           description: "Triage Linear issues for this community.",
           skill_revision_id: "linear-triage-revision-1",
           instructions_md: "Use the user's connected Linear tools when needed.",
+          activation_route: "explicit_mention",
+          activation_reason: "user explicitly mentioned $linear-triage",
         },
       ],
     },

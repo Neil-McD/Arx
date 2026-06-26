@@ -1,4 +1,4 @@
-// Deterministic organic layout for the PolyNet community memory graph.
+// Deterministic organic layout for the Polynet community memory graph.
 //
 // The community root is a seed neuron at the world origin {0,0}. Directory
 // memory nodes spread outward on growth rings, but each node's angle and radius

@@ -393,8 +393,8 @@ function compileMcpServer(
       code: endpointUrl ? "mcp_unknown_hosted_endpoint" : "mcp_registry_entry_missing",
       path,
       message: endpointUrl
-        ? "Hosted MCP endpoints must match a reviewed PolyNet registry entry."
-        : "MCP entries must identify a reviewed PolyNet registry entry.",
+        ? "Hosted MCP endpoints must match a reviewed Polynet registry entry."
+        : "MCP entries must identify a reviewed Polynet registry entry.",
     });
     return;
   }

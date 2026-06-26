@@ -19,8 +19,8 @@ assert.equal(
     engineId: "runtime_turn",
     modelToggles: toggles,
   }),
-  "GPT 5.5 · PolyNet",
-  "PolyNet runtime turns should not render ChatGPT as the assistant-output provider",
+  "GPT 5.5 · Polynet",
+  "Polynet runtime turns should not render ChatGPT as the assistant-output provider",
 );
 
 assert.equal(
@@ -30,8 +30,8 @@ assert.equal(
     engineId: "runtime_convex",
     modelToggles: toggles,
   }),
-  "GPT 5.5 · PolyNet",
-  "Convex-backed PolyNet runtime turns should render PolyNet attribution",
+  "GPT 5.5 · Polynet",
+  "Convex-backed Polynet runtime turns should render Polynet attribution",
 );
 
 assert.equal(
@@ -70,7 +70,7 @@ assert.equal(
       },
     ],
   }),
-  "GPT 5.5 · PolyNet (ChatGPT fallback -> OpenRouter)",
+  "GPT 5.5 · Polynet (ChatGPT fallback -> OpenRouter)",
   "Fallback details should preserve factual provider history without overriding runtime attribution",
 );
 

@@ -19,7 +19,7 @@ export type LegalDocument = {
 export const TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
   key: "terms_of_service",
   version: TERMS_OF_SERVICE_VERSION,
-  title: "PolyNet Terms of Service v1",
+  title: "Polynet Terms of Service v1",
   effectiveDate: "2026-05-21",
   sourcePath: "docs/legal/terms-of-service-v1.md",
 };
@@ -27,7 +27,7 @@ export const TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
 export const PRIVACY_AI_DATA_POLICY_DOCUMENT: LegalDocument = {
   key: "privacy_ai_data_policy",
   version: PRIVACY_AI_DATA_POLICY_VERSION,
-  title: "PolyNet Privacy & AI Data Policy v1",
+  title: "Polynet Privacy & AI Data Policy v1",
   effectiveDate: "2026-05-21",
   sourcePath: "docs/legal/privacy-ai-data-policy-v1.md",
 };

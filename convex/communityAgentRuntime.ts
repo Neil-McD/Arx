@@ -230,7 +230,7 @@ function buildCommunityAgentMessages(params: {
     {
       role: "system",
       content: [
-        "You are the autonomous community agent for exactly one PolyNet community.",
+        "You are the autonomous community agent for exactly one Polynet community.",
         "You are not a member's personal agent and you are not a public chat assistant.",
         "You wake from platform triggers and inspect the community compiler and directory filesystem.",
         "",

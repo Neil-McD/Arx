@@ -128,10 +128,10 @@ export function LoginTrampolineRoute() {
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Redirecting to sign in</div>
         <div style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(245,247,251,0.78)" }}>
           {signInUrl && !showManualContinue
-            ? "PolyNet is redirecting you to sign in and will bring you back to your original page."
+            ? "Polynet is redirecting you to sign in and will bring you back to your original page."
             : signInUrl
               ? "If the redirect does not continue automatically, use the button below."
-              : "PolyNet is preparing the sign-in handoff and will return you to your original page."}
+              : "Polynet is preparing the sign-in handoff and will return you to your original page."}
         </div>
         {signInUrl && showManualContinue ? (
           <button

@@ -12,6 +12,8 @@ import {
 } from "./skillCore";
 import {
   COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS,
+  GLOBAL_PLATFORM_RUNTIME_SKILLS,
+  PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL,
   type RuntimePlatformSkillDefinition,
 } from "./platformSkillRuntime";
 import {
@@ -19,11 +21,17 @@ import {
   resolveScopedExplicitlyMentionedSkills,
   type ScopedExplicitlyMentionedSkillCandidate,
   type RuntimeSkillInferenceMessage,
+  type RuntimeSelectedSkillActivationEvidence,
 } from "../shared/runtimeSkillActivation";
 import {
   buildCommunityResourceRuntimeLaneState,
   type CommunityResourceRuntimeLaneState,
 } from "../shared/communityResourceLane";
+import {
+  describeRuntimeSkillLifecycleTrigger,
+  normalizeRuntimeSkillLifecycleTrigger,
+  type RuntimeSkillLifecycleTrigger,
+} from "../shared/runtimeSkillLifecycle";
 
 type UserPlatformSkillInstallRow = {
   _id: any;
@@ -56,7 +64,7 @@ type RuntimeUserPlatformSkillInventory = {
 type RuntimeSelectedUserPlatformSkill = RuntimeUserPlatformSkillInventory & {
   skill_revision_id: any | null;
   instructions_md: string;
-};
+} & RuntimeSelectedSkillActivationEvidence;
 
 type RuntimeCommunitySkillInventory = {
   community_skill_attachment_id: any;
@@ -70,7 +78,7 @@ type RuntimeCommunitySkillInventory = {
 type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
   skill_revision_id: any | null;
   instructions_md: string;
-};
+} & RuntimeSelectedSkillActivationEvidence;
 
 type RuntimePlatformSkillInventory = {
   platform_skill_id: string;
@@ -83,7 +91,7 @@ type RuntimePlatformSkillInventory = {
 
 type RuntimeSelectedPlatformSkill = RuntimePlatformSkillInventory & {
   instructions_md: string;
-};
+} & RuntimeSelectedSkillActivationEvidence;
 
 type RuntimeScopedSelectedSkill =
   | RuntimeSelectedPlatformSkill
@@ -173,10 +181,12 @@ function buildRuntimePlatformSkillInventoryItem(
 
 function buildRuntimeSelectedPlatformSkill(
   skill: RuntimePlatformSkillDefinition,
+  activation: RuntimeSelectedSkillActivationEvidence,
 ): RuntimeSelectedPlatformSkill {
   return {
     ...buildRuntimePlatformSkillInventoryItem(skill),
     instructions_md: skill.instructionsMd,
+    ...activation,
   };
 }
 
@@ -196,12 +206,26 @@ function dedupeRuntimeSelectedPlatformSkills(
   return result;
 }
 
+export function buildRuntimeLifecyclePlatformSelectedSkills(
+  lifecycleTrigger: RuntimeSkillLifecycleTrigger | null | undefined,
+): RuntimeSelectedPlatformSkill[] {
+  const trigger = normalizeRuntimeSkillLifecycleTrigger(lifecycleTrigger);
+  if (!trigger) return [];
+  return [
+    buildRuntimeSelectedPlatformSkill(PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL, {
+      activation_route: "lifecycle_trigger",
+      activation_reason: describeRuntimeSkillLifecycleTrigger(trigger),
+    }),
+  ];
+}
+
 async function resolveRuntimePlatformSkillScope(args: {
   ctx: any;
   communityId: any | null;
   userId: any;
   includeSelectedData: boolean;
   communityResourceLane: CommunityResourceRuntimeLaneState;
+  lifecycleTrigger: RuntimeSkillLifecycleTrigger | null;
 }): Promise<{
   inventory: RuntimePlatformSkillInventory[];
   selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
@@ -209,35 +233,68 @@ async function resolveRuntimePlatformSkillScope(args: {
     RuntimeSelectedPlatformSkill
   >[];
   autoSelectedSkills: RuntimeSelectedPlatformSkill[];
+  lifecycleSelectedSkills: RuntimeSelectedPlatformSkill[];
 }> {
+  const lifecycleSelectedSkills = buildRuntimeLifecyclePlatformSelectedSkills(
+    args.lifecycleTrigger,
+  );
+  const globalInventory = GLOBAL_PLATFORM_RUNTIME_SKILLS.map(
+    buildRuntimePlatformSkillInventoryItem,
+  );
+  const globalSelectedCandidates = args.includeSelectedData
+    ? GLOBAL_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
+        scope: "platform" as const,
+        mentionToken: skill.mentionToken,
+        value: buildRuntimeSelectedPlatformSkill(skill, {
+          activation_route: "explicit_mention",
+          activation_reason: `user explicitly mentioned $${skill.mentionToken}`,
+        }),
+      }))
+    : [];
   if (
     !args.communityId ||
     args.communityResourceLane.lane !== "builder" ||
     !args.communityResourceLane.can_use_resource_builder
   ) {
     return {
-      inventory: [],
-      selectedCandidates: [],
+      inventory: globalInventory,
+      selectedCandidates: globalSelectedCandidates,
       autoSelectedSkills: [],
+      lifecycleSelectedSkills,
     };
   }
 
-  const inventory = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
-    buildRuntimePlatformSkillInventoryItem,
-  );
+  const inventory = [
+    ...globalInventory,
+    ...COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
+      buildRuntimePlatformSkillInventoryItem,
+    ),
+  ];
   const autoSelectedSkills = COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map(
-    buildRuntimeSelectedPlatformSkill,
+    (skill) =>
+      buildRuntimeSelectedPlatformSkill(skill, {
+        activation_route: "platform_required",
+        activation_reason:
+          "active builder community resource lane requires this platform workflow",
+      }),
   );
   return {
     inventory,
-    selectedCandidates: args.includeSelectedData
-      ? COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
-          scope: "platform" as const,
-          mentionToken: skill.mentionToken,
-          value: buildRuntimeSelectedPlatformSkill(skill),
-        }))
-      : [],
+    selectedCandidates: [
+      ...globalSelectedCandidates,
+      ...(args.includeSelectedData
+        ? COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS.map((skill) => ({
+            scope: "platform" as const,
+            mentionToken: skill.mentionToken,
+            value: buildRuntimeSelectedPlatformSkill(skill, {
+              activation_route: "explicit_mention",
+              activation_reason: `user explicitly mentioned $${skill.mentionToken}`,
+            }),
+          }))
+        : []),
+    ],
     autoSelectedSkills,
+    lifecycleSelectedSkills,
   };
 }
 
@@ -285,6 +342,8 @@ async function resolveRuntimeUserPlatformSkillScope(args: {
         ...inventoryItem,
         skill_revision_id: activeInstructions.revisionId,
         instructions_md: activeInstructions.instructionsMd,
+        activation_route: "explicit_mention",
+        activation_reason: `user explicitly mentioned $${mentionToken}`,
       },
     });
   }
@@ -341,6 +400,8 @@ async function resolveRuntimeCommunitySkillScope(args: {
         ...inventoryItem,
         skill_revision_id: activeInstructions.revisionId,
         instructions_md: activeInstructions.instructionsMd,
+        activation_route: "explicit_mention",
+        activation_reason: `user explicitly mentioned $${mentionToken}`,
       },
     });
   }
@@ -525,6 +586,7 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
         content: v.string(),
       }),
     ),
+    lifecycleTrigger: v.optional(v.literal("onboarding_completed")),
   },
   handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -536,6 +598,9 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       args.messages as RuntimeSkillInferenceMessage[],
     );
     const includeSelectedData = requestedMentionTokens.length > 0;
+    const lifecycleTrigger = normalizeRuntimeSkillLifecycleTrigger(
+      args.lifecycleTrigger ?? null,
+    );
     const communityResourceLane = await resolveCommunityResourceRuntimeLane({
       ctx,
       communityId: args.communityId ?? null,
@@ -552,6 +617,7 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       userId,
       includeSelectedData,
       communityResourceLane,
+      lifecycleTrigger,
     });
     userPlatformSkillScope = filterUserSkillScopeAgainstPlatform({
       userSkillScope: userPlatformSkillScope,
@@ -618,6 +684,7 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       .map((selection) => selection.value as RuntimeSelectedPlatformSkill);
     const selectedPlatformSkills = dedupeRuntimeSelectedPlatformSkills([
       ...platformSkillScope.autoSelectedSkills,
+      ...platformSkillScope.lifecycleSelectedSkills,
       ...explicitlySelectedPlatformSkills,
     ]);
 

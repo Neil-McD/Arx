@@ -58,7 +58,7 @@ function formatRuntimeEngineProviderLabel(value: string | null | undefined): str
     raw === "public_convex" ||
     raw === "public_openrouter"
   ) {
-    return "PolyNet";
+    return "Polynet";
   }
   return null;
 }

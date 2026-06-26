@@ -16,7 +16,7 @@ This document defines the intended architecture for community cognition, memory 
 
 ## Irreducible System
 
-PolyNet is trying to answer one question:
+Polynet is trying to answer one question:
 
 > How can one member's useful experience improve another member's future outcome?
 
@@ -1436,13 +1436,13 @@ Rules:
 - Existing historical run rows may not have every action-array field, so readers must default missing arrays to empty arrays.
 - No operator panel in this slice. Make the organism auditable in the backend first.
 
-The eighteenth backend slice adds the first read-only PolyNet overview projection for the future community tab:
+The eighteenth backend slice adds the first read-only Polynet overview projection for the future community tab:
 
 ```txt
 Accepted directory intelligence
   -> bounded graph projection
   -> compact community-agent status
-  -> future PolyNet tab
+  -> future Polynet tab
 ```
 
 Rules:
@@ -1453,18 +1453,18 @@ Rules:
 - Directory graph edges are real node-to-node `communityIntelligenceEdges`; the projection does not invent memory edges.
 - The projection does not expose raw activity, source traces, compiler digests, compiler windows, or pending change requests.
 - The projection exposes accepted-memory statuses only: `promising`, `validated`, `canonical`, `contested`, and `stale`.
-- Draft, candidate, archived, and deprecated nodes stay out of the PolyNet overview.
+- Draft, candidate, archived, and deprecated nodes stay out of the Polynet overview.
 - Node reads use bounded status/time indexes, and edge reads are bounded from selected nodes.
 - The agent panel data comes from the `communityAgentRuns` ledger and is compact: status, activity state, wake reason, recent action counts, and recent run summaries.
 - The overview is product read-model infrastructure. It is not a write surface, not a compiler dashboard, and not an admin review queue.
 
 ## Nineteenth Implementation Slice
 
-The nineteenth slice makes the first read-only PolyNet community tab visible:
+The nineteenth slice makes the first read-only Polynet community tab visible:
 
 ```txt
 getCommunityPolynetOverview
-  -> PolyNet tab shell
+  -> Polynet tab shell
   -> memory graph
   -> community-agent status
   -> selected node detail
@@ -1477,12 +1477,12 @@ Rules:
 - The graph renders backend-projected nodes and edges only. It may include the synthetic community root node returned by the overview, but it must not create fake memory nodes.
 - The tab shows the community agent as status/activity derived from the `communityAgentRuns` ledger.
 - The tab shows selected-node metadata from the overview projection, not raw traces or compiler internals.
-- PolyNet tab visibility follows community view access because this is now a member-safe memory surface, not a manager-only archive operations panel.
-- Archive backfill, processing, retry, and embedding-health controls are not part of the PolyNet memory tab.
+- Polynet tab visibility follows community view access because this is now a member-safe memory surface, not a manager-only archive operations panel.
+- Archive backfill, processing, retry, and embedding-health controls are not part of the Polynet memory tab.
 
 ## Twentieth Implementation Slice
 
-The twentieth slice adds a deterministic seeded overview fixture for validating the first real PolyNet tab state without writing live community memory:
+The twentieth slice adds a deterministic seeded overview fixture for validating the first real Polynet tab state without writing live community memory:
 
 ```txt
 Seeded overview fixture

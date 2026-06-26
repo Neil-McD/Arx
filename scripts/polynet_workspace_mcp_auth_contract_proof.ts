@@ -77,6 +77,16 @@ assertIncludes(contract, "`/runtime/mcp` is an OAuth-protected remote MCP resour
 assertIncludes(contract, "initialize", "authenticated initialize contract");
 assertIncludes(contract, "tools/list", "authenticated tool discovery contract");
 assertIncludes(contract, "tools/call", "protected tool call contract");
+assertIncludes(
+  contract,
+  "`initialize`, `tools/list`, and `tools/call` require authentication",
+  "authenticated MCP method contract",
+);
+assertIncludes(
+  contract,
+  "unauthenticated MCP calls return a MCP-compatible OAuth `WWW-Authenticate` challenge",
+  "unauthenticated MCP challenge contract",
+);
 assertIncludes(contract, "2025-11-25", "current MCP protocol contract");
 assertIncludes(contract, "2025-06-18", "native Codex MCP protocol contract");
 assertIncludes(contract, "2025-03-26", "legacy MCP protocol contract");
@@ -93,10 +103,119 @@ assertIncludes(contract, "/runtime/mcp", "public MCP runtime route contract");
 assertIncludes(contract, "/.well-known/oauth-protected-resource", "public MCP protected resource route contract");
 assertIncludes(contract, "/.well-known/oauth-authorization-server", "public MCP authorization server route contract");
 assertIncludes(contract, "Auth proves user identity only.", "auth versus authorization boundary");
+assertIncludes(contract, "## OAuth Continuity Model", "OAuth continuity contract section");
+assertIncludes(
+  contract,
+  "one OAuth login -> durable MCP access",
+  "OAuth continuity target UX",
+);
+assertIncludes(
+  contract,
+  "Polynet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client",
+  "OAuth role separation",
+);
+assertIncludes(
+  contract,
+  "The local OAuth callback completion page is owned by the external MCP client or adapter, not by Polynet.",
+  "OAuth callback UI ownership boundary",
+);
+assertIncludes(
+  contract,
+  "Authentication complete. You may close this window.",
+  "OAuth callback completion copy boundary",
+);
+assertIncludes(
+  contract,
+  "close that tab, return to the harness",
+  "OAuth callback close-tab next action",
+);
+assertIncludes(
+  contract,
+  "start a fresh chat or reconnect MCP",
+  "OAuth callback reconnect guidance",
+);
+assertIncludes(
+  contract,
+  "codex mcp login polynet --scopes openid,profile,email,offline_access",
+  "native Codex OAuth fallback with offline access",
+);
+assertIncludes(
+  contract,
+  'mcp_oauth_credentials_store = "keyring"',
+  "native Codex durable credential store",
+);
+assertIncludes(
+  contract,
+  "Recommended Codex credential persistence should be configured before OAuth",
+  "native Codex durable credential store should precede OAuth",
+);
+assertIncludes(
+  contract,
+  "Run `add` first",
+  "native Codex add command should be primary",
+);
+assertIncludes(
+  contract,
+  "Only if Codex does not open OAuth during `add`, run the login fallback",
+  "native Codex login should be fallback only",
+);
+assertIncludes(
+  contract,
+  "`mcp-remote` is a compatibility fallback only",
+  "mcp-remote non-canonical boundary",
+);
 assertIncludes(authSetup, "ARX_MCP_RESOURCE_URL", "MCP resource setup env");
 assertIncludes(authSetup, "ARX_MCP_AUTH_JWT_AUDIENCE", "MCP audience setup env");
 assertIncludes(authSetup, "Resource Indicator", "WorkOS MCP resource indicator setup");
 assertIncludes(authSetup, "https://<POLYNET_ORIGIN>/runtime/mcp", "canonical MCP resource setup");
+assertIncludes(authSetup, "## 4) Hosted MCP OAuth Continuity", "hosted MCP OAuth continuity setup section");
+assertIncludes(
+  authSetup,
+  "one harness profile + one Polynet MCP config + one successful OAuth login",
+  "hosted MCP OAuth continuity invariant",
+);
+assertIncludes(authSetup, "Client ID Metadata Document", "WorkOS CIMD setup guidance");
+assertIncludes(authSetup, "Dynamic Client Registration", "WorkOS DCR compatibility setup guidance");
+assertIncludes(
+  authSetup,
+  "codex mcp login polynet --scopes openid,profile,email,offline_access",
+  "hosted MCP OAuth native Codex login fallback",
+);
+assertIncludes(
+  authSetup,
+  "codex mcp add polynet --url https://<POLYNET_ORIGIN>/runtime/mcp",
+  "hosted MCP OAuth native Codex add command",
+);
+assertIncludes(
+  authSetup,
+  "Existing harnesses that already have `polymcp` configured may keep using it as the same Polynet MCP server",
+  "hosted MCP OAuth legacy polymcp alias compatibility",
+);
+assertIncludes(
+  authSetup,
+  'mcp_oauth_credentials_store = "keyring"',
+  "hosted MCP OAuth durable credential store",
+);
+assertIncludes(
+  authSetup,
+  "Recommended Codex credential persistence should be configured before OAuth",
+  "hosted MCP OAuth durable credential store should precede OAuth",
+);
+assertIncludes(
+  authSetup,
+  "Run `add` first",
+  "hosted MCP OAuth add command should be primary",
+);
+assertIncludes(
+  authSetup,
+  "Only if Codex does not open OAuth during `add`, run the login fallback",
+  "hosted MCP OAuth login should be fallback only",
+);
+assertIncludes(
+  authSetup,
+  "A native Codex harness and an `mcp-remote` adapter can use different client registrations and credential stores.",
+  "native Codex versus mcp-remote credential-store boundary",
+);
 
 assertIncludes(sharedMcp, 'POLYNET_MCP_PROTOCOL_VERSION = "2025-11-25"', "current MCP protocol constant");
 assertIncludes(
@@ -124,10 +243,19 @@ assertIncludes(contract, "## External Smoke Harness", "external smoke contract s
 assertIncludes(contract, "POLYNET_MCP_URL", "external smoke endpoint env");
 assertIncludes(contract, "POLYNET_MCP_BEARER_TOKEN", "external smoke bearer token env");
 assertIncludes(contract, "POLYNET_MCP_RECORD_OUTCOME=1", "external smoke outcome opt-in");
+assertIncludes(contract, "POLYNET_MCP_RESOURCE_QUERY", "external smoke resource query env");
+assertIncludes(contract, "POLYNET_MCP_REQUIRE_RESOURCES=1", "external smoke strict resource env");
+assertIncludes(contract, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1", "external smoke strict builder resource env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_RELATION", "external smoke expected relation env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smoke expected authority lens env");
 assertIncludes(contract, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
-assertIncludes(contract, "list/open/context/authority/search", "authenticated smoke authority contract");
+assertIncludes(contract, "resource map/list/search/read", "authenticated smoke resource contract");
+assertIncludes(contract, "builder resource map/list/read", "authenticated smoke builder resource contract");
+assertIncludes(
+  contract,
+  "Authenticated smoke proves token -> tools/list -> list/open/context/authority/product docs/search",
+  "resource smoke acceptance proof",
+);
 assertIncludes(contract, "Acceptance smoke", "external acceptance smoke contract");
 
 assertIncludes(externalSmoke, "--mode=metadata", "external metadata smoke mode");
@@ -139,13 +267,20 @@ assertIncludes(externalSmoke, "POLYNET_MCP_COMMUNITY_SLUG", "external smoke work
 assertIncludes(externalSmoke, "POLYNET_MCP_MEMORY_QUERY", "external smoke memory query env");
 assertIncludes(externalSmoke, "POLYNET_MCP_MEMORY_NODE_ID", "external smoke memory node override env");
 assertIncludes(externalSmoke, "POLYNET_MCP_RETRIEVAL_LOG_ID", "external smoke retrieval log override env");
+assertIncludes(externalSmoke, "POLYNET_MCP_RESOURCE_QUERY", "external smoke resource query env");
 assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_RELATION", "external smoke expected relation env");
 assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_AUTHORITY_LENS", "external smoke expected authority lens env");
 assertIncludes(externalSmoke, "POLYNET_MCP_EXPECT_TOOLSETS", "external smoke expected toolsets env");
 assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_MEMORY", "external smoke strict memory env");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_RESOURCES", "external smoke strict resource env");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES", "external smoke strict builder resource env");
 assertIncludes(externalSmoke, "POLYNET_MCP_RECORD_OUTCOME", "external smoke outcome opt-in env");
 assertIncludes(externalSmoke, "POLYNET_MCP_TIMEOUT_MS", "external smoke timeout env");
 assertIncludes(externalSmoke, "AbortController", "external smoke timeout controller");
+assertIncludes(externalSmoke, "PROVIDER_TOOLS", "authenticated smoke provider tool inventory");
+assertIncludes(externalSmoke, "tools_list", "authenticated smoke reports tool discovery");
+assertIncludes(externalSmoke, "advertised_tool_count", "authenticated smoke reports advertised tool count");
+assertIncludes(externalSmoke, "tools/list should advertise", "authenticated smoke verifies provider tools are advertised");
 assertIncludes(externalSmoke, "function assertWorkspaceAuthority", "authenticated smoke authority assertion helper");
 assertIncludes(externalSmoke, "function assertMatchingAuthority", "authenticated smoke authority stability helper");
 assertIncludes(externalSmoke, "MCP_ACCESS_RELATIONS", "authenticated smoke canonical relation values");
@@ -155,6 +290,24 @@ assertIncludes(externalSmoke, '"workspace_context"', "authenticated smoke requir
 assertIncludes(externalSmoke, "authority_relation", "authenticated smoke reports authority relation");
 assertIncludes(externalSmoke, "authority_lens", "authenticated smoke reports authority lens");
 assertIncludes(externalSmoke, "available_toolsets", "authenticated smoke reports available toolsets");
+assertIncludes(externalSmoke, "function runProductDocsSmoke", "authenticated smoke product docs helper");
+assertIncludes(externalSmoke, "product_docs_search", "authenticated smoke reports product docs search");
+assertIncludes(externalSmoke, "product_doc_read", "authenticated smoke reports product doc read");
+assertIncludes(externalSmoke, "function runResourceSmoke", "authenticated smoke resource helper");
+assertIncludes(externalSmoke, "member_resources", "authenticated smoke gates resource calls on member_resources");
+assertIncludes(externalSmoke, "function runBuilderResourceSmoke", "authenticated smoke builder resource helper");
+assertIncludes(externalSmoke, "builder_resources", "authenticated smoke gates builder resource calls on builder_resources");
+assertIncludes(externalSmoke, "resource_map", "authenticated smoke reports resource map status");
+assertIncludes(externalSmoke, "resource_list", "authenticated smoke reports resource list status");
+assertIncludes(externalSmoke, "resource_search", "authenticated smoke reports resource search status");
+assertIncludes(externalSmoke, "resource_read", "authenticated smoke reports resource read status");
+assertIncludes(externalSmoke, "resource_found", "authenticated smoke reports resource discovery");
+assertIncludes(externalSmoke, "builder_resource_map", "authenticated smoke reports builder resource map status");
+assertIncludes(externalSmoke, "builder_resource_list", "authenticated smoke reports builder resource list status");
+assertIncludes(externalSmoke, "builder_resource_read", "authenticated smoke reports builder resource read status");
+assertIncludes(externalSmoke, "builder_resource_scope", "authenticated smoke reports builder resource scope");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_RESOURCES requires", "strict resource smoke failure");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_BUILDER_RESOURCES requires", "strict builder resource smoke failure");
 assertIncludes(
   externalSmoke,
   'requireMemoryRead: mode === "acceptance" || readBoolEnv("POLYNET_MCP_REQUIRE_MEMORY")',
@@ -162,8 +315,55 @@ assertIncludes(
 );
 assertIncludes(
   externalSmoke,
+  'requireResources: readBoolEnv("POLYNET_MCP_REQUIRE_RESOURCES")',
+  "authenticated smoke strict resource read",
+);
+assertIncludes(
+  externalSmoke,
+  'requireBuilderResources: readBoolEnv("POLYNET_MCP_REQUIRE_BUILDER_RESOURCES")',
+  "authenticated smoke strict builder resource map",
+);
+assertIncludes(
+  externalSmoke,
   'mcpUrl: args.mcpUrl,\n      token,\n      name: "polynet_workspace_memory_read"',
   "acceptance memory read uses selected MCP URL",
+);
+for (const productDocsToolName of [
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
+]) {
+  assertIncludes(
+    externalSmoke,
+    `name: "${productDocsToolName}"`,
+    `${productDocsToolName} authenticated product docs smoke call`,
+  );
+}
+for (const resourceToolName of [
+  "polynet_workspace_resources_map",
+  "polynet_workspace_resources_list",
+  "polynet_workspace_resources_search",
+  "polynet_workspace_resource_read",
+]) {
+  assertIncludes(
+    externalSmoke,
+    `name: "${resourceToolName}"`,
+    `${resourceToolName} authenticated resource smoke call`,
+  );
+}
+assertIncludes(
+  externalSmoke,
+  'name: "polynet_workspace_builder_resources_map"',
+  "polynet_workspace_builder_resources_map authenticated builder resource smoke call",
+);
+assertIncludes(
+  externalSmoke,
+  'name: "polynet_workspace_builder_resources_list"',
+  "polynet_workspace_builder_resources_list authenticated builder resource smoke call",
+);
+assertIncludes(
+  externalSmoke,
+  'name: "polynet_workspace_builder_resource_read"',
+  "polynet_workspace_builder_resource_read authenticated builder resource smoke call",
 );
 assertIncludes(externalSmoke, "skipped_basic_mode", "authenticated smoke should not read memory by default");
 assertIncludes(
@@ -178,17 +378,26 @@ assertIncludes(releasePreflight, "ARX_MCP_AUTH_JWT_AUDIENCE", "release preflight
 assertIncludes(releasePreflight, "not_released_yet", "release preflight classifies unreleased public web origin");
 assertIncludes(releasePreflight, "web_proxy_ready_but_convex_stale", "release preflight classifies stale Convex route");
 assertIncludes(releasePreflight, "ready_for_smoke", "release preflight classifies live smoke readiness");
+assertIncludes(releasePreflight, "oauth_challenge_ready", "release preflight classifies OAuth-protected live readiness");
+assertIncludes(releasePreflight, "function hasOAuthResourceChallenge", "release preflight validates OAuth challenge shape");
+assertIncludes(releasePreflight, "resource_metadata=", "release preflight requires protected resource metadata challenge");
 assertIncludes(releasePreflight, "--require-live-ready", "release preflight has strict live-ready mode");
 for (const toolName of [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
+  "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   assertIncludes(externalSmoke, toolName, `${toolName} external smoke`);
 }
@@ -259,7 +468,7 @@ const connectionAuthBlock = httpMcp.slice(connectionAuthIndex, initializeIndex);
 assertIncludes(connectionAuthBlock, "mcpUnauthorizedResponse", "authenticated MCP connection challenge");
 assertIncludes(
   connectionAuthBlock,
-  "Authorization required to connect to PolyNet MCP.",
+  "Authorization required to connect to Polynet MCP.",
   "authenticated MCP connection challenge message",
 );
 
@@ -388,9 +597,13 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
+  "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   const block = toolDispatchBlock(httpMcp, toolName);
   assertIncludes(block, "resolveWorkspaceContext", `${toolName} per-call workspace authorization`);

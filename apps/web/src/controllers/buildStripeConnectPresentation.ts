@@ -38,7 +38,7 @@ export function buildStripeConnectPresentation(args: {
 
   const statusMessage = (() => {
     if (isReady) {
-      return `PolyNet owns pricing, access, and community revenue reporting. Stripe Connect Express handles regulated payouts and verification. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`;
+      return `Polynet owns pricing, access, and community revenue reporting. Stripe Connect Express handles regulated payouts and verification. Polynet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`;
     }
     if (status === "restricted") {
       return args.surface === "community"

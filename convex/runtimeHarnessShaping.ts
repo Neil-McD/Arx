@@ -22,6 +22,11 @@ import {
 } from "../shared/toolRegistry.ts";
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
 import { decodeStoredMcpToolInputSchema } from "./mcpSnapshotCodec.ts";
+import {
+  normalizeRuntimeSkillActivationReason,
+  normalizeRuntimeSkillActivationRoute,
+  type NormalizedRuntimeSelectedSkillActivationEvidence,
+} from "../shared/runtimeSkillActivation.ts";
 
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
@@ -41,6 +46,9 @@ export type RuntimeMountedUserPlatformAppTool = {
   risk_level: "read" | "write" | "sensitive";
 };
 
+export type RuntimeSelectedSkillActivationEvidence =
+  NormalizedRuntimeSelectedSkillActivationEvidence;
+
 export type RuntimeCommunitySkillInventory = {
   community_skill_attachment_id: string;
   skill_package_id: string;
@@ -53,7 +61,7 @@ export type RuntimeCommunitySkillInventory = {
 export type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
   skill_revision_id: string | null;
   instructions_md: string;
-};
+} & RuntimeSelectedSkillActivationEvidence;
 
 export type RuntimePlatformSkillInventory = {
   platform_skill_id: string;
@@ -66,7 +74,7 @@ export type RuntimePlatformSkillInventory = {
 
 export type RuntimeSelectedPlatformSkill = RuntimePlatformSkillInventory & {
   instructions_md: string;
-};
+} & RuntimeSelectedSkillActivationEvidence;
 
 export type RuntimeUserPlatformSkillInventory = {
   user_platform_skill_install_id: string;
@@ -80,7 +88,7 @@ export type RuntimeUserPlatformSkillInventory = {
 export type RuntimeSelectedUserPlatformSkill = RuntimeUserPlatformSkillInventory & {
   skill_revision_id: string | null;
   instructions_md: string;
-};
+} & RuntimeSelectedSkillActivationEvidence;
 
 export type RuntimeSkillResolution = {
   requested_mention_tokens: string[];
@@ -273,6 +281,10 @@ export function normalizeRuntimeSelectedPlatformSkills(
           ? record.requires_capability.trim()
           : null,
       instructions_md: instructionsMd,
+      activation_route: normalizeRuntimeSkillActivationRoute(record.activation_route),
+      activation_reason: normalizeRuntimeSkillActivationReason(
+        record.activation_reason,
+      ),
     });
   }
   return skills;
@@ -317,6 +329,10 @@ export function normalizeRuntimeSelectedCommunitySkills(
           ? record.description.trim()
           : null,
       instructions_md: instructionsMd,
+      activation_route: normalizeRuntimeSkillActivationRoute(record.activation_route),
+      activation_reason: normalizeRuntimeSkillActivationReason(
+        record.activation_reason,
+      ),
     });
   }
   return skills;
@@ -396,6 +412,10 @@ export function normalizeRuntimeSelectedUserPlatformSkills(
           ? record.description.trim()
           : null,
       instructions_md: instructionsMd,
+      activation_route: normalizeRuntimeSkillActivationRoute(record.activation_route),
+      activation_reason: normalizeRuntimeSkillActivationReason(
+        record.activation_reason,
+      ),
     });
   }
   return skills;

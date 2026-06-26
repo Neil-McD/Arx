@@ -2,7 +2,7 @@
 
 This branch pivots away from the Codex-in-workspace staging path and starts from current local `main`.
 
-The first Blaxel slice is deliberately not a product integration. It is a provider proof for the workspace-computer model PolyNet actually needs.
+The first Blaxel slice is deliberately not a product integration. It is a provider proof for the workspace-computer model Polynet actually needs.
 
 ## Target Model
 
@@ -17,7 +17,7 @@ For Blaxel:
 - Standby should preserve running process state, writable filesystem state, and volume-mounted files.
 - Cold restore should recreate a sandbox from the durable volume after the warm sandbox is deleted.
 
-PolyNet maps product intent to provider lifecycle:
+Polynet maps product intent to provider lifecycle:
 
 - File inspection: wake on demand, idle delete after 5 minutes, max age 1 hour.
 - Interactive terminals/previews/tools: idle delete after 30 minutes, max age 1 hour.
@@ -32,7 +32,7 @@ implicitly.
 When a project sandbox already exists, stronger lifecycle intent wins. A
 file-inspection sandbox can be reused for later file inspection. Agent work
 must upgrade a weaker sandbox in place before running. If the provider rejects
-the lifecycle update, PolyNet falls back to deleting/recreating from the same
+the lifecycle update, Polynet falls back to deleting/recreating from the same
 volume.
 
 ## Probe

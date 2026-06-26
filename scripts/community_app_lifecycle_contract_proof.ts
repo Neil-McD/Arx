@@ -309,7 +309,7 @@ function main() {
   );
   assertIncludes(
     runtimeAgentLoop,
-    "createPolyNetExecutionSession({",
+    "createPolynetExecutionSession({",
     "runtime personal mounted-tool execution session composition",
   );
   assertIncludes(

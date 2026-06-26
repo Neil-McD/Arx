@@ -6,7 +6,7 @@ import {
   type PolynetLayoutPosition,
 } from "../../../../shared/communityPolynetGraphLayout";
 
-// Interactive viewport for the PolyNet memory graph: pan, zoom-about-cursor, and
+// Interactive viewport for the Polynet memory graph: pan, zoom-about-cursor, and
 // per-node drag. World coordinates come from the deterministic layout (root at
 // origin). One SVG user unit equals one CSS pixel, so pointer math stays 1:1.
 //

@@ -10,6 +10,7 @@
 
 import type * as account from "../account.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
+import type * as agentLifecycleActivations from "../agentLifecycleActivations.js";
 import type * as anonymousUserCleanup from "../anonymousUserCleanup.js";
 import type * as appConnections from "../appConnections.js";
 import type * as appCore from "../appCore.js";
@@ -197,6 +198,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   account: typeof account;
   accountSetupCore: typeof accountSetupCore;
+  agentLifecycleActivations: typeof agentLifecycleActivations;
   anonymousUserCleanup: typeof anonymousUserCleanup;
   appConnections: typeof appConnections;
   appCore: typeof appCore;

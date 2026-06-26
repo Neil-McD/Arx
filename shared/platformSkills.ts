@@ -8,7 +8,7 @@ export type PlatformSkillSummary = SkillPackageSummary & {
   locked: true;
   canDisable: false;
   canDetach: false;
-  requiresCapability: PlatformSkillCapability;
+  requiresCapability: PlatformSkillCapability | null;
 };
 
 export const PLATFORM_RESOURCES_ARCHITECT_SKILL: PlatformSkillSummary = {
@@ -25,8 +25,26 @@ export const PLATFORM_RESOURCES_ARCHITECT_SKILL: PlatformSkillSummary = {
   requiresCapability: "community_resources_manage",
 };
 
+export const PLATFORM_ONBOARDING_GUIDE_SKILL: PlatformSkillSummary = {
+  id: "platform:onboarding-guide",
+  catalogSkillId: "platform-onboarding-guide",
+  name: "Onboarding Guide",
+  mentionToken: "onboarding-guide",
+  description:
+    "Introduce new users to Polynet and guide them toward their first useful action.",
+  scope: "platform",
+  locked: true,
+  canDisable: false,
+  canDetach: false,
+  requiresCapability: null,
+};
+
 export const COMMUNITY_MANAGER_PLATFORM_SKILLS: PlatformSkillSummary[] = [
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
+];
+
+export const GLOBAL_PLATFORM_SKILLS: PlatformSkillSummary[] = [
+  PLATFORM_ONBOARDING_GUIDE_SKILL,
 ];
 
 export const PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES = [

@@ -218,13 +218,13 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
             Builder Partner Program
           </div>
           <div className="settings-section-desc">
-            Platform-level partner program for builders bringing new communities and paid tool usage to PolyNet.
+            Platform-level partner program for builders bringing new communities and paid tool usage to Polynet.
           </div>
 
           <div className="builder-partner-hero">
             <div className="builder-partner-hero-copy">
               <span className="builder-partner-kicker">Platform partner program</span>
-              <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to PolyNet and share in the value they create."}</h2>
+              <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to Polynet and share in the value they create."}</h2>
               <p>
                 Builder Partners earn from referred creators' community revenue and settled paid tool usage.
                 Partner links are generated automatically when the requirements are met.
@@ -264,7 +264,7 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
               <strong>
                 Earn up to {formatBps(toolUsageRevenueShareBps)} of referred creators' settled tool usage.
               </strong>
-              <small>Tool commissions preserve PolyNet's retained margin target before payout.</small>
+              <small>Tool commissions preserve Polynet's retained margin target before payout.</small>
             </div>
             <div className="builder-partner-metric" role="listitem">
               <ShieldCheck />

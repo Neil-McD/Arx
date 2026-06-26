@@ -855,7 +855,7 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   setupModal + baseCss,
-  /Build in PolyNet[\s\S]*onOpenStep\("workflows"\)|community-launch-workflow-option|community-launch-harness-selector|Back to workflow path options/,
+  /Build in Polynet[\s\S]*onOpenStep\("workflows"\)|community-launch-workflow-option|community-launch-harness-selector|Back to workflow path options/,
   "community launch onboarding must not retain workflow import UI hooks or styles",
 );
 assert.match(

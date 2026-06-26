@@ -100,7 +100,7 @@ import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
 import {
-  createPolyNetExecutionSession,
+  createPolynetExecutionSession,
   type ActiveDaytonaRuntimeSubstrateForTools,
 } from "./runtimeExecutionSession";
 import {
@@ -134,6 +134,7 @@ import {
   buildPlatformSkillToolNamesForSelection,
   type PlatformSkillSelectionSummary,
 } from "../shared/platformSkills";
+import type { RuntimeSkillLifecycleTrigger } from "../shared/runtimeSkillLifecycle";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -1343,6 +1344,7 @@ async function executeRetrievalAgentLoop(
     harnessName: "chat_tools";
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
+    skillLifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     projectId?: string | null;
@@ -1406,6 +1408,7 @@ async function executeRetrievalAgentLoop(
           role: String(message.role ?? ""),
           content: String(message.content ?? ""),
         })),
+        lifecycleTrigger: params.skillLifecycleTrigger ?? undefined,
       },
     ),
   );
@@ -1425,7 +1428,7 @@ async function executeRetrievalAgentLoop(
     resolvedHarness.activeCommunityModule?.attachedSkills ?? [];
   const selectedCommunitySkills =
     resolvedHarness.activeCommunityModule?.selectedSkills ?? [];
-  const executionSession = createPolyNetExecutionSession({
+  const executionSession = createPolynetExecutionSession({
     ctx: params.ctx,
     userId: params.userId,
     authSubject: params.authSubject,
@@ -2616,6 +2619,7 @@ async function executeChatToolsAgentLoop(
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
+    skillLifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;

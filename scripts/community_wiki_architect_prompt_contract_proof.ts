@@ -115,7 +115,7 @@ assert.match(
 );
 assert.match(
   promptSource,
-  /PolyNet currently stores one primary source per draft page/,
+  /Polynet currently stores one primary source per draft page/,
   "architect prompt should match the current singular sourceResourceId data model",
 );
 assert.match(

@@ -60,7 +60,7 @@ assert.match(
 assert.doesNotMatch(
   architect,
   /COMMUNITY_WIKI_ARCHITECT_DEFAULT_MODEL\s*=\s*"gpt-5\.5"/,
-  "architect should not use a raw hardcoded PolyNet catalog model id as direct OpenAI fallback",
+  "architect should not use a raw hardcoded Polynet catalog model id as direct OpenAI fallback",
 );
 assert.match(
   architect,

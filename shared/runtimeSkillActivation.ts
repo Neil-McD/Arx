@@ -5,6 +5,27 @@ export type RuntimeSkillInferenceMessage = {
   content: string;
 };
 
+export const RUNTIME_SKILL_ACTIVATION_ROUTES = [
+  "explicit_mention",
+  "ui_selected",
+  "platform_required",
+  "lifecycle_trigger",
+  "task_match",
+] as const;
+
+export type RuntimeSkillActivationRoute =
+  (typeof RUNTIME_SKILL_ACTIVATION_ROUTES)[number];
+
+export type RuntimeSelectedSkillActivationEvidence = {
+  activation_route: RuntimeSkillActivationRoute;
+  activation_reason: string;
+};
+
+export type NormalizedRuntimeSelectedSkillActivationEvidence = {
+  activation_route: RuntimeSkillActivationRoute | null;
+  activation_reason: string | null;
+};
+
 export type ExplicitlyMentionedSkillCandidate<T> = {
   mentionToken: string;
   value: T;
@@ -21,6 +42,23 @@ export type ScopedExplicitlyMentionedSkillCandidate<
 
 function normalizeMentionToken(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+export function normalizeRuntimeSkillActivationRoute(
+  value: unknown,
+): RuntimeSkillActivationRoute | null {
+  return typeof value === "string" &&
+    (RUNTIME_SKILL_ACTIVATION_ROUTES as readonly string[]).includes(value)
+    ? (value as RuntimeSkillActivationRoute)
+    : null;
+}
+
+export function normalizeRuntimeSkillActivationReason(
+  value: unknown,
+): string | null {
+  return typeof value === "string" && value.trim()
+    ? value.trim().slice(0, 500)
+    : null;
 }
 
 export function extractExplicitSkillMentions(

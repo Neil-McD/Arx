@@ -105,4 +105,4 @@ assert.equal(hugeFit.scale, 0.4, "huge content should floor at minScale");
 const tinyFit = computeFitTransform({ minX: -1, minY: -1, maxX: 1, maxY: 1 }, VP, { padding: 72, minScale: 0.4, maxScale: 3 });
 assert.equal(tinyFit.scale, 3, "tiny content should cap at maxScale");
 
-console.log("Community PolyNet graph layout proof passed");
+console.log("Community Polynet graph layout proof passed");

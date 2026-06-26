@@ -68,7 +68,7 @@ export type CommunityWikiArchitectProposal = {
   needs_from_builder: string[];
 };
 
-export const COMMUNITY_WIKI_ARCHITECT_PROMPT = `You are the Wiki Architect for a PolyNet community knowledge base.
+export const COMMUNITY_WIKI_ARCHITECT_PROMPT = `You are the Wiki Architect for a Polynet community knowledge base.
 
 Your job is to design a clean, navigable wiki architecture for ONE community,
 based on the context the builder has provided. You do NOT write page bodies.
@@ -169,7 +169,7 @@ source itself gives enough signal.
 DYNAMIC CATEGORY SHAPE
 ================================================================
 
-PolyNet stores top-level wiki categories in a backend field named "module".
+Polynet stores top-level wiki categories in a backend field named "module".
 Treat every "module" field in the JSON as a member-facing wiki category.
 
 Do not force a default category set. Derive the top-level categories from the
@@ -207,7 +207,7 @@ PAGE DESIGN RULES
     status: "draft"
 
 - Any page without source_resource_id must be filed as a gap, not a draft.
-- PolyNet currently stores one primary source per draft page. If several sources are relevant,
+- Polynet currently stores one primary source per draft page. If several sources are relevant,
   choose the strongest primary source for source_resource_id and leave weaker secondary sources
   unassigned unless they justify their own page.
 - source_units are bounded section/page signals inside one visible source. They help you split

@@ -84,7 +84,7 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
           ? "Community monetization is not available for this account yet."
           : message.includes("responsibilities of managing losses for connected accounts") ||
               message.includes("ongoing compliance")
-            ? "Stripe Connect setup for PolyNet is still incomplete. Finish the Connect platform-profile acknowledgements in Stripe, then retry."
+            ? "Stripe Connect setup for Polynet is still incomplete. Finish the Connect platform-profile acknowledgements in Stripe, then retry."
             : message;
       args.setAccountCommerceError(friendly);
       emitWorkspaceEvent({

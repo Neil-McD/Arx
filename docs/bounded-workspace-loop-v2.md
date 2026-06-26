@@ -177,7 +177,7 @@ Blaxel’s role is:
 
 Blaxel is not the loop owner.
 Workspace tools call into Blaxel only when the model calls a workspace-scoped
-tool and PolyNet policy authorizes execution.
+tool and Polynet policy authorizes execution.
 
 ## 11. Relationship To Codex
 

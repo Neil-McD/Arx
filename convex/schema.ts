@@ -892,6 +892,7 @@ export default defineSchema({
         instagram: v.optional(v.string()),
       }),
     ),
+    // Deprecated compatibility field: current onboarding no longer writes direction.
     onboardingDirection: v.optional(
       v.union(
         v.literal("build_community"),
@@ -903,6 +904,42 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  agentLifecycleActivations: defineTable({
+    userId: v.id("users"),
+    trigger: v.literal("onboarding_completed"),
+    scopeType: v.union(
+      v.literal("user"),
+      v.literal("community"),
+      v.literal("project"),
+    ),
+    scopeKey: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    activationRoute: v.literal("lifecycle_trigger"),
+    activationReason: v.string(),
+    source: v.string(),
+    threadId: v.optional(v.id("threads")),
+    runId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    processingAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_trigger_scope", [
+      "userId",
+      "trigger",
+      "scopeType",
+      "scopeKey",
+    ])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_user_status_updatedAt", ["userId", "status", "updatedAt"]),
 
   emailPreferences: defineTable({
     userId: v.id("users"),

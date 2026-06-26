@@ -42,12 +42,12 @@ const integrationsSettings = read(
 
 assertIncludes(
   contract,
-  "PolyNet Workspace MCP is a provider surface.",
+  "Polynet Workspace MCP is a provider surface.",
   "workspace MCP contract first principle",
 );
 assertIncludes(
   contract,
-  "It is not the existing PolyNet MCP app consumer path.",
+  "It is not the existing Polynet MCP app consumer path.",
   "workspace MCP provider/consumer boundary",
 );
 assertIncludes(
@@ -82,23 +82,108 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "## Product Docs Boundary",
+  "workspace MCP product docs boundary",
+);
+assertIncludes(
+  contract,
   "require the `member_resources` authority toolset",
   "workspace MCP member resource authority gate",
 );
 assertIncludes(
   contract,
-  "use only the member-visible directory internals",
+  "use only bounded resource-tool internals",
   "workspace MCP member resource backend boundary",
 );
 assertIncludes(
   contract,
-  "must not expose resource map, batch read",
+  "They must not expose resource batch read",
   "workspace MCP resource non-goals",
 );
 assertIncludes(
   contract,
   "provider implementation does not import or mutate the internal MCP consumer/runtime path.",
   "workspace MCP non-interference acceptance",
+);
+assertIncludes(
+  contract,
+  "The local OAuth callback completion page is owned by the external MCP client or adapter, not by Polynet.",
+  "workspace MCP contract should assign callback UI ownership to the harness",
+);
+assertIncludes(
+  contract,
+  "Authentication complete. You may close this window.",
+  "workspace MCP contract should describe the plain local callback page",
+);
+assertIncludes(
+  contract,
+  "start a fresh chat or reconnect MCP",
+  "workspace MCP contract should document reconnect guidance after login",
+);
+assertIncludes(
+  contract,
+  "The copied setup should be a self-contained setup packet for the receiving agent.",
+  "workspace MCP contract should define the setup packet model",
+);
+assertIncludes(
+  contract,
+  "The packet must keep the receiving agent focused on the Polynet connection.",
+  "workspace MCP contract should constrain receiving-agent setup behavior",
+);
+assertIncludes(
+  contract,
+  "It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
+  "workspace MCP contract should keep setup from detouring into unrelated CLI repair",
+);
+assertIncludes(
+  contract,
+  "New harness setup should use `polynet` as the canonical local server alias.",
+  "workspace MCP contract should define canonical polynet alias",
+);
+assertIncludes(
+  contract,
+  "Existing harnesses that already have `polymcp` configured should treat it as the same Polynet MCP server.",
+  "workspace MCP contract should preserve legacy polymcp alias",
+);
+assertIncludes(
+  contract,
+  "must not tell users to install both aliases unless the user explicitly wants to migrate",
+  "workspace MCP contract should prevent duplicate alias installs",
+);
+assertIncludes(
+  contract,
+  "[Sign in to Polynet](AUTHORIZATION_URL)",
+  "workspace MCP contract should define clean OAuth link presentation",
+);
+assertIncludes(
+  contract,
+  "It should not paste the raw full OAuth URL unless no cleaner link path is available.",
+  "workspace MCP contract should discourage raw OAuth URL dumps",
+);
+assertIncludes(
+  contract,
+  "only ask the user to paste the localhost callback URL back if the browser callback fails",
+  "workspace MCP contract should reserve callback URL paste for failure recovery",
+);
+assertIncludes(
+  contract,
+  "Claude Code setup should use native remote HTTP MCP",
+  "workspace MCP contract should include Claude Code setup",
+);
+assertIncludes(
+  contract,
+  "claude mcp add --transport http polynet https://www.polynet.ai/runtime/mcp",
+  "workspace MCP contract should include the Claude Code remote HTTP command",
+);
+assertIncludes(
+  contract,
+  "codex mcp add polynet --url https://www.polynet.ai/runtime/mcp",
+  "workspace MCP contract should include the canonical Codex add command",
+);
+assertIncludes(
+  contract,
+  "codex mcp login polynet --scopes openid,profile,email,offline_access",
+  "workspace MCP contract should include the canonical Codex login fallback",
 );
 
 assertIncludes(
@@ -109,28 +194,73 @@ assertIncludes(
 
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_CODEX_SETUP_COMMANDS",
-  "PolyMCP Codex setup commands",
+  "POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND",
+  "Polynet Claude Code add command constant",
 );
 assertIncludes(
   integrationsSettings,
-  "9 workspace tools",
+  "POLYNET_MCP_CODEX_ADD_COMMAND",
+  "Polynet Codex primary add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND",
+  "Polynet Codex login fallback command",
+);
+assertIncludes(
+  integrationsSettings,
+  "15 workspace tools",
   "PolyMCP integration tool count",
 );
 assertIncludes(
   integrationsSettings,
-  "codex mcp add polymcp --url",
-  "PolyMCP Codex add command",
+  "claude mcp add --transport http polynet",
+  "Polynet Claude Code remote HTTP add command",
 );
 assertIncludes(
   integrationsSettings,
-  "codex mcp login polymcp",
-  "PolyMCP Codex login command",
+  "/mcp",
+  "PolyMCP Claude Code OAuth flow command",
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_GENERIC_HTTP_CONFIG",
-  "PolyMCP generic HTTP config payload",
+  "codex mcp add polynet --url",
+  "Polynet Codex add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "codex mcp login polynet",
+  "Polynet Codex login fallback command",
+);
+assertIncludes(
+  integrationsSettings,
+  "--scopes openid,profile,email,offline_access",
+  "PolyMCP Codex login requests refresh-capable scopes",
+);
+assertIncludes(
+  integrationsSettings,
+  'mcp_oauth_credentials_store = "keyring"',
+  "PolyMCP Codex durable credential store recommendation",
+);
+assertIncludes(
+  integrationsSettings,
+  "before OAuth",
+  "PolyMCP setup copy should put durable credential storage before OAuth",
+);
+assertIncludes(
+  integrationsSettings,
+  "Add Polynet:",
+  "Polynet setup copy should make add the primary Codex setup command",
+);
+assertIncludes(
+  integrationsSettings,
+  "Only if Codex does not open OAuth during add, run:",
+  "PolyMCP setup copy should make Codex login a fallback",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_GENERIC_HTTP_CONFIG",
+  "Polynet generic HTTP config payload",
 );
 assertIncludes(
   integrationsSettings,
@@ -139,58 +269,307 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
+  "polynet: {",
+  "Polynet generic JSON config should use the canonical polynet key",
+);
+assertIncludes(
+  integrationsSettings,
   'type: "http"',
   "PolyMCP generic HTTP config type",
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_SETUP_INSTRUCTIONS",
-  "PolyMCP copied setup instructions",
+  "POLYNET_MCP_SETUP_BUNDLE",
+  "Polynet canonical setup bundle",
 );
 assertIncludes(
   integrationsSettings,
-  "POLYMCP_SETUP_BUNDLE",
-  "PolyMCP canonical setup bundle",
+  "# Polynet Setup Packet",
+  "Polynet setup packet heading",
 );
 assertIncludes(
   integrationsSettings,
-  "# PolyMCP Setup",
-  "PolyMCP setup bundle heading",
+  "You are helping the user connect this AI harness to Polynet.",
+  "PolyMCP setup packet should address the receiving agent",
+);
+assertIncludes(
+  integrationsSettings,
+  "Connect Polynet so this harness can access the user's Polynet communities, resources, and workspace memory.",
+  "Polynet setup packet should define the goal",
+);
+assertIncludes(
+  integrationsSettings,
+  "Polynet MCP endpoint:",
+  "Polynet setup packet should include the endpoint label",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Operating Rules",
+  "PolyMCP setup packet should include operating rules",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not ask for or paste access tokens.",
+  "PolyMCP setup packet should forbid token-paste setup",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks.",
+  "PolyMCP setup packet should avoid unrelated CLI repair detours",
+);
+assertIncludes(
+  integrationsSettings,
+  "give the user the exact next command or click path and stop",
+  "PolyMCP setup packet should make blocked auth handoff concise",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Existing `polymcp` Installs",
+  "Polynet setup packet should include legacy polymcp compatibility",
+);
+assertIncludes(
+  integrationsSettings,
+  "New setup should use the server alias `polynet`.",
+  "Polynet setup packet should canonicalize new installs to polynet",
+);
+assertIncludes(
+  integrationsSettings,
+  "treat it as the same Polynet server",
+  "Polynet setup packet should treat polymcp as a legacy alias",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not install both unless the user explicitly wants to migrate the local alias.",
+  "Polynet setup packet should prevent duplicate alias installs",
+);
+assertIncludes(
+  integrationsSettings,
+  "## OAuth Link Handling",
+  "PolyMCP setup packet should include OAuth link handling",
+);
+assertIncludes(
+  integrationsSettings,
+  "do not paste the raw full URL unless there is no other option",
+  "PolyMCP setup packet should discourage raw OAuth URL dumps",
+);
+assertIncludes(
+  integrationsSettings,
+  "Open the authorization URL automatically if this harness can open browser links.",
+  "PolyMCP setup packet should prefer automatic browser opening",
+);
+assertIncludes(
+  integrationsSettings,
+  "[Sign in to Polynet](AUTHORIZATION_URL)",
+  "PolyMCP setup packet should prefer a clean markdown auth link",
+);
+assertIncludes(
+  integrationsSettings,
+  "Only ask the user to paste the localhost callback URL back if the browser callback fails",
+  "PolyMCP setup packet should reserve callback URL paste for failure recovery",
+);
+assertIncludes(
+  integrationsSettings,
+  "treat it as a one-time OAuth credential",
+  "PolyMCP setup packet should treat callback codes as sensitive",
+);
+assertIncludes(
+  integrationsSettings,
+  "## What To Do",
+  "PolyMCP setup packet should include agent workflow instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  "Identify which harness you are running in.",
+  "PolyMCP setup packet should tell the receiving agent to identify its harness",
+);
+assertIncludes(
+  integrationsSettings,
+  "Add Polynet with the matching setup path below, unless `polynet` or legacy `polymcp` is already configured.",
+  "Polynet setup packet should not duplicate existing MCP registration",
+);
+assertIncludes(
+  integrationsSettings,
+  "If authentication is needed, give the user one clear sign-in action for this harness.",
+  "PolyMCP setup packet should keep auth handoff to one clear action",
+);
+assertIncludes(
+  integrationsSettings,
+  "verify the connection by listing the user's Polynet workspaces",
+  "PolyMCP setup packet should require connection verification",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Claude Code",
+  "PolyMCP setup packet should include Claude Code instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not troubleshoot Claude installation paths unless the user asks.",
+  "PolyMCP setup packet should avoid Claude local-install debugging detours",
+);
+assertIncludes(
+  integrationsSettings,
+  "Run `/mcp`, select `polynet`, then complete Polynet sign-in in the browser.",
+  "Polynet setup packet should explain Claude Code sign-in",
+);
+assertIncludes(
+  integrationsSettings,
+  "show it as [Sign in to Polynet](AUTHORIZATION_URL), not as a raw URL block",
+  "PolyMCP Claude Code instructions should avoid raw authorization URL blocks",
+);
+assertIncludes(
+  integrationsSettings,
+  "If `polynet` or legacy `polymcp` already appears as `Needs authentication`, do not re-add it.",
+  "Polynet setup packet should route configured Claude Code servers directly to auth",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Codex",
+  "PolyMCP setup packet should include Codex instructions",
+);
+assert.ok(
+  integrationsSettings.indexOf("## Claude Code") < integrationsSettings.indexOf("## Codex"),
+  "PolyMCP setup packet should put Claude Code before Codex",
 );
 assertIncludes(
   integrationsSettings,
   "```bash",
-  "PolyMCP setup bundle includes Codex commands",
+  "PolyMCP setup packet includes shell commands",
+);
+assertIncludes(
+  integrationsSettings,
+  "Add Polynet:",
+  "Polynet setup bundle should label the primary add command",
+);
+assertIncludes(
+  integrationsSettings,
+  "Only if Codex does not open OAuth during add, run:",
+  "PolyMCP setup bundle should label the login fallback",
+);
+assertIncludes(
+  integrationsSettings,
+  "If `polynet` or legacy `polymcp` is already configured, do not add it again.",
+  "Polynet setup packet should avoid duplicate Codex registration",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Cursor Or Other JSON-Based Harnesses",
+  "PolyMCP setup packet should include JSON-based harness instructions",
 );
 assertIncludes(
   integrationsSettings,
   "```json",
-  "PolyMCP setup bundle includes a JSON config block",
+  "PolyMCP setup packet includes a JSON config block",
 );
 assertIncludes(
   integrationsSettings,
-  "Your harness starts OAuth",
-  "PolyMCP setup copy should explain harness-owned OAuth",
+  "Use this HTTP MCP config:",
+  "PolyMCP setup packet should support JSON-only harnesses",
 );
 assertIncludes(
   integrationsSettings,
-  "open a new Codex thread",
-  "PolyMCP setup copy should tell users how to activate the MCP server",
+  "## After Sign-In",
+  "PolyMCP setup packet should include after-sign-in instructions",
 );
 assertIncludes(
   integrationsSettings,
-  "Use this if your harness asks for MCP JSON",
-  "PolyMCP setup copy should support JSON-only harnesses",
+  "Authentication complete. You may close this window.",
+  "PolyMCP setup packet should normalize the local callback completion page",
 );
 assertIncludes(
   integrationsSettings,
-  "List my PolyNet workspaces",
-  "PolyMCP setup copy should give a smoke-test prompt",
+  "Close that tab and return to this harness.",
+  "PolyMCP setup packet should explain the callback handoff next action",
+);
+assertIncludes(
+  integrationsSettings,
+  "start a fresh chat or reconnect tools",
+  "PolyMCP setup packet should tell users how to activate the connection",
+);
+assertIncludes(
+  integrationsSettings,
+  "One successful sign-in should persist for that harness profile or device.",
+  "PolyMCP setup packet should set credential persistence expectation",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Verify",
+  "PolyMCP setup packet should include a verification section",
+);
+assertIncludes(
+  integrationsSettings,
+  "Do not repeat OAuth unless the harness still says authentication is required.",
+  "PolyMCP setup packet should avoid unnecessary repeated OAuth",
+);
+assertIncludes(
+  integrationsSettings,
+  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory.",
+  "Polynet setup packet should give a success response",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Usage Guidance",
+  "PolyMCP setup packet should include usage guidance",
+);
+assertIncludes(
+  integrationsSettings,
+  "Before using workspace-specific memory, list or open the relevant Polynet workspace.",
+  "PolyMCP setup packet should require workspace selection before memory use",
+);
+assertIncludes(
+  integrationsSettings,
+  "Treat workspace context IDs as opaque selectors. Do not invent them.",
+  "PolyMCP setup packet should preserve workspace context selector rules",
+);
+assertIncludes(
+  integrationsSettings,
+  "Copy one setup packet",
+  "Polynet integration card should frame the copied text as one packet",
+);
+assertIncludes(
+  integrationsSettings,
+  "Codex, Claude Code",
+  "PolyMCP integration card should name target harnesses",
+);
+assertIncludes(
+  integrationsSettings,
+  "another AI harness",
+  "Polynet user-facing copy should say AI harness instead of MCP harness",
 );
 assertIncludes(
   integrationsSettings,
   "Copy setup",
-  "PolyMCP canonical setup copy action",
+  "Polynet canonical setup copy action",
+);
+assertIncludes(
+  integrationsSettings,
+  "name=\"Polynet\"",
+  "Polynet visible integration logo name",
+);
+assertIncludes(
+  integrationsSettings,
+  "<strong>Polynet</strong>",
+  "Polynet visible integration title",
+);
+assertIncludes(
+  integrationsSettings,
+  "aria-label=\"Copy Polynet setup\"",
+  "Polynet visible setup copy action label",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "PolyMCP",
+  "Polynet setup/UI source after compatibility rename",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "claude mcp add --transport http polymcp",
+  "Polynet setup should not make polymcp the canonical Claude Code alias",
+);
+assertNotIncludes(
+  integrationsSettings,
+  "codex mcp add polymcp",
+  "Polynet setup should not make polymcp the canonical Codex alias",
 );
 assertNotIncludes(
   integrationsSettings,
@@ -222,12 +601,18 @@ for (const toolName of [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
+  "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   assertIncludes(polynetMcp, `| "${toolName}"`, `${toolName} type union`);
   assertIncludes(polynetMcp, `name: "${toolName}"`, `${toolName} tool definition`);
@@ -244,13 +629,39 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
   "polynet_workspace_resources_search",
+  "polynet_workspace_builder_resources_map",
+  "polynet_workspace_builder_resources_list",
+  "polynet_workspace_builder_resource_read",
 ]) {
   const block = toolDefinitionBlock(polynetMcp, toolName);
   assertIncludes(block, "workspace_context_id", `${toolName} schema`);
 }
+
+for (const toolName of [
+  "polynet_product_docs_search",
+  "polynet_product_doc_read",
+]) {
+  const definition = toolDefinitionBlock(polynetMcp, toolName);
+  assertIncludes(definition, "readOnlyHint: true", `${toolName} read-only annotation`);
+  assertNotIncludes(definition, "workspace_context_id", `${toolName} platform docs scope`);
+  const dispatch = toolDispatchBlock(httpMcp, toolName);
+  assertNotIncludes(dispatch, "resolveWorkspaceContext", `${toolName} no workspace selector`);
+  assertNotIncludes(dispatch, "requireWorkspaceAuthorityToolset", `${toolName} no workspace authority gate`);
+}
+assertIncludes(
+  httpMcp,
+  "executeSearchProductDocsTool",
+  "product docs search runtime helper",
+);
+assertIncludes(
+  httpMcp,
+  "executeGetProductDocTool",
+  "product docs read runtime helper",
+);
 
 const openWorkspaceDefinition = toolDefinitionBlock(polynetMcp, "polynet_open_workspace");
 assertIncludes(openWorkspaceDefinition, "workspace: {", "open workspace context output");
@@ -357,6 +768,23 @@ for (const toolName of [
   assertNotIncludes(dispatch, "applyCommunityResourceBuilderChangeset", `${toolName} no apply mutation path`);
 }
 
+const resourceMapDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_resources_map");
+assertIncludes(resourceMapDefinition, "readOnlyHint: true", "resource map read-only annotation");
+assertIncludes(resourceMapDefinition, "Members see live resources", "resource map member-visible description");
+assertIncludes(resourceMapDefinition, "builders may receive builder-visible", "resource map builder authority description");
+
+const resourceMapDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_map");
+assertIncludes(resourceMapDispatch, "resolveWorkspaceContext", "resource map workspace revalidation");
+assertIncludes(resourceMapDispatch, "requireWorkspaceAuthorityToolset", "resource map authority toolset gate");
+assertIncludes(resourceMapDispatch, "\"member_resources\"", "resource map member resource toolset gate");
+assertIncludes(resourceMapDispatch, "mapCommunityResourcesForToolInternal", "resource map internal path");
+assertIncludes(resourceMapDispatch, "perModuleLimit", "resource map per-module limit");
+assertNotIncludes(resourceMapDispatch, "readCommunityResourcesForToolInternal", "resource map no batch read path");
+assertNotIncludes(resourceMapDispatch, "listCommunityResourceBuilderDirectory", "resource map no builder list path");
+assertNotIncludes(resourceMapDispatch, "readCommunityResourceBuilderResource", "resource map no builder read path");
+assertNotIncludes(resourceMapDispatch, "stageCommunityResourceBuilderChangeset", "resource map no staged mutation path");
+assertNotIncludes(resourceMapDispatch, "applyCommunityResourceBuilderChangeset", "resource map no apply mutation path");
+
 const resourceListDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_list");
 assertIncludes(resourceListDispatch, "listCommunityResourceDirectoryInternal", "resource list member directory path");
 
@@ -367,6 +795,50 @@ assertIncludes(resourceReadDispatch, "ref is required", "resource read ref valid
 const resourceSearchDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_search");
 assertIncludes(resourceSearchDispatch, "searchCommunityResourceDirectoryInternal", "resource search member directory path");
 assertIncludes(resourceSearchDispatch, "query is required", "resource search query validation");
+
+const builderResourceMapDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_builder_resources_map");
+assertIncludes(builderResourceMapDefinition, "readOnlyHint: true", "builder resource map read-only annotation");
+assertIncludes(builderResourceMapDefinition, "builder-visible", "builder resource map description");
+assertIncludes(builderResourceMapDefinition, "draft/source", "builder resource map draft/source description");
+assertIncludes(builderResourceMapDefinition, "resource health", "builder resource map health description");
+
+const builderResourceMapDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_builder_resources_map");
+assertIncludes(builderResourceMapDispatch, "resolveWorkspaceContext", "builder resource map workspace revalidation");
+assertIncludes(builderResourceMapDispatch, "requireWorkspaceAuthorityToolset", "builder resource map authority toolset gate");
+assertIncludes(builderResourceMapDispatch, "\"builder_resources\"", "builder resource map builder toolset gate");
+assertIncludes(builderResourceMapDispatch, "mapCommunityResourcesForToolInternal", "builder resource map internal path");
+assertIncludes(builderResourceMapDispatch, "perModuleLimit", "builder resource map per-module limit");
+assertNotIncludes(builderResourceMapDispatch, "readCommunityResourcesForToolInternal", "builder resource map no batch read path");
+assertNotIncludes(builderResourceMapDispatch, "listCommunityResourceBuilderDirectory", "builder resource map no builder list path");
+assertNotIncludes(builderResourceMapDispatch, "readCommunityResourceBuilderResource", "builder resource map no builder read path");
+assertNotIncludes(builderResourceMapDispatch, "stageCommunityResourceBuilderChangeset", "builder resource map no staged mutation path");
+assertNotIncludes(builderResourceMapDispatch, "applyCommunityResourceBuilderChangeset", "builder resource map no apply mutation path");
+
+const builderResourceListDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_builder_resources_list");
+assertIncludes(builderResourceListDefinition, "readOnlyHint: true", "builder resource list read-only annotation");
+assertIncludes(builderResourceListDefinition, "builder-visible", "builder resource list description");
+
+const builderResourceListDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_builder_resources_list");
+assertIncludes(builderResourceListDispatch, "resolveWorkspaceContext", "builder resource list workspace revalidation");
+assertIncludes(builderResourceListDispatch, "requireWorkspaceAuthorityToolset", "builder resource list authority toolset gate");
+assertIncludes(builderResourceListDispatch, "\"builder_resources\"", "builder resource list builder toolset gate");
+assertIncludes(builderResourceListDispatch, "listCommunityResourceBuilderDirectory", "builder resource list internal path");
+assertNotIncludes(builderResourceListDispatch, "stageCommunityResourceBuilderChangeset", "builder resource list no staged mutation path");
+assertNotIncludes(builderResourceListDispatch, "applyCommunityResourceBuilderChangeset", "builder resource list no apply mutation path");
+
+const builderResourceReadDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_builder_resource_read");
+assertIncludes(builderResourceReadDefinition, "readOnlyHint: true", "builder resource read read-only annotation");
+assertIncludes(builderResourceReadDefinition, "builder-visible", "builder resource read description");
+assertIncludes(builderResourceReadDefinition, "ref", "builder resource read ref input");
+
+const builderResourceReadDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_builder_resource_read");
+assertIncludes(builderResourceReadDispatch, "resolveWorkspaceContext", "builder resource read workspace revalidation");
+assertIncludes(builderResourceReadDispatch, "requireWorkspaceAuthorityToolset", "builder resource read authority toolset gate");
+assertIncludes(builderResourceReadDispatch, "\"builder_resources\"", "builder resource read builder toolset gate");
+assertIncludes(builderResourceReadDispatch, "readCommunityResourceBuilderResource", "builder resource read internal path");
+assertIncludes(builderResourceReadDispatch, "ref is required", "builder resource read ref validation");
+assertNotIncludes(builderResourceReadDispatch, "stageCommunityResourceBuilderChangeset", "builder resource read no staged mutation path");
+assertNotIncludes(builderResourceReadDispatch, "applyCommunityResourceBuilderChangeset", "builder resource read no apply mutation path");
 
 const rawSearchDispatch = toolDispatchBlock(httpMcp, "polynet_community_search");
 assertIncludes(rawSearchDispatch, "searchCommunityKnowledgeInternal", "raw community search remains separate");
