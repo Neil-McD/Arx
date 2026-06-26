@@ -24,6 +24,7 @@ const communityRecentContext = read("convex/communityRecentContext.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const platformToolSurface = read("shared/polynetPlatformToolSurface.ts");
 const harnessToolPolicy = read("shared/harnessToolPolicy.ts");
+const runtimeCodexPromptProjection = read("shared/runtimeCodexPromptProjection.ts");
 const workerLimits = read("shared/polynetCodexWorkerLimits.ts");
 const runtimeTurnEnvelope = read("shared/runtimeTurnEnvelope.ts");
 const daytonaPolicy = read("shared/daytonaCodexRuntimePolicy.ts");
@@ -191,6 +192,21 @@ assert.match(
   "runtime envelope must carry canonical community authority and allowed tool names",
 );
 assert.match(
+  runtimeCodexPromptProjection,
+  /buildPlatformHarnessRuntimePromptBundle[\s\S]*POLYNET_CODEX_RUNTIME_AUTHORITY[\s\S]*PolyNet's Codex execution engine[\s\S]*PolyNet prompt bundle below is authoritative[\s\S]*Codex defaults and worker service notes only describe execution mechanics/,
+  "Codex worker prompt projection must make PolyNet authority explicit and keep Codex as execution mechanics",
+);
+assert.match(
+  bridge,
+  /export type PolynetCodexWorkerTurnInputs = RuntimeCodexPromptProjection[\s\S]*buildPolynetCodexWorkerTurnInputs[\s\S]*return buildRuntimeCodexPromptProjection\(\{[\s\S]*allowedToolNames: params\.codexVisiblePolynetToolNames[\s\S]*harnessName: "chat_tools"[\s\S]*runtimeTurnContext: params\.runtimeTurnContext/,
+  "bridge must build Codex worker inputs through the PolyNet Codex prompt projection",
+);
+assert.match(
+  handlers,
+  /const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope\(\{[\s\S]*allowedToolNames: codexVisiblePolynetToolNames[\s\S]*loadRuntimeTurnContextPacketForRun\(\{[\s\S]*runtimeTurnEnvelope: codexRuntimeTurnEnvelope[\s\S]*buildPolynetCodexWorkerTurnInputs\(\{[\s\S]*runtimeTurnContext: codexRuntimeTurnContext[\s\S]*codexVisiblePolynetToolNames/,
+  "runtime handler must bind Codex worker prompt inputs to the canonical runtime envelope and context packet",
+);
+assert.match(
   platformToolSurface,
   /requiredCommunityAuthority[\s\S]*toolName: "community_write"[\s\S]*requiredCommunityAuthority: "moderator"[\s\S]*entry\.requiredCommunityResourceLane === "builder"[\s\S]*authority\?\.canManageResources === true/,
   "platform tool surface must gate community_write by moderator authority and builder tools by resource-management authority",
@@ -220,6 +236,17 @@ assert.match(
   /eventType: "codex_harness_tool_policy_resolved"[\s\S]*buildCodexHarnessToolPolicyReceipt\(codexHarnessToolPolicy\)[\s\S]*runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
   "runtime handler must emit Codex harness policy receipts before projecting worker tools",
 );
+for (const [source, label] of [
+  [bridge, "bridge"],
+  [handlers, "runtime handler Codex worker branch"],
+  [worker, "worker service"],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /composeResolvedRuntimeHarness|listRuntimeUserPlatformMountedToolsInternal|resolveRuntimeSkillSelectionInternal|buildMountedApp(OpenAi|Responses)Tools/,
+    `${label} must not silently run the native PolyNet skill or mounted-app harness composition inside Codex worker turns`,
+  );
+}
 assert.match(
   tool,
   /runAuthorityAllowsRequiredLane[\s\S]*authority\?\.canManageResources === true[\s\S]*readRunCommunityAuthority[\s\S]*runAuthorityAllowsRequiredAuthority[\s\S]*required_community_authority/,
@@ -229,6 +256,11 @@ assert.match(
   tool,
   /runStatus !== "running"[\s\S]*codex_worker_run_not_active/,
   "worker tool endpoint must reject callbacks after the run is no longer active",
+);
+assert.match(
+  tool,
+  /findPolynetPlatformToolSurfaceEntry[\s\S]*CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES[\s\S]*executeRetrievalHarnessTool/,
+  "worker tool endpoint must expose only the curated PolyNet platform surface and dispatch through native PolyNet retrieval tools",
 );
 assert.match(
   communityRecentContext,

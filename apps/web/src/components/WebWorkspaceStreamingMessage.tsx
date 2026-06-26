@@ -15,6 +15,12 @@ type WebWorkspaceStreamingMessageProps = {
   renderPreviewForRun: (runId: string | null) => ReactNode;
 };
 
+function hasSequencedAssistantText(
+  events: Array<{ event_type: string }>,
+): boolean {
+  return events.some((event) => event.event_type === "assistant_text_delta");
+}
+
 export function WebWorkspaceStreamingMessage(
   props: WebWorkspaceStreamingMessageProps,
 ) {
@@ -23,6 +29,8 @@ export function WebWorkspaceStreamingMessage(
 
   const hasTimeline = view.runtimeEvents.length > 0;
   const hasStreamedContent = view.content.trim().length > 0;
+  const shouldRenderStreamedContent =
+    hasStreamedContent && !hasSequencedAssistantText(view.runtimeEvents);
 
   return (
     <div className="message-item assistant streaming thinking">
@@ -37,6 +45,7 @@ export function WebWorkspaceStreamingMessage(
               })
             }
             showActiveIndicators
+            showThinkingFooter={false}
           />
         ) : null}
         {hasTimeline ? (
@@ -46,7 +55,7 @@ export function WebWorkspaceStreamingMessage(
             requireLiveDesktop
           />
         ) : null}
-        {hasStreamedContent ? (
+        {shouldRenderStreamedContent ? (
           <>
             {props.renderMarkdown(view.content, {
               onCopyCode: props.copyTextToClipboard,
@@ -54,15 +63,13 @@ export function WebWorkspaceStreamingMessage(
             <span className="streaming-caret" aria-hidden="true" />
           </>
         ) : null}
-        {!hasTimeline ? (
-          <span
-            className="streaming-placeholder shimmer-text streaming-thinking-footer"
-            aria-live="polite"
-            aria-label="Thinking"
-          >
-            Thinking
-          </span>
-        ) : null}
+        <span
+          className="streaming-placeholder shimmer-text streaming-thinking-footer"
+          aria-live="polite"
+          aria-label="Thinking"
+        >
+          Thinking
+        </span>
       </div>
       {props.renderPreviewForRun(view.runId)}
     </div>

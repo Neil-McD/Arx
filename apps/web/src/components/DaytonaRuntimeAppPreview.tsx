@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import { getConvexCloudRuntimeRunDaytonaPreviewSession } from "../../../../shared/cloudThreadsRead";
+import {
+  getConvexCloudRuntimeRunDaytonaPreviewSession,
+  stopConvexCloudRuntimeRunDaytonaPreview,
+} from "../../../../shared/cloudThreadsRead";
 import { buildWorkspacePreviewProxyUrl } from "../lib/workspacePreviewProxy";
 
 export type DaytonaRuntimePreviewAnchor = {
@@ -11,7 +14,7 @@ export type DaytonaRuntimePreviewAnchor = {
   updatedAt: number;
 };
 
-type DaytonaPreviewPhase = "loading" | "ready" | "error";
+type DaytonaPreviewPhase = "loading" | "ready" | "stopping" | "stopped" | "error";
 
 type DaytonaPreviewState = {
   phase: DaytonaPreviewPhase;
@@ -28,8 +31,10 @@ function describePreviewError(code: string | null): string {
   if (code === "runtime_run_not_found") return "This runtime run is no longer available.";
   if (code === "daytona_sandbox_not_available") return "The Daytona sandbox for this run is no longer available.";
   if (code === "daytona_preview_not_authorized") return "This run did not start an app preview on that port.";
+  if (code === "daytona_preview_port_not_active") return "This app preview is no longer running.";
   if (code === "daytona_preview_url_missing") return "Daytona did not return a preview URL for this app.";
   if (code === "daytona_preview_unavailable") return "The Daytona app preview is not available yet.";
+  if (code === "daytona_preview_stop_failed") return "The Daytona app preview could not be stopped.";
   return "The Daytona app preview could not be attached.";
 }
 
@@ -40,6 +45,7 @@ function shouldHideUnavailableDaytonaPreview(code: string | null): boolean {
     normalized === "daytona_runtime_target_not_found" ||
     normalized === "daytona_sandbox_not_available" ||
     normalized === "daytona_preview_not_authorized" ||
+    normalized === "daytona_preview_port_not_active" ||
     normalized === "invalid_preview_port"
   );
 }
@@ -89,13 +95,17 @@ function DaytonaRuntimeAppPreviewCard(props: {
             props.onUnavailable(props.anchor);
             return;
           }
-          setState((prev) => ({
-            ...prev,
-            phase: "error",
-            frameUrl: null,
-            rawUrl: null,
-            error: describePreviewError(result.code),
-          }));
+          setState((prev) =>
+            prev.phase === "stopping" || prev.phase === "stopped"
+              ? prev
+              : {
+                  ...prev,
+                  phase: "error",
+                  frameUrl: null,
+                  rawUrl: null,
+                  error: describePreviewError(result.code),
+                },
+          );
           return;
         }
         const frameUrl = buildWorkspacePreviewProxyUrl({
@@ -106,24 +116,32 @@ function DaytonaRuntimeAppPreviewCard(props: {
             polynet_preview_contract: "surface-v1",
           },
         });
-        setState((prev) => ({
-          ...prev,
-          phase: "loading",
-          frameUrl,
-          rawUrl: frameUrl,
-          label: result.session.preview_label,
-          error: null,
-        }));
+        setState((prev) =>
+          prev.phase === "stopping" || prev.phase === "stopped"
+            ? prev
+            : {
+                ...prev,
+                phase: "loading",
+                frameUrl,
+                rawUrl: frameUrl,
+                label: result.session.preview_label,
+                error: null,
+              },
+        );
       })
       .catch((error) => {
         if (cancelled) return;
-        setState((prev) => ({
-          ...prev,
-          phase: "error",
-          frameUrl: null,
-          rawUrl: null,
-          error: error instanceof Error ? error.message : "The Daytona app preview could not be attached.",
-        }));
+        setState((prev) =>
+          prev.phase === "stopping" || prev.phase === "stopped"
+            ? prev
+            : {
+                ...prev,
+                phase: "error",
+                frameUrl: null,
+                rawUrl: null,
+                error: error instanceof Error ? error.message : "The Daytona app preview could not be attached.",
+              },
+        );
       });
     return () => {
       cancelled = true;
@@ -137,20 +155,88 @@ function DaytonaRuntimeAppPreviewCard(props: {
     state.attempt,
   ]);
 
+  const handleStop = useCallback(() => {
+    if (!props.session) {
+      setState((prev) => ({
+        ...prev,
+        phase: "error",
+        error: describePreviewError("auth_unavailable"),
+      }));
+      return;
+    }
+    setState((prev) => ({
+      ...prev,
+      phase: "stopping",
+      error: null,
+    }));
+    void stopConvexCloudRuntimeRunDaytonaPreview({
+      session: props.session,
+      runId: props.anchor.runId,
+      port: props.anchor.port,
+    })
+      .then((result) => {
+        if (!result.ok) {
+          if (shouldHideUnavailableDaytonaPreview(result.code)) {
+            props.onUnavailable(props.anchor);
+            return;
+          }
+          setState((prev) => ({
+            ...prev,
+            phase: "error",
+            error: result.message || describePreviewError(result.code),
+          }));
+          return;
+        }
+        setState((prev) => ({
+          ...prev,
+          phase: "stopped",
+          frameUrl: null,
+          rawUrl: null,
+          error: null,
+        }));
+        props.onUnavailable(props.anchor);
+      })
+      .catch((error) => {
+        setState((prev) => ({
+          ...prev,
+          phase: "error",
+          error: error instanceof Error ? error.message : describePreviewError("daytona_preview_stop_failed"),
+        }));
+      });
+  }, [props.anchor, props.onUnavailable, props.session]);
+
   const title = state.label || `Daytona app :${props.anchor.port}`;
+  const isStopping = state.phase === "stopping";
+  const statusClass =
+    state.phase === "error"
+      ? "failed"
+      : state.phase === "stopping"
+        ? "starting"
+        : state.phase === "stopped"
+          ? "failed"
+          : "running";
   return (
     <article className="workspace-app-preview-card">
       <div className="workspace-app-preview-header">
         <div className="workspace-app-preview-title-row">
           <div className="workspace-app-preview-title">{title}</div>
-          <span className={`workspace-app-preview-status ${state.phase === "error" ? "failed" : "running"}`}>
-            {state.phase === "error" ? "Unavailable" : state.phase === "ready" ? "Running" : "Loading"}
+          <span className={`workspace-app-preview-status ${statusClass}`}>
+            {state.phase === "error"
+              ? "Unavailable"
+              : state.phase === "stopping"
+                ? "Stopping"
+                : state.phase === "stopped"
+                  ? "Stopped"
+                  : state.phase === "ready"
+                    ? "Running"
+                    : "Loading"}
           </span>
         </div>
         <div className="workspace-app-preview-actions">
           <button
             type="button"
             className="workspace-app-preview-button"
+            disabled={isStopping}
             onClick={() => {
               setState((prev) => ({
                 ...prev,
@@ -170,6 +256,18 @@ function DaytonaRuntimeAppPreviewCard(props: {
               Open
             </a>
           ) : null}
+          {state.phase !== "error" && state.phase !== "stopped" ? (
+            <button
+              type="button"
+              className="workspace-app-preview-button stop"
+              onClick={handleStop}
+              disabled={isStopping}
+              aria-label={isStopping ? "Stopping app preview" : "Stop app preview"}
+              title={isStopping ? "Stopping..." : "Stop"}
+            >
+              {isStopping ? "Stopping" : "Stop"}
+            </button>
+          ) : null}
         </div>
       </div>
       {state.frameUrl ? (
@@ -188,15 +286,22 @@ function DaytonaRuntimeAppPreviewCard(props: {
                 onLoad={() => {
                   setState((prev) => ({
                     ...prev,
-                    phase: "ready",
+                    phase:
+                      prev.phase === "stopping" || prev.phase === "stopped"
+                        ? prev.phase
+                        : "ready",
                   }));
                 }}
                 onError={() => {
-                  setState((prev) => ({
-                    ...prev,
-                    phase: "error",
-                    error: "The Daytona app preview failed to load.",
-                  }));
+                  setState((prev) =>
+                    prev.phase === "stopping" || prev.phase === "stopped"
+                      ? prev
+                      : {
+                          ...prev,
+                          phase: "error",
+                          error: "The Daytona app preview failed to load.",
+                        },
+                  );
                 }}
               />
             </div>

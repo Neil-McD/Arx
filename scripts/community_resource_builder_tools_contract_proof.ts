@@ -19,6 +19,7 @@ const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const runtimeLifecycle = read("apps/web/src/controllers/useWebRuntimeRunLifecycle.ts");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
+const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
@@ -414,9 +415,14 @@ assert.match(
   "resource mutation event should validate community id before frontend refresh",
 );
 assert.match(
-  runtimeTimeline,
+  changesetApprovalCards,
   /applyCloudCommunityResourceBuilderChangeset[\s\S]*getCloudCommunityResourceBuilderChangesetStatus[\s\S]*status === "applied"[\s\S]*dispatchCommunityResourcesMutated/,
   "approval card should verify applied changeset state before dispatching resource refresh",
+);
+assert.match(
+  runtimeTimeline,
+  /RuntimeResourceChangesetApprovalCards/,
+  "runtime timeline should delegate resource approval cards to the dedicated component",
 );
 assert.match(
   app,

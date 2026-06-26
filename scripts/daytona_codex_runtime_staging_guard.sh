@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EXPECTED_ROOT="/Users/neilmcdevitt/code/arx-daytona-codex-runtime-spike"
+EXPECTED_ROOTS=(
+  "/Users/neilmcdevitt/code/arx-daytona-codex-runtime-spike"
+  "/Users/neilmcdevitt/code/arx-daytona-spike-mainline-adapt-20260626"
+)
 EXPECTED_BRANCH_PREFIX="codex/daytona-codex-runtime-spike-"
 EXPECTED_SPLIT_BRANCH_PREFIX="codex/daytona-runtime-core-slice-"
 EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX="codex/daytona-tool-authority-slice-"
 EXPECTED_PREVIEW_COMPUTER_BRANCH_PREFIX="codex/daytona-preview-computer-slice-"
+EXPECTED_MAINLINE_ADAPT_BRANCH_PREFIX="codex/daytona-spike-mainline-adapt-"
 EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"
 FORBIDDEN_CONVEX_PROD="wry-hawk-715"
 EXPECTED_VERCEL_PROJECT_NAME="polynet-staging"
@@ -23,16 +27,28 @@ ok() {
   echo "OK: $*"
 }
 
-if [[ "$ROOT_DIR" != "$EXPECTED_ROOT" ]]; then
-  fail "expected Daytona Codex runtime staging worktree at $EXPECTED_ROOT, got $ROOT_DIR"
+root_allowed=false
+for expected_root in "${EXPECTED_ROOTS[@]}"; do
+  if [[ "$ROOT_DIR" == "$expected_root" ]]; then
+    root_allowed=true
+  fi
+done
+if [[ "$root_allowed" != "true" ]]; then
+  fail "expected Daytona Codex runtime staging worktree at one of: ${EXPECTED_ROOTS[*]}, got $ROOT_DIR"
 fi
 ok "Daytona Codex runtime staging worktree path is exact: $ROOT_DIR"
 
 cd "$ROOT_DIR"
 
 git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ "$git_root" != "$EXPECTED_ROOT" ]]; then
-  fail "git root must be $EXPECTED_ROOT, got ${git_root:-missing}"
+git_root_allowed=false
+for expected_root in "${EXPECTED_ROOTS[@]}"; do
+  if [[ "$git_root" == "$expected_root" ]]; then
+    git_root_allowed=true
+  fi
+done
+if [[ "$git_root_allowed" != "true" ]]; then
+  fail "git root must be one of: ${EXPECTED_ROOTS[*]}, got ${git_root:-missing}"
 fi
 ok "git root is exact"
 
@@ -40,8 +56,8 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$branch" == "main" ]]; then
   fail "refusing Daytona Codex runtime staging work from main"
 fi
-if [[ "$branch" != "$EXPECTED_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_SPLIT_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_PREVIEW_COMPUTER_BRANCH_PREFIX"* ]]; then
-  fail "expected branch to start with $EXPECTED_BRANCH_PREFIX, $EXPECTED_SPLIT_BRANCH_PREFIX, $EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX, or $EXPECTED_PREVIEW_COMPUTER_BRANCH_PREFIX, got $branch"
+if [[ "$branch" != "$EXPECTED_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_SPLIT_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_PREVIEW_COMPUTER_BRANCH_PREFIX"* && "$branch" != "$EXPECTED_MAINLINE_ADAPT_BRANCH_PREFIX"* ]]; then
+  fail "expected branch to start with $EXPECTED_BRANCH_PREFIX, $EXPECTED_SPLIT_BRANCH_PREFIX, $EXPECTED_TOOL_AUTHORITY_BRANCH_PREFIX, $EXPECTED_PREVIEW_COMPUTER_BRANCH_PREFIX, or $EXPECTED_MAINLINE_ADAPT_BRANCH_PREFIX, got $branch"
 fi
 ok "branch is Daytona Codex runtime staging safe: $branch"
 

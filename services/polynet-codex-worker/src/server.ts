@@ -52,6 +52,18 @@ type StreamWriter = {
   send: (event: string, data: JsonRecord) => void;
 };
 
+type CodexDynamicToolCallRecord = {
+  toolCallId: string;
+  providerCallId: string;
+  toolName: string;
+  args: JsonRecord;
+};
+
+type CodexNativeToolProjection = {
+  record: CodexDynamicToolCallRecord;
+  details: JsonRecord | null;
+};
+
 type ActiveTurn = {
   runId: string;
   codexThreadId: string | null;
@@ -83,6 +95,8 @@ type ActiveTurn = {
   eventSeq: number;
   eventLog: RuntimeEvent[];
   writer: StreamWriter | null;
+  dynamicToolCallsByItemId: Map<string, CodexDynamicToolCallRecord>;
+  dynamicToolDetailsByCallId: Map<string, JsonRecord>;
   turnCompletionResolvers: Map<string, Array<(value: JsonRecord) => void>>;
 };
 
@@ -334,6 +348,241 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
     : null;
+}
+
+function parseJsonRecord(value: unknown): JsonRecord | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCodexDynamicToolArgs(value: unknown): JsonRecord {
+  return asRecord(value) ?? parseJsonRecord(value) ?? {};
+}
+
+function normalizeCodexDynamicToolName(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeCodexCommand(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : null;
+  }
+  return null;
+}
+
+function normalizeCodexWebSearchAction(value: unknown): string | null {
+  const action = String(value ?? "").trim();
+  if (action === "openPage") return "open_page";
+  if (action === "findInPage") return "find_in_page";
+  return action || null;
+}
+
+function normalizeCodexFileChanges(value: unknown): JsonRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((change) => asRecord(change))
+    .filter((change): change is JsonRecord => Boolean(change));
+}
+
+function lastPathSegment(path: string | null): string | null {
+  if (!path) return null;
+  return path.split("/").filter(Boolean).pop() || path;
+}
+
+function normalizeCodexProviderCallId(item: JsonRecord | null, itemId: string): string {
+  return String(item?.callId ?? item?.call_id ?? itemId).trim();
+}
+
+function normalizeCodexToolCallStatus(item: JsonRecord | null): "ok" | "error" {
+  const status = String(item?.status ?? "").trim().toLowerCase();
+  if (
+    item?.success === false ||
+    status === "error" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "canceled"
+  ) {
+    return "error";
+  }
+  return "ok";
+}
+
+function buildCodexDynamicToolCallRecord(params: {
+  runId: string;
+  codexTurnId: string;
+  itemId: string;
+  providerCallId?: string;
+  toolName: string;
+  args: JsonRecord;
+}): CodexDynamicToolCallRecord {
+  const stableItemId = params.itemId || `${params.codexTurnId}:${params.toolName}`;
+  const providerCallId = params.providerCallId || stableItemId;
+  return {
+    toolCallId: `codex_worker:${params.runId}:${stableItemId}`,
+    providerCallId,
+    toolName: params.toolName,
+    args: params.args,
+  };
+}
+
+function buildCodexNativeToolProjection(params: {
+  activeTurn: ActiveTurn;
+  codexTurnId: string;
+  itemId: string;
+  providerCallId: string;
+  item: JsonRecord | null;
+}): CodexNativeToolProjection | null {
+  const itemType = String(params.item?.type ?? "").trim();
+  if (!itemType || itemType === "dynamicToolCall") return null;
+
+  let toolName: string | null = null;
+  let args: JsonRecord = {
+    codex_item_type: itemType,
+  };
+  let details: JsonRecord | null = null;
+
+  if (itemType === "commandExecution") {
+    toolName = "bash";
+    const command = normalizeCodexCommand(params.item?.command);
+    const cwd =
+      typeof params.item?.cwd === "string" ? params.item.cwd.trim() : "";
+    const exitCode =
+      typeof params.item?.exitCode === "number" ? params.item.exitCode : null;
+    args = {
+      ...args,
+      ...(command ? { command } : {}),
+      ...(cwd ? { cwd } : {}),
+    };
+    details = {
+      codex_item_type: itemType,
+      ...(exitCode !== null ? { exit_code: exitCode } : {}),
+    };
+  } else if (itemType === "fileChange") {
+    toolName = "codex_file_change";
+    const changes = normalizeCodexFileChanges(params.item?.changes);
+    const firstPath = String(changes[0]?.path ?? "").trim();
+    const firstKind = String(changes[0]?.kind ?? "").trim();
+    args = {
+      ...args,
+      ...(firstPath ? { path: firstPath } : {}),
+      ...(firstKind ? { kind: firstKind } : {}),
+      changes_count: changes.length,
+    };
+    details = {
+      codex_item_type: itemType,
+      changes: changes.map((change) => ({
+        path: String(change.path ?? "").trim() || null,
+        kind: String(change.kind ?? "").trim() || null,
+      })),
+    };
+  } else if (itemType === "mcpToolCall") {
+    toolName = "codex_mcp_tool_call";
+    const server = String(params.item?.server ?? "").trim();
+    const tool = String(params.item?.tool ?? "").trim();
+    args = {
+      ...args,
+      ...(server ? { server } : {}),
+      ...(tool ? { tool } : {}),
+      ...(params.item?.arguments !== undefined ? { arguments: params.item.arguments } : {}),
+    };
+    details = {
+      codex_item_type: itemType,
+      ...(params.item?.error ? { error: String(params.item.error) } : {}),
+    };
+  } else if (itemType === "webSearch") {
+    toolName = "web_research";
+    const actionRecord = asRecord(params.item?.action);
+    const action = normalizeCodexWebSearchAction(actionRecord?.type);
+    const query =
+      String(actionRecord?.query ?? params.item?.query ?? "").trim() ||
+      (Array.isArray(actionRecord?.queries)
+        ? actionRecord.queries
+            .map((query) => String(query ?? "").trim())
+            .filter(Boolean)
+            .join(", ")
+        : "");
+    const url = String(actionRecord?.url ?? "").trim();
+    const pattern = String(actionRecord?.pattern ?? "").trim();
+    args = {
+      ...args,
+      ...(action ? { action } : {}),
+      ...(query ? { query } : {}),
+      ...(url ? { url } : {}),
+      ...(pattern ? { pattern } : {}),
+    };
+  } else if (itemType === "imageView") {
+    toolName = "codex_image_view";
+    const path = String(params.item?.path ?? "").trim();
+    args = {
+      ...args,
+      ...(path ? { path, name: lastPathSegment(path) } : {}),
+    };
+  }
+
+  if (!toolName) return null;
+  const stableItemId = params.itemId || `${params.codexTurnId}:${itemType}`;
+  const providerCallId = params.providerCallId || stableItemId;
+  return {
+    record: {
+      toolCallId: `codex_worker:${params.activeTurn.runId}:${stableItemId}`,
+      providerCallId,
+      toolName,
+      args,
+    },
+    details,
+  };
+}
+
+function buildCodexToolEventPayload(params: {
+  activeTurn: ActiveTurn;
+  codexTurnId: string;
+  itemId: string;
+  record: CodexDynamicToolCallRecord;
+  status?: "ok" | "error";
+  success?: boolean;
+  durationMs?: number | null;
+  details?: JsonRecord | null;
+}): JsonRecord {
+  const details =
+    params.details ??
+    params.activeTurn.dynamicToolDetailsByCallId.get(
+      params.record.providerCallId,
+    );
+  return {
+    codex_turn_id: params.codexTurnId,
+    item_id: params.itemId,
+    tool: params.record.toolName,
+    arguments: params.record.args,
+    tool_call_id: params.record.toolCallId,
+    provider_call_id: params.record.providerCallId,
+    tool_name: params.record.toolName,
+    args: params.record.args,
+    attempt: 1,
+    harness: {
+      kind: "codex_worker",
+    },
+    ...(params.status
+      ? {
+          status: params.status,
+          success: params.success ?? params.status === "ok",
+        }
+      : {}),
+    ...(typeof params.durationMs === "number"
+      ? { duration_ms: params.durationMs }
+      : {}),
+    ...(details ? { details } : {}),
+  };
 }
 
 function readEnv(name: string): string {
@@ -802,6 +1051,8 @@ export class PolynetCodexWorkerRuntime {
       eventSeq: 0,
       eventLog: [],
       writer: params.writer,
+      dynamicToolCallsByItemId: new Map(),
+      dynamicToolDetailsByCallId: new Map(),
       turnCompletionResolvers: new Map(),
     };
     this.activeTurn = activeTurn;
@@ -1229,6 +1480,13 @@ export class PolynetCodexWorkerRuntime {
       }
       if (itemId) activeTurn.lastAgentMessageItemId = itemId;
       activeTurn.assistantText += delta;
+      this.emitRuntimeEvent("assistant_text_delta", {
+        codex_turn_id: String(params.turnId ?? activeTurn.turnId ?? ""),
+        item_id: itemId || null,
+        delta,
+        role: "assistant",
+        harness: { kind: "codex_worker" },
+      });
       activeTurn.writer?.send("delta", {
         run_id: activeTurn.runId,
         delta,
@@ -1260,43 +1518,130 @@ export class PolynetCodexWorkerRuntime {
 
     if (method === "item/started" && params) {
       const item = asRecord(params.item);
+      const codexTurnId = String(params.turnId ?? "");
+      const itemId = String(item?.id ?? "").trim();
+      const providerCallId = normalizeCodexProviderCallId(item, itemId);
+      const toolName = normalizeCodexDynamicToolName(item?.tool);
       this.emitRuntimeEvent("codex_item_started", {
-        codex_turn_id: String(params.turnId ?? ""),
-        item_id: String(item?.id ?? ""),
+        codex_turn_id: codexTurnId,
+        item_id: itemId,
         item_type: String(item?.type ?? ""),
-        tool: String(item?.tool ?? ""),
+        tool: toolName,
       });
-      if (String(item?.type ?? "") === "dynamicToolCall") {
-        this.emitRuntimeEvent("tool_call_started", {
-          codex_turn_id: String(params.turnId ?? ""),
-          item_id: String(item?.id ?? ""),
-          tool: String(item?.tool ?? ""),
-          arguments: item?.arguments ?? null,
+      if (String(item?.type ?? "") === "dynamicToolCall" && toolName) {
+        const record = buildCodexDynamicToolCallRecord({
+          runId: activeTurn.runId,
+          codexTurnId,
+          itemId,
+          providerCallId,
+          toolName,
+          args: normalizeCodexDynamicToolArgs(item?.arguments),
         });
+        if (itemId) {
+          activeTurn.dynamicToolCallsByItemId.set(itemId, record);
+        }
+        this.emitRuntimeEvent(
+          "tool_call_started",
+          buildCodexToolEventPayload({
+            activeTurn,
+            codexTurnId,
+            itemId,
+            record,
+          }),
+        );
+      } else {
+        const projection = buildCodexNativeToolProjection({
+          activeTurn,
+          codexTurnId,
+          itemId,
+          providerCallId,
+          item,
+        });
+        if (projection) {
+          this.emitRuntimeEvent(
+            "tool_call_started",
+            buildCodexToolEventPayload({
+              activeTurn,
+              codexTurnId,
+              itemId,
+              record: projection.record,
+              details: projection.details,
+            }),
+          );
+        }
       }
       return;
     }
 
     if (method === "item/completed" && params) {
       const item = asRecord(params.item);
+      const codexTurnId = String(params.turnId ?? "");
+      const itemId = String(item?.id ?? "").trim();
+      const providerCallId = normalizeCodexProviderCallId(item, itemId);
+      const toolName = normalizeCodexDynamicToolName(item?.tool);
+      const durationMs =
+        typeof item?.durationMs === "number" ? item.durationMs : null;
       this.emitRuntimeEvent("codex_item_completed", {
-        codex_turn_id: String(params.turnId ?? ""),
-        item_id: String(item?.id ?? ""),
+        codex_turn_id: codexTurnId,
+        item_id: itemId,
         item_type: String(item?.type ?? ""),
-        tool: String(item?.tool ?? ""),
+        tool: toolName,
         status: String(item?.status ?? ""),
         success: item?.success === true,
-        duration_ms: typeof item?.durationMs === "number" ? item.durationMs : null,
+        duration_ms: durationMs,
       });
-      if (String(item?.type ?? "") === "dynamicToolCall") {
-        this.emitRuntimeEvent("tool_call_finished", {
-          codex_turn_id: String(params.turnId ?? ""),
-          item_id: String(item?.id ?? ""),
-          tool: String(item?.tool ?? ""),
-          status: String(item?.status ?? ""),
-          success: item?.success === true,
-          duration_ms: typeof item?.durationMs === "number" ? item.durationMs : null,
+      if (String(item?.type ?? "") === "dynamicToolCall" && toolName) {
+        const record =
+          (itemId ? activeTurn.dynamicToolCallsByItemId.get(itemId) : null) ??
+          buildCodexDynamicToolCallRecord({
+            runId: activeTurn.runId,
+            codexTurnId,
+            itemId,
+            providerCallId,
+            toolName,
+            args: normalizeCodexDynamicToolArgs(item?.arguments),
+          });
+        const status = normalizeCodexToolCallStatus(item);
+        this.emitRuntimeEvent(
+          "tool_call_finished",
+          buildCodexToolEventPayload({
+            activeTurn,
+            codexTurnId,
+            itemId,
+            record,
+            status,
+            success: status === "ok",
+            durationMs,
+          }),
+        );
+        if (itemId) {
+          activeTurn.dynamicToolCallsByItemId.delete(itemId);
+        }
+        activeTurn.dynamicToolDetailsByCallId.delete(record.providerCallId);
+      } else {
+        const projection = buildCodexNativeToolProjection({
+          activeTurn,
+          codexTurnId,
+          itemId,
+          providerCallId,
+          item,
         });
+        if (projection) {
+          const status = normalizeCodexToolCallStatus(item);
+          this.emitRuntimeEvent(
+            "tool_call_finished",
+            buildCodexToolEventPayload({
+              activeTurn,
+              codexTurnId,
+              itemId,
+              record: projection.record,
+              status,
+              success: status === "ok",
+              durationMs,
+              details: projection.details,
+            }),
+          );
+        }
       }
       return;
     }
@@ -1415,9 +1760,10 @@ export class PolynetCodexWorkerRuntime {
     }
 
     const startedAtMs = nowMs();
+    const providerCallId = typeof params.callId === "string" ? params.callId.trim() : "";
     this.emitRuntimeEvent("computer_tool_requested", {
       tool_name: "computer_screenshot",
-      call_id: typeof params.callId === "string" ? params.callId : null,
+      call_id: providerCallId || null,
       workspace_host_id: activeTurn.workspaceHostId,
     });
 
@@ -1452,6 +1798,32 @@ export class PolynetCodexWorkerRuntime {
       };
     }
 
+    const summary =
+      ok
+        ? String(payload.output ?? payload.summary ?? "").trim() ||
+          "Captured Daytona computer screenshot."
+        : "";
+    const frameUrl = ok ? String(payload.frame_url ?? "").trim() : "";
+    const computerUseDetails = ok
+      ? {
+          provider_id: "daytona",
+          computer_use: {
+            provider: "daytona",
+            summary,
+            frame_url: frameUrl || null,
+            frame_storage_id: payload.frame_storage_id ?? null,
+            frame_mime_type: payload.frame_mime_type ?? null,
+            frame_size_bytes: payload.frame_size_bytes ?? null,
+            screenshot_method: payload.screenshot_method ?? null,
+            screenshot_width: payload.screenshot_width ?? null,
+            screenshot_height: payload.screenshot_height ?? null,
+          },
+        }
+      : null;
+    if (providerCallId && computerUseDetails) {
+      activeTurn.dynamicToolDetailsByCallId.set(providerCallId, computerUseDetails);
+    }
+
     this.emitRuntimeEvent("computer_tool_completed", {
       run_id: activeTurn.runId,
       tool_name: "computer_screenshot",
@@ -1459,8 +1831,14 @@ export class PolynetCodexWorkerRuntime {
       status: ok ? "ok" : "error",
       error_code: failureCode,
       workspace_host_id: activeTurn.workspaceHostId,
+      summary: summary || null,
+      frame_url: frameUrl || null,
       frame_storage_id: ok ? payload.frame_storage_id ?? null : null,
+      frame_mime_type: ok ? payload.frame_mime_type ?? null : null,
+      frame_size_bytes: ok ? payload.frame_size_bytes ?? null : null,
       screenshot_method: ok ? payload.screenshot_method ?? null : null,
+      screenshot_width: ok ? payload.screenshot_width ?? null : null,
+      screenshot_height: ok ? payload.screenshot_height ?? null : null,
     });
 
     if (!ok) {
@@ -1476,10 +1854,6 @@ export class PolynetCodexWorkerRuntime {
       return;
     }
 
-    const summary =
-      String(payload.output ?? payload.summary ?? "").trim() ||
-      "Captured Daytona computer screenshot.";
-    const frameUrl = String(payload.frame_url ?? "").trim();
     const contentItems: JsonRecord[] = [{ type: "inputText", text: summary }];
     if (frameUrl) {
       contentItems.push({ type: "inputImage", imageUrl: frameUrl });
@@ -1517,9 +1891,10 @@ export class PolynetCodexWorkerRuntime {
     }
 
     const startedAtMs = nowMs();
+    const providerCallId = typeof params.callId === "string" ? params.callId.trim() : "";
     this.emitRuntimeEvent("computer_tool_requested", {
       tool_name: "computer_open_url",
-      call_id: typeof params.callId === "string" ? params.callId : null,
+      call_id: providerCallId || null,
       workspace_host_id: activeTurn.workspaceHostId,
     });
 
@@ -1554,6 +1929,24 @@ export class PolynetCodexWorkerRuntime {
       };
     }
 
+    const summary =
+      ok
+        ? String(payload.output ?? payload.summary ?? "").trim() ||
+          "Opened URL in the Daytona computer browser."
+        : "";
+    if (providerCallId && ok) {
+      activeTurn.dynamicToolDetailsByCallId.set(providerCallId, {
+        provider_id: "daytona",
+        computer_use: {
+          provider: "daytona",
+          summary,
+          command_exit_code: payload.command_exit_code ?? null,
+          display_keys: payload.display_keys ?? [],
+          window_count: payload.window_count ?? null,
+        },
+      });
+    }
+
     this.emitRuntimeEvent("computer_tool_completed", {
       run_id: activeTurn.runId,
       tool_name: "computer_open_url",
@@ -1561,6 +1954,7 @@ export class PolynetCodexWorkerRuntime {
       status: ok ? "ok" : "error",
       error_code: failureCode,
       workspace_host_id: activeTurn.workspaceHostId,
+      summary: summary || null,
     });
 
     if (!ok) {
@@ -1576,9 +1970,6 @@ export class PolynetCodexWorkerRuntime {
       return;
     }
 
-    const summary =
-      String(payload.output ?? payload.summary ?? "").trim() ||
-      "Opened URL in the Daytona computer browser.";
     client.respond(messageId, {
       success: true,
       contentItems: [{ type: "inputText", text: summary }],

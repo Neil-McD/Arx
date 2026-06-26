@@ -176,6 +176,22 @@ export type CloudRuntimeDaytonaPreviewSessionLookup =
       retryable: boolean;
     };
 
+export type CloudRuntimeDaytonaPreviewStopResult =
+  | {
+      ok: true;
+      stopped_preview_ports: number[];
+      target_run_id: string | null;
+      target_id: string | null;
+      sandbox_id: string | null;
+      teardown_state: string | null;
+    }
+  | {
+      ok: false;
+      code: string;
+      retryable: boolean;
+      message: string | null;
+    };
+
 export function isConvexCloudThreadsEnabled(): boolean {
   return hasConvexUrl();
 }
@@ -682,5 +698,75 @@ export async function getConvexCloudRuntimeRunDaytonaPreviewSession(params: {
       preview_transport:
         typeof payload.preview_transport === "string" ? payload.preview_transport : null,
     },
+  };
+}
+
+export async function stopConvexCloudRuntimeRunDaytonaPreview(params: {
+  session: AuthSessionLike;
+  runId: string;
+  port: number;
+}): Promise<CloudRuntimeDaytonaPreviewStopResult> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) {
+    return {
+      ok: false,
+      code: "auth_unavailable",
+      retryable: false,
+      message: "Authentication session is unavailable.",
+    };
+  }
+  const { client, authSubject } = bootstrapped;
+  const runId = String(params.runId ?? "").trim();
+  const port = Math.floor(Number(params.port));
+  if (!runId) {
+    return {
+      ok: false,
+      code: "invalid_run_id",
+      retryable: false,
+      message: "Runtime run id is invalid.",
+    };
+  }
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    return {
+      ok: false,
+      code: "invalid_preview_port",
+      retryable: false,
+      message: "Preview port is invalid.",
+    };
+  }
+  const payload = (await client.action("threads:stopCloudRuntimeRunDaytonaPreview" as any, {
+    authSubject,
+    runId,
+    port,
+  })) as Record<string, unknown> | null;
+  if (!payload || payload.ok !== true) {
+    const code = String(payload?.code ?? "daytona_preview_stop_failed").trim() || "daytona_preview_stop_failed";
+    return {
+      ok: false,
+      code,
+      retryable:
+        typeof payload?.retryable === "boolean"
+          ? payload.retryable
+          : code !== "runtime_run_not_found" &&
+            code !== "daytona_runtime_target_not_found" &&
+            code !== "daytona_sandbox_not_available" &&
+            code !== "daytona_preview_not_authorized" &&
+            code !== "daytona_preview_port_not_active" &&
+            code !== "auth_unavailable",
+      message: typeof payload?.message === "string" ? payload.message : null,
+    };
+  }
+  const stoppedPreviewPorts = Array.isArray(payload.stopped_preview_ports)
+    ? payload.stopped_preview_ports
+        .map((value) => Math.floor(Number(value)))
+        .filter((value) => Number.isFinite(value) && value > 0)
+    : [];
+  return {
+    ok: true,
+    stopped_preview_ports: stoppedPreviewPorts,
+    target_run_id: typeof payload.target_run_id === "string" ? payload.target_run_id : null,
+    target_id: typeof payload.target_id === "string" ? payload.target_id : null,
+    sandbox_id: typeof payload.sandbox_id === "string" ? payload.sandbox_id : null,
+    teardown_state: typeof payload.teardown_state === "string" ? payload.teardown_state : null,
   };
 }

@@ -16975,14 +16975,6 @@ button.chat-reply-quote:hover {
   margin-bottom: 10px;
 }
 
-.runtime-live-timeline-entry {
-  width: 100%;
-}
-
-.runtime-live-timeline-reasoning {
-  color: var(--text-primary);
-}
-
 .runtime-live-timeline-reasoning-text {
   max-width: 74ch;
   font-size: 0.96em;
@@ -17013,24 +17005,6 @@ button.chat-reply-quote:hover {
   color: inherit;
 }
 
-.runtime-activity-word {
-  width: fit-content;
-  line-height: 1.35;
-  letter-spacing: 0;
-}
-
-.runtime-thought-snippet {
-  width: fit-content;
-  max-width: min(620px, 100%);
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
-  letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .runtime-turn-timer {
   display: inline-flex;
   align-items: center;
@@ -17051,96 +17025,127 @@ button.chat-reply-quote:hover {
   transform: translateY(-0.5px);
 }
 
-.runtime-tool-roll {
-  position: relative;
+.runtime-trace-flow {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  max-width: min(560px, 100%);
-  max-height: 58px;
-  overflow: hidden;
-  perspective: 420px;
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  gap: 8px;
+  max-width: min(74ch, 100%);
 }
 
-.runtime-tool-roll-item {
+.runtime-trace-reasoning {
+  width: 100%;
+}
+
+.runtime-trace-tool {
   width: fit-content;
   max-width: 100%;
-  font-size: 13px;
-  line-height: 1.35;
-  opacity: 0;
-  transform: translateY(7px) rotateX(-16deg);
-  transform-origin: center top;
-  animation: runtime-tool-roll-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  animation-delay: var(--runtime-tool-delay, 0ms);
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--text-muted));
 }
 
-.runtime-tool-roll-kind {
-  color: var(--text-muted);
-}
-
-.runtime-tool-roll-label {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-tool-drawers {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-width: min(640px, 100%);
-  margin-top: 2px;
-}
-
-.runtime-tool-drawer {
-  width: fit-content;
-  max-width: 100%;
-}
-
-.runtime-tool-drawer-summary {
+.runtime-trace-tool-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   width: fit-content;
   max-width: 100%;
   cursor: pointer;
+  color: color-mix(in srgb, var(--text-secondary) 84%, var(--text-muted));
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.4;
   list-style: none;
+  transition: color 120ms ease, opacity 120ms ease;
 }
 
-.runtime-tool-drawer-summary::-webkit-details-marker {
+.runtime-trace-tool-summary:hover {
+  color: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary));
+}
+
+.runtime-trace-tool-active > .runtime-trace-tool-summary .runtime-trace-tool-title,
+.runtime-trace-tool-active > .runtime-trace-tool-summary .runtime-trace-tool-chevron {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 25%,
+    var(--text-faint, rgba(255, 255, 255, 0.3)) 50%,
+    var(--text-muted) 75%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-web 2s ease-in-out infinite;
+}
+
+.runtime-trace-tool-summary::-webkit-details-marker {
   display: none;
 }
 
-.runtime-tool-drawer-title {
-  color: var(--text-muted);
+.runtime-trace-tool-summary::marker {
+  content: "";
 }
 
-.runtime-tool-drawer-detail {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.runtime-trace-tool-title {
+  flex: 0 0 auto;
+  color: inherit;
+  font-weight: 560;
 }
 
-.runtime-tool-drawer-body {
+.runtime-trace-tool-chevron {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, currentColor 70%, transparent);
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.runtime-trace-tool[open] .runtime-trace-tool-chevron {
+  transform: rotate(90deg);
+}
+
+.runtime-trace-tool-body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin: 5px 0 2px;
-  padding-left: 14px;
-  color: var(--text-faint, rgba(255, 255, 255, 0.3));
+  margin: 4px 0 2px;
+  padding-left: 12px;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
-.runtime-tool-drawer-item {
+.runtime-trace-tool-call {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   max-width: min(620px, 100%);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-trace-tool-call-title,
+.runtime-trace-tool-call-link,
+.runtime-trace-tool-call-kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runtime-trace-tool-call-title,
+.runtime-trace-tool-call-link {
+  flex: 0 1 auto;
+  color: color-mix(in srgb, var(--text-secondary) 86%, var(--text-muted));
+  text-decoration: none;
+}
+
+.runtime-trace-tool-call-link:hover {
+  color: color-mix(in srgb, var(--text-primary) 86%, var(--text-secondary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.runtime-trace-tool-call-kind {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--text-muted) 74%, transparent);
 }
 
 .resource-changeset-card-stack {
@@ -17282,17 +17287,6 @@ button.chat-reply-quote:hover {
 
 .resource-changeset-card-error {
   color: var(--accent-error, #c75a4a);
-}
-
-@keyframes runtime-tool-roll-in {
-  0% {
-    opacity: 0;
-    transform: translateY(7px) rotateX(-16deg);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) rotateX(0);
-  }
 }
 
 .streaming-thinking-footer {

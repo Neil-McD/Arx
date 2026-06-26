@@ -71,6 +71,13 @@ assertMatch(
   "authenticated Daytona preview action may return a preview gateway token only after auth and run/port evidence checks",
 );
 
+const publicStopActionSource = threads.slice(threads.indexOf("export const stopCloudRuntimeRunDaytonaPreview"));
+assertMatch(
+  publicStopActionSource,
+  /resolveOwnerIdForAuthenticatedRequest[\s\S]*getDaytonaWorkspacePreviewReadyEventInternal[\s\S]*stopDaytonaAppPreviewInternal[\s\S]*reason: "polynet_preview_card_stop"[\s\S]*appendCloudRuntimeRunEventInternal[\s\S]*eventType: "workspace_preview_stopped"[\s\S]*source: "preview_card_stop"/,
+  "authenticated Daytona preview stop action must verify run/port evidence, delegate to Daytona stop, and append a stopped-preview event",
+);
+
 assertMatch(
   cloudThreadsRead,
   /preview_proxy_token: string;/,
@@ -87,6 +94,12 @@ assertMatch(
   cloudThreadsRead,
   /preview_transport: "polynet_preview_gateway" \| string \| null;/,
   "browser Daytona preview session type must expose explicit preview transport",
+);
+
+assertMatch(
+  cloudThreadsRead,
+  /stopConvexCloudRuntimeRunDaytonaPreview[\s\S]*client\.action\("threads:stopCloudRuntimeRunDaytonaPreview" as any[\s\S]*daytona_preview_port_not_active/,
+  "browser Daytona preview stop helper must call the authenticated stop action and treat inactive preview ports as stale",
 );
 
 assertMatch(
@@ -111,6 +124,12 @@ assertMatch(
   daytonaRuntimeAppPreview,
   /buildWorkspacePreviewProxyUrl\(\{[\s\S]*previewProxyToken: result\.session\.preview_proxy_token/,
   "Daytona preview UI must render through the preview gateway URL",
+);
+
+assertMatch(
+  daytonaRuntimeAppPreview,
+  /stopConvexCloudRuntimeRunDaytonaPreview[\s\S]*phase: "stopping"[\s\S]*props\.onUnavailable\(props\.anchor\)[\s\S]*Stop app preview/,
+  "Daytona preview UI must expose a Stop control that calls the real backend stop path and removes stopped cards",
 );
 
 assertMatch(

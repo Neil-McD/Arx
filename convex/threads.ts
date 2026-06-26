@@ -3187,3 +3187,140 @@ export const getCloudRuntimeRunDaytonaPreviewSession = action({
     }
   },
 });
+
+export const stopCloudRuntimeRunDaytonaPreview = action({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    runId: v.string(),
+    port: v.number(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+        ctx,
+        ownerId: args.ownerId,
+        authSubject: args.authSubject ?? null,
+      });
+      const runId = normalizeRunId(args.runId);
+      const port = normalizeWorkspacePreviewPort(args.port);
+      if (port === null) {
+        return {
+          ok: false,
+          status: 400,
+          code: "invalid_preview_port",
+          message: "Preview port is invalid.",
+          retryable: false,
+        };
+      }
+
+      const run = (await ctx.runQuery(internal.threads.getRuntimeRunByOwnerRunIdInternal as any, {
+        ownerId,
+        runId,
+      })) as RuntimeRunLike | null;
+      if (!run) {
+        return {
+          ok: false,
+          status: 404,
+          code: "runtime_run_not_found",
+          message: "Runtime run not found.",
+          retryable: false,
+        };
+      }
+      const previewReadyEvent = (await ctx.runQuery(
+        internal.threads.getDaytonaWorkspacePreviewReadyEventInternal as any,
+        {
+          ownerId,
+          runId,
+          port,
+        },
+      )) as RuntimeRunEventLike | null;
+      if (!previewReadyEvent) {
+        return {
+          ok: false,
+          status: 403,
+          code: "daytona_preview_not_authorized",
+          message: "No Daytona app preview was started for this run and port.",
+          retryable: false,
+        };
+      }
+
+      const stopped = (await ctx.runAction(
+        (internal as any).daytonaCodexRuntimeTargetActions
+          .stopDaytonaAppPreviewInternal as any,
+        {
+          ownerId,
+          runId,
+          previewPort: port,
+          reason: "polynet_preview_card_stop",
+        },
+      )) as Record<string, unknown> | null;
+      if (!stopped || stopped.ok !== true) {
+        const code = String(stopped?.code ?? "daytona_preview_stop_failed").trim() || "daytona_preview_stop_failed";
+        return {
+          ok: false,
+          status: code === "daytona_preview_port_not_active" ? 404 : 500,
+          code,
+          message: String(stopped?.message ?? "Daytona preview stop failed."),
+          retryable:
+            code !== "daytona_preview_port_not_active" &&
+            code !== "daytona_runtime_target_not_found" &&
+            code !== "daytona_sandbox_not_available",
+        };
+      }
+
+      const stoppedPreviewPorts = Array.isArray(stopped.stopped_preview_ports)
+        ? stopped.stopped_preview_ports
+            .map((value) => normalizeWorkspacePreviewPort(value))
+            .filter((value): value is number => value !== null)
+        : [];
+      if (stoppedPreviewPorts.length > 0) {
+        await ctx.runMutation(internal.threads.appendCloudRuntimeRunEventInternal as any, {
+          ownerId,
+          threadId: run.threadId,
+          runId,
+          eventType: "workspace_preview_stopped",
+          eventKey: `${runId}:workspace_preview_stopped:preview_card:${stoppedPreviewPorts.join("-")}`,
+          payload: {
+            run_id: runId,
+            provider: "daytona",
+            transport: "daytona_direct",
+            target_run_id:
+              String(stopped.target_run_id ?? "").trim() || runId,
+            target_id:
+              String(stopped.target_id ?? "").trim() || null,
+            sandbox_id:
+              String(stopped.sandbox_id ?? "").trim() || null,
+            preview_ports: stoppedPreviewPorts,
+            stopped_preview_ports: stoppedPreviewPorts,
+            reason: "polynet_preview_card_stop",
+            source: "preview_card_stop",
+            teardown_state:
+              String(stopped.teardown_state ?? "").trim() || null,
+          },
+        });
+      }
+
+      return {
+        ok: true,
+        target_run_id: String(stopped.target_run_id ?? "").trim() || runId,
+        target_id: String(stopped.target_id ?? "").trim() || null,
+        sandbox_id: String(stopped.sandbox_id ?? "").trim() || null,
+        stopped_preview_ports: stoppedPreviewPorts,
+        stopped_process_ids: Array.isArray(stopped.stopped_process_ids)
+          ? stopped.stopped_process_ids
+          : [],
+        teardown_state: String(stopped.teardown_state ?? "").trim() || null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "unknown_error");
+      return {
+        ok: false,
+        status: 500,
+        code: "daytona_preview_stop_failed",
+        message,
+        retryable: true,
+      };
+    }
+  },
+});

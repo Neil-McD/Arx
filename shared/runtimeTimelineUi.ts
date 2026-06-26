@@ -1,4 +1,4 @@
-import { isComputerUseToolName } from "./retrievalTools";
+import { isComputerUseToolName } from "./retrievalTools.ts";
 import type { CloudRuntimeRunEventTransportRow } from "./cloudThreadsRead";
 
 export type RuntimeToolCategory =
@@ -6,6 +6,7 @@ export type RuntimeToolCategory =
   | "search"
   | "writes"
   | "shell"
+  | "preview"
   | "computer"
   | "docs"
   | "web"
@@ -35,6 +36,14 @@ export type RuntimeTimelineToolGroup = {
 export type RuntimeLiveTimelineEntry =
   | {
       id: string;
+      kind: "assistant_text";
+      seqStart: number;
+      seqEnd: number;
+      text: string;
+      isActive: boolean;
+    }
+  | {
+      id: string;
       kind: "reasoning";
       seqStart: number;
       seqEnd: number;
@@ -59,23 +68,6 @@ export type RuntimeWebSourceRef = {
   seq: number;
 };
 
-export type RuntimeComputerUseStep = {
-  id: string;
-  seq: number;
-  title: string;
-  summary: string | null;
-  status: "running" | "ok" | "error";
-};
-
-export type RuntimeComputerUseViewerState = {
-  latestFrameUrl: string | null;
-  latestActionTitle: string | null;
-  latestSummary: string | null;
-  pendingActionTitle: string | null;
-  status: "active" | "stopped" | "error";
-  recentSteps: RuntimeComputerUseStep[];
-};
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -95,15 +87,36 @@ function toFiniteNumberValue(value: unknown): number | null {
   return null;
 }
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => toStringValue(item))
-    .filter((item): item is string => Boolean(item));
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function readRuntimeToolName(payload: Record<string, unknown> | null): string | null {
+  return toStringValue(payload?.tool_name) ?? toStringValue(payload?.tool);
+}
+
+function readRuntimeToolArgs(payload: Record<string, unknown> | null): Record<string, unknown> | null {
+  return asRecord(payload?.args) ?? asRecord(payload?.arguments) ?? parseJsonRecord(payload?.arguments);
 }
 
 function normalizeInlineWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeReasoningSummaryText(value: string): string {
+  return value
+    .replace(/\\\*\\\*/g, "**")
+    .replace(/\\_\\_/g, "__")
+    .trim();
+}
+
+function normalizeAssistantText(value: string): string {
+  return value.trim();
 }
 
 function truncateLabel(value: string, maxChars: number): string {
@@ -243,9 +256,10 @@ function formatCount(count: number, singular: string, plural = `${singular}s`): 
 }
 
 function categoryForTool(toolName: string): RuntimeToolCategory {
-  if (toolName === "list_dir" || toolName === "read") return "exploration";
+  if (toolName === "list_dir" || toolName === "read" || toolName === "codex_image_view") return "exploration";
   if (toolName === "glob" || toolName === "grep" || toolName === "sha256") return "search";
-  if (toolName === "write" || toolName === "edit") return "writes";
+  if (toolName === "write" || toolName === "edit" || toolName === "codex_file_change") return "writes";
+  if (toolName === "workspace_serve") return "preview";
   if (
     toolName === "bash" ||
     toolName === "terminal_start" ||
@@ -274,6 +288,12 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   const slug = toStringValue(args?.slug);
   const url = toStringValue(args?.url);
   const action = toStringValue(args?.action);
+  const port = toFiniteNumberValue(args?.port);
+  const name = toStringValue(args?.name);
+  const server = toStringValue(args?.server);
+  const nestedTool = toStringValue(args?.tool);
+  const command = toStringValue(args?.command);
+  const changeCount = toFiniteNumberValue(args?.changes_count);
   const shortPath = path ? path.split("/").filter(Boolean).pop() || path : null;
   if (toolName === "search_product_docs") return `Docs search${query ? `: ${query}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? `: ${slug}` : ""}`;
@@ -299,11 +319,14 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "sha256") return `Hash ${shortPath || path || "file"}`;
   if (toolName === "write") return `Write ${shortPath || path || "file"}`;
   if (toolName === "edit") return `Edit ${shortPath || path || "file"}`;
-  if (toolName === "bash") return `Bash`;
+  if (toolName === "bash") return command ? `Run ${truncateLabel(command, 48)}` : `Bash`;
   if (toolName === "terminal_start") return "Start terminal";
   if (toolName === "terminal_read") return "Check terminal";
   if (toolName === "terminal_write") return "Send terminal input";
   if (toolName === "terminal_stop") return "Stop terminal";
+  if (toolName === "workspace_serve") {
+    return `Start app preview${port !== null ? `:${Math.floor(port)}` : ""}`;
+  }
   if (toolName === "computer_open_url") return `Open ${summarizeUrlLabel(url) || "browser URL"}`;
   if (toolName === "computer_screenshot") return "Capture screenshot";
   if (toolName === "computer_click") {
@@ -325,16 +348,30 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "computer_stop") return "Stop computer use";
   if (toolName === "web_research") {
     const querySummary = summarizeSearchQuery(query);
+    const patternSummary = summarizeSearchQuery(pattern);
     const urlSummary = summarizeUrlLabel(url);
     if (action === "search") return `Web search${querySummary ? `: ${querySummary}` : ""}`;
     if (action === "open_page") return `Open page${urlSummary ? `: ${urlSummary}` : ""}`;
     if (action === "find_in_page") {
-      const parts = [urlSummary, querySummary ? `"${truncateLabel(querySummary, 28)}"` : null].filter(Boolean);
+      const findSummary = patternSummary ?? querySummary;
+      const parts = [
+        urlSummary,
+        findSummary ? `"${truncateLabel(findSummary, 28)}"` : null,
+      ].filter(Boolean);
       return `Find in page${parts.length > 0 ? `: ${parts.join(" · ")}` : ""}`;
     }
     return "Web research";
   }
   if (toolName === "web_crawl") return `Web crawl${summarizeUrlLabel(url) ? `: ${summarizeUrlLabel(url)}` : ""}`;
+  if (toolName === "codex_file_change") {
+    if (shortPath) return `Change ${shortPath}`;
+    return `Change ${changeCount !== null ? `${Math.floor(changeCount)} file${changeCount === 1 ? "" : "s"}` : "files"}`;
+  }
+  if (toolName === "codex_mcp_tool_call") {
+    const target = [server, nestedTool].filter(Boolean).join("/");
+    return `MCP tool${target ? `: ${target}` : ""}`;
+  }
+  if (toolName === "codex_image_view") return `View image${name || shortPath ? `: ${name || shortPath}` : ""}`;
   return toolName;
 }
 
@@ -356,8 +393,11 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
   const lists = calls.filter((call) => call.toolName === "list_dir").length;
   const searches = calls.filter((call) => call.toolName === "glob" || call.toolName === "grep").length;
   const digests = calls.filter((call) => call.toolName === "sha256").length;
-  const writes = calls.filter((call) => call.toolName === "write" || call.toolName === "edit").length;
+  const writes = calls.filter(
+    (call) => call.toolName === "write" || call.toolName === "edit" || call.toolName === "codex_file_change",
+  ).length;
   const commands = calls.filter((call) => call.toolName === "bash").length;
+  const previews = calls.filter((call) => call.toolName === "workspace_serve").length;
   const computerCalls = calls.filter((call) => call.category === "computer").length;
   const docsCalls = calls.filter((call) => call.category === "docs").length;
   const webCalls = calls.filter((call) => call.toolName === "web_research" || call.toolName === "web_crawl").length;
@@ -379,25 +419,29 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
             ? running
               ? "Running"
               : "Ran"
-            : category === "computer"
+            : category === "preview"
               ? running
-                ? "Using"
-                : "Used"
-              : category === "web"
+                ? "Starting"
+                : "Started"
+              : category === "computer"
                 ? running
-                  ? "Researching"
-                  : "Researched"
-                : category === "docs"
+                  ? "Using"
+                  : "Used"
+                : category === "web"
                   ? running
-                    ? "Reading"
-                    : "Read"
-                : category === "community"
-                  ? running
-                    ? "Working"
-                    : "Worked"
-                  : running
-                    ? "Processing"
-                    : "Processed";
+                    ? "Researching"
+                    : "Researched"
+                  : category === "docs"
+                    ? running
+                      ? "Reading"
+                      : "Read"
+                    : category === "community"
+                      ? running
+                        ? "Working"
+                        : "Worked"
+                      : running
+                        ? "Processing"
+                        : "Processed";
 
   const parts: string[] = [];
   if (category === "exploration") {
@@ -410,6 +454,8 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
     if (writes > 0) parts.push(formatCount(writes, "change"));
   } else if (category === "shell") {
     if (commands > 0) parts.push(formatCount(commands, "command"));
+  } else if (category === "preview") {
+    if (previews > 0) parts.push(formatCount(previews, "app preview"));
   } else if (category === "computer") {
     if (computerCalls > 0) parts.push(formatCount(computerCalls, "computer step"));
   } else if (category === "docs") {
@@ -434,132 +480,9 @@ function resolveToolCallId(
   return (
     toStringValue(payload.tool_call_id) ||
     toStringValue(payload.provider_call_id) ||
+    toStringValue(payload.item_id) ||
     `${event.run_id}:${event.seq}:${toolName}`
   );
-}
-
-function readComputerUseDetails(payload: Record<string, unknown> | null): {
-  frameUrl: string | null;
-  summary: string | null;
-} {
-  const details = asRecord(payload?.details);
-  const computerUse = asRecord(details?.computer_use);
-  const requestedX = toFiniteNumberValue(computerUse?.requested_x);
-  const requestedY = toFiniteNumberValue(computerUse?.requested_y);
-  const mouseX = toFiniteNumberValue(computerUse?.mouse_x);
-  const mouseY = toFiniteNumberValue(computerUse?.mouse_y);
-  const browserWindowTitle = toStringValue(computerUse?.browser_window_title);
-  const windowTitlesBefore = toStringArray(computerUse?.window_titles_before);
-  const windowTitlesAfter = toStringArray(computerUse?.window_titles_after);
-  const networkProbeStatus = toStringValue(computerUse?.network_probe_status);
-  const networkProbeMessage = toStringValue(computerUse?.network_probe_message);
-  const networkProbeOutput = toStringValue(computerUse?.network_probe_output);
-  const diagnostics: string[] = [];
-
-  if (
-    requestedX !== null &&
-    requestedY !== null &&
-    mouseX !== null &&
-    mouseY !== null
-  ) {
-    diagnostics.push(
-      requestedX === mouseX && requestedY === mouseY
-        ? `Cursor confirmed at (${mouseX}, ${mouseY}).`
-        : `Requested (${requestedX}, ${requestedY}); cursor ended at (${mouseX}, ${mouseY}).`,
-    );
-  }
-
-  if (browserWindowTitle) {
-    diagnostics.push(`Browser window: ${browserWindowTitle}.`);
-  }
-
-  if (windowTitlesBefore.length > 0 || windowTitlesAfter.length > 0) {
-    const beforeLabel = windowTitlesBefore.length > 0 ? windowTitlesBefore.join(", ") : "(none)";
-    const afterLabel = windowTitlesAfter.length > 0 ? windowTitlesAfter.join(", ") : "(none)";
-    diagnostics.push(`Windows before: ${beforeLabel}. After: ${afterLabel}.`);
-  }
-
-  if (networkProbeStatus && networkProbeStatus !== "reachable") {
-    diagnostics.push(
-      networkProbeMessage
-        ? `Navigation blocker: ${networkProbeMessage}.`
-        : `Navigation blocker: ${networkProbeStatus}.`,
-    );
-    if (networkProbeOutput) {
-      diagnostics.push(`Probe output: ${truncateLabel(networkProbeOutput, 180)}.`);
-    }
-  }
-
-  const summary = toStringValue(computerUse?.summary);
-  return {
-    frameUrl: toStringValue(computerUse?.frame_url),
-    summary: [summary, diagnostics.join(" ")].filter((value): value is string => Boolean(value)).join(" ").trim() || null,
-  };
-}
-
-export function buildRuntimeComputerUseViewer(
-  events: Array<Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
-): RuntimeComputerUseViewerState | null {
-  const pendingTitles = new Map<string, string>();
-  const recentSteps: RuntimeComputerUseStep[] = [];
-  let latestFrameUrl: string | null = null;
-  let latestActionTitle: string | null = null;
-  let latestSummary: string | null = null;
-  let lastFinishedToolName: string | null = null;
-  let lastFinishedStatus: "ok" | "error" | null = null;
-
-  for (const event of events) {
-    if (event.event_type !== "tool_call_started" && event.event_type !== "tool_call_finished") continue;
-    const payload = asRecord(event.payload);
-    if (!payload) continue;
-    const toolName = toStringValue(payload.tool_name);
-    if (!toolName || !isComputerUseToolName(toolName)) continue;
-    const args = asRecord(payload.args);
-    const callId = resolveToolCallId(event, payload, toolName);
-    const title = buildCallTitle(toolName, args);
-    if (event.event_type === "tool_call_started") {
-      pendingTitles.set(callId, title);
-      continue;
-    }
-
-    pendingTitles.delete(callId);
-    const status = toStringValue(payload.status) === "error" ? "error" : "ok";
-    const { frameUrl, summary } = readComputerUseDetails(payload);
-    recentSteps.push({
-      id: callId,
-      seq: event.seq,
-      title,
-      summary,
-      status,
-    });
-    latestActionTitle = title;
-    latestSummary = summary;
-    if (frameUrl) {
-      latestFrameUrl = frameUrl;
-    }
-    lastFinishedToolName = toolName;
-    lastFinishedStatus = status;
-  }
-
-  if (!latestFrameUrl && recentSteps.length === 0 && pendingTitles.size === 0) return null;
-
-  const pendingActionTitle =
-    pendingTitles.size > 0 ? Array.from(pendingTitles.values())[pendingTitles.size - 1] ?? null : null;
-  const status =
-    lastFinishedStatus === "error"
-      ? "error"
-      : lastFinishedToolName === "computer_stop"
-        ? "stopped"
-        : "active";
-
-  return {
-    latestFrameUrl,
-    latestActionTitle,
-    latestSummary,
-    pendingActionTitle,
-    status,
-    recentSteps: recentSteps.slice(-5).reverse(),
-  };
 }
 
 function extractRuntimeToolCalls(
@@ -570,10 +493,10 @@ function extractRuntimeToolCalls(
     if (event.event_type !== "tool_call_started" && event.event_type !== "tool_call_finished") continue;
     const payload = asRecord(event.payload);
     if (!payload) continue;
-    const toolName = toStringValue(payload.tool_name);
+    const toolName = readRuntimeToolName(payload);
     if (!toolName) continue;
     const callId = resolveToolCallId(event, payload, toolName);
-    const args = asRecord(payload.args);
+    const args = readRuntimeToolArgs(payload);
     let call = calls.get(callId);
     if (!call) {
       call = {
@@ -607,25 +530,74 @@ export function buildRuntimeLiveTimeline(
   const calls = extractRuntimeToolCalls(
     sorted as Array<Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "event_type" | "payload">>,
   );
-  const reasoningSections = new Map<
-    string,
-    {
-      id: string;
-      seqStart: number;
-      seqEnd: number;
-      text: string;
-    }
-  >();
-  const toolGroups: RuntimeTimelineToolGroup[] = [];
+  const entries: RuntimeLiveTimelineEntry[] = [];
   let latestEventSeq = -1;
   const placedCallIds = new Set<string>();
-  let currentToolGroup: RuntimeTimelineToolGroup | null = null;
+
+  function appendTextEntry(params: {
+    kind: "assistant_text" | "reasoning";
+    key: string;
+    seq: number;
+    delta: string;
+  }): void {
+    if (!params.delta) return;
+    const idPrefix = `${params.kind}:${params.key}:`;
+    const lastEntry = entries[entries.length - 1];
+    if (lastEntry?.kind === params.kind && lastEntry.id.startsWith(idPrefix)) {
+      lastEntry.text += params.delta;
+      lastEntry.seqEnd = Math.max(lastEntry.seqEnd, params.seq);
+      return;
+    }
+    entries.push({
+      id: `${idPrefix}${params.seq}`,
+      kind: params.kind,
+      seqStart: params.seq,
+      seqEnd: params.seq,
+      text: params.delta,
+      isActive: false,
+    });
+  }
+
+  function appendToolCall(call: RuntimeTimelineToolCall): void {
+    const lastEntry = entries[entries.length - 1];
+    if (lastEntry?.kind === "tool_group" && lastEntry.group.category === call.category) {
+      lastEntry.group.calls.push(call);
+      lastEntry.seqEnd = Math.max(lastEntry.seqEnd, call.seqEnd);
+      return;
+    }
+    entries.push({
+      id: `${call.category}:${call.seqStart}`,
+      kind: "tool_group",
+      seqStart: call.seqStart,
+      seqEnd: call.seqEnd,
+      group: {
+        id: `${call.category}:${call.seqStart}`,
+        category: call.category,
+        title: "",
+        status: call.status,
+        calls: [call],
+      },
+      isActive: false,
+    });
+  }
 
   for (const event of sorted) {
     latestEventSeq = Math.max(latestEventSeq, event.seq);
+    if (event.event_type === "assistant_text_delta") {
+      const payload = asRecord(event.payload);
+      const delta = typeof payload?.delta === "string" ? payload.delta : "";
+      const itemId = toStringValue(payload?.item_id) ?? `seq-${event.seq}`;
+      appendTextEntry({
+        kind: "assistant_text",
+        key: itemId,
+        seq: event.seq,
+        delta,
+      });
+      continue;
+    }
     if (event.event_type === "tool_call_started" || event.event_type === "tool_call_finished") {
       const payload = asRecord(event.payload);
-      const toolName = toStringValue(payload?.tool_name);
+      const toolName = readRuntimeToolName(payload);
       if (!payload || !toolName) continue;
       const callId = resolveToolCallId(
         event as Pick<CloudRuntimeRunEventTransportRow, "run_id" | "seq" | "payload">,
@@ -635,49 +607,11 @@ export function buildRuntimeLiveTimeline(
       if (placedCallIds.has(callId)) continue;
       const call = calls.get(callId);
       if (!call) continue;
-      if (!currentToolGroup || currentToolGroup.category !== call.category) {
-        currentToolGroup = {
-          id: `${call.category}:${call.seqStart}`,
-          category: call.category,
-          title: "",
-          status: call.status,
-          calls: [call],
-        };
-        toolGroups.push(currentToolGroup);
-      } else {
-        currentToolGroup.calls.push(call);
-        if (currentToolGroup.status !== "error") {
-          currentToolGroup.status =
-            call.status === "error"
-              ? "error"
-              : currentToolGroup.status === "running" || call.status === "running"
-                ? "running"
-                : "ok";
-        }
-      }
+      appendToolCall(call);
       placedCallIds.add(callId);
       continue;
     }
     if (event.event_type === "reasoning_summary_part_added") {
-      const payload = asRecord(event.payload);
-      const summaryIndex = Number(payload?.summary_index);
-      if (!Number.isFinite(summaryIndex)) continue;
-      const summaryStreamId = toStringValue(payload?.summary_stream_id) ?? "default";
-      const normalizedSummaryIndex = Math.max(0, Math.floor(summaryIndex));
-      const sectionKey = `${summaryStreamId}:${normalizedSummaryIndex}`;
-      if (!reasoningSections.has(sectionKey)) {
-        reasoningSections.set(sectionKey, {
-          id: `reasoning:${sectionKey}`,
-          seqStart: event.seq,
-          seqEnd: event.seq,
-          text: "",
-        });
-      }
-      currentToolGroup = null;
-      const section = reasoningSections.get(sectionKey);
-      if (section) {
-        section.seqEnd = Math.max(section.seqEnd, event.seq);
-      }
       continue;
     }
     if (event.event_type === "reasoning_summary_text_delta") {
@@ -688,63 +622,47 @@ export function buildRuntimeLiveTimeline(
       const summaryStreamId = toStringValue(payload?.summary_stream_id) ?? "default";
       const normalizedSummaryIndex = Math.max(0, Math.floor(summaryIndex));
       const sectionKey = `${summaryStreamId}:${normalizedSummaryIndex}`;
-      const section =
-        reasoningSections.get(sectionKey) ??
-        (() => {
-          const created = {
-            id: `reasoning:${sectionKey}`,
-            seqStart: event.seq,
-            seqEnd: event.seq,
-            text: "",
-          };
-          reasoningSections.set(sectionKey, created);
-          return created;
-        })();
-      currentToolGroup = null;
-      section.text += delta;
-      section.seqEnd = Math.max(section.seqEnd, event.seq);
+      appendTextEntry({
+        kind: "reasoning",
+        key: sectionKey,
+        seq: event.seq,
+        delta,
+      });
     }
   }
 
-  const normalizedToolGroups: RuntimeTimelineToolGroup[] = toolGroups.map((group) => ({
-    ...group,
-    title: buildGroupTitle(group.category, group.calls),
-    status:
-      group.calls.some((call) => call.status === "error")
-        ? "error"
-        : group.calls.some((call) => call.status === "running")
-          ? "running"
-          : "ok",
-  }));
-
-  const reasoningEntries: RuntimeLiveTimelineEntry[] = [...reasoningSections.values()]
-    .map((section) => ({
-      id: section.id,
-      kind: "reasoning" as const,
-      seqStart: section.seqStart,
-      seqEnd: section.seqEnd,
-      text: section.text.trim(),
-      isActive: section.seqEnd === latestEventSeq,
-    }))
-    .filter((entry) => entry.text);
-
-  const toolEntries: RuntimeLiveTimelineEntry[] = normalizedToolGroups.map((group) => {
-    const seqStart = group.calls[0]?.seqStart ?? 0;
-    const seqEnd = group.calls[group.calls.length - 1]?.seqEnd ?? seqStart;
-    return {
-      id: group.id,
-      kind: "tool_group" as const,
-      seqStart,
-      seqEnd,
-      group,
-      isActive: seqEnd === latestEventSeq,
-    };
-  });
-
-  return [...reasoningEntries, ...toolEntries].sort((a, b) => {
-    if (a.seqStart !== b.seqStart) return a.seqStart - b.seqStart;
-    if (a.seqEnd !== b.seqEnd) return a.seqEnd - b.seqEnd;
-    return a.kind === b.kind ? 0 : a.kind === "reasoning" ? -1 : 1;
+  return entries.flatMap<RuntimeLiveTimelineEntry>((entry) => {
+    if (entry.kind === "tool_group") {
+      const group = entry.group;
+      return [
+        {
+          ...entry,
+          group: {
+            ...group,
+            title: buildGroupTitle(group.category, group.calls),
+            status:
+              group.calls.some((call) => call.status === "error")
+                ? "error"
+                : group.calls.some((call) => call.status === "running")
+                  ? "running"
+                  : "ok",
+          },
+          isActive: entry.seqEnd === latestEventSeq,
+        },
+      ];
+    }
+    const text =
+      entry.kind === "reasoning"
+        ? normalizeReasoningSummaryText(entry.text)
+        : normalizeAssistantText(entry.text);
+    if (!text) return [];
+    return [
+      {
+        ...entry,
+        text,
+        isActive: entry.seqEnd === latestEventSeq,
+      },
+    ];
   });
 }
 

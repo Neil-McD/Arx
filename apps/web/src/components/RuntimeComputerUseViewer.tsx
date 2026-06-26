@@ -2,7 +2,7 @@ import { useEffect, useMemo, useReducer } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { getConvexCloudRuntimeRunComputerUseLiveSession } from "../../../../shared/cloudThreadsRead";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
-import { buildRuntimeComputerUseViewer } from "../../../../shared/runtimeTimelineUi";
+import { buildRuntimeComputerUseViewer } from "../../../../shared/runtimeComputerUseViewerUi";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
