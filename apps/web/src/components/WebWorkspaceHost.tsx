@@ -1149,7 +1149,7 @@ function WorkspaceRuntimeEngineSelector(props: {
   onChange: (engine: RuntimeEngine) => void;
 }) {
   const runtimeEngineLabels: Partial<Record<RuntimeEngine, string>> = {
-    polynet: "PolyNet",
+    polynet: "Polynet",
     codex: "Codex",
   };
   const options = ACTIVE_WORKSPACE_RUNTIME_ENGINES.map((value) => ({
