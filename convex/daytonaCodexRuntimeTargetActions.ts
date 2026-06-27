@@ -673,7 +673,7 @@ function readDaytonaTargetLifecycleMode(): DaytonaTargetLifecycleMode {
   const explicit = readEnv("POLYNET_DAYTONA_DIRECT_LIFECYCLE_MODE");
   if (explicit === "per_turn_ephemeral") return "per_turn_ephemeral";
   if (explicit === "thread_ephemeral") return "thread_ephemeral";
-  return "per_turn_ephemeral";
+  return "thread_ephemeral";
 }
 
 function normalizeDaytonaTargetLifecycleMode(
@@ -2106,6 +2106,42 @@ export const teardownDaytonaCodexRuntimeTargetInternal = internalAction({
           lifecycleMode,
           sandboxId,
           reason: "active_preview_lease",
+          timing: timing(),
+        };
+      }
+
+      if (lifecycleMode === "thread_ephemeral") {
+        await ctx.runMutation(
+          (internal as any).daytonaCodexRuntimeTargets
+            .markDaytonaCodexRuntimeTargetWorkspaceLifecycleInternal as any,
+          {
+            ownerId: args.ownerId,
+            runId: args.runId,
+            workspaceChangeState: workspaceScan.changeState,
+            workspaceRetentionState: "none",
+            workspaceMeaningfulFileCount: workspaceScan.meaningfulFileCount,
+            workspaceMeaningfulFilePreview: workspaceScan.meaningfulFilePreview,
+            cleanupDecision: "keep_thread_ephemeral_reuse",
+            nowMs: Date.now(),
+          },
+        );
+        await ctx.runMutation(
+          (internal as any).daytonaCodexRuntimeTargets
+            .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
+          {
+            ownerId: args.ownerId,
+            runId: args.runId,
+            state: "skipped",
+            reason: `${args.reason}:thread_ephemeral_reuse`,
+            nowMs: Date.now(),
+          },
+        );
+        return {
+          ok: true,
+          state: "skipped",
+          lifecycleMode,
+          sandboxId,
+          reason: "thread_ephemeral_reuse",
           timing: timing(),
         };
       }

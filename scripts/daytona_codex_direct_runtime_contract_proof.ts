@@ -236,8 +236,8 @@ assert.doesNotMatch(
 );
 assert.match(
   actions,
-  /function readConfiguredReusableSandboxId\(\): string[\s\S]*POLYNET_DAYTONA_DIRECT_SANDBOX_ID[\s\S]*function readDaytonaTargetLifecycleMode\(\): DaytonaTargetLifecycleMode[\s\S]*readConfiguredReusableSandboxId\(\)[\s\S]*prepared_staging_reuse[\s\S]*POLYNET_DAYTONA_DIRECT_LIFECYCLE_MODE[\s\S]*per_turn_ephemeral[\s\S]*thread_ephemeral[\s\S]*return "per_turn_ephemeral"/,
-  "Daytona direct targets must default to per-turn provider-ephemeral sandboxes while preserving explicit staging reuse and thread overrides",
+  /function readConfiguredReusableSandboxId\(\): string[\s\S]*POLYNET_DAYTONA_DIRECT_SANDBOX_ID[\s\S]*function readDaytonaTargetLifecycleMode\(\): DaytonaTargetLifecycleMode[\s\S]*readConfiguredReusableSandboxId\(\)[\s\S]*prepared_staging_reuse[\s\S]*POLYNET_DAYTONA_DIRECT_LIFECYCLE_MODE[\s\S]*per_turn_ephemeral[\s\S]*thread_ephemeral[\s\S]*return "thread_ephemeral"/,
+  "Daytona direct targets must default to same-thread reusable sandboxes while preserving explicit staging reuse and per-turn overrides",
 );
 assert.match(
   actions,
@@ -496,8 +496,13 @@ assert.match(
 );
 assert.match(
   actions,
-  /deleteDaytonaSandbox[\s\S]*workspaceChangeState: workspaceScan\.changeState[\s\S]*workspaceRetentionState: "none"[\s\S]*cleanupDecision: "delete_without_active_lease"[\s\S]*state: "deleted"[\s\S]*appendDaytonaPreviewStoppedEventBestEffort/,
-  "Daytona teardown must delete released sandboxes without an active preview lease even when workspace files are dirty or unscannable",
+  /lifecycleMode === "thread_ephemeral"[\s\S]*cleanupDecision: "keep_thread_ephemeral_reuse"[\s\S]*state: "skipped"[\s\S]*thread_ephemeral_reuse/,
+  "Daytona teardown must keep thread-scoped sandboxes reusable across Helena/Codex turns",
+);
+assert.match(
+  actions,
+  /lifecycleMode === "thread_ephemeral"[\s\S]*deleteDaytonaSandbox[\s\S]*workspaceChangeState: workspaceScan\.changeState[\s\S]*workspaceRetentionState: "none"[\s\S]*cleanupDecision: "delete_without_active_lease"[\s\S]*state: "deleted"[\s\S]*appendDaytonaPreviewStoppedEventBestEffort/,
+  "Daytona teardown must still delete explicit per-turn sandboxes without an active preview lease even when workspace files are dirty or unscannable",
 );
 assert.doesNotMatch(
   actions,

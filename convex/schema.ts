@@ -2728,6 +2728,7 @@ export default defineSchema({
         v.literal("delete_without_active_lease"),
         v.literal("stop_for_human_save"),
         v.literal("keep_running_active_preview"),
+        v.literal("keep_thread_ephemeral_reuse"),
         v.literal("skip_prepared_staging_reuse"),
         v.literal("retain_scan_failed"),
         v.literal("delete_expired_retention"),
