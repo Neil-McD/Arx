@@ -68,6 +68,11 @@ export const PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES: readonly RetrievalToolName[]
   "terminal_stop",
 ];
 
+export const SANDBOX_PREVIEW_TOOL_NAMES: readonly RetrievalToolName[] = [
+  "terminal_start",
+  "terminal_stop",
+];
+
 export const PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES: readonly RetrievalToolName[] = [
   ...PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES,
   ...COMPUTER_USE_TOOL_NAMES,

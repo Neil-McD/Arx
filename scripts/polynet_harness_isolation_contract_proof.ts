@@ -15,6 +15,7 @@ import {
   COMPUTER_USE_TOOL_NAMES,
   NON_SANDBOX_TOOL_NAMES,
   SANDBOX_FILE_SHELL_TOOL_NAMES,
+  SANDBOX_PREVIEW_TOOL_NAMES,
   SANDBOX_TOOL_NAMES,
   type RetrievalToolName,
 } from "../shared/retrievalTools.ts";
@@ -157,7 +158,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   [...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES],
-  ["terminal_start", "terminal_stop"],
+  [...SANDBOX_PREVIEW_TOOL_NAMES],
   "PolyNet must expose only Daytona-backed preview start/stop tools",
 );
 

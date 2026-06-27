@@ -1,7 +1,8 @@
 import {
   COMPUTER_USE_TOOL_NAMES,
-  SANDBOX_TOOL_NAMES,
   SANDBOX_FILE_SHELL_TOOL_NAMES,
+  SANDBOX_PREVIEW_TOOL_NAMES,
+  SANDBOX_TOOL_NAMES,
   type RetrievalToolName,
 } from "./retrievalTools.ts";
 import {
@@ -86,7 +87,7 @@ export const POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES: readonly RetrievalToo
   SANDBOX_FILE_SHELL_TOOL_NAMES;
 
 export const POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES: readonly RetrievalToolName[] =
-  ["terminal_start", "terminal_stop"];
+  SANDBOX_PREVIEW_TOOL_NAMES;
 
 function uniqueRetrievalToolNames(values: readonly RetrievalToolName[]): RetrievalToolName[] {
   const seen = new Set<string>();

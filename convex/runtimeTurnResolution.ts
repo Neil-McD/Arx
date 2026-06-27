@@ -4,6 +4,7 @@ import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig"
 import {
   PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES,
   SANDBOX_FILE_SHELL_TOOL_NAMES,
+  SANDBOX_PREVIEW_TOOL_NAMES,
   type RetrievalToolName,
 } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
@@ -259,6 +260,7 @@ export function resolveAllowedToolNames(params: {
   }
   if (params.activeCapabilityFamilies.includes("sandbox_tools")) {
     toolNames.push(...SANDBOX_FILE_SHELL_TOOL_NAMES);
+    toolNames.push(...SANDBOX_PREVIEW_TOOL_NAMES);
   }
   if (params.activeCapabilityFamilies.includes("workspace_tools")) {
     toolNames.push(...PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES);

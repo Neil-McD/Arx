@@ -393,8 +393,8 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeTurnResolutionSource,
-    /if \(params\.activeCapabilityFamilies\.includes\("sandbox_tools"\)\)[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES/,
-    "sandbox file and shell tools should be exposed by authenticated sandbox capability",
+    /if \(params\.activeCapabilityFamilies\.includes\("sandbox_tools"\)\)[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES[\s\S]*SANDBOX_PREVIEW_TOOL_NAMES/,
+    "sandbox file, shell, and preview start/stop tools should be exposed by authenticated sandbox capability",
   );
   assert.match(
     runtimeTurnResolutionSource,
