@@ -9036,6 +9036,24 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: color-mix(in srgb, var(--bg-card) 80%, var(--bg-workspace) 20%);
 }
 
+.community-interaction-reply-button {
+  margin-top: 10px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-default);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.community-interaction-reply-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .community-interaction-reply-list {
   display: grid;
   gap: 2px;

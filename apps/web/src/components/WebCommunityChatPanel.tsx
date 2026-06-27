@@ -139,7 +139,7 @@ export type WebCommunityChatPanelProps = {
   onRequireSignIn: () => void;
   onFinishProfileSetup: () => void;
   onScrollToBottom: () => void;
-  onSetReplyingToMessage: (message: CommunityChatMessage | null) => void;
+  onSetReplyingToMessage: (message: Pick<CommunityChatMessage, "id" | "sender_id" | "body"> | null) => void;
   onRemoveCommunityAttachment: (id: string) => void;
   onCommunityFileInputChange: ChangeEventHandler<HTMLInputElement>;
   onCommunityAttachmentDrop: DragEventHandler<HTMLDivElement>;
@@ -544,6 +544,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 getInitials={getInitials}
                 formatChatTime={formatChatTime}
                 renderTextWithLinks={renderTextWithLinks}
+                onStartRootReply={(message) => {
+                  onSetReplyingToMessage(message);
+                  chatInputRef.current?.focus();
+                }}
               />
             </div>
           ) : (

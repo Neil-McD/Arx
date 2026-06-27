@@ -17,6 +17,7 @@ export type WebCommunityInteractionProjectionProps = {
   repliesError: string | null;
   onSelectRoot: (rootId: string) => void;
   onCloseDrawer: () => void;
+  onStartRootReply?: (message: { id: string; sender_id: string; body: string }) => void;
   onRetryRoots: () => void;
   onRetryReplies: (rootId: string) => void;
   displayName: (userId: string) => string;
@@ -139,6 +140,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const selectedRootText = selectedRoot
     ? bundleText(selectedRoot.content_blocks, selectedRoot.root.content_summary)
     : "";
+  const canReplyToSelectedRoot = Boolean(
+    selectedRoot?.root.legacy_message_id && selectedRoot.root.actor_user_id && selectedRootText.trim(),
+  );
 
   return (
     <div className={`community-interaction-projection${selectedRoot ? " has-drawer" : ""}`}>
@@ -238,6 +242,22 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           </div>
           <div className="community-interaction-drawer-root">
             <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
+            {canReplyToSelectedRoot ? (
+              <button
+                className="community-interaction-reply-button"
+                type="button"
+                onClick={() => {
+                  if (!selectedRoot?.root.legacy_message_id || !selectedRoot.root.actor_user_id) return;
+                  props.onStartRootReply?.({
+                    id: selectedRoot.root.legacy_message_id,
+                    sender_id: selectedRoot.root.actor_user_id,
+                    body: selectedRootText,
+                  });
+                }}
+              >
+                Reply
+              </button>
+            ) : null}
           </div>
           {props.repliesError ? (
             <div className="community-interaction-state" role="alert">

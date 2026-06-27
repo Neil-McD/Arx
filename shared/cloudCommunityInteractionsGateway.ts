@@ -69,6 +69,8 @@ export type CommunityInteractionRootRecord = {
   last_reply_at: string | null;
   pinned_at: string | null;
   locked_at: string | null;
+  legacy_thread_id: string | null;
+  legacy_message_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -87,6 +89,9 @@ export type CommunityInteractionReplyRecord = {
   content_summary: string;
   reaction_summary: CommunityInteractionReactionSummary[];
   idempotency_key: string;
+  legacy_thread_id: string | null;
+  legacy_message_id: string | null;
+  legacy_target_message_id: string | null;
   created_at: string;
   updated_at: string;
 };

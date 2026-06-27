@@ -436,6 +436,20 @@ async function getLegacyChatLinkByMessage(ctx: any, messageId: any): Promise<Leg
     .first()) as LegacyChatLinkRow | null;
 }
 
+async function getLegacyChatLinkByRoot(ctx: any, rootId: any): Promise<LegacyChatLinkRow | null> {
+  return (await ctx.db
+    .query("communityInteractionLegacyChatLinks" as any)
+    .withIndex("by_root", (q: any) => q.eq("rootId", rootId))
+    .first()) as LegacyChatLinkRow | null;
+}
+
+async function getLegacyChatLinkByReply(ctx: any, replyId: any): Promise<LegacyChatLinkRow | null> {
+  return (await ctx.db
+    .query("communityInteractionLegacyChatLinks" as any)
+    .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
+    .first()) as LegacyChatLinkRow | null;
+}
+
 async function insertLegacyChatLinkIfMissing(args: {
   ctx: any;
   communityId: any;
@@ -581,6 +595,7 @@ async function mapRootBundle(ctx: any, root: InteractionRootRow, deduped: boolea
   const blocks = await listContentBlocksForRoot(ctx, root._id);
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
+  const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
   return {
     deduped,
     root: {
@@ -600,6 +615,8 @@ async function mapRootBundle(ctx: any, root: InteractionRootRow, deduped: boolea
       last_reply_at: typeof root.lastReplyAt === "number" ? toIsoString(root.lastReplyAt) : null,
       pinned_at: typeof root.pinnedAt === "number" ? toIsoString(root.pinnedAt) : null,
       locked_at: typeof root.lockedAt === "number" ? toIsoString(root.lockedAt) : null,
+      legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
+      legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
       created_at: toIsoString(root.createdAt),
       updated_at: toIsoString(root.updatedAt),
     },
@@ -613,6 +630,7 @@ async function mapReplyBundle(ctx: any, reply: InteractionReplyRow, deduped: boo
   const blocks = await listContentBlocksForReply(ctx, reply._id);
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
+  const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
   return {
     deduped,
     reply: {
@@ -629,6 +647,9 @@ async function mapReplyBundle(ctx: any, reply: InteractionReplyRow, deduped: boo
       content_summary: reply.contentSummary,
       reaction_summary: mapReactionSummary(reply.reactionSummary),
       idempotency_key: reply.idempotencyKey,
+      legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
+      legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
+      legacy_target_message_id: legacyLink?.targetMessageId ? normalizeIdValue(legacyLink.targetMessageId) : null,
       created_at: toIsoString(reply.createdAt),
       updated_at: toIsoString(reply.updatedAt),
     },
