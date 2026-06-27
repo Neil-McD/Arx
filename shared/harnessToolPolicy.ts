@@ -1,5 +1,7 @@
 import {
+  PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES,
   SANDBOX_TOOL_NAMES,
+  SANDBOX_FILE_SHELL_TOOL_NAMES,
   type RetrievalToolName,
 } from "./retrievalTools.ts";
 import {
@@ -74,7 +76,10 @@ export const CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES = [
 ] as const;
 
 export const POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES: readonly RetrievalToolName[] =
-  SANDBOX_TOOL_NAMES;
+  PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES;
+
+export const POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES: readonly RetrievalToolName[] =
+  SANDBOX_FILE_SHELL_TOOL_NAMES;
 
 function uniqueRetrievalToolNames(values: readonly RetrievalToolName[]): RetrievalToolName[] {
   const seen = new Set<string>();
@@ -127,6 +132,38 @@ function buildCodexRuntimeCapabilities(
   return capabilities;
 }
 
+function buildPolynetRuntimeCapabilities(
+  fixedRuntimeToolNames: readonly RetrievalToolName[],
+): HarnessRuntimeCapability[] {
+  const available = new Set<string>(fixedRuntimeToolNames);
+  const capabilities: HarnessRuntimeCapability[] = [];
+  const fileToolNames = selectIncludedToolNames(
+    [
+      "list_dir",
+      "read",
+      "glob",
+      "grep",
+      "sha256",
+      "write",
+      "edit",
+    ] as const,
+    available,
+  );
+  if (fileToolNames.length > 0) {
+    capabilities.push({
+      name: "workspace_files",
+      toolNames: fileToolNames,
+    });
+  }
+  if (available.has("bash")) {
+    capabilities.push({
+      name: "workspace_shell",
+      toolNames: ["bash"],
+    });
+  }
+  return capabilities;
+}
+
 const POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAME_SET = new Set<RetrievalToolName>(
   POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
 );
@@ -148,7 +185,7 @@ export function resolvePolynetHarnessToolPolicy(params: {
   return {
     harnessKind: "polynet",
     fixedRuntimeToolNames,
-    runtimeCapabilities: [],
+    runtimeCapabilities: buildPolynetRuntimeCapabilities(fixedRuntimeToolNames),
   };
 }
 

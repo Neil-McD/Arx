@@ -85,6 +85,7 @@ import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken"
 import {
   buildCodexHarnessToolPolicyReceipt,
   buildPolynetHarnessToolPolicyReceipt,
+  POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
   POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
   resolveCodexHarnessToolPolicy,
   resolvePolynetHarnessToolPolicy,
@@ -136,6 +137,7 @@ type RuntimeSubstrateResolution = {
   provider: "daytona" | "project_workspace" | "none";
   status:
     | "required_for_codex"
+    | "polynet_daytona_workspace"
     | "polynet_harness_isolated"
     | "legacy_project_workspace";
   targetId: string | null;
@@ -148,8 +150,11 @@ type RuntimeSubstrateResolution = {
   suppressedToolNames: RetrievalToolName[];
 };
 
-const POLYNET_WORKSPACE_SUBSTRATE_TOOL_NAMES = new Set<RetrievalToolName>([
+const POLYNET_DEFERRED_RUNTIME_TOOL_NAMES = new Set<RetrievalToolName>([
   ...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
+]);
+const POLYNET_DAYTONA_WORKSPACE_TOOL_NAME_SET = new Set<RetrievalToolName>([
+  ...POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
 ]);
 
 function isolatePolynetHarnessToolNames(params: {
@@ -158,7 +163,7 @@ function isolatePolynetHarnessToolNames(params: {
   const allowedToolNames: RetrievalToolName[] = [];
   const suppressedToolNames: RetrievalToolName[] = [];
   for (const toolName of params.allowedToolNames) {
-    if (POLYNET_WORKSPACE_SUBSTRATE_TOOL_NAMES.has(toolName)) {
+    if (POLYNET_DEFERRED_RUNTIME_TOOL_NAMES.has(toolName)) {
       suppressedToolNames.push(toolName);
     } else {
       allowedToolNames.push(toolName);
@@ -1142,7 +1147,20 @@ export async function handleRuntimeTurnRequest(args: {
         return null;
       }
     };
-    const activeDaytonaRuntimeSubstrate = usePolynetCodexWorkerBridge
+    const polynetToolSurface = isolatePolynetHarnessToolNames({
+      allowedToolNames,
+    });
+    const polynetAllowedToolNamesForRun = polynetToolSurface.allowedToolNames;
+    const suppressedPolynetToolNames = polynetToolSurface.suppressedToolNames;
+    const polynetDaytonaWorkspaceEnabled =
+      !usePolynetCodexWorkerBridge &&
+      runtimeExecutionMode === "agentic" &&
+      polynetAllowedToolNamesForRun.some((toolName) =>
+        POLYNET_DAYTONA_WORKSPACE_TOOL_NAME_SET.has(toolName),
+      );
+    const shouldResolveDaytonaRuntimeSubstrate =
+      usePolynetCodexWorkerBridge || polynetDaytonaWorkspaceEnabled;
+    const activeDaytonaRuntimeSubstrate = shouldResolveDaytonaRuntimeSubstrate
       ? ((await ctx.runQuery(
           (internal as any).daytonaCodexRuntimeTargets
             .getActiveDaytonaCodexRuntimeSubstrateForThreadInternal as any,
@@ -1160,40 +1178,58 @@ export async function handleRuntimeTurnRequest(args: {
           previewLeaseActive?: unknown;
         } | null)
       : null;
-    const polynetToolSurface = isolatePolynetHarnessToolNames({
-      allowedToolNames,
-    });
-    const polynetAllowedToolNamesForRun = polynetToolSurface.allowedToolNames;
-    const suppressedPolynetToolNames = polynetToolSurface.suppressedToolNames;
+    const normalizedDaytonaRuntimeSubstrate = {
+      provider: "daytona" as const,
+      targetId:
+        String(activeDaytonaRuntimeSubstrate?.targetId ?? "").trim() || null,
+      runId:
+        String(activeDaytonaRuntimeSubstrate?.runId ?? "").trim() || runId,
+      sandboxId:
+        String(activeDaytonaRuntimeSubstrate?.sandboxId ?? "").trim() || null,
+      workspaceRoot:
+        String(activeDaytonaRuntimeSubstrate?.workspaceRoot ?? "").trim() ||
+        null,
+      activePreviewPorts: Array.isArray(
+        activeDaytonaRuntimeSubstrate?.activePreviewPorts,
+      )
+        ? activeDaytonaRuntimeSubstrate.activePreviewPorts
+            .map((port) => Number(port))
+            .filter((port) => Number.isFinite(port) && port > 0)
+        : [],
+      previewLeaseActive:
+        activeDaytonaRuntimeSubstrate?.previewLeaseActive === true,
+      previewStartAvailable: false,
+    };
     const runtimeSubstrateResolution: RuntimeSubstrateResolution =
       usePolynetCodexWorkerBridge
         ? {
             provider: "daytona",
             status: "required_for_codex",
-            targetId:
-              String(activeDaytonaRuntimeSubstrate?.targetId ?? "").trim() ||
-              null,
-            runId:
-              String(activeDaytonaRuntimeSubstrate?.runId ?? "").trim() ||
-              null,
-            sandboxId:
-              String(activeDaytonaRuntimeSubstrate?.sandboxId ?? "").trim() ||
-              null,
-            workspaceRoot:
-              String(activeDaytonaRuntimeSubstrate?.workspaceRoot ?? "").trim() ||
-              null,
-            activePreviewPorts: Array.isArray(
-              activeDaytonaRuntimeSubstrate?.activePreviewPorts,
-            )
-              ? activeDaytonaRuntimeSubstrate.activePreviewPorts
-                  .map((port) => Number(port))
-                  .filter((port) => Number.isFinite(port) && port > 0)
-              : [],
-            previewLeaseActive:
-              activeDaytonaRuntimeSubstrate?.previewLeaseActive === true,
+            targetId: normalizedDaytonaRuntimeSubstrate.targetId,
+            runId: normalizedDaytonaRuntimeSubstrate.runId,
+            sandboxId: normalizedDaytonaRuntimeSubstrate.sandboxId,
+            workspaceRoot: normalizedDaytonaRuntimeSubstrate.workspaceRoot,
+            activePreviewPorts: normalizedDaytonaRuntimeSubstrate.activePreviewPorts,
+            previewLeaseActive: normalizedDaytonaRuntimeSubstrate.previewLeaseActive,
             polyNetWorkspaceToolsSuppressed: false,
             suppressedToolNames: [],
           }
+        : polynetDaytonaWorkspaceEnabled
+          ? {
+              provider: "daytona",
+              status: "polynet_daytona_workspace",
+              targetId: normalizedDaytonaRuntimeSubstrate.targetId,
+              runId: normalizedDaytonaRuntimeSubstrate.runId,
+              sandboxId: normalizedDaytonaRuntimeSubstrate.sandboxId,
+              workspaceRoot: normalizedDaytonaRuntimeSubstrate.workspaceRoot,
+              activePreviewPorts:
+                normalizedDaytonaRuntimeSubstrate.activePreviewPorts,
+              previewLeaseActive:
+                normalizedDaytonaRuntimeSubstrate.previewLeaseActive,
+              polyNetWorkspaceToolsSuppressed:
+                suppressedPolynetToolNames.length > 0,
+              suppressedToolNames: suppressedPolynetToolNames,
+            }
         : {
             provider:
               runtimeExecutionMode === "agentic" ? "none" : "project_workspace",
@@ -1211,7 +1247,8 @@ export async function handleRuntimeTurnRequest(args: {
               suppressedPolynetToolNames.length > 0,
             suppressedToolNames: suppressedPolynetToolNames,
           };
-    const activeDaytonaRuntimeSubstrateForPolynetTools = null;
+    const activeDaytonaRuntimeSubstrateForPolynetTools =
+      polynetDaytonaWorkspaceEnabled ? normalizedDaytonaRuntimeSubstrate : null;
     await appendRunEvent({
       eventType: "runtime_substrate_resolved",
       eventKey: `${runId}:runtime_substrate_resolved:1`,

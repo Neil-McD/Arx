@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   CODEX_RUNTIME_ADAPTER_TOOL_NAMES,
+  POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
   POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
   buildCodexHarnessToolPolicyReceipt,
   buildPolynetHarnessToolPolicyReceipt,
@@ -11,6 +12,8 @@ import {
 } from "../shared/harnessToolPolicy.ts";
 import {
   NON_SANDBOX_TOOL_NAMES,
+  PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES,
+  SANDBOX_FILE_SHELL_TOOL_NAMES,
   SANDBOX_TOOL_NAMES,
   type RetrievalToolName,
 } from "../shared/retrievalTools.ts";
@@ -143,8 +146,13 @@ assert.match(
 
 assert.deepEqual(
   [...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES],
-  [...SANDBOX_TOOL_NAMES],
-  "PolyNet must forbid the complete sandbox substrate tool family",
+  [...PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES],
+  "PolyNet must defer preview, terminal, and computer tools in the first shared-Daytona slice",
+);
+assert.deepEqual(
+  [...POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES],
+  [...SANDBOX_FILE_SHELL_TOOL_NAMES],
+  "PolyNet must expose Daytona-backed filesystem and shell tools",
 );
 
 const mixedPolyNetPolicy = resolvePolynetHarnessToolPolicy({
@@ -161,25 +169,35 @@ assert.deepEqual(
     "get_active_community_context",
     "community_resources_search",
     "web_research",
+    ...SANDBOX_FILE_SHELL_TOOL_NAMES,
   ],
-  "PolyNet policy must strip workspace, shell, preview, and computer tools",
+  "PolyNet policy must keep community tools plus Daytona-backed filesystem and shell tools",
 );
 assert.deepEqual(
-  mixedPolyNetPolicy.runtimeCapabilities,
-  [],
-  "PolyNet policy must not advertise coding runtime capabilities",
+  mixedPolyNetPolicy.runtimeCapabilities.map((capability) => capability.name),
+  ["workspace_files", "workspace_shell"],
+  "PolyNet policy must advertise the shared Daytona workspace capabilities it exposes",
 );
 const mixedPolyNetReceipt = buildPolynetHarnessToolPolicyReceipt(mixedPolyNetPolicy);
 assert.deepEqual(
-  mixedPolyNetReceipt["runtime_capabilities"],
-  [],
-  "PolyNet policy receipts must keep runtime capabilities empty",
+  (mixedPolyNetReceipt["runtime_capabilities"] as Array<{ name: string }>).map(
+    (capability) => capability.name,
+  ),
+  ["workspace_files", "workspace_shell"],
+  "PolyNet policy receipts must include shared Daytona workspace capabilities",
 );
-for (const toolName of SANDBOX_TOOL_NAMES) {
+for (const toolName of SANDBOX_FILE_SHELL_TOOL_NAMES) {
+  assert.equal(
+    mixedPolyNetPolicy.fixedRuntimeToolNames.includes(toolName),
+    true,
+    `${toolName} must remain available to PolyNet through the shared Daytona workspace substrate`,
+  );
+}
+for (const toolName of PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES) {
   assert.equal(
     mixedPolyNetPolicy.fixedRuntimeToolNames.includes(toolName),
     false,
-    `${toolName} must be removed from the PolyNet harness surface`,
+    `${toolName} must remain deferred from the first PolyNet Daytona workspace slice`,
   );
 }
 
@@ -224,28 +242,28 @@ for (const toolName of NON_SANDBOX_TOOL_NAMES) {
 
 assert.match(
   harnessToolPolicy,
-  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*SANDBOX_TOOL_NAMES[\s\S]*excludePolynetRuntimeSubstrateToolNames[\s\S]*resolvePolynetHarnessToolPolicy/,
-  "shared harness policy must make PolyNet isolation invariant at the policy layer",
+  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES[\s\S]*resolvePolynetHarnessToolPolicy/,
+  "shared harness policy must expose Daytona workspace tools while deferring preview/computer tools",
 );
 assert.match(
   handlers,
-  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*POLYNET_WORKSPACE_SUBSTRATE_TOOL_NAMES[\s\S]*function isolatePolynetHarnessToolNames/,
-  "runtime handler must isolate PolyNet before entering the agent loop",
+  /POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*POLYNET_DEFERRED_RUNTIME_TOOL_NAMES[\s\S]*POLYNET_DAYTONA_WORKSPACE_TOOL_NAME_SET[\s\S]*function isolatePolynetHarnessToolNames/,
+  "runtime handler must split shared Daytona workspace tools from deferred runtime tools",
 );
 assert.match(
   handlers,
-  /provider:[\s\S]*"none"[\s\S]*"polynet_harness_isolated"[\s\S]*polynet_workspace_tools_suppressed[\s\S]*suppressed_tool_names/,
-  "runtime handler must emit explicit PolyNet isolation telemetry",
+  /polynetDaytonaWorkspaceEnabled[\s\S]*provider:[\s\S]*"daytona"[\s\S]*"polynet_daytona_workspace"[\s\S]*polynet_workspace_tools_suppressed[\s\S]*suppressed_tool_names/,
+  "runtime handler must emit explicit PolyNet shared-Daytona substrate telemetry",
 );
 assert.match(
   handlers,
-  /const activeDaytonaRuntimeSubstrateForPolynetTools = null;/,
-  "runtime handler must never pass a Daytona substrate into the PolyNet harness",
+  /const activeDaytonaRuntimeSubstrateForPolynetTools =[\s\S]*polynetDaytonaWorkspaceEnabled \? normalizedDaytonaRuntimeSubstrate : null;/,
+  "runtime handler must pass the Daytona substrate into PolyNet only when workspace tools are active",
 );
 assert.match(
   handlers,
   /allowedToolNames: polynetAllowedToolNamesForRun[\s\S]*activeDaytonaRuntimeSubstrate:\s*activeDaytonaRuntimeSubstrateForPolynetTools/,
-  "PolyNet agent-loop calls must use the isolated tool list and null Daytona substrate",
+  "PolyNet agent-loop calls must use the filtered tool list and shared Daytona substrate",
 );
 assert.doesNotMatch(
   handlers,
