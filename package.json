@@ -152,6 +152,8 @@
     "check:workspace-credit-accounting-behavior": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_behavior_test.ts",
     "check:blaxel-workspace-lifecycle-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/blaxel_workspace_lifecycle_accounting_proof.ts",
     "smoke:workspace-credit-accounting-health": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_health_smoke.ts",
+    "smoke:workspace-credit-accounting-prod-data": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_prod_data_smoke.ts",
+    "plan:workspace-credit-accounting-reconciliation-backlog:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_reconciliation_backlog_plan.ts",
     "smoke:workspace-usage-card-billing": "bash scripts/run_workspace_usage_card_billing_smoke.sh",
     "check:workspace-inspector-boundary-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_inspector_boundary_proof.ts",
     "check:workspace-file-preview-cache-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_file_preview_cache_proof.ts",

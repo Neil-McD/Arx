@@ -76,8 +76,8 @@ assert.match(
 );
 assert.match(
   workspaceHost,
-  /runtimeEngineLabels[\s\S]*polynet: "PolyNet"[\s\S]*codex: "Codex"/,
-  "the workspace composer must label both PolyNet and Codex runtime options",
+  /runtimeEngineLabels[\s\S]*polynet: "Polynet"[\s\S]*codex: "Codex"/,
+  "the workspace composer must label both Polynet and Codex runtime options",
 );
 assert.match(
   workspaceHost,
