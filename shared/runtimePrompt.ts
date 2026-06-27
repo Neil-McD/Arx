@@ -538,6 +538,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   const hasBashTool = params.allowedToolNames.includes("bash");
   const hasPreviewCapableTerminalTool =
     params.allowedToolNames.includes("terminal_start");
+  const hasTerminalReadTool = params.allowedToolNames.includes("terminal_read");
   if (params.allowedToolNames.includes("get_active_community_context")) {
     toolGuidance.push(
       "- Use get_active_community_context when the answer depends on the active community's identity, mission, audience, offer, or positioning.",
@@ -674,7 +675,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       toolGuidance.push(
         "- This run has bash but no preview-capable terminal_start/workspace_serve surface. Do not start persistent app servers or background localhost processes with bash.",
         "- Do not present localhost, 127.0.0.1, or an internally fetched URL as user-visible or running in the UI. Those addresses are internal to the runtime environment unless a preview card/event is available.",
-        "- If the user asks to build, run, open, preview, or visually inspect an app, site, or UI, explain that visible app previews require the Codex harness on the Daytona preview path. You may plan or create files only when useful, but do not claim the app is visibly running.",
+        "- If the user asks to build, run, open, preview, or visually inspect an app, site, or UI, explain that visible app previews require a preview-capable Daytona runtime surface. You may plan or create files only when useful, but do not claim the app is visibly running.",
       );
     }
   }
@@ -682,19 +683,20 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
     toolGuidance.push(
       "- Prefer bash for short-lived commands. Use background terminals for long-running or previewable processes.",
       "- If the user asks to build and run, open, preview, show, visually inspect, or launch an app/site/UI, you must use terminal_start to start the server and expose an inline preview. Do not satisfy that request by running a persistent server with bash only.",
-      "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, use terminal_read for status and logs instead of rerunning the server command in bash.",
+      hasTerminalReadTool
+        ? "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, use terminal_read for status and logs instead of rerunning the server command in bash."
+        : "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, rely on the returned preview status and inline preview card; do not claim terminal log streaming is available.",
       "- For a user-viewable app run, include preview metadata by default so the app can appear inline for the user while the terminal keeps running in the background. Set preview_port to the server port when you know it.",
       "- For previewable apps, use one dense app shell that fits inline and expanded preview modes without page-level overflow.",
       "- Prefer one active background terminal. Reuse or stop terminals based on fresh terminal state.",
       "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/computer observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
-      "- For localhost app checks, use bash or terminal_read inside the workspace. Do not route localhost through web_research or a generic public web tool.",
+      hasTerminalReadTool
+        ? "- For localhost app checks, use bash or terminal_read inside the workspace. Do not route localhost through web_research or a generic public web tool."
+        : "- For localhost app checks, use bash for short one-shot probes only. Do not route localhost through web_research or a generic public web tool.",
       "- After a successful background terminal start, do not echo the returned preview/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
     );
   }
-  if (
-    params.allowedToolNames.includes("terminal_stop") &&
-    !params.allowedToolNames.includes("terminal_start")
-  ) {
+  if (params.allowedToolNames.includes("terminal_stop")) {
     toolGuidance.push(
       '- If a Daytona app preview is active and the user asks to stop the app, call terminal_stop with terminal_session_id "active_daytona_preview".',
     );

@@ -225,8 +225,10 @@ assert.deepEqual(
     "write",
     "edit",
     "bash",
+    "terminal_start",
+    "terminal_stop",
   ],
-  "PolyNet harness policy must keep Daytona filesystem and shell tools",
+  "PolyNet harness policy must keep Daytona filesystem, shell, and preview start/stop tools",
 );
 const polynetRuntimeCapabilityNames = (
   buildPolynetHarnessToolPolicyReceipt(polynetWorkspaceHarnessPolicy)[
@@ -235,8 +237,8 @@ const polynetRuntimeCapabilityNames = (
 ).map((capability) => capability.name);
 assert.deepEqual(
   polynetRuntimeCapabilityNames,
-  ["workspace_files", "workspace_shell"],
-  "PolyNet harness must advertise shared Daytona filesystem and shell capabilities",
+  ["workspace_files", "workspace_shell", "app_preview"],
+  "PolyNet harness must advertise shared Daytona filesystem, shell, and preview capabilities",
 );
 for (const forbiddenToolName of CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES) {
   assert.equal(
@@ -359,6 +361,7 @@ for (const forbiddenToolName of [
   "web_crawl",
   "terminal_start",
   "terminal_read",
+  "terminal_stop",
   "computer_open_url",
   "workspace_bash",
   "list_dir",
@@ -448,8 +451,8 @@ assert.match(
 );
 assert.match(
   runtimeTurnHandlersSource,
-  /isolatePolynetHarnessToolNames[\s\S]*polynetDaytonaWorkspaceEnabled[\s\S]*activeDaytonaRuntimeSubstrateForPolynetTools =[\s\S]*polynetDaytonaWorkspaceEnabled \? normalizedDaytonaRuntimeSubstrate : null/,
-  "runtime handler must share Daytona filesystem/shell substrate with PolyNet without injecting preview/computer tools",
+  /isolatePolynetHarnessToolNames[\s\S]*polynetDaytonaRuntimeEnabled[\s\S]*activeDaytonaRuntimeSubstrateForPolynetTools =[\s\S]*polynetDaytonaRuntimeEnabled \? normalizedDaytonaRuntimeSubstrate : null/,
+  "runtime handler must share Daytona filesystem/shell/preview substrate with PolyNet without injecting terminal IO or computer tools",
 );
 
 console.log("daytona_codex_tool_role_matrix_proof: ok");

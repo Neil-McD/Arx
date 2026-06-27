@@ -85,6 +85,7 @@ import { mintPolynetCodexWorkerRunTokenSet } from "./polynetCodexWorkerRunToken"
 import {
   buildCodexHarnessToolPolicyReceipt,
   buildPolynetHarnessToolPolicyReceipt,
+  POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES,
   POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
   POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
   resolveCodexHarnessToolPolicy,
@@ -137,7 +138,7 @@ type RuntimeSubstrateResolution = {
   provider: "daytona" | "project_workspace" | "none";
   status:
     | "required_for_codex"
-    | "polynet_daytona_workspace"
+    | "polynet_daytona_runtime"
     | "polynet_harness_isolated"
     | "legacy_project_workspace";
   targetId: string | null;
@@ -153,8 +154,9 @@ type RuntimeSubstrateResolution = {
 const POLYNET_DEFERRED_RUNTIME_TOOL_NAMES = new Set<RetrievalToolName>([
   ...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
 ]);
-const POLYNET_DAYTONA_WORKSPACE_TOOL_NAME_SET = new Set<RetrievalToolName>([
+const POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET = new Set<RetrievalToolName>([
   ...POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
+  ...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES,
 ]);
 
 function isolatePolynetHarnessToolNames(params: {
@@ -1152,14 +1154,14 @@ export async function handleRuntimeTurnRequest(args: {
     });
     const polynetAllowedToolNamesForRun = polynetToolSurface.allowedToolNames;
     const suppressedPolynetToolNames = polynetToolSurface.suppressedToolNames;
-    const polynetDaytonaWorkspaceEnabled =
+    const polynetDaytonaRuntimeEnabled =
       !usePolynetCodexWorkerBridge &&
       runtimeExecutionMode === "agentic" &&
       polynetAllowedToolNamesForRun.some((toolName) =>
-        POLYNET_DAYTONA_WORKSPACE_TOOL_NAME_SET.has(toolName),
+        POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET.has(toolName),
       );
     const shouldResolveDaytonaRuntimeSubstrate =
-      usePolynetCodexWorkerBridge || polynetDaytonaWorkspaceEnabled;
+      usePolynetCodexWorkerBridge || polynetDaytonaRuntimeEnabled;
     const activeDaytonaRuntimeSubstrate = shouldResolveDaytonaRuntimeSubstrate
       ? ((await ctx.runQuery(
           (internal as any).daytonaCodexRuntimeTargets
@@ -1198,7 +1200,7 @@ export async function handleRuntimeTurnRequest(args: {
         : [],
       previewLeaseActive:
         activeDaytonaRuntimeSubstrate?.previewLeaseActive === true,
-      previewStartAvailable: false,
+      previewStartAvailable: polynetAllowedToolNamesForRun.includes("terminal_start"),
     };
     const runtimeSubstrateResolution: RuntimeSubstrateResolution =
       usePolynetCodexWorkerBridge
@@ -1214,10 +1216,10 @@ export async function handleRuntimeTurnRequest(args: {
             polyNetWorkspaceToolsSuppressed: false,
             suppressedToolNames: [],
           }
-        : polynetDaytonaWorkspaceEnabled
+        : polynetDaytonaRuntimeEnabled
           ? {
               provider: "daytona",
-              status: "polynet_daytona_workspace",
+              status: "polynet_daytona_runtime",
               targetId: normalizedDaytonaRuntimeSubstrate.targetId,
               runId: normalizedDaytonaRuntimeSubstrate.runId,
               sandboxId: normalizedDaytonaRuntimeSubstrate.sandboxId,
@@ -1248,7 +1250,7 @@ export async function handleRuntimeTurnRequest(args: {
             suppressedToolNames: suppressedPolynetToolNames,
           };
     const activeDaytonaRuntimeSubstrateForPolynetTools =
-      polynetDaytonaWorkspaceEnabled ? normalizedDaytonaRuntimeSubstrate : null;
+      polynetDaytonaRuntimeEnabled ? normalizedDaytonaRuntimeSubstrate : null;
     await appendRunEvent({
       eventType: "runtime_substrate_resolved",
       eventKey: `${runId}:runtime_substrate_resolved:1`,

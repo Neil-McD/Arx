@@ -135,8 +135,8 @@ assert.match(
 );
 assert.match(
   handlers,
-  /"polynet_daytona_workspace"[\s\S]*const activeDaytonaRuntimeSubstrateForPolynetTools =[\s\S]*polynetDaytonaWorkspaceEnabled \? normalizedDaytonaRuntimeSubstrate : null[\s\S]*activeDaytonaRuntimeSubstrate:\s*activeDaytonaRuntimeSubstrateForPolynetTools/,
-  "runtime handler must share Daytona filesystem/shell substrate with PolyNet while keeping it conditional",
+  /"polynet_daytona_runtime"[\s\S]*const activeDaytonaRuntimeSubstrateForPolynetTools =[\s\S]*polynetDaytonaRuntimeEnabled \? normalizedDaytonaRuntimeSubstrate : null[\s\S]*activeDaytonaRuntimeSubstrate:\s*activeDaytonaRuntimeSubstrateForPolynetTools/,
+  "runtime handler must share Daytona filesystem/shell/preview substrate with PolyNet while keeping it conditional",
 );
 assert.doesNotMatch(
   handlers,
@@ -218,8 +218,8 @@ assert.match(
 );
 assert.match(
   harnessToolPolicy,
-  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES[\s\S]*excludePolynetRuntimeSubstrateToolNames/,
-  "shared harness policy must let PolyNet use Daytona filesystem/shell while deferring preview/computer tools",
+  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*terminal_read[\s\S]*terminal_write[\s\S]*COMPUTER_USE_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES[\s\S]*terminal_start[\s\S]*terminal_stop[\s\S]*excludePolynetRuntimeSubstrateToolNames/,
+  "shared harness policy must let PolyNet use Daytona filesystem/shell/preview start-stop while deferring terminal stream IO and computer tools",
 );
 assert.match(
   harnessToolPolicy,
