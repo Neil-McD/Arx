@@ -8836,7 +8836,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  padding: 8px 8px 6px;
+  /* Match the topbar band: topbar padding-top (8px) + island padding-top (6px). */
+  padding: 14px 8px 6px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
