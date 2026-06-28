@@ -9479,6 +9479,7 @@ button.community-launch-knowledge-integration-chip:disabled {
     width: 100%;
     border-left: 0;
     z-index: 5;
+    background: var(--bg-app);
   }
 
   .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-header {
