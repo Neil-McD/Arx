@@ -8903,7 +8903,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reply-composer-copy strong {
-  color: var(--text-default);
+  color: var(--text-primary);
   font-weight: 700;
   flex: 0 1 auto;
   min-width: 0;
@@ -8953,7 +8953,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-feed-title,
 .community-interaction-drawer-title {
-  color: var(--text-default);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
@@ -8984,7 +8984,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-interaction-icon-button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--bg-card) 94%, var(--accent) 6%);
   border-color: var(--border-default);
-  color: var(--text-default);
+  color: var(--text-primary);
 }
 
 .community-interaction-icon-button:disabled {
@@ -9063,33 +9063,34 @@ button.community-launch-knowledge-integration-chip:disabled {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px;
-  color: var(--text-faint);
+  gap: 7px;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.35;
 }
 
 .community-interaction-author {
-  color: var(--text-default);
-  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .community-interaction-title {
   margin-top: 4px;
-  color: var(--text-default);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.35;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .community-interaction-body {
-  margin-top: 4px;
+  margin-top: 3px;
   display: grid;
   gap: 6px;
-  color: var(--text-default);
-  font-size: 14px;
-  line-height: 1.45;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -9146,7 +9147,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-card);
-  color: var(--text-default);
+  color: var(--text-primary);
   min-height: 32px;
   padding: 0 12px;
   cursor: pointer;
@@ -9200,7 +9201,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-card);
-  color: var(--text-default);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -9403,7 +9404,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-embed-title {
-  color: var(--text-default);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
@@ -9444,7 +9445,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-quote-author {
   flex: 0 0 auto;
-  color: var(--text-default);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -9473,7 +9474,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-interaction-back-button:hover {
   background: color-mix(in srgb, var(--bg-card) 94%, var(--accent) 6%);
   border-color: var(--border-default);
-  color: var(--text-default);
+  color: var(--text-primary);
 }
 
 /* Layered collapse: when the main area is too narrow for feed + drawer
