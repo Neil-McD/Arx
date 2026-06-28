@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { CornerUpLeft, MessageSquare, PanelRightClose, RefreshCw } from "lucide-react";
+import { ArrowLeft, CornerUpLeft, MessageSquare, PanelRightClose, RefreshCw } from "lucide-react";
 import type {
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
@@ -397,6 +397,15 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       {selectedRoot ? (
         <aside className="community-interaction-drawer" aria-label="Thread replies">
           <div className="community-interaction-drawer-header">
+            <button
+              className="community-interaction-back-button"
+              type="button"
+              onClick={props.onCloseDrawer}
+              aria-label="Back to chat"
+              title="Back to chat"
+            >
+              <ArrowLeft size={16} aria-hidden="true" />
+            </button>
             <div>
               <div className="community-interaction-drawer-title">Replies</div>
               <div className="community-interaction-drawer-subtitle">{selectedRootLabel}</div>

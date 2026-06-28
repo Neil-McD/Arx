@@ -9435,6 +9435,56 @@ button.community-launch-knowledge-integration-chip:disabled {
   white-space: nowrap;
 }
 
+.community-interaction-back-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.community-interaction-back-button:hover {
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--accent) 6%);
+  border-color: var(--border-default);
+  color: var(--text-default);
+}
+
+/* Layered collapse: when the main area is too narrow for feed + drawer
+   side-by-side, the reply drawer takes over and a back arrow returns to chat. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .community-chat .community-interaction-projection.has-drawer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border-left: 0;
+    z-index: 5;
+  }
+
+  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-header {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .community-chat .community-interaction-projection.has-drawer .community-interaction-back-button {
+    display: inline-flex;
+  }
+
+  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-header > button.community-interaction-icon-button {
+    display: none;
+  }
+}
+
 .chat-empty {
   color: var(--text-faint);
   font-size: 13px;
