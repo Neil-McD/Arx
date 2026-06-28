@@ -731,6 +731,16 @@ async function mapRootBundle(
   const publicActorUserId = root.actorUserId
     ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
     : null;
+  const lastReply = Math.max(0, Math.floor(root.replyCount ?? 0)) > 0
+    ? ((await ctx.db
+        .query("communityInteractionReplies" as any)
+        .withIndex("by_root_seq", (q: any) => q.eq("rootId", root._id))
+        .order("desc")
+        .first()) as InteractionReplyRow | null)
+    : null;
+  const lastReplyPublicId = lastReply?.actorUserId
+    ? await resolvePublicUserId(ctx, lastReply.actorUserId, userIdCache)
+    : null;
   return {
     deduped,
     root: {
@@ -749,6 +759,8 @@ async function mapRootBundle(
       viewer_emojis: viewerEmojis ?? [],
       idempotency_key: root.idempotencyKey,
       last_reply_at: typeof root.lastReplyAt === "number" ? toIsoString(root.lastReplyAt) : null,
+      last_reply_actor_user_id:
+        lastReplyPublicId ?? (lastReply?.actorUserId ? normalizeIdValue(lastReply.actorUserId) : null),
       pinned_at: typeof root.pinnedAt === "number" ? toIsoString(root.pinnedAt) : null,
       locked_at: typeof root.lockedAt === "number" ? toIsoString(root.lockedAt) : null,
       legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,

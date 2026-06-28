@@ -5828,6 +5828,8 @@ export default function App() {
     for (const bundle of communityInteractionRoots) {
       const actorId = String(bundle.root.actor_user_id ?? "").trim();
       if (actorId) ids.add(actorId);
+      const lastReplyActorId = String(bundle.root.last_reply_actor_user_id ?? "").trim();
+      if (lastReplyActorId) ids.add(lastReplyActorId);
     }
     for (const replies of Object.values(communityInteractionRepliesByRootId)) {
       for (const bundle of replies) {

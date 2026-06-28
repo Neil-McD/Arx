@@ -261,16 +261,35 @@ function QuoteChip(props: {
   );
 }
 
+function formatRelativeTime(iso: string): string {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  const seconds = Math.floor((Date.now() - ms) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
 function ActorAvatar(props: {
   label: string;
   seed: string;
   profile?: UserProfile | null;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
+  className?: string;
 }) {
   return (
     <UserAvatar
-      className="community-interaction-avatar"
+      className={props.className ?? "community-interaction-avatar"}
       readyClassName="has-image"
       imageClassName="community-interaction-avatar-image"
       fallbackClassName="community-interaction-avatar-fallback"
@@ -423,13 +442,30 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             {hasFooter ? (
                               <div className="community-interaction-footer">
                                 {root.reply_count > 0 ? (
-                                  <button
-                                    type="button"
-                                    className="community-interaction-reply-pill"
-                                    onClick={() => props.onSelectRoot(root.id)}
-                                  >
-                                    {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
-                                  </button>
+                                  <div className="community-interaction-thread-row">
+                                    {root.last_reply_actor_user_id ? (
+                                      <ActorAvatar
+                                        className="community-interaction-thread-avatar"
+                                        label={props.displayName(root.last_reply_actor_user_id)}
+                                        seed={root.last_reply_actor_user_id}
+                                        profile={props.profilesByUserId[root.last_reply_actor_user_id] ?? null}
+                                        getAvatarColor={props.getAvatarColor}
+                                        getInitials={props.getInitials}
+                                      />
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      className="community-interaction-reply-pill"
+                                      onClick={() => props.onSelectRoot(root.id)}
+                                    >
+                                      {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
+                                    </button>
+                                    {root.last_reply_at ? (
+                                      <span className="community-interaction-thread-time">
+                                        Last reply {formatRelativeTime(root.last_reply_at)}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                                 <ReactionSummary
                                   rows={root.reaction_summary}

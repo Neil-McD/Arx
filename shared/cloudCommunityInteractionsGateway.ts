@@ -68,6 +68,7 @@ export type CommunityInteractionRootRecord = {
   viewer_emojis: string[];
   idempotency_key: string;
   last_reply_at: string | null;
+  last_reply_actor_user_id: string | null;
   pinned_at: string | null;
   locked_at: string | null;
   legacy_thread_id: string | null;
