@@ -9143,6 +9143,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   cursor: default;
 }
 
+.community-interaction-reaction > span:first-child {
+  font-size: 15px;
+}
+
 .community-interaction-reaction.is-mine {
   background: var(--status-approved);
   border-color: transparent;
