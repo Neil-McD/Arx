@@ -8776,6 +8776,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-chat {
   --accent: var(--accent-gold);
+  --reaction-accent: #3fb950;
 }
 
 .community-interaction-scroll {
@@ -9144,9 +9145,9 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reaction.is-mine {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--reaction-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--reaction-accent) 55%, transparent);
+  color: color-mix(in srgb, var(--reaction-accent) 32%, var(--text-primary));
 }
 
 .community-interaction-emoji-picker {
