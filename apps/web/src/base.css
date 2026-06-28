@@ -9307,21 +9307,14 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-message {
-  display: block;
-  width: 100%;
   margin-left: -6px;
   padding: 1px 6px 4px;
-  border: 0;
   border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
   transition: background 140ms ease;
 }
 
 .community-interaction-message:hover {
-  background: color-mix(in srgb, var(--bg-card) 86%, var(--accent) 8%);
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--accent) 4%);
 }
 
 .community-interaction-message.selected {
@@ -9357,10 +9350,18 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-interaction-reply-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
   color: var(--accent);
-  font-weight: 700;
-  font-size: 12px;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.community-interaction-reply-pill:hover {
+  text-decoration: underline;
 }
 
 .community-interaction-embeds {

@@ -338,12 +338,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         const selected = root.id === props.selectedRootId;
                         const hasFooter = root.reply_count > 0 || root.reaction_summary.length > 0;
                         return (
-                          <button
+                          <div
                             key={root.id}
-                            type="button"
                             className={`community-interaction-message${selected ? " selected" : ""}`}
-                            onClick={() => props.onSelectRoot(root.id)}
-                            aria-pressed={selected}
                           >
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
                             <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
@@ -351,15 +348,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             {hasFooter ? (
                               <div className="community-interaction-footer">
                                 {root.reply_count > 0 ? (
-                                  <span className="community-interaction-reply-pill">
-                                    <MessageSquare size={13} aria-hidden="true" />
+                                  <button
+                                    type="button"
+                                    className="community-interaction-reply-pill"
+                                    onClick={() => props.onSelectRoot(root.id)}
+                                  >
                                     {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
-                                  </span>
+                                  </button>
                                 ) : null}
                                 <ReactionSummary rows={root.reaction_summary} />
                               </div>
                             ) : null}
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
