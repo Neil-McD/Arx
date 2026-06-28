@@ -8774,6 +8774,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   padding: 20px 48px 20px;
 }
 
+.community-chat {
+  --accent: var(--accent-gold);
+}
+
 .community-interaction-scroll {
   flex: 1;
   min-height: 0;
