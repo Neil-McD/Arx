@@ -819,7 +819,7 @@ body {
 
 .community-nav-banner {
   position: relative;
-  height: 86px;
+  height: clamp(86px, 8vw, 132px);
   border-radius: 12px;
   background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.12), transparent 60%),
     linear-gradient(140deg, rgba(201, 169, 98, 0.2), rgba(110, 212, 216, 0.18));
