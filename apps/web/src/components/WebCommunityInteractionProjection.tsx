@@ -1,5 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { ArrowLeft, CornerUpLeft, MessageSquare, PanelRightClose } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, CornerUpLeft, MessageSquare, PanelRightClose, SmilePlus } from "lucide-react";
 import type {
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
@@ -32,7 +32,57 @@ export type WebCommunityInteractionProjectionProps = {
   getInitials: (value: string) => string;
   formatChatTime: (value: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
+  onToggleReaction?: (targetType: "root" | "reply", targetId: string, emoji: string) => void;
 };
+
+const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "👀", "🙏", "🚀", "💯", "✅", "👏", "😮"];
+
+function EmojiPickerButton(props: {
+  className: string;
+  label: string;
+  onPick: (emoji: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+  return (
+    <div className="community-interaction-emoji-picker" ref={ref}>
+      <button
+        type="button"
+        className={props.className}
+        aria-label={props.label}
+        title={props.label}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <SmilePlus size={15} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="community-interaction-emoji-popover" role="menu">
+          {QUICK_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              className="community-interaction-emoji-option"
+              onClick={() => {
+                props.onPick(emoji);
+                setOpen(false);
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function actorLabel(
   actor: {
@@ -110,15 +160,24 @@ function bundleText(blocks: CommunityInteractionContentBlock[], fallback: string
 
 function ReactionSummary(props: {
   rows: Array<{ emoji: string; count: number }>;
+  viewerEmojis?: string[];
+  onToggle?: (emoji: string) => void;
 }) {
   if (props.rows.length === 0) return null;
+  const viewer = new Set(props.viewerEmojis ?? []);
   return (
     <div className="community-interaction-reactions" aria-label="Reactions">
       {props.rows.map((row) => (
-        <span key={row.emoji} className="community-interaction-reaction">
+        <button
+          key={row.emoji}
+          type="button"
+          className={`community-interaction-reaction${viewer.has(row.emoji) ? " is-mine" : ""}`}
+          onClick={() => props.onToggle?.(row.emoji)}
+          disabled={!props.onToggle}
+        >
           <span>{row.emoji}</span>
           <span>{row.count}</span>
-        </span>
+        </button>
       ))}
     </div>
   );
@@ -343,6 +402,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             className={`community-interaction-message${selected ? " selected" : ""}`}
                           >
                             <div className="community-interaction-msg-actions">
+                              <EmojiPickerButton
+                                className="community-interaction-msg-action"
+                                label="Add reaction"
+                                onPick={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                              />
                               <button
                                 type="button"
                                 className="community-interaction-msg-action"
@@ -367,7 +431,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                                     {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
                                   </button>
                                 ) : null}
-                                <ReactionSummary rows={root.reaction_summary} />
+                                <ReactionSummary
+                                  rows={root.reaction_summary}
+                                  viewerEmojis={root.viewer_emojis}
+                                  onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                                />
                               </div>
                             ) : null}
                           </div>
@@ -437,11 +505,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   ) : null}
                   <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
                   <EmbedCards embeds={selectedRoot.embeds} />
-                  {selectedRoot.root.reaction_summary.length > 0 ? (
-                    <div className="community-interaction-thread-anchor-actions">
-                      <ReactionSummary rows={selectedRoot.root.reaction_summary} />
-                    </div>
-                  ) : null}
+                  <div className="community-interaction-thread-anchor-actions">
+                    <ReactionSummary
+                      rows={selectedRoot.root.reaction_summary}
+                      viewerEmojis={selectedRoot.root.viewer_emojis}
+                      onToggle={(emoji) => props.onToggleReaction?.("root", selectedRoot.root.id, emoji)}
+                    />
+                    <EmojiPickerButton
+                      className="community-interaction-reaction-add"
+                      label="Add reaction"
+                      onPick={(emoji) => props.onToggleReaction?.("root", selectedRoot.root.id, emoji)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -485,7 +560,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         ) : null}
                         <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
                         <EmbedCards embeds={bundle.embeds} />
-                        <ReactionSummary rows={reply.reaction_summary} />
+                        <div className="community-interaction-reply-actions">
+                          <ReactionSummary
+                            rows={reply.reaction_summary}
+                            viewerEmojis={reply.viewer_emojis}
+                            onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                          />
+                          <EmojiPickerButton
+                            className="community-interaction-reaction-add"
+                            label="Add reaction"
+                            onPick={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                          />
+                        </div>
                       </div>
                     </div>
                   );

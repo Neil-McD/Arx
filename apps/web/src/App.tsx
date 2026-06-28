@@ -112,6 +112,7 @@ import {
   createCloudCommunityInteractionComposerMessageRows,
   listCloudCommunityInteractionReplies,
   listCloudCommunityInteractionRoots,
+  toggleCloudCommunityInteractionReaction,
   type CommunityInteractionReplyBundle,
   type CommunityInteractionRootBundle,
 } from "../../../shared/cloudCommunityInteractionsGateway";
@@ -2511,6 +2512,36 @@ export default function App() {
   const handleCloseCommunityInteractionDrawer = useCallback(() => {
     setSelectedCommunityInteractionRootId(null);
   }, []);
+
+  const handleToggleCommunityInteractionReaction = useCallback(async (
+    targetType: "root" | "reply",
+    targetId: string,
+    emoji: string,
+  ) => {
+    const usableSession = await ensureUsableAuthSession(session ?? undefined);
+    if (!usableSession) return;
+    try {
+      await toggleCloudCommunityInteractionReaction<AuthSession>({
+        session: usableSession,
+        targetType,
+        targetId,
+        emoji,
+      });
+    } catch {
+      // Swallow; the reload below reflects authoritative server state.
+    }
+    void loadCommunityInteractionRoots(activeCommunityId, usableSession);
+    if (selectedCommunityInteractionRootId) {
+      void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
+    }
+  }, [
+    activeCommunityId,
+    ensureUsableAuthSession,
+    loadCommunityInteractionReplies,
+    loadCommunityInteractionRoots,
+    selectedCommunityInteractionRootId,
+    session,
+  ]);
 
   useCommunityChatRealtime({
     isEnabled: activePage === "community" && hasResolvedCommunityChat,
@@ -10327,6 +10358,7 @@ export default function App() {
           : null,
         onSelectRoot: handleSelectCommunityInteractionRoot,
         onCloseDrawer: handleCloseCommunityInteractionDrawer,
+        onToggleReaction: handleToggleCommunityInteractionReaction,
         onRetryRoots: () => {
           if (!activeCommunityId) return;
           void loadCommunityInteractionRoots(activeCommunityId, session);

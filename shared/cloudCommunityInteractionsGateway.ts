@@ -65,6 +65,7 @@ export type CommunityInteractionRootRecord = {
   content_summary: string;
   reply_count: number;
   reaction_summary: CommunityInteractionReactionSummary[];
+  viewer_emojis: string[];
   idempotency_key: string;
   last_reply_at: string | null;
   pinned_at: string | null;
@@ -88,6 +89,7 @@ export type CommunityInteractionReplyRecord = {
   visibility_scope: string;
   content_summary: string;
   reaction_summary: CommunityInteractionReactionSummary[];
+  viewer_emojis: string[];
   idempotency_key: string;
   legacy_thread_id: string | null;
   legacy_message_id: string | null;
@@ -174,4 +176,28 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     replyToMessageId: params.replyToMessageId ?? null,
   });
   return coerceObjectRows<TRow>(payload, "rows");
+}
+
+export async function toggleCloudCommunityInteractionReaction<SessionT>(
+  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
+    targetType: "root" | "reply";
+    targetId: string;
+    emoji: string;
+  },
+): Promise<{ reacted: boolean; reaction_summary: CommunityInteractionReactionSummary[] }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:toggleCommunityInteractionReaction" as any, {
+    authSubject,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    emoji: params.emoji,
+  });
+  const result = (payload ?? {}) as {
+    reacted?: boolean;
+    reaction_summary?: CommunityInteractionReactionSummary[];
+  };
+  return {
+    reacted: Boolean(result.reacted),
+    reaction_summary: Array.isArray(result.reaction_summary) ? result.reaction_summary : [],
+  };
 }

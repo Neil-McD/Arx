@@ -72,6 +72,7 @@ import {
   createCommunityInteractionRoot as createCommunityInteractionRootImpl,
   listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
   listCommunityInteractionRoots as listCommunityInteractionRootsImpl,
+  toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl,
 } from "./communityInteractions";
 import {
   backfillCommunityInteractionsFromLegacyChatBatch as backfillCommunityInteractionsFromLegacyChatBatchImpl,
@@ -278,6 +279,7 @@ export const createCommunityInteractionReply = createCommunityInteractionReplyIm
 export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;
 export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
 export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;
+export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;
 export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;
 export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
