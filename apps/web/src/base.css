@@ -9318,12 +9318,11 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-message:hover {
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--accent) 4%);
+  background: var(--hover-overlay);
 }
 
 .community-interaction-message.selected {
-  background: color-mix(in srgb, var(--bg-card) 82%, var(--accent) 10%);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--active-overlay);
 }
 
 .community-interaction-badge {
@@ -9358,7 +9357,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: transparent;
   padding: 2px 0;
   color: var(--accent);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
