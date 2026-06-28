@@ -342,6 +342,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             key={root.id}
                             className={`community-interaction-message${selected ? " selected" : ""}`}
                           >
+                            <div className="community-interaction-msg-actions">
+                              <button
+                                type="button"
+                                className="community-interaction-msg-action"
+                                onClick={() => props.onSelectRoot(root.id)}
+                                aria-label="Reply in thread"
+                                title="Reply in thread"
+                              >
+                                <MessageSquare size={15} aria-hidden="true" />
+                              </button>
+                            </div>
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
                             <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
                             <EmbedCards embeds={bundle.embeds} />

@@ -9311,10 +9311,51 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-message {
+  position: relative;
   margin-left: -6px;
   padding: 1px 6px 4px;
   border-radius: 6px;
   transition: background 140ms ease;
+}
+
+.community-interaction-msg-actions {
+  position: absolute;
+  top: -14px;
+  right: 6px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card-solid);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.community-interaction-message:hover .community-interaction-msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.community-interaction-msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.community-interaction-msg-action:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
 }
 
 .community-interaction-message:hover {
