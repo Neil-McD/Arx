@@ -1482,6 +1482,7 @@ export default defineSchema({
     lockedAt: v.optional(v.number()),
     hiddenAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
+    editedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1521,6 +1522,7 @@ export default defineSchema({
     idempotencyKey: v.string(),
     hiddenAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
+    editedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

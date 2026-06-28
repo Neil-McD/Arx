@@ -9523,6 +9523,110 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-size: 12px;
 }
 
+.community-interaction-overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 144px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card-solid);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.community-interaction-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.community-interaction-overflow-item:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-interaction-overflow-item.is-danger {
+  color: #e5666b;
+}
+
+.community-interaction-overflow-item.is-danger:hover {
+  background: color-mix(in srgb, #e5666b 14%, transparent);
+  color: #ef8a8e;
+}
+
+.community-interaction-edit {
+  margin-top: 4px;
+  display: grid;
+  gap: 6px;
+}
+
+.community-interaction-edit-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.community-interaction-edit-input:focus {
+  border-color: var(--border-strong);
+}
+
+.community-interaction-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.community-interaction-edit-cancel,
+.community-interaction-edit-save {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.community-interaction-edit-cancel {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.community-interaction-edit-save {
+  border: 0;
+  background: var(--accent-gold);
+  color: var(--bg-app);
+}
+
+.community-interaction-edited {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
 .community-interaction-embeds {
   margin-top: 8px;
   display: grid;

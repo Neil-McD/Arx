@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, CornerUpLeft, MessageSquare, PanelRightClose, SmilePlus } from "lucide-react";
+import {
+  ArrowLeft,
+  CornerUpLeft,
+  MessageSquare,
+  MoreHorizontal,
+  PanelRightClose,
+  Pencil,
+  SmilePlus,
+  Trash2,
+} from "lucide-react";
 import type {
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
@@ -33,6 +42,9 @@ export type WebCommunityInteractionProjectionProps = {
   formatChatTime: (value: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
   onToggleReaction?: (targetType: "root" | "reply", targetId: string, emoji: string) => void;
+  currentUserId?: string | null;
+  onEditMessage?: (targetType: "root" | "reply", targetId: string, text: string) => void;
+  onDeleteMessage?: (targetType: "root" | "reply", targetId: string) => void;
 };
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "👀", "🙏", "🚀", "💯", "✅", "👏", "😮"];
@@ -160,10 +172,103 @@ function bundleText(blocks: CommunityInteractionContentBlock[], fallback: string
 
 const QUICK_REACTIONS = ["👍", "❤️", "🔥"];
 
+function OverflowMenu(props: { onEdit?: () => void; onDelete?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+  if (!props.onEdit && !props.onDelete) return null;
+  return (
+    <div className="community-interaction-emoji-picker" ref={ref}>
+      <button
+        type="button"
+        className="community-interaction-msg-action"
+        aria-label="More actions"
+        title="More actions"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <MoreHorizontal size={15} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="community-interaction-overflow-menu" role="menu">
+          {props.onEdit ? (
+            <button
+              type="button"
+              className="community-interaction-overflow-item"
+              onClick={() => {
+                props.onEdit?.();
+                setOpen(false);
+              }}
+            >
+              <Pencil size={14} aria-hidden="true" /> Edit
+            </button>
+          ) : null}
+          {props.onDelete ? (
+            <button
+              type="button"
+              className="community-interaction-overflow-item is-danger"
+              onClick={() => {
+                props.onDelete?.();
+                setOpen(false);
+              }}
+            >
+              <Trash2 size={14} aria-hidden="true" /> Delete
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EditForm(props: {
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="community-interaction-edit">
+      <textarea
+        className="community-interaction-edit-input"
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            props.onSave();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            props.onCancel();
+          }
+        }}
+        rows={2}
+        autoFocus
+      />
+      <div className="community-interaction-edit-actions">
+        <button type="button" className="community-interaction-edit-cancel" onClick={props.onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="community-interaction-edit-save" onClick={props.onSave}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MessageActions(props: {
   onReact: (emoji: string) => void;
   onReply: () => void;
   replyLabel: string;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <div className="community-interaction-msg-actions">
@@ -193,6 +298,7 @@ function MessageActions(props: {
       >
         <MessageSquare size={15} aria-hidden="true" />
       </button>
+      <OverflowMenu onEdit={props.onEdit} onDelete={props.onDelete} />
     </div>
   );
 }
@@ -363,6 +469,19 @@ function InteractionBody(props: {
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const prevRootCount = useRef(0);
+  const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
+  const [editText, setEditText] = useState("");
+  const startEdit = (type: "root" | "reply", id: string, body: string) => {
+    setEditing({ type, id });
+    setEditText(body);
+  };
+  const cancelEdit = () => setEditing(null);
+  const saveEdit = () => {
+    if (!editing) return;
+    const text = editText.trim();
+    if (text) props.onEditMessage?.(editing.type, editing.id, text);
+    setEditing(null);
+  };
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -454,6 +573,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         const body = bundleText(bundle.content_blocks, root.content_summary);
                         const selected = root.id === props.selectedRootId;
                         const hasFooter = root.reply_count > 0 || root.reaction_summary.length > 0;
+                        const isOwnRoot = Boolean(
+                          props.currentUserId && root.actor_user_id && root.actor_user_id === props.currentUserId,
+                        );
+                        const isEditingRoot = editing?.type === "root" && editing.id === root.id;
                         return (
                           <div
                             key={root.id}
@@ -463,10 +586,38 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                               onReact={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
                               onReply={() => props.onSelectRoot(root.id)}
                               replyLabel="Reply in thread"
+                              onEdit={
+                                isOwnRoot && props.onEditMessage
+                                  ? () => startEdit("root", root.id, body)
+                                  : undefined
+                              }
+                              onDelete={
+                                isOwnRoot && props.onDeleteMessage
+                                  ? () => {
+                                      if (window.confirm("Delete this message?")) {
+                                        props.onDeleteMessage?.("root", root.id);
+                                      }
+                                    }
+                                  : undefined
+                              }
                             />
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
-                            <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                            <EmbedCards embeds={bundle.embeds} />
+                            {isEditingRoot ? (
+                              <EditForm
+                                value={editText}
+                                onChange={setEditText}
+                                onSave={saveEdit}
+                                onCancel={cancelEdit}
+                              />
+                            ) : (
+                              <>
+                                <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                                <EmbedCards embeds={bundle.embeds} />
+                                {root.edited_at ? (
+                                  <span className="community-interaction-edited">(edited)</span>
+                                ) : null}
+                              </>
+                            )}
                             {hasFooter ? (
                               <div className="community-interaction-footer">
                                 {root.reply_count > 0 ? (
@@ -604,6 +755,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   const profile = reply.actor_user_id ? props.profilesByUserId[reply.actor_user_id] ?? null : null;
                   const body = bundleText(bundle.content_blocks, reply.content_summary);
                   const badge = agentBadgeLabel(reply.actor_type);
+                  const isOwnReply = Boolean(
+                    props.currentUserId && reply.actor_user_id && reply.actor_user_id === props.currentUserId,
+                  );
+                  const isEditingReply = editing?.type === "reply" && editing.id === reply.id;
                   return (
                     <div key={reply.id} className="community-interaction-reply">
                       <MessageActions
@@ -618,6 +773,20 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           });
                         }}
                         replyLabel="Reply to this message"
+                        onEdit={
+                          isOwnReply && props.onEditMessage
+                            ? () => startEdit("reply", reply.id, body)
+                            : undefined
+                        }
+                        onDelete={
+                          isOwnReply && props.onDeleteMessage
+                            ? () => {
+                                if (window.confirm("Delete this reply?")) {
+                                  props.onDeleteMessage?.("reply", reply.id);
+                                }
+                              }
+                            : undefined
+                        }
                       />
                       <ActorAvatar
                         label={label}
@@ -635,8 +804,22 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         {reply.target_reply_id ? (
                           <QuoteChip quoted={replyById.get(reply.target_reply_id)} displayName={props.displayName} />
                         ) : null}
-                        <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                        <EmbedCards embeds={bundle.embeds} />
+                        {isEditingReply ? (
+                          <EditForm
+                            value={editText}
+                            onChange={setEditText}
+                            onSave={saveEdit}
+                            onCancel={cancelEdit}
+                          />
+                        ) : (
+                          <>
+                            <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                            <EmbedCards embeds={bundle.embeds} />
+                            {reply.edited_at ? (
+                              <span className="community-interaction-edited">(edited)</span>
+                            ) : null}
+                          </>
+                        )}
                         <ReactionSummary
                           rows={reply.reaction_summary}
                           viewerEmojis={reply.viewer_emojis}

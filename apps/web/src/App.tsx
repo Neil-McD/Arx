@@ -110,6 +110,8 @@ import { useCommunityAttentionController } from "../../../shared/useCommunityAtt
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
   createCloudCommunityInteractionComposerMessageRows,
+  deleteCloudCommunityInteractionMessage,
+  editCloudCommunityInteractionMessage,
   listCloudCommunityInteractionReplies,
   listCloudCommunityInteractionRoots,
   toggleCloudCommunityInteractionReaction,
@@ -2532,6 +2534,58 @@ export default function App() {
     }
     void loadCommunityInteractionRoots(activeCommunityId, usableSession);
     if (selectedCommunityInteractionRootId) {
+      void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
+    }
+  }, [
+    activeCommunityId,
+    ensureUsableAuthSession,
+    loadCommunityInteractionReplies,
+    loadCommunityInteractionRoots,
+    selectedCommunityInteractionRootId,
+    session,
+  ]);
+
+  const handleEditCommunityInteractionMessage = useCallback(async (
+    targetType: "root" | "reply",
+    targetId: string,
+    text: string,
+  ) => {
+    const usableSession = await ensureUsableAuthSession(session ?? undefined);
+    if (!usableSession) return;
+    try {
+      await editCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId, text });
+    } catch {
+      // Reload reflects authoritative server state.
+    }
+    void loadCommunityInteractionRoots(activeCommunityId, usableSession);
+    if (selectedCommunityInteractionRootId) {
+      void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
+    }
+  }, [
+    activeCommunityId,
+    ensureUsableAuthSession,
+    loadCommunityInteractionReplies,
+    loadCommunityInteractionRoots,
+    selectedCommunityInteractionRootId,
+    session,
+  ]);
+
+  const handleDeleteCommunityInteractionMessage = useCallback(async (
+    targetType: "root" | "reply",
+    targetId: string,
+  ) => {
+    const usableSession = await ensureUsableAuthSession(session ?? undefined);
+    if (!usableSession) return;
+    if (targetType === "root" && selectedCommunityInteractionRootId === targetId) {
+      setSelectedCommunityInteractionRootId(null);
+    }
+    try {
+      await deleteCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId });
+    } catch {
+      // Reload reflects authoritative server state.
+    }
+    void loadCommunityInteractionRoots(activeCommunityId, usableSession);
+    if (selectedCommunityInteractionRootId && selectedCommunityInteractionRootId !== targetId) {
       void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
     }
   }, [
@@ -10361,6 +10415,9 @@ export default function App() {
         onSelectRoot: handleSelectCommunityInteractionRoot,
         onCloseDrawer: handleCloseCommunityInteractionDrawer,
         onToggleReaction: handleToggleCommunityInteractionReaction,
+        onEditMessage: handleEditCommunityInteractionMessage,
+        onDeleteMessage: handleDeleteCommunityInteractionMessage,
+        currentUserId: canonicalSessionUserId,
         onRetryRoots: () => {
           if (!activeCommunityId) return;
           void loadCommunityInteractionRoots(activeCommunityId, session);

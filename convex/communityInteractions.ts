@@ -5,6 +5,7 @@ import {
   type CommunityChatThreadLike,
   normalizeIdValue,
   requireCommunityChatAccess,
+  requireCommunityModerator,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
@@ -39,6 +40,7 @@ type InteractionRootRow = {
   lockedAt?: number;
   hiddenAt?: number;
   deletedAt?: number;
+  editedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -59,6 +61,7 @@ type InteractionReplyRow = {
   idempotencyKey: string;
   hiddenAt?: number;
   deletedAt?: number;
+  editedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -767,6 +770,7 @@ async function mapRootBundle(
       legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
       created_at: toIsoString(root.createdAt),
       updated_at: toIsoString(root.updatedAt),
+      edited_at: typeof root.editedAt === "number" ? toIsoString(root.editedAt) : null,
     },
     content_blocks: blocks.map(mapContentBlock),
     embeds: embeds.map(mapEmbed),
@@ -810,6 +814,7 @@ async function mapReplyBundle(
       legacy_target_message_id: legacyLink?.targetMessageId ? normalizeIdValue(legacyLink.targetMessageId) : null,
       created_at: toIsoString(reply.createdAt),
       updated_at: toIsoString(reply.updatedAt),
+      edited_at: typeof reply.editedAt === "number" ? toIsoString(reply.editedAt) : null,
     },
     content_blocks: blocks.map(mapContentBlock),
     embeds: embeds.map(mapEmbed),
@@ -1303,6 +1308,15 @@ export async function recordLegacyChatMessageInteractionBestEffort(args: {
   return { ok: true as const, link_kind: "root" as const };
 }
 
+async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
+  const last = (await ctx.db
+    .query("communityInteractionReplies" as any)
+    .withIndex("by_root_seq", (q: any) => q.eq("rootId", rootId))
+    .order("desc")
+    .first()) as InteractionReplyRow | null;
+  return Math.max(0, Math.floor(last?.seq ?? 0)) + 1;
+}
+
 export const createCommunityInteractionRoot = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -1409,7 +1423,7 @@ export const createCommunityInteractionReply = mutation({
     const nowMs = Date.now();
     const contentBlocks = normalizeContentBlocks(args.contentBlocks);
     const visibilityScope = resolveReplyVisibilityScope(args.visibilityScope, root.visibilityScope);
-    const seq = Math.max(0, Math.floor(root.replyCount ?? 0)) + 1;
+    const seq = await nextReplySeq(ctx, root._id);
     const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
       communityId: root.communityId,
       rootId: root._id,
@@ -1434,7 +1448,7 @@ export const createCommunityInteractionReply = mutation({
       nowMs,
     });
     await ctx.db.patch(root._id as any, {
-      replyCount: seq,
+      replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
       lastReplyAt: nowMs,
       updatedAt: nowMs,
     });
@@ -1560,7 +1574,7 @@ export const createCommunityInteractionComposerMessage = mutation({
 
     if (!reply) {
       const visibilityScope = resolveReplyVisibilityScope(root.visibilityScope, root.visibilityScope);
-      const seq = Math.max(0, Math.floor(root.replyCount ?? 0)) + 1;
+      const seq = await nextReplySeq(ctx, root._id);
       const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
         communityId: root.communityId,
         rootId: root._id,
@@ -1585,7 +1599,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         nowMs,
       });
       await ctx.db.patch(root._id as any, {
-        replyCount: seq,
+        replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
         lastReplyAt: nowMs,
         updatedAt: nowMs,
       });
@@ -1825,6 +1839,138 @@ export const toggleCommunityInteractionReaction = mutation({
   },
 });
 
+export const editCommunityInteractionMessage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    targetType: v.union(v.literal("root"), v.literal("reply")),
+    targetId: v.string(),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
+    if (!text) throw new Error("interaction_content_required");
+    const target = (await ctx.db.get(args.targetId as any)) as any;
+    if (!target) throw new Error("interaction_target_not_found");
+    const communityId = target.communityId;
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId, userId });
+    if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId)) {
+      throw new Error("interaction_edit_forbidden");
+    }
+    if (target.status !== "live") throw new Error("interaction_not_editable");
+
+    const nowMs = Date.now();
+    const blocks: NormalizedContentBlock[] = [{ blockType: "markdown_text", text }];
+    const existingBlocks =
+      args.targetType === "root"
+        ? await listContentBlocksForRoot(ctx, target._id)
+        : await listContentBlocksForReply(ctx, target._id);
+    for (const block of existingBlocks) await ctx.db.delete(block._id);
+    await insertContentBlocksForTarget({
+      ctx,
+      communityId,
+      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
+      visibilityScope: target.visibilityScope,
+      blocks,
+      nowMs,
+    });
+    await ctx.db.patch(target._id, {
+      contentSummary: contentSummary(blocks),
+      editedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const legacyLink =
+      args.targetType === "root"
+        ? await getLegacyChatLinkByRoot(ctx, target._id)
+        : await getLegacyChatLinkByReply(ctx, target._id);
+    if (legacyLink?.messageId) {
+      const message = await ctx.db.get(legacyLink.messageId as any);
+      if (message) await ctx.db.patch(legacyLink.messageId as any, { contentJson: { text }, updatedAt: nowMs });
+    }
+    await ctx.db.insert("communityInteractionModerationEvents" as any, {
+      communityId,
+      targetType: args.targetType,
+      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
+      eventType: "edit",
+      actorType: "human",
+      actorUserId: userId,
+      createdAt: nowMs,
+    });
+    return { ok: true };
+  },
+});
+
+export const deleteCommunityInteractionMessage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    targetType: v.union(v.literal("root"), v.literal("reply")),
+    targetId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const target = (await ctx.db.get(args.targetId as any)) as any;
+    if (!target) throw new Error("interaction_target_not_found");
+    const communityId = target.communityId;
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId, userId });
+    const isOwner = normalizeIdValue(target.actorUserId) === normalizeIdValue(userId);
+    if (!isOwner) {
+      let isModerator = false;
+      try {
+        await requireCommunityModerator({ ctx, communityId, userId });
+        isModerator = true;
+      } catch {
+        isModerator = false;
+      }
+      if (!isModerator) throw new Error("interaction_delete_forbidden");
+    }
+    if (target.status === "deleted") return { ok: true };
+
+    const nowMs = Date.now();
+    const previousStatus = target.status;
+    await ctx.db.patch(target._id, { status: "deleted", deletedAt: nowMs, updatedAt: nowMs });
+    if (args.targetType === "reply") {
+      const root = (await ctx.db.get(target.rootId as any)) as InteractionRootRow | null;
+      if (root) {
+        const lastLive = (await ctx.db
+          .query("communityInteractionReplies" as any)
+          .withIndex("by_root_status_createdAt", (q: any) =>
+            q.eq("rootId", root._id).eq("status", "live"),
+          )
+          .order("desc")
+          .first()) as InteractionReplyRow | null;
+        const rootPatch: any = {
+          replyCount: Math.max(0, Math.floor(root.replyCount ?? 0) - 1),
+          updatedAt: nowMs,
+        };
+        if (lastLive) rootPatch.lastReplyAt = lastLive.createdAt;
+        await ctx.db.patch(root._id, rootPatch);
+      }
+    }
+    await ctx.db.insert("communityInteractionModerationEvents" as any, {
+      communityId,
+      targetType: args.targetType,
+      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
+      eventType: "tombstone",
+      actorType: "human",
+      actorUserId: userId,
+      previousStatus,
+      nextStatus: "deleted",
+      createdAt: nowMs,
+    });
+    return { ok: true };
+  },
+});
+
 const SEED_AUTH_PREFIX = "seed:polynet:";
 
 const SEED_PEOPLE = [
@@ -1963,7 +2109,7 @@ export const seedPolynetChatDemo = internalMutation({
       if (existing) return existing;
       const root = (await ctx.db.get(opts.rootId as any)) as InteractionRootRow;
       const blocks: NormalizedContentBlock[] = [{ blockType: "markdown_text", text: opts.text }];
-      const seq = Math.max(0, Math.floor(root.replyCount ?? 0)) + 1;
+      const seq = await nextReplySeq(ctx, root._id);
       const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
         communityId,
         rootId: opts.rootId,
@@ -1987,7 +2133,7 @@ export const seedPolynetChatDemo = internalMutation({
         nowMs: opts.atMs,
       });
       await ctx.db.patch(opts.rootId as any, {
-        replyCount: seq,
+        replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
         lastReplyAt: opts.atMs,
         updatedAt: opts.atMs,
       });

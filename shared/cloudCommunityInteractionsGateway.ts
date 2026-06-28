@@ -75,6 +75,7 @@ export type CommunityInteractionRootRecord = {
   legacy_message_id: string | null;
   created_at: string;
   updated_at: string;
+  edited_at: string | null;
 };
 
 export type CommunityInteractionReplyRecord = {
@@ -97,6 +98,7 @@ export type CommunityInteractionReplyRecord = {
   legacy_target_message_id: string | null;
   created_at: string;
   updated_at: string;
+  edited_at: string | null;
 };
 
 export type CommunityInteractionRootBundle = {
@@ -201,4 +203,34 @@ export async function toggleCloudCommunityInteractionReaction<SessionT>(
     reacted: Boolean(result.reacted),
     reaction_summary: Array.isArray(result.reaction_summary) ? result.reaction_summary : [],
   };
+}
+
+export async function editCloudCommunityInteractionMessage<SessionT>(
+  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
+    targetType: "root" | "reply";
+    targetId: string;
+    text: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:editCommunityInteractionMessage" as any, {
+    authSubject,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    text: params.text,
+  });
+}
+
+export async function deleteCloudCommunityInteractionMessage<SessionT>(
+  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
+    targetType: "root" | "reply";
+    targetId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:deleteCommunityInteractionMessage" as any, {
+    authSubject,
+    targetType: params.targetType,
+    targetId: params.targetId,
+  });
 }

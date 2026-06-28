@@ -70,6 +70,8 @@ import {
   createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl,
   createCommunityInteractionReply as createCommunityInteractionReplyImpl,
   createCommunityInteractionRoot as createCommunityInteractionRootImpl,
+  deleteCommunityInteractionMessage as deleteCommunityInteractionMessageImpl,
+  editCommunityInteractionMessage as editCommunityInteractionMessageImpl,
   listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
   listCommunityInteractionRoots as listCommunityInteractionRootsImpl,
   toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl,
@@ -280,6 +282,8 @@ export const createCommunityInteractionComposerMessage = createCommunityInteract
 export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
 export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;
 export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;
+export const editCommunityInteractionMessage = editCommunityInteractionMessageImpl;
+export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;
 export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;
 export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
