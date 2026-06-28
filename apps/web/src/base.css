@@ -9318,7 +9318,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-message:hover {
-  background: var(--hover-overlay);
+  background: color-mix(in srgb, var(--bg-card) 97%, var(--accent) 3%);
 }
 
 .community-interaction-message.selected {
