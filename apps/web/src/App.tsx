@@ -2639,11 +2639,23 @@ export default function App() {
     writeStoredInteractionSelectedRoot(activeCommunityId, null);
   }, [activeCommunityId]);
 
+  const restoredInteractionSelectionForCommunityRef = useRef<string | null>(null);
   useEffect(() => {
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
+    if (restoredInteractionSelectionForCommunityRef.current === activeCommunityId) return;
+    // Restore only once the feed's roots are actually loaded FOR THIS community,
+    // i.e. after the boot-time resets have settled — otherwise the master reset
+    // effect clobbers the restored selection.
+    const rootsLoadedForCommunity =
+      communityInteractionRoots.length > 0
+      && communityInteractionRoots[0]?.root.community_id === activeCommunityId;
+    if (!rootsLoadedForCommunity) return;
+    restoredInteractionSelectionForCommunityRef.current = activeCommunityId;
     const stored = readStoredInteractionSelectedRoot(activeCommunityId);
-    if (stored) setSelectedCommunityInteractionRootId(stored);
-  }, [activeCommunityId]);
+    if (stored && communityInteractionRoots.some((bundle) => bundle.root.id === stored)) {
+      setSelectedCommunityInteractionRootId((current) => current ?? stored);
+    }
+  }, [activeCommunityId, communityInteractionRoots]);
 
   const handleToggleCommunityInteractionReaction = useCallback(async (
     targetType: "root" | "reply",
