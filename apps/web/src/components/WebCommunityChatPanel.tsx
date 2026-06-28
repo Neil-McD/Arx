@@ -321,6 +321,26 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [drawerReplyInput, setDrawerReplyInput] = useState("");
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedInteractionRootId = interactionProjection?.selectedRootId ?? null;
+  const selectedInteractionRootBundle = selectedInteractionRootId
+    ? (interactionProjection?.roots ?? []).find(
+        (bundle) => bundle.root.id === selectedInteractionRootId,
+      ) ?? null
+    : null;
+  const rootReplyTarget = useMemo<CommunityReplyTarget | null>(() => {
+    const root = selectedInteractionRootBundle?.root;
+    if (!root?.legacy_message_id || !root.actor_user_id) return null;
+    return {
+      id: root.legacy_message_id,
+      sender_id: root.actor_user_id,
+      body: root.content_summary ?? "",
+      interaction_root_id: root.id,
+    };
+  }, [
+    selectedInteractionRootBundle?.root.legacy_message_id,
+    selectedInteractionRootBundle?.root.actor_user_id,
+    selectedInteractionRootBundle?.root.id,
+    selectedInteractionRootBundle?.root.content_summary,
+  ]);
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
@@ -440,12 +460,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   }, [activeCommunity?.id]);
 
   useEffect(() => {
-    setDrawerReplyTarget(null);
+    setDrawerReplyTarget(rootReplyTarget);
     setDrawerReplyInput("");
     if (drawerReplyInputRef.current) {
       drawerReplyInputRef.current.style.height = "auto";
     }
-  }, [activeCommunity?.id, selectedInteractionRootId]);
+  }, [activeCommunity?.id, rootReplyTarget]);
 
   useEffect(() => {
     setProfileCommunityContextByUserId({});
@@ -706,27 +726,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   const drawerReplyComposer = drawerReplyTarget ? (
     <div className="community-interaction-reply-composer-panel">
-      <div className="community-interaction-reply-composer-context">
-        <div className="community-interaction-reply-composer-copy">
-          <span>Replying to</span>
-          <strong>{displayName(drawerReplyTarget.sender_id)}</strong>
-          <em>{truncateReplyPreview(drawerReplyTarget.body)}</em>
-        </div>
-        <button
-          className="chat-replying-cancel"
-          type="button"
-          onClick={() => {
-            setDrawerReplyTarget(null);
-            setDrawerReplyInput("");
-          }}
-          title="Cancel reply"
-          aria-label="Cancel reply"
-        >
-          <svg viewBox="0 0 24 24">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
       <div className="chat-input-bar community-interaction-reply-input-bar">
         <textarea
           ref={(node) => {

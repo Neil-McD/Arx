@@ -265,9 +265,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     : "";
   const selectedRootChip = selectedRoot ? kindChipLabel(selectedRoot.root.kind) : null;
   const selectedRootBadge = selectedRoot ? agentBadgeLabel(selectedRoot.root.actor_type) : null;
-  const canReplyToSelectedRoot = Boolean(
-    selectedRoot?.root.legacy_message_id && selectedRoot.root.actor_user_id && selectedRootText.trim(),
-  );
 
   const segments = groupInteractionFeed(props.roots);
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
@@ -450,26 +447,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   ) : null}
                   <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
                   <EmbedCards embeds={selectedRoot.embeds} />
-                  <div className="community-interaction-thread-anchor-actions">
-                    <ReactionSummary rows={selectedRoot.root.reaction_summary} />
-                    {canReplyToSelectedRoot ? (
-                      <button
-                        className="community-interaction-reply-button"
-                        type="button"
-                        onClick={() => {
-                          if (!selectedRoot?.root.legacy_message_id || !selectedRoot.root.actor_user_id) return;
-                          props.onStartRootReply?.({
-                            id: selectedRoot.root.legacy_message_id,
-                            sender_id: selectedRoot.root.actor_user_id,
-                            body: selectedRootText,
-                            interaction_root_id: selectedRoot.root.id,
-                          });
-                        }}
-                      >
-                        Reply
-                      </button>
-                    ) : null}
-                  </div>
+                  {selectedRoot.root.reaction_summary.length > 0 ? (
+                    <div className="community-interaction-thread-anchor-actions">
+                      <ReactionSummary rows={selectedRoot.root.reaction_summary} />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

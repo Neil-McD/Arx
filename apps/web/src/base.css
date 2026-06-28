@@ -8851,6 +8851,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: none;
   border-radius: 12px;
   box-shadow: none;
+  align-items: flex-end;
+}
+
+.community-chat .community-interaction-main-composer .chat-input {
+  min-height: 44px;
 }
 
 .community-interaction-drawer-composer {
@@ -8910,7 +8915,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reply-input-bar .chat-input {
-  min-height: 34px;
+  min-height: 42px;
 }
 
 .community-interaction-feed-header,
