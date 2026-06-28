@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowLeft,
   CornerUpLeft,
   MessageSquare,
   MoreHorizontal,
@@ -675,15 +674,16 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <aside className="community-interaction-drawer" aria-label="Thread replies">
           <div className="community-interaction-drawer-header">
             <button
-              className="community-interaction-drawer-back"
+              className="back-to-workspace"
               type="button"
               onClick={props.onCloseDrawer}
-              aria-label="Back to channel"
               title="Back to channel"
             >
-              <ArrowLeft size={18} aria-hidden="true" />
+              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span className="back-path">thread</span>
             </button>
-            <span className="community-interaction-drawer-heading">Thread</span>
           </div>
           <div className="community-interaction-drawer-scroll">
             <div className="community-interaction-drawer-root">

@@ -8836,34 +8836,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 22px 14px 12px;
+  padding: 8px 8px 6px;
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.community-interaction-drawer-back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.community-interaction-drawer-back:hover {
-  background: var(--hover-overlay);
-  color: var(--text-primary);
-}
-
-.community-interaction-drawer-heading {
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 600;
 }
 
 .community-interaction-drawer-scroll {
