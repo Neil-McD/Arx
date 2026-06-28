@@ -8828,7 +8828,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-drawer-scroll {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
@@ -8864,9 +8864,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-drawer-composer {
-  border-top: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
-  padding: 10px 12px 12px;
+  background: transparent;
+  padding: 4px 12px 12px;
 }
 
 .community-interaction-reply-composer-panel {
