@@ -8846,6 +8846,13 @@ button.community-launch-knowledge-integration-chip:disabled {
   padding-top: 8px;
 }
 
+.community-chat .community-interaction-main-composer .chat-input-bar {
+  margin: 0 14px 14px;
+  max-width: none;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
 .community-interaction-drawer-composer {
   border-top: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
