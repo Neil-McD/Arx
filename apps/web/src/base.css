@@ -8851,11 +8851,16 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: none;
   border-radius: 12px;
   box-shadow: none;
-  align-items: flex-end;
+  align-items: center;
+  padding: 13px 14px;
 }
 
-.community-chat .community-interaction-main-composer .chat-input {
-  min-height: 44px;
+.community-chat .community-interaction-drawer-composer .chat-input-bar {
+  margin: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  align-items: center;
+  padding: 11px 12px;
 }
 
 .community-interaction-drawer-composer {
@@ -8915,7 +8920,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reply-input-bar .chat-input {
-  min-height: 42px;
+  min-height: 24px;
 }
 
 .community-interaction-feed-header,
