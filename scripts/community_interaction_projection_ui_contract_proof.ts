@@ -154,6 +154,37 @@ assert.doesNotMatch(
 });
 
 assert.match(
+  baseCss,
+  /\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*14px\)\s+18px\s+28px;/,
+  "projection feed should reserve the web topbar before rendering roots",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-drawer-header\s*\{[\s\S]*padding:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*12px\)\s+16px\s+16px;/,
+  "projection drawer header should reserve the web topbar before rendering replies",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-avatar\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*overflow:\s*hidden;/,
+  "projection avatars should be stable positioned clipping boxes",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-avatar-image\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*object-fit:\s*cover;/,
+  "projection avatar images should fill the avatar clipping box",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*14px\)\s+12px\s+18px;/,
+  "mobile projection feed should reserve the mobile topbar clearance",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-drawer-header\s*\{[\s\S]*padding-top:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*14px\);/,
+  "mobile projection drawer should reserve the mobile topbar clearance",
+);
+
+assert.match(
   envExample,
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION=/,
   ".env.example should document the projection flag without enabling it globally",
