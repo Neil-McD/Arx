@@ -95,6 +95,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   adminCount: number;
   onlineCount: number;
   onlineFaces: PublicCommunityFace[];
+  onlineUserIds: string[];
 }> {
   const memberships = (await ctx.db
     .query("communityMemberships")
@@ -147,11 +148,20 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     )
   ).filter(Boolean) as PublicCommunityFace[];
 
+  const onlineUserPublicIds = (
+    await Promise.all(
+      onlineUserIds.map(
+        async (userId) => (await resolvePublicUserId(ctx, userId, userIdCache)) ?? String(userId),
+      ),
+    )
+  ).filter(Boolean) as string[];
+
   return {
     memberCount,
     adminCount: adminUserIds.size,
     onlineCount: onlineUserIds.length,
     onlineFaces,
+    onlineUserIds: onlineUserPublicIds,
   };
 }
 
@@ -160,12 +170,14 @@ function mapPublicCommunityStats(stats: {
   adminCount: number;
   onlineCount: number;
   onlineFaces: PublicCommunityFace[];
+  onlineUserIds: string[];
 }) {
   return {
     member_count: stats.memberCount,
     admin_count: stats.adminCount,
     online_count: stats.onlineCount,
     online_faces: stats.onlineFaces,
+    online_user_ids: stats.onlineUserIds,
   };
 }
 

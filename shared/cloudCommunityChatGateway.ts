@@ -190,12 +190,14 @@ export function subscribeCloudCommunityActivityEvents<TRow = unknown>(
 export async function setCloudCommunityTyping<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
+    rootId?: string | null;
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   await client.mutation("community:setCommunityTyping" as any, {
     authSubject,
     communityId: params.communityId,
+    rootId: params.rootId ?? undefined,
   });
 }
 

@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type
 import { MessageCircle } from "lucide-react";
 import { AttachmentChipButton } from "./AttachmentChipButton";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
+import { CommunityChatMediaPlayers } from "./CommunityChatMediaPlayers";
 import { UserAvatar } from "./UserAvatar";
 import { partitionCommunityAttachments } from "./communityAttachmentUi";
 
@@ -125,7 +126,7 @@ function CommunityChatMessageRowComponent({
   onOpenSenderProfile,
   onMessageSender,
 }: CommunityChatMessageRowProps) {
-  const { imageAttachments, fileAttachments } = useMemo(
+  const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } = useMemo(
     () => partitionCommunityAttachments(message.attachments),
     [message.attachments],
   );
@@ -426,6 +427,8 @@ function CommunityChatMessageRowComponent({
             images={lightboxImages}
             onOpenImage={onOpenCommunityChatLightbox}
           />
+
+          <CommunityChatMediaPlayers videos={videoAttachments} audios={audioAttachments} />
 
           {fileAttachments.length > 0 && (
             <div className="attachments-preview chat-attachments-preview">

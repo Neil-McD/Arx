@@ -14,6 +14,7 @@ export type CommunityAttentionIndicators = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  chat_last_seen_at?: number | null;
 };
 
 type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
@@ -40,6 +41,7 @@ function buildAttentionMap(
       ai_feed: false,
       resources: false,
       events: false,
+      chat_last_seen_at: null,
     };
   }
   for (const row of rows) {
@@ -50,6 +52,7 @@ function buildAttentionMap(
       ai_feed: Boolean(row.ai_feed),
       resources: Boolean(row.resources),
       events: Boolean(row.events),
+      chat_last_seen_at: typeof row.chat_last_seen_at === "number" ? row.chat_last_seen_at : null,
     };
   }
   return next;

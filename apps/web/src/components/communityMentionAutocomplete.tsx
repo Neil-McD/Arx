@@ -1,0 +1,228 @@
+import type { KeyboardEvent, MutableRefObject } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
+export type MentionCandidate = {
+  userId: string;
+  displayName: string;
+  handle: string | null;
+  avatarUrl: string | null;
+};
+
+export type CommittedMention = {
+  userId: string;
+  displayName: string;
+};
+
+// Max characters we'll scan back from the caret as a mention query. Display names can
+// contain spaces ("Neil McDevitt"), so we allow them, but cap the span so an `@` early
+// in a long message doesn't keep the menu open across an entire paragraph.
+const MAX_QUERY_LENGTH = 40;
+const MAX_RESULTS = 8;
+
+type ActiveQuery = {
+  atIndex: number;
+  query: string;
+};
+
+// Find the mention token the caret currently sits inside, if any. Returns null when the
+// caret is not within an `@...` token we should complete.
+function findActiveQuery(value: string, caret: number): ActiveQuery | null {
+  // Scan backwards from the caret for the `@` that opens the current token.
+  for (let i = caret - 1; i >= 0; i -= 1) {
+    const char = value[i];
+    if (char === "@") {
+      const before = i === 0 ? "" : value[i - 1];
+      // Only treat as a mention when the `@` starts a word (start of input or after space).
+      if (i !== 0 && !/\s/.test(before)) return null;
+      const query = value.slice(i + 1, caret);
+      if (query.length > MAX_QUERY_LENGTH) return null;
+      if (/[\n@]/.test(query)) return null;
+      // Don't open on `@ ` — a space immediately after `@` means it's not a mention.
+      if (/^\s/.test(query)) return null;
+      return { atIndex: i, query };
+    }
+    if (char === "\n") return null;
+  }
+  return null;
+}
+
+function matchesQuery(candidate: MentionCandidate, query: string): boolean {
+  if (!query) return true;
+  const needle = query.toLowerCase();
+  if (candidate.displayName.toLowerCase().includes(needle)) return true;
+  if (candidate.handle && candidate.handle.toLowerCase().includes(needle)) return true;
+  return false;
+}
+
+export type MentionAutocomplete = {
+  isOpen: boolean;
+  query: string;
+  results: MentionCandidate[];
+  highlightedIndex: number;
+  /** Recompute the active query from the textarea's current value + caret. */
+  syncFromTextarea: (textarea: HTMLTextAreaElement) => void;
+  /** Close the menu (e.g. on blur or after send). */
+  close: () => void;
+  /** Handle a keydown; returns true when the event was consumed by the menu. */
+  handleKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /** Insert the chosen candidate at the active token and record the mention. */
+  pick: (candidate: MentionCandidate) => void;
+  setHighlightedIndex: (index: number) => void;
+};
+
+export function useMentionAutocomplete(params: {
+  candidates: MentionCandidate[];
+  textareaRef: MutableRefObject<HTMLTextAreaElement | null>;
+  /** Write the new textarea value back into the owning state. */
+  applyText: (value: string, textarea: HTMLTextAreaElement) => void;
+  /** Record a mention pick so it can be sent with the message. */
+  onCommitMention: (mention: CommittedMention) => void;
+}): MentionAutocomplete {
+  const { candidates, textareaRef, applyText, onCommitMention } = params;
+  const [active, setActive] = useState<ActiveQuery | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+  const results = useMemo(() => {
+    if (!active) return [];
+    return candidates.filter((candidate) => matchesQuery(candidate, active.query)).slice(0, MAX_RESULTS);
+  }, [active, candidates]);
+
+  const isOpen = active !== null && results.length > 0;
+
+  const close = useCallback(() => {
+    setActive(null);
+    setHighlightedIndex(0);
+  }, []);
+
+  const syncFromTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    const caret = textarea.selectionStart ?? textarea.value.length;
+    const next = findActiveQuery(textarea.value, caret);
+    setActive(next);
+    setHighlightedIndex(0);
+  }, []);
+
+  const pick = useCallback(
+    (candidate: MentionCandidate) => {
+      const textarea = textareaRef.current;
+      if (!textarea || !active) return;
+      const value = textarea.value;
+      const caret = textarea.selectionStart ?? value.length;
+      const before = value.slice(0, active.atIndex);
+      const after = value.slice(caret);
+      const token = `@${candidate.displayName}`;
+      const needsSpace = !after.startsWith(" ");
+      const nextValue = `${before}${token}${needsSpace ? " " : ""}${after}`;
+      const nextCaret = before.length + token.length + 1;
+
+      applyText(nextValue, textarea);
+      onCommitMention({ userId: candidate.userId, displayName: candidate.displayName });
+      close();
+
+      // Restore the caret after React re-renders the controlled value.
+      requestAnimationFrame(() => {
+        const node = textareaRef.current;
+        if (!node) return;
+        node.focus();
+        node.setSelectionRange(nextCaret, nextCaret);
+      });
+    },
+    [active, applyText, close, onCommitMention, textareaRef],
+  );
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (active === null || results.length === 0) return false;
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          setHighlightedIndex((index) => (index + 1) % results.length);
+          return true;
+        case "ArrowUp":
+          event.preventDefault();
+          setHighlightedIndex((index) => (index - 1 + results.length) % results.length);
+          return true;
+        case "Enter":
+        case "Tab": {
+          event.preventDefault();
+          const candidate = results[Math.min(highlightedIndex, results.length - 1)];
+          if (candidate) pick(candidate);
+          return true;
+        }
+        case "Escape":
+          event.preventDefault();
+          close();
+          return true;
+        default:
+          return false;
+      }
+    },
+    [active, results, highlightedIndex, pick, close],
+  );
+
+  return {
+    isOpen,
+    query: active?.query ?? "",
+    results,
+    highlightedIndex,
+    syncFromTextarea,
+    close,
+    handleKeyDown,
+    pick,
+    setHighlightedIndex,
+  };
+}
+
+export function MentionAutocompleteMenu(props: {
+  autocomplete: MentionAutocomplete;
+  getAvatarColor: (seed: string) => string;
+  getInitials: (value: string) => string;
+}) {
+  const { autocomplete, getAvatarColor, getInitials } = props;
+  const { isOpen, results, highlightedIndex, pick, setHighlightedIndex } = autocomplete;
+  // Suppress textarea blur so clicking a row doesn't close the menu before the pick lands.
+  const suppressBlurRef = useRef(false);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="mention-autocomplete"
+      role="listbox"
+      onMouseDown={() => {
+        suppressBlurRef.current = true;
+      }}
+    >
+      {results.map((candidate, index) => (
+        <button
+          key={candidate.userId}
+          type="button"
+          role="option"
+          aria-selected={index === highlightedIndex}
+          className={`mention-autocomplete-row${index === highlightedIndex ? " is-active" : ""}`}
+          onMouseEnter={() => setHighlightedIndex(index)}
+          onClick={() => {
+            pick(candidate);
+            suppressBlurRef.current = false;
+          }}
+        >
+          <span
+            className="mention-autocomplete-avatar"
+            style={
+              candidate.avatarUrl
+                ? { backgroundImage: `url(${candidate.avatarUrl})` }
+                : { backgroundColor: getAvatarColor(candidate.userId) }
+            }
+          >
+            {candidate.avatarUrl ? null : getInitials(candidate.displayName)}
+          </span>
+          <span className="mention-autocomplete-meta">
+            <span className="mention-autocomplete-name">{candidate.displayName}</span>
+            {candidate.handle ? (
+              <span className="mention-autocomplete-handle">@{candidate.handle}</span>
+            ) : null}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}

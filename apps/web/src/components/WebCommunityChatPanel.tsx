@@ -33,6 +33,12 @@ import {
   type WebCommunityInteractionProjectionProps,
 } from "./WebCommunityInteractionProjection";
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
+import {
+  MentionAutocompleteMenu,
+  useMentionAutocomplete,
+  type CommittedMention,
+  type MentionCandidate,
+} from "./communityMentionAutocomplete";
 
 type CommunityChatMessage = SharedCommunityChatMessage<CommunityMessageAttachment>;
 type CommunityActivityEvent = SharedCommunityActivityEvent;
@@ -49,6 +55,7 @@ type CommunityChatSendDraft = {
   text?: string;
   attachments?: CommunityMessageAttachment[];
   replyingToMessage?: CommunityReplyTarget | null;
+  mentions?: CommittedMention[];
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
   restoreDraft?: () => void;
@@ -131,6 +138,7 @@ export type WebCommunityChatPanelProps = {
   communityMessageById: Map<string, CommunityChatMessage>;
   messageReactions: MessageReaction[];
   typingPresence: CommunityTypingPresenceBundle;
+  onThreadTypingSignal?: (rootId: string) => void;
   profilesByUserId: Record<string, UserProfile>;
   editingMessageId: string | null;
   editingMessageText: string;
@@ -138,6 +146,10 @@ export type WebCommunityChatPanelProps = {
   replyingToMessage: CommunityReplyTarget | null;
   communityAttachments: CommunityMessageAttachment[];
   communityMessageInput: string;
+  communityMessageMentions: CommittedMention[];
+  setCommunityMessageMentions: (
+    update: CommittedMention[] | ((prev: CommittedMention[]) => CommittedMention[]),
+  ) => void;
   isSendingCommunityMessage: boolean;
   communityChatError: string | null;
   isUserAtBottom: boolean;
@@ -257,6 +269,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     communityMessageById,
     messageReactions,
     typingPresence,
+    onThreadTypingSignal,
     profilesByUserId,
     editingMessageId,
     editingMessageText,
@@ -264,6 +277,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     replyingToMessage,
     communityAttachments,
     communityMessageInput,
+    setCommunityMessageMentions,
     isSendingCommunityMessage,
     communityChatError,
     isUserAtBottom,
@@ -319,7 +333,32 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   >({});
   const [drawerReplyTarget, setDrawerReplyTarget] = useState<CommunityReplyTarget | null>(null);
   const [drawerReplyInput, setDrawerReplyInput] = useState("");
+  const [drawerReplyMentions, setDrawerReplyMentions] = useState<CommittedMention[]>([]);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Members available to @-mention: everyone we have a profile for, except yourself.
+  const mentionCandidates = useMemo<MentionCandidate[]>(() => {
+    return Object.values(profilesByUserId)
+      .filter((profile) => profile.user_id !== sessionUserId)
+      .map((profile) => ({
+        userId: profile.user_id,
+        displayName: displayName(profile.user_id),
+        handle: profile.handle ?? null,
+        avatarUrl: profile.avatar_url ?? null,
+      }))
+      .filter((candidate) => candidate.displayName.trim().length > 0)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [profilesByUserId, sessionUserId, displayName]);
+
+  const mainMention = useMentionAutocomplete({
+    candidates: mentionCandidates,
+    textareaRef: chatInputRef,
+    applyText: (value, textarea) => onCommunityMessageInputChange(value, textarea),
+    onCommitMention: (mention) =>
+      setCommunityMessageMentions((prev) =>
+        prev.some((existing) => existing.userId === mention.userId) ? prev : [...prev, mention],
+      ),
+  });
   const selectedInteractionRootId = interactionProjection?.selectedRootId ?? null;
   const selectedInteractionRootBundle = selectedInteractionRootId
     ? (interactionProjection?.roots ?? []).find(
@@ -501,6 +540,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     if (!profilePanelUserId) return;
+    // The canonical chat docks the profile into the right panel (closed via the back
+    // button), so click-outside-to-close only applies to the legacy floating card.
+    if (showInteractionProjection) return;
 
     const handleProfilePanelPointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -514,7 +556,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     return () => {
       document.removeEventListener("pointerdown", handleProfilePanelPointerDown, true);
     };
-  }, [profilePanelUserId]);
+  }, [profilePanelUserId, showInteractionProjection]);
 
   const openDirectMessage = useCallback((targetUserId: string, sourceCommunityIdOverride?: string | null) => {
     const normalizedTargetUserId = String(targetUserId ?? "").trim();
@@ -525,30 +567,66 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onOpenDirectMessageFromCommunity(normalizedTargetUserId, sourceCommunityId);
   }, [activeCommunity?.id, onOpenDirectMessageFromCommunity, sessionUserId]);
 
+  const profilePanelElement = profilePanelUserId ? (
+    <WebCommunityProfilePanel
+      profile={profilePanelProfile}
+      displayName={profilePanelDisplayName}
+      avatarColor={profilePanelAvatarColor}
+      communityContext={profilePanelCommunityContext}
+      isSelfProfile={profilePanelCommunityContext.is_self || Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
+      isMessageDisabled={!canOpenDirectMessageFromCommunity || !profilePanelCommunityContext.can_message}
+      onMessage={
+        profilePanelUserId && profilePanelUserId !== sessionUserId && profilePanelCommunityContext.message_context_community_id
+          ? () => openDirectMessage(profilePanelUserId, profilePanelCommunityContext.message_context_community_id)
+          : undefined
+      }
+      getInitials={getInitials}
+      docked={showInteractionProjection}
+    />
+  ) : null;
+
   const handleDrawerReplyInputChange = useCallback((value: string, textarea: HTMLTextAreaElement) => {
     setDrawerReplyInput(value);
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, []);
+    if (value.trim() && selectedInteractionRootId) {
+      onThreadTypingSignal?.(selectedInteractionRootId);
+    }
+  }, [selectedInteractionRootId, onThreadTypingSignal]);
+
+  const drawerMention = useMentionAutocomplete({
+    candidates: mentionCandidates,
+    textareaRef: drawerReplyInputRef,
+    applyText: (value, textarea) => handleDrawerReplyInputChange(value, textarea),
+    onCommitMention: (mention) =>
+      setDrawerReplyMentions((prev) =>
+        prev.some((existing) => existing.userId === mention.userId) ? prev : [...prev, mention],
+      ),
+  });
 
   const handleSendDrawerReply = useCallback(async () => {
     const target = drawerReplyTarget;
     const text = drawerReplyInput.trim();
     if (!target || !text) return;
+    // Only send mentions whose @DisplayName token still survives in the final text.
+    const mentions = drawerReplyMentions.filter((mention) => text.includes(`@${mention.displayName}`));
     await onSendCommunityMessage({
       text,
       attachments: [],
       replyingToMessage: target,
+      mentions,
       inputRef: drawerReplyInputRef,
       clearDraft: () => {
         setDrawerReplyInput("");
+        setDrawerReplyMentions([]);
       },
       restoreDraft: () => {
         setDrawerReplyTarget(target);
         setDrawerReplyInput(text);
+        setDrawerReplyMentions(mentions);
       },
     });
-  }, [drawerReplyInput, drawerReplyTarget, onSendCommunityMessage]);
+  }, [drawerReplyInput, drawerReplyMentions, drawerReplyTarget, onSendCommunityMessage]);
 
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
@@ -639,6 +717,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       })()}
 
       <div className="chat-input-bar">
+        <MentionAutocompleteMenu
+          autocomplete={mainMention}
+          getAvatarColor={getAvatarColor}
+          getInitials={getInitials}
+        />
         <button
           className="ask-icon-btn ask-plus"
           type="button"
@@ -663,7 +746,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           }}
           type="file"
           multiple
-          accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
+          accept="image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
           style={{ display: "none" }}
           onChange={onCommunityFileInputChange}
         />
@@ -688,9 +771,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                         : "Message the community..."
           }
           value={communityMessageInput}
-          onChange={(event) => onCommunityMessageInputChange(event.target.value, event.target)}
+          onChange={(event) => {
+            onCommunityMessageInputChange(event.target.value, event.target);
+            mainMention.syncFromTextarea(event.target);
+          }}
+          onClick={(event) => mainMention.syncFromTextarea(event.currentTarget)}
+          onBlur={() => mainMention.close()}
           onPaste={onCommunityAttachmentPaste}
           onKeyDown={(event) => {
+            if (mainMention.handleKeyDown(event)) return;
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               if (isAuthRecoveringSignedIn) return;
@@ -750,6 +839,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         </div>
       ) : null}
       <div className="chat-input-bar community-interaction-reply-input-bar">
+        <MentionAutocompleteMenu
+          autocomplete={drawerMention}
+          getAvatarColor={getAvatarColor}
+          getInitials={getInitials}
+        />
         <textarea
           ref={(node) => {
             drawerReplyInputRef.current = node;
@@ -757,8 +851,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           className="chat-input"
           placeholder="Reply..."
           value={drawerReplyInput}
-          onChange={(event) => handleDrawerReplyInputChange(event.target.value, event.target)}
+          onChange={(event) => {
+            handleDrawerReplyInputChange(event.target.value, event.target);
+            drawerMention.syncFromTextarea(event.target);
+          }}
+          onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
+          onBlur={() => drawerMention.close()}
           onKeyDown={(event) => {
+            if (drawerMention.handleKeyDown(event)) return;
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               if (isAuthRecoveringSignedIn) return;
@@ -856,6 +956,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   setDrawerReplyTarget(message);
                   setTimeout(() => drawerReplyInputRef.current?.focus(), 0);
                 }}
+                onOpenProfile={setProfilePanelUserId}
+                onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}
+                profilePanel={profilePanelElement}
+                onCloseProfile={() => setProfilePanelUserId(null)}
                 mainComposer={mainCommunityComposer}
                 drawerComposer={drawerReplyComposer}
               />
@@ -1045,22 +1149,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         {communityChatError && <div className="auth-error">{communityChatError}</div>}
       </div>
 
-      {profilePanelUserId ? (
-        <WebCommunityProfilePanel
-          profile={profilePanelProfile}
-          displayName={profilePanelDisplayName}
-          avatarColor={profilePanelAvatarColor}
-          communityContext={profilePanelCommunityContext}
-          isSelfProfile={profilePanelCommunityContext.is_self || Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
-          isMessageDisabled={!canOpenDirectMessageFromCommunity || !profilePanelCommunityContext.can_message}
-          onMessage={
-            profilePanelUserId && profilePanelUserId !== sessionUserId && profilePanelCommunityContext.message_context_community_id
-              ? () => openDirectMessage(profilePanelUserId, profilePanelCommunityContext.message_context_community_id)
-              : undefined
-          }
-          getInitials={getInitials}
-        />
-      ) : null}
+      {!showInteractionProjection ? profilePanelElement : null}
 
       <WebCommunityChatLightboxModal {...lightboxModalProps} />
     </>

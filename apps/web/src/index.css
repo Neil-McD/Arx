@@ -2081,25 +2081,22 @@
   color: var(--text-faint);
 }
 
-/* Desktop: broaden the community nav so the center column isn't a wide empty plain */
+/* Desktop: one continuous fluid nav width — scales smoothly with the window
+   (no discrete "steps"), comfortably wide by default, narrowing as space tightens. */
 @media (min-width: 641px) {
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
-    grid-template-columns: var(--web-rail-width, 72px) clamp(220px, 20vw, 440px) minmax(0, 1fr);
+    grid-template-columns: var(--web-rail-width, 72px) clamp(168px, 20vw, 420px) minmax(0, 1fr);
   }
 }
 
-/* Extra-tight windows: prevent community nav + feed from colliding */
-@media (max-width: 640px) {
-  .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
-    grid-template-columns: var(--web-rail-width) minmax(0, 140px) minmax(0, 1fr);
-  }
-
+/* Tighter windows: keep the nav from spilling its labels as it approaches the floor. */
+@media (max-width: 860px) {
   .community-nav {
     overflow: hidden;
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 720px) {
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
     grid-template-columns: var(--web-rail-width) 56px minmax(0, 1fr);
   }

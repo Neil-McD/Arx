@@ -392,15 +392,15 @@ body {
 .back-to-workspace {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px 6px 8px;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -410,8 +410,8 @@ body {
 }
 
 .back-to-workspace .back-icon {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   fill: none;
   stroke: currentColor;
@@ -8632,6 +8632,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   position: relative;
   min-width: 0;
   gap: 0;
+  /* Container so the chat's drawer collapse is keyed to the chat area width
+     (not the viewport) — keeps the fixed-width drawer from forcing horizontal
+     overflow when the rail + nav consume most of the window. */
+  container: community-chat-area / inline-size;
 }
 
 .community-chat-page-loading-shell {
@@ -8798,7 +8802,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-projection.has-drawer {
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 32vw, 760px);
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 34vw, 760px);
 }
 
 .community-interaction-main,
@@ -8808,6 +8812,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -8818,9 +8823,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  padding: calc(var(--web-topbar-height, 48px) + 10px) 18px 28px;
+  padding: calc(var(--web-topbar-height, 48px) + 10px) 18px 4px;
 }
 
 .community-interaction-drawer {
@@ -8832,13 +8838,20 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow: hidden;
 }
 
-.community-interaction-drawer-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  /* Match the topbar band: topbar padding-top (8px) + island padding-top (6px). */
-  padding: 14px 8px 6px;
-  border-bottom: 1px solid var(--border-subtle);
+/* Floating back button — plain transparent .back-to-workspace (arrow + "thread" label),
+   matching the workspace back button exactly (no glass pill). Anchored to the drawer's
+   top-left at the same 8px inset as the fixed topbar, so it lands on the same band. */
+.community-interaction-drawer-back {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  z-index: 5;
+}
+
+/* Arrow slightly smaller than the workspace back button's 20px. */
+.community-interaction-drawer-back .back-icon {
+  width: 17px;
+  height: 17px;
 }
 
 .community-interaction-drawer-scroll {
@@ -8846,7 +8859,9 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
-  padding-top: 8px;
+  overflow-x: hidden;
+  /* Clear the floating back island (top 8px + ~48px pill height). */
+  padding-top: calc(var(--web-topbar-height, 48px) + 12px);
 }
 
 .community-interaction-main-composer,
@@ -8858,7 +8873,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-interaction-main-composer {
   border-top: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
   background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
 .community-chat .community-interaction-main-composer .chat-input-bar {
@@ -9025,6 +9040,43 @@ button.community-launch-knowledge-integration-chip:disabled {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Avatar hover wrapper — positioned context for the reused .chat-profile-hover-card. */
+.community-interaction-avatar-hover {
+  position: relative;
+  display: inline-flex;
+}
+
+.community-interaction-avatar-trigger {
+  display: inline-flex;
+  align-items: flex-start;
+  align-self: flex-start;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+/* Author-name trigger — selectable name that opens the profile and shows the hovercard. */
+.community-interaction-author-trigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.community-interaction-author-trigger:hover .community-interaction-author {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+
 .community-interaction-avatar {
   position: relative;
   width: 40px;
@@ -9132,10 +9184,15 @@ button.community-launch-knowledge-integration-chip:disabled {
   line-height: 1;
   cursor: pointer;
   font-family: inherit;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
 }
 
 .community-interaction-reaction:hover:not(:disabled) {
   border-color: var(--border-strong);
+}
+
+.community-interaction-reaction:active:not(:disabled) {
+  transform: scale(0.9);
 }
 
 .community-interaction-reaction:disabled {
@@ -9188,6 +9245,13 @@ button.community-launch-knowledge-integration-chip:disabled {
   border-radius: 12px;
   background: var(--bg-card-solid);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* The thread root's add-reaction button is left-aligned, so its popover must open
+   rightward (the default right:0 runs it off the left edge of the panel). */
+.community-interaction-thread-anchor-actions .community-interaction-emoji-popover {
+  right: auto;
+  left: 0;
 }
 
 .community-interaction-emoji-option {
@@ -9301,6 +9365,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 10px;
   padding: 10px 8px;
   border-radius: 8px;
+  transition: background 140ms ease;
 }
 
 .community-interaction-reply .community-interaction-avatar {
@@ -9440,8 +9505,236 @@ button.community-launch-knowledge-integration-chip:disabled {
   pointer-events: auto;
 }
 
-.community-interaction-message:hover {
+.community-interaction-message:hover,
+.community-interaction-reply:hover {
   background: color-mix(in srgb, var(--bg-card) 97%, var(--accent) 3%);
+}
+
+/* Newly-arrived messages animate in (only the ones that land after first load). */
+@keyframes community-interaction-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.community-interaction-message.is-new,
+.community-interaction-reply.is-new {
+  animation: community-interaction-arrive 240ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-interaction-message.is-new,
+  .community-interaction-reply.is-new {
+    animation: none;
+  }
+}
+
+/* Optimistic (not-yet-confirmed) messages. */
+.community-interaction-message.is-pending-sending .community-interaction-body,
+.community-interaction-message.is-pending-sending .community-interaction-title,
+.community-interaction-reply.is-pending-sending .community-interaction-body {
+  opacity: 0.5;
+}
+
+.community-interaction-sending-spinner {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-top-color: var(--text-secondary);
+  animation: community-interaction-spin 0.7s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes community-interaction-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-interaction-sending-spinner {
+    animation: none;
+    border-top-color: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  }
+}
+
+.community-interaction-message.is-pending-failed,
+.community-interaction-reply.is-pending-failed {
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--danger, #e24b4a) 10%);
+}
+
+.community-interaction-pending-status {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.community-interaction-pending-status.is-failed {
+  color: var(--danger, #e24b4a);
+}
+
+.community-interaction-pending-status button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.community-interaction-pending-status button:hover {
+  color: var(--text-primary);
+}
+
+/* Online presence dot on avatars. */
+.community-interaction-avatar-presence {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  line-height: 0;
+}
+
+.community-interaction-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3fbf7f;
+  border: 2px solid color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+  pointer-events: none;
+}
+
+/* Typing indicator above the composer. */
+.community-interaction-typing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 18px 6px;
+  animation: community-interaction-arrive 160ms ease-out;
+}
+
+.community-interaction-typing-avatars {
+  display: inline-flex;
+}
+
+.community-interaction-typing-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  margin-left: -6px;
+  border: 2px solid color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+}
+
+.community-interaction-typing-avatar:first-child {
+  margin-left: 0;
+}
+
+.community-interaction-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 9px;
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.community-interaction-typing-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: community-interaction-typing-bounce 1.2s infinite;
+}
+
+.community-interaction-typing-dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.community-interaction-typing-dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes community-interaction-typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.community-interaction-typing-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-interaction-typing {
+    animation: none;
+  }
+  .community-interaction-typing-dots > span {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Floating "jump to latest" pill — shown when new messages land while scrolled up. */
+.community-interaction-jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--web-floating-chrome-bg);
+  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: community-interaction-arrive 200ms ease-out;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.community-interaction-jump-latest:hover {
+  background: color-mix(in srgb, var(--web-floating-chrome-bg) 80%, var(--accent) 20%);
+}
+
+.community-interaction-jump-latest:active {
+  transform: translateX(-50%) scale(0.96);
 }
 
 .community-interaction-message.selected {
@@ -9488,6 +9781,60 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-reply-pill:hover {
   text-decoration: underline;
+}
+
+/* Feed thread row showing live typing instead of the reply count. */
+.community-interaction-reply-pill.is-typing {
+  gap: 6px;
+}
+
+.community-interaction-reply-pill.is-typing:hover {
+  text-decoration: none;
+}
+
+.community-interaction-reply-pill.is-typing .community-interaction-typing-dots {
+  padding: 0;
+  background: none;
+}
+
+.community-interaction-reply-pill.is-typing .community-interaction-typing-dots > span {
+  background: currentColor;
+}
+
+/* Unread read-state: "New messages" divider + thread-row new-reply marker. */
+.community-interaction-unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 2px 2px;
+}
+
+.community-interaction-unread-divider::before {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.community-interaction-unread-divider > span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.community-interaction-reply-pill.is-unread {
+  font-weight: 700;
+}
+
+.community-interaction-unread-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 5px;
 }
 
 .community-interaction-thread-row {
@@ -9723,20 +10070,29 @@ button.community-launch-knowledge-integration-chip:disabled {
   white-space: nowrap;
 }
 
-/* Layered collapse: when the main area is too narrow for feed + drawer
-   side-by-side, the reply drawer takes over and a back arrow returns to chat. */
-@media (min-width: 641px) and (max-width: 1024px) {
-  .community-chat .community-interaction-projection.has-drawer {
+/* Layered collapse: when the chat area itself is too narrow for feed + drawer
+   side-by-side, the drawer takes over the area (back arrow returns to chat).
+   Keyed to the projection's own width (container query) so it triggers based on
+   the real chat area, regardless of how much the rail + nav consume. */
+@container community-chat-area (max-width: 680px) {
+  .community-interaction-projection.has-drawer {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer {
+  .community-interaction-projection.has-drawer .community-interaction-drawer {
     position: absolute;
     inset: 0;
     width: 100%;
     border-left: 0;
-    z-index: 5;
-    background: var(--bg-app);
+    z-index: 6;
+    /* Same translucent drawer color as the side-by-side state, layered over an opaque
+       base so it matches exactly yet the feed never shows through. */
+    background:
+      linear-gradient(
+        color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%),
+        color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%)
+      ),
+      var(--bg-app);
   }
 }
 
@@ -9983,13 +10339,27 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .chat-profile-hover-name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: inherit;
   color: var(--text-primary);
   font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-profile-hover-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .chat-profile-hover-handle {
@@ -10048,6 +10418,23 @@ button.community-launch-knowledge-integration-chip:disabled {
   .chat-profile-hover-card {
     display: none;
   }
+}
+
+/* Docked variant — fills the right panel slot (the drawer provides the surface + back header). */
+.community-profile-panel.community-profile-panel--docked {
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  z-index: auto;
+  padding: 0 16px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .community-profile-panel {
@@ -11052,6 +11439,53 @@ button.community-launch-knowledge-integration-chip:disabled {
   margin-top: 8px;
   width: 100%;
   max-width: 480px;
+}
+
+.chat-media-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.community-interaction-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-media-player {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-media-player-video video {
+  width: 100%;
+  max-height: 360px;
+  border-radius: 12px;
+  background: #000;
+  display: block;
+}
+
+.chat-media-player-audio {
+  gap: 6px;
+}
+
+.chat-media-player-audio audio {
+  width: 100%;
+}
+
+.chat-media-player-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-media-grid.chat-media-grid-composer {
@@ -16710,6 +17144,81 @@ button.chat-reply-quote:hover {
   flex-shrink: 0;
   min-width: 0;
   position: relative;
+}
+
+.mention-autocomplete {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 2px;
+  background: var(--bg-card-solid, var(--bg-card));
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  z-index: 40;
+}
+
+.mention-autocomplete-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-default);
+}
+
+.mention-autocomplete-row.is-active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.mention-autocomplete-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+  text-transform: uppercase;
+}
+
+.mention-autocomplete-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.mention-autocomplete-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-autocomplete-handle {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .community-chat-profile-gate {
@@ -29469,8 +29978,12 @@ button.message-citation-chip:hover {
   box-shadow: -18px 0 40px rgba(0, 0, 0, 0.28);
 }
 
-.app-root.mobile-shell .community-chat .community-interaction-drawer-header {
-  padding-top: calc(var(--mobile-topbar-clearance) + 14px);
+.app-root.mobile-shell .community-chat .community-interaction-drawer-back {
+  top: calc(var(--mobile-topbar-clearance) + 8px);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-drawer-scroll {
+  padding-top: calc(var(--mobile-topbar-clearance) + 62px);
 }
 
 .app-root.mobile-shell .community-chat .community-interaction-root {

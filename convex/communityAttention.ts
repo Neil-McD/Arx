@@ -27,6 +27,7 @@ type CommunityAttentionRow = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  chat_last_seen_at: number | null;
 };
 
 type CommunityEventLike = {
@@ -183,6 +184,8 @@ async function getCommunityAttentionRow(
     events:
       typeof latestEventsUpdatedAt === "number" &&
       latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
+    chat_last_seen_at:
+      typeof settingsRow?.chatLastSeenAt === "number" ? Math.floor(settingsRow.chatLastSeenAt) : null,
   };
 }
 
@@ -347,6 +350,43 @@ export const markCommunitySurfaceSeen = mutation({
       surface: args.surface,
       seenAtMs: args.seenAtMs ?? null,
       nowMs: args.nowMs ?? Date.now(),
+    });
+    return { ok: true };
+  },
+});
+
+// Advances the canonical-chat "new messages" divider boundary (created_at timestamp).
+// Kept separate from the seq-based dot cursor so the divider can persist while reading
+// and only move forward when the reader leaves / catches up.
+export const markCommunityChatReadAt = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    seenAtMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const nowMs = Date.now();
+    const seenAt = Math.max(0, Math.floor(args.seenAtMs ?? nowMs));
+    const existing = await getCommunityMemberSettingsRow(ctx, args.communityId, userId);
+    if (existing) {
+      if ((existing.chatLastSeenAt ?? 0) >= seenAt) return { ok: true };
+      await ctx.db.patch(existing._id as any, { chatLastSeenAt: seenAt, updatedAt: nowMs });
+      return { ok: true };
+    }
+    await ctx.db.insert("communityMemberSettings" as any, {
+      communityId: args.communityId,
+      userId,
+      muted: false,
+      chatLastSeenAt: seenAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
     });
     return { ok: true };
   },

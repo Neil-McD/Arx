@@ -720,6 +720,57 @@ function mapMention(row: MentionRow) {
   };
 }
 
+// Resolve the attachments stored on the originating legacy chat message and shape them for the
+// client (with storage URLs). The interaction content-block model has no attachment block type, so
+// the projection flattens attachments to a "Shared attachment: …" text block — this carries the real
+// media through on the bundle instead, retroactively, for every projected chat message.
+async function resolveLegacyMessageAttachments(
+  ctx: any,
+  messageId: any,
+): Promise<Array<Record<string, unknown>>> {
+  if (!messageId) return [];
+  const message = (await ctx.db.get(messageId as any)) as CommunityChatMessageLike | null;
+  const contentJson = message?.contentJson;
+  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return [];
+  const rawAttachments = (contentJson as Record<string, unknown>).attachments;
+  if (!Array.isArray(rawAttachments)) return [];
+  const out: Array<Record<string, unknown>> = [];
+  for (const raw of rawAttachments.slice(0, 8)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const record = raw as Record<string, unknown>;
+    const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : `attachment-${out.length}`;
+    const name = typeof record.name === "string" && record.name.trim() ? record.name.trim() : "attachment";
+    const type = record.type === "image" ? "image" : "file";
+    const mime = typeof record.mime === "string" && record.mime.trim() ? record.mime.trim() : null;
+    const sizeRaw = Number(record.size);
+    const size = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
+    const storageIdRaw =
+      typeof record.storageId === "string"
+        ? record.storageId
+        : typeof record.storage_id === "string"
+          ? record.storage_id
+          : "";
+    const storageId = storageIdRaw.trim() ? storageIdRaw.trim() : null;
+    const dataUrl =
+      typeof record.data_url === "string" && record.data_url.trim().startsWith("data:image/")
+        ? record.data_url.trim()
+        : null;
+    if (!storageId && !dataUrl) continue;
+    const resolvedUrl = storageId ? await ctx.storage.getUrl(storageId as any) : null;
+    out.push({
+      id,
+      name,
+      type,
+      mime,
+      size,
+      ...(storageId ? { storage_id: storageId } : null),
+      ...(typeof resolvedUrl === "string" && resolvedUrl.trim() ? { url: resolvedUrl.trim() } : null),
+      ...(dataUrl ? { data_url: dataUrl } : null),
+    });
+  }
+  return out;
+}
+
 async function mapRootBundle(
   ctx: any,
   root: InteractionRootRow,
@@ -731,6 +782,7 @@ async function mapRootBundle(
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
   const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
+  const attachments = await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = root.actorUserId
     ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
     : null;
@@ -775,6 +827,7 @@ async function mapRootBundle(
     content_blocks: blocks.map(mapContentBlock),
     embeds: embeds.map(mapEmbed),
     mentions: mentions.map(mapMention),
+    attachments,
   };
 }
 
@@ -789,6 +842,7 @@ async function mapReplyBundle(
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
   const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
+  const attachments = await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = reply.actorUserId
     ? await resolvePublicUserId(ctx, reply.actorUserId, userIdCache)
     : null;
@@ -819,6 +873,7 @@ async function mapReplyBundle(
     content_blocks: blocks.map(mapContentBlock),
     embeds: embeds.map(mapEmbed),
     mentions: mentions.map(mapMention),
+    attachments,
   };
 }
 
@@ -1458,6 +1513,32 @@ export const createCommunityInteractionReply = mutation({
   },
 });
 
+async function insertCommunityInteractionMentionRows(args: {
+  ctx: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
+  mentionedUserIds: any[];
+  nowMs: number;
+}): Promise<void> {
+  const seen = new Set<string>();
+  for (const mentionedUserId of args.mentionedUserIds) {
+    const normalized = normalizeIdValue(mentionedUserId);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    await args.ctx.db.insert("communityInteractionMentions" as any, {
+      communityId: args.communityId,
+      ...(args.rootId ? { rootId: args.rootId } : {}),
+      ...(args.replyId ? { replyId: args.replyId } : {}),
+      mentionKind: "user",
+      mentionedUserId,
+      notifyState: "pending",
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+}
+
 export const createCommunityInteractionComposerMessage = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -1467,6 +1548,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     text: v.string(),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
+    mentions: v.optional(v.array(v.object({ userId: v.id("users") }))),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1481,6 +1563,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     if (!text) throw new Error("interaction_content_required");
     const contentBlocks: NormalizedContentBlock[] = [{ blockType: "markdown_text", text }];
     const summary = contentSummary(contentBlocks);
+    const mentionedUserIds = (args.mentions ?? []).map((mention) => mention.userId);
     const nowMs = Date.now();
     const thread = await ensureLegacyCompatibilityChatThread(ctx, args.communityId, nowMs);
     const userIdCache = new Map<string, string | null>();
@@ -1510,6 +1593,13 @@ export const createCommunityInteractionComposerMessage = mutation({
           rootId,
           visibilityScope: "community",
           blocks: contentBlocks,
+          nowMs,
+        });
+        await insertCommunityInteractionMentionRows({
+          ctx,
+          communityId: args.communityId,
+          rootId,
+          mentionedUserIds,
           nowMs,
         });
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
@@ -1596,6 +1686,13 @@ export const createCommunityInteractionComposerMessage = mutation({
         replyId,
         visibilityScope,
         blocks: contentBlocks,
+        nowMs,
+      });
+      await insertCommunityInteractionMentionRows({
+        ctx,
+        communityId: root.communityId,
+        replyId,
+        mentionedUserIds,
         nowMs,
       });
       await ctx.db.patch(root._id as any, {

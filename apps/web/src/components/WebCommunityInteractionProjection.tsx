@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CornerUpLeft,
+  MessageCircle,
   MessageSquare,
   MoreHorizontal,
   Pencil,
@@ -8,12 +9,20 @@ import {
   Trash2,
 } from "lucide-react";
 import type {
+  CommunityInteractionAttachment,
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
   CommunityInteractionReplyBundle,
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
-import type { UserProfile } from "../../../../shared/communityTypes";
+import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
+import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
+import type {
+  CommunityTypingPresenceBundle,
+  CommunityTypingPresenceUser,
+  UserProfile,
+} from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 
@@ -43,6 +52,16 @@ export type WebCommunityInteractionProjectionProps = {
   currentUserId?: string | null;
   onEditMessage?: (targetType: "root" | "reply", targetId: string, text: string) => void;
   onDeleteMessage?: (targetType: "root" | "reply", targetId: string) => void;
+  onOpenProfile?: (userId: string) => void;
+  onMessageUser?: (userId: string) => void;
+  profilePanel?: ReactNode;
+  onCloseProfile?: () => void;
+  onRetrySend?: (idempotencyKey: string) => void;
+  onDiscardPending?: (idempotencyKey: string) => void;
+  typingPresence?: CommunityTypingPresenceBundle;
+  onlineUserIds?: Set<string>;
+  chatLastSeenAt?: number | null;
+  onCaughtUp?: () => void;
 };
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "👀", "🙏", "🚀", "💯", "✅", "👏", "😮"];
@@ -429,8 +448,9 @@ function ActorAvatar(props: {
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
   className?: string;
+  online?: boolean;
 }) {
-  return (
+  const avatar = (
     <UserAvatar
       className={props.className ?? "community-interaction-avatar"}
       readyClassName="has-image"
@@ -446,6 +466,221 @@ function ActorAvatar(props: {
       alt=""
       aria-hidden={true}
     />
+  );
+  if (!props.online) return avatar;
+  return (
+    <span className="community-interaction-avatar-presence">
+      {avatar}
+      <span className="community-interaction-online-dot" aria-label="Online" />
+    </span>
+  );
+}
+
+function ProfileHoverCard(props: {
+  userId: string | null;
+  label: string;
+  seed: string;
+  profile?: UserProfile | null;
+  getAvatarColor: (seed: string) => string;
+  getInitials: (value: string) => string;
+  className?: string;
+  currentUserId?: string | null;
+  onOpenProfile?: (userId: string) => void;
+  onMessageUser?: (userId: string) => void;
+  children?: ReactNode;
+  triggerClassName?: string;
+  online?: boolean;
+}) {
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const openTimer = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<"top" | "bottom">("top");
+  const userId = props.userId;
+
+  const clearClose = () => {
+    if (closeTimer.current === null) return;
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const clearOpen = () => {
+    if (openTimer.current === null) return;
+    window.clearTimeout(openTimer.current);
+    openTimer.current = null;
+  };
+  const resolvePlacement = (): "top" | "bottom" => {
+    const anchor = anchorRef.current;
+    if (!anchor) return "top";
+    const rect = anchor.getBoundingClientRect();
+    const viewport = anchor.closest(
+      ".community-interaction-feed-scroll, .community-interaction-drawer-scroll",
+    );
+    const vRect = viewport instanceof HTMLElement ? viewport.getBoundingClientRect() : null;
+    const top = Math.max(0, vRect?.top ?? 0);
+    const bottom = Math.min(window.innerHeight, vRect?.bottom ?? window.innerHeight);
+    const cardHeight = Math.min(cardRef.current?.getBoundingClientRect().height || 188, 188);
+    const required = cardHeight + 10;
+    const spaceAbove = rect.top - top;
+    const spaceBelow = bottom - rect.bottom;
+    return spaceAbove < required && spaceBelow > spaceAbove ? "bottom" : "top";
+  };
+  const openHover = () => {
+    if (!userId) return;
+    clearClose();
+    if (open || openTimer.current !== null) return;
+    // Hover-intent delay so the card doesn't fire while sweeping past names/avatars.
+    openTimer.current = window.setTimeout(() => {
+      openTimer.current = null;
+      setPlacement(resolvePlacement());
+      setOpen(true);
+    }, 450);
+  };
+  const scheduleClose = () => {
+    clearOpen();
+    clearClose();
+    closeTimer.current = window.setTimeout(() => {
+      setOpen(false);
+      closeTimer.current = null;
+    }, 140);
+  };
+  useEffect(() => () => {
+    clearOpen();
+    clearClose();
+  }, []);
+
+  const trigger = props.children ?? (
+    <ActorAvatar
+      label={props.label}
+      seed={props.seed}
+      profile={props.profile}
+      getAvatarColor={props.getAvatarColor}
+      getInitials={props.getInitials}
+      className={props.className}
+      online={props.online}
+    />
+  );
+  if (!userId) return <>{trigger}</>;
+
+  const handle = props.profile?.handle?.trim() || null;
+  const handleLabel = handle ? (handle.startsWith("@") ? handle : `@${handle}`) : null;
+  const bio = props.profile?.bio?.trim() || "";
+  const canMessage = Boolean(props.onMessageUser) && userId !== props.currentUserId;
+
+  return (
+    <span
+      className="community-interaction-avatar-hover"
+      ref={anchorRef}
+      onMouseEnter={openHover}
+      onMouseLeave={scheduleClose}
+    >
+      <button
+        type="button"
+        className={props.triggerClassName ?? "community-interaction-avatar-trigger"}
+        onClick={() => props.onOpenProfile?.(userId)}
+        aria-label={`${props.label} profile`}
+      >
+        {trigger}
+      </button>
+      <div
+        ref={cardRef}
+        className={`chat-profile-hover-card${open ? " is-open" : ""}`}
+        data-placement={placement}
+        role="group"
+        aria-label={`${props.label} profile preview`}
+        onMouseEnter={openHover}
+        onMouseLeave={scheduleClose}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            clearClose();
+            setOpen(false);
+          }
+        }}
+      >
+        <div className="chat-profile-hover-top">
+          <UserAvatar
+            className="chat-profile-hover-avatar"
+            readyClassName="has-image"
+            name={props.label}
+            imageUrl={props.profile?.avatar_url ?? null}
+            focusX={props.profile?.avatar_focus_x ?? 0.5}
+            focusY={props.profile?.avatar_focus_y ?? 0.5}
+            zoom={props.profile?.avatar_zoom ?? 1}
+            alt={props.label}
+            fallback={<span>{props.getInitials(props.label)}</span>}
+            fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed || props.label) }}
+          />
+          <button
+            type="button"
+            className="chat-profile-message-button"
+            disabled={!canMessage}
+            onClick={() => {
+              if (canMessage) props.onMessageUser?.(userId);
+            }}
+          >
+            <MessageCircle aria-hidden="true" />
+            <span>Message</span>
+          </button>
+        </div>
+        <div className="chat-profile-hover-identity">
+          <button
+            type="button"
+            className="chat-profile-hover-name"
+            onClick={() => {
+              clearClose();
+              setOpen(false);
+              props.onOpenProfile?.(userId);
+            }}
+          >
+            {props.label}
+          </button>
+          {handleLabel ? <div className="chat-profile-hover-handle">{handleLabel}</div> : null}
+        </div>
+        {bio ? <div className="chat-profile-hover-bio">{bio}</div> : null}
+      </div>
+    </span>
+  );
+}
+
+function TypingIndicator(props: {
+  users: CommunityTypingPresenceUser[];
+  displayName: (userId: string) => string;
+  getAvatarColor: (seed: string) => string;
+  getInitials: (value: string) => string;
+}) {
+  if (props.users.length === 0) return null;
+  const nameOf = (user: CommunityTypingPresenceUser) =>
+    (user.display_name || props.displayName(user.user_id) || "Someone").split(" ")[0];
+  const label =
+    props.users.length === 1
+      ? `${nameOf(props.users[0]!)} is typing`
+      : props.users.length === 2
+        ? `${nameOf(props.users[0]!)} and ${nameOf(props.users[1]!)} are typing`
+        : `${nameOf(props.users[0]!)} and ${props.users.length - 1} others are typing`;
+  return (
+    <div className="community-interaction-typing" aria-live="polite">
+      <span className="community-interaction-typing-avatars">
+        {props.users.slice(0, 3).map((user) => (
+          <UserAvatar
+            key={user.user_id}
+            className="community-interaction-typing-avatar"
+            readyClassName="has-image"
+            name={user.display_name || props.displayName(user.user_id)}
+            imageUrl={user.avatar_url}
+            alt=""
+            aria-hidden={true}
+            fallback={<span>{props.getInitials(user.display_name || props.displayName(user.user_id))}</span>}
+            fallbackStyle={{ backgroundColor: props.getAvatarColor(user.user_id) }}
+          />
+        ))}
+      </span>
+      <span className="community-interaction-typing-dots" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+      <span className="community-interaction-typing-label">{label}</span>
+    </div>
   );
 }
 
@@ -464,9 +699,70 @@ function InteractionBody(props: {
   );
 }
 
+// Render the attachments carried on a projected legacy chat message: images in a grid, video/audio
+// as inline players, and any other file as a download chip.
+function InteractionAttachments(props: { attachments: CommunityInteractionAttachment[] }) {
+  const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } =
+    partitionCommunityAttachments(props.attachments);
+  if (
+    imageAttachments.length === 0 &&
+    videoAttachments.length === 0 &&
+    audioAttachments.length === 0 &&
+    fileAttachments.length === 0
+  ) {
+    return null;
+  }
+  const imageViews = imageAttachments.map((item) => ({
+    id: item.attachment.id,
+    url: item.url,
+    previewUrl: item.previewUrl,
+    fullUrl: item.fullUrl,
+    name: item.name,
+  }));
+  return (
+    <div className="community-interaction-attachments">
+      {imageViews.length > 0 ? (
+        <CommunityChatMediaGrid
+          images={imageViews}
+          onOpenImage={(images, index) => {
+            const target = images[index]?.fullUrl || images[index]?.url;
+            if (target) window.open(target, "_blank", "noopener,noreferrer");
+          }}
+        />
+      ) : null}
+      <CommunityChatMediaPlayers videos={videoAttachments} audios={audioAttachments} />
+      {fileAttachments.length > 0 ? (
+        <div className="attachments-preview chat-attachments-preview">
+          {fileAttachments.map((attachment) => {
+            const href = typeof attachment.url === "string" && attachment.url.trim() ? attachment.url.trim() : null;
+            return (
+              <button
+                key={attachment.id}
+                type="button"
+                className="attachment-item"
+                disabled={!href}
+                title={attachment.name}
+                onClick={href ? () => window.open(href, "_blank", "noopener,noreferrer") : undefined}
+              >
+                <span className="attachment-name">{attachment.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const prevRootCount = useRef(0);
+  // Track which messages we've already rendered so only newly-arrived ones animate in.
+  const seenRootIds = useRef<Set<string>>(new Set());
+  const rootsLoadedOnce = useRef(false);
+  const seenReplyIds = useRef<Set<string>>(new Set());
+  const repliesLoadedOnce = useRef(false);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
   const [editText, setEditText] = useState("");
   const startEdit = (type: "root" | "reply", id: string, body: string) => {
@@ -481,6 +777,23 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     setEditing(null);
   };
 
+  const scrollToLatest = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setShowJumpToLatest(false);
+  };
+
+  const handleFeedScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 120) {
+      setShowJumpToLatest(false);
+      props.onCaughtUp?.();
+    }
+  };
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -490,9 +803,33 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (previous === 0 || distanceFromBottom < 200) {
         el.scrollTop = el.scrollHeight;
+        setShowJumpToLatest(false);
+        // Reached the bottom on load / new message → reader is caught up.
+        props.onCaughtUp?.();
+      } else {
+        // New messages arrived while the reader is scrolled up — nudge, don't yank.
+        setShowJumpToLatest(true);
       }
     }
   }, [props.roots.length]);
+
+  // Seed the seen-set after the first real load so the initial feed doesn't all animate.
+  useEffect(() => {
+    if (!rootsLoadedOnce.current && props.roots.length === 0 && props.isLoadingRoots) return;
+    for (const bundle of props.roots) seenRootIds.current.add(bundle.root.id);
+    rootsLoadedOnce.current = true;
+  }, [props.roots, props.isLoadingRoots]);
+
+  // Reset reply animation tracking on thread switch so a thread's initial replies don't animate.
+  useEffect(() => {
+    repliesLoadedOnce.current = false;
+    seenReplyIds.current = new Set();
+  }, [props.selectedRootId]);
+
+  useEffect(() => {
+    for (const bundle of props.replies) seenReplyIds.current.add(bundle.reply.id);
+    repliesLoadedOnce.current = true;
+  }, [props.replies]);
 
   const selectedRoot = props.selectedRootId
     ? props.roots.find((bundle) => bundle.root.id === props.selectedRootId) ?? null
@@ -507,10 +844,25 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const segments = groupInteractionFeed(props.roots);
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
+  // "New messages" divider: first root (by others) created after the frozen read boundary.
+  const unreadBoundary = typeof props.chatLastSeenAt === "number" ? props.chatLastSeenAt : null;
+  const firstUnreadRootId = unreadBoundary
+    ? props.roots.find(
+        (bundle) =>
+          !bundle.pending &&
+          bundle.root.actor_user_id !== props.currentUserId &&
+          Date.parse(bundle.root.created_at) > unreadBoundary,
+      )?.root.id ?? null
+    : null;
+  const firstUnreadSegmentKey = firstUnreadRootId
+    ? segments.find((segment) => "bundles" in segment && segment.bundles.some((b) => b.root.id === firstUnreadRootId))?.key ?? null
+    : null;
+  const unreadDivider = <div className="community-interaction-unread-divider"><span>New</span></div>;
+
   return (
-    <div className={`community-interaction-projection${selectedRoot ? " has-drawer" : ""}`}>
+    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : ""}`}>
       <div className="community-interaction-main">
-        <div className="community-interaction-feed-scroll" ref={scrollRef}>
+        <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
           {props.error ? (
             <div className="community-interaction-state" role="alert">
               <div>{props.error}</div>
@@ -530,19 +882,26 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           ) : (
             <div className="community-interaction-feed">
               {segments.map((segment) => {
+                const dividerBefore = segment.key === firstUnreadSegmentKey ? unreadDivider : null;
                 if (segment.type === "day") {
                   return (
-                    <div key={segment.key} className="community-interaction-day">
-                      <span>{segment.label}</span>
-                    </div>
+                    <Fragment key={segment.key}>
+                      {dividerBefore}
+                      <div className="community-interaction-day">
+                        <span>{segment.label}</span>
+                      </div>
+                    </Fragment>
                   );
                 }
                 if (segment.type === "system") {
                   const body = bundleText(segment.bundle.content_blocks, segment.bundle.root.content_summary);
                   return (
-                    <div key={segment.key} className="community-interaction-system">
-                      <span>{body}</span>
-                    </div>
+                    <Fragment key={segment.key}>
+                      {dividerBefore}
+                      <div className="community-interaction-system">
+                        <span>{body}</span>
+                      </div>
+                    </Fragment>
                   );
                 }
                 const first = segment.bundles[0]!;
@@ -553,19 +912,38 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 const badge = agentBadgeLabel(first.root.actor_type);
                 const chip = kindChipLabel(first.root.kind);
                 return (
-                  <div key={segment.key} className={`community-interaction-group${badge ? " is-agent" : ""}`}>
+                  <Fragment key={segment.key}>
+                    {dividerBefore}
+                    <div className={`community-interaction-group${badge ? " is-agent" : ""}`}>
                     <div className="community-interaction-group-gutter">
-                      <ActorAvatar
+                      <ProfileHoverCard
+                        userId={first.root.actor_user_id}
                         label={label}
                         seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
                         profile={profile}
                         getAvatarColor={props.getAvatarColor}
                         getInitials={props.getInitials}
+                        currentUserId={props.currentUserId}
+                        onOpenProfile={props.onOpenProfile}
+                        onMessageUser={props.onMessageUser}
                       />
                     </div>
                     <div className="community-interaction-group-body">
                       <div className="community-interaction-meta-row">
-                        <span className="community-interaction-author">{label}</span>
+                        <ProfileHoverCard
+                          userId={first.root.actor_user_id}
+                          label={label}
+                          seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
+                          profile={profile}
+                          getAvatarColor={props.getAvatarColor}
+                          getInitials={props.getInitials}
+                          currentUserId={props.currentUserId}
+                          onOpenProfile={props.onOpenProfile}
+                          onMessageUser={props.onMessageUser}
+                          triggerClassName="community-interaction-author-trigger"
+                        >
+                          <span className="community-interaction-author">{label}</span>
+                        </ProfileHoverCard>
                         {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                         {chip ? <span className="community-interaction-kind">{chip}</span> : null}
                         <span>{props.formatChatTime(first.root.created_at)}</span>
@@ -574,35 +952,48 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         const root = bundle.root;
                         const body = bundleText(bundle.content_blocks, root.content_summary);
                         const selected = root.id === props.selectedRootId;
-                        const hasFooter = root.reply_count > 0 || root.reaction_summary.length > 0;
+                        const threadTypers = (props.typingPresence?.users ?? []).filter(
+                          (user) => user.user_id !== props.currentUserId && user.root_id === root.id,
+                        );
+                        const threadHasUnread = Boolean(
+                          unreadBoundary &&
+                            root.last_reply_at &&
+                            root.last_reply_actor_user_id !== props.currentUserId &&
+                            Date.parse(root.last_reply_at) > unreadBoundary,
+                        );
+                        const hasFooter =
+                          root.reply_count > 0 || root.reaction_summary.length > 0 || threadTypers.length > 0;
                         const isOwnRoot = Boolean(
                           props.currentUserId && root.actor_user_id && root.actor_user_id === props.currentUserId,
                         );
                         const isEditingRoot = editing?.type === "root" && editing.id === root.id;
+                        const isNewRoot = rootsLoadedOnce.current && !seenRootIds.current.has(root.id);
                         return (
                           <div
                             key={root.id}
-                            className={`community-interaction-message${selected ? " selected" : ""}`}
+                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
                           >
-                            <MessageActions
-                              onReact={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
-                              onReply={() => props.onSelectRoot(root.id)}
-                              replyLabel="Reply in thread"
-                              onEdit={
-                                isOwnRoot && props.onEditMessage
-                                  ? () => startEdit("root", root.id, body)
-                                  : undefined
-                              }
-                              onDelete={
-                                isOwnRoot && props.onDeleteMessage
-                                  ? () => {
-                                      if (window.confirm("Delete this message?")) {
-                                        props.onDeleteMessage?.("root", root.id);
+                            {bundle.pending ? null : (
+                              <MessageActions
+                                onReact={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                                onReply={() => props.onSelectRoot(root.id)}
+                                replyLabel="Reply in thread"
+                                onEdit={
+                                  isOwnRoot && props.onEditMessage
+                                    ? () => startEdit("root", root.id, body)
+                                    : undefined
+                                }
+                                onDelete={
+                                  isOwnRoot && props.onDeleteMessage
+                                    ? () => {
+                                        if (window.confirm("Delete this message?")) {
+                                          props.onDeleteMessage?.("root", root.id);
+                                        }
                                       }
-                                    }
-                                  : undefined
-                              }
-                            />
+                                    : undefined
+                                }
+                              />
+                            )}
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
                             {isEditingRoot ? (
                               <EditForm
@@ -614,15 +1005,52 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             ) : (
                               <>
                                 <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                                <InteractionAttachments attachments={bundle.attachments} />
                                 <EmbedCards embeds={bundle.embeds} />
                                 {root.edited_at ? (
                                   <span className="community-interaction-edited">(edited)</span>
                                 ) : null}
                               </>
                             )}
+                            {bundle.pending === "sending" ? (
+                              <span className="community-interaction-sending-spinner" role="status" aria-label="Sending message" />
+                            ) : bundle.pending === "failed" ? (
+                              <div className="community-interaction-pending-status is-failed">
+                                <span>Failed to send.</span>
+                                <button type="button" onClick={() => props.onRetrySend?.(root.idempotency_key)}>
+                                  Retry
+                                </button>
+                                <button type="button" onClick={() => props.onDiscardPending?.(root.idempotency_key)}>
+                                  Discard
+                                </button>
+                              </div>
+                            ) : null}
                             {hasFooter ? (
                               <div className="community-interaction-footer">
-                                {root.reply_count > 0 ? (
+                                {threadTypers.length > 0 ? (
+                                  <div className="community-interaction-thread-row">
+                                    <ActorAvatar
+                                      className="community-interaction-thread-avatar"
+                                      label={threadTypers[0]!.display_name || props.displayName(threadTypers[0]!.user_id)}
+                                      seed={threadTypers[0]!.user_id}
+                                      profile={props.profilesByUserId[threadTypers[0]!.user_id] ?? null}
+                                      getAvatarColor={props.getAvatarColor}
+                                      getInitials={props.getInitials}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="community-interaction-reply-pill is-typing"
+                                      onClick={() => props.onSelectRoot(root.id)}
+                                    >
+                                      <span className="community-interaction-typing-dots" aria-hidden="true">
+                                        <span />
+                                        <span />
+                                        <span />
+                                      </span>
+                                      <span>typing…</span>
+                                    </button>
+                                  </div>
+                                ) : root.reply_count > 0 ? (
                                   <div className="community-interaction-thread-row">
                                     {root.last_reply_actor_user_id ? (
                                       <ActorAvatar
@@ -636,9 +1064,12 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                                     ) : null}
                                     <button
                                       type="button"
-                                      className="community-interaction-reply-pill"
+                                      className={`community-interaction-reply-pill${threadHasUnread ? " is-unread" : ""}`}
                                       onClick={() => props.onSelectRoot(root.id)}
                                     >
+                                      {threadHasUnread ? (
+                                        <span className="community-interaction-unread-dot" aria-hidden="true" />
+                                      ) : null}
                                       {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
                                     </button>
                                     {root.last_reply_at ? (
@@ -659,20 +1090,51 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         );
                       })}
                     </div>
-                  </div>
+                    </div>
+                  </Fragment>
                 );
               })}
             </div>
           )}
         </div>
+        {showJumpToLatest ? (
+          <button type="button" className="community-interaction-jump-latest" onClick={scrollToLatest}>
+            <span aria-hidden="true">↓</span> New messages
+          </button>
+        ) : null}
+        <TypingIndicator
+          users={(props.typingPresence?.users ?? []).filter(
+            (user) => user.user_id !== props.currentUserId && !user.root_id,
+          )}
+          displayName={props.displayName}
+          getAvatarColor={props.getAvatarColor}
+          getInitials={props.getInitials}
+        />
         {props.mainComposer ? (
           <div className="community-interaction-main-composer">{props.mainComposer}</div>
         ) : null}
       </div>
 
-      {selectedRoot ? (
+      {props.profilePanel ? (
+        <aside className="community-interaction-drawer" aria-label="Profile">
+          <div className="community-interaction-drawer-back">
+            <button
+              className="back-to-workspace"
+              type="button"
+              onClick={props.onCloseProfile}
+              title="Back"
+            >
+              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span className="back-path">profile</span>
+            </button>
+          </div>
+          <div className="community-interaction-drawer-scroll">{props.profilePanel}</div>
+        </aside>
+      ) : selectedRoot ? (
         <aside className="community-interaction-drawer" aria-label="Thread replies">
-          <div className="community-interaction-drawer-header">
+          <div className="community-interaction-drawer-back">
             <button
               className="back-to-workspace"
               type="button"
@@ -688,7 +1150,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           <div className="community-interaction-drawer-scroll">
             <div className="community-interaction-drawer-root">
               <div className="community-interaction-thread-anchor">
-                <ActorAvatar
+                <ProfileHoverCard
+                  userId={selectedRoot.root.actor_user_id}
                   label={selectedRootLabel}
                   seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
                   profile={
@@ -698,10 +1161,30 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   }
                   getAvatarColor={props.getAvatarColor}
                   getInitials={props.getInitials}
+                  currentUserId={props.currentUserId}
+                  onOpenProfile={props.onOpenProfile}
+                  onMessageUser={props.onMessageUser}
                 />
                 <div className="community-interaction-thread-anchor-content">
                   <div className="community-interaction-meta-row">
-                    <span className="community-interaction-author">{selectedRootLabel}</span>
+                    <ProfileHoverCard
+                      userId={selectedRoot.root.actor_user_id}
+                      label={selectedRootLabel}
+                      seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
+                      profile={
+                        selectedRoot.root.actor_user_id
+                          ? props.profilesByUserId[selectedRoot.root.actor_user_id] ?? null
+                          : null
+                      }
+                      getAvatarColor={props.getAvatarColor}
+                      getInitials={props.getInitials}
+                      currentUserId={props.currentUserId}
+                      onOpenProfile={props.onOpenProfile}
+                      onMessageUser={props.onMessageUser}
+                      triggerClassName="community-interaction-author-trigger"
+                    >
+                      <span className="community-interaction-author">{selectedRootLabel}</span>
+                    </ProfileHoverCard>
                     {selectedRootBadge ? (
                       <span className="community-interaction-badge">{selectedRootBadge}</span>
                     ) : null}
@@ -714,6 +1197,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     <div className="community-interaction-title">{selectedRoot.root.title}</div>
                   ) : null}
                   <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
+                  <InteractionAttachments attachments={selectedRoot.attachments} />
                   <EmbedCards embeds={selectedRoot.embeds} />
                   <div className="community-interaction-thread-anchor-actions">
                     <ReactionSummary
@@ -754,45 +1238,65 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     props.currentUserId && reply.actor_user_id && reply.actor_user_id === props.currentUserId,
                   );
                   const isEditingReply = editing?.type === "reply" && editing.id === reply.id;
+                  const isNewReply = repliesLoadedOnce.current && !seenReplyIds.current.has(reply.id);
                   return (
-                    <div key={reply.id} className="community-interaction-reply">
-                      <MessageActions
-                        onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
-                        onReply={() => {
-                          if (!reply.legacy_message_id || !reply.actor_user_id) return;
-                          props.onStartRootReply?.({
-                            id: reply.legacy_message_id,
-                            sender_id: reply.actor_user_id,
-                            body,
-                            interaction_root_id: reply.root_id,
-                          });
-                        }}
-                        replyLabel="Reply to this message"
-                        onEdit={
-                          isOwnReply && props.onEditMessage
-                            ? () => startEdit("reply", reply.id, body)
-                            : undefined
-                        }
-                        onDelete={
-                          isOwnReply && props.onDeleteMessage
-                            ? () => {
-                                if (window.confirm("Delete this reply?")) {
-                                  props.onDeleteMessage?.("reply", reply.id);
+                    <div key={reply.id} className={`community-interaction-reply${isNewReply ? " is-new" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}>
+                      {bundle.pending ? null : (
+                        <MessageActions
+                          onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                          onReply={() => {
+                            if (!reply.legacy_message_id || !reply.actor_user_id) return;
+                            props.onStartRootReply?.({
+                              id: reply.legacy_message_id,
+                              sender_id: reply.actor_user_id,
+                              body,
+                              interaction_root_id: reply.root_id,
+                            });
+                          }}
+                          replyLabel="Reply to this message"
+                          onEdit={
+                            isOwnReply && props.onEditMessage
+                              ? () => startEdit("reply", reply.id, body)
+                              : undefined
+                          }
+                          onDelete={
+                            isOwnReply && props.onDeleteMessage
+                              ? () => {
+                                  if (window.confirm("Delete this reply?")) {
+                                    props.onDeleteMessage?.("reply", reply.id);
+                                  }
                                 }
-                              }
-                            : undefined
-                        }
-                      />
-                      <ActorAvatar
+                              : undefined
+                          }
+                        />
+                      )}
+                      <ProfileHoverCard
+                        userId={reply.actor_user_id}
                         label={label}
                         seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
                         profile={profile}
                         getAvatarColor={props.getAvatarColor}
                         getInitials={props.getInitials}
+                        currentUserId={props.currentUserId}
+                        onOpenProfile={props.onOpenProfile}
+                        onMessageUser={props.onMessageUser}
                       />
                       <div className="community-interaction-reply-content">
                         <div className="community-interaction-meta-row">
-                          <span className="community-interaction-author">{label}</span>
+                          <ProfileHoverCard
+                            userId={reply.actor_user_id}
+                            label={label}
+                            seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
+                            profile={profile}
+                            getAvatarColor={props.getAvatarColor}
+                            getInitials={props.getInitials}
+                            currentUserId={props.currentUserId}
+                            onOpenProfile={props.onOpenProfile}
+                            onMessageUser={props.onMessageUser}
+                            triggerClassName="community-interaction-author-trigger"
+                          >
+                            <span className="community-interaction-author">{label}</span>
+                          </ProfileHoverCard>
                           {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                           <span>{props.formatChatTime(reply.created_at)}</span>
                         </div>
@@ -809,17 +1313,32 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         ) : (
                           <>
                             <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                            <InteractionAttachments attachments={bundle.attachments} />
                             <EmbedCards embeds={bundle.embeds} />
                             {reply.edited_at ? (
                               <span className="community-interaction-edited">(edited)</span>
                             ) : null}
                           </>
                         )}
-                        <ReactionSummary
-                          rows={reply.reaction_summary}
-                          viewerEmojis={reply.viewer_emojis}
-                          onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
-                        />
+                        {bundle.pending === "sending" ? (
+                          <span className="community-interaction-sending-spinner" role="status" aria-label="Sending message" />
+                        ) : bundle.pending === "failed" ? (
+                          <div className="community-interaction-pending-status is-failed">
+                            <span>Failed to send.</span>
+                            <button type="button" onClick={() => props.onRetrySend?.(reply.idempotency_key)}>
+                              Retry
+                            </button>
+                            <button type="button" onClick={() => props.onDiscardPending?.(reply.idempotency_key)}>
+                              Discard
+                            </button>
+                          </div>
+                        ) : (
+                          <ReactionSummary
+                            rows={reply.reaction_summary}
+                            viewerEmojis={reply.viewer_emojis}
+                            onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                          />
+                        )}
                       </div>
                     </div>
                   );
@@ -827,6 +1346,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               </div>
             )}
           </div>
+          <TypingIndicator
+            users={(props.typingPresence?.users ?? []).filter(
+              (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
+            )}
+            displayName={props.displayName}
+            getAvatarColor={props.getAvatarColor}
+            getInitials={props.getInitials}
+          />
           {props.drawerComposer ? (
             <div className="community-interaction-drawer-composer">{props.drawerComposer}</div>
           ) : null}

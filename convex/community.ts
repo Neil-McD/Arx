@@ -178,6 +178,7 @@ import {
 import {
   listMyCommunityAttention as listMyCommunityAttentionImpl,
   markCommunitySurfaceSeen as markCommunitySurfaceSeenImpl,
+  markCommunityChatReadAt as markCommunityChatReadAtImpl,
 } from "./communityAttention";
 import { listCommunityCompilerInputs as listCommunityCompilerInputsImpl } from "./communityCompilerInputs";
 import {
@@ -350,6 +351,7 @@ export const getCommunityFunnelConfig = getCommunityFunnelConfigImpl;
 export const saveCommunityPublicPresentation = saveCommunityPublicPresentationImpl;
 export const listMyCommunityAttention = listMyCommunityAttentionImpl;
 export const markCommunitySurfaceSeen = markCommunitySurfaceSeenImpl;
+export const markCommunityChatReadAt = markCommunityChatReadAtImpl;
 export const recordCommunitySourceTrace = recordCommunitySourceTraceImpl;
 export const createCommunityIntelligenceChangeRequest = createCommunityIntelligenceChangeRequestImpl;
 export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl;

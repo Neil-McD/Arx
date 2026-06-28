@@ -10,6 +10,7 @@ import type {
 } from "../../../../shared/communityTypes";
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -117,8 +118,15 @@ function DirectMessageAttachmentViews(props: {
   onRetryAttachment?: (id: string) => void;
   onRemoveAttachment?: (id: string) => void;
 }) {
-  const { imageAttachments, fileAttachments } = partitionCommunityAttachments(props.attachments);
-  if (imageAttachments.length === 0 && fileAttachments.length === 0) return null;
+  const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } = partitionCommunityAttachments(props.attachments);
+  if (
+    imageAttachments.length === 0 &&
+    videoAttachments.length === 0 &&
+    audioAttachments.length === 0 &&
+    fileAttachments.length === 0
+  ) {
+    return null;
+  }
   const imageViews = imageAttachments.map((item) => ({
     id: item.attachment.id,
     url: item.url,
@@ -178,6 +186,9 @@ function DirectMessageAttachmentViews(props: {
             }}
           />
         )
+      ) : null}
+      {!props.isComposer && (videoAttachments.length > 0 || audioAttachments.length > 0) ? (
+        <CommunityChatMediaPlayers videos={videoAttachments} audios={audioAttachments} />
       ) : null}
       {fileAttachments.length > 0 ? (
         <div className="attachments-preview community-dm-attachments-preview">

@@ -40,6 +40,7 @@ export type CommunityMessageSendDraft<
 > = {
   text?: string;
   attachments?: AttachmentT[];
+  mentions?: { userId: string; displayName: string }[];
   replyingToMessage?: CommunityReplyTarget<MessageT> | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
@@ -81,8 +82,20 @@ type UseCommunityChatMutationControllerArgs<
     text: string;
     rootId?: string | null;
     replyToMessageId?: string | null;
+    mentions?: { userId: string }[];
   }) => Promise<RowT[]>;
   useCanonicalCommunityInteractions?: boolean;
+  onCanonicalOptimisticInsert?: (pending: {
+    idempotencyKey: string;
+    communityId: string;
+    kind: "root" | "reply";
+    rootId: string | null;
+    replyToMessageId: string | null;
+    text: string;
+    createdAt: string;
+    senderId: string;
+  }) => void;
+  onCanonicalOptimisticSettle?: (settle: { idempotencyKey: string; status: "failed" }) => void;
   toCommunityChatMessage: (row: RowT) => MessageT | null;
   loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
   parseReplyPrefix: (body: string) => ReplyPrefixLike | null;
@@ -105,6 +118,7 @@ type UseCommunityChatMutationControllerArgs<
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
   communityMessageInput: string;
+  communityMessageMentions?: { userId: string; displayName: string }[];
   communityMessages: MessageT[];
   messageReactions: ReactionT[];
   replyingToMessage: CommunityReplyTarget<MessageT> | null;
@@ -350,6 +364,17 @@ export function useCommunityChatMutationController<
     const replyToId = replySnapshot ? replySnapshot.id : null;
     const bodyToSend = rawText;
 
+    // Keep only mentions whose @DisplayName token still appears in the sent text (dedupe by user).
+    const mentionDraft = draft?.mentions ?? current.communityMessageMentions ?? [];
+    const mentionsToSend: { userId: string }[] = [];
+    const seenMentionUserIds = new Set<string>();
+    for (const mention of mentionDraft) {
+      if (!mention.userId || seenMentionUserIds.has(mention.userId)) continue;
+      if (!bodyToSend.includes(`@${mention.displayName}`)) continue;
+      seenMentionUserIds.add(mention.userId);
+      mentionsToSend.push({ userId: mention.userId });
+    }
+
     if (current.beforeSendValidate) {
       const validationError = await current.beforeSendValidate(bodyToSend);
       if (validationError) {
@@ -359,6 +384,7 @@ export function useCommunityChatMutationController<
     }
 
     const optimisticId = `pending-${Date.now()}`;
+    const optimisticCreatedAt = new Date().toISOString();
     const optimisticMessage = {
       id: optimisticId,
       community_id: current.activeCommunityId,
@@ -366,9 +392,20 @@ export function useCommunityChatMutationController<
       body: bodyToSend,
       attachments: attachmentsToSend,
       reply_to_id: replyToId,
-      created_at: new Date().toISOString(),
+      created_at: optimisticCreatedAt,
       seq: Number.MAX_SAFE_INTEGER,
     } as MessageT;
+
+    // Canonical optimistic overlay: stamp the message with the same idempotency key the
+    // mutation will use, so the projection can render it immediately and reconcile exactly.
+    const canonicalReplyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
+    const canonicalEligible =
+      Boolean(current.useCanonicalCommunityInteractions && current.createCommunityInteractionMessageRows)
+      && attachmentsToSend.length === 0
+      && (!replyToId || Boolean(canonicalReplyRootId));
+    const canonicalIdempotencyKey = canonicalEligible
+      ? createCommunityComposerIdempotencyKey(activeCommunityId, canonicalReplyRootId)
+      : null;
 
     const restoreDraft = () => {
       if (draft?.restoreDraft) {
@@ -381,6 +418,18 @@ export function useCommunityChatMutationController<
     };
 
     current.setCommunityMessages((prev) => [...prev, optimisticMessage]);
+    if (canonicalEligible && canonicalIdempotencyKey) {
+      current.onCanonicalOptimisticInsert?.({
+        idempotencyKey: canonicalIdempotencyKey,
+        communityId: activeCommunityId,
+        kind: canonicalReplyRootId ? "reply" : "root",
+        rootId: canonicalReplyRootId,
+        replyToMessageId: replyToId,
+        text: bodyToSend,
+        createdAt: optimisticCreatedAt,
+        senderId: sessionUserId,
+      });
+    }
     if (draft?.clearDraft) {
       draft.clearDraft();
     } else {
@@ -413,10 +462,11 @@ export function useCommunityChatMutationController<
         ? await current.createCommunityInteractionMessageRows({
             session,
             communityId: activeCommunityId,
-            idempotencyKey: createCommunityComposerIdempotencyKey(activeCommunityId, replyRootId),
+            idempotencyKey: canonicalIdempotencyKey ?? createCommunityComposerIdempotencyKey(activeCommunityId, replyRootId),
             text: bodyToSend,
             rootId: replyRootId,
             replyToMessageId: replyToId,
+            mentions: mentionsToSend,
           })
         : await (async () => {
             const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
@@ -432,6 +482,9 @@ export function useCommunityChatMutationController<
       if (!record) {
         current.setCommunityChatError(current.missingPayloadMessage);
         current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
+        if (canonicalIdempotencyKey) {
+          current.onCanonicalOptimisticSettle?.({ idempotencyKey: canonicalIdempotencyKey, status: "failed" });
+        }
         restoreDraft();
         return;
       }
@@ -455,6 +508,9 @@ export function useCommunityChatMutationController<
       }
       current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
       current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
+      if (canonicalIdempotencyKey) {
+        current.onCanonicalOptimisticSettle?.({ idempotencyKey: canonicalIdempotencyKey, status: "failed" });
+      }
       restoreDraft();
     } finally {
       current.setIsSendingCommunityMessage(false);

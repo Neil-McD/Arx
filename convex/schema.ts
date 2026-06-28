@@ -1436,6 +1436,8 @@ export default defineSchema({
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
+    // Thread scope: present when typing inside a thread, absent for channel-level typing.
+    rootId: v.optional(v.id("communityInteractionRoots")),
     displayUntil: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2179,6 +2181,8 @@ export default defineSchema({
     muted: v.boolean(),
     mutedUntil: v.optional(v.number()),
     chatLastSeenSeq: v.optional(v.number()),
+    // Timestamp boundary for the canonical chat "new messages" divider (roots order by created_at).
+    chatLastSeenAt: v.optional(v.number()),
     aiFeedLastSeenAt: v.optional(v.number()),
     resourcesLastSeenAt: v.optional(v.number()),
     eventsLastSeenAt: v.optional(v.number()),

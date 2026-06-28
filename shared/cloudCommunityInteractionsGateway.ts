@@ -11,6 +11,17 @@ export type CommunityInteractionReactionSummary = {
   count: number;
 };
 
+export type CommunityInteractionAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "file" | string;
+  mime: string | null;
+  size: number;
+  url?: string | null;
+  storage_id?: string | null;
+  data_url?: string | null;
+};
+
 export type CommunityInteractionContentBlock = {
   id: string;
   block_order: number;
@@ -103,12 +114,17 @@ export type CommunityInteractionReplyRecord = {
   edited_at: string | null;
 };
 
+export type CommunityInteractionPendingStatus = "sending" | "failed";
+
 export type CommunityInteractionRootBundle = {
   deduped: boolean;
   root: CommunityInteractionRootRecord;
   content_blocks: CommunityInteractionContentBlock[];
   embeds: CommunityInteractionEmbed[];
   mentions: CommunityInteractionMention[];
+  attachments: CommunityInteractionAttachment[];
+  /** Client-only: present on optimistic (not-yet-confirmed) messages. */
+  pending?: CommunityInteractionPendingStatus;
 };
 
 export type CommunityInteractionReplyBundle = {
@@ -117,6 +133,9 @@ export type CommunityInteractionReplyBundle = {
   content_blocks: CommunityInteractionContentBlock[];
   embeds: CommunityInteractionEmbed[];
   mentions: CommunityInteractionMention[];
+  attachments: CommunityInteractionAttachment[];
+  /** Client-only: present on optimistic (not-yet-confirmed) messages. */
+  pending?: CommunityInteractionPendingStatus;
 };
 
 function coerceObjectRows<TRow>(payload: unknown, key: string): TRow[] {
@@ -169,6 +188,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     text: string;
     rootId?: string | null;
     replyToMessageId?: string | null;
+    mentions?: { userId: string }[];
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -179,6 +199,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     text: params.text,
     rootId: params.rootId ?? null,
     replyToMessageId: params.replyToMessageId ?? null,
+    ...(params.mentions && params.mentions.length ? { mentions: params.mentions } : null),
   });
   return coerceObjectRows<TRow>(payload, "rows");
 }
