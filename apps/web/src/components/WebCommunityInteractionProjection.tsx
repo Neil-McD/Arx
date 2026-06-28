@@ -486,9 +486,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (props.roots.length !== prevRootCount.current) {
+    const previous = prevRootCount.current;
+    prevRootCount.current = props.roots.length;
+    if (props.roots.length > previous) {
       el.scrollTop = el.scrollHeight;
-      prevRootCount.current = props.roots.length;
     }
   }, [props.roots.length]);
 
