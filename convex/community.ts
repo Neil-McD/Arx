@@ -67,6 +67,7 @@ import {
   setCommunityTyping as setCommunityTypingImpl,
 } from "./communityChat";
 import {
+  createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl,
   createCommunityInteractionReply as createCommunityInteractionReplyImpl,
   createCommunityInteractionRoot as createCommunityInteractionRootImpl,
   listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
@@ -274,6 +275,7 @@ export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
 export const createCommunityInteractionRoot = createCommunityInteractionRootImpl;
 export const createCommunityInteractionReply = createCommunityInteractionReplyImpl;
+export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;
 export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
 export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;
 export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;

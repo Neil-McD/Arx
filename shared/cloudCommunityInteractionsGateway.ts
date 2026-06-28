@@ -154,3 +154,24 @@ export async function listCloudCommunityInteractionReplies<SessionT>(
   });
   return coerceObjectRows<CommunityInteractionReplyBundle>(payload, "replies");
 }
+
+export async function createCloudCommunityInteractionComposerMessageRows<SessionT, TRow = unknown>(
+  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
+    communityId: string;
+    idempotencyKey: string;
+    text: string;
+    rootId?: string | null;
+    replyToMessageId?: string | null;
+  },
+): Promise<TRow[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:createCommunityInteractionComposerMessage" as any, {
+    authSubject,
+    communityId: params.communityId,
+    idempotencyKey: params.idempotencyKey,
+    text: params.text,
+    rootId: params.rootId ?? null,
+    replyToMessageId: params.replyToMessageId ?? null,
+  });
+  return coerceObjectRows<TRow>(payload, "rows");
+}

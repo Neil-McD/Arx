@@ -109,6 +109,7 @@ import {
 import { useCommunityAttentionController } from "../../../shared/useCommunityAttentionController";
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
+  createCloudCommunityInteractionComposerMessageRows,
   listCloudCommunityInteractionReplies,
   listCloudCommunityInteractionRoots,
   type CommunityInteractionReplyBundle,
@@ -734,6 +735,9 @@ type MessageAttachment = CommunityMessageAttachment & {
 };
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
+type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
+  interaction_root_id?: string | null;
+};
 type CommunityActivityEvent = SharedCommunityActivityEvent;
 type CommunityInteractionRoot = CommunityInteractionRootBundle;
 type CommunityInteractionReply = CommunityInteractionReplyBundle;
@@ -2310,7 +2314,7 @@ export default function App() {
     setError: setCommunityChatError,
     ingestAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
   });
-  const [replyingToMessage, setReplyingToMessage] = useState<Pick<CommunityChatMessage, "id" | "sender_id" | "body"> | null>(null);
+  const [replyingToMessage, setReplyingToMessage] = useState<CommunityReplyTarget | null>(null);
   const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -2575,6 +2579,16 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     missingPayloadMessage: "Message sent, but no payload returned.",
     ensureCommunityChatThread,
+    useCanonicalCommunityInteractions: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
+    createCommunityInteractionMessageRows: (params) =>
+      createCloudCommunityInteractionComposerMessageRows<AuthSession, Parameters<typeof toCommunityChatMessage>[0]>({
+        session: params.session,
+        communityId: params.communityId,
+        idempotencyKey: params.idempotencyKey,
+        text: params.text,
+        rootId: params.rootId ?? null,
+        replyToMessageId: params.replyToMessageId ?? null,
+      }),
     toCommunityChatMessage,
     loadCommunityChat,
     parseReplyPrefix,

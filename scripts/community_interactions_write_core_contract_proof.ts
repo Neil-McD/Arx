@@ -29,6 +29,11 @@ assert.match(
 );
 assert.match(
   contract,
+  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical roots\/replies before legacy compatibility rows/,
+  "contract should document the active canonical composer bridge slice",
+);
+assert.match(
+  contract,
   /write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously/,
   "contract should delete synchronous unfurls from interaction writes",
 );
@@ -187,6 +192,38 @@ assert.doesNotMatch(
   createReply,
   /parentReplyId|replyDepth|depth:/,
   "reply write should not create recursive reply hierarchy fields",
+);
+
+const createComposerMessage = exportedConstBlock(interactions, "createCommunityInteractionComposerMessage");
+assert.match(
+  createComposerMessage,
+  /communityInteractionRoots" as any[\s\S]*createLegacyCompatibilityChatMessageForInteraction/,
+  "composer bridge should create canonical roots before legacy compatibility rows",
+);
+assert.match(
+  createComposerMessage,
+  /communityInteractionReplies" as any[\s\S]*createLegacyCompatibilityChatMessageForInteraction/,
+  "composer bridge should create canonical replies before legacy compatibility rows",
+);
+assert.match(
+  createComposerMessage,
+  /insertLegacyChatLinkIfMissing[\s\S]*linkKind: "root"[\s\S]*insertLegacyChatLinkIfMissing[\s\S]*linkKind: "reply"/,
+  "composer bridge should persist root and reply legacy compatibility links",
+);
+assert.match(
+  createComposerMessage,
+  /rows:\s*\[await mapLegacyCompatibilityMessageRow/,
+  "composer bridge should preserve the legacy chat response row shape",
+);
+assert.doesNotMatch(
+  createComposerMessage,
+  /legacyChatIdempotencyKey|legacy_chat_message:/,
+  "composer bridge should not use the legacy chat adapter idempotency namespace",
+);
+assert.doesNotMatch(
+  createComposerMessage,
+  /createCommunityInteractionRoot|createCommunityInteractionReply/,
+  "composer bridge should not call public root or reply mutations",
 );
 
 assert.match(

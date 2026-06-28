@@ -88,10 +88,15 @@ assert.match(
   /client\.query\("community:listCommunityInteractionReplies" as any/,
   "gateway should read drawer replies through the community interaction query",
 );
+assert.match(
+  gateway,
+  /client\.mutation\("community:createCommunityInteractionComposerMessage" as any/,
+  "gateway should expose the canonical composer bridge mutation",
+);
 assert.doesNotMatch(
   gateway,
-  /client\.mutation|sendCloudCommunityMessage|communityChatMessages/,
-  "projection gateway should stay read-only and should not fall back to legacy chat tables",
+  /createThreadUserMessage|sendCloudCommunityMessage|communityChatMessages/,
+  "interaction gateway should not fall back to legacy chat tables",
 );
 
 assert.match(
@@ -133,8 +138,13 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection does not create a second send\/write path[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*text-only top-level composer sends may use the canonical composer bridge[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
+);
+assert.match(
+  contract,
+  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical roots\/replies before legacy compatibility rows[\s\S]*attachment sends stay on `createThreadUserMessage`/,
+  "interaction contract should document the active canonical composer bridge slice",
 );
 
 console.log("community interaction projection UI contract proof passed");

@@ -17,7 +17,7 @@ export type WebCommunityInteractionProjectionProps = {
   repliesError: string | null;
   onSelectRoot: (rootId: string) => void;
   onCloseDrawer: () => void;
-  onStartRootReply?: (message: { id: string; sender_id: string; body: string }) => void;
+  onStartRootReply?: (message: { id: string; sender_id: string; body: string; interaction_root_id: string }) => void;
   mainComposer?: ReactNode;
   drawerComposer?: ReactNode;
   onRetryRoots: () => void;
@@ -260,6 +260,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       id: selectedRoot.root.legacy_message_id,
                       sender_id: selectedRoot.root.actor_user_id,
                       body: selectedRootText,
+                      interaction_root_id: selectedRoot.root.id,
                     });
                   }}
                 >

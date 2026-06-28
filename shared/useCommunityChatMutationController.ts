@@ -20,6 +20,16 @@ type ReplyPrefixLike = {
   rest: string;
 };
 
+type CommunityReplyTarget<
+  MessageT extends {
+    id: string;
+    sender_id: string;
+    body: string;
+  },
+> = Pick<MessageT, "id" | "sender_id" | "body"> & {
+  interaction_root_id?: string | null;
+};
+
 export type CommunityMessageSendDraft<
   MessageT extends {
     id: string;
@@ -30,7 +40,7 @@ export type CommunityMessageSendDraft<
 > = {
   text?: string;
   attachments?: AttachmentT[];
-  replyingToMessage?: Pick<MessageT, "id" | "sender_id" | "body"> | null;
+  replyingToMessage?: CommunityReplyTarget<MessageT> | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
   restoreDraft?: () => void;
@@ -64,6 +74,15 @@ type UseCommunityChatMutationControllerArgs<
   ensureSession?: EnsureSessionFn<SessionT>;
   missingPayloadMessage: string;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
+  createCommunityInteractionMessageRows?: (params: {
+    session: SessionT;
+    communityId: string;
+    idempotencyKey: string;
+    text: string;
+    rootId?: string | null;
+    replyToMessageId?: string | null;
+  }) => Promise<RowT[]>;
+  useCanonicalCommunityInteractions?: boolean;
   toCommunityChatMessage: (row: RowT) => MessageT | null;
   loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
   parseReplyPrefix: (body: string) => ReplyPrefixLike | null;
@@ -88,7 +107,7 @@ type UseCommunityChatMutationControllerArgs<
   communityMessageInput: string;
   communityMessages: MessageT[];
   messageReactions: ReactionT[];
-  replyingToMessage: Pick<MessageT, "id" | "sender_id" | "body"> | null;
+  replyingToMessage: CommunityReplyTarget<MessageT> | null;
   editingMessageId: string | null;
   editingMessageText: string;
   editingMessagePrefix: string | null;
@@ -96,7 +115,7 @@ type UseCommunityChatMutationControllerArgs<
   setMessageReactions: Dispatch<SetStateAction<ReactionT[]>>;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
   setCommunityAttachments: Dispatch<SetStateAction<AttachmentT[]>>;
-  setReplyingToMessage: Dispatch<SetStateAction<Pick<MessageT, "id" | "sender_id" | "body"> | null>>;
+  setReplyingToMessage: Dispatch<SetStateAction<CommunityReplyTarget<MessageT> | null>>;
   setReactionPickerMessageId: Dispatch<SetStateAction<string | null>>;
   setEditingMessageId: Dispatch<SetStateAction<string | null>>;
   setEditingMessageText: Dispatch<SetStateAction<string>>;
@@ -130,6 +149,17 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
     return "One attachment preview is too large. Try a smaller image.";
   }
   return message;
+}
+
+function createCommunityComposerIdempotencyKey(communityId: string, rootId: string | null): string {
+  const scope = rootId ? `reply:${rootId}` : "root";
+  return [
+    "community-composer",
+    communityId,
+    scope,
+    Date.now().toString(36),
+    Math.random().toString(36).slice(2, 10),
+  ].join(":");
 }
 
 export function useCommunityChatMutationController<
@@ -217,7 +247,7 @@ export function useCommunityChatMutationController<
     current.setReactionPickerMessageId(null);
   }, []);
 
-  const handleStartReply = useCallback((message: Pick<MessageT, "id" | "sender_id" | "body">) => {
+  const handleStartReply = useCallback((message: CommunityReplyTarget<MessageT>) => {
     if (message.id.startsWith("pending-")) return;
     const current = argsRef.current;
     current.setReplyingToMessage(message);
@@ -303,6 +333,7 @@ export function useCommunityChatMutationController<
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return;
+    const activeCommunityId = current.activeCommunityId;
     const sessionUserId = resolveRuntimeSessionUserId(session);
     if (!sessionUserId) return;
 
@@ -373,14 +404,30 @@ export function useCommunityChatMutationController<
       const serializedAttachments = current.serializeAttachmentsForWrite
         ? current.serializeAttachmentsForWrite(preparedAttachments)
         : preparedAttachments;
-      const threadId = await current.ensureCommunityChatThread(current.activeCommunityId, session);
-      const created = await createCloudThreadUserMessageRows<SessionT, RowT>({
-        session,
-        threadId,
-        text: bodyToSend,
-        attachments: serializedAttachments,
-        replyToId,
-      });
+      const replyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
+      const canUseCanonicalComposer =
+        Boolean(current.useCanonicalCommunityInteractions && current.createCommunityInteractionMessageRows)
+        && serializedAttachments.length === 0
+        && (!replyToId || Boolean(replyRootId));
+      const created = canUseCanonicalComposer && current.createCommunityInteractionMessageRows
+        ? await current.createCommunityInteractionMessageRows({
+            session,
+            communityId: activeCommunityId,
+            idempotencyKey: createCommunityComposerIdempotencyKey(activeCommunityId, replyRootId),
+            text: bodyToSend,
+            rootId: replyRootId,
+            replyToMessageId: replyToId,
+          })
+        : await (async () => {
+            const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
+            return await createCloudThreadUserMessageRows<SessionT, RowT>({
+              session,
+              threadId,
+              text: bodyToSend,
+              attachments: serializedAttachments,
+              replyToId,
+            });
+          })();
       const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;
       if (!record) {
         current.setCommunityChatError(current.missingPayloadMessage);
@@ -397,7 +444,7 @@ export function useCommunityChatMutationController<
         return next;
       });
       current.onCommunityMessageSent?.({
-        communityId: current.activeCommunityId,
+        communityId: activeCommunityId,
         messageId: record.id,
         hasAttachments: preparedAttachments.length > 0,
         hasReply: Boolean(replyToId),

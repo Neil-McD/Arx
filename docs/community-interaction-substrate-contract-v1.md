@@ -267,11 +267,30 @@ Rules:
 - when disabled, the existing legacy chat timeline remains the rendered surface
 - the projection reads roots with `listCommunityInteractionRoots`
 - the projection opens exactly one drawer with replies from `listCommunityInteractionReplies`
-- the projection does not create a second send/write path
-- the existing legacy chat composer remains the writer during this migration slice
+- text-only top-level composer sends may use the canonical composer bridge
+- text-only drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id
+- attachment sends and ambiguous legacy reply sends remain on the legacy chat writer during this migration slice
 - successful legacy sends may refresh the projection after the canonical adapter dual-write completes
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
+
+## Current Canonical Composer Bridge Slice
+
+The first composer migration slice adds `createCommunityInteractionComposerMessage`.
+
+Rules:
+
+- composer text writes create canonical roots/replies before legacy compatibility rows
+- the compatibility row is written to `communityChatMessages` in the same Convex transaction
+- `communityInteractionLegacyChatLinks` maps the compatibility message to the canonical root/reply
+- the compatibility row keeps old readers, realtime subscribers, archive documents, digests, and recent-context consumers alive
+- the mutation returns the existing legacy chat row shape to preserve optimistic UI replacement behavior
+- drawer replies require a canonical `rootId` and a valid legacy reply target message id
+- attachment upload migration is deferred; attachment sends stay on `createThreadUserMessage`
+- ambiguous legacy timeline replies stay on `createThreadUserMessage`
+- idempotency keys use a composer namespace, not `legacy_chat_message:*`
+- the bridge does not call public root/reply mutations
+- the bridge does not fetch URLs, scrape pages, process media, schedule jobs, promote source traces, or call the compiler
 
 ## Current Legacy Chat Adapter Slice
 

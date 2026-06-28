@@ -41,7 +41,9 @@ type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
 type UserProfile = SharedUserProfile;
 type ProfileCommunityContext = SharedProfileCommunityContext;
-type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body">;
+type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
+  interaction_root_id?: string | null;
+};
 
 type CommunityChatSendDraft = {
   text?: string;
