@@ -8794,7 +8794,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-projection.has-drawer {
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 560px);
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 32vw, 760px);
 }
 
 .community-interaction-main,

@@ -2084,7 +2084,7 @@
 /* Desktop: broaden the community nav so the center column isn't a wide empty plain */
 @media (min-width: 641px) {
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
-    grid-template-columns: var(--web-rail-width, 72px) clamp(220px, 18vw, 340px) minmax(0, 1fr);
+    grid-template-columns: var(--web-rail-width, 72px) clamp(220px, 20vw, 440px) minmax(0, 1fr);
   }
 }
 
