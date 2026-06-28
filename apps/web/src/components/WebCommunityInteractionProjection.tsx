@@ -489,7 +489,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     const previous = prevRootCount.current;
     prevRootCount.current = props.roots.length;
     if (props.roots.length > previous) {
-      el.scrollTop = el.scrollHeight;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (previous === 0 || distanceFromBottom < 200) {
+        el.scrollTop = el.scrollHeight;
+      }
     }
   }, [props.roots.length]);
 

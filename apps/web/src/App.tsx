@@ -107,13 +107,19 @@ import {
   useCommunityAiFeedController,
 } from "../../../shared/useCommunityAiFeedController";
 import { useCommunityAttentionController } from "../../../shared/useCommunityAttentionController";
-import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
+import {
+  createCloudCommunityChatLiveClient,
+  uploadCloudCommunityChatAttachmentFile,
+  type CloudCommunityChatLiveClient,
+} from "../../../shared/cloudCommunityChatGateway";
 import {
   createCloudCommunityInteractionComposerMessageRows,
   deleteCloudCommunityInteractionMessage,
   editCloudCommunityInteractionMessage,
   listCloudCommunityInteractionReplies,
   listCloudCommunityInteractionRoots,
+  subscribeCloudCommunityInteractionReplies,
+  subscribeCloudCommunityInteractionRoots,
   toggleCloudCommunityInteractionReaction,
   type CommunityInteractionReplyBundle,
   type CommunityInteractionRootBundle,
@@ -2499,6 +2505,96 @@ export default function App() {
     }
   }, [activeCommunityId, ensureUsableAuthSession, resetCommunityInteractionProjection, session]);
 
+  useEffect(() => {
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) return;
+    let cancelled = false;
+    let liveClient: CloudCommunityChatLiveClient | null = null;
+    let unsubscribe: (() => void) | null = null;
+    void (async () => {
+      const usableSession = await ensureUsableAuthSession(session ?? undefined);
+      if (!usableSession || cancelled) return;
+      try {
+        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        unsubscribe = subscribeCloudCommunityInteractionRoots({
+          liveClient,
+          communityId: activeCommunityId,
+          limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
+          onUpdate: (roots) => {
+            if (cancelled) return;
+            setCommunityInteractionRoots(roots);
+            setSelectedCommunityInteractionRootId((current) =>
+              current && roots.some((bundle) => bundle.root.id === current) ? current : null,
+            );
+            setIsLoadingCommunityInteractions(false);
+            setCommunityInteractionError(null);
+          },
+          onError: (error) => {
+            if (cancelled) return;
+            setCommunityInteractionError(formatCommunityInteractionProjectionError(error));
+            setIsLoadingCommunityInteractions(false);
+          },
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setCommunityInteractionError(formatCommunityInteractionProjectionError(error));
+          setIsLoadingCommunityInteractions(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      liveClient?.close();
+    };
+  }, [activeCommunityId, ensureUsableAuthSession, session]);
+
+  useEffect(() => {
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedCommunityInteractionRootId || !session) return;
+    const rootId = selectedCommunityInteractionRootId;
+    let cancelled = false;
+    let liveClient: CloudCommunityChatLiveClient | null = null;
+    let unsubscribe: (() => void) | null = null;
+    void (async () => {
+      const usableSession = await ensureUsableAuthSession(session ?? undefined);
+      if (!usableSession || cancelled) return;
+      try {
+        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        unsubscribe = subscribeCloudCommunityInteractionReplies({
+          liveClient,
+          rootId,
+          limit: COMMUNITY_INTERACTION_REPLY_LIMIT,
+          onUpdate: (replies) => {
+            if (cancelled) return;
+            setCommunityInteractionRepliesByRootId((previous) => ({ ...previous, [rootId]: replies }));
+            setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
+            setCommunityInteractionRepliesErrorByRootId((previous) => ({ ...previous, [rootId]: null }));
+          },
+          onError: (error) => {
+            if (cancelled) return;
+            setCommunityInteractionRepliesErrorByRootId((previous) => ({
+              ...previous,
+              [rootId]: formatCommunityInteractionProjectionError(error),
+            }));
+            setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
+          },
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setCommunityInteractionRepliesErrorByRootId((previous) => ({
+            ...previous,
+            [rootId]: formatCommunityInteractionProjectionError(error),
+          }));
+          setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      liveClient?.close();
+    };
+  }, [ensureUsableAuthSession, selectedCommunityInteractionRootId, session]);
+
   const handleSelectCommunityInteractionRoot = useCallback((rootIdRaw: string) => {
     const rootId = String(rootIdRaw ?? "").trim();
     if (!rootId) return;
@@ -2530,11 +2626,7 @@ export default function App() {
         emoji,
       });
     } catch {
-      // Swallow; the reload below reflects authoritative server state.
-    }
-    void loadCommunityInteractionRoots(activeCommunityId, usableSession);
-    if (selectedCommunityInteractionRootId) {
-      void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
+      // Live subscription reflects authoritative server state.
     }
   }, [
     activeCommunityId,
@@ -2555,11 +2647,7 @@ export default function App() {
     try {
       await editCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId, text });
     } catch {
-      // Reload reflects authoritative server state.
-    }
-    void loadCommunityInteractionRoots(activeCommunityId, usableSession);
-    if (selectedCommunityInteractionRootId) {
-      void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
+      // Live subscription reflects authoritative server state.
     }
   }, [
     activeCommunityId,
@@ -2582,11 +2670,7 @@ export default function App() {
     try {
       await deleteCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId });
     } catch {
-      // Reload reflects authoritative server state.
-    }
-    void loadCommunityInteractionRoots(activeCommunityId, usableSession);
-    if (selectedCommunityInteractionRootId && selectedCommunityInteractionRootId !== targetId) {
-      void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, usableSession);
+      // Live subscription reflects authoritative server state.
     }
   }, [
     activeCommunityId,

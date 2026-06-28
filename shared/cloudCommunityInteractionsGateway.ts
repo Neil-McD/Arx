@@ -1,4 +1,6 @@
+import { api } from "../convex/_generated/api";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
 
 type CloudCommunityInteractionsGatewayParams<SessionT> = {
   session: SessionT;
@@ -233,4 +235,64 @@ export async function deleteCloudCommunityInteractionMessage<SessionT>(
     targetType: params.targetType,
     targetId: params.targetId,
   });
+}
+
+export function subscribeCloudCommunityInteractionRoots(params: {
+  liveClient: CloudCommunityChatLiveClient;
+  communityId: string;
+  limit?: number;
+  kind?: string | null;
+  onUpdate: (roots: CommunityInteractionRootBundle[]) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    (api as any).community.listCommunityInteractionRoots,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+      beforeCreatedAt: null,
+      limit: params.limit ?? 40,
+      kind: params.kind ?? null,
+    } as any,
+  );
+  const publish = () => {
+    try {
+      const result = watch.localQueryResult() as { roots?: CommunityInteractionRootBundle[] } | undefined;
+      if (typeof result === "undefined") return;
+      params.onUpdate(Array.isArray(result?.roots) ? result.roots : []);
+    } catch (error) {
+      params.onError?.(error);
+    }
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
+export function subscribeCloudCommunityInteractionReplies(params: {
+  liveClient: CloudCommunityChatLiveClient;
+  rootId: string;
+  limit?: number;
+  onUpdate: (replies: CommunityInteractionReplyBundle[]) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    (api as any).community.listCommunityInteractionReplies,
+    {
+      authSubject: params.liveClient.authSubject,
+      rootId: params.rootId as any,
+      beforeSeq: null,
+      limit: params.limit ?? 80,
+    } as any,
+  );
+  const publish = () => {
+    try {
+      const result = watch.localQueryResult() as { replies?: CommunityInteractionReplyBundle[] } | undefined;
+      if (typeof result === "undefined") return;
+      params.onUpdate(Array.isArray(result?.replies) ? result.replies : []);
+    } catch (error) {
+      params.onError?.(error);
+    }
+  };
+  publish();
+  return watch.onUpdate(publish);
 }
