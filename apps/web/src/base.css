@@ -9120,23 +9120,30 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reaction {
-  min-height: 22px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid transparent;
+  padding: 3px 8px;
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--border-default) 12%);
+  background: var(--bg-card-alt);
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.community-interaction-reaction > span:first-child {
+  font-size: 14px;
+}
+
+.community-interaction-reaction > span:last-child {
+  font-weight: 500;
 }
 
 .community-interaction-reaction:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
 }
 
 .community-interaction-reaction:disabled {
