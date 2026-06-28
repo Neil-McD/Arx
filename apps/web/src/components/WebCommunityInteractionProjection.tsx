@@ -4,7 +4,6 @@ import {
   CornerUpLeft,
   MessageSquare,
   MoreHorizontal,
-  PanelRightClose,
   Pencil,
   SmilePlus,
   Trash2,
@@ -674,25 +673,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
       {selectedRoot ? (
         <aside className="community-interaction-drawer" aria-label="Thread replies">
-          <div className="community-interaction-drawer-controls">
+          <div className="community-interaction-drawer-header">
             <button
-              className="community-interaction-back-button"
+              className="community-interaction-drawer-back"
               type="button"
               onClick={props.onCloseDrawer}
-              aria-label="Back to chat"
-              title="Back to chat"
+              aria-label="Back to channel"
+              title="Back to channel"
             >
-              <ArrowLeft size={16} aria-hidden="true" />
+              <ArrowLeft size={18} aria-hidden="true" />
             </button>
-            <button
-              className="community-interaction-icon-button"
-              type="button"
-              onClick={props.onCloseDrawer}
-              aria-label="Close replies"
-              title="Close replies"
-            >
-              <PanelRightClose size={16} aria-hidden="true" />
-            </button>
+            <span className="community-interaction-drawer-heading">Thread</span>
           </div>
           <div className="community-interaction-drawer-scroll">
             <div className="community-interaction-drawer-root">

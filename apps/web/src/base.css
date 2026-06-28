@@ -8832,13 +8832,39 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow: hidden;
 }
 
-.community-interaction-drawer-controls {
-  position: absolute;
-  top: calc(var(--web-topbar-height, 48px) + 8px);
-  right: 12px;
-  z-index: 6;
+.community-interaction-drawer-header {
+  flex: 0 0 auto;
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+  height: var(--web-topbar-height, 48px);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.community-interaction-drawer-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.community-interaction-drawer-back:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-interaction-drawer-heading {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .community-interaction-drawer-scroll {
@@ -8846,7 +8872,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
-  padding-top: calc(var(--web-topbar-height, 48px) + 30px);
+  padding-top: 8px;
 }
 
 .community-interaction-main-composer,
@@ -9733,27 +9759,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   white-space: nowrap;
 }
 
-.community-interaction-back-button {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
-  color: var(--text-muted);
-  cursor: pointer;
-  flex: 0 0 auto;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
-}
-
-.community-interaction-back-button:hover {
-  background: color-mix(in srgb, var(--bg-card) 94%, var(--accent) 6%);
-  border-color: var(--border-default);
-  color: var(--text-primary);
-}
-
 /* Layered collapse: when the main area is too narrow for feed + drawer
    side-by-side, the reply drawer takes over and a back arrow returns to chat. */
 @media (min-width: 641px) and (max-width: 1024px) {
@@ -9768,14 +9773,6 @@ button.community-launch-knowledge-integration-chip:disabled {
     border-left: 0;
     z-index: 5;
     background: var(--bg-app);
-  }
-
-  .community-chat .community-interaction-projection.has-drawer .community-interaction-back-button {
-    display: inline-flex;
-  }
-
-  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-controls .community-interaction-icon-button {
-    display: none;
   }
 }
 
