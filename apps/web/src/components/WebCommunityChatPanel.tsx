@@ -724,8 +724,31 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     </>
   );
 
+  const isQuotingDrawerReply = Boolean(
+    drawerReplyTarget && rootReplyTarget && drawerReplyTarget.id !== rootReplyTarget.id,
+  );
   const drawerReplyComposer = drawerReplyTarget ? (
     <div className="community-interaction-reply-composer-panel">
+      {isQuotingDrawerReply ? (
+        <div className="community-interaction-reply-composer-context">
+          <div className="community-interaction-reply-composer-copy">
+            <span>Replying to</span>
+            <strong>{displayName(drawerReplyTarget.sender_id)}</strong>
+            <em>{truncateReplyPreview(drawerReplyTarget.body)}</em>
+          </div>
+          <button
+            className="chat-replying-cancel"
+            type="button"
+            onClick={() => setDrawerReplyTarget(rootReplyTarget)}
+            title="Cancel reply"
+            aria-label="Cancel reply"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ) : null}
       <div className="chat-input-bar community-interaction-reply-input-bar">
         <textarea
           ref={(node) => {

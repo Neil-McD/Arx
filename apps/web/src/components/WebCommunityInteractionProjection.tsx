@@ -158,6 +158,45 @@ function bundleText(blocks: CommunityInteractionContentBlock[], fallback: string
   return text || fallback;
 }
 
+const QUICK_REACTIONS = ["👍", "❤️", "🔥"];
+
+function MessageActions(props: {
+  onReact: (emoji: string) => void;
+  onReply: () => void;
+  replyLabel: string;
+}) {
+  return (
+    <div className="community-interaction-msg-actions">
+      {QUICK_REACTIONS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          className="community-interaction-msg-action community-interaction-msg-emoji"
+          onClick={() => props.onReact(emoji)}
+          aria-label={`React with ${emoji}`}
+          title={`React with ${emoji}`}
+        >
+          {emoji}
+        </button>
+      ))}
+      <EmojiPickerButton
+        className="community-interaction-msg-action"
+        label="Add reaction"
+        onPick={props.onReact}
+      />
+      <button
+        type="button"
+        className="community-interaction-msg-action"
+        onClick={props.onReply}
+        aria-label={props.replyLabel}
+        title={props.replyLabel}
+      >
+        <MessageSquare size={15} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function ReactionSummary(props: {
   rows: Array<{ emoji: string; count: number }>;
   viewerEmojis?: string[];
@@ -420,22 +459,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             key={root.id}
                             className={`community-interaction-message${selected ? " selected" : ""}`}
                           >
-                            <div className="community-interaction-msg-actions">
-                              <EmojiPickerButton
-                                className="community-interaction-msg-action"
-                                label="Add reaction"
-                                onPick={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
-                              />
-                              <button
-                                type="button"
-                                className="community-interaction-msg-action"
-                                onClick={() => props.onSelectRoot(root.id)}
-                                aria-label="Reply in thread"
-                                title="Reply in thread"
-                              >
-                                <MessageSquare size={15} aria-hidden="true" />
-                              </button>
-                            </div>
+                            <MessageActions
+                              onReact={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                              onReply={() => props.onSelectRoot(root.id)}
+                              replyLabel="Reply in thread"
+                            />
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
                             <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
                             <EmbedCards embeds={bundle.embeds} />
@@ -578,6 +606,19 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   const badge = agentBadgeLabel(reply.actor_type);
                   return (
                     <div key={reply.id} className="community-interaction-reply">
+                      <MessageActions
+                        onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                        onReply={() => {
+                          if (!reply.legacy_message_id || !reply.actor_user_id) return;
+                          props.onStartRootReply?.({
+                            id: reply.legacy_message_id,
+                            sender_id: reply.actor_user_id,
+                            body,
+                            interaction_root_id: reply.root_id,
+                          });
+                        }}
+                        replyLabel="Reply to this message"
+                      />
                       <ActorAvatar
                         label={label}
                         seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
@@ -596,18 +637,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         ) : null}
                         <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
                         <EmbedCards embeds={bundle.embeds} />
-                        <div className="community-interaction-reply-actions">
-                          <ReactionSummary
-                            rows={reply.reaction_summary}
-                            viewerEmojis={reply.viewer_emojis}
-                            onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
-                          />
-                          <EmojiPickerButton
-                            className="community-interaction-reaction-add"
-                            label="Add reaction"
-                            onPick={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
-                          />
-                        </div>
+                        <ReactionSummary
+                          rows={reply.reaction_summary}
+                          viewerEmojis={reply.viewer_emojis}
+                          onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                        />
                       </div>
                     </div>
                   );

@@ -9301,6 +9301,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reply {
+  position: relative;
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
@@ -9434,6 +9435,15 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-interaction-msg-action:hover {
   background: var(--hover-overlay);
   color: var(--text-primary);
+}
+
+.community-interaction-msg-emoji {
+  font-size: 15px;
+}
+
+.community-interaction-reply:hover .community-interaction-msg-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .community-interaction-message:hover {
