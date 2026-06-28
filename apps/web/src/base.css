@@ -9615,10 +9615,19 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-secondary);
 }
 
+.community-interaction-edit-cancel:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
 .community-interaction-edit-save {
   border: 0;
-  background: var(--accent-gold);
-  color: var(--bg-app);
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+.community-interaction-edit-save:hover {
+  background: var(--bg-button-hover);
 }
 
 .community-interaction-edited {
