@@ -187,6 +187,17 @@ function bundleText(blocks: CommunityInteractionContentBlock[], fallback: string
   return text || fallback;
 }
 
+// The projection flattens legacy attachments to a "Shared attachment: name" text line. Now that the
+// real attachment renders, drop that redundant summary line from the displayed body.
+function stripSharedAttachmentSummary(text: string, hasAttachments: boolean): string {
+  if (!hasAttachments) return text;
+  return text
+    .split(/\n{2,}/)
+    .filter((part) => !/^shared attachments?:/i.test(part.trim()))
+    .join("\n\n")
+    .trim();
+}
+
 const QUICK_REACTIONS = ["👍", "❤️", "🔥"];
 
 function OverflowMenu(props: { onEdit?: () => void; onDelete?: () => void }) {
@@ -836,7 +847,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     : null;
   const selectedRootLabel = selectedRoot ? actorLabel(selectedRoot.root, props.displayName) : "";
   const selectedRootText = selectedRoot
-    ? bundleText(selectedRoot.content_blocks, selectedRoot.root.content_summary)
+    ? stripSharedAttachmentSummary(
+        bundleText(selectedRoot.content_blocks, selectedRoot.root.content_summary),
+        selectedRoot.attachments.length > 0,
+      )
     : "";
   const selectedRootChip = selectedRoot ? kindChipLabel(selectedRoot.root.kind) : null;
   const selectedRootBadge = selectedRoot ? agentBadgeLabel(selectedRoot.root.actor_type) : null;
@@ -894,7 +908,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   );
                 }
                 if (segment.type === "system") {
-                  const body = bundleText(segment.bundle.content_blocks, segment.bundle.root.content_summary);
+                  const body = stripSharedAttachmentSummary(
+                    bundleText(segment.bundle.content_blocks, segment.bundle.root.content_summary),
+                    segment.bundle.attachments.length > 0,
+                  );
                   return (
                     <Fragment key={segment.key}>
                       {dividerBefore}
@@ -950,7 +967,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       </div>
                       {segment.bundles.map((bundle) => {
                         const root = bundle.root;
-                        const body = bundleText(bundle.content_blocks, root.content_summary);
+                        const body = stripSharedAttachmentSummary(
+                          bundleText(bundle.content_blocks, root.content_summary),
+                          bundle.attachments.length > 0,
+                        );
                         const selected = root.id === props.selectedRootId;
                         const threadTypers = (props.typingPresence?.users ?? []).filter(
                           (user) => user.user_id !== props.currentUserId && user.root_id === root.id,
@@ -1232,7 +1252,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   const reply = bundle.reply;
                   const label = actorLabel(reply, props.displayName);
                   const profile = reply.actor_user_id ? props.profilesByUserId[reply.actor_user_id] ?? null : null;
-                  const body = bundleText(bundle.content_blocks, reply.content_summary);
+                  const body = stripSharedAttachmentSummary(
+                    bundleText(bundle.content_blocks, reply.content_summary),
+                    bundle.attachments.length > 0,
+                  );
                   const badge = agentBadgeLabel(reply.actor_type);
                   const isOwnReply = Boolean(
                     props.currentUserId && reply.actor_user_id && reply.actor_user_id === props.currentUserId,
