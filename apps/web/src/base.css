@@ -9028,8 +9028,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-avatar {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -9120,30 +9120,23 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-reaction {
+  min-height: 22px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
-  border: 1px solid var(--border-default);
+  padding: 2px 8px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--bg-card-alt);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--border-default) 12%);
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.community-interaction-reaction > span:first-child {
-  font-size: 14px;
-}
-
-.community-interaction-reaction > span:last-child {
-  font-weight: 500;
 }
 
 .community-interaction-reaction:hover:not(:disabled) {
-  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
 }
 
 .community-interaction-reaction:disabled {
@@ -9271,7 +9264,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-thread-anchor {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
 }
@@ -9309,17 +9302,17 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-reply {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
   padding: 10px 8px;
   border-radius: 8px;
 }
 
 .community-interaction-reply .community-interaction-avatar {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .community-interaction-feed {
@@ -9375,7 +9368,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-group {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   gap: 12px;
   padding: 8px 12px 4px;
   border-radius: 10px;
