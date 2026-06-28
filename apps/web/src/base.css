@@ -8963,8 +8963,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 24px;
 }
 
-.community-interaction-feed-header,
-.community-interaction-drawer-header {
+.community-interaction-feed-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -9276,15 +9275,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   border-radius: 999px;
 }
 
-.community-interaction-drawer-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin: 0;
-  padding: calc(var(--web-topbar-height, 48px) + 12px) 16px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
-}
 
 .community-interaction-drawer-root {
   padding: 16px;
