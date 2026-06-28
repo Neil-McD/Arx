@@ -1,12 +1,14 @@
-import type { ReactNode } from "react";
-import { MessageSquare, PanelRightClose, RefreshCw } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { CornerUpLeft, MessageSquare, PanelRightClose, RefreshCw } from "lucide-react";
 import type {
   CommunityInteractionContentBlock,
+  CommunityInteractionEmbed,
   CommunityInteractionReplyBundle,
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import type { UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { groupInteractionFeed } from "./groupInteractionFeed";
 
 export type WebCommunityInteractionProjectionProps = {
   activeCommunityName: string;
@@ -48,14 +50,33 @@ function actorLabel(
   return "Member";
 }
 
-function kindLabel(kind: string): string {
+function kindChipLabel(kind: string): string | null {
+  if (kind === "discussion") return null;
   if (kind === "resource_share") return "Resource";
   if (kind === "agent_signal") return "Agent signal";
-  return kind
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ") || "Discussion";
+  if (kind === "announcement") return "Announcement";
+  if (kind === "question") return "Question";
+  return (
+    kind
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() + part.slice(1))
+      .join(" ") || null
+  );
+}
+
+function agentBadgeLabel(actorType: string): string | null {
+  if (actorType === "community_agent" || actorType === "personal_agent") return "Agent";
+  return null;
+}
+
+function hostnameOf(url: string | null): string {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 function sortedBlocks(blocks: CommunityInteractionContentBlock[]): CommunityInteractionContentBlock[] {
@@ -103,6 +124,84 @@ function ReactionSummary(props: {
   );
 }
 
+function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
+  const visible = props.embeds.filter(
+    (embed) => embed.status !== "redacted" && (embed.embed_kind === "link" || embed.embed_kind === "workspace_ref"),
+  );
+  if (visible.length === 0) return null;
+  return (
+    <div className="community-interaction-embeds">
+      {visible.map((embed) => {
+        if (embed.status === "pending") {
+          return (
+            <div
+              key={embed.id}
+              className="community-interaction-embed is-pending web-skeleton-pill"
+              aria-hidden="true"
+            />
+          );
+        }
+        const href = embed.source_url ?? undefined;
+        if (embed.status !== "ready") {
+          if (!href) return null;
+          return (
+            <a
+              key={embed.id}
+              className="community-interaction-embed is-bare"
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {embed.source_url}
+            </a>
+          );
+        }
+        const provider = embed.provider || hostnameOf(embed.source_url);
+        return (
+          <a
+            key={embed.id}
+            className="community-interaction-embed"
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {embed.image_url ? (
+              <img className="community-interaction-embed-media" src={embed.image_url} alt="" loading="lazy" />
+            ) : null}
+            <div className="community-interaction-embed-text">
+              {provider ? <span className="community-interaction-embed-provider">{provider}</span> : null}
+              {embed.title ? <span className="community-interaction-embed-title">{embed.title}</span> : null}
+              {embed.description ? <span className="community-interaction-embed-desc">{embed.description}</span> : null}
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+function QuoteChip(props: {
+  quoted: CommunityInteractionReplyBundle | undefined;
+  displayName: (userId: string) => string;
+}) {
+  const label = props.quoted ? actorLabel(props.quoted.reply, props.displayName) : "a reply";
+  const snippet = props.quoted
+    ? bundleText(props.quoted.content_blocks, props.quoted.reply.content_summary)
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80)
+    : "";
+  return (
+    <div className="community-interaction-quote" aria-label={`In reply to ${label}`}>
+      <CornerUpLeft size={12} aria-hidden="true" />
+      <span className="community-interaction-quote-author">{label}</span>
+      {snippet ? <span className="community-interaction-quote-text">{snippet}</span> : null}
+    </div>
+  );
+}
+
 function ActorAvatar(props: {
   label: string;
   seed: string;
@@ -145,40 +244,55 @@ function InteractionBody(props: {
 }
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const prevRootCount = useRef(0);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (props.roots.length !== prevRootCount.current) {
+      el.scrollTop = el.scrollHeight;
+      prevRootCount.current = props.roots.length;
+    }
+  }, [props.roots.length]);
+
   const selectedRoot = props.selectedRootId
     ? props.roots.find((bundle) => bundle.root.id === props.selectedRootId) ?? null
     : null;
-  const selectedRootLabel = selectedRoot
-    ? actorLabel(selectedRoot.root, props.displayName)
-    : "";
+  const selectedRootLabel = selectedRoot ? actorLabel(selectedRoot.root, props.displayName) : "";
   const selectedRootText = selectedRoot
     ? bundleText(selectedRoot.content_blocks, selectedRoot.root.content_summary)
     : "";
+  const selectedRootChip = selectedRoot ? kindChipLabel(selectedRoot.root.kind) : null;
+  const selectedRootBadge = selectedRoot ? agentBadgeLabel(selectedRoot.root.actor_type) : null;
   const canReplyToSelectedRoot = Boolean(
     selectedRoot?.root.legacy_message_id && selectedRoot.root.actor_user_id && selectedRootText.trim(),
   );
 
+  const segments = groupInteractionFeed(props.roots);
+  const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
+
   return (
     <div className={`community-interaction-projection${selectedRoot ? " has-drawer" : ""}`}>
       <div className="community-interaction-main">
-        <div className="community-interaction-feed-scroll">
-          <div className="community-interaction-feed-header">
-            <div>
-              <div className="community-interaction-feed-title">{props.activeCommunityName}</div>
-              <div className="community-interaction-feed-subtitle">Threads</div>
-            </div>
-            <button
-              className="community-interaction-icon-button"
-              type="button"
-              onClick={props.onRetryRoots}
-              disabled={props.isLoadingRoots}
-              aria-label="Refresh threads"
-              title="Refresh threads"
-            >
-              <RefreshCw size={16} aria-hidden="true" />
-            </button>
+        <div className="community-interaction-feed-header">
+          <div>
+            <div className="community-interaction-feed-title">{props.activeCommunityName}</div>
+            <div className="community-interaction-feed-subtitle">Threads</div>
           </div>
+          <button
+            className="community-interaction-icon-button"
+            type="button"
+            onClick={props.onRetryRoots}
+            disabled={props.isLoadingRoots}
+            aria-label="Refresh threads"
+            title="Refresh threads"
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
+        </div>
 
+        <div className="community-interaction-feed-scroll" ref={scrollRef}>
           {props.error ? (
             <div className="community-interaction-state" role="alert">
               <div>{props.error}</div>
@@ -196,44 +310,80 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               <span>New community messages will appear here as canonical threads.</span>
             </div>
           ) : (
-            <div className="community-interaction-root-list">
-              {props.roots.map((bundle) => {
-                const root = bundle.root;
-                const label = actorLabel(root, props.displayName);
-                const profile = root.actor_user_id ? props.profilesByUserId[root.actor_user_id] ?? null : null;
-                const body = bundleText(bundle.content_blocks, root.content_summary);
-                const selected = root.id === props.selectedRootId;
+            <div className="community-interaction-feed">
+              {segments.map((segment) => {
+                if (segment.type === "day") {
+                  return (
+                    <div key={segment.key} className="community-interaction-day">
+                      <span>{segment.label}</span>
+                    </div>
+                  );
+                }
+                if (segment.type === "system") {
+                  const body = bundleText(segment.bundle.content_blocks, segment.bundle.root.content_summary);
+                  return (
+                    <div key={segment.key} className="community-interaction-system">
+                      <span>{body}</span>
+                    </div>
+                  );
+                }
+                const first = segment.bundles[0]!;
+                const label = actorLabel(first.root, props.displayName);
+                const profile = first.root.actor_user_id
+                  ? props.profilesByUserId[first.root.actor_user_id] ?? null
+                  : null;
+                const badge = agentBadgeLabel(first.root.actor_type);
+                const chip = kindChipLabel(first.root.kind);
                 return (
-                  <button
-                    key={root.id}
-                    type="button"
-                    className={`community-interaction-root${selected ? " selected" : ""}`}
-                    onClick={() => props.onSelectRoot(root.id)}
-                    aria-pressed={selected}
-                  >
-                    <ActorAvatar
-                      label={label}
-                      seed={root.actor_user_id ?? root.actor_agent_key ?? root.id}
-                      profile={profile}
-                      getAvatarColor={props.getAvatarColor}
-                      getInitials={props.getInitials}
-                    />
-                    <div className="community-interaction-root-content">
+                  <div key={segment.key} className={`community-interaction-group${badge ? " is-agent" : ""}`}>
+                    <div className="community-interaction-group-gutter">
+                      <ActorAvatar
+                        label={label}
+                        seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
+                        profile={profile}
+                        getAvatarColor={props.getAvatarColor}
+                        getInitials={props.getInitials}
+                      />
+                    </div>
+                    <div className="community-interaction-group-body">
                       <div className="community-interaction-meta-row">
                         <span className="community-interaction-author">{label}</span>
-                        <span>{props.formatChatTime(root.created_at)}</span>
-                        <span>{kindLabel(root.kind)}</span>
+                        {badge ? <span className="community-interaction-badge">{badge}</span> : null}
+                        {chip ? <span className="community-interaction-kind">{chip}</span> : null}
+                        <span>{props.formatChatTime(first.root.created_at)}</span>
                       </div>
-                      {root.title ? (
-                        <div className="community-interaction-title">{root.title}</div>
-                      ) : null}
-                      <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                      <div className="community-interaction-footer">
-                        <span>{root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}</span>
-                        <ReactionSummary rows={root.reaction_summary} />
-                      </div>
+                      {segment.bundles.map((bundle) => {
+                        const root = bundle.root;
+                        const body = bundleText(bundle.content_blocks, root.content_summary);
+                        const selected = root.id === props.selectedRootId;
+                        const hasFooter = root.reply_count > 0 || root.reaction_summary.length > 0;
+                        return (
+                          <button
+                            key={root.id}
+                            type="button"
+                            className={`community-interaction-message${selected ? " selected" : ""}`}
+                            onClick={() => props.onSelectRoot(root.id)}
+                            aria-pressed={selected}
+                          >
+                            {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
+                            <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                            <EmbedCards embeds={bundle.embeds} />
+                            {hasFooter ? (
+                              <div className="community-interaction-footer">
+                                {root.reply_count > 0 ? (
+                                  <span className="community-interaction-reply-pill">
+                                    <MessageSquare size={13} aria-hidden="true" />
+                                    {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
+                                  </span>
+                                ) : null}
+                                <ReactionSummary rows={root.reaction_summary} />
+                              </div>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -278,13 +428,19 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 <div className="community-interaction-thread-anchor-content">
                   <div className="community-interaction-meta-row">
                     <span className="community-interaction-author">{selectedRootLabel}</span>
+                    {selectedRootBadge ? (
+                      <span className="community-interaction-badge">{selectedRootBadge}</span>
+                    ) : null}
+                    {selectedRootChip ? (
+                      <span className="community-interaction-kind">{selectedRootChip}</span>
+                    ) : null}
                     <span>{props.formatChatTime(selectedRoot.root.created_at)}</span>
-                    <span>{kindLabel(selectedRoot.root.kind)}</span>
                   </div>
                   {selectedRoot.root.title ? (
                     <div className="community-interaction-title">{selectedRoot.root.title}</div>
                   ) : null}
                   <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
+                  <EmbedCards embeds={selectedRoot.embeds} />
                   <div className="community-interaction-thread-anchor-actions">
                     <ReactionSummary rows={selectedRoot.root.reaction_summary} />
                     {canReplyToSelectedRoot ? (
@@ -327,6 +483,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   const label = actorLabel(reply, props.displayName);
                   const profile = reply.actor_user_id ? props.profilesByUserId[reply.actor_user_id] ?? null : null;
                   const body = bundleText(bundle.content_blocks, reply.content_summary);
+                  const badge = agentBadgeLabel(reply.actor_type);
                   return (
                     <div key={reply.id} className="community-interaction-reply">
                       <ActorAvatar
@@ -339,9 +496,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       <div className="community-interaction-reply-content">
                         <div className="community-interaction-meta-row">
                           <span className="community-interaction-author">{label}</span>
+                          {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                           <span>{props.formatChatTime(reply.created_at)}</span>
                         </div>
+                        {reply.target_reply_id ? (
+                          <QuoteChip quoted={replyById.get(reply.target_reply_id)} displayName={props.displayName} />
+                        ) : null}
                         <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                        <EmbedCards embeds={bundle.embeds} />
                         <ReactionSummary rows={reply.reaction_summary} />
                       </div>
                     </div>
