@@ -717,18 +717,26 @@ function mapMention(row: MentionRow) {
   };
 }
 
-async function mapRootBundle(ctx: any, root: InteractionRootRow, deduped: boolean) {
+async function mapRootBundle(
+  ctx: any,
+  root: InteractionRootRow,
+  deduped: boolean,
+  userIdCache?: Map<string, string | null>,
+) {
   const blocks = await listContentBlocksForRoot(ctx, root._id);
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
   const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
+  const publicActorUserId = root.actorUserId
+    ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
+    : null;
   return {
     deduped,
     root: {
       id: normalizeIdValue(root._id),
       community_id: normalizeIdValue(root.communityId),
       actor_type: root.actorType,
-      actor_user_id: root.actorUserId ? normalizeIdValue(root.actorUserId) : null,
+      actor_user_id: publicActorUserId ?? (root.actorUserId ? normalizeIdValue(root.actorUserId) : null),
       actor_agent_key: root.actorAgentKey ?? null,
       kind: root.kind,
       status: root.status,
@@ -752,11 +760,19 @@ async function mapRootBundle(ctx: any, root: InteractionRootRow, deduped: boolea
   };
 }
 
-async function mapReplyBundle(ctx: any, reply: InteractionReplyRow, deduped: boolean) {
+async function mapReplyBundle(
+  ctx: any,
+  reply: InteractionReplyRow,
+  deduped: boolean,
+  userIdCache?: Map<string, string | null>,
+) {
   const blocks = await listContentBlocksForReply(ctx, reply._id);
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
   const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
+  const publicActorUserId = reply.actorUserId
+    ? await resolvePublicUserId(ctx, reply.actorUserId, userIdCache)
+    : null;
   return {
     deduped,
     reply: {
@@ -765,7 +781,7 @@ async function mapReplyBundle(ctx: any, reply: InteractionReplyRow, deduped: boo
       root_id: normalizeIdValue(reply.rootId),
       seq: Math.max(0, Math.floor(reply.seq ?? 0)),
       actor_type: reply.actorType,
-      actor_user_id: reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null,
+      actor_user_id: publicActorUserId ?? (reply.actorUserId ? normalizeIdValue(reply.actorUserId) : null),
       actor_agent_key: reply.actorAgentKey ?? null,
       target_reply_id: reply.targetReplyId ? normalizeIdValue(reply.targetReplyId) : null,
       status: reply.status,
@@ -1636,7 +1652,8 @@ export const listCommunityInteractionRoots = query({
           .order("desc")
           .take(limit))) as InteractionRootRow[];
 
-    const bundles = await Promise.all(rows.map((row) => mapRootBundle(ctx, row, false)));
+    const userIdCache = new Map<string, string | null>();
+    const bundles = await Promise.all(rows.map((row) => mapRootBundle(ctx, row, false, userIdCache)));
     return {
       roots: bundles,
       next_before_created_at: rows.length === limit && rows.length > 0 ? rows[rows.length - 1]!.createdAt : null,
@@ -1676,7 +1693,8 @@ export const listCommunityInteractionReplies = query({
       .filter((row) => row.status === "live")
       .sort((left, right) => left.seq - right.seq)
       .slice(-limit);
-    const bundles = await Promise.all(filtered.map((row) => mapReplyBundle(ctx, row, false)));
+    const userIdCache = new Map<string, string | null>();
+    const bundles = await Promise.all(filtered.map((row) => mapReplyBundle(ctx, row, false, userIdCache)));
     return {
       root_id: normalizeIdValue(root._id),
       replies: bundles,

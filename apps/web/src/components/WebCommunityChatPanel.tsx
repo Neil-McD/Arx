@@ -185,7 +185,13 @@ export type WebCommunityChatPanelProps = {
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
   interactionProjection?: Omit<
     WebCommunityInteractionProjectionProps,
-    "activeCommunityName" | "displayName" | "getAvatarColor" | "getInitials" | "formatChatTime" | "renderTextWithLinks"
+    | "activeCommunityName"
+    | "profilesByUserId"
+    | "displayName"
+    | "getAvatarColor"
+    | "getInitials"
+    | "formatChatTime"
+    | "renderTextWithLinks"
   > & {
     enabled: boolean;
   };
@@ -818,6 +824,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               <WebCommunityInteractionProjection
                 {...interactionProjection}
                 activeCommunityName={activeCommunity?.name ?? "Community"}
+                profilesByUserId={profilesByUserId}
                 displayName={displayName}
                 getAvatarColor={getAvatarColor}
                 getInitials={getInitials}

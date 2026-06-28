@@ -5,6 +5,8 @@ import type {
   CommunityInteractionReplyBundle,
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
+import type { UserProfile } from "../../../../shared/communityTypes";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 
 export type WebCommunityInteractionProjectionProps = {
   activeCommunityName: string;
@@ -22,6 +24,7 @@ export type WebCommunityInteractionProjectionProps = {
   drawerComposer?: ReactNode;
   onRetryRoots: () => void;
   onRetryReplies: (rootId: string) => void;
+  profilesByUserId: Record<string, UserProfile>;
   displayName: (userId: string) => string;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
@@ -103,17 +106,26 @@ function ReactionSummary(props: {
 function ActorAvatar(props: {
   label: string;
   seed: string;
+  profile?: UserProfile | null;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
 }) {
   return (
-    <div
+    <UserAvatar
       className="community-interaction-avatar"
-      style={{ background: props.getAvatarColor(props.seed || props.label) }}
-      aria-hidden="true"
-    >
-      {props.getInitials(props.label)}
-    </div>
+      readyClassName="has-image"
+      imageClassName="community-interaction-avatar-image"
+      fallbackClassName="community-interaction-avatar-fallback"
+      name={props.label}
+      imageUrl={props.profile?.avatar_url ?? null}
+      focusX={props.profile?.avatar_focus_x ?? 0.5}
+      focusY={props.profile?.avatar_focus_y ?? 0.5}
+      zoom={props.profile?.avatar_zoom ?? 1}
+      fallback={<span>{props.getInitials(props.label)}</span>}
+      fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed || props.label) }}
+      alt=""
+      aria-hidden={true}
+    />
   );
 }
 
@@ -188,6 +200,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               {props.roots.map((bundle) => {
                 const root = bundle.root;
                 const label = actorLabel(root, props.displayName);
+                const profile = root.actor_user_id ? props.profilesByUserId[root.actor_user_id] ?? null : null;
                 const body = bundleText(bundle.content_blocks, root.content_summary);
                 const selected = root.id === props.selectedRootId;
                 return (
@@ -201,6 +214,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     <ActorAvatar
                       label={label}
                       seed={root.actor_user_id ?? root.actor_agent_key ?? root.id}
+                      profile={profile}
                       getAvatarColor={props.getAvatarColor}
                       getInitials={props.getInitials}
                     />
@@ -249,24 +263,50 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           </div>
           <div className="community-interaction-drawer-scroll">
             <div className="community-interaction-drawer-root">
-              <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
-              {canReplyToSelectedRoot ? (
-                <button
-                  className="community-interaction-reply-button"
-                  type="button"
-                  onClick={() => {
-                    if (!selectedRoot?.root.legacy_message_id || !selectedRoot.root.actor_user_id) return;
-                    props.onStartRootReply?.({
-                      id: selectedRoot.root.legacy_message_id,
-                      sender_id: selectedRoot.root.actor_user_id,
-                      body: selectedRootText,
-                      interaction_root_id: selectedRoot.root.id,
-                    });
-                  }}
-                >
-                  Reply
-                </button>
-              ) : null}
+              <div className="community-interaction-thread-anchor">
+                <ActorAvatar
+                  label={selectedRootLabel}
+                  seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
+                  profile={
+                    selectedRoot.root.actor_user_id
+                      ? props.profilesByUserId[selectedRoot.root.actor_user_id] ?? null
+                      : null
+                  }
+                  getAvatarColor={props.getAvatarColor}
+                  getInitials={props.getInitials}
+                />
+                <div className="community-interaction-thread-anchor-content">
+                  <div className="community-interaction-meta-row">
+                    <span className="community-interaction-author">{selectedRootLabel}</span>
+                    <span>{props.formatChatTime(selectedRoot.root.created_at)}</span>
+                    <span>{kindLabel(selectedRoot.root.kind)}</span>
+                  </div>
+                  {selectedRoot.root.title ? (
+                    <div className="community-interaction-title">{selectedRoot.root.title}</div>
+                  ) : null}
+                  <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
+                  <div className="community-interaction-thread-anchor-actions">
+                    <ReactionSummary rows={selectedRoot.root.reaction_summary} />
+                    {canReplyToSelectedRoot ? (
+                      <button
+                        className="community-interaction-reply-button"
+                        type="button"
+                        onClick={() => {
+                          if (!selectedRoot?.root.legacy_message_id || !selectedRoot.root.actor_user_id) return;
+                          props.onStartRootReply?.({
+                            id: selectedRoot.root.legacy_message_id,
+                            sender_id: selectedRoot.root.actor_user_id,
+                            body: selectedRootText,
+                            interaction_root_id: selectedRoot.root.id,
+                          });
+                        }}
+                      >
+                        Reply
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </div>
             {props.repliesError ? (
               <div className="community-interaction-state" role="alert">
@@ -285,12 +325,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 {props.replies.map((bundle) => {
                   const reply = bundle.reply;
                   const label = actorLabel(reply, props.displayName);
+                  const profile = reply.actor_user_id ? props.profilesByUserId[reply.actor_user_id] ?? null : null;
                   const body = bundleText(bundle.content_blocks, reply.content_summary);
                   return (
                     <div key={reply.id} className="community-interaction-reply">
                       <ActorAvatar
                         label={label}
                         seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
+                        profile={profile}
                         getAvatarColor={props.getAvatarColor}
                         getInitials={props.getInitials}
                       />

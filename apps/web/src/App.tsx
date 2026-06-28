@@ -5794,6 +5794,16 @@ export default function App() {
       const actorId = String(event.actor_user_id ?? "").trim();
       if (actorId) ids.add(actorId);
     }
+    for (const bundle of communityInteractionRoots) {
+      const actorId = String(bundle.root.actor_user_id ?? "").trim();
+      if (actorId) ids.add(actorId);
+    }
+    for (const replies of Object.values(communityInteractionRepliesByRootId)) {
+      for (const bundle of replies) {
+        const actorId = String(bundle.reply.actor_user_id ?? "").trim();
+        if (actorId) ids.add(actorId);
+      }
+    }
     if (canonicalSessionUserId) ids.add(canonicalSessionUserId);
     return Array.from(ids);
   }, [
@@ -5801,6 +5811,8 @@ export default function App() {
     activeView,
     canonicalSessionUserId,
     communityActivityEvents,
+    communityInteractionRepliesByRootId,
+    communityInteractionRoots,
     communityMembers,
     communityMessages,
     isWorkspaceRightPanelOpen,

@@ -14,6 +14,7 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
+const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const envExample = read(".env.example");
@@ -50,6 +51,11 @@ assert.match(
   /communityInteractionRootsRequestIdRef[\s\S]*activeCommunityInteractionCommunityIdRef[\s\S]*activeCommunityInteractionCommunityIdRef\.current !== communityId/,
   "App should guard the projection against stale roots after community switches",
 );
+assert.match(
+  app,
+  /visibleCommunityProfileIds[\s\S]*communityInteractionRoots[\s\S]*bundle\.root\.actor_user_id[\s\S]*communityInteractionRepliesByRootId[\s\S]*bundle\.reply\.actor_user_id/,
+  "App should hydrate profiles for canonical root and reply actors",
+);
 
 assert.match(
   chatPanel,
@@ -65,6 +71,11 @@ assert.match(
   chatPanel,
   /showInteractionProjection && interactionProjection[\s\S]*community-interaction-scroll[\s\S]*WebCommunityInteractionProjection[\s\S]*:\s*\([\s\S]*className="chat-messages"/,
   "chat panel should keep the legacy message timeline as the fallback projection",
+);
+assert.match(
+  chatPanel,
+  /WebCommunityInteractionProjection[\s\S]*profilesByUserId=\{profilesByUserId\}/,
+  "chat panel should pass hydrated profile rows into the canonical projection",
 );
 
 assert.match(
@@ -98,11 +109,26 @@ assert.doesNotMatch(
   /createThreadUserMessage|sendCloudCommunityMessage|communityChatMessages/,
   "interaction gateway should not fall back to legacy chat tables",
 );
+assert.match(
+  interactions,
+  /mapRootBundle[\s\S]*resolvePublicUserId\(ctx, root\.actorUserId[\s\S]*actor_user_id: publicActorUserId/,
+  "root read bundles should expose public actor user ids for UI profile hydration",
+);
+assert.match(
+  interactions,
+  /mapReplyBundle[\s\S]*resolvePublicUserId\(ctx, reply\.actorUserId[\s\S]*actor_user_id: publicActorUserId/,
+  "reply read bundles should expose public actor user ids for UI profile hydration",
+);
 
 assert.match(
   projection,
   /selectedRoot[\s\S]*community-interaction-drawer/,
   "projection should render a one-level drawer for the selected root",
+);
+assert.match(
+  projection,
+  /profilesByUserId: Record<string, UserProfile>[\s\S]*UserAvatar[\s\S]*profile=\{profile\}/,
+  "projection should render root/reply avatars from the hydrated profile cache",
 );
 assert.match(
   projection,
@@ -119,6 +145,8 @@ assert.doesNotMatch(
   ".community-interaction-projection.has-drawer",
   ".community-interaction-drawer",
   ".community-interaction-root.selected",
+  ".community-interaction-thread-anchor",
+  ".community-interaction-avatar-image",
   ".community-interaction-reply-list",
   ".app-root.mobile-shell .community-chat .community-interaction-drawer",
 ].forEach((selector) => {
@@ -138,7 +166,7 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*text-only top-level composer sends may use the canonical composer bridge[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*text-only top-level composer sends may use the canonical composer bridge[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(

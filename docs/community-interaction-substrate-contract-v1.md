@@ -267,6 +267,7 @@ Rules:
 - when disabled, the existing legacy chat timeline remains the rendered surface
 - the projection reads roots with `listCommunityInteractionRoots`
 - the projection opens exactly one drawer with replies from `listCommunityInteractionReplies`
+- canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
 - text-only top-level composer sends may use the canonical composer bridge
 - text-only drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id
 - attachment sends and ambiguous legacy reply sends remain on the legacy chat writer during this migration slice
