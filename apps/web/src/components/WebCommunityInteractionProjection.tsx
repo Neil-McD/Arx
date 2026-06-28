@@ -18,6 +18,8 @@ export type WebCommunityInteractionProjectionProps = {
   onSelectRoot: (rootId: string) => void;
   onCloseDrawer: () => void;
   onStartRootReply?: (message: { id: string; sender_id: string; body: string }) => void;
+  mainComposer?: ReactNode;
+  drawerComposer?: ReactNode;
   onRetryRoots: () => void;
   onRetryReplies: (rootId: string) => void;
   displayName: (userId: string) => string;
@@ -147,80 +149,85 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   return (
     <div className={`community-interaction-projection${selectedRoot ? " has-drawer" : ""}`}>
       <div className="community-interaction-main">
-        <div className="community-interaction-feed-header">
-          <div>
-            <div className="community-interaction-feed-title">{props.activeCommunityName}</div>
-            <div className="community-interaction-feed-subtitle">Threads</div>
+        <div className="community-interaction-feed-scroll">
+          <div className="community-interaction-feed-header">
+            <div>
+              <div className="community-interaction-feed-title">{props.activeCommunityName}</div>
+              <div className="community-interaction-feed-subtitle">Threads</div>
+            </div>
+            <button
+              className="community-interaction-icon-button"
+              type="button"
+              onClick={props.onRetryRoots}
+              disabled={props.isLoadingRoots}
+              aria-label="Refresh threads"
+              title="Refresh threads"
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+            </button>
           </div>
-          <button
-            className="community-interaction-icon-button"
-            type="button"
-            onClick={props.onRetryRoots}
-            disabled={props.isLoadingRoots}
-            aria-label="Refresh threads"
-            title="Refresh threads"
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-        </div>
 
-        {props.error ? (
-          <div className="community-interaction-state" role="alert">
-            <div>{props.error}</div>
-            <button type="button" onClick={props.onRetryRoots}>Retry</button>
-          </div>
-        ) : props.isLoadingRoots && props.roots.length === 0 ? (
-          <div className="community-interaction-state" aria-live="polite">
-            <div>Loading threads...</div>
-            <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
-          </div>
-        ) : props.roots.length === 0 ? (
-          <div className="community-interaction-empty">
-            <MessageSquare size={22} aria-hidden="true" />
-            <div>No threads yet</div>
-            <span>New community messages will appear here as canonical threads.</span>
-          </div>
-        ) : (
-          <div className="community-interaction-root-list">
-            {props.roots.map((bundle) => {
-              const root = bundle.root;
-              const label = actorLabel(root, props.displayName);
-              const body = bundleText(bundle.content_blocks, root.content_summary);
-              const selected = root.id === props.selectedRootId;
-              return (
-                <button
-                  key={root.id}
-                  type="button"
-                  className={`community-interaction-root${selected ? " selected" : ""}`}
-                  onClick={() => props.onSelectRoot(root.id)}
-                  aria-pressed={selected}
-                >
-                  <ActorAvatar
-                    label={label}
-                    seed={root.actor_user_id ?? root.actor_agent_key ?? root.id}
-                    getAvatarColor={props.getAvatarColor}
-                    getInitials={props.getInitials}
-                  />
-                  <div className="community-interaction-root-content">
-                    <div className="community-interaction-meta-row">
-                      <span className="community-interaction-author">{label}</span>
-                      <span>{props.formatChatTime(root.created_at)}</span>
-                      <span>{kindLabel(root.kind)}</span>
+          {props.error ? (
+            <div className="community-interaction-state" role="alert">
+              <div>{props.error}</div>
+              <button type="button" onClick={props.onRetryRoots}>Retry</button>
+            </div>
+          ) : props.isLoadingRoots && props.roots.length === 0 ? (
+            <div className="community-interaction-state" aria-live="polite">
+              <div>Loading threads...</div>
+              <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
+            </div>
+          ) : props.roots.length === 0 ? (
+            <div className="community-interaction-empty">
+              <MessageSquare size={22} aria-hidden="true" />
+              <div>No threads yet</div>
+              <span>New community messages will appear here as canonical threads.</span>
+            </div>
+          ) : (
+            <div className="community-interaction-root-list">
+              {props.roots.map((bundle) => {
+                const root = bundle.root;
+                const label = actorLabel(root, props.displayName);
+                const body = bundleText(bundle.content_blocks, root.content_summary);
+                const selected = root.id === props.selectedRootId;
+                return (
+                  <button
+                    key={root.id}
+                    type="button"
+                    className={`community-interaction-root${selected ? " selected" : ""}`}
+                    onClick={() => props.onSelectRoot(root.id)}
+                    aria-pressed={selected}
+                  >
+                    <ActorAvatar
+                      label={label}
+                      seed={root.actor_user_id ?? root.actor_agent_key ?? root.id}
+                      getAvatarColor={props.getAvatarColor}
+                      getInitials={props.getInitials}
+                    />
+                    <div className="community-interaction-root-content">
+                      <div className="community-interaction-meta-row">
+                        <span className="community-interaction-author">{label}</span>
+                        <span>{props.formatChatTime(root.created_at)}</span>
+                        <span>{kindLabel(root.kind)}</span>
+                      </div>
+                      {root.title ? (
+                        <div className="community-interaction-title">{root.title}</div>
+                      ) : null}
+                      <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                      <div className="community-interaction-footer">
+                        <span>{root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}</span>
+                        <ReactionSummary rows={root.reaction_summary} />
+                      </div>
                     </div>
-                    {root.title ? (
-                      <div className="community-interaction-title">{root.title}</div>
-                    ) : null}
-                    <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                    <div className="community-interaction-footer">
-                      <span>{root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}</span>
-                      <ReactionSummary rows={root.reaction_summary} />
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {props.mainComposer ? (
+          <div className="community-interaction-main-composer">{props.mainComposer}</div>
+        ) : null}
       </div>
 
       {selectedRoot ? (
@@ -240,64 +247,69 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               <PanelRightClose size={16} aria-hidden="true" />
             </button>
           </div>
-          <div className="community-interaction-drawer-root">
-            <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
-            {canReplyToSelectedRoot ? (
-              <button
-                className="community-interaction-reply-button"
-                type="button"
-                onClick={() => {
-                  if (!selectedRoot?.root.legacy_message_id || !selectedRoot.root.actor_user_id) return;
-                  props.onStartRootReply?.({
-                    id: selectedRoot.root.legacy_message_id,
-                    sender_id: selectedRoot.root.actor_user_id,
-                    body: selectedRootText,
-                  });
-                }}
-              >
-                Reply
-              </button>
-            ) : null}
-          </div>
-          {props.repliesError ? (
-            <div className="community-interaction-state" role="alert">
-              <div>{props.repliesError}</div>
-              <button type="button" onClick={() => props.onRetryReplies(selectedRoot.root.id)}>Retry</button>
+          <div className="community-interaction-drawer-scroll">
+            <div className="community-interaction-drawer-root">
+              <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
+              {canReplyToSelectedRoot ? (
+                <button
+                  className="community-interaction-reply-button"
+                  type="button"
+                  onClick={() => {
+                    if (!selectedRoot?.root.legacy_message_id || !selectedRoot.root.actor_user_id) return;
+                    props.onStartRootReply?.({
+                      id: selectedRoot.root.legacy_message_id,
+                      sender_id: selectedRoot.root.actor_user_id,
+                      body: selectedRootText,
+                    });
+                  }}
+                >
+                  Reply
+                </button>
+              ) : null}
             </div>
-          ) : props.isLoadingReplies && props.replies.length === 0 ? (
-            <div className="community-interaction-state" aria-live="polite">
-              <div>Loading replies...</div>
-              <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
-            </div>
-          ) : props.replies.length === 0 ? (
-            <div className="community-interaction-drawer-empty">No replies yet.</div>
-          ) : (
-            <div className="community-interaction-reply-list">
-              {props.replies.map((bundle) => {
-                const reply = bundle.reply;
-                const label = actorLabel(reply, props.displayName);
-                const body = bundleText(bundle.content_blocks, reply.content_summary);
-                return (
-                  <div key={reply.id} className="community-interaction-reply">
-                    <ActorAvatar
-                      label={label}
-                      seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
-                      getAvatarColor={props.getAvatarColor}
-                      getInitials={props.getInitials}
-                    />
-                    <div className="community-interaction-reply-content">
-                      <div className="community-interaction-meta-row">
-                        <span className="community-interaction-author">{label}</span>
-                        <span>{props.formatChatTime(reply.created_at)}</span>
+            {props.repliesError ? (
+              <div className="community-interaction-state" role="alert">
+                <div>{props.repliesError}</div>
+                <button type="button" onClick={() => props.onRetryReplies(selectedRoot.root.id)}>Retry</button>
+              </div>
+            ) : props.isLoadingReplies && props.replies.length === 0 ? (
+              <div className="community-interaction-state" aria-live="polite">
+                <div>Loading replies...</div>
+                <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
+              </div>
+            ) : props.replies.length === 0 ? (
+              <div className="community-interaction-drawer-empty">No replies yet.</div>
+            ) : (
+              <div className="community-interaction-reply-list">
+                {props.replies.map((bundle) => {
+                  const reply = bundle.reply;
+                  const label = actorLabel(reply, props.displayName);
+                  const body = bundleText(bundle.content_blocks, reply.content_summary);
+                  return (
+                    <div key={reply.id} className="community-interaction-reply">
+                      <ActorAvatar
+                        label={label}
+                        seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
+                        getAvatarColor={props.getAvatarColor}
+                        getInitials={props.getInitials}
+                      />
+                      <div className="community-interaction-reply-content">
+                        <div className="community-interaction-meta-row">
+                          <span className="community-interaction-author">{label}</span>
+                          <span>{props.formatChatTime(reply.created_at)}</span>
+                        </div>
+                        <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                        <ReactionSummary rows={reply.reaction_summary} />
                       </div>
-                      <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                      <ReactionSummary rows={reply.reaction_summary} />
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {props.drawerComposer ? (
+            <div className="community-interaction-drawer-composer">{props.drawerComposer}</div>
+          ) : null}
         </aside>
       ) : null}
     </div>

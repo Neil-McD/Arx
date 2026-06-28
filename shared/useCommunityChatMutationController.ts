@@ -20,6 +20,22 @@ type ReplyPrefixLike = {
   rest: string;
 };
 
+export type CommunityMessageSendDraft<
+  MessageT extends {
+    id: string;
+    sender_id: string;
+    body: string;
+  },
+  AttachmentT,
+> = {
+  text?: string;
+  attachments?: AttachmentT[];
+  replyingToMessage?: Pick<MessageT, "id" | "sender_id" | "body"> | null;
+  inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
+  clearDraft?: () => void;
+  restoreDraft?: () => void;
+};
+
 type UseCommunityChatMutationControllerArgs<
   SessionT extends SessionLike,
   RowT,
@@ -281,18 +297,25 @@ export function useCommunityChatMutationController<
     }
   }, []);
 
-  const handleSendCommunityMessage = useCallback(async () => {
+  const handleSendCommunityMessage = useCallback(async (
+    draft?: CommunityMessageSendDraft<MessageT, AttachmentT>,
+  ) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return;
     const sessionUserId = resolveRuntimeSessionUserId(session);
     if (!sessionUserId) return;
 
-    const rawText = current.communityMessageInput.trim();
-    const attachmentsToSend = [...current.communityAttachmentsRef.current];
+    const hasExplicitDraft = Boolean(draft);
+    const rawText = String(draft?.text ?? current.communityMessageInput).trim();
+    const attachmentsToSend = draft?.attachments
+      ? [...draft.attachments]
+      : [...current.communityAttachmentsRef.current];
     if (!rawText && attachmentsToSend.length === 0) return;
 
-    const replySnapshot = current.replyingToMessage;
+    const replySnapshot = hasExplicitDraft
+      ? draft?.replyingToMessage ?? null
+      : current.replyingToMessage;
     const replyToId = replySnapshot ? replySnapshot.id : null;
     const bodyToSend = rawText;
 
@@ -317,19 +340,28 @@ export function useCommunityChatMutationController<
     } as MessageT;
 
     const restoreDraft = () => {
+      if (draft?.restoreDraft) {
+        draft.restoreDraft();
+        return;
+      }
       current.setCommunityMessageInput(rawText);
       current.setCommunityAttachments(attachmentsToSend);
       current.setReplyingToMessage(replySnapshot);
     };
 
     current.setCommunityMessages((prev) => [...prev, optimisticMessage]);
-    current.setCommunityMessageInput("");
-    current.setCommunityAttachments([]);
-    current.setReplyingToMessage(null);
+    if (draft?.clearDraft) {
+      draft.clearDraft();
+    } else {
+      current.setCommunityMessageInput("");
+      current.setCommunityAttachments([]);
+      current.setReplyingToMessage(null);
+    }
     current.onOptimisticSendScrollIntent();
 
-    if (current.chatInputRef.current) {
-      current.chatInputRef.current.style.height = "auto";
+    const inputRef = draft?.inputRef ?? current.chatInputRef;
+    if (inputRef?.current) {
+      inputRef.current.style.height = "auto";
     }
 
     current.setIsSendingCommunityMessage(true);
