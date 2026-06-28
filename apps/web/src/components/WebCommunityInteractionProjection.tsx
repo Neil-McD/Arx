@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { ArrowLeft, CornerUpLeft, MessageSquare, PanelRightClose, RefreshCw } from "lucide-react";
+import { ArrowLeft, CornerUpLeft, MessageSquare, PanelRightClose } from "lucide-react";
 import type {
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
@@ -272,23 +272,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   return (
     <div className={`community-interaction-projection${selectedRoot ? " has-drawer" : ""}`}>
       <div className="community-interaction-main">
-        <div className="community-interaction-feed-header">
-          <div>
-            <div className="community-interaction-feed-title">{props.activeCommunityName}</div>
-            <div className="community-interaction-feed-subtitle">Threads</div>
-          </div>
-          <button
-            className="community-interaction-icon-button"
-            type="button"
-            onClick={props.onRetryRoots}
-            disabled={props.isLoadingRoots}
-            aria-label="Refresh threads"
-            title="Refresh threads"
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-        </div>
-
         <div className="community-interaction-feed-scroll" ref={scrollRef}>
           {props.error ? (
             <div className="community-interaction-state" role="alert">
@@ -393,7 +376,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
       {selectedRoot ? (
         <aside className="community-interaction-drawer" aria-label="Thread replies">
-          <div className="community-interaction-drawer-header">
+          <div className="community-interaction-drawer-controls">
             <button
               className="community-interaction-back-button"
               type="button"
@@ -403,10 +386,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             >
               <ArrowLeft size={16} aria-hidden="true" />
             </button>
-            <div>
-              <div className="community-interaction-drawer-title">Replies</div>
-              <div className="community-interaction-drawer-subtitle">{selectedRootLabel}</div>
-            </div>
             <button
               className="community-interaction-icon-button"
               type="button"

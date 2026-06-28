@@ -8816,10 +8816,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 10px 18px 28px;
+  padding: calc(var(--web-topbar-height, 48px) + 10px) 18px 28px;
 }
 
 .community-interaction-drawer {
+  position: relative;
   border-left: 1px solid var(--border-default);
   background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
   display: flex;
@@ -8827,11 +8828,21 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow: hidden;
 }
 
+.community-interaction-drawer-controls {
+  position: absolute;
+  top: calc(var(--web-topbar-height, 48px) + 8px);
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  gap: 6px;
+}
+
 .community-interaction-drawer-scroll {
   flex: 0 1 auto;
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
+  padding-top: calc(var(--web-topbar-height, 48px) + 30px);
 }
 
 .community-interaction-main-composer,
@@ -9481,16 +9492,11 @@ button.community-launch-knowledge-integration-chip:disabled {
     background: var(--bg-app);
   }
 
-  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-header {
-    justify-content: flex-start;
-    gap: 10px;
-  }
-
   .community-chat .community-interaction-projection.has-drawer .community-interaction-back-button {
     display: inline-flex;
   }
 
-  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-header > button.community-interaction-icon-button {
+  .community-chat .community-interaction-projection.has-drawer .community-interaction-drawer-controls .community-interaction-icon-button {
     display: none;
   }
 }
