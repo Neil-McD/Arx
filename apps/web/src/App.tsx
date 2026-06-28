@@ -1164,6 +1164,28 @@ const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const COMMUNITY_INTERACTION_ROOT_LIMIT = 50;
 const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
+const INTERACTION_SELECTED_ROOT_STORAGE_PREFIX = "polynet:interaction:selectedRoot:";
+
+function readStoredInteractionSelectedRoot(communityId: string | null): string | null {
+  if (!communityId) return null;
+  try {
+    const value = window.localStorage.getItem(`${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}`);
+    return value && value.trim() ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredInteractionSelectedRoot(communityId: string | null, rootId: string | null): void {
+  if (!communityId) return;
+  try {
+    const key = `${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}`;
+    if (rootId) window.localStorage.setItem(key, rootId);
+    else window.localStorage.removeItem(key);
+  } catch {
+    // localStorage unavailable; non-fatal.
+  }
+}
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("web");
 
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
@@ -2522,9 +2544,13 @@ export default function App() {
           onUpdate: (roots) => {
             if (cancelled) return;
             setCommunityInteractionRoots(roots);
-            setSelectedCommunityInteractionRootId((current) =>
-              current && roots.some((bundle) => bundle.root.id === current) ? current : null,
-            );
+            setSelectedCommunityInteractionRootId((current) => {
+              if (current && !roots.some((bundle) => bundle.root.id === current)) {
+                writeStoredInteractionSelectedRoot(activeCommunityId, null);
+                return null;
+              }
+              return current;
+            });
             setIsLoadingCommunityInteractions(false);
             setCommunityInteractionError(null);
           },
@@ -2600,16 +2626,24 @@ export default function App() {
     if (!rootId) return;
     setSelectedCommunityInteractionRootId((current) => {
       const next = current === rootId ? null : rootId;
+      writeStoredInteractionSelectedRoot(activeCommunityId, next);
       if (next && !communityInteractionRepliesByRootId[next]) {
         void loadCommunityInteractionReplies(next);
       }
       return next;
     });
-  }, [communityInteractionRepliesByRootId, loadCommunityInteractionReplies]);
+  }, [activeCommunityId, communityInteractionRepliesByRootId, loadCommunityInteractionReplies]);
 
   const handleCloseCommunityInteractionDrawer = useCallback(() => {
     setSelectedCommunityInteractionRootId(null);
-  }, []);
+    writeStoredInteractionSelectedRoot(activeCommunityId, null);
+  }, [activeCommunityId]);
+
+  useEffect(() => {
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
+    const stored = readStoredInteractionSelectedRoot(activeCommunityId);
+    if (stored) setSelectedCommunityInteractionRootId(stored);
+  }, [activeCommunityId]);
 
   const handleToggleCommunityInteractionReaction = useCallback(async (
     targetType: "root" | "reply",
@@ -2666,6 +2700,7 @@ export default function App() {
     if (!usableSession) return;
     if (targetType === "root" && selectedCommunityInteractionRootId === targetId) {
       setSelectedCommunityInteractionRootId(null);
+      writeStoredInteractionSelectedRoot(activeCommunityId, null);
     }
     try {
       await deleteCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId });
