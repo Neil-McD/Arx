@@ -2081,6 +2081,13 @@
   color: var(--text-faint);
 }
 
+/* Desktop: broaden the community nav so the center column isn't a wide empty plain */
+@media (min-width: 641px) {
+  .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
+    grid-template-columns: var(--web-rail-width, 72px) minmax(0, 248px) minmax(0, 1fr);
+  }
+}
+
 /* Extra-tight windows: prevent community nav + feed from colliding */
 @media (max-width: 640px) {
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {

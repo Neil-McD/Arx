@@ -8794,7 +8794,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-projection.has-drawer {
-  grid-template-columns: minmax(360px, 1fr) minmax(320px, 380px);
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 560px);
 }
 
 .community-interaction-main,
@@ -8814,6 +8814,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   padding: 10px 18px 28px;
 }
 
@@ -9204,8 +9206,14 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-feed {
+  margin-top: auto;
   display: grid;
   gap: 2px;
+}
+
+.community-interaction-feed-scroll > .community-interaction-state,
+.community-interaction-feed-scroll > .community-interaction-empty {
+  margin: auto 0;
 }
 
 .community-interaction-day {
