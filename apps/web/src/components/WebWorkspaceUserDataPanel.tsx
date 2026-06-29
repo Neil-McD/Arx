@@ -110,6 +110,11 @@ export type WorkspaceUserPanelRecentSignal = {
     sender: string;
     text: string;
   } | null;
+  media?: {
+    kind: "image" | "video" | "audio" | "file" | "link";
+    thumbnailUrl?: string | null;
+    label?: string | null;
+  } | null;
   target: {
     tab: "chat" | "ai_feed" | "resources" | "events";
     itemId?: string | null;
@@ -1459,6 +1464,31 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
                       ) : null}
                       {signal.subtitle ? (
                         <div className="workspace-community-signal-subtitle">{signal.subtitle}</div>
+                      ) : null}
+                      {signal.media ? (
+                        <div className={`workspace-community-signal-media is-${signal.media.kind}`}>
+                          {signal.media.kind === "image" && signal.media.thumbnailUrl ? (
+                            <img
+                              className="workspace-community-signal-media-thumb"
+                              src={signal.media.thumbnailUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span className="workspace-community-signal-media-chip">
+                              <span className="workspace-community-signal-media-icon" aria-hidden="true">
+                                {signal.media.kind === "video"
+                                  ? "▶"
+                                  : signal.media.kind === "audio"
+                                    ? "♪"
+                                    : signal.media.kind === "link"
+                                      ? "🔗"
+                                      : "📎"}
+                              </span>
+                              {signal.media.label ?? "Attachment"}
+                            </span>
+                          )}
+                        </div>
                       ) : null}
                     </div>
                   </button>

@@ -1,5 +1,6 @@
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { parseReplyPrefix } from "../../../../shared/communityMessageParsing";
+import { classifyMediaKind } from "../../../../shared/attachmentHelpers";
 import type {
   AnalyticsRange,
   CommunityAccess,
@@ -41,12 +42,21 @@ type WorkspaceRightPanelAvatarSource = {
   avatar_zoom?: number | null;
 };
 
+type WorkspaceRightPanelChatAttachment = {
+  type?: string | null;
+  mime?: string | null;
+  name?: string | null;
+  url?: string | null;
+  data_url?: string | null;
+};
+
 type WorkspaceRightPanelChatMessage = {
   id: string;
   sender_id: string;
   body: string;
   reply_to_id?: string | null;
   created_at: string | null;
+  attachments?: readonly WorkspaceRightPanelChatAttachment[] | null;
 };
 
 type WorkspaceRightPanelAiFeedPost = {
@@ -167,6 +177,47 @@ function formatPanelEventTimeLabel(value: string): string | null {
   }).format(date);
 }
 
+// Drop the projection's "Shared attachment: name" summary line — the media chip carries it now.
+function stripSharedAttachmentSummaryLine(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .filter((part) => !/^shared attachments?:/i.test(part.trim()))
+    .join("\n\n")
+    .trim();
+}
+
+// Reduce a message's attachments (or a bare URL) to a single compact signal media descriptor.
+function deriveSignalMedia(
+  attachments: readonly WorkspaceRightPanelChatAttachment[] | null | undefined,
+  body: string,
+): WorkspaceUserPanelRecentSignal["media"] {
+  const list = Array.isArray(attachments) ? attachments : [];
+  let imageThumb: string | null = null;
+  let hasVideo = false;
+  let hasAudio = false;
+  let hasFile = false;
+  for (const attachment of list) {
+    const source =
+      (typeof attachment.data_url === "string" && attachment.data_url.trim()) ||
+      (typeof attachment.url === "string" && attachment.url.trim()) ||
+      null;
+    if (attachment.type === "image" && source) {
+      imageThumb = imageThumb ?? source;
+      continue;
+    }
+    const kind = classifyMediaKind(attachment.mime, attachment.name);
+    if (kind === "video") hasVideo = true;
+    else if (kind === "audio") hasAudio = true;
+    else hasFile = true;
+  }
+  if (imageThumb) return { kind: "image", thumbnailUrl: imageThumb, label: null };
+  if (hasVideo) return { kind: "video", label: "Video" };
+  if (hasAudio) return { kind: "audio", label: "Audio" };
+  if (hasFile) return { kind: "file", label: "Attachment" };
+  if (/\bhttps?:\/\/\S+/i.test(body)) return { kind: "link", label: "Link" };
+  return null;
+}
+
 export function buildWorkspaceRightPanelRecentSignals(params: {
   nowMs?: number;
   communityMessages: readonly WorkspaceRightPanelChatMessage[];
@@ -217,8 +268,11 @@ export function buildWorkspaceRightPanelRecentSignals(params: {
   for (const { message, createdAtMs } of sortedMessages) {
     const senderId = String(message.sender_id ?? "").trim();
     const senderName = senderId ? params.displayName(senderId) : "Member";
-    const snippet = truncatePanelSignalText(message.body, 160);
-    if (!snippet) continue;
+    const hasAttachments = Array.isArray(message.attachments) && message.attachments.length > 0;
+    const media = deriveSignalMedia(message.attachments, message.body);
+    const cleanedBody = hasAttachments ? stripSharedAttachmentSummaryLine(message.body) : message.body;
+    const snippet = truncatePanelSignalText(cleanedBody, 160);
+    if (!snippet && !media) continue;
     const replyToId = String(message.reply_to_id ?? "").trim();
     const replyTarget = replyToId ? params.communityMessageById.get(replyToId) ?? null : null;
     const replyBody = replyTarget
@@ -229,7 +283,8 @@ export function buildWorkspaceRightPanelRecentSignals(params: {
       id: `chat:${message.id}`,
       kind: "chat",
       title: senderName,
-      subtitle: snippet,
+      subtitle: snippet || null,
+      media,
       avatar: senderId ? buildAvatar(senderId, senderName) : null,
       replyContext: replyToId
         ? {
