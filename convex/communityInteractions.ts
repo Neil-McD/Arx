@@ -12,7 +12,18 @@ import {
   toIsoString,
 } from "./communityCore";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
-import { upsertArchiveDocumentForChatMessage } from "./communityArchiveDocuments";
+import {
+  type CommunityInteractionLegacyChatLinkRow,
+  createLegacyCompatibilityChatMessageForInteraction,
+  ensureLegacyCompatibilityChatThread,
+  getLegacyChatLinkByMessage,
+  getLegacyChatLinkByReply,
+  getLegacyChatLinkByRoot,
+  getLinkedLegacyCompatibilityMessage,
+  insertLegacyChatLinkIfMissing,
+  legacyChatIdempotencyKey,
+  mapLegacyCompatibilityMessageRow,
+} from "./communityInteractionLegacyBridge";
 import { resolveLegacyMessageAttachments } from "./communityInteractionLegacyAttachments";
 import {
   normalizeCommunitySourcePolicyString,
@@ -127,19 +138,6 @@ type MentionRow = {
   mentionedAgentKey?: string;
   mentionedRoleKey?: string;
   notifyState: "pending" | "sent" | "suppressed" | "read";
-  createdAt: number;
-  updatedAt: number;
-};
-
-type LegacyChatLinkRow = {
-  _id: any;
-  communityId: any;
-  threadId: any;
-  messageId: any;
-  targetMessageId?: any;
-  linkKind: "root" | "reply";
-  rootId?: any;
-  replyId?: any;
   createdAt: number;
   updatedAt: number;
 };
@@ -269,99 +267,8 @@ function normalizeBeforeNumber(raw: unknown): number | null {
   return Math.max(0, Math.floor(parsed));
 }
 
-function legacyChatIdempotencyKey(messageId: any, kind: "root" | "reply"): string {
-  return `legacy_chat_message:${normalizeIdValue(messageId)}:${kind}`;
-}
-
 function composerIdempotencyKey(idempotencyKey: string, kind: "root" | "reply"): string {
   return `community_composer:${kind}:${idempotencyKey}`.slice(0, MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS);
-}
-
-async function ensureLegacyCompatibilityChatThread(
-  ctx: any,
-  communityId: any,
-  nowMs: number,
-): Promise<CommunityChatThreadLike> {
-  const existing = (await ctx.db
-    .query("communityChatThreads" as any)
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
-    .order("asc")
-    .first()) as CommunityChatThreadLike | null;
-  if (existing) return existing;
-  const threadId = await ctx.db.insert("communityChatThreads" as any, {
-    communityId,
-    lastSeq: 0,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  });
-  const thread = (await ctx.db.get(threadId as any)) as CommunityChatThreadLike | null;
-  if (!thread) throw new Error("community_chat_thread_create_failed");
-  return thread;
-}
-
-async function mapLegacyCompatibilityMessageRow(
-  ctx: any,
-  row: CommunityChatMessageLike,
-  userIdCache?: Map<string, string | null>,
-) {
-  return {
-    id: String(row._id),
-    thread_id: String(row.threadId),
-    seq: Math.max(0, Math.floor(row.seq)),
-    role: row.role,
-    content_json: row.contentJson,
-    sender_id: (await resolvePublicUserId(ctx, row.senderUserId, userIdCache)) ?? normalizeIdValue(row.senderUserId),
-    reply_to_id: row.replyToMessageId ? String(row.replyToMessageId) : null,
-    created_at: toIsoString(row.createdAt),
-  };
-}
-
-async function getLinkedLegacyCompatibilityMessage(
-  ctx: any,
-  link: LegacyChatLinkRow | null,
-): Promise<CommunityChatMessageLike | null> {
-  if (!link?.messageId) return null;
-  return (await ctx.db.get(link.messageId as any)) as CommunityChatMessageLike | null;
-}
-
-async function createLegacyCompatibilityChatMessageForInteraction(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  actorUserId: any;
-  text: string;
-  replyToMessageId?: any;
-  nowMs: number;
-}): Promise<CommunityChatMessageLike> {
-  let replyToMessageId: any | undefined;
-  if (args.replyToMessageId) {
-    const target = (await args.ctx.db.get(args.replyToMessageId as any)) as CommunityChatMessageLike | null;
-    if (!target || normalizeIdValue(target.threadId) !== normalizeIdValue(args.thread._id)) {
-      throw new Error("interaction_legacy_reply_target_invalid");
-    }
-    replyToMessageId = target._id;
-  }
-  const seq = Math.max(0, Math.floor(args.thread.lastSeq ?? 0)) + 1;
-  const messageId = await args.ctx.db.insert("communityChatMessages" as any, {
-    threadId: args.thread._id,
-    seq,
-    role: "user",
-    contentJson: { text: args.text },
-    senderUserId: args.actorUserId,
-    ...(replyToMessageId ? { replyToMessageId } : {}),
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  await args.ctx.db.patch(args.thread._id as any, {
-    lastSeq: seq,
-    updatedAt: args.nowMs,
-  });
-  const row = (await args.ctx.db.get(messageId as any)) as CommunityChatMessageLike | null;
-  if (!row) throw new Error("interaction_legacy_message_create_failed");
-  await upsertArchiveDocumentForChatMessage(args.ctx, {
-    thread: args.thread,
-    message: row,
-  });
-  return row;
 }
 
 async function resolveLegacyReplyTargetForCanonicalReply(args: {
@@ -371,7 +278,7 @@ async function resolveLegacyReplyTargetForCanonicalReply(args: {
   replyToMessageId?: string | null;
 }): Promise<{ targetMessageId: any; targetReplyId?: any }> {
   const requestedTargetMessageId = String(args.replyToMessageId ?? "").trim();
-  let targetLink: LegacyChatLinkRow | null = null;
+  let targetLink: CommunityInteractionLegacyChatLinkRow | null = null;
   if (requestedTargetMessageId) {
     const targetMessage = (await args.ctx.db.get(requestedTargetMessageId as any)) as CommunityChatMessageLike | null;
     if (!targetMessage || normalizeIdValue(targetMessage.threadId) !== normalizeIdValue(args.thread._id)) {
@@ -579,66 +486,6 @@ async function getExistingReplyByIdempotencyKey(ctx: any, communityId: any, idem
       q.eq("communityId", communityId).eq("idempotencyKey", idempotencyKey),
     )
     .first()) as InteractionReplyRow | null;
-}
-
-async function getLegacyChatLinkByMessage(ctx: any, messageId: any): Promise<LegacyChatLinkRow | null> {
-  return (await ctx.db
-    .query("communityInteractionLegacyChatLinks" as any)
-    .withIndex("by_message", (q: any) => q.eq("messageId", messageId))
-    .first()) as LegacyChatLinkRow | null;
-}
-
-async function getLegacyChatLinkByRoot(ctx: any, rootId: any): Promise<LegacyChatLinkRow | null> {
-  return (await ctx.db
-    .query("communityInteractionLegacyChatLinks" as any)
-    .withIndex("by_root", (q: any) => q.eq("rootId", rootId))
-    .first()) as LegacyChatLinkRow | null;
-}
-
-async function getLegacyChatLinkByReply(ctx: any, replyId: any): Promise<LegacyChatLinkRow | null> {
-  return (await ctx.db
-    .query("communityInteractionLegacyChatLinks" as any)
-    .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
-    .first()) as LegacyChatLinkRow | null;
-}
-
-async function insertLegacyChatLinkIfMissing(args: {
-  ctx: any;
-  communityId: any;
-  threadId: any;
-  messageId: any;
-  targetMessageId?: any;
-  linkKind: "root" | "reply";
-  rootId?: any;
-  replyId?: any;
-  nowMs: number;
-}): Promise<LegacyChatLinkRow> {
-  const existing = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
-  if (existing) {
-    if (
-      existing.linkKind !== args.linkKind ||
-      (args.rootId && normalizeIdValue(existing.rootId) !== normalizeIdValue(args.rootId)) ||
-      (args.replyId && normalizeIdValue(existing.replyId) !== normalizeIdValue(args.replyId)) ||
-      (args.targetMessageId && normalizeIdValue(existing.targetMessageId) !== normalizeIdValue(args.targetMessageId))
-    ) {
-      throw new Error("legacy_chat_interaction_link_conflict");
-    }
-    return existing;
-  }
-  const linkId = await args.ctx.db.insert("communityInteractionLegacyChatLinks" as any, {
-    communityId: args.communityId,
-    threadId: args.threadId,
-    messageId: args.messageId,
-    ...(args.targetMessageId ? { targetMessageId: args.targetMessageId } : {}),
-    linkKind: args.linkKind,
-    ...(args.rootId ? { rootId: args.rootId } : {}),
-    ...(args.replyId ? { replyId: args.replyId } : {}),
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  const created = (await args.ctx.db.get(linkId as any)) as LegacyChatLinkRow | null;
-  if (!created) throw new Error("legacy_chat_interaction_link_create_failed");
-  return created;
 }
 
 async function listContentBlocksForRoot(ctx: any, rootId: any): Promise<ContentBlockRow[]> {

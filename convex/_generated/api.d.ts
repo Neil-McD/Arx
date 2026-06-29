@@ -72,6 +72,7 @@ import type * as communityIntelligenceDirectory from "../communityIntelligenceDi
 import type * as communityInteractionBackfill from "../communityInteractionBackfill.js";
 import type * as communityInteractionDemo from "../communityInteractionDemo.js";
 import type * as communityInteractionLegacyAttachments from "../communityInteractionLegacyAttachments.js";
+import type * as communityInteractionLegacyBridge from "../communityInteractionLegacyBridge.js";
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
@@ -265,6 +266,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractionBackfill: typeof communityInteractionBackfill;
   communityInteractionDemo: typeof communityInteractionDemo;
   communityInteractionLegacyAttachments: typeof communityInteractionLegacyAttachments;
+  communityInteractionLegacyBridge: typeof communityInteractionLegacyBridge;
   communityInteractions: typeof communityInteractions;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const legacyBridge = readFileSync(join(root, "convex/communityInteractionLegacyBridge.ts"), "utf8");
 const communityChat = readFileSync(join(root, "convex/communityChat.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
@@ -69,6 +70,11 @@ assert.match(
   /attachment upload migration is deferred[\s\S]*attachment-only legacy messages become bounded markdown summaries/,
   "contract should defer full attachment migration while preserving projection summaries",
 );
+assert.match(
+  contract,
+  /communityInteractionLegacyBridge/,
+  "contract should name the extracted legacy bridge module",
+);
 
 const legacyLinkTable = blockBetween(
   schema,
@@ -91,7 +97,7 @@ const legacyLinkTable = blockBetween(
 ].forEach((needle) => assert.match(legacyLinkTable, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))));
 
 assert.match(
-  interactions,
+  legacyBridge,
   /function legacyChatIdempotencyKey\(messageId: any, kind: "root" \| "reply"\): string \{[\s\S]*legacy_chat_message:\$\{normalizeIdValue\(messageId\)\}:\$\{kind\}/,
   "adapter should derive deterministic idempotency keys from legacy message ids",
 );
@@ -106,9 +112,19 @@ assert.match(
   "adapter should preserve attachment-only legacy rows as bounded markdown summaries",
 );
 assert.match(
-  interactions,
+  legacyBridge,
   /getLegacyChatLinkByMessage[\s\S]*query\("communityInteractionLegacyChatLinks" as any\)[\s\S]*withIndex\("by_message"/,
   "adapter should look up legacy mappings through the legacy-link table",
+);
+assert.match(
+  legacyBridge,
+  /createLegacyCompatibilityChatMessageForInteraction[\s\S]*insert\("communityChatMessages" as any,[\s\S]*upsertArchiveDocumentForChatMessage/,
+  "composer compatibility rows should be isolated in the extracted legacy bridge",
+);
+assert.doesNotMatch(
+  interactions,
+  /query\("communityChatThreads" as any\)|insert\("communityChatMessages" as any\)|insert\("communityInteractionLegacyChatLinks" as any\)/,
+  "canonical interaction core should not directly access legacy chat thread/message/link tables",
 );
 
 const rootPlan = functionBlock(interactions, "planInteractionRootFromLegacyChatMessageCore");

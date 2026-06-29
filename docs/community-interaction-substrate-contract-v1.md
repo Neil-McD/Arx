@@ -197,6 +197,10 @@ Migration should be additive first:
 
 No big-bang rewrite. No duplicated product truth.
 
+The active migration residue inventory lives in `docs/community-interaction-migration-residue-map.md`.
+Anything touching legacy chat tables during the interaction migration must be classified there as
+`KEEP TEMPORARILY`, `BLOCKED BY PARITY`, or `DELETE CANDIDATE`.
+
 ## Current Additive Schema Slice
 
 The first backend slice adds canonical tables beside legacy chat:
@@ -335,6 +339,7 @@ The first compatibility adapter keeps the existing chat mutation alive while dua
 - attachment upload migration is deferred
 - attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
 - legacy chat response shape is unchanged
+- legacy chat thread/message/link table access for the canonical composer compatibility bridge lives in `communityInteractionLegacyBridge`
 
 ## Current Legacy Chat Backfill Slice
 
