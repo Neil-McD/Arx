@@ -54,6 +54,10 @@ import {
 } from "./communityResourceContent";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import {
+  requireSafeCommunitySourceFetcherEndpoint,
+  requireSafeCommunitySourceUrl,
+} from "./communitySourceUrlPolicy";
+import {
   COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT,
   COMMUNITY_RESOURCE_UNSORTED_MODULE_SEGMENT,
   buildCommunityResourceDirectoryFields,
@@ -131,18 +135,6 @@ const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 4;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS = 40_000;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS = 80_000;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS = 8_000;
-const COMMUNITY_RESOURCE_SOURCE_INGESTION_DENIED_HOSTNAME_SUFFIXES = [
-  ".localhost",
-  ".local",
-  ".internal",
-  ".home",
-  ".lan",
-  ".corp",
-  ".arpa",
-  ".test",
-  ".invalid",
-  ".example",
-];
 const GOOGLE_DRIVE_SOURCE_PROVIDER = "google_drive" as const;
 const GOOGLE_DRIVE_SOURCE_OAUTH_STATE_TTL_MS = 10 * 60_000;
 const GOOGLE_DRIVE_SOURCE_OAUTH_FINALIZE_PROCESSING_TIMEOUT_MS = 2 * 60_000;
@@ -879,68 +871,8 @@ function parseGoogleDriveModifiedAt(value: unknown): number | undefined {
   return Number.isFinite(ms) ? ms : undefined;
 }
 
-function isLiteralIpv4(hostname: string): boolean {
-  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
-  const parts = hostname.split(".").map((part) => Number(part));
-  return parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255);
-}
-
-function isLiteralPrivateIpv4(hostname: string): boolean {
-  if (!isLiteralIpv4(hostname)) return false;
-  const parts = hostname.split(".").map((part) => Number(part));
-  const [a, b] = parts as [number, number, number, number];
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    a === 169 && b === 254 ||
-    a === 172 && b >= 16 && b <= 31 ||
-    a === 192 && b === 168 ||
-    a === 100 && b >= 64 && b <= 127 ||
-    a === 198 && (b === 18 || b === 19) ||
-    a >= 224
-  );
-}
-
-function hasEmbeddedPrivateIpv4(hostname: string): boolean {
-  const candidates = hostname.replace(/-/g, ".").match(/\d{1,3}(?:\.\d{1,3}){3}/g) ?? [];
-  return candidates.some(isLiteralPrivateIpv4);
-}
-
-function isDeniedSourceIngestionHostname(hostname: string): boolean {
-  return (
-    !hostname ||
-    hostname === "localhost" ||
-    hostname === "metadata.google.internal" ||
-    hostname.includes(":") ||
-    hostname.startsWith("[") ||
-    hostname.endsWith("]") ||
-    /^\d+$/.test(hostname) ||
-    isLiteralIpv4(hostname) ||
-    hasEmbeddedPrivateIpv4(hostname) ||
-    COMMUNITY_RESOURCE_SOURCE_INGESTION_DENIED_HOSTNAME_SUFFIXES.some((suffix) => hostname.endsWith(suffix))
-  );
-}
-
 function requireSafeSourceIngestionUrl(raw: unknown): string {
-  const url = normalizeOptionalUrl(raw);
-  if (!url) throw new Error("community_source_url_required");
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:") {
-    throw new Error("community_source_url_https_required");
-  }
-  if (parsed.username || parsed.password) {
-    throw new Error("community_source_url_credentials_not_supported");
-  }
-  if (parsed.port && parsed.port !== "443") {
-    throw new Error("community_source_url_port_not_supported");
-  }
-  const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
-  if (isDeniedSourceIngestionHostname(hostname)) {
-    throw new Error("community_source_url_private_or_local");
-  }
-  parsed.hash = "";
-  return parsed.toString();
+  return requireSafeCommunitySourceUrl(raw);
 }
 
 function getHeaderNumber(headers: Headers, name: string): number | null {
@@ -1001,22 +933,7 @@ async function fetchWithTimeout(
 }
 
 function resolveSourceUrlFetcherEndpoint(): string {
-  const raw = normalizeSourceIntegrationString(readEnv(COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV), 2_000);
-  if (!raw) throw new Error("community_source_url_fetcher_not_configured");
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new Error("community_source_url_fetcher_invalid");
-  }
-  if (parsed.protocol !== "https:") throw new Error("community_source_url_fetcher_invalid");
-  if (parsed.username || parsed.password || parsed.hash) {
-    throw new Error("community_source_url_fetcher_invalid");
-  }
-  if (parsed.port && parsed.port !== "443") {
-    throw new Error("community_source_url_fetcher_invalid");
-  }
-  return parsed.toString();
+  return requireSafeCommunitySourceFetcherEndpoint(readEnv(COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV));
 }
 
 function sourceUrlFetcherHeaders(): Record<string, string> {

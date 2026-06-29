@@ -14,6 +14,11 @@ import {
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 import { upsertArchiveDocumentForChatMessage } from "./communityArchiveDocuments";
 import { resolveLegacyMessageAttachments } from "./communityInteractionLegacyAttachments";
+import {
+  normalizeCommunitySourcePolicyString,
+  requireSafeCommunitySourceFetcherEndpoint,
+  requireSafeCommunitySourceUrl,
+} from "./communitySourceUrlPolicy";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -426,21 +431,10 @@ function legacyChatContentBlocks(message: CommunityChatMessageLike): NormalizedC
 }
 
 function normalizeUrl(raw: unknown): { sourceUrl: string; normalizedSourceUrl: string } {
-  const input = normalizeBoundedText(raw, MAX_INTERACTION_URL_CHARS);
-  if (!input) throw new Error("interaction_link_url_required");
-  let url: URL;
-  try {
-    url = new URL(input);
-  } catch {
-    throw new Error("interaction_link_url_invalid");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("interaction_link_url_invalid");
-  }
-  url.hash = "";
+  const url = requireSafeCommunitySourceUrl(raw, MAX_INTERACTION_URL_CHARS);
   return {
-    sourceUrl: input,
-    normalizedSourceUrl: url.toString().slice(0, MAX_INTERACTION_URL_CHARS),
+    sourceUrl: url,
+    normalizedSourceUrl: url.slice(0, MAX_INTERACTION_URL_CHARS),
   };
 }
 
@@ -2067,6 +2061,14 @@ export const deleteCommunityInteractionMessage = mutation({
 const MAX_EMBED_TITLE_CHARS = 300;
 const MAX_EMBED_DESCRIPTION_CHARS = 600;
 const MAX_EMBED_IMAGE_URL_CHARS = 2048;
+const MAX_EMBED_FETCHER_RESPONSE_BYTES = 64_000;
+const INTERACTION_EMBED_SOURCE_FETCHER_ENDPOINT_ENV = "ARX_SOURCE_URL_FETCHER_ENDPOINT";
+const INTERACTION_EMBED_SOURCE_FETCHER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
+const INTERACTION_EMBED_SOURCE_FETCHER_USER_AGENT = "Polynet Community Interaction Embeds/1.0";
+const INTERACTION_EMBED_SOURCE_FETCHER_MAX_BYTES = 1_500_000;
+const INTERACTION_EMBED_SOURCE_FETCHER_MAX_CHARS = 4000;
+const INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS = 8000;
+const INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS = 3;
 
 function boundedEmbedString(raw: unknown, maxChars: number): string | null {
   const value = String(raw ?? "").replace(/\s+/g, " ").trim();
@@ -2080,6 +2082,87 @@ function hostnameOfUrl(raw: string): string | null {
   } catch {
     return null;
   }
+}
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function resolveInteractionEmbedSourceFetcherEndpoint(): string {
+  return requireSafeCommunitySourceFetcherEndpoint(readEnv(INTERACTION_EMBED_SOURCE_FETCHER_ENDPOINT_ENV));
+}
+
+function interactionEmbedSourceFetcherHeaders(): Record<string, string> {
+  const secret = normalizeCommunitySourcePolicyString(readEnv(INTERACTION_EMBED_SOURCE_FETCHER_SECRET_ENV), 4_000);
+  if (!secret) throw new Error("community_source_url_fetcher_secret_not_configured");
+  return {
+    "user-agent": INTERACTION_EMBED_SOURCE_FETCHER_USER_AGENT,
+    accept: "application/json",
+    "content-type": "application/json",
+    authorization: `Bearer ${secret}`,
+  };
+}
+
+async function fetchInteractionEmbedWithTimeout(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readEmbedFetcherJsonBounded(response: Response): Promise<Record<string, unknown>> {
+  const contentLength = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > MAX_EMBED_FETCHER_RESPONSE_BYTES) {
+    throw new Error("source_url_fetcher_response_too_large");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const text = await response.text();
+    if (text.length > MAX_EMBED_FETCHER_RESPONSE_BYTES) throw new Error("source_url_fetcher_response_too_large");
+    return JSON.parse(text || "{}") as Record<string, unknown>;
+  }
+  const decoder = new TextDecoder();
+  let text = "";
+  let totalBytes = 0;
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    totalBytes += next.value.byteLength;
+    if (totalBytes > MAX_EMBED_FETCHER_RESPONSE_BYTES) throw new Error("source_url_fetcher_response_too_large");
+    text += decoder.decode(next.value, { stream: true });
+  }
+  text += decoder.decode();
+  return JSON.parse(text || "{}") as Record<string, unknown>;
+}
+
+function sanitizeEmbedImageUrl(raw: unknown): string | null {
+  const value = boundedEmbedString(raw, MAX_EMBED_IMAGE_URL_CHARS);
+  if (!value) return null;
+  try {
+    return requireSafeCommunitySourceUrl(value, MAX_EMBED_IMAGE_URL_CHARS);
+  } catch {
+    return null;
+  }
+}
+
+function boundedEmbedError(raw: unknown): string {
+  return normalizeBoundedText(raw, 200) || "source_url_fetch_failed";
 }
 
 // Fire-and-forget enrichment for each freshly-created embed (link embeds resolve; others no-op).
@@ -2132,31 +2215,26 @@ export const applyInteractionEmbedEnrichment = internalMutation({
 async function fetchEmbedOpenGraph(
   sourceUrl: string,
 ): Promise<{ title: string | null; description: string | null; imageUrl: string | null }> {
-  const endpoint = String(process.env.ARX_SOURCE_URL_FETCHER_ENDPOINT ?? "").trim();
-  const secret = String(process.env.ARX_SOURCE_URL_FETCHER_SECRET ?? "").trim();
-  if (!endpoint || !secret) throw new Error("source_url_fetcher_not_configured");
-  const response = await fetch(endpoint, {
+  const requestedUrl = requireSafeCommunitySourceUrl(sourceUrl, MAX_INTERACTION_URL_CHARS);
+  const response = await fetchInteractionEmbedWithTimeout(resolveInteractionEmbedSourceFetcherEndpoint(), {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json",
-      authorization: `Bearer ${secret}`,
-    },
+    headers: interactionEmbedSourceFetcherHeaders(),
     body: JSON.stringify({
-      url: sourceUrl,
-      max_bytes: 1_500_000,
-      max_chars: 4000,
-      timeout_ms: 8000,
-      max_redirects: 4,
+      url: requestedUrl,
+      max_bytes: INTERACTION_EMBED_SOURCE_FETCHER_MAX_BYTES,
+      max_chars: INTERACTION_EMBED_SOURCE_FETCHER_MAX_CHARS,
+      timeout_ms: INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS,
+      max_redirects: INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS,
+      accept: "text/html,text/plain,text/markdown,application/json,application/xml,text/xml,*/*;q=0.5",
     }),
   });
   if (!response.ok) throw new Error(`source_url_fetcher_failed_${response.status}`);
-  const payload = (await response.json()) as Record<string, unknown>;
+  const payload = await readEmbedFetcherJsonBounded(response);
   if (payload.ok === false) throw new Error(String(payload.error_code ?? "source_url_fetch_failed"));
   return {
     title: boundedEmbedString(payload.og_title ?? payload.title, MAX_EMBED_TITLE_CHARS),
     description: boundedEmbedString(payload.og_description, MAX_EMBED_DESCRIPTION_CHARS),
-    imageUrl: boundedEmbedString(payload.og_image, MAX_EMBED_IMAGE_URL_CHARS),
+    imageUrl: sanitizeEmbedImageUrl(payload.og_image),
   };
 }
 
@@ -2168,21 +2246,22 @@ export const enrichInteractionEmbed = internalAction({
     });
     if (!embed || embed.embedKind !== "link" || embed.status !== "pending" || !embed.sourceUrl) return;
     try {
-      const og = await fetchEmbedOpenGraph(embed.sourceUrl);
+      const sourceUrl = requireSafeCommunitySourceUrl(embed.sourceUrl, MAX_INTERACTION_URL_CHARS);
+      const og = await fetchEmbedOpenGraph(sourceUrl);
       await ctx.runMutation(internal.communityInteractions.applyInteractionEmbedEnrichment, {
         embedId: args.embedId,
         status: "ready",
         title: og.title,
         description: og.description,
         imageUrl: og.imageUrl,
-        provider: hostnameOfUrl(embed.sourceUrl),
+        provider: hostnameOfUrl(sourceUrl),
       });
     } catch (error) {
       await ctx.runMutation(internal.communityInteractions.applyInteractionEmbedEnrichment, {
         embedId: args.embedId,
         status: "failed",
         provider: hostnameOfUrl(embed.sourceUrl),
-        error: String(error instanceof Error ? error.message : error).slice(0, 200),
+        error: boundedEmbedError(error instanceof Error ? error.message : error),
       });
     }
   },

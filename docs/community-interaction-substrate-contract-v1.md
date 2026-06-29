@@ -298,6 +298,25 @@ Rules:
 - the bridge may schedule async link-embed enrichment after creating pending embed records
 - the bridge does not fetch URLs, scrape pages, process media, promote source traces, or call the compiler synchronously
 
+## Current Async Link Embed Enrichment Slice
+
+Link previews are async projections over canonical interaction content, not part of the message write contract.
+
+Rules:
+
+- composer writes may create pending link embed records from eligible pasted URLs
+- unsafe or unsupported URLs remain as plain message text and do not create fetchable preview embeds
+- eligible preview URLs must pass the shared community source URL policy before storage and again before enrichment
+- preview URLs must be HTTPS, public-shaped, credential-free, custom-port-free, hashless, and not local/private/reserved/metadata/internal-shaped hosts
+- Convex never fetches the user-provided source URL directly
+- the internal enrichment action may only POST bounded requests to the configured first-party source URL fetcher endpoint
+- the configured fetcher endpoint must itself be HTTPS, credential-free, custom-port-free, hashless, and public-shaped
+- the source URL fetcher remains authoritative for DNS resolution checks, public-address pinning, and redirect target revalidation
+- enrichment requests must include byte, character, timeout, redirect, and accept-header bounds
+- fetcher responses must be read with a bounded response cap before JSON parsing
+- returned preview image URLs must pass the same shared community source URL policy or be omitted
+- enrichment failures patch the embed to `failed`; they do not fail or mutate the canonical root/reply text
+
 ## Current Legacy Chat Adapter Slice
 
 The first compatibility adapter keeps the existing chat mutation alive while dual-writing canonical interactions:

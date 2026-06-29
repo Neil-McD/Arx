@@ -87,6 +87,7 @@
     "check:community-resource-builder-tools-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_builder_tools_contract_proof.ts",
     "check:community-resource-content-hydration-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_content_hydration_contract_proof.ts",
     "check:community-source-ingestion-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_source_ingestion_contract_proof.ts",
+    "check:community-source-url-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_source_url_policy_behavior_proof.ts",
     "check:community-source-crawl-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_source_crawl_behavior_proof.ts",
     "check:community-wiki-architect-prompt-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_wiki_architect_prompt_contract_proof.ts",
     "check:community-wiki-architect-proposal-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_wiki_architect_proposal_contract_proof.ts",

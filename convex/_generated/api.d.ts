@@ -81,6 +81,7 @@ import type * as communityRecipientCore from "../communityRecipientCore.js";
 import type * as communityResourceContent from "../communityResourceContent.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
+import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
@@ -273,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   communityResourceContent: typeof communityResourceContent;
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
+  communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communityWikiArchitect: typeof communityWikiArchitect;
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
 const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -36,6 +37,11 @@ assert.match(
   contract,
   /write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously/,
   "contract should delete synchronous unfurls from interaction writes",
+);
+assert.match(
+  contract,
+  /Current Async Link Embed Enrichment Slice[\s\S]*Convex never fetches the user-provided source URL directly[\s\S]*source URL fetcher remains authoritative for DNS resolution checks/,
+  "contract should document the async link embed fetch boundary",
 );
 assert.match(
   contract,
@@ -266,11 +272,83 @@ assert.doesNotMatch(
   "embed enrichment scheduler should not do the enrichment work inline",
 );
 
+assert.match(
+  sourceUrlPolicy,
+  /COMMUNITY_SOURCE_URL_DENIED_HOSTNAME_SUFFIXES[\s\S]*"\.localhost"[\s\S]*"\.internal"[\s\S]*"\.arpa"[\s\S]*"\.invalid"/,
+  "shared source URL policy should deny local-only hostname suffixes",
+);
+assert.match(
+  sourceUrlPolicy,
+  /function isPrivateOrReservedIpv4[\s\S]*10\.0\.0\.0[\s\S]*127\.0\.0\.0[\s\S]*169\.254\.0\.0[\s\S]*172\.16\.0\.0[\s\S]*192\.168\.0\.0/,
+  "shared source URL policy should classify private and link-local IPv4 ranges",
+);
+assert.match(
+  sourceUrlPolicy,
+  /isDeniedCommunitySourceHostname[\s\S]*localhost[\s\S]*metadata\.google\.internal[\s\S]*isLiteralIpv4[\s\S]*hasEmbeddedPrivateIpv4/,
+  "shared source URL policy should reject local, literal IP, and embedded-private-IP hosts",
+);
+assert.match(
+  sourceUrlPolicy,
+  /requireSafeCommunitySourceUrl[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_https_required[\s\S]*parsed\.username \|\| parsed\.password[\s\S]*community_source_url_credentials_not_supported[\s\S]*parsed\.port && parsed\.port !== "443"[\s\S]*community_source_url_port_not_supported/,
+  "shared source URL policy should allow only public-shaped HTTPS source URLs",
+);
+assert.match(
+  sourceUrlPolicy,
+  /requireSafeCommunitySourceFetcherEndpoint[\s\S]*community_source_url_fetcher_not_configured[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_fetcher_invalid[\s\S]*isDeniedCommunitySourceHostname/,
+  "shared source URL policy should validate first-party fetcher endpoints",
+);
+
+assert.match(
+  interactions,
+  /function normalizeUrl\(raw: unknown\)[\s\S]*requireSafeCommunitySourceUrl\(raw, MAX_INTERACTION_URL_CHARS\)/,
+  "link block normalization should require shared safe source URL policy",
+);
+
+const fetchEmbedOpenGraph = interactions.slice(
+  interactions.indexOf("async function fetchEmbedOpenGraph"),
+  interactions.indexOf("export const enrichInteractionEmbed"),
+);
+assert.match(
+  fetchEmbedOpenGraph,
+  /const requestedUrl = requireSafeCommunitySourceUrl\(sourceUrl, MAX_INTERACTION_URL_CHARS\)/,
+  "embed enrichment should revalidate the source URL before broker handoff",
+);
+assert.match(
+  fetchEmbedOpenGraph,
+  /fetchInteractionEmbedWithTimeout\(resolveInteractionEmbedSourceFetcherEndpoint\(\),[\s\S]*headers: interactionEmbedSourceFetcherHeaders\(\)/,
+  "embed enrichment should only call the configured first-party fetcher endpoint",
+);
+assert.doesNotMatch(
+  fetchEmbedOpenGraph,
+  /\bfetch\s*\(\s*(sourceUrl|requestedUrl)|process\.env/,
+  "embed enrichment must not directly fetch user URLs or read raw process env",
+);
+assert.match(
+  fetchEmbedOpenGraph,
+  /max_bytes: INTERACTION_EMBED_SOURCE_FETCHER_MAX_BYTES[\s\S]*max_chars: INTERACTION_EMBED_SOURCE_FETCHER_MAX_CHARS[\s\S]*timeout_ms: INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS[\s\S]*max_redirects: INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS/,
+  "embed enrichment should send bounded fetcher limits",
+);
+assert.match(
+  interactions,
+  /const INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS = 3/,
+  "embed enrichment redirect cap should not exceed the first-party broker hard cap",
+);
+assert.match(
+  fetchEmbedOpenGraph,
+  /readEmbedFetcherJsonBounded\(response\)[\s\S]*sanitizeEmbedImageUrl\(payload\.og_image\)/,
+  "embed enrichment should bound fetcher JSON and sanitize returned image URLs",
+);
+
 const enrichInteractionEmbed = exportedConstBlock(interactions, "enrichInteractionEmbed");
 assert.match(
   enrichInteractionEmbed,
   /internalAction\(\{[\s\S]*fetchEmbedOpenGraph/,
   "external URL fetching should be isolated to the internal embed enrichment action",
+);
+assert.match(
+  enrichInteractionEmbed,
+  /const sourceUrl = requireSafeCommunitySourceUrl\(embed\.sourceUrl, MAX_INTERACTION_URL_CHARS\)[\s\S]*fetchEmbedOpenGraph\(sourceUrl\)[\s\S]*error: boundedEmbedError/,
+  "internal embed enrichment action should fail closed on unsafe URLs and bounded errors",
 );
 
 assert.match(

@@ -69,6 +69,10 @@ const directory = read(directoryPath);
   "## Current Demo Seed Tooling",
   "Demo seed and unseed helpers are internal-only operational tooling, not canonical substrate behavior.",
   "`seedPolynetChatDemo` and `unseedPolynetChatDemo` live outside `communityInteractions`",
+  "## Current Async Link Embed Enrichment Slice",
+  "Convex never fetches the user-provided source URL directly",
+  "the source URL fetcher remains authoritative for DNS resolution checks, public-address pinning, and redirect target revalidation",
+  "returned preview image URLs must pass the same shared community source URL policy or be omitted",
 ].forEach((needle) => assertIncludes(contractPath, contract, needle));
 
 const corePath = "docs/irreducible-core-contract.md";
