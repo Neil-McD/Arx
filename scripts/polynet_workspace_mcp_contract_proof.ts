@@ -324,23 +324,13 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "## Existing `polymcp` Installs",
-  "Polynet setup packet should include legacy polymcp compatibility",
-);
-assertIncludes(
-  integrationsSettings,
-  "New setup should use the server alias `polynet`.",
+  "Use `polynet` as the server alias for new setup.",
   "Polynet setup packet should canonicalize new installs to polynet",
 );
 assertIncludes(
   integrationsSettings,
-  "treat it as the same Polynet server",
-  "Polynet setup packet should treat polymcp as a legacy alias",
-);
-assertIncludes(
-  integrationsSettings,
-  "Do not install both unless the user explicitly wants to migrate the local alias.",
-  "Polynet setup packet should prevent duplicate alias installs",
+  "authenticate that existing server instead of adding a duplicate",
+  "Polynet setup packet should prevent duplicate server installs",
 );
 assertIncludes(
   integrationsSettings,
@@ -384,7 +374,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Add Polynet with the matching setup path below, unless `polynet` or legacy `polymcp` is already configured.",
+  "Add Polynet with the matching setup path below, unless Polynet is already configured.",
   "Polynet setup packet should not duplicate existing MCP registration",
 );
 assertIncludes(
@@ -419,7 +409,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "If `polynet` or legacy `polymcp` already appears as `Needs authentication`, do not re-add it.",
+  "If Polynet already appears as `Needs authentication`, do not re-add it.",
   "Polynet setup packet should route configured Claude Code servers directly to auth",
 );
 assertIncludes(
@@ -448,7 +438,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "If `polynet` or legacy `polymcp` is already configured, do not add it again.",
+  "If Polynet is already configured, do not add it again.",
   "Polynet setup packet should avoid duplicate Codex registration",
 );
 assertIncludes(
