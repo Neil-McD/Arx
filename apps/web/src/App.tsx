@@ -6630,16 +6630,29 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
 
-  const latestActiveCommunityChatSeq = useMemo(() => {
-    let latestSeq: number | null = null;
-    for (const message of communityMessages) {
-      const seq = Number(message.seq);
-      if (!Number.isFinite(seq) || seq <= 0 || seq >= Number.MAX_SAFE_INTEGER) continue;
-      if (String(message.id ?? "").startsWith("pending-")) continue;
-      latestSeq = latestSeq === null ? Math.floor(seq) : Math.max(latestSeq, Math.floor(seq));
+  const latestActiveCommunityChatActivityAt = useMemo(() => {
+    const timestamps: number[] = [];
+    const pushIsoTimestamp = (raw: string | null | undefined) => {
+      const ms = Date.parse(String(raw ?? ""));
+      if (Number.isFinite(ms) && ms > 0) timestamps.push(ms);
+    };
+    for (const bundle of communityInteractionRoots) {
+      if (String(bundle.root.id ?? "").startsWith("pending:")) continue;
+      pushIsoTimestamp(bundle.root.created_at);
+      pushIsoTimestamp(bundle.root.last_reply_at);
     }
-    return latestSeq;
-  }, [communityMessages]);
+    for (const replies of Object.values(communityInteractionRepliesByRootId)) {
+      for (const bundle of replies) {
+        if (String(bundle.reply.id ?? "").startsWith("pending:")) continue;
+        pushIsoTimestamp(bundle.reply.created_at);
+      }
+    }
+    for (const message of communityMessages) {
+      if (String(message.id ?? "").startsWith("pending-")) continue;
+      pushIsoTimestamp(message.created_at);
+    }
+    return timestamps.length > 0 ? Math.max(...timestamps) : null;
+  }, [communityInteractionRepliesByRootId, communityInteractionRoots, communityMessages]);
 
   const latestActiveCommunityAiFeedCreatedAt = useMemo(() => {
     const timestamps = activeCommunityFeedState.live
@@ -6678,15 +6691,17 @@ export default function App() {
       || !activeCommunityId
       || !hasResolvedCommunityChat
       || !isUserAtBottom
-      || latestActiveCommunityChatSeq === null
+      || latestActiveCommunityChatActivityAt === null
     ) {
       return;
     }
     const requestKey = `${activeCommunityId}:chat`;
-    const markerKey = String(latestActiveCommunityChatSeq);
+    const markerKey = String(latestActiveCommunityChatActivityAt);
     if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
     communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
-    void markCommunitySurfaceSeen(activeCommunityId, "chat").catch(() => {
+    void markCommunitySurfaceSeen(activeCommunityId, "chat", {
+      seenAtMs: latestActiveCommunityChatActivityAt,
+    }).catch(() => {
       if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
         delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
       }
@@ -6697,7 +6712,7 @@ export default function App() {
     communityTab,
     hasResolvedCommunityChat,
     isUserAtBottom,
-    latestActiveCommunityChatSeq,
+    latestActiveCommunityChatActivityAt,
     markCommunitySurfaceSeen,
   ]);
 

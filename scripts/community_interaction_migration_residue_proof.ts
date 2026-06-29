@@ -25,6 +25,7 @@ const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const dataController = read("shared/useCommunityChatDataController.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const communityAttention = read("convex/communityAttention.ts");
 
 function assertIncludes(sourceName: string, source: string, needle: string): void {
   assert.ok(source.includes(needle), `${sourceName} should include: ${needle}`);
@@ -65,6 +66,8 @@ assert.match(
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
   "Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.",
+  "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
+  "No longer blockers: canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
 assert.match(
@@ -207,6 +210,26 @@ assert.match(
   app,
   /subscribeCloudCommunityInteractionRoots[\s\S]*subscribeCloudCommunityInteractionReplies/,
   "canonical projection should refresh through canonical interaction subscriptions",
+);
+assert.match(
+  communityAttention,
+  /getLatestCommunityChatActivityAt[\s\S]*query\("communityInteractionRoots" as any\)[\s\S]*by_community_status_createdAt[\s\S]*query\("communityInteractionReplies" as any\)[\s\S]*by_community_status_createdAt/,
+  "community attention chat dots should derive from canonical interaction activity",
+);
+assert.match(
+  schema,
+  /communityInteractionReplies: defineTable\(\{[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
+  "canonical replies should expose a status-scoped community activity index for attention reads",
+);
+assert.doesNotMatch(
+  communityAttention,
+  /communityChatMessages|communityChatThreads|getLatestCommunityChatSeq|chatLastSeenSeq/,
+  "community attention should not depend on legacy chat row or seq markers",
+);
+assert.match(
+  app,
+  /latestActiveCommunityChatActivityAt[\s\S]*communityInteractionRoots[\s\S]*communityInteractionRepliesByRootId[\s\S]*markCommunitySurfaceSeen\(activeCommunityId, "chat", \{[\s\S]*seenAtMs: latestActiveCommunityChatActivityAt/,
+  "web chat seen acknowledgement should send canonical interaction activity timestamps",
 );
 
 assert.match(

@@ -1532,6 +1532,7 @@ export default defineSchema({
     .index("by_root_createdAt", ["rootId", "createdAt"])
     .index("by_root_status_createdAt", ["rootId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
     .index("by_targetReply", ["targetReplyId"])
     .index("by_actorUser", ["actorUserId"])
