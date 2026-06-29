@@ -255,6 +255,7 @@ Rules:
 - reply reads return only one-level drawer replies
 - read APIs do not use legacy chat tables as source-of-truth
 - migration-only legacy attachment hydration may resolve linked legacy chat attachments until canonical attachment backfill is complete
+- migration-only legacy attachment hydration lives outside the canonical interaction core in `communityInteractionLegacyAttachments`
 - viewer reaction state must be loaded only for the visible root/reply target ids, never by scanning all reactions for a viewer
 - reaction summary updates must not rescan every reaction on a target
 - read APIs do not read compiler, source-trace, archive, or memory tables
@@ -336,3 +337,14 @@ Rules:
 - backfill write/materialization failures are not caught after writes begin
 - backfill does not migrate reactions, edits, deletes, or moderation state
 - backfill does not promote source traces, write archive truth, call the compiler, schedule jobs, or change UI behavior
+
+## Current Demo Seed Tooling
+
+Demo seed and unseed helpers are internal-only operational tooling, not canonical substrate behavior.
+
+Rules:
+
+- `seedPolynetChatDemo` and `unseedPolynetChatDemo` live outside `communityInteractions`
+- demo seed data must not be imported by public read/write paths
+- demo cleanup may use broad deletes because it is an internal maintenance tool, not a product read model
+- production chat behavior must not depend on seeded demo rows

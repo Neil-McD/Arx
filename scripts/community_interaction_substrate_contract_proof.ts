@@ -66,6 +66,9 @@ const directory = read(directoryPath);
   "`communityInteractionSourceTraceLinks`",
   "`communityInteractionLegacyChatLinks`",
   "It also adds `interaction` as a product-owned `communitySourceTraces.sourceType`.",
+  "## Current Demo Seed Tooling",
+  "Demo seed and unseed helpers are internal-only operational tooling, not canonical substrate behavior.",
+  "`seedPolynetChatDemo` and `unseedPolynetChatDemo` live outside `communityInteractions`",
 ].forEach((needle) => assertIncludes(contractPath, contract, needle));
 
 const corePath = "docs/irreducible-core-contract.md";

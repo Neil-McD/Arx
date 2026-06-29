@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
+const demo = readFileSync(join(root, "convex/communityInteractionDemo.ts"), "utf8");
 const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -41,8 +43,44 @@ assert.match(
 );
 assert.match(
   contract,
-  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*migration-only legacy attachment hydration[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
+  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*migration-only legacy attachment hydration[\s\S]*communityInteractionLegacyAttachments[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
   "contract should preserve read-model boundaries",
+);
+assert.match(
+  contract,
+  /Current Demo Seed Tooling[\s\S]*seedPolynetChatDemo[\s\S]*unseedPolynetChatDemo[\s\S]*live outside `communityInteractions`/,
+  "contract should keep internal demo tooling outside the canonical interaction core",
+);
+
+assert.match(
+  interactions,
+  /import \{ resolveLegacyMessageAttachments \} from "\.\/communityInteractionLegacyAttachments";/,
+  "canonical interaction core should import migration-only legacy attachment hydration",
+);
+assert.doesNotMatch(
+  interactions,
+  /function resolveLegacyMessageAttachments|ctx\.storage\.getUrl/,
+  "canonical interaction core should not own legacy storage URL resolution",
+);
+assert.match(
+  legacyAttachments,
+  /rawAttachments\.slice\(0, 8\)[\s\S]*ctx\.storage\.getUrl\(storageId as any\)/,
+  "legacy attachment hydration should stay bounded and isolated",
+);
+assert.doesNotMatch(
+  legacyAttachments,
+  /\.collect\(\)|query\("communityChatThreads"|query\("communityChatMessages"/,
+  "legacy attachment hydration should not scan legacy chat tables",
+);
+assert.doesNotMatch(
+  interactions,
+  /seedPolynetChatDemo|unseedPolynetChatDemo|SEED_PEOPLE|SEED_AUTH_PREFIX/,
+  "canonical interaction core should not contain demo seed tooling",
+);
+assert.match(
+  demo,
+  /export const seedPolynetChatDemo = internalMutation[\s\S]*export const unseedPolynetChatDemo = internalMutation/,
+  "demo seed and unseed helpers should live in the dedicated internal demo module",
 );
 
 assert.doesNotMatch(
