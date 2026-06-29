@@ -157,6 +157,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onSaveEdit: WebCommunityChatPanelProps["onSaveEdit"];
   onCancelEdit: WebCommunityChatPanelProps["onCancelEdit"];
   voiceButtonProps: WebCommunityChatPanelProps["voiceButtonProps"];
+  drawerVoiceButtonProps: WebCommunityChatPanelProps["drawerVoiceButtonProps"];
   onCommunityVoiceInputClick: WebCommunityChatPanelProps["onCommunityVoiceInputClick"];
   lightboxModalProps: WebCommunityChatPanelProps["lightboxModalProps"];
   interactionProjection: WebCommunityChatPanelProps["interactionProjection"];
@@ -390,6 +391,7 @@ export function buildWebCommunitySurfaceProjection(
     onSaveEdit: params.onSaveEdit,
     onCancelEdit: params.onCancelEdit,
     voiceButtonProps: params.voiceButtonProps,
+    drawerVoiceButtonProps: params.drawerVoiceButtonProps,
     onCommunityVoiceInputClick: params.onCommunityVoiceInputClick,
     lightboxModalProps: params.lightboxModalProps,
     interactionProjection: params.interactionProjection,

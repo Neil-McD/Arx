@@ -761,6 +761,8 @@ type CommunityVoiceTranscriptTarget = {
   focusInput?: () => void;
 };
 
+type CommunityVoiceButtonOwner = "main" | "drawer";
+
 type PendingCanonicalInteraction = {
   idempotencyKey: string;
   communityId: string;
@@ -2506,6 +2508,8 @@ export default function App() {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const communityFileInputRef = useRef<HTMLInputElement | null>(null);
   const communityVoiceTranscriptTargetRef = useRef<CommunityVoiceTranscriptTarget | null>(null);
+  const [communityVoiceButtonOwner, setCommunityVoiceButtonOwner] =
+    useState<CommunityVoiceButtonOwner | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
   const {
     isCommunityChatLightboxOpen,
@@ -8608,21 +8612,51 @@ export default function App() {
     chatInputRef,
   });
 
-  const handleCommunityVoiceInputClick = useCallback((target: CommunityVoiceTranscriptTarget | null) => {
+  const handleCommunityVoiceInputClick = useCallback((
+    target: CommunityVoiceTranscriptTarget | null,
+    owner: CommunityVoiceButtonOwner,
+  ) => {
     if (!isProfileSetupCompleteForPublicActions) {
       openProfileSetup();
       return;
     }
+    const activeOwner =
+      communityVoiceUiState === "idle" ? null : communityVoiceButtonOwner ?? "main";
+    if (activeOwner !== null && activeOwner !== owner) {
+      showAppToastMessage("Finish the current voice capture first.");
+      return;
+    }
     if (communityVoiceUiState === "idle") {
       communityVoiceTranscriptTargetRef.current = target;
+      setCommunityVoiceButtonOwner(owner);
     }
     void handleVoiceInputClick("community");
   }, [
+    communityVoiceButtonOwner,
     communityVoiceUiState,
     handleVoiceInputClick,
     isProfileSetupCompleteForPublicActions,
     openProfileSetup,
+    showAppToastMessage,
   ]);
+
+  useEffect(() => {
+    if (communityVoiceUiState !== "idle") return;
+    communityVoiceTranscriptTargetRef.current = null;
+    setCommunityVoiceButtonOwner(null);
+  }, [communityVoiceUiState]);
+
+  const activeCommunityVoiceButtonOwner: CommunityVoiceButtonOwner | null =
+    communityVoiceUiState === "idle" ? null : communityVoiceButtonOwner ?? "main";
+  const communityVoiceButtonTitle = isProfileSetupCompleteForPublicActions
+    ? communityVoiceIntent.title
+    : "Finish your profile to use voice input in community chat.";
+  const mainCommunityVoiceButtonState =
+    activeCommunityVoiceButtonOwner === null || activeCommunityVoiceButtonOwner === "main"
+      ? communityVoiceUiState
+      : "idle";
+  const drawerCommunityVoiceButtonState =
+    activeCommunityVoiceButtonOwner === "drawer" ? communityVoiceUiState : "idle";
 
   const communityMessageById = useMemo(() => {
     const map = new Map<string, CommunityChatMessage>();
@@ -10911,11 +10945,19 @@ export default function App() {
       onSaveEdit: handleSaveEdit,
       onCancelEdit: handleCancelEdit,
       voiceButtonProps: {
-        state: communityVoiceUiState,
-        title: isProfileSetupCompleteForPublicActions
-          ? communityVoiceIntent.title
-          : "Finish your profile to use voice input in community chat.",
-        onClick: () => handleCommunityVoiceInputClick(null),
+        state: mainCommunityVoiceButtonState,
+        title: activeCommunityVoiceButtonOwner === "drawer"
+          ? "Finish the current voice capture in the thread first."
+          : communityVoiceButtonTitle,
+        onClick: () => handleCommunityVoiceInputClick(null, "main"),
+        disabled: activeCommunityVoiceButtonOwner === "drawer",
+      },
+      drawerVoiceButtonProps: {
+        state: drawerCommunityVoiceButtonState,
+        title: activeCommunityVoiceButtonOwner === "main"
+          ? "Finish the current voice capture in the main chat first."
+          : communityVoiceButtonTitle,
+        disabled: activeCommunityVoiceButtonOwner === "main",
       },
       onCommunityVoiceInputClick: handleCommunityVoiceInputClick,
       lightboxModalProps: {

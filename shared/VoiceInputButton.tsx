@@ -4,14 +4,16 @@ type VoiceInputButtonProps = {
   state: VoiceUiState;
   title: string;
   onClick: () => void;
+  disabled?: boolean;
 };
 
-export function VoiceInputButton({ state, title, onClick }: VoiceInputButtonProps) {
+export function VoiceInputButton({ state, title, onClick, disabled = false }: VoiceInputButtonProps) {
   return (
     <button
       className={`ask-icon-btn ask-mic ${state}`}
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={title}
       aria-pressed={state === "recording"}
       aria-busy={state === "transcribing"}

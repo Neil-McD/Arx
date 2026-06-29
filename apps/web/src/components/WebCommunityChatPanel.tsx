@@ -70,6 +70,8 @@ type CommunityVoiceTranscriptTarget = {
   focusInput?: () => void;
 };
 
+type CommunityVoiceButtonOwner = "main" | "drawer";
+
 type CommunityChatMessageViewModel = {
   message: CommunityChatMessage;
   showMeta: boolean;
@@ -212,7 +214,11 @@ export type WebCommunityChatPanelProps = {
   onSaveEdit: () => void | Promise<void>;
   onCancelEdit: () => void;
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
-  onCommunityVoiceInputClick: (target: CommunityVoiceTranscriptTarget | null) => void;
+  drawerVoiceButtonProps: Omit<ComponentProps<typeof VoiceInputButton>, "onClick">;
+  onCommunityVoiceInputClick: (
+    target: CommunityVoiceTranscriptTarget | null,
+    owner: CommunityVoiceButtonOwner,
+  ) => void;
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
   interactionProjection?: Omit<
     WebCommunityInteractionProjectionProps,
@@ -343,6 +349,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onSaveEdit,
     onCancelEdit,
     voiceButtonProps,
+    drawerVoiceButtonProps,
     onCommunityVoiceInputClick,
     lightboxModalProps,
     interactionProjection,
@@ -995,8 +1002,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           rows={1}
         />
         <VoiceInputButton
-          {...voiceButtonProps}
-          onClick={() => onCommunityVoiceInputClick(drawerVoiceTranscriptTarget)}
+          {...drawerVoiceButtonProps}
+          onClick={() => onCommunityVoiceInputClick(drawerVoiceTranscriptTarget, "drawer")}
         />
         <button
           className="chat-send ask-send-btn ask-send-btn-v2"
