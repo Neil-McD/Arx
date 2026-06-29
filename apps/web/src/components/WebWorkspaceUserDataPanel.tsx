@@ -33,6 +33,12 @@ import {
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
+import {
+  EmojiPickerButton,
+  QUICK_REACTIONS,
+  ReactionSummary,
+  ThreadReplyPill,
+} from "./communityInteractionRowParts";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
   listWorkspaceDirectoryCanonical,
@@ -118,6 +124,8 @@ export type WorkspaceUserPanelRecentSignal = {
   /** Interaction root id — present on chat signals; enables reactions from the panel. */
   rootId?: string | null;
   reactions?: { emoji: string; count: number; reacted: boolean }[] | null;
+  replyCount?: number | null;
+  lastReplyLabel?: string | null;
   target: {
     tab: "chat" | "ai_feed" | "resources" | "events";
     itemId?: string | null;
@@ -1503,36 +1511,44 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
                         </div>
                       ) : null}
                     </div>
-                    {signal.kind === "chat" && signal.rootId && (props.onToggleSignalReaction || (signal.reactions && signal.reactions.length > 0)) ? (
+                    {signal.kind === "chat" && signal.rootId ? (
                       <div
-                        className="workspace-community-signal-reactions"
+                        className="workspace-community-signal-footer"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        {(signal.reactions ?? []).map((reaction) => (
-                          <button
-                            key={reaction.emoji}
-                            type="button"
-                            className={`workspace-community-signal-reaction${reaction.reacted ? " is-active" : ""}`}
-                            onClick={() => props.onToggleSignalReaction?.(signal.rootId!, reaction.emoji)}
-                          >
-                            <span aria-hidden="true">{reaction.emoji}</span>
-                            <span>{reaction.count}</span>
-                          </button>
-                        ))}
-                        {props.onToggleSignalReaction && props.signalQuickReactions && props.signalQuickReactions.length > 0 ? (
-                          <span className="workspace-community-signal-react-bar">
-                            {props.signalQuickReactions.map((emoji) => (
+                        <ThreadReplyPill
+                          replyCount={signal.replyCount ?? 0}
+                          lastReplyLabel={signal.lastReplyLabel}
+                          onOpen={() => props.onOpenRecentSignal(signal.target)}
+                        />
+                        <ReactionSummary
+                          rows={(signal.reactions ?? []).map((reaction) => ({ emoji: reaction.emoji, count: reaction.count }))}
+                          viewerEmojis={(signal.reactions ?? []).filter((reaction) => reaction.reacted).map((reaction) => reaction.emoji)}
+                          onToggle={
+                            props.onToggleSignalReaction
+                              ? (emoji) => props.onToggleSignalReaction!(signal.rootId!, emoji)
+                              : undefined
+                          }
+                        />
+                        {props.onToggleSignalReaction ? (
+                          <div className="workspace-community-signal-react-bar">
+                            {(props.signalQuickReactions ?? QUICK_REACTIONS).map((emoji) => (
                               <button
                                 key={`add:${emoji}`}
                                 type="button"
                                 className="workspace-community-signal-react-add"
-                                onClick={() => props.onToggleSignalReaction?.(signal.rootId!, emoji)}
+                                onClick={() => props.onToggleSignalReaction!(signal.rootId!, emoji)}
                                 aria-label={`React ${emoji}`}
                               >
                                 {emoji}
                               </button>
                             ))}
-                          </span>
+                            <EmojiPickerButton
+                              className="workspace-community-signal-react-add"
+                              label="Add reaction"
+                              onPick={(emoji) => props.onToggleSignalReaction!(signal.rootId!, emoji)}
+                            />
+                          </div>
                         ) : null}
                       </div>
                     ) : null}

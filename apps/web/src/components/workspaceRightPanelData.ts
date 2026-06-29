@@ -58,6 +58,7 @@ type WorkspaceRightPanelInteractionRoot = {
     actor_user_id: string | null;
     content_summary: string;
     reply_count?: number | null;
+    last_reply_at?: string | null;
     reaction_summary?: readonly { emoji: string; count: number }[] | null;
     viewer_emojis?: readonly string[] | null;
     created_at: string | null;
@@ -183,6 +184,17 @@ function formatPanelEventTimeLabel(value: string): string | null {
   }).format(date);
 }
 
+function formatPanelRelativeTime(iso: string | null, nowMs: number): string | null {
+  const ms = parsePanelSignalTimestampMs(iso);
+  if (ms === null) return null;
+  const diffMin = Math.floor(Math.max(0, nowMs - ms) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
+}
+
 // Drop the projection's "Shared attachment: name" summary line — the media chip carries it now.
 function stripSharedAttachmentSummaryLine(text: string): string {
   return text
@@ -290,10 +302,11 @@ export function buildWorkspaceRightPanelRecentSignals(params: {
       kind: "chat",
       title: actorName,
       subtitle: snippet || null,
-      metaLabel: replyCount > 0 ? `${replyCount} ${replyCount === 1 ? "reply" : "replies"}` : null,
       media,
       rootId: root.id,
       reactions: reactions.length > 0 ? reactions : null,
+      replyCount,
+      lastReplyLabel: replyCount > 0 ? formatPanelRelativeTime(root.last_reply_at ?? null, nowMs) : null,
       avatar: actorId ? buildAvatar(actorId, actorName) : null,
       replyContext: null,
       target: { tab: "chat", itemId: root.id },

@@ -5,9 +5,13 @@ import {
   MessageSquare,
   MoreHorizontal,
   Pencil,
-  SmilePlus,
   Trash2,
 } from "lucide-react";
+import {
+  EmojiPickerButton,
+  QUICK_REACTIONS,
+  ReactionSummary,
+} from "./communityInteractionRowParts";
 import type {
   CommunityInteractionAttachment,
   CommunityInteractionContentBlock,
@@ -63,55 +67,6 @@ export type WebCommunityInteractionProjectionProps = {
   chatLastSeenAt?: number | null;
   onCaughtUp?: () => void;
 };
-
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "👀", "🙏", "🚀", "💯", "✅", "👏", "😮"];
-
-function EmojiPickerButton(props: {
-  className: string;
-  label: string;
-  onPick: (emoji: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-  return (
-    <div className="community-interaction-emoji-picker" ref={ref}>
-      <button
-        type="button"
-        className={props.className}
-        aria-label={props.label}
-        title={props.label}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <SmilePlus size={15} aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className="community-interaction-emoji-popover" role="menu">
-          {QUICK_EMOJIS.map((emoji) => (
-            <button
-              key={emoji}
-              type="button"
-              className="community-interaction-emoji-option"
-              onClick={() => {
-                props.onPick(emoji);
-                setOpen(false);
-              }}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function actorLabel(
   actor: {
@@ -197,8 +152,6 @@ function stripSharedAttachmentSummary(text: string, hasAttachments: boolean): st
     .join("\n\n")
     .trim();
 }
-
-const QUICK_REACTIONS = ["👍", "❤️", "🔥"];
 
 function OverflowMenu(props: { onEdit?: () => void; onDelete?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -327,31 +280,6 @@ function MessageActions(props: {
         <MessageSquare size={15} aria-hidden="true" />
       </button>
       <OverflowMenu onEdit={props.onEdit} onDelete={props.onDelete} />
-    </div>
-  );
-}
-
-function ReactionSummary(props: {
-  rows: Array<{ emoji: string; count: number }>;
-  viewerEmojis?: string[];
-  onToggle?: (emoji: string) => void;
-}) {
-  if (props.rows.length === 0) return null;
-  const viewer = new Set(props.viewerEmojis ?? []);
-  return (
-    <div className="community-interaction-reactions" aria-label="Reactions">
-      {props.rows.map((row) => (
-        <button
-          key={row.emoji}
-          type="button"
-          className={`community-interaction-reaction${viewer.has(row.emoji) ? " is-mine" : ""}`}
-          onClick={() => props.onToggle?.(row.emoji)}
-          disabled={!props.onToggle}
-        >
-          <span>{row.emoji}</span>
-          <span>{row.count}</span>
-        </button>
-      ))}
     </div>
   );
 }

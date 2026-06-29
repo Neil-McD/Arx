@@ -31365,6 +31365,20 @@ button.message-citation-chip:hover {
   background: color-mix(in srgb, var(--accent, #7c5cff) 22%, transparent);
 }
 
+/* Chat-signal footer reuses the feed's reaction + reply-pill components/classes so it reads
+   identically to the main feed, just stacked compactly in the panel. */
+.workspace-community-signal-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.workspace-community-signal-footer .community-interaction-reactions {
+  flex-wrap: wrap;
+}
+
 .workspace-community-signal-reply.chat-reply-quote {
   max-width: 100%;
   width: fit-content;
