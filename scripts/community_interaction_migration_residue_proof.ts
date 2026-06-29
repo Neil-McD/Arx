@@ -11,6 +11,7 @@ function read(path: string): string {
 const packageJson = read("package.json");
 const residueMap = read("docs/community-interaction-migration-residue-map.md");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
+const app = read("apps/web/src/App.tsx");
 const interactions = read("convex/communityInteractions.ts");
 const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
@@ -49,11 +50,11 @@ assert.match(
   "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
   "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
   "| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` |",
-  "| R-006 | Legacy chat realtime subscription feeding projection refresh | `DELETE CANDIDATE` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
   "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
+  "Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
 assert.match(
@@ -128,6 +129,16 @@ assert.match(
   chatPanel,
   /showInteractionProjection[\s\S]*WebCommunityInteractionProjection[\s\S]*className="chat-messages"/,
   "chat panel should keep canonical projection and legacy fallback in one visible branch",
+);
+assert.match(
+  app,
+  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  "legacy chat realtime should be disabled while canonical projection is active",
+);
+assert.match(
+  app,
+  /subscribeCloudCommunityInteractionRoots[\s\S]*subscribeCloudCommunityInteractionReplies/,
+  "canonical projection should refresh through canonical interaction subscriptions",
 );
 
 assert.match(

@@ -44,8 +44,18 @@ assert.match(
 );
 assert.match(
   app,
+  /subscribeCloudCommunityInteractionRoots[\s\S]*subscribeCloudCommunityInteractionReplies/,
+  "App should subscribe to canonical interaction roots and replies directly",
+);
+assert.match(
+  app,
+  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  "legacy chat realtime should run only for the legacy timeline fallback",
+);
+assert.match(
+  app,
   /onCommunityMessageSent:[\s\S]*loadCommunityInteractionRoots\(communityId, session\)/,
-  "legacy chat writes should refresh the canonical projection after send",
+  "send completion should request canonical projection refresh through canonical reads",
 );
 assert.match(
   app,
@@ -218,7 +228,7 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*text-only top-level composer sends may use the canonical composer bridge[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled while canonical interaction projection is active[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*text-only top-level composer sends may use the canonical composer bridge[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(

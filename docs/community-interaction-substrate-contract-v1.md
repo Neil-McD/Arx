@@ -277,11 +277,13 @@ Rules:
 - when disabled, the existing legacy chat timeline remains the rendered surface
 - the projection reads roots with `listCommunityInteractionRoots`
 - the projection opens exactly one drawer with replies from `listCommunityInteractionReplies`
+- the projection subscribes to canonical interaction roots and replies directly
+- legacy chat realtime is disabled while canonical interaction projection is active and remains only for the legacy timeline fallback
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
 - text-only top-level composer sends may use the canonical composer bridge
 - text-only drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id
 - attachment sends and ambiguous legacy reply sends remain on the legacy chat writer during this migration slice
-- successful legacy sends may refresh the projection after the canonical adapter dual-write completes
+- successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
 

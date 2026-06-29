@@ -2916,7 +2916,9 @@ export default function App() {
   ]);
 
   useCommunityChatRealtime({
-    isEnabled: activePage === "community" && hasResolvedCommunityChat,
+    // Legacy chat realtime is only for the legacy timeline fallback. The canonical
+    // projection subscribes to interaction roots/replies through canonical queries.
+    isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
     session: session,
     ensureSession: ensureUsableAuthSession,
     activeCommunityId,

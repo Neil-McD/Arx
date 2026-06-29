@@ -16,8 +16,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 | R-002 | Legacy compatibility message rows created by canonical composer | `KEEP TEMPORARILY` | `convex/communityInteractionLegacyBridge.ts` | Delete after archive, realtime, digests, and legacy row-shaped optimistic replacement no longer require `communityChatMessages`. |
 | R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `convex/communityInteractionLegacyBridge.ts` | Delete after historical chat rows are fully backfilled and no UI or adapter needs legacy-to-canonical id mapping. |
 | R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` | `convex/communityInteractionAttachmentBridge.ts`, `convex/communityInteractionLegacyAttachments.ts`, `apps/web/src/components/communityInteractionFeed.tsx` | Delete after native canonical attachment writes, historical backfill, and projection rendering are all canonical-only. |
-| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` | `VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION`, `WebCommunityChatPanel` | Delete after canonical projection is the only community chat surface in staging and production. |
-| R-006 | Legacy chat realtime subscription feeding projection refresh | `DELETE CANDIDATE` | `useCommunityChatRealtime`, `onCommunityMessageSent` refresh hooks | Delete after canonical interaction subscriptions fully cover roots, replies, reactions, edits, deletes, and pending states. |
+| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` | `VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION`, `WebCommunityChatPanel`, `useCommunityChatRealtime` | Delete after canonical projection is the only community chat surface in staging and production. |
 | R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` | `convex/communityInteractionBackfill.ts` | Delete after historical `communityChatMessages` are migrated and audited. |
 
 ## Drift Boundaries
@@ -28,6 +27,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 - Canonical read bundles must prefer `communityInteractionAttachments`; legacy attachment hydration may only run as an absent-canonical-row fallback until attachment parity exists.
 - The web interaction gateway must not call legacy chat mutations.
 - The shared community send controller may fall back to legacy sends only for attachments or replies that cannot be mapped to a canonical root.
+- Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.
 
 ## Next Deletion Order
 
