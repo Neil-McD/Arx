@@ -756,6 +756,11 @@ type CommunityInteractionRoot = CommunityInteractionRootBundle;
 type CommunityInteractionReply = CommunityInteractionReplyBundle;
 type CommunityInteractionRootChangeReason = "initial" | "newer" | "older" | "reset";
 
+type CommunityVoiceTranscriptTarget = {
+  appendTranscript: (transcript: string) => void;
+  focusInput?: () => void;
+};
+
 type PendingCanonicalInteraction = {
   idempotencyKey: string;
   communityId: string;
@@ -2500,6 +2505,7 @@ export default function App() {
   const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const communityFileInputRef = useRef<HTMLInputElement | null>(null);
+  const communityVoiceTranscriptTargetRef = useRef<CommunityVoiceTranscriptTarget | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
   const {
     isCommunityChatLightboxOpen,
@@ -8597,9 +8603,26 @@ export default function App() {
     },
     appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),
     focusWorkspaceInput: focusWorkspaceComposer,
+    resolveCommunityTranscriptTarget: () => communityVoiceTranscriptTargetRef.current,
     setCommunityMessageInput,
     chatInputRef,
   });
+
+  const handleCommunityVoiceInputClick = useCallback((target: CommunityVoiceTranscriptTarget | null) => {
+    if (!isProfileSetupCompleteForPublicActions) {
+      openProfileSetup();
+      return;
+    }
+    if (communityVoiceUiState === "idle") {
+      communityVoiceTranscriptTargetRef.current = target;
+    }
+    void handleVoiceInputClick("community");
+  }, [
+    communityVoiceUiState,
+    handleVoiceInputClick,
+    isProfileSetupCompleteForPublicActions,
+    openProfileSetup,
+  ]);
 
   const communityMessageById = useMemo(() => {
     const map = new Map<string, CommunityChatMessage>();
@@ -10853,6 +10876,8 @@ export default function App() {
       },
       onSetReplyingToMessage: setReplyingToMessage,
       onRemoveCommunityAttachment: removeCommunityAttachment,
+      onCommunityAttachmentError: setCommunityChatError,
+      onIngestCommunityAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
       onCommunityFileInputChange: handleCommunityFileInputChange,
       onCommunityAttachmentDrop: handleCommunityAttachmentDrop,
       onCommunityAttachmentDragEnter: handleCommunityAttachmentDragEnter,
@@ -10890,14 +10915,9 @@ export default function App() {
         title: isProfileSetupCompleteForPublicActions
           ? communityVoiceIntent.title
           : "Finish your profile to use voice input in community chat.",
-        onClick: () => {
-          if (!isProfileSetupCompleteForPublicActions) {
-            openProfileSetup();
-            return;
-          }
-          void handleVoiceInputClick("community");
-        },
+        onClick: () => handleCommunityVoiceInputClick(null),
       },
+      onCommunityVoiceInputClick: handleCommunityVoiceInputClick,
       lightboxModalProps: {
         isOpen: isCommunityChatLightboxOpen,
         images: communityChatLightboxImages,

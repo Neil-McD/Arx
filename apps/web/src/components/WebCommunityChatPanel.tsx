@@ -2,9 +2,11 @@ import type {
   ChangeEventHandler,
   ClipboardEventHandler,
   ComponentProps,
+  Dispatch,
   DragEventHandler,
   MutableRefObject,
   ReactNode,
+  SetStateAction,
   UIEventHandler,
 } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,6 +28,8 @@ import {
   type ReplyPrefix,
 } from "../../../../shared/communityMessageParsing";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
+import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
+import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 import {
@@ -59,6 +63,11 @@ type CommunityChatSendDraft = {
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
   restoreDraft?: () => void;
+};
+
+type CommunityVoiceTranscriptTarget = {
+  appendTranscript: (transcript: string) => void;
+  focusInput?: () => void;
 };
 
 type CommunityChatMessageViewModel = {
@@ -117,6 +126,9 @@ const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
   message_unavailable_reason: "no_mutual_community",
 };
 
+const COMMUNITY_ATTACHMENT_ACCEPT =
+  "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
+
 export type WebCommunityChatPanelProps = {
   activeCommunity: { id: string; name: string; owner_id?: string | null } | null;
   session: unknown | null;
@@ -165,6 +177,12 @@ export type WebCommunityChatPanelProps = {
   onScrollToBottom: () => void;
   onSetReplyingToMessage: (message: CommunityReplyTarget | null) => void;
   onRemoveCommunityAttachment: (id: string) => void;
+  onCommunityAttachmentError: Dispatch<SetStateAction<string | null>>;
+  onIngestCommunityAttachmentsFromFileList: (
+    files: FileList | readonly File[],
+    existing: CommunityMessageAttachment[],
+    onError: (message: string) => void,
+  ) => Promise<CommunityMessageAttachment[]>;
   onCommunityFileInputChange: ChangeEventHandler<HTMLInputElement>;
   onCommunityAttachmentDrop: DragEventHandler<HTMLDivElement>;
   onCommunityAttachmentDragEnter: DragEventHandler<HTMLDivElement>;
@@ -194,6 +212,7 @@ export type WebCommunityChatPanelProps = {
   onSaveEdit: () => void | Promise<void>;
   onCancelEdit: () => void;
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
+  onCommunityVoiceInputClick: (target: CommunityVoiceTranscriptTarget | null) => void;
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
   interactionProjection?: Omit<
     WebCommunityInteractionProjectionProps,
@@ -293,6 +312,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onScrollToBottom,
     onSetReplyingToMessage,
     onRemoveCommunityAttachment,
+    onCommunityAttachmentError,
+    onIngestCommunityAttachmentsFromFileList,
     onCommunityFileInputChange,
     onCommunityAttachmentDrop,
     onCommunityAttachmentDragEnter,
@@ -322,6 +343,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onSaveEdit,
     onCancelEdit,
     voiceButtonProps,
+    onCommunityVoiceInputClick,
     lightboxModalProps,
     interactionProjection,
   } = props;
@@ -334,7 +356,34 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [drawerReplyTarget, setDrawerReplyTarget] = useState<CommunityReplyTarget | null>(null);
   const [drawerReplyInput, setDrawerReplyInput] = useState("");
   const [drawerReplyMentions, setDrawerReplyMentions] = useState<CommittedMention[]>([]);
+  const [drawerReplyAttachments, setDrawerReplyAttachments] = useState<CommunityMessageAttachment[]>([]);
+  const drawerReplyAttachmentsRef = useRef<CommunityMessageAttachment[]>([]);
+  const drawerReplyFileInputRef = useRef<HTMLInputElement | null>(null);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const setDrawerReplyAttachmentsAndRef = useCallback<
+    Dispatch<SetStateAction<CommunityMessageAttachment[]>>
+  >((update) => {
+    setDrawerReplyAttachments((previous) => {
+      const next =
+        typeof update === "function"
+          ? (update as (value: CommunityMessageAttachment[]) => CommunityMessageAttachment[])(previous)
+          : update;
+      drawerReplyAttachmentsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const {
+    handleAttachmentFileInputChange: handleDrawerReplyFileInputChange,
+    handleAttachmentPaste: handleDrawerReplyAttachmentPaste,
+    removeAttachment: removeDrawerReplyAttachment,
+  } = useMessageAttachmentInputController<CommunityMessageAttachment>({
+    attachmentsRef: drawerReplyAttachmentsRef,
+    setAttachments: setDrawerReplyAttachmentsAndRef,
+    setError: onCommunityAttachmentError,
+    ingestAttachmentsFromFileList: onIngestCommunityAttachmentsFromFileList,
+  });
 
   // Members available to @-mention: everyone we have a profile for, except yourself.
   const mentionCandidates = useMemo<MentionCandidate[]>(() => {
@@ -501,10 +550,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   useEffect(() => {
     setDrawerReplyTarget(rootReplyTarget);
     setDrawerReplyInput("");
+    setDrawerReplyMentions([]);
+    setDrawerReplyAttachmentsAndRef([]);
     if (drawerReplyInputRef.current) {
       drawerReplyInputRef.current.style.height = "auto";
     }
-  }, [activeCommunity?.id, rootReplyTarget]);
+  }, [activeCommunity?.id, rootReplyTarget, setDrawerReplyAttachmentsAndRef]);
 
   useEffect(() => {
     setProfileCommunityContextByUserId({});
@@ -604,29 +655,63 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       ),
   });
 
+  const focusDrawerReplyInput = useCallback(() => {
+    const input = drawerReplyInputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+    input.focus();
+  }, []);
+
+  const appendDrawerVoiceTranscript = useCallback((transcript: string) => {
+    const normalized = transcript.trim();
+    if (!normalized) return;
+    setDrawerReplyInput((previous) => mergeVoiceTranscript(previous, normalized));
+    if (selectedInteractionRootId) {
+      onThreadTypingSignal?.(selectedInteractionRootId);
+    }
+  }, [selectedInteractionRootId, onThreadTypingSignal]);
+
+  const drawerVoiceTranscriptTarget = useMemo<CommunityVoiceTranscriptTarget>(
+    () => ({
+      appendTranscript: appendDrawerVoiceTranscript,
+      focusInput: focusDrawerReplyInput,
+    }),
+    [appendDrawerVoiceTranscript, focusDrawerReplyInput],
+  );
+
   const handleSendDrawerReply = useCallback(async () => {
     const target = drawerReplyTarget;
     const text = drawerReplyInput.trim();
-    if (!target || !text) return;
+    const attachments = [...drawerReplyAttachmentsRef.current];
+    if (!target || (!text && attachments.length === 0)) return;
     // Only send mentions whose @DisplayName token still survives in the final text.
     const mentions = drawerReplyMentions.filter((mention) => text.includes(`@${mention.displayName}`));
     await onSendCommunityMessage({
       text,
-      attachments: [],
+      attachments,
       replyingToMessage: target,
       mentions,
       inputRef: drawerReplyInputRef,
       clearDraft: () => {
         setDrawerReplyInput("");
         setDrawerReplyMentions([]);
+        setDrawerReplyAttachmentsAndRef([]);
       },
       restoreDraft: () => {
         setDrawerReplyTarget(target);
         setDrawerReplyInput(text);
         setDrawerReplyMentions(mentions);
+        setDrawerReplyAttachmentsAndRef(attachments);
       },
     });
-  }, [drawerReplyInput, drawerReplyMentions, drawerReplyTarget, onSendCommunityMessage]);
+  }, [
+    drawerReplyInput,
+    drawerReplyMentions,
+    drawerReplyTarget,
+    onSendCommunityMessage,
+    setDrawerReplyAttachmentsAndRef,
+  ]);
 
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
@@ -636,6 +721,67 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         !hasCommunityTimelineItems &&
         !communityChatError &&
         (isLoadingChat || !hasResolvedCommunityChat))));
+
+  const renderCommunityAttachmentsPreview = (
+    attachments: CommunityMessageAttachment[],
+    onRemove: (id: string) => void,
+    className = "community-attachments-preview",
+  ) => {
+    if (attachments.length === 0) return null;
+    const { imageAttachments, fileAttachments } = partitionCommunityAttachments(attachments);
+    const gridCount = Math.min(Math.max(imageAttachments.length, 1), 4);
+    return (
+      <div className={className}>
+        {imageAttachments.length > 0 && (
+          <div className={`chat-media-grid count-${gridCount} chat-media-grid-composer`}>
+            {imageAttachments.map((item) => (
+              <div key={item.attachment.id} className="chat-media-item chat-media-item-static">
+                <img src={item.url} alt={item.name} />
+                <button
+                  type="button"
+                  className="chat-media-remove"
+                  onClick={() => onRemove(item.attachment.id)}
+                  title="Remove"
+                  aria-label={`Remove ${item.name}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {fileAttachments.length > 0 && (
+          <div className="attachments-preview">
+            {fileAttachments.map((att) => (
+              <div key={att.id} className="attachment-item" title={att.name}>
+                <div className="attachment-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                    <path d="M16 13H8" />
+                    <path d="M16 17H8" />
+                    <path d="M10 9H8" />
+                  </svg>
+                </div>
+                <span className="attachment-name">{att.name}</span>
+                <button
+                  className="attachment-remove"
+                  type="button"
+                  onClick={() => onRemove(att.id)}
+                  title="Remove"
+                  aria-label={`Remove ${att.name}`}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const mainCommunityComposer = (
     <>
@@ -660,61 +806,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         </div>
       )}
 
-      {communityAttachments.length > 0 && (() => {
-        const { imageAttachments, fileAttachments } = partitionCommunityAttachments(communityAttachments);
-        const gridCount = Math.min(Math.max(imageAttachments.length, 1), 4);
-        return (
-          <div className="community-attachments-preview">
-            {imageAttachments.length > 0 && (
-              <div className={`chat-media-grid count-${gridCount} chat-media-grid-composer`}>
-                {imageAttachments.map((item) => (
-                  <div key={item.attachment.id} className="chat-media-item chat-media-item-static">
-                    <img src={item.url} alt={item.name} />
-                    <button
-                      type="button"
-                      className="chat-media-remove"
-                      onClick={() => onRemoveCommunityAttachment(item.attachment.id)}
-                      title="Remove"
-                      aria-label={`Remove ${item.name}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {fileAttachments.length > 0 && (
-              <div className="attachments-preview">
-                {fileAttachments.map((att) => (
-                  <div key={att.id} className="attachment-item" title={att.name}>
-                    <div className="attachment-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <path d="M14 2v6h6" />
-                        <path d="M16 13H8" />
-                        <path d="M16 17H8" />
-                        <path d="M10 9H8" />
-                      </svg>
-                    </div>
-                    <span className="attachment-name">{att.name}</span>
-                    <button
-                      className="attachment-remove"
-                      type="button"
-                      onClick={() => onRemoveCommunityAttachment(att.id)}
-                      title="Remove"
-                      aria-label={`Remove ${att.name}`}
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {renderCommunityAttachmentsPreview(communityAttachments, onRemoveCommunityAttachment)}
 
       <div className="chat-input-bar">
         <MentionAutocompleteMenu
@@ -746,7 +838,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           }}
           type="file"
           multiple
-          accept="image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
+          accept={COMMUNITY_ATTACHMENT_ACCEPT}
           style={{ display: "none" }}
           onChange={onCommunityFileInputChange}
         />
@@ -838,11 +930,44 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           </button>
         </div>
       ) : null}
+      {renderCommunityAttachmentsPreview(
+        drawerReplyAttachments,
+        removeDrawerReplyAttachment,
+        "community-attachments-preview community-interaction-reply-attachments-preview",
+      )}
       <div className="chat-input-bar community-interaction-reply-input-bar">
         <MentionAutocompleteMenu
           autocomplete={drawerMention}
           getAvatarColor={getAvatarColor}
           getInitials={getInitials}
+        />
+        <button
+          className="ask-icon-btn ask-plus"
+          type="button"
+          onClick={() => drawerReplyFileInputRef.current?.click()}
+          disabled={
+            isAuthRecoveringSignedIn ||
+            !hasSession ||
+            !activeCommunity ||
+            !canUseComposer ||
+            isSendingCommunityMessage
+          }
+          aria-label="Attach files to reply"
+          title="Attach files to reply"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+        <input
+          ref={(node) => {
+            drawerReplyFileInputRef.current = node;
+          }}
+          type="file"
+          multiple
+          accept={COMMUNITY_ATTACHMENT_ACCEPT}
+          style={{ display: "none" }}
+          onChange={handleDrawerReplyFileInputChange}
         />
         <textarea
           ref={(node) => {
@@ -857,6 +982,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           }}
           onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
           onBlur={() => drawerMention.close()}
+          onPaste={handleDrawerReplyAttachmentPaste}
           onKeyDown={(event) => {
             if (drawerMention.handleKeyDown(event)) return;
             if (event.key === "Enter" && !event.shiftKey) {
@@ -868,6 +994,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
           rows={1}
         />
+        <VoiceInputButton
+          {...voiceButtonProps}
+          onClick={() => onCommunityVoiceInputClick(drawerVoiceTranscriptTarget)}
+        />
         <button
           className="chat-send ask-send-btn ask-send-btn-v2"
           onClick={() => void handleSendDrawerReply()}
@@ -877,7 +1007,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             !activeCommunity ||
             !canUseComposer ||
             isSendingCommunityMessage ||
-            drawerReplyInput.trim().length === 0
+            (drawerReplyInput.trim().length === 0 && drawerReplyAttachments.length === 0)
           }
           type="button"
           aria-label="Send reply"

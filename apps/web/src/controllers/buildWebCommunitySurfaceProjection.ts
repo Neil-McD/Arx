@@ -125,6 +125,9 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onScrollToBottom: WebCommunityChatPanelProps["onScrollToBottom"];
   onSetReplyingToMessage: WebCommunityChatPanelProps["onSetReplyingToMessage"];
   onRemoveCommunityAttachment: WebCommunityChatPanelProps["onRemoveCommunityAttachment"];
+  onCommunityAttachmentError: WebCommunityChatPanelProps["onCommunityAttachmentError"];
+  onIngestCommunityAttachmentsFromFileList:
+    WebCommunityChatPanelProps["onIngestCommunityAttachmentsFromFileList"];
   onCommunityFileInputChange: WebCommunityChatPanelProps["onCommunityFileInputChange"];
   onCommunityAttachmentDrop: WebCommunityChatPanelProps["onCommunityAttachmentDrop"];
   onCommunityAttachmentDragEnter: WebCommunityChatPanelProps["onCommunityAttachmentDragEnter"];
@@ -154,6 +157,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onSaveEdit: WebCommunityChatPanelProps["onSaveEdit"];
   onCancelEdit: WebCommunityChatPanelProps["onCancelEdit"];
   voiceButtonProps: WebCommunityChatPanelProps["voiceButtonProps"];
+  onCommunityVoiceInputClick: WebCommunityChatPanelProps["onCommunityVoiceInputClick"];
   lightboxModalProps: WebCommunityChatPanelProps["lightboxModalProps"];
   interactionProjection: WebCommunityChatPanelProps["interactionProjection"];
 };
@@ -355,6 +359,8 @@ export function buildWebCommunitySurfaceProjection(
     onScrollToBottom: params.onScrollToBottom,
     onSetReplyingToMessage: params.onSetReplyingToMessage,
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,
+    onCommunityAttachmentError: params.onCommunityAttachmentError,
+    onIngestCommunityAttachmentsFromFileList: params.onIngestCommunityAttachmentsFromFileList,
     onCommunityFileInputChange: params.onCommunityFileInputChange,
     onCommunityAttachmentDrop: params.onCommunityAttachmentDrop,
     onCommunityAttachmentDragEnter: params.onCommunityAttachmentDragEnter,
@@ -384,6 +390,7 @@ export function buildWebCommunitySurfaceProjection(
     onSaveEdit: params.onSaveEdit,
     onCancelEdit: params.onCancelEdit,
     voiceButtonProps: params.voiceButtonProps,
+    onCommunityVoiceInputClick: params.onCommunityVoiceInputClick,
     lightboxModalProps: params.lightboxModalProps,
     interactionProjection: params.interactionProjection,
   };
