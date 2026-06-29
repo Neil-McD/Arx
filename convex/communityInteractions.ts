@@ -24,6 +24,10 @@ import {
   legacyChatIdempotencyKey,
   mapLegacyCompatibilityMessageRow,
 } from "./communityInteractionLegacyBridge";
+import {
+  insertCanonicalInteractionAttachmentsFromLegacyMessage,
+  listCanonicalInteractionAttachmentsForTarget,
+} from "./communityInteractionAttachmentBridge";
 import { resolveLegacyMessageAttachments } from "./communityInteractionLegacyAttachments";
 import {
   normalizeCommunitySourcePolicyString,
@@ -601,7 +605,10 @@ async function mapRootBundle(
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
   const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
-  const attachments = await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
+  const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
+  const attachments = canonicalAttachments.length > 0
+    ? canonicalAttachments
+    : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = root.actorUserId
     ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
     : null;
@@ -661,7 +668,10 @@ async function mapReplyBundle(
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
   const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
-  const attachments = await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
+  const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
+  const attachments = canonicalAttachments.length > 0
+    ? canonicalAttachments
+    : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = reply.actorUserId
     ? await resolvePublicUserId(ctx, reply.actorUserId, userIdCache)
     : null;
@@ -795,6 +805,7 @@ export type LegacyChatRootInteractionPlan =
       communityId: any;
       threadId: any;
       messageId: any;
+      message: CommunityChatMessageLike;
       nowMs: number;
       needsLegacyLink: boolean;
     }
@@ -803,6 +814,7 @@ export type LegacyChatRootInteractionPlan =
       communityId: any;
       threadId: any;
       messageId: any;
+      message: CommunityChatMessageLike;
       actorUserId?: any;
       idempotencyKey: string;
       contentBlocks: NormalizedContentBlock[];
@@ -820,6 +832,7 @@ export type LegacyChatReplyInteractionPlan =
       communityId: any;
       threadId: any;
       messageId: any;
+      message: CommunityChatMessageLike;
       targetMessageId: any;
       nowMs: number;
       needsLegacyLink: boolean;
@@ -830,6 +843,7 @@ export type LegacyChatReplyInteractionPlan =
       communityId: any;
       threadId: any;
       messageId: any;
+      message: CommunityChatMessageLike;
       targetMessageId: any;
       actorUserId?: any;
       targetReplyId?: any;
@@ -873,6 +887,7 @@ export async function planInteractionRootFromLegacyChatMessageCore(args: {
       communityId: args.thread.communityId,
       threadId: args.thread._id,
       messageId: args.message._id,
+      message: args.message,
       nowMs,
       needsLegacyLink: false,
     };
@@ -887,6 +902,7 @@ export async function planInteractionRootFromLegacyChatMessageCore(args: {
       communityId: args.thread.communityId,
       threadId: args.thread._id,
       messageId: args.message._id,
+      message: args.message,
       nowMs,
       needsLegacyLink: true,
     };
@@ -900,6 +916,7 @@ export async function planInteractionRootFromLegacyChatMessageCore(args: {
     communityId: args.thread.communityId,
     threadId: args.thread._id,
     messageId: args.message._id,
+    message: args.message,
     ...(args.message.senderUserId ? { actorUserId: args.message.senderUserId } : {}),
     idempotencyKey,
     contentBlocks,
@@ -912,6 +929,13 @@ export async function planInteractionRootFromLegacyChatMessageCore(args: {
 
 export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: LegacyChatRootInteractionPlan) {
   if (plan.planKind === "existing_root") {
+    await insertCanonicalInteractionAttachmentsFromLegacyMessage({
+      ctx,
+      communityId: plan.communityId,
+      rootId: plan.root._id,
+      message: plan.message,
+      nowMs: plan.nowMs,
+    });
     if (plan.needsLegacyLink) {
       await insertLegacyChatLinkIfMissing({
         ctx,
@@ -947,6 +971,13 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
     visibilityScope: "community",
     blocks: plan.contentBlocks,
     nowMs: plan.createdAt,
+  });
+  await insertCanonicalInteractionAttachmentsFromLegacyMessage({
+    ctx,
+    communityId: plan.communityId,
+    rootId,
+    message: plan.message,
+    nowMs: plan.nowMs,
   });
   await insertLegacyChatLinkIfMissing({
     ctx,
@@ -1006,6 +1037,7 @@ export async function planInteractionReplyFromLegacyChatMessageCore(args: {
       communityId: linkedReply.communityId,
       threadId: args.thread._id,
       messageId: args.message._id,
+      message: args.message,
       targetMessageId: args.message.replyToMessageId,
       nowMs,
       needsLegacyLink: false,
@@ -1046,6 +1078,7 @@ export async function planInteractionReplyFromLegacyChatMessageCore(args: {
       communityId: root.communityId,
       threadId: args.thread._id,
       messageId: args.message._id,
+      message: args.message,
       targetMessageId: args.message.replyToMessageId,
       nowMs,
       needsLegacyLink: true,
@@ -1063,6 +1096,7 @@ export async function planInteractionReplyFromLegacyChatMessageCore(args: {
     communityId: root.communityId,
     threadId: args.thread._id,
     messageId: args.message._id,
+    message: args.message,
     targetMessageId: args.message.replyToMessageId,
     ...(args.message.senderUserId ? { actorUserId: args.message.senderUserId } : {}),
     ...(targetReplyId ? { targetReplyId } : {}),
@@ -1079,6 +1113,13 @@ export async function planInteractionReplyFromLegacyChatMessageCore(args: {
 
 export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: LegacyChatReplyInteractionPlan) {
   if (plan.planKind === "existing_reply") {
+    await insertCanonicalInteractionAttachmentsFromLegacyMessage({
+      ctx,
+      communityId: plan.communityId,
+      replyId: plan.reply._id,
+      message: plan.message,
+      nowMs: plan.nowMs,
+    });
     if (plan.needsLegacyLink) {
       await insertLegacyChatLinkIfMissing({
         ctx,
@@ -1117,6 +1158,13 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
     visibilityScope: plan.visibilityScope,
     blocks: plan.contentBlocks,
     nowMs: plan.createdAt,
+  });
+  await insertCanonicalInteractionAttachmentsFromLegacyMessage({
+    ctx,
+    communityId: plan.communityId,
+    replyId,
+    message: plan.message,
+    nowMs: plan.nowMs,
   });
   await ctx.db.patch(plan.root._id as any, {
     replyCount: plan.seq,

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyBridge = readFileSync(join(root, "convex/communityInteractionLegacyBridge.ts"), "utf8");
 const communityChat = readFileSync(join(root, "convex/communityChat.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
@@ -67,8 +68,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /attachment upload migration is deferred[\s\S]*attachment-only legacy messages become bounded markdown summaries/,
-  "contract should defer full attachment migration while preserving projection summaries",
+  /attachment upload migration is deferred[\s\S]*shadow-writes bounded canonical `communityInteractionAttachments` rows[\s\S]*attachment-only legacy messages become bounded markdown summaries/,
+  "contract should defer native attachment upload migration while shadow-writing canonical attachment rows",
 );
 assert.match(
   contract,
@@ -110,6 +111,16 @@ assert.match(
   interactions,
   /Shared attachment:|Shared attachments:/,
   "adapter should preserve attachment-only legacy rows as bounded markdown summaries",
+);
+assert.match(
+  attachmentBridge,
+  /insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*insert\("communityInteractionAttachments" as any/,
+  "attachment bridge should shadow-write canonical attachment rows from legacy message payloads",
+);
+assert.match(
+  attachmentBridge,
+  /hasCanonicalInteractionAttachmentsForTarget[\s\S]*withIndex\("by_root"[\s\S]*withIndex\("by_reply"/,
+  "attachment bridge should make legacy shadow-writes idempotent per root or reply target",
 );
 assert.match(
   legacyBridge,
@@ -159,6 +170,11 @@ assert.match(
   rootMaterialize,
   /insertContentBlocksForTarget\([\s\S]*rootId[\s\S]*blocks: plan\.contentBlocks/,
   "root adapter should write typed root content blocks",
+);
+assert.match(
+  rootMaterialize,
+  /insertCanonicalInteractionAttachmentsFromLegacyMessage\(\{[\s\S]*rootId[\s\S]*message: plan\.message/,
+  "root adapter should shadow-write canonical attachments from the legacy payload",
 );
 assert.match(
   rootMaterialize,
@@ -235,6 +251,11 @@ assert.match(
   replyMaterialize,
   /insertContentBlocksForTarget\([\s\S]*replyId[\s\S]*blocks: plan\.contentBlocks/,
   "reply adapter should write typed reply content blocks only against the reply target",
+);
+assert.match(
+  replyMaterialize,
+  /insertCanonicalInteractionAttachmentsFromLegacyMessage\(\{[\s\S]*replyId[\s\S]*message: plan\.message/,
+  "reply adapter should shadow-write canonical attachments from the legacy payload",
 );
 assert.doesNotMatch(
   replyMaterialize,

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
 const demo = readFileSync(join(root, "convex/communityInteractionDemo.ts"), "utf8");
 const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
@@ -43,7 +44,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*migration-only legacy attachment hydration[\s\S]*communityInteractionLegacyAttachments[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
+  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*read bundles prefer canonical `communityInteractionAttachments` rows[\s\S]*migration-only legacy attachment hydration[\s\S]*communityInteractionLegacyAttachments[\s\S]*communityInteractionAttachmentBridge[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
   "contract should preserve read-model boundaries",
 );
 assert.match(
@@ -54,6 +55,11 @@ assert.match(
 
 assert.match(
   interactions,
+  /import \{[\s\S]*listCanonicalInteractionAttachmentsForTarget[\s\S]*\} from "\.\/communityInteractionAttachmentBridge";/,
+  "canonical interaction core should import canonical attachment reads through the attachment bridge",
+);
+assert.match(
+  interactions,
   /import \{ resolveLegacyMessageAttachments \} from "\.\/communityInteractionLegacyAttachments";/,
   "canonical interaction core should import migration-only legacy attachment hydration",
 );
@@ -61,6 +67,21 @@ assert.doesNotMatch(
   interactions,
   /function resolveLegacyMessageAttachments|ctx\.storage\.getUrl/,
   "canonical interaction core should not own legacy storage URL resolution",
+);
+assert.match(
+  attachmentBridge,
+  /listCanonicalInteractionAttachmentsForTarget[\s\S]*query\("communityInteractionAttachments" as any\)[\s\S]*withIndex\("by_root"[\s\S]*withIndex\("by_reply"[\s\S]*take\(MAX_LEGACY_INTERACTION_ATTACHMENTS\)/,
+  "canonical attachment reads should stay bounded and indexed in the attachment bridge",
+);
+assert.match(
+  attachmentBridge,
+  /mapCanonicalInteractionAttachment[\s\S]*ctx\.storage\.getUrl\(row\.storageId as any\)/,
+  "canonical attachment storage URL resolution should stay isolated in the attachment bridge",
+);
+assert.doesNotMatch(
+  attachmentBridge,
+  /query\("communityChatThreads"|query\("communityChatMessages"|\.collect\(\)/,
+  "canonical attachment hydration should not scan legacy chat tables",
 );
 assert.match(
   legacyAttachments,
@@ -100,6 +121,11 @@ assert.match(
   /listContentBlocksForRoot\(ctx, root\._id\)[\s\S]*listEmbedsForRoot\(ctx, root\._id\)[\s\S]*listMentionsForRoot\(ctx, root\._id\)/,
   "root bundle mapper should hydrate bounded content blocks, embeds, and mentions",
 );
+assert.match(
+  mapRootBundle,
+  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
+  "root bundle mapper should prefer canonical attachments before legacy fallback",
+);
 assert.doesNotMatch(
   mapRootBundle,
   /listCommunityInteractionReplies|listContentBlocksForReply|\.take\(MAX_INTERACTION_REPLY_READ_LIMIT\)/,
@@ -116,6 +142,11 @@ assert.match(
   mapReplyBundle,
   /listContentBlocksForReply\(ctx, reply\._id\)[\s\S]*listEmbedsForReply\(ctx, reply\._id\)[\s\S]*listMentionsForReply\(ctx, reply\._id\)/,
   "reply bundle mapper should hydrate bounded content blocks, embeds, and mentions",
+);
+assert.match(
+  mapReplyBundle,
+  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
+  "reply bundle mapper should prefer canonical attachments before legacy fallback",
 );
 
 const viewerReactionMap = functionBlock(interactions, "loadViewerReactionMapForTargets");

@@ -258,8 +258,10 @@ Rules:
 - reply reads use bounded indexed reads by `rootId + seq`
 - reply reads return only one-level drawer replies
 - read APIs do not use legacy chat tables as source-of-truth
-- migration-only legacy attachment hydration may resolve linked legacy chat attachments until canonical attachment backfill is complete
+- read bundles prefer canonical `communityInteractionAttachments` rows before using legacy attachment fallback
+- migration-only legacy attachment hydration may resolve linked legacy chat attachments only when canonical attachment rows are absent, until canonical attachment backfill is complete
 - migration-only legacy attachment hydration lives outside the canonical interaction core in `communityInteractionLegacyAttachments`
+- canonical attachment row reads and storage URL resolution live outside the canonical interaction core in `communityInteractionAttachmentBridge`
 - viewer reaction state must be loaded only for the visible root/reply target ids, never by scanning all reactions for a viewer
 - reaction summary updates must not rescan every reaction on a target
 - read APIs do not read compiler, source-trace, archive, or memory tables
@@ -336,7 +338,7 @@ The first compatibility adapter keeps the existing chat mutation alive while dua
 - adapter writes do not call the public interaction mutations
 - adapter writes do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
 - adapter writes do not promote source traces, write archive truth, or call the compiler
-- attachment upload migration is deferred
+- attachment upload migration is deferred, but the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
 - attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
 - legacy chat response shape is unchanged
 - legacy chat thread/message/link table access for the canonical composer compatibility bridge lives in `communityInteractionLegacyBridge`

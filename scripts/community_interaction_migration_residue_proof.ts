@@ -12,6 +12,7 @@ const packageJson = read("package.json");
 const residueMap = read("docs/community-interaction-migration-residue-map.md");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const interactions = read("convex/communityInteractions.ts");
+const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
 const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const communityChat = read("convex/communityChat.ts");
@@ -47,7 +48,7 @@ assert.match(
   "| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` |",
   "| R-002 | Legacy compatibility message rows created by canonical composer | `KEEP TEMPORARILY` |",
   "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
-  "| R-004 | Legacy attachment hydration in canonical read bundles | `BLOCKED BY PARITY` |",
+  "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
   "| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` |",
   "| R-006 | Legacy chat realtime subscription feeding projection refresh | `DELETE CANDIDATE` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
@@ -71,6 +72,16 @@ assert.match(
   interactions,
   /resolveLegacyMessageAttachments/,
   "canonical read bundles may only hydrate legacy attachments through the migration-only attachment module",
+);
+assert.match(
+  interactions,
+  /listCanonicalInteractionAttachmentsForTarget[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments/,
+  "canonical read bundles should prefer canonical attachment rows before legacy fallback",
+);
+assert.match(
+  attachmentBridge,
+  /insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*listCanonicalInteractionAttachmentsForTarget/,
+  "canonical attachment bridge should own shadow-writing and reading canonical attachment rows",
 );
 
 assert.match(
