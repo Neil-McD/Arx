@@ -89,7 +89,7 @@ assert.match(
 );
 assert.match(
   attachmentBridge,
-  /insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*listCanonicalInteractionAttachmentsForTarget/,
+  /insertCanonicalInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*listCanonicalInteractionAttachmentsForTarget/,
   "canonical attachment bridge should own shadow-writing and reading canonical attachment rows",
 );
 
@@ -160,8 +160,8 @@ assert.doesNotMatch(
 
 assert.match(
   sendController,
-  /const canUseCanonicalComposer[\s\S]*useCanonicalCommunityInteractions[\s\S]*createCommunityInteractionMessageRows[\s\S]*serializedAttachments\.length === 0[\s\S]*\(!replyToId \|\| Boolean\(replyRootId\)\)/,
-  "shared send controller should use canonical composer only for attachment-free sends with mappable replies",
+  /const canUseCanonicalComposer[\s\S]*useCanonicalCommunityInteractions[\s\S]*createCommunityInteractionMessageRows[\s\S]*\(!replyToId \|\| Boolean\(replyRootId\)\)/,
+  "shared send controller should use canonical composer for sends with mappable replies",
 );
 assert.match(
   sendController,

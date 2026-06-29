@@ -13,7 +13,7 @@ type CommunityInteractionAttachmentRow = {
   externalUrl?: string;
 };
 
-type NormalizedLegacyAttachment = {
+export type NormalizedInteractionAttachmentInput = {
   id: string;
   name: string;
   attachmentKind: CanonicalAttachmentKind;
@@ -27,6 +27,7 @@ const MAX_LEGACY_INTERACTION_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_NAME_CHARS = 256;
 const MAX_ATTACHMENT_MIME_CHARS = 160;
 const MAX_LEGACY_IMAGE_DATA_URL_CHARS = 600_000;
+const MAX_ATTACHMENT_CONTENT_HASH_CHARS = 256;
 
 export function readLegacyInteractionAttachmentPayloads(message: CommunityChatMessageLike): unknown[] {
   const contentJson = message.contentJson;
@@ -44,8 +45,8 @@ function normalizeLegacyAttachmentKind(record: Record<string, unknown>, mimeType
   return "file";
 }
 
-function normalizeLegacyInteractionAttachments(rawAttachments: unknown[]): NormalizedLegacyAttachment[] {
-  const out: NormalizedLegacyAttachment[] = [];
+export function normalizeInteractionAttachmentInputs(rawAttachments: unknown[]): NormalizedInteractionAttachmentInput[] {
+  const out: NormalizedInteractionAttachmentInput[] = [];
   for (const raw of rawAttachments) {
     if (out.length >= MAX_LEGACY_INTERACTION_ATTACHMENTS) break;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
@@ -112,24 +113,25 @@ async function hasCanonicalInteractionAttachmentsForTarget(args: {
   return Boolean(row);
 }
 
-export async function insertCanonicalInteractionAttachmentsFromLegacyMessage(args: {
+export async function insertCanonicalInteractionAttachmentsForTarget(args: {
   ctx: any;
   communityId: any;
   rootId?: any;
   replyId?: any;
-  message: CommunityChatMessageLike;
+  attachments: NormalizedInteractionAttachmentInput[];
+  actorUserId?: any;
   nowMs: number;
+  contentHashPrefix: string;
+  skipIfExisting?: boolean;
 }): Promise<string[]> {
   if (Boolean(args.rootId) === Boolean(args.replyId)) {
     throw new Error("interaction_attachment_target_required");
   }
-  const attachments = normalizeLegacyInteractionAttachments(readLegacyInteractionAttachmentPayloads(args.message));
-  if (attachments.length === 0) return [];
-  if (await hasCanonicalInteractionAttachmentsForTarget(args)) return [];
-  const createdAt = Math.max(0, Math.floor(Number(args.message.createdAt) || args.nowMs));
-  const updatedAt = Math.max(createdAt, Math.floor(Number(args.nowMs) || createdAt));
+  if (args.attachments.length === 0) return [];
+  if (args.skipIfExisting && await hasCanonicalInteractionAttachmentsForTarget(args)) return [];
+  const nowMs = Math.max(0, Math.floor(Number(args.nowMs) || Date.now()));
   const ids: string[] = [];
-  for (const attachment of attachments) {
+  for (const attachment of args.attachments) {
     const attachmentId = await args.ctx.db.insert("communityInteractionAttachments" as any, {
       communityId: args.communityId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
@@ -141,15 +143,42 @@ export async function insertCanonicalInteractionAttachmentsFromLegacyMessage(arg
       sizeBytes: attachment.sizeBytes,
       ...(attachment.storageId ? { storageId: attachment.storageId as any } : {}),
       ...(!attachment.storageId && attachment.dataUrl ? { externalUrl: attachment.dataUrl } : {}),
-      contentHash: `legacy-chat:${normalizeIdValue(args.message._id)}:${attachment.id}`.slice(0, 256),
+      contentHash: `${args.contentHashPrefix}:${attachment.id}`.slice(0, MAX_ATTACHMENT_CONTENT_HASH_CHARS),
       createdByActorType: "human",
-      ...(args.message.senderUserId ? { createdByUserId: args.message.senderUserId } : {}),
-      createdAt,
-      updatedAt,
+      ...(args.actorUserId ? { createdByUserId: args.actorUserId } : {}),
+      createdAt: nowMs,
+      updatedAt: nowMs,
     });
     ids.push(normalizeIdValue(attachmentId));
   }
   return ids;
+}
+
+export async function insertCanonicalInteractionAttachmentsFromLegacyMessage(args: {
+  ctx: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
+  message: CommunityChatMessageLike;
+  nowMs: number;
+}): Promise<string[]> {
+  if (Boolean(args.rootId) === Boolean(args.replyId)) {
+    throw new Error("interaction_attachment_target_required");
+  }
+  const attachments = normalizeInteractionAttachmentInputs(readLegacyInteractionAttachmentPayloads(args.message));
+  if (attachments.length === 0) return [];
+  const createdAt = Math.max(0, Math.floor(Number(args.message.createdAt) || args.nowMs));
+  return await insertCanonicalInteractionAttachmentsForTarget({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    rootId: args.rootId,
+    replyId: args.replyId,
+    attachments,
+    actorUserId: args.message.senderUserId,
+    nowMs: createdAt,
+    contentHashPrefix: `legacy-chat:${normalizeIdValue(args.message._id)}`,
+    skipIfExisting: true,
+  });
 }
 
 async function mapCanonicalInteractionAttachment(ctx: any, row: CommunityInteractionAttachmentRow) {

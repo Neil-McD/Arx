@@ -280,9 +280,9 @@ Rules:
 - the projection subscribes to canonical interaction roots and replies directly
 - legacy chat realtime is disabled while canonical interaction projection is active and remains only for the legacy timeline fallback
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
-- text-only top-level composer sends may use the canonical composer bridge
-- text-only drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id
-- attachment sends and ambiguous legacy reply sends remain on the legacy chat writer during this migration slice
+- top-level composer sends may use the canonical composer bridge, including prepared attachments
+- drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
+- ambiguous legacy reply sends remain on the legacy chat writer during this migration slice
 - successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
@@ -293,18 +293,20 @@ The first composer migration slice adds `createCommunityInteractionComposerMessa
 
 Rules:
 
-- composer text writes create canonical roots/replies before legacy compatibility rows
+- composer writes create canonical roots/replies before legacy compatibility rows
+- composer writes may include bounded, already-prepared attachment metadata
+- composer attachment rows are written to `communityInteractionAttachments`
 - the compatibility row is written to `communityChatMessages` in the same Convex transaction
+- the compatibility row preserves bounded attachment metadata in `contentJson.attachments` while legacy consumers remain
 - `communityInteractionLegacyChatLinks` maps the compatibility message to the canonical root/reply
 - the compatibility row keeps old readers, realtime subscribers, archive documents, digests, and recent-context consumers alive
 - the mutation returns the existing legacy chat row shape to preserve optimistic UI replacement behavior
 - drawer replies require a canonical `rootId` and a valid legacy reply target message id
-- attachment upload migration is deferred; attachment sends stay on `createThreadUserMessage`
 - ambiguous legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
 - the bridge may schedule async link-embed enrichment after creating pending embed records
-- the bridge does not fetch URLs, scrape pages, process media, promote source traces, or call the compiler synchronously
+- the bridge does not generate upload URLs, fetch URLs, scrape pages, process media, promote source traces, or call the compiler synchronously
 
 ## Current Async Link Embed Enrichment Slice
 
@@ -340,7 +342,7 @@ The first compatibility adapter keeps the existing chat mutation alive while dua
 - adapter writes do not call the public interaction mutations
 - adapter writes do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
 - adapter writes do not promote source traces, write archive truth, or call the compiler
-- attachment upload migration is deferred, but the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
+- the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
 - attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
 - legacy chat response shape is unchanged
 - legacy chat thread/message/link table access for the canonical composer compatibility bridge lives in `communityInteractionLegacyBridge`

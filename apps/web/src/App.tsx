@@ -123,6 +123,7 @@ import {
   subscribeCloudCommunityInteractionReplies,
   subscribeCloudCommunityInteractionRoots,
   toggleCloudCommunityInteractionReaction,
+  type CommunityInteractionAttachment,
   type CommunityInteractionPendingStatus,
   type CommunityInteractionReplyBundle,
   type CommunityInteractionRootBundle,
@@ -770,6 +771,8 @@ type PendingCanonicalInteraction = {
   rootId: string | null;
   replyToMessageId: string | null;
   text: string;
+  attachments: MessageAttachment[];
+  serializedAttachments: unknown[];
   createdAt: string;
   senderId: string;
   status: CommunityInteractionPendingStatus;
@@ -782,6 +785,28 @@ function composerStoredIdempotencyKey(rawKey: string, kind: "root" | "reply"): s
   return `community_composer:${kind}:${rawKey}`.slice(0, MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS);
 }
 
+function optimisticInteractionAttachment(attachment: MessageAttachment): CommunityInteractionAttachment {
+  const storageId = String(attachment.storage_id ?? "").trim();
+  const dataUrl =
+    typeof attachment.data_url === "string" && attachment.data_url.trim()
+      ? attachment.data_url.trim()
+      : null;
+  const url =
+    typeof attachment.url === "string" && attachment.url.trim()
+      ? attachment.url.trim()
+      : null;
+  return {
+    id: attachment.id,
+    name: attachment.name,
+    type: attachment.type,
+    mime: attachment.mime ?? null,
+    size: Math.max(0, Math.floor(Number(attachment.size) || 0)),
+    ...(storageId ? { storage_id: storageId } : null),
+    ...(url ? { url } : null),
+    ...(dataUrl ? { data_url: dataUrl } : null),
+  };
+}
+
 function buildOptimisticRootBundle(p: PendingCanonicalInteraction): CommunityInteractionRootBundle {
   return {
     deduped: false,
@@ -789,7 +814,7 @@ function buildOptimisticRootBundle(p: PendingCanonicalInteraction): CommunityInt
     content_blocks: [],
     embeds: [],
     mentions: [],
-    attachments: [],
+    attachments: p.attachments.map(optimisticInteractionAttachment),
     root: {
       id: `pending:${p.idempotencyKey}`,
       community_id: p.communityId,
@@ -825,7 +850,7 @@ function buildOptimisticReplyBundle(p: PendingCanonicalInteraction): CommunityIn
     content_blocks: [],
     embeds: [],
     mentions: [],
-    attachments: [],
+    attachments: p.attachments.map(optimisticInteractionAttachment),
     reply: {
       id: `pending:${p.idempotencyKey}`,
       community_id: p.communityId,
@@ -2887,6 +2912,7 @@ export default function App() {
           text: pending.text,
           rootId: pending.rootId,
           replyToMessageId: pending.replyToMessageId,
+          attachments: pending.serializedAttachments,
         });
         void loadCommunityInteractionRoots(pending.communityId, activeSession);
         if (pending.kind === "reply" && pending.rootId) {
@@ -3090,6 +3116,7 @@ export default function App() {
         rootId: params.rootId ?? null,
         replyToMessageId: params.replyToMessageId ?? null,
         mentions: params.mentions,
+        attachments: params.attachments,
       }),
     toCommunityChatMessage,
     loadCommunityChat,

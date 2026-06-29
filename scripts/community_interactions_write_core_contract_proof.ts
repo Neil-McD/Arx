@@ -66,8 +66,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   interactions,
-  /communityInteractionAttachments" as any[\s\S]*insert|generateUploadUrl/,
-  "first write-core slice should not migrate attachment upload creation yet",
+  /generateUploadUrl/,
+  "interaction writes should not create upload URLs inline",
 );
 assert.doesNotMatch(
   interactions,
@@ -236,6 +236,26 @@ assert.match(
   /rows:\s*\[await mapLegacyCompatibilityMessageRow/,
   "composer bridge should preserve the legacy chat response row shape",
 );
+assert.match(
+  createComposerMessage,
+  /attachments: v\.optional\(v\.array\(interactionAttachmentInputValidator\)\)/,
+  "composer bridge should accept bounded prepared attachment metadata",
+);
+assert.match(
+  createComposerMessage,
+  /normalizeInteractionAttachmentInputs\(args\.attachments \?\? \[\]\)[\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
+  "composer bridge should allow attachment-only sends while rejecting empty payloads",
+);
+assert.match(
+  createComposerMessage,
+  /insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
+  "composer bridge should write canonical attachment rows for roots and replies",
+);
+assert.match(
+  createComposerMessage,
+  /attachments: legacyAttachments/,
+  "composer bridge should preserve bounded attachment metadata in compatibility rows",
+);
 assert.doesNotMatch(
   createComposerMessage,
   /legacyChatIdempotencyKey|legacy_chat_message:/,
@@ -253,8 +273,8 @@ assert.match(
 );
 assert.doesNotMatch(
   createComposerMessage,
-  /\bfetch\s*\(|ctx\.runAction|ctx\.storage\.getUrl|scrape|crawler|processMedia/,
-  "composer bridge should not synchronously fetch URLs, run actions, resolve storage URLs, scrape, or process media",
+  /\bfetch\s*\(|ctx\.runAction|ctx\.storage\.getUrl|generateUploadUrl|scrape|crawler|processMedia/,
+  "composer bridge should not synchronously fetch URLs, run actions, resolve storage URLs, generate upload URLs, scrape, or process media",
 );
 
 const scheduleEmbedEnrichment = interactions.slice(

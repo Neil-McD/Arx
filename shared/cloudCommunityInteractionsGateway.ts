@@ -215,6 +215,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     rootId?: string | null;
     replyToMessageId?: string | null;
     mentions?: { userId: string }[];
+    attachments?: unknown[];
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -226,6 +227,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     rootId: params.rootId ?? null,
     replyToMessageId: params.replyToMessageId ?? null,
     ...(params.mentions && params.mentions.length ? { mentions: params.mentions } : null),
+    ...(params.attachments && params.attachments.length ? { attachments: params.attachments } : null),
   });
   return coerceObjectRows<TRow>(payload, "rows");
 }

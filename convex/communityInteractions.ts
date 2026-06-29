@@ -25,8 +25,11 @@ import {
   mapLegacyCompatibilityMessageRow,
 } from "./communityInteractionLegacyBridge";
 import {
+  insertCanonicalInteractionAttachmentsForTarget,
   insertCanonicalInteractionAttachmentsFromLegacyMessage,
   listCanonicalInteractionAttachmentsForTarget,
+  normalizeInteractionAttachmentInputs,
+  type NormalizedInteractionAttachmentInput,
 } from "./communityInteractionAttachmentBridge";
 import { resolveLegacyMessageAttachments } from "./communityInteractionLegacyAttachments";
 import {
@@ -216,6 +219,18 @@ const mentionKindValidator = v.union(
   v.literal("community_agent"),
   v.literal("role"),
 );
+
+const interactionAttachmentInputValidator = v.object({
+  id: v.optional(v.string()),
+  name: v.string(),
+  type: v.string(),
+  mime: v.optional(v.union(v.string(), v.null())),
+  size: v.number(),
+  storageId: v.optional(v.id("_storage")),
+  data_url: v.optional(v.string()),
+  text: v.optional(v.string()),
+  truncated: v.optional(v.boolean()),
+});
 
 const contentBlockInputValidator = v.union(
   v.object({
@@ -454,6 +469,43 @@ function contentSummary(blocks: NormalizedContentBlock[]): string {
   const summary = parts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_INTERACTION_SUMMARY_CHARS);
   if (!summary) throw new Error("interaction_content_required");
   return summary;
+}
+
+function attachmentSummary(attachments: NormalizedInteractionAttachmentInput[]): string {
+  const names = attachments
+    .map((attachment) => normalizeBoundedText(attachment.name, 80))
+    .filter(Boolean)
+    .slice(0, 8);
+  const summary = names.length === 1
+    ? `Shared attachment: ${names[0]}`
+    : names.length > 1
+      ? `Shared attachments: ${names.join(", ")}`
+      : "";
+  const normalized = normalizeBoundedText(summary, MAX_INTERACTION_SUMMARY_CHARS);
+  if (!normalized) throw new Error("interaction_content_required");
+  return normalized;
+}
+
+function composerContentSummary(
+  blocks: NormalizedContentBlock[],
+  attachments: NormalizedInteractionAttachmentInput[],
+): string {
+  if (blocks.length > 0) return contentSummary(blocks);
+  return attachmentSummary(attachments);
+}
+
+function serializeInteractionAttachmentsForLegacyContent(
+  attachments: NormalizedInteractionAttachmentInput[],
+): Array<Record<string, unknown>> {
+  return attachments.map((attachment) => ({
+    id: attachment.id,
+    name: attachment.name,
+    type: attachment.attachmentKind,
+    mime: attachment.mimeType ?? null,
+    size: attachment.sizeBytes,
+    ...(attachment.storageId ? { storageId: attachment.storageId } : {}),
+    ...(attachment.dataUrl ? { data_url: attachment.dataUrl } : {}),
+  }));
 }
 
 function visibilityRank(scope: InteractionVisibilityScope): number {
@@ -1416,6 +1468,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
     mentions: v.optional(v.array(v.object({ userId: v.id("users") }))),
+    attachments: v.optional(v.array(interactionAttachmentInputValidator)),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1427,12 +1480,16 @@ export const createCommunityInteractionComposerMessage = mutation({
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    if (!text) throw new Error("interaction_content_required");
-    const contentBlocks: NormalizedContentBlock[] = [
-      { blockType: "markdown_text", text },
-      ...extractLinkBlocksFromText(text),
-    ];
-    const summary = contentSummary(contentBlocks);
+    const attachments = normalizeInteractionAttachmentInputs(args.attachments ?? []);
+    if (!text && attachments.length === 0) throw new Error("interaction_content_required");
+    const contentBlocks: NormalizedContentBlock[] = text
+      ? [
+          { blockType: "markdown_text", text },
+          ...extractLinkBlocksFromText(text),
+        ]
+      : [];
+    const summary = composerContentSummary(contentBlocks, attachments);
+    const legacyAttachments = serializeInteractionAttachmentsForLegacyContent(attachments);
     const mentionedUserIds = (args.mentions ?? []).map((mention) => mention.userId);
     const nowMs = Date.now();
     const thread = await ensureLegacyCompatibilityChatThread(ctx, args.communityId, nowMs);
@@ -1475,6 +1532,15 @@ export const createCommunityInteractionComposerMessage = mutation({
         });
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
+        await insertCanonicalInteractionAttachmentsForTarget({
+          ctx,
+          communityId: args.communityId,
+          rootId: root._id,
+          attachments,
+          actorUserId: userId,
+          nowMs,
+          contentHashPrefix: `community-composer:${idempotencyKey}`,
+        });
         deduped = false;
       }
 
@@ -1485,6 +1551,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         thread,
         actorUserId: userId,
         text,
+        attachments: legacyAttachments,
         nowMs,
       });
       if (!existingMessage) {
@@ -1574,6 +1641,15 @@ export const createCommunityInteractionComposerMessage = mutation({
       });
       reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
       if (!reply) throw new Error("interaction_reply_create_failed");
+      await insertCanonicalInteractionAttachmentsForTarget({
+        ctx,
+        communityId: root.communityId,
+        replyId: reply._id,
+        attachments,
+        actorUserId: userId,
+        nowMs,
+        contentHashPrefix: `community-composer:${idempotencyKey}`,
+      });
       deduped = false;
     }
 
@@ -1584,6 +1660,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       thread,
       actorUserId: userId,
       text,
+      attachments: legacyAttachments,
       replyToMessageId: legacyTarget.targetMessageId,
       nowMs,
     });

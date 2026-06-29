@@ -228,12 +228,12 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled while canonical interaction projection is active[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*text-only top-level composer sends may use the canonical composer bridge[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled while canonical interaction projection is active[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends may use the canonical composer bridge, including prepared attachments[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(
   contract,
-  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical roots\/replies before legacy compatibility rows[\s\S]*attachment sends stay on `createThreadUserMessage`/,
+  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical roots\/replies before legacy compatibility rows[\s\S]*bounded, already-prepared attachment metadata[\s\S]*communityInteractionAttachments/,
   "interaction contract should document the active canonical composer bridge slice",
 );
 

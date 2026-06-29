@@ -68,8 +68,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /attachment upload migration is deferred[\s\S]*shadow-writes bounded canonical `communityInteractionAttachments` rows[\s\S]*attachment-only legacy messages become bounded markdown summaries/,
-  "contract should defer native attachment upload migration while shadow-writing canonical attachment rows",
+  /legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows[\s\S]*attachment-only legacy messages become bounded markdown summaries/,
+  "contract should keep legacy adapter attachment shadow-writes documented",
 );
 assert.match(
   contract,
@@ -114,7 +114,7 @@ assert.match(
 );
 assert.match(
   attachmentBridge,
-  /insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*insert\("communityInteractionAttachments" as any/,
+  /insertCanonicalInteractionAttachmentsForTarget[\s\S]*insert\("communityInteractionAttachments" as any[\s\S]*insertCanonicalInteractionAttachmentsFromLegacyMessage[\s\S]*readLegacyInteractionAttachmentPayloads\(args\.message\)[\s\S]*insertCanonicalInteractionAttachmentsForTarget/,
   "attachment bridge should shadow-write canonical attachment rows from legacy message payloads",
 );
 assert.match(

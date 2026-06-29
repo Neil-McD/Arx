@@ -83,6 +83,7 @@ type UseCommunityChatMutationControllerArgs<
     rootId?: string | null;
     replyToMessageId?: string | null;
     mentions?: { userId: string }[];
+    attachments?: unknown[];
   }) => Promise<RowT[]>;
   useCanonicalCommunityInteractions?: boolean;
   onCanonicalOptimisticInsert?: (pending: {
@@ -92,6 +93,8 @@ type UseCommunityChatMutationControllerArgs<
     rootId: string | null;
     replyToMessageId: string | null;
     text: string;
+    attachments: AttachmentT[];
+    serializedAttachments: unknown[];
     createdAt: string;
     senderId: string;
   }) => void;
@@ -401,7 +404,6 @@ export function useCommunityChatMutationController<
     const canonicalReplyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
     const canonicalEligible =
       Boolean(current.useCanonicalCommunityInteractions && current.createCommunityInteractionMessageRows)
-      && attachmentsToSend.length === 0
       && (!replyToId || Boolean(canonicalReplyRootId));
     const canonicalIdempotencyKey = canonicalEligible
       ? createCommunityComposerIdempotencyKey(activeCommunityId, canonicalReplyRootId)
@@ -418,18 +420,6 @@ export function useCommunityChatMutationController<
     };
 
     current.setCommunityMessages((prev) => [...prev, optimisticMessage]);
-    if (canonicalEligible && canonicalIdempotencyKey) {
-      current.onCanonicalOptimisticInsert?.({
-        idempotencyKey: canonicalIdempotencyKey,
-        communityId: activeCommunityId,
-        kind: canonicalReplyRootId ? "reply" : "root",
-        rootId: canonicalReplyRootId,
-        replyToMessageId: replyToId,
-        text: bodyToSend,
-        createdAt: optimisticCreatedAt,
-        senderId: sessionUserId,
-      });
-    }
     if (draft?.clearDraft) {
       draft.clearDraft();
     } else {
@@ -456,8 +446,21 @@ export function useCommunityChatMutationController<
       const replyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
       const canUseCanonicalComposer =
         Boolean(current.useCanonicalCommunityInteractions && current.createCommunityInteractionMessageRows)
-        && serializedAttachments.length === 0
         && (!replyToId || Boolean(replyRootId));
+      if (canUseCanonicalComposer && current.onCanonicalOptimisticInsert) {
+        current.onCanonicalOptimisticInsert({
+          idempotencyKey: canonicalIdempotencyKey ?? createCommunityComposerIdempotencyKey(activeCommunityId, replyRootId),
+          communityId: activeCommunityId,
+          kind: replyRootId ? "reply" : "root",
+          rootId: replyRootId,
+          replyToMessageId: replyToId,
+          text: bodyToSend,
+          attachments: preparedAttachments,
+          serializedAttachments,
+          createdAt: optimisticCreatedAt,
+          senderId: sessionUserId,
+        });
+      }
       const created = canUseCanonicalComposer && current.createCommunityInteractionMessageRows
         ? await current.createCommunityInteractionMessageRows({
             session,
@@ -467,6 +470,7 @@ export function useCommunityChatMutationController<
             rootId: replyRootId,
             replyToMessageId: replyToId,
             mentions: mentionsToSend,
+            attachments: serializedAttachments,
           })
         : await (async () => {
             const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);

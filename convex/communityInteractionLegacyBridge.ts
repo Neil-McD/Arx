@@ -145,6 +145,7 @@ export async function createLegacyCompatibilityChatMessageForInteraction(args: {
   thread: CommunityChatThreadLike;
   actorUserId: any;
   text: string;
+  attachments?: Array<Record<string, unknown>>;
   replyToMessageId?: any;
   nowMs: number;
 }): Promise<CommunityChatMessageLike> {
@@ -161,7 +162,9 @@ export async function createLegacyCompatibilityChatMessageForInteraction(args: {
     threadId: args.thread._id,
     seq,
     role: "user",
-    contentJson: { text: args.text },
+    contentJson: args.attachments && args.attachments.length > 0
+      ? { text: args.text, attachments: args.attachments }
+      : { text: args.text },
     senderUserId: args.actorUserId,
     ...(replyToMessageId ? { replyToMessageId } : {}),
     createdAt: args.nowMs,
