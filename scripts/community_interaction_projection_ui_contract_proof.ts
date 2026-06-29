@@ -15,6 +15,7 @@ const projection = read("apps/web/src/components/WebCommunityInteractionProjecti
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
+const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
@@ -114,6 +115,16 @@ assert.match(
   gateway,
   /client\.mutation\("community:createCommunityInteractionComposerMessage" as any/,
   "gateway should expose the canonical composer bridge mutation",
+);
+assert.match(
+  sendController,
+  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*reply_target_unmapped/,
+  "send controller should keep canonical projection writes behind one explicit route decision",
+);
+assert.match(
+  sendController,
+  /onCanonicalOptimisticInsert[\s\S]*idempotencyKey: sendRoute\.idempotencyKey[\s\S]*attachments: preparedAttachments[\s\S]*serializedAttachments/,
+  "canonical optimistic projection rows should use the route idempotency key and prepared attachments",
 );
 assert.doesNotMatch(
   gateway,

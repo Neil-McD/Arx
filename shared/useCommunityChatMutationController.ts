@@ -179,6 +179,40 @@ function createCommunityComposerIdempotencyKey(communityId: string, rootId: stri
   ].join(":");
 }
 
+type CommunityChatSendRoute =
+  | {
+      kind: "canonical";
+      rootId: string | null;
+      idempotencyKey: string;
+    }
+  | {
+      kind: "legacy";
+      reason: "projection_disabled" | "writer_missing" | "reply_target_unmapped";
+    };
+
+function resolveCommunityChatSendRoute(args: {
+  useCanonicalCommunityInteractions?: boolean;
+  hasCanonicalWriter: boolean;
+  activeCommunityId: string;
+  replyToId: string | null;
+  replyRootId: string | null;
+}): CommunityChatSendRoute {
+  if (!args.useCanonicalCommunityInteractions) {
+    return { kind: "legacy", reason: "projection_disabled" };
+  }
+  if (!args.hasCanonicalWriter) {
+    return { kind: "legacy", reason: "writer_missing" };
+  }
+  if (args.replyToId && !args.replyRootId) {
+    return { kind: "legacy", reason: "reply_target_unmapped" };
+  }
+  return {
+    kind: "canonical",
+    rootId: args.replyRootId,
+    idempotencyKey: createCommunityComposerIdempotencyKey(args.activeCommunityId, args.replyRootId),
+  };
+}
+
 export function useCommunityChatMutationController<
   SessionT extends SessionLike,
   RowT,
@@ -399,16 +433,6 @@ export function useCommunityChatMutationController<
       seq: Number.MAX_SAFE_INTEGER,
     } as MessageT;
 
-    // Canonical optimistic overlay: stamp the message with the same idempotency key the
-    // mutation will use, so the projection can render it immediately and reconcile exactly.
-    const canonicalReplyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
-    const canonicalEligible =
-      Boolean(current.useCanonicalCommunityInteractions && current.createCommunityInteractionMessageRows)
-      && (!replyToId || Boolean(canonicalReplyRootId));
-    const canonicalIdempotencyKey = canonicalEligible
-      ? createCommunityComposerIdempotencyKey(activeCommunityId, canonicalReplyRootId)
-      : null;
-
     const restoreDraft = () => {
       if (draft?.restoreDraft) {
         draft.restoreDraft();
@@ -436,6 +460,7 @@ export function useCommunityChatMutationController<
 
     current.setIsSendingCommunityMessage(true);
     current.setCommunityChatError(null);
+    let canonicalOptimisticIdempotencyKey: string | null = null;
     try {
       const preparedAttachments = current.prepareAttachmentsForSend
         ? await current.prepareAttachmentsForSend(attachmentsToSend, session, current.activeCommunityId)
@@ -444,15 +469,22 @@ export function useCommunityChatMutationController<
         ? current.serializeAttachmentsForWrite(preparedAttachments)
         : preparedAttachments;
       const replyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
-      const canUseCanonicalComposer =
-        Boolean(current.useCanonicalCommunityInteractions && current.createCommunityInteractionMessageRows)
-        && (!replyToId || Boolean(replyRootId));
-      if (canUseCanonicalComposer && current.onCanonicalOptimisticInsert) {
+      const createCanonicalMessageRows = current.createCommunityInteractionMessageRows;
+      const sendRoute = resolveCommunityChatSendRoute({
+        useCanonicalCommunityInteractions: current.useCanonicalCommunityInteractions,
+        hasCanonicalWriter: Boolean(createCanonicalMessageRows),
+        activeCommunityId,
+        replyToId,
+        replyRootId,
+      });
+
+      if (sendRoute.kind === "canonical" && current.onCanonicalOptimisticInsert) {
+        canonicalOptimisticIdempotencyKey = sendRoute.idempotencyKey;
         current.onCanonicalOptimisticInsert({
-          idempotencyKey: canonicalIdempotencyKey ?? createCommunityComposerIdempotencyKey(activeCommunityId, replyRootId),
+          idempotencyKey: sendRoute.idempotencyKey,
           communityId: activeCommunityId,
-          kind: replyRootId ? "reply" : "root",
-          rootId: replyRootId,
+          kind: sendRoute.rootId ? "reply" : "root",
+          rootId: sendRoute.rootId,
           replyToMessageId: replyToId,
           text: bodyToSend,
           attachments: preparedAttachments,
@@ -461,33 +493,39 @@ export function useCommunityChatMutationController<
           senderId: sessionUserId,
         });
       }
-      const created = canUseCanonicalComposer && current.createCommunityInteractionMessageRows
-        ? await current.createCommunityInteractionMessageRows({
-            session,
-            communityId: activeCommunityId,
-            idempotencyKey: canonicalIdempotencyKey ?? createCommunityComposerIdempotencyKey(activeCommunityId, replyRootId),
-            text: bodyToSend,
-            rootId: replyRootId,
-            replyToMessageId: replyToId,
-            mentions: mentionsToSend,
-            attachments: serializedAttachments,
-          })
-        : await (async () => {
-            const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
-            return await createCloudThreadUserMessageRows<SessionT, RowT>({
-              session,
-              threadId,
-              text: bodyToSend,
-              attachments: serializedAttachments,
-              replyToId,
-            });
-          })();
+
+      let created: RowT[];
+      if (sendRoute.kind === "canonical") {
+        if (!createCanonicalMessageRows) throw new Error("community_interaction_writer_missing");
+        created = await createCanonicalMessageRows({
+          session,
+          communityId: activeCommunityId,
+          idempotencyKey: sendRoute.idempotencyKey,
+          text: bodyToSend,
+          rootId: sendRoute.rootId,
+          replyToMessageId: replyToId,
+          mentions: mentionsToSend,
+          attachments: serializedAttachments,
+        });
+      } else {
+        const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
+        created = await createCloudThreadUserMessageRows<SessionT, RowT>({
+          session,
+          threadId,
+          text: bodyToSend,
+          attachments: serializedAttachments,
+          replyToId,
+        });
+      }
       const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;
       if (!record) {
         current.setCommunityChatError(current.missingPayloadMessage);
         current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
-        if (canonicalIdempotencyKey) {
-          current.onCanonicalOptimisticSettle?.({ idempotencyKey: canonicalIdempotencyKey, status: "failed" });
+        if (canonicalOptimisticIdempotencyKey) {
+          current.onCanonicalOptimisticSettle?.({
+            idempotencyKey: canonicalOptimisticIdempotencyKey,
+            status: "failed",
+          });
         }
         restoreDraft();
         return;
@@ -512,8 +550,11 @@ export function useCommunityChatMutationController<
       }
       current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
       current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
-      if (canonicalIdempotencyKey) {
-        current.onCanonicalOptimisticSettle?.({ idempotencyKey: canonicalIdempotencyKey, status: "failed" });
+      if (canonicalOptimisticIdempotencyKey) {
+        current.onCanonicalOptimisticSettle?.({
+          idempotencyKey: canonicalOptimisticIdempotencyKey,
+          status: "failed",
+        });
       }
       restoreDraft();
     } finally {

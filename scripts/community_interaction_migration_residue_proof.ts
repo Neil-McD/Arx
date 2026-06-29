@@ -160,8 +160,18 @@ assert.doesNotMatch(
 
 assert.match(
   sendController,
-  /const canUseCanonicalComposer[\s\S]*useCanonicalCommunityInteractions[\s\S]*createCommunityInteractionMessageRows[\s\S]*\(!replyToId \|\| Boolean\(replyRootId\)\)/,
-  "shared send controller should use canonical composer for sends with mappable replies",
+  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*reply_target_unmapped[\s\S]*createCommunityComposerIdempotencyKey/,
+  "shared send controller should route sends through one explicit canonical-vs-legacy decision",
+);
+assert.match(
+  sendController,
+  /const sendRoute = resolveCommunityChatSendRoute\(\{[\s\S]*useCanonicalCommunityInteractions[\s\S]*hasCanonicalWriter: Boolean\(createCanonicalMessageRows\)[\s\S]*replyToId[\s\S]*replyRootId[\s\S]*\}\)/,
+  "shared send controller should compute the send route once after attachment preparation",
+);
+assert.doesNotMatch(
+  sendController,
+  /canonicalEligible|canUseCanonicalComposer/,
+  "shared send controller should not keep duplicated canonical eligibility booleans",
 );
 assert.match(
   sendController,
