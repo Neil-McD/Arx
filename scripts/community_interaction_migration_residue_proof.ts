@@ -17,14 +17,24 @@ const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
 const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const communityChat = read("convex/communityChat.ts");
+const communityFacade = read("convex/community.ts");
 const backfill = read("convex/communityInteractionBackfill.ts");
+const schema = read("convex/schema.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
+const dataController = read("shared/useCommunityChatDataController.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 
 function assertIncludes(sourceName: string, source: string, needle: string): void {
   assert.ok(source.includes(needle), `${sourceName} should include: ${needle}`);
+}
+
+function extractExportedConst(source: string, name: string): string {
+  const start = source.indexOf(`export const ${name} =`);
+  assert.notEqual(start, -1, `expected exported const ${name}`);
+  const next = source.indexOf("\nexport const ", start + 1);
+  return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
 assert.match(
@@ -114,6 +124,39 @@ assert.match(
   /createCloudThreadUserMessageRows[\s\S]*community:createThreadUserMessage/,
   "legacy chat gateway should own the explicit legacy chat writer call",
 );
+for (const [label, source] of [
+  ["chat gateway", chatGateway],
+  ["chat data controller", dataController],
+  ["chat mutation controller", sendController],
+  ["community chat backend", communityChat],
+  ["community facade", communityFacade],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /listCloudThreadUserMessageSenderIds|listThreadUserMessageSenderIds/,
+    `${label} should not keep the unused sender-list query path`,
+  );
+}
+assert.doesNotMatch(
+  chatGateway,
+  /void params\.init|init\?: RequestInit/,
+  "chat gateway Convex calls should not advertise ignored RequestInit options",
+);
+assert.doesNotMatch(
+  chatGateway,
+  /void params\.senderId|senderId: string/,
+  "chat edit/delete gateway calls should not accept ignored senderId params",
+);
+assert.doesNotMatch(
+  dataController,
+  /init:\s*\{\s*signal:|communityFetchAbortScope|beginScopedAbortRequest|finishScopedAbortRequest|abortAllScopedRequests|isAbortError/,
+  "chat data controller should not keep fake Convex abort plumbing",
+);
+assert.doesNotMatch(
+  sendController,
+  /senderId:\s*session\.user\.id/,
+  "chat mutation controller should trust backend auth instead of forwarding senderId hints",
+);
 
 assert.match(
   sendController,
@@ -145,6 +188,56 @@ assert.match(
   communityChat,
   /createThreadUserMessage[\s\S]*recordLegacyChatMessageInteractionBestEffort/,
   "legacy chat writer should still dual-write through the adapter during the migration",
+);
+assert.match(
+  schema,
+  /communityChatThreads: defineTable\(\{[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
+  "community chat threads should have a bounded canonical lookup index",
+);
+assert.match(
+  schema,
+  /communityTypingPresence: defineTable\(\{[\s\S]*\.index\("by_community_displayUntil", \["communityId", "displayUntil"\]\)/,
+  "community typing presence should have a bounded active-window lookup index",
+);
+assert.match(
+  communityChat,
+  /withIndex\("by_community_createdAt", \(q: any\) => q\.eq\("communityId", communityId\)\)[\s\S]*\.order\("asc"\)[\s\S]*\.first\(\)/,
+  "canonical community chat thread lookup should be bounded by index + first",
+);
+assert.doesNotMatch(
+  communityChat,
+  /function listCommunityChatThreadsForCommunity|const rows = \(await ctx\.db\s*\.query\("communityChatThreads"\)\s*\.withIndex\("by_community",[\s\S]{0,300}\.collect\(\)|\.sort\(\(a, b\) => a\.createdAt - b\.createdAt/,
+  "canonical chat-thread lookup should not collect and sort all community threads",
+);
+
+const listCommunityTyping = extractExportedConst(communityChat, "listCommunityTyping");
+assert.match(listCommunityTyping, /MAX_TYPING_PRESENCE_SCAN_ROWS/, "typing presence reads should use a named scan cap");
+assert.match(
+  listCommunityTyping,
+  /withIndex\("by_community_displayUntil", \(q: any\) =>[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(MAX_TYPING_PRESENCE_SCAN_ROWS\)/,
+  "typing presence reads should use the active-window index and bounded take",
+);
+assert.doesNotMatch(
+  listCommunityTyping,
+  /\.collect\(\)|\.sort\(/,
+  "typing presence reads should not collect/sort all community typing rows",
+);
+
+const deleteOwnMessage = extractExportedConst(communityChat, "deleteOwnMessage");
+assert.match(deleteOwnMessage, /MAX_REACTION_DELETE_ROWS/, "message delete should use a named reaction-delete cap");
+assert.match(
+  deleteOwnMessage,
+  /\.take\(MAX_REACTION_DELETE_ROWS \+ 1\)[\s\S]*message_reaction_delete_limit_exceeded/,
+  "message delete should fail closed instead of collecting unbounded reactions",
+);
+
+const listMessageReactions = extractExportedConst(communityChat, "listMessageReactions");
+assert.match(listMessageReactions, /MAX_REACTION_MESSAGE_IDS_PER_REQUEST/, "reaction reads should cap message ids");
+assert.match(listMessageReactions, /MAX_REACTIONS_PER_MESSAGE/, "reaction reads should cap reactions per message");
+assert.doesNotMatch(
+  listMessageReactions,
+  /\.collect\(\)/,
+  "reaction reads should not collect unbounded reactions per message",
 );
 assert.match(
   backfill,
