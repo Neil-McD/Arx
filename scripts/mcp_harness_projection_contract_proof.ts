@@ -366,6 +366,191 @@ function proveDisabledToolsStayOutOfRuntimeProjections() {
   console.log("PASS: enabled tool policy is preserved in runtime projections");
 }
 
+function proveOnlyLiveAppsWithRuntimeToolsProject() {
+  const effectiveApps = buildEffectiveMcpApps([
+    mount({
+      id: "user:u-airtable",
+      source_mount_id: "u-airtable",
+      scope: "user",
+      live_status: "live",
+      enabled_tools: ["list_records"],
+      app: {
+        catalog_app_id: "airtable",
+        name: "Airtable",
+        slug: "airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        auth_type: "bearer",
+        status: "valid",
+      },
+      tools: [
+        {
+          tool_name: "list_records",
+          namespaced_tool_name: "airtable__list_records",
+          description: "List Airtable records",
+          risk_level: "read",
+          enabled: true,
+        },
+      ],
+    }),
+    mount({
+      id: "user:u-github",
+      source_mount_id: "u-github",
+      scope: "user",
+      live_status: "live",
+      enabled_tools: ["search_repositories"],
+      app: {
+        catalog_app_id: "github",
+        name: "GitHub",
+        slug: "github",
+        endpoint_url: "https://github.example.com/mcp",
+        auth_type: "bearer",
+        status: "valid",
+      },
+      tools: [
+        {
+          tool_name: "search_repositories",
+          namespaced_tool_name: "github__search_repositories",
+          description: "Search repositories",
+          risk_level: "read",
+          enabled: true,
+        },
+      ],
+    }),
+    mount({
+      id: "user:u-linear",
+      source_mount_id: "u-linear",
+      scope: "user",
+      live_status: "live",
+      enabled_tools: ["search_issues"],
+    }),
+    mount({
+      id: "user:u-context7",
+      source_mount_id: "u-context7",
+      scope: "user",
+      live_status: "live",
+      enabled_tools: [],
+      app: {
+        catalog_app_id: "context7",
+        name: "Context7",
+        slug: "context7",
+        endpoint_url: "https://context7.example.com/mcp",
+        auth_type: "bearer",
+        status: "valid",
+      },
+      tools: [],
+    }),
+    mount({
+      id: "user:u-fly",
+      source_mount_id: "u-fly",
+      scope: "user",
+      live_status: "not_live",
+      enabled_tools: ["list_apps"],
+      app: {
+        catalog_app_id: "fly",
+        name: "Fly",
+        slug: "fly",
+        endpoint_url: "https://fly.example.com/mcp",
+        auth_type: "bearer",
+        status: "valid",
+      },
+      tools: [
+        {
+          tool_name: "list_apps",
+          namespaced_tool_name: "fly__list_apps",
+          description: "List Fly apps",
+          risk_level: "read",
+          enabled: true,
+        },
+      ],
+    }),
+  ]);
+  const projection = buildMcpHarnessProjection({
+    effectiveApps,
+    runtimeMountedTools: [
+      runtimeTool({
+        mount_id: "u-airtable",
+        runtime_tool_name: "me__airtable__list_records",
+        developer_app_id: "dev-airtable",
+        catalog_app_id: "airtable",
+        app_name: "Airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        tool_name: "list_records",
+        namespaced_tool_name: "airtable__list_records",
+      }),
+      runtimeTool({
+        mount_id: "u-github",
+        runtime_tool_name: "me__github__search_repositories",
+        developer_app_id: "dev-github",
+        catalog_app_id: "github",
+        app_name: "GitHub",
+        endpoint_url: "https://github.example.com/mcp",
+        tool_name: "search_repositories",
+        namespaced_tool_name: "github__search_repositories",
+      }),
+      runtimeTool({
+        mount_id: "u-linear",
+        runtime_tool_name: "me__linear__search_issues",
+        tool_name: "search_issues",
+        namespaced_tool_name: "linear__search_issues",
+      }),
+      runtimeTool({
+        mount_id: "u-context7",
+        runtime_tool_name: "me__context7__resolve_library_id",
+        developer_app_id: "dev-context7",
+        catalog_app_id: "context7",
+        app_name: "Context7",
+        endpoint_url: "https://context7.example.com/mcp",
+        tool_name: "resolve_library_id",
+        namespaced_tool_name: "context7__resolve_library_id",
+      }),
+      runtimeTool({
+        mount_id: "u-fly",
+        runtime_tool_name: "me__fly__list_apps",
+        developer_app_id: "dev-fly",
+        catalog_app_id: "fly",
+        app_name: "Fly",
+        endpoint_url: "https://fly.example.com/mcp",
+        tool_name: "list_apps",
+        namespaced_tool_name: "fly__list_apps",
+      }),
+    ],
+  });
+
+  assert.deepEqual(
+    projection.codexBridgeTools.map((tool) => tool.connector_name),
+    ["Airtable", "GitHub", "Linear"],
+  );
+  assert.deepEqual(
+    projection.polynetMountedTools.map((tool) => tool.app_name),
+    ["Airtable", "GitHub", "Linear"],
+  );
+  assert.deepEqual(
+    projection.codexBridgeTools.map((tool) => tool.bridge_tool_name),
+    [
+      "polynet_mcp__airtable__list_records",
+      "polynet_mcp__github__search_repositories",
+      "polynet_mcp__linear__search_issues",
+    ],
+  );
+  assert.equal(
+    projection.capabilities.find((capability) => capability.app_name === "Context7")
+      ?.codex_bridge_tool_count,
+    0,
+  );
+  assert.equal(
+    projection.capabilities.find((capability) => capability.app_name === "Fly")
+      ?.codex_bridge_tool_count,
+    0,
+  );
+  assert.equal(
+    projection.setupPacketHints.find((hint) => hint.app_name === "Fly")
+      ?.setup_reason,
+    "needs_auth",
+  );
+
+  console.log("PASS: only live apps with runtime tools project to harnesses");
+}
+
 function proveBridgeNamesAreCollisionSafeAcrossRuntimeTools() {
   const effectiveApps = buildEffectiveMcpApps([
     mount({
@@ -469,6 +654,7 @@ proveLivePersonalRuntimeToolsProjectToBothRuntimes();
 proveCommunityAttachmentDoesNotDuplicateRuntimeTools();
 proveCommunityOnlyAttachmentIsSetupNeeded();
 proveDisabledToolsStayOutOfRuntimeProjections();
+proveOnlyLiveAppsWithRuntimeToolsProject();
 proveBridgeNamesAreCollisionSafeAcrossRuntimeTools();
 proveRuntimeToolsWithoutMatchingLivePersonalAppFailClosed();
 

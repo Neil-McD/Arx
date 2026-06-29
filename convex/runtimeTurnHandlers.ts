@@ -205,6 +205,22 @@ type CodexMcpBridgeProjectionReceipt = {
   bridge_tool_names: string[];
   runtime_tool_names: string[];
   app_count: number;
+  live_app_count: number;
+  bridge_app_count: number;
+  live_bridge_app_names: string[];
+  app_summaries: Array<{
+    app_identity_key: string;
+    app_name: string;
+    catalog_app_id: string | null;
+    live_for_current_user: boolean;
+    source_label: string;
+    effective_tool_count: number;
+    bridge_tool_count: number;
+    bridge_tool_names: string[];
+    executable_bridge_tool_count: number;
+    setup_needed: boolean;
+    setup_reason: string | null;
+  }>;
   setup_needed_app_count: number;
   executable: boolean;
   executable_bridge_tool_count: number;
@@ -237,6 +253,42 @@ function buildCodexMcpBridgeProjectionReceipt(
   projection: McpHarnessProjection,
 ): CodexMcpBridgeProjectionReceipt {
   const sourceLabels = new Set<string>();
+  const setupHintsByAppIdentityKey = new Map(
+    projection.setupPacketHints.map((hint) => [hint.app_identity_key, hint]),
+  );
+  const bridgeToolsByAppIdentityKey = new Map<
+    string,
+    { bridgeToolNames: string[]; executableBridgeToolCount: number }
+  >();
+  for (const tool of projection.codexBridgeTools) {
+    const entry =
+      bridgeToolsByAppIdentityKey.get(tool.app_identity_key) ??
+      { bridgeToolNames: [], executableBridgeToolCount: 0 };
+    entry.bridgeToolNames.push(tool.bridge_tool_name);
+    if (tool.risk_level === "read") entry.executableBridgeToolCount += 1;
+    bridgeToolsByAppIdentityKey.set(tool.app_identity_key, entry);
+  }
+  const appSummaries = projection.capabilities.map((capability) => {
+    const bridgeTools =
+      bridgeToolsByAppIdentityKey.get(capability.app_identity_key) ??
+      { bridgeToolNames: [], executableBridgeToolCount: 0 };
+    const setupHint = setupHintsByAppIdentityKey.get(
+      capability.app_identity_key,
+    );
+    return {
+      app_identity_key: capability.app_identity_key,
+      app_name: capability.app_name,
+      catalog_app_id: capability.catalog_app_id,
+      live_for_current_user: capability.live_for_current_user,
+      source_label: capability.source_label,
+      effective_tool_count: capability.effective_tool_count,
+      bridge_tool_count: capability.codex_bridge_tool_count,
+      bridge_tool_names: [...bridgeTools.bridgeToolNames].sort(),
+      executable_bridge_tool_count: bridgeTools.executableBridgeToolCount,
+      setup_needed: Boolean(setupHint),
+      setup_reason: setupHint?.setup_reason ?? null,
+    };
+  });
   for (const capability of projection.capabilities) {
     sourceLabels.add(capability.source_label);
   }
@@ -250,6 +302,17 @@ function buildCodexMcpBridgeProjectionReceipt(
       (tool) => tool.runtime_tool_name,
     ),
     app_count: projection.capabilities.length,
+    live_app_count: projection.capabilities.filter(
+      (capability) => capability.live_for_current_user,
+    ).length,
+    bridge_app_count: appSummaries.filter(
+      (summary) => summary.bridge_tool_count > 0,
+    ).length,
+    live_bridge_app_names: appSummaries
+      .filter((summary) => summary.bridge_tool_count > 0)
+      .map((summary) => summary.app_name)
+      .sort(),
+    app_summaries: appSummaries,
     setup_needed_app_count: projection.setupPacketHints.length,
     executable: projection.codexBridgeTools.some((tool) => tool.risk_level === "read"),
     executable_bridge_tool_count: projection.codexBridgeTools.filter(
@@ -267,6 +330,10 @@ function buildFailedCodexMcpBridgeProjectionReceipt(): CodexMcpBridgeProjectionR
     bridge_tool_names: [],
     runtime_tool_names: [],
     app_count: 0,
+    live_app_count: 0,
+    bridge_app_count: 0,
+    live_bridge_app_names: [],
+    app_summaries: [],
     setup_needed_app_count: 0,
     executable: false,
     executable_bridge_tool_count: 0,

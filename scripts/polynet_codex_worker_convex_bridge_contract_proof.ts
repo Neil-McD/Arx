@@ -250,8 +250,13 @@ assert.match(
 );
 assert.match(
   handlers,
-  /type CodexMcpBridgeProjectionReceipt = \{[\s\S]*executable: boolean[\s\S]*executable_bridge_tool_count: number[\s\S]*credential_boundary: "server_only"/,
-  "Codex MCP bridge projection receipt must expose executable read-only bridge counts while keeping credentials server-side",
+  /type CodexMcpBridgeProjectionReceipt = \{[\s\S]*live_app_count: number[\s\S]*bridge_app_count: number[\s\S]*live_bridge_app_names: string\[\][\s\S]*app_summaries: Array<\{[\s\S]*app_name: string[\s\S]*bridge_tool_count: number[\s\S]*bridge_tool_names: string\[\][\s\S]*setup_reason: string \| null[\s\S]*executable: boolean[\s\S]*executable_bridge_tool_count: number[\s\S]*credential_boundary: "server_only"/,
+  "Codex MCP bridge projection receipt must expose safe app-level bridge visibility while keeping credentials server-side",
+);
+assert.match(
+  handlers,
+  /bridgeToolsByAppIdentityKey[\s\S]*appSummaries = projection\.capabilities\.map[\s\S]*live_app_count: projection\.capabilities\.filter[\s\S]*bridge_app_count: appSummaries\.filter[\s\S]*live_bridge_app_names: appSummaries[\s\S]*app_summaries: appSummaries/,
+  "Codex MCP bridge projection receipt must summarize live Polynet-managed bridge apps from the canonical projection",
 );
 assert.match(
   handlers,
@@ -372,6 +377,11 @@ assert.match(
   daytonaConfig,
   /buildDaytonaCodexDeveloperInstructions[\s\S]*PolyNet's Codex runtime hosted in a Daytona sandbox/,
   "Daytona Codex config must inject PolyNet runtime instructions",
+);
+assert.match(
+  daytonaConfig,
+  /polynet_mcp__[\s\S]*PolyNet-managed bridge tools, not raw Codex MCP servers[\s\S]*default app\/plugin registry/,
+  "Daytona Codex instructions must distinguish Polynet-managed MCP bridge tools from Codex's default MCP/app registry",
 );
 assert.match(
   daytonaPolicy,
