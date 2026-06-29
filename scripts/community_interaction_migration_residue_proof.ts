@@ -160,22 +160,27 @@ assert.doesNotMatch(
 
 assert.match(
   sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*reply_target_unmapped[\s\S]*createCommunityComposerIdempotencyKey/,
+  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*community_interaction_reply_target_unmapped[\s\S]*createCommunityComposerIdempotencyKey/,
   "shared send controller should route sends through one explicit canonical-vs-legacy decision",
 );
 assert.match(
   sendController,
-  /const sendRoute = resolveCommunityChatSendRoute\(\{[\s\S]*useCanonicalCommunityInteractions[\s\S]*hasCanonicalWriter: Boolean\(createCanonicalMessageRows\)[\s\S]*replyToId[\s\S]*replyRootId[\s\S]*\}\)/,
+  /const sendRoute = resolveCommunityChatSendRoute\(\{[\s\S]*useCanonicalCommunityInteractions[\s\S]*hasCanonicalWriter: Boolean\(createCanonicalMessageRows\)[\s\S]*hasReplyTarget: Boolean\(replySnapshot\)[\s\S]*replyRootId[\s\S]*\}\)/,
   "shared send controller should compute the send route once after attachment preparation",
 );
 assert.doesNotMatch(
   sendController,
-  /canonicalEligible|canUseCanonicalComposer/,
+  /canonicalEligible|canUseCanonicalComposer|reason:\s*"reply_target_unmapped"/,
   "shared send controller should not keep duplicated canonical eligibility booleans",
 );
 assert.match(
   sendController,
-  /createCloudThreadUserMessageRows[\s\S]*attachments: serializedAttachments[\s\S]*replyToId/,
+  /const legacyReplyToId[\s\S]*replySnapshot\?\.legacy_message_id[\s\S]*return replyRootId \? null : replyToId/,
+  "shared send controller should separate legacy reply ids from canonical reply target ids",
+);
+assert.match(
+  sendController,
+  /createCloudThreadUserMessageRows[\s\S]*attachments: serializedAttachments[\s\S]*replyToId: legacyReplyToId/,
   "shared send controller should keep the legacy fallback explicit and payload-bounded",
 );
 assert.match(

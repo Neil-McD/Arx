@@ -751,6 +751,7 @@ type MessageAttachment = CommunityMessageAttachment & {
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
   interaction_root_id?: string | null;
+  legacy_message_id?: string | null;
 };
 type CommunityActivityEvent = SharedCommunityActivityEvent;
 type CommunityInteractionRoot = CommunityInteractionRootBundle;
@@ -3095,7 +3096,12 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     missingPayloadMessage: "Message sent, but no payload returned.",
     ensureCommunityChatThread,
-    useCanonicalCommunityInteractions: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
+    useCanonicalCommunityInteractions: Boolean(
+      COMMUNITY_INTERACTION_PROJECTION_ENABLED &&
+      activeCommunity &&
+      hasResolvedCommunityChat &&
+      !isLoadingChat
+    ),
     onCanonicalOptimisticInsert: (pending) => {
       setPendingCanonicalInteractions((prev) => [
         ...prev.filter((item) => item.idempotencyKey !== pending.idempotencyKey),

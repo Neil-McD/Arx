@@ -40,7 +40,13 @@ export type WebCommunityInteractionProjectionProps = {
   repliesError: string | null;
   onSelectRoot: (rootId: string) => void;
   onCloseDrawer: () => void;
-  onStartRootReply?: (message: { id: string; sender_id: string; body: string; interaction_root_id: string }) => void;
+  onStartRootReply?: (message: {
+    id: string;
+    sender_id: string;
+    body: string;
+    interaction_root_id: string;
+    legacy_message_id?: string | null;
+  }) => void;
   mainComposer?: ReactNode;
   drawerComposer?: ReactNode;
   onRetryRoots: () => void;
@@ -383,12 +389,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         <MessageActions
                           onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
                           onReply={() => {
-                            if (!reply.legacy_message_id || !reply.actor_user_id) return;
+                            if (!reply.actor_user_id) return;
                             props.onStartRootReply?.({
-                              id: reply.legacy_message_id,
+                              id: reply.legacy_message_id ?? reply.id,
                               sender_id: reply.actor_user_id,
                               body,
                               interaction_root_id: reply.root_id,
+                              legacy_message_id: reply.legacy_message_id ?? null,
                             });
                           }}
                           replyLabel="Reply to this message"

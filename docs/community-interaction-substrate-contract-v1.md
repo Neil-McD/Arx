@@ -282,7 +282,7 @@ Rules:
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
 - top-level composer sends may use the canonical composer bridge, including prepared attachments
 - drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
-- ambiguous legacy reply sends remain on the legacy chat writer during this migration slice
+- legacy timeline reply sends remain on the legacy chat writer while the legacy timeline fallback is active
 - successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
@@ -301,8 +301,9 @@ Rules:
 - `communityInteractionLegacyChatLinks` maps the compatibility message to the canonical root/reply
 - the compatibility row keeps old readers, realtime subscribers, archive documents, digests, and recent-context consumers alive
 - the mutation returns the existing legacy chat row shape to preserve optimistic UI replacement behavior
-- drawer replies require a canonical `rootId` and a valid legacy reply target message id
-- ambiguous legacy timeline replies stay on `createThreadUserMessage`
+- drawer replies require a canonical `rootId`; legacy reply target message ids are compatibility metadata when available
+- canonical projection reply targets without a canonical `rootId` fail closed instead of falling back to legacy sends
+- legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
 - the bridge may schedule async link-embed enrichment after creating pending embed records

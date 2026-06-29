@@ -118,13 +118,23 @@ assert.match(
 );
 assert.match(
   sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*reply_target_unmapped/,
+  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*community_interaction_reply_target_unmapped/,
   "send controller should keep canonical projection writes behind one explicit route decision",
 );
 assert.match(
   sendController,
   /onCanonicalOptimisticInsert[\s\S]*idempotencyKey: sendRoute\.idempotencyKey[\s\S]*attachments: preparedAttachments[\s\S]*serializedAttachments/,
   "canonical optimistic projection rows should use the route idempotency key and prepared attachments",
+);
+assert.match(
+  chatPanel,
+  /const rootReplyTarget[\s\S]*if \(!root\?\.id \|\| !root\.actor_user_id\) return null[\s\S]*id: root\.legacy_message_id \?\? root\.id[\s\S]*legacy_message_id: root\.legacy_message_id \?\? null/,
+  "canonical drawer root reply target should not require a legacy message id",
+);
+assert.match(
+  projection,
+  /onReply=\{\(\) => \{[\s\S]*if \(!reply\.actor_user_id\) return[\s\S]*id: reply\.legacy_message_id \?\? reply\.id[\s\S]*interaction_root_id: reply\.root_id[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null/,
+  "canonical drawer reply action should carry canonical root id and optional legacy metadata",
 );
 assert.doesNotMatch(
   gateway,

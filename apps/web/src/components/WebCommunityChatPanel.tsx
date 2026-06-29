@@ -53,6 +53,7 @@ type UserProfile = SharedUserProfile;
 type ProfileCommunityContext = SharedProfileCommunityContext;
 type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
   interaction_root_id?: string | null;
+  legacy_message_id?: string | null;
 };
 
 type CommunityChatSendDraft = {
@@ -423,12 +424,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     : null;
   const rootReplyTarget = useMemo<CommunityReplyTarget | null>(() => {
     const root = selectedInteractionRootBundle?.root;
-    if (!root?.legacy_message_id || !root.actor_user_id) return null;
+    if (!root?.id || !root.actor_user_id) return null;
     return {
-      id: root.legacy_message_id,
+      id: root.legacy_message_id ?? root.id,
       sender_id: root.actor_user_id,
       body: root.content_summary ?? "",
       interaction_root_id: root.id,
+      legacy_message_id: root.legacy_message_id ?? null,
     };
   }, [
     selectedInteractionRootBundle?.root.legacy_message_id,
