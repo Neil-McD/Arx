@@ -31274,6 +31274,30 @@ button.message-citation-chip:hover {
   -webkit-line-clamp: 2;
 }
 
+/* The community feed rendered compact inside the workspace right panel. Reuses the feed's own
+   row/reaction/reply components; this just bounds + tightens it for the narrow column. */
+.workspace-community-signal-feed {
+  margin: 2px 0 10px;
+  max-height: 460px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.workspace-community-signal-feed .community-interaction-feed {
+  max-width: 100%;
+  padding: 0;
+  gap: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-group {
+  max-width: 100%;
+}
+
+.workspace-community-section__subtitle {
+  margin-top: 6px;
+  opacity: 0.7;
+}
+
 .workspace-community-signal-media {
   margin-top: 4px;
   min-width: 0;

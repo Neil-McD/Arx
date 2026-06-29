@@ -538,6 +538,7 @@ import {
   buildWorkspaceRightPanelUserData,
   type WorkspaceRightPanelRecentSignalTarget,
 } from "./components/workspaceRightPanelData";
+import { CommunityInteractionFeedList } from "./components/communityInteractionFeed";
 import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
@@ -11486,7 +11487,6 @@ export default function App() {
 
   const workspacePanelCommunityRecentSignals = useMemo(() => {
     return buildWorkspaceRightPanelRecentSignals({
-      communityInteractionRoots,
       aiFeedPosts: activeCommunityFeedState.live,
       resources: communityResources,
       events: communityEvents,
@@ -11496,7 +11496,6 @@ export default function App() {
   }, [
     activeCommunityFeedState.live,
     communityEvents,
-    communityInteractionRoots,
     communityResources,
     displayName,
     savedProfilesByUserId,
@@ -11528,7 +11527,54 @@ export default function App() {
     ],
   );
 
+  const recentSignalChatRoots = useMemo(
+    () => communityInteractionRoots.filter((bundle) => !bundle.pending).slice(-15),
+    [communityInteractionRoots],
+  );
+  const handleOpenPanelInteractionThread = useCallback(
+    (rootId: string) => {
+      const slug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+      if (slug) openCommunityChat(slug, { clearUnread: false, pushSnapshot: true });
+      handleSelectCommunityInteractionRoot(rootId);
+    },
+    [activeCommunity?.slug, handleSelectCommunityInteractionRoot, openCommunityChat, selectedActiveCommunitySlug],
+  );
+  const noopPanelHandler = useCallback(() => {}, []);
+  const workspaceRecentSignalFeed = COMMUNITY_INTERACTION_PROJECTION_ENABLED ? (
+    <CommunityInteractionFeedList
+      density="compact"
+      activeCommunityName={activeCommunity?.name ?? ""}
+      roots={recentSignalChatRoots}
+      selectedRootId={null}
+      replies={[]}
+      isLoadingRoots={isLoadingCommunityInteractions}
+      isLoadingReplies={false}
+      error={communityInteractionError}
+      repliesError={null}
+      onSelectRoot={handleOpenPanelInteractionThread}
+      onCloseDrawer={noopPanelHandler}
+      onRetryRoots={() => {
+        if (activeCommunityId) void loadCommunityInteractionRoots(activeCommunityId, session);
+      }}
+      onRetryReplies={noopPanelHandler}
+      profilesByUserId={savedProfilesByUserId}
+      displayName={displayName}
+      getAvatarColor={getAvatarColor}
+      getInitials={getInitials}
+      formatChatTime={formatChatTime}
+      renderTextWithLinks={renderTextWithLinks}
+      onToggleReaction={handleToggleCommunityInteractionReaction}
+      currentUserId={canonicalSessionUserId}
+      editing={null}
+      editText=""
+      onStartEdit={noopPanelHandler}
+      onEditTextChange={noopPanelHandler}
+      onSaveEdit={noopPanelHandler}
+      onCancelEdit={noopPanelHandler}
+    />
+  ) : null;
   const workspaceUserDataPanelCommunity = buildWorkspaceRightPanelCommunityData({
+    recentSignalFeed: workspaceRecentSignalFeed,
     activeCommunity,
     activeCommunityAccess,
     fallbackRole: activeCommunity ? communityRoleById[activeCommunity.id] : null,

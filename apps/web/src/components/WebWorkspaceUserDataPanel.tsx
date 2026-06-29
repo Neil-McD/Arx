@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronLeft,
@@ -64,6 +64,7 @@ export type WorkspaceUserPanelCommunity = {
   analytics: WorkspaceUserPanelCommunityAnalytics;
   operations: WorkspaceUserPanelCommunityOperations;
   recentSignals: WorkspaceUserPanelRecentSignal[];
+  recentSignalFeed?: ReactNode;
   integrations: WorkspaceUserPanelIntegration[];
 };
 
@@ -1304,6 +1305,7 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
   }, [community?.id, isRecentSignalsExpanded]);
 
   const panelRecentSignals = community?.recentSignals ?? [];
+  const recentSignalFeed = community?.recentSignalFeed ?? null;
   const recentSignalsCount = panelRecentSignals.length;
   const updateRecentSignalsScrollState = useCallback(() => {
     const viewport = recentSignalsViewportRef.current;
@@ -1416,9 +1418,17 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
           onOpenMembers={props.onOpenActiveCommunityMembers}
         />
       ) : null}
-      {panelRecentSignals.length > 0 ? (
+      {recentSignalFeed || panelRecentSignals.length > 0 ? (
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
+          {recentSignalFeed ? (
+            <div className="workspace-community-signal-feed community-interaction-feed-compact">
+              {recentSignalFeed}
+            </div>
+          ) : null}
+          {panelRecentSignals.length > 0 ? (
+            <div className="workspace-community-section__title workspace-community-section__subtitle">Activity</div>
+          ) : null}
           <div
             className={`workspace-community-signal-viewport${isRecentSignalsExpanded ? " is-expanded" : ""}`}
           >
