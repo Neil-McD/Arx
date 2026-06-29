@@ -11564,13 +11564,26 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: rgba(0, 0, 0, 0.55);
 }
 
-.chat-media-grid.count-1 .chat-media-item {
-  max-height: 320px;
+/* Single image in the feed: bounded box at natural aspect ratio (no crop), so any aspect ratio
+   fits without dominating the column. Lightbox shows full-res. Composer preview keeps its own rule. */
+.chat-media-grid.count-1:not(.chat-media-grid-composer) {
+  width: fit-content;
+  max-width: min(340px, 80vw);
 }
 
-.chat-media-grid.count-1 .chat-media-item img {
-  max-height: 320px;
-  object-fit: cover;
+.chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item {
+  width: auto;
+  max-width: min(340px, 80vw);
+  aspect-ratio: auto;
+  max-height: 360px;
+}
+
+.chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item img {
+  width: auto;
+  height: auto;
+  max-width: min(340px, 80vw);
+  max-height: 360px;
+  object-fit: contain;
 }
 
 .chat-media-grid.count-2 .chat-media-item,
