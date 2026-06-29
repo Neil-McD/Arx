@@ -31277,6 +31277,10 @@ button.message-citation-chip:hover {
 /* The community feed rendered compact inside the workspace right panel. Reuses the feed's own
    row/reaction/reply components; this just bounds + tightens it for the narrow column. */
 .workspace-community-signal-feed {
+  /* The feed's accent token (reply pill, reactions) is normally provided by the .community-chat
+     scope on the chat page. The panel renders the feed outside that scope, so map it here — it
+     stays theme-aware since --accent-gold is defined per theme at :root. */
+  --accent: var(--accent-gold);
   margin: 2px 0 10px;
   max-height: 460px;
   overflow-y: auto;
