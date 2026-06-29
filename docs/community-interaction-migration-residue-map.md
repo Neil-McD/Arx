@@ -19,7 +19,6 @@ This map is the deletion queue for the community chat substrate migration. It se
 | R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` | `VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION`, `WebCommunityChatPanel` | Delete after canonical projection is the only community chat surface in staging and production. |
 | R-006 | Legacy chat realtime subscription feeding projection refresh | `DELETE CANDIDATE` | `useCommunityChatRealtime`, `onCommunityMessageSent` refresh hooks | Delete after canonical interaction subscriptions fully cover roots, replies, reactions, edits, deletes, and pending states. |
 | R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` | `convex/communityInteractionBackfill.ts` | Delete after historical `communityChatMessages` are migrated and audited. |
-| R-008 | Demo seed/unseed tooling | `KEEP TEMPORARILY` | `convex/communityInteractionDemo.ts` | Delete or move after staging smoke fixtures no longer depend on seeded demo rows. |
 
 ## Drift Boundaries
 

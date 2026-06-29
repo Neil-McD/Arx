@@ -17,7 +17,6 @@ const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
 const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const communityChat = read("convex/communityChat.ts");
 const backfill = read("convex/communityInteractionBackfill.ts");
-const demo = read("convex/communityInteractionDemo.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
@@ -52,7 +51,6 @@ assert.match(
   "| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` |",
   "| R-006 | Legacy chat realtime subscription feeding projection refresh | `DELETE CANDIDATE` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
-  "| R-008 | Demo seed/unseed tooling | `KEEP TEMPORARILY` |",
   "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
@@ -141,11 +139,6 @@ assert.match(
   backfill,
   /backfillCommunityInteractionsFromLegacyChatBatch[\s\S]*dryRun[\s\S]*communityChatMessages/,
   "legacy backfill should remain a bounded migration tool",
-);
-assert.match(
-  demo,
-  /seedPolynetChatDemo[\s\S]*unseedPolynetChatDemo/,
-  "demo seed tooling should remain isolated from product interaction code",
 );
 
 console.log("community_interaction_migration_residue_proof: ok");
