@@ -2933,27 +2933,17 @@ export default function App() {
     },
   });
 
+  // Keep the interaction projection loaded whenever a community is active — NOT only on the chat
+  // page. The workspace right panel renders the same feed (compact) on the workspace page, so the
+  // roots must persist across page navigation. Only reset when there's no active community/session.
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED) {
-      resetCommunityInteractionProjection();
-      return;
-    }
-    if (
-      activePage !== "community"
-      || communityTab !== "chat"
-      || !activeCommunityId
-      || !session
-      || !hasResolvedCommunityChat
-    ) {
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) {
       resetCommunityInteractionProjection();
       return;
     }
     void loadCommunityInteractionRoots(activeCommunityId, session);
   }, [
     activeCommunityId,
-    activePage,
-    communityTab,
-    hasResolvedCommunityChat,
     loadCommunityInteractionRoots,
     resetCommunityInteractionProjection,
     session,
