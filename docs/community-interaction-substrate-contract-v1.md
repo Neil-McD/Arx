@@ -253,7 +253,10 @@ Rules:
 - reply reads are access-gated through the root community
 - reply reads use bounded indexed reads by `rootId + seq`
 - reply reads return only one-level drawer replies
-- read APIs do not read legacy chat tables
+- read APIs do not use legacy chat tables as source-of-truth
+- migration-only legacy attachment hydration may resolve linked legacy chat attachments until canonical attachment backfill is complete
+- viewer reaction state must be loaded only for the visible root/reply target ids, never by scanning all reactions for a viewer
+- reaction summary updates must not rescan every reaction on a target
 - read APIs do not read compiler, source-trace, archive, or memory tables
 - read APIs do not mutate unread, notification, or moderation state
 
@@ -291,7 +294,8 @@ Rules:
 - ambiguous legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
-- the bridge does not fetch URLs, scrape pages, process media, schedule jobs, promote source traces, or call the compiler
+- the bridge may schedule async link-embed enrichment after creating pending embed records
+- the bridge does not fetch URLs, scrape pages, process media, promote source traces, or call the compiler synchronously
 
 ## Current Legacy Chat Adapter Slice
 

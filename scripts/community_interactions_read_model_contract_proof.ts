@@ -22,7 +22,8 @@ function functionBlock(source: string, functionName: string): string {
   assert.notEqual(start, -1, `${functionName} should exist`);
   const next = source.indexOf("\nfunction ", start + startToken.length);
   const nextAsync = source.indexOf("\nasync function ", start + startToken.length);
-  const candidates = [next, nextAsync].filter((value) => value >= 0);
+  const nextExportConst = source.indexOf("\nexport const ", start + startToken.length);
+  const candidates = [next, nextAsync, nextExportConst].filter((value) => value >= 0);
   const end = candidates.length > 0 ? Math.min(...candidates) : source.length;
   return source.slice(start, end);
 }
@@ -40,22 +41,17 @@ assert.match(
 );
 assert.match(
   contract,
-  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not read legacy chat tables[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
+  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*migration-only legacy attachment hydration[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
   "contract should preserve read-model boundaries",
 );
 
 assert.doesNotMatch(
-  interactions,
-  /\.collect\(\)/,
-  "interaction read/write module should not use unbounded collect reads",
+  exportedConstBlock(interactions, "listCommunityInteractionRoots") + exportedConstBlock(interactions, "listCommunityInteractionReplies"),
+  /\.collect\(\)|query\("communityChatThreads"|query\("communityChatMessages"|query\("communityMessageReactions"|communityChatThreads" as any|communityChatMessages" as any|communityMessageReactions" as any/,
+  "public interaction read queries should not use unbounded collects or legacy chat tables as source-of-truth",
 );
 assert.doesNotMatch(
-  interactions,
-  /query\("communityChatThreads"|query\("communityChatMessages"|query\("communityMessageReactions"|communityChatThreads" as any|communityChatMessages" as any|communityMessageReactions" as any/,
-  "interaction read model should not read legacy community chat tables",
-);
-assert.doesNotMatch(
-  interactions,
+  exportedConstBlock(interactions, "listCommunityInteractionRoots") + exportedConstBlock(interactions, "listCommunityInteractionReplies"),
   /communitySourceTraces" as any|communityArchiveDocuments|communityCompiler|communityIntelligenceNodes|communityIntelligenceChangeRequests/,
   "interaction read model should not read source trace, archive, compiler, or directory truth tables",
 );
@@ -68,8 +64,13 @@ assert.match(
 );
 assert.doesNotMatch(
   mapRootBundle,
-  /communityInteractionReplies|listCommunityInteractionReplies|listContentBlocksForReply/,
-  "root bundle mapper should not hydrate drawer replies inline",
+  /listCommunityInteractionReplies|listContentBlocksForReply|\.take\(MAX_INTERACTION_REPLY_READ_LIMIT\)/,
+  "root bundle mapper should not hydrate drawer reply bodies inline",
+);
+assert.match(
+  mapRootBundle,
+  /query\("communityInteractionReplies" as any\)[\s\S]*withIndex\("by_root_seq"[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/,
+  "root bundle mapper may read one latest reply row for compact-feed last-reply metadata",
 );
 
 const mapReplyBundle = functionBlock(interactions, "mapReplyBundle");
@@ -77,6 +78,30 @@ assert.match(
   mapReplyBundle,
   /listContentBlocksForReply\(ctx, reply\._id\)[\s\S]*listEmbedsForReply\(ctx, reply\._id\)[\s\S]*listMentionsForReply\(ctx, reply\._id\)/,
   "reply bundle mapper should hydrate bounded content blocks, embeds, and mentions",
+);
+
+const viewerReactionMap = functionBlock(interactions, "loadViewerReactionMapForTargets");
+assert.match(
+  viewerReactionMap,
+  /targetIds: any\[\][\s\S]*by_root_actor_emoji[\s\S]*by_reply_actor_emoji[\s\S]*\.eq\("actorKey", actorKey\)[\s\S]*\.take\(MAX_VIEWER_REACTIONS_PER_TARGET\)/,
+  "viewer reaction state should be loaded through target+actor indexes and capped per visible target",
+);
+assert.doesNotMatch(
+  viewerReactionMap,
+  /by_actor[\s\S]*\.collect\(\)|\.collect\(\)/,
+  "viewer reaction state should not scan all reactions for the actor",
+);
+
+const reactionSummaryDelta = functionBlock(interactions, "applyReactionSummaryDelta");
+assert.match(
+  reactionSummaryDelta,
+  /mapReactionSummary\(current\)[\s\S]*counts\.set[\s\S]*counts\.delete[\s\S]*Array\.from\(counts\.entries\(\)\)/,
+  "reaction summary updates should adjust the denormalized summary by delta",
+);
+assert.doesNotMatch(
+  reactionSummaryDelta,
+  /ctx\.db\.query|\.collect\(\)/,
+  "reaction summary updates should not rescan all reactions on the target",
 );
 
 for (const [helper, pattern] of [
@@ -100,6 +125,11 @@ assert.match(
   listRoots,
   /MAX_INTERACTION_ROOT_READ_LIMIT/,
   "root list should cap the requested limit",
+);
+assert.match(
+  listRoots,
+  /loadViewerReactionMapForTargets\(ctx, userId, "root", rows\.map\(\(row\) => row\._id\)\)/,
+  "root list should load viewer reactions only for visible roots",
 );
 assert.match(
   listRoots,
@@ -132,6 +162,11 @@ assert.match(
   listReplies,
   /MAX_INTERACTION_REPLY_READ_LIMIT/,
   "reply list should cap the requested limit",
+);
+assert.match(
+  listReplies,
+  /loadViewerReactionMapForTargets\(ctx, userId, "reply", filtered\.map\(\(row\) => row\._id\)\)/,
+  "reply list should load viewer reactions only for visible drawer replies",
 );
 assert.match(
   listReplies,

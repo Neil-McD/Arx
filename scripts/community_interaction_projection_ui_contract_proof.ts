@@ -12,6 +12,7 @@ const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const interactions = read("convex/communityInteractions.ts");
@@ -38,8 +39,8 @@ assert.match(
 );
 assert.match(
   app,
-  /interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*communityInteractionRoots[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
-  "App should pass a feature-flagged canonical projection into the chat panel",
+  /interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*appendPendingRoots\(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId\)[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
+  "App should pass a feature-flagged canonical projection with optimistic roots into the chat panel",
 );
 assert.match(
   app,
@@ -127,8 +128,18 @@ assert.match(
 );
 assert.match(
   projection,
-  /profilesByUserId: Record<string, UserProfile>[\s\S]*UserAvatar[\s\S]*profile=\{profile\}/,
-  "projection should render root/reply avatars from the hydrated profile cache",
+  /CommunityInteractionFeedList[\s\S]*density="full"/,
+  "projection shell should delegate main feed rows to the shared full-density interaction feed",
+);
+assert.match(
+  projection,
+  /profilesByUserId: Record<string, UserProfile>/,
+  "projection props should carry hydrated profile rows for avatar rendering",
+);
+assert.match(
+  feed,
+  /export function ActorAvatar[\s\S]*UserAvatar[\s\S]*imageUrl=\{props\.profile\?\.avatar_url \?\? null\}[\s\S]*focusX=\{props\.profile\?\.avatar_focus_x \?\? 0\.5\}[\s\S]*focusY=\{props\.profile\?\.avatar_focus_y \?\? 0\.5\}[\s\S]*zoom=\{props\.profile\?\.avatar_zoom \?\? 1\}/,
+  "shared feed renderer should render avatars from the hydrated profile cache",
 );
 assert.match(
   projection,
@@ -139,6 +150,16 @@ assert.doesNotMatch(
   projection,
   /onStartReply|onSendCommunityMessage|client\.mutation|sendCloudCommunityMessage/,
   "projection component should not introduce a second writer path",
+);
+assert.match(
+  feed,
+  /export function CommunityInteractionFeedList[\s\S]*density: "full" \| "compact"[\s\S]*props\.roots[\s\S]*community-interaction-message/,
+  "shared feed renderer should own root row rendering for full and compact projections",
+);
+assert.match(
+  app,
+  /workspaceRecentSignalFeed[\s\S]*<CommunityInteractionFeedList[\s\S]*density="compact"/,
+  "workspace panel should use the shared compact interaction feed projection",
 );
 
 [
@@ -155,13 +176,13 @@ assert.doesNotMatch(
 
 assert.match(
   baseCss,
-  /\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*14px\)\s+18px\s+28px;/,
-  "projection feed should reserve the web topbar before rendering roots",
+  /\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*10px\)\s+18px\s+4px;/,
+  "projection feed should reserve the web topbar while leaving space for the pane-scoped composer",
 );
 assert.match(
   baseCss,
-  /\.community-interaction-drawer-header\s*\{[\s\S]*padding:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*12px\)\s+16px\s+16px;/,
-  "projection drawer header should reserve the web topbar before rendering replies",
+  /\.community-interaction-drawer-scroll\s*\{[\s\S]*padding-top:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*12px\);/,
+  "projection drawer scroll region should reserve the web topbar and floating back button before rendering replies",
 );
 assert.match(
   baseCss,
@@ -175,13 +196,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*14px\)\s+12px\s+18px;/,
-  "mobile projection feed should reserve the mobile topbar clearance",
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*8px\s+12px\s+18px;/,
+  "mobile projection feed should use compact pane padding because the mobile shell owns topbar clearance",
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-drawer-header\s*\{[\s\S]*padding-top:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*14px\);/,
-  "mobile projection drawer should reserve the mobile topbar clearance",
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-drawer-scroll\s*\{[\s\S]*padding-top:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*62px\);/,
+  "mobile projection drawer should reserve the mobile topbar clearance and floating back button",
 );
 
 assert.match(

@@ -55,8 +55,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   interactions,
-  /\bfetch\s*\(|httpAction|ctx\.scheduler|ctx\.runAction|scrape|crawler|processMedia|ctx\.storage\.getUrl/,
-  "interaction writes should not synchronously unfurl, scrape, fetch, schedule, or process media",
+  /httpAction|scrape|crawler|processMedia/,
+  "interaction writes should not introduce synchronous scraping or media-processing paths",
 );
 assert.doesNotMatch(
   interactions,
@@ -131,6 +131,11 @@ assert.match(
   /insertContentBlocksForTarget\([\s\S]*rootId[\s\S]*blocks: contentBlocks/,
   "root write should write normalized content blocks after root creation",
 );
+assert.doesNotMatch(
+  createRoot,
+  /\bfetch\s*\(|ctx\.scheduler|ctx\.runAction|ctx\.storage\.getUrl|scheduleEmbedEnrichment/,
+  "public root write should not fetch URLs, schedule enrichment, run actions, or resolve storage URLs",
+);
 
 const createReply = exportedConstBlock(interactions, "createCommunityInteractionReply");
 assert.doesNotMatch(
@@ -159,13 +164,18 @@ assert.match(
   "reply writes should not allow broader visibility than the root",
 );
 assert.match(
-  createReply,
-  /const seq = Math\.max\(0, Math\.floor\(root\.replyCount \?\? 0\)\) \+ 1/,
-  "reply write should derive one-level drawer sequence from root reply count",
+  interactions,
+  /async function nextReplySeq\(ctx: any, rootId: any\)[\s\S]*withIndex\("by_root_seq"[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)[\s\S]*Math\.max\(0, Math\.floor\(last\?\.seq \?\? 0\)\) \+ 1/,
+  "reply writes should derive one-level drawer sequence from the latest indexed reply seq",
 );
 assert.match(
   createReply,
-  /ctx\.db\.patch\(root\._id as any,[\s\S]*replyCount: seq[\s\S]*lastReplyAt: nowMs/,
+  /const seq = await nextReplySeq\(ctx, root\._id\)/,
+  "reply write should use the indexed one-level drawer sequence helper",
+);
+assert.match(
+  createReply,
+  /ctx\.db\.patch\(root\._id as any,[\s\S]*replyCount: Math\.max\(0, Math\.floor\(root\.replyCount \?\? 0\)\) \+ 1[\s\S]*lastReplyAt: nowMs/,
   "reply write should update root reply count and last reply timestamp",
 );
 assert.match(
@@ -192,6 +202,11 @@ assert.doesNotMatch(
   createReply,
   /parentReplyId|replyDepth|depth:/,
   "reply write should not create recursive reply hierarchy fields",
+);
+assert.doesNotMatch(
+  createReply,
+  /\bfetch\s*\(|ctx\.scheduler|ctx\.runAction|ctx\.storage\.getUrl|scheduleEmbedEnrichment/,
+  "public reply write should not fetch URLs, schedule enrichment, run actions, or resolve storage URLs",
 );
 
 const createComposerMessage = exportedConstBlock(interactions, "createCommunityInteractionComposerMessage");
@@ -224,6 +239,38 @@ assert.doesNotMatch(
   createComposerMessage,
   /createCommunityInteractionRoot|createCommunityInteractionReply/,
   "composer bridge should not call public root or reply mutations",
+);
+assert.match(
+  createComposerMessage,
+  /scheduleEmbedEnrichment\(ctx, inserted\.embedIds\)[\s\S]*scheduleEmbedEnrichment\(ctx, insertedReply\.embedIds\)/,
+  "composer bridge should hand pending link embeds to async enrichment after canonical writes",
+);
+assert.doesNotMatch(
+  createComposerMessage,
+  /\bfetch\s*\(|ctx\.runAction|ctx\.storage\.getUrl|scrape|crawler|processMedia/,
+  "composer bridge should not synchronously fetch URLs, run actions, resolve storage URLs, scrape, or process media",
+);
+
+const scheduleEmbedEnrichment = interactions.slice(
+  interactions.indexOf("async function scheduleEmbedEnrichment"),
+  interactions.indexOf("export const getInteractionEmbedForEnrichment"),
+);
+assert.match(
+  scheduleEmbedEnrichment,
+  /ctx\.scheduler\.runAfter\(0, internal\.communityInteractions\.enrichInteractionEmbed/,
+  "embed enrichment handoff should be an internal scheduled action",
+);
+assert.doesNotMatch(
+  scheduleEmbedEnrichment,
+  /\bfetch\s*\(|ctx\.runAction|ctx\.storage\.getUrl/,
+  "embed enrichment scheduler should not do the enrichment work inline",
+);
+
+const enrichInteractionEmbed = exportedConstBlock(interactions, "enrichInteractionEmbed");
+assert.match(
+  enrichInteractionEmbed,
+  /internalAction\(\{[\s\S]*fetchEmbedOpenGraph/,
+  "external URL fetching should be isolated to the internal embed enrichment action",
 );
 
 assert.match(

@@ -176,6 +176,7 @@ const MAX_INTERACTION_ROOT_READ_LIMIT = 50;
 const MAX_INTERACTION_REPLY_READ_LIMIT = 100;
 const MAX_INTERACTION_EMBEDS_PER_BUNDLE = 24;
 const MAX_INTERACTION_MENTIONS_PER_BUNDLE = 24;
+const MAX_VIEWER_REACTIONS_PER_TARGET = 24;
 
 const visibilityScopeValidator = v.union(
   v.literal("private"),
@@ -1812,7 +1813,7 @@ export const listCommunityInteractionRoots = query({
           .take(limit))) as InteractionRootRow[];
 
     const userIdCache = new Map<string, string | null>();
-    const viewerMap = await loadViewerReactionMap(ctx, userId);
+    const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "root", rows.map((row) => row._id));
     const bundles = await Promise.all(
       rows.map((row) => mapRootBundle(ctx, row, false, userIdCache, viewerMap.get(normalizeIdValue(row._id)) ?? [])),
     );
@@ -1856,7 +1857,7 @@ export const listCommunityInteractionReplies = query({
       .sort((left, right) => left.seq - right.seq)
       .slice(-limit);
     const userIdCache = new Map<string, string | null>();
-    const viewerMap = await loadViewerReactionMap(ctx, userId);
+    const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "reply", filtered.map((row) => row._id));
     const bundles = await Promise.all(
       filtered.map((row) => mapReplyBundle(ctx, row, false, userIdCache, viewerMap.get(normalizeIdValue(row._id)) ?? [])),
     );
@@ -1871,45 +1872,53 @@ export const listCommunityInteractionReplies = query({
   },
 });
 
-async function loadViewerReactionMap(ctx: any, userId: any): Promise<Map<string, string[]>> {
+async function loadViewerReactionMapForTargets(
+  ctx: any,
+  userId: any,
+  targetType: "root" | "reply",
+  targetIds: any[],
+): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
   if (!userId) return map;
   const actorKey = normalizeIdValue(userId);
-  const rows = await ctx.db
-    .query("communityInteractionReactions" as any)
-    .withIndex("by_actor", (q: any) => q.eq("actorKey", actorKey))
-    .collect();
-  for (const row of rows) {
-    const targetId = normalizeIdValue(row.rootId ?? row.replyId);
-    if (!targetId) continue;
-    const list = map.get(targetId) ?? [];
-    list.push(String(row.emoji));
-    map.set(targetId, list);
-  }
+  const uniqueTargetIds = Array.from(new Map(targetIds.map((id) => [normalizeIdValue(id), id])).values());
+  await Promise.all(
+    uniqueTargetIds.map(async (targetId) => {
+      const rows = await ctx.db
+        .query("communityInteractionReactions" as any)
+        .withIndex(
+          targetType === "root" ? "by_root_actor_emoji" : "by_reply_actor_emoji",
+          (q: any) =>
+            q
+              .eq(targetType === "root" ? "rootId" : "replyId", targetId)
+              .eq("actorKey", actorKey),
+        )
+        .take(MAX_VIEWER_REACTIONS_PER_TARGET);
+      const emojis = rows
+        .map((row: any) => String(row.emoji ?? "").trim().slice(0, 32))
+        .filter(Boolean);
+      if (emojis.length > 0) map.set(normalizeIdValue(targetId), emojis);
+    }),
+  );
   return map;
 }
 
-async function recomputeReactionSummary(
-  ctx: any,
-  targetType: "root" | "reply",
-  targetId: any,
-  nowMs: number,
-): Promise<Array<{ emoji: string; count: number }>> {
-  const rows = await ctx.db
-    .query("communityInteractionReactions" as any)
-    .withIndex(targetType === "root" ? "by_root" : "by_reply", (q: any) =>
-      q.eq(targetType === "root" ? "rootId" : "replyId", targetId),
-    )
-    .collect();
+function applyReactionSummaryDelta(
+  current: Array<{ emoji: string; count: number }> | undefined,
+  emoji: string,
+  delta: 1 | -1,
+): Array<{ emoji: string; count: number }> {
   const counts = new Map<string, number>();
-  for (const row of rows) {
-    const emoji = String(row.emoji ?? "").trim();
-    if (!emoji) continue;
-    counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
+  for (const row of mapReactionSummary(current)) {
+    counts.set(row.emoji, row.count);
   }
-  const summary = Array.from(counts.entries()).map(([emoji, count]) => ({ emoji, count }));
-  await ctx.db.patch(targetId, { reactionSummary: summary, updatedAt: nowMs });
-  return summary;
+  const next = Math.max(0, (counts.get(emoji) ?? 0) + delta);
+  if (next > 0) {
+    counts.set(emoji, next);
+  } else {
+    counts.delete(emoji);
+  }
+  return Array.from(counts.entries()).map(([emojiValue, count]) => ({ emoji: emojiValue, count }));
 }
 
 export const toggleCommunityInteractionReaction = mutation({
@@ -1963,7 +1972,8 @@ export const toggleCommunityInteractionReaction = mutation({
       });
       reacted = true;
     }
-    const summary = await recomputeReactionSummary(ctx, args.targetType, target._id, nowMs);
+    const summary = applyReactionSummaryDelta(target.reactionSummary, emoji, reacted ? 1 : -1);
+    await ctx.db.patch(target._id, { reactionSummary: summary, updatedAt: nowMs });
     return { reacted, reaction_summary: summary };
   },
 });
