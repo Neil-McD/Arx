@@ -145,6 +145,17 @@ function coerceObjectRows<TRow>(payload: unknown, key: string): TRow[] {
   return Array.isArray(value) ? (value as TRow[]) : [];
 }
 
+function coerceNullableNumber(payload: unknown, key: string): number | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export type CommunityInteractionRootPage = {
+  roots: CommunityInteractionRootBundle[];
+  nextBeforeCreatedAt: number | null;
+};
+
 export async function listCloudCommunityInteractionRoots<SessionT>(
   params: CloudCommunityInteractionsGatewayParams<SessionT> & {
     communityId: string;
@@ -153,6 +164,18 @@ export async function listCloudCommunityInteractionRoots<SessionT>(
     kind?: string | null;
   },
 ): Promise<CommunityInteractionRootBundle[]> {
+  const page = await listCloudCommunityInteractionRootsPage(params);
+  return page.roots;
+}
+
+export async function listCloudCommunityInteractionRootsPage<SessionT>(
+  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
+    communityId: string;
+    beforeCreatedAt?: number | null;
+    limit?: number;
+    kind?: string | null;
+  },
+): Promise<CommunityInteractionRootPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listCommunityInteractionRoots" as any, {
     authSubject,
@@ -161,7 +184,10 @@ export async function listCloudCommunityInteractionRoots<SessionT>(
     limit: params.limit ?? 40,
     kind: params.kind ?? null,
   });
-  return coerceObjectRows<CommunityInteractionRootBundle>(payload, "roots");
+  return {
+    roots: coerceObjectRows<CommunityInteractionRootBundle>(payload, "roots"),
+    nextBeforeCreatedAt: coerceNullableNumber(payload, "next_before_created_at"),
+  };
 }
 
 export async function listCloudCommunityInteractionReplies<SessionT>(

@@ -65,6 +65,7 @@ export type WorkspaceUserPanelCommunity = {
   operations: WorkspaceUserPanelCommunityOperations;
   recentSignals: WorkspaceUserPanelRecentSignal[];
   recentSignalFeed?: ReactNode;
+  recentSignalFeedVersion?: string | null;
   integrations: WorkspaceUserPanelIntegration[];
 };
 
@@ -1298,6 +1299,7 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
   const community = props.activeCommunity;
   const [isRecentSignalsAtBottom, setIsRecentSignalsAtBottom] = useState(true);
   const recentSignalsViewportRef = useRef<HTMLDivElement | null>(null);
+  const recentSignalFeedViewportRef = useRef<HTMLDivElement | null>(null);
   const isRecentSignalsExpanded = props.isRecentSignalsExpanded;
 
   useEffect(() => {
@@ -1306,6 +1308,7 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
 
   const panelRecentSignals = community?.recentSignals ?? [];
   const recentSignalFeed = community?.recentSignalFeed ?? null;
+  const recentSignalFeedVersion = community?.recentSignalFeedVersion ?? null;
   const recentSignalsCount = panelRecentSignals.length;
   const updateRecentSignalsScrollState = useCallback(() => {
     const viewport = recentSignalsViewportRef.current;
@@ -1322,6 +1325,14 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
     const frame = requestAnimationFrame(updateRecentSignalsScrollState);
     return () => cancelAnimationFrame(frame);
   }, [isRecentSignalsExpanded, recentSignalsCount, updateRecentSignalsScrollState]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const viewport = recentSignalFeedViewportRef.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [community?.id, recentSignalFeedVersion]);
 
   if (!community) {
     return null;
@@ -1422,7 +1433,10 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
           {recentSignalFeed ? (
-            <div className="workspace-community-signal-feed community-interaction-feed-compact">
+            <div
+              ref={recentSignalFeedViewportRef}
+              className="workspace-community-signal-feed community-interaction-feed-compact"
+            >
               {recentSignalFeed}
             </div>
           ) : null}

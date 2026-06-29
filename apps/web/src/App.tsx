@@ -118,8 +118,8 @@ import {
   createCloudCommunityInteractionComposerMessageRows,
   deleteCloudCommunityInteractionMessage,
   editCloudCommunityInteractionMessage,
+  listCloudCommunityInteractionRootsPage,
   listCloudCommunityInteractionReplies,
-  listCloudCommunityInteractionRoots,
   subscribeCloudCommunityInteractionReplies,
   subscribeCloudCommunityInteractionRoots,
   toggleCloudCommunityInteractionReaction,
@@ -754,6 +754,7 @@ type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "bod
 type CommunityActivityEvent = SharedCommunityActivityEvent;
 type CommunityInteractionRoot = CommunityInteractionRootBundle;
 type CommunityInteractionReply = CommunityInteractionReplyBundle;
+type CommunityInteractionRootChangeReason = "initial" | "newer" | "older" | "reset";
 
 type PendingCanonicalInteraction = {
   idempotencyKey: string;
@@ -865,6 +866,29 @@ function appendPendingReplies(
     .filter((p) => p.kind === "reply" && p.rootId === rootId)
     .map(buildOptimisticReplyBundle);
   return extra.length ? [...replies, ...extra] : replies;
+}
+
+function communityInteractionRootCreatedAtMs(bundle: CommunityInteractionRootBundle): number {
+  const ms = Date.parse(bundle.root.created_at);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function mergeCommunityInteractionRootWindows(
+  current: CommunityInteractionRootBundle[],
+  incoming: CommunityInteractionRootBundle[],
+): CommunityInteractionRootBundle[] {
+  if (current.length === 0) {
+    return [...incoming].sort(
+      (left, right) => communityInteractionRootCreatedAtMs(right) - communityInteractionRootCreatedAtMs(left),
+    );
+  }
+  if (incoming.length === 0) return current;
+  const byId = new Map<string, CommunityInteractionRootBundle>();
+  for (const bundle of current) byId.set(bundle.root.id, bundle);
+  for (const bundle of incoming) byId.set(bundle.root.id, bundle);
+  return Array.from(byId.values()).sort(
+    (left, right) => communityInteractionRootCreatedAtMs(right) - communityInteractionRootCreatedAtMs(left),
+  );
 }
 type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
@@ -2338,6 +2362,17 @@ export default function App() {
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityActivityEvents, setCommunityActivityEvents] = useState<CommunityActivityEvent[]>([]);
   const [communityInteractionRoots, setCommunityInteractionRoots] = useState<CommunityInteractionRoot[]>([]);
+  const [communityInteractionNextBeforeCreatedAt, setCommunityInteractionNextBeforeCreatedAt] =
+    useState<number | null>(null);
+  const [isLoadingOlderCommunityInteractionRoots, setIsLoadingOlderCommunityInteractionRoots] = useState(false);
+  const [communityInteractionRootChangeReason, setCommunityInteractionRootChangeReason] =
+    useState<CommunityInteractionRootChangeReason>("reset");
+  const communityInteractionRootsRef = useRef<CommunityInteractionRoot[]>([]);
+  const communityInteractionNextBeforeCreatedAtRef = useRef<number | null>(null);
+  const isLoadingOlderCommunityInteractionRootsRef = useRef(false);
+  communityInteractionRootsRef.current = communityInteractionRoots;
+  communityInteractionNextBeforeCreatedAtRef.current = communityInteractionNextBeforeCreatedAt;
+  isLoadingOlderCommunityInteractionRootsRef.current = isLoadingOlderCommunityInteractionRoots;
   const [pendingCanonicalInteractions, setPendingCanonicalInteractions] = useState<PendingCanonicalInteraction[]>([]);
   const pendingCanonicalInteractionsRef = useRef<PendingCanonicalInteraction[]>([]);
   pendingCanonicalInteractionsRef.current = pendingCanonicalInteractions;
@@ -2578,6 +2613,9 @@ export default function App() {
     communityInteractionRootsRequestIdRef.current += 1;
     communityInteractionRepliesRequestIdRef.current = {};
     setCommunityInteractionRoots([]);
+    setCommunityInteractionNextBeforeCreatedAt(null);
+    setIsLoadingOlderCommunityInteractionRoots(false);
+    setCommunityInteractionRootChangeReason("reset");
     setCommunityInteractionError(null);
     setIsLoadingCommunityInteractions(false);
     setSelectedCommunityInteractionRootId(null);
@@ -2638,7 +2676,7 @@ export default function App() {
     setIsLoadingCommunityInteractions(true);
     setCommunityInteractionError(null);
     try {
-      const roots = await listCloudCommunityInteractionRoots<AuthSession>({
+      const page = await listCloudCommunityInteractionRootsPage<AuthSession>({
         session: usableSession,
         communityId,
         limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
@@ -2649,9 +2687,11 @@ export default function App() {
       ) {
         return;
       }
-      setCommunityInteractionRoots(roots);
+      setCommunityInteractionRootChangeReason("initial");
+      setCommunityInteractionRoots(page.roots);
+      setCommunityInteractionNextBeforeCreatedAt(page.nextBeforeCreatedAt);
       setSelectedCommunityInteractionRootId((current) =>
-        current && roots.some((bundle) => bundle.root.id === current) ? current : null,
+        current && page.roots.some((bundle) => bundle.root.id === current) ? current : null,
       );
     } catch (error) {
       if (
@@ -2671,6 +2711,48 @@ export default function App() {
     }
   }, [activeCommunityId, ensureUsableAuthSession, resetCommunityInteractionProjection, session]);
 
+  const loadOlderCommunityInteractionRoots = useCallback(async (
+    communityIdRaw: string | null = activeCommunityId,
+    activeSessionRaw: AuthSession | null = session,
+  ) => {
+    const communityId = String(communityIdRaw ?? "").trim();
+    const beforeCreatedAt = communityInteractionNextBeforeCreatedAtRef.current;
+    if (
+      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
+      || !communityId
+      || beforeCreatedAt === null
+      || isLoadingOlderCommunityInteractionRootsRef.current
+    ) {
+      return;
+    }
+    const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
+    if (!usableSession) return;
+    setIsLoadingOlderCommunityInteractionRoots(true);
+    try {
+      const page = await listCloudCommunityInteractionRootsPage<AuthSession>({
+        session: usableSession,
+        communityId,
+        beforeCreatedAt,
+        limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
+      });
+      if (activeCommunityInteractionCommunityIdRef.current !== communityId) return;
+      setCommunityInteractionRootChangeReason("older");
+      setCommunityInteractionRoots((current) =>
+        mergeCommunityInteractionRootWindows(
+          current.filter((bundle) => bundle.root.community_id === communityId),
+          page.roots,
+        ),
+      );
+      setCommunityInteractionNextBeforeCreatedAt(page.nextBeforeCreatedAt);
+    } catch {
+      // Keep the already loaded window usable; the next upward scroll can retry.
+    } finally {
+      if (activeCommunityInteractionCommunityIdRef.current === communityId) {
+        setIsLoadingOlderCommunityInteractionRoots(false);
+      }
+    }
+  }, [activeCommunityId, ensureUsableAuthSession, session]);
+
   useEffect(() => {
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) return;
     let cancelled = false;
@@ -2687,14 +2769,16 @@ export default function App() {
           limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
           onUpdate: (roots) => {
             if (cancelled) return;
-            setCommunityInteractionRoots(roots);
-            setSelectedCommunityInteractionRootId((current) => {
-              if (current && !roots.some((bundle) => bundle.root.id === current)) {
-                writeStoredInteractionSelectedRoot(activeCommunityId, null);
-                return null;
-              }
-              return current;
-            });
+            const hadLoadedRoots = communityInteractionRootsRef.current.some(
+              (bundle) => bundle.root.community_id === activeCommunityId,
+            );
+            setCommunityInteractionRootChangeReason(hadLoadedRoots ? "newer" : "initial");
+            setCommunityInteractionRoots((current) =>
+              mergeCommunityInteractionRootWindows(
+                current.filter((bundle) => bundle.root.community_id === activeCommunityId),
+                roots,
+              ),
+            );
             setIsLoadingCommunityInteractions(false);
             setCommunityInteractionError(null);
           },
@@ -2943,6 +3027,7 @@ export default function App() {
       resetCommunityInteractionProjection();
       return;
     }
+    resetCommunityInteractionProjection();
     void loadCommunityInteractionRoots(activeCommunityId, session);
   }, [
     activeCommunityId,
@@ -10846,6 +10931,13 @@ export default function App() {
         onDeleteMessage: handleDeleteCommunityInteractionMessage,
         currentUserId: canonicalSessionUserId,
         chatLastSeenAt: chatDividerBoundary,
+        rootChangeReason: communityInteractionRootChangeReason,
+        canLoadOlderRoots: Boolean(communityInteractionNextBeforeCreatedAt),
+        isLoadingOlderRoots: isLoadingOlderCommunityInteractionRoots,
+        onLoadOlderRoots: () => {
+          if (!activeCommunityId) return;
+          void loadOlderCommunityInteractionRoots(activeCommunityId, session);
+        },
         onCaughtUp: handleChatCaughtUp,
         onRetryRoots: () => {
           if (!activeCommunityId) return;
@@ -11521,16 +11613,19 @@ export default function App() {
 
   const recentSignalChatRoots = useMemo(
     () => {
-      const toMs = (value: string) => {
-        const ms = Date.parse(value);
-        return Number.isFinite(ms) ? ms : 0;
-      };
       return communityInteractionRoots
         .filter((bundle) => !bundle.pending)
-        .sort((left, right) => toMs(right.root.created_at) - toMs(left.root.created_at))
+        .sort(
+          (left, right) =>
+            communityInteractionRootCreatedAtMs(right) - communityInteractionRootCreatedAtMs(left),
+        )
         .slice(0, 15);
     },
     [communityInteractionRoots],
+  );
+  const recentSignalChatRootsVersion = useMemo(
+    () => recentSignalChatRoots.map((bundle) => bundle.root.id).join("|"),
+    [recentSignalChatRoots],
   );
   const handleOpenPanelInteractionThread = useCallback(
     (rootId: string) => {
@@ -11576,6 +11671,7 @@ export default function App() {
   ) : null;
   const workspaceUserDataPanelCommunity = buildWorkspaceRightPanelCommunityData({
     recentSignalFeed: workspaceRecentSignalFeed,
+    recentSignalFeedVersion: recentSignalChatRootsVersion,
     activeCommunity,
     activeCommunityAccess,
     fallbackRole: activeCommunity ? communityRoleById[activeCommunity.id] : null,

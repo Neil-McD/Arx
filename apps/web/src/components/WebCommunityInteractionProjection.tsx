@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CornerUpLeft,
   MessageCircle,
@@ -64,6 +64,10 @@ export type WebCommunityInteractionProjectionProps = {
   typingPresence?: CommunityTypingPresenceBundle;
   onlineUserIds?: Set<string>;
   chatLastSeenAt?: number | null;
+  rootChangeReason?: "initial" | "newer" | "older" | "reset";
+  canLoadOlderRoots?: boolean;
+  isLoadingOlderRoots?: boolean;
+  onLoadOlderRoots?: () => void;
   onCaughtUp?: () => void;
 };
 
@@ -92,7 +96,9 @@ import {
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const prevRootCount = useRef(0);
+  const isNearBottomRef = useRef(true);
+  const requestedOlderRootsRef = useRef(false);
+  const pendingOlderAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const seenReplyIds = useRef<Set<string>>(new Set());
   const repliesLoadedOnce = useRef(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -121,30 +127,69 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     const el = scrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom < 120;
     if (distanceFromBottom < 120) {
       setShowJumpToLatest(false);
       props.onCaughtUp?.();
     }
+    if (
+      el.scrollTop < 180
+      && props.canLoadOlderRoots
+      && !props.isLoadingOlderRoots
+      && !requestedOlderRootsRef.current
+    ) {
+      pendingOlderAnchorRef.current = {
+        scrollHeight: el.scrollHeight,
+        scrollTop: el.scrollTop,
+      };
+      requestedOlderRootsRef.current = true;
+      props.onLoadOlderRoots?.();
+    }
   };
 
   useEffect(() => {
+    if (!props.isLoadingOlderRoots) requestedOlderRootsRef.current = false;
+  }, [props.isLoadingOlderRoots]);
+
+  const rootWindowSignature = useMemo(
+    () => props.roots.map((bundle) => bundle.root.id).join("|"),
+    [props.roots],
+  );
+
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const previous = prevRootCount.current;
-    prevRootCount.current = props.roots.length;
-    if (props.roots.length > previous) {
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (previous === 0 || distanceFromBottom < 200) {
+    const reason = props.rootChangeReason ?? "newer";
+    if (reason === "reset") {
+      pendingOlderAnchorRef.current = null;
+      setShowJumpToLatest(false);
+      return;
+    }
+    if (reason === "older") {
+      const anchor = pendingOlderAnchorRef.current;
+      pendingOlderAnchorRef.current = null;
+      if (anchor) {
+        el.scrollTop = Math.max(0, el.scrollHeight - anchor.scrollHeight + anchor.scrollTop);
+      }
+      return;
+    }
+    if (reason === "initial") {
+      el.scrollTop = el.scrollHeight;
+      isNearBottomRef.current = true;
+      setShowJumpToLatest(false);
+      props.onCaughtUp?.();
+      return;
+    }
+    if (reason === "newer") {
+      if (isNearBottomRef.current) {
         el.scrollTop = el.scrollHeight;
         setShowJumpToLatest(false);
-        // Reached the bottom on load / new message → reader is caught up.
         props.onCaughtUp?.();
       } else {
-        // New messages arrived while the reader is scrolled up — nudge, don't yank.
         setShowJumpToLatest(true);
       }
     }
-  }, [props.roots.length]);
+  }, [props.rootChangeReason, rootWindowSignature]);
 
   // Reset reply animation tracking on thread switch so a thread's initial replies don't animate.
   useEffect(() => {

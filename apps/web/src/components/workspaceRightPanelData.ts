@@ -306,6 +306,7 @@ export function buildWorkspaceRightPanelCommunityData(params: {
   formatJoinRequestCreatedAt: (createdAt: string) => string;
   recentSignals: readonly WorkspaceUserPanelRecentSignal[];
   recentSignalFeed?: ReactNode;
+  recentSignalFeedVersion?: string | null;
   integrations: readonly WorkspaceUserPanelIntegration[];
 }): WorkspaceUserPanelCommunity | null {
   const activeCommunity = params.activeCommunity;
@@ -315,6 +316,7 @@ export function buildWorkspaceRightPanelCommunityData(params: {
     slug: activeCommunity.slug ?? null,
     name: activeCommunity.name,
     recentSignalFeed: params.recentSignalFeed ?? null,
+    recentSignalFeedVersion: params.recentSignalFeedVersion ?? null,
     oneLiner: activeCommunity.one_liner ?? null,
     visibility: activeCommunity.visibility ?? null,
     memberCount: params.memberCount,
