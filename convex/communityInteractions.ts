@@ -1,4 +1,5 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   type CommunityChatMessageLike,
@@ -439,6 +440,32 @@ function normalizeUrl(raw: unknown): { sourceUrl: string; normalizedSourceUrl: s
     sourceUrl: input,
     normalizedSourceUrl: url.toString().slice(0, MAX_INTERACTION_URL_CHARS),
   };
+}
+
+const MAX_AUTO_LINK_BLOCKS = 2;
+
+// Detect http(s) URLs in composer text and turn them into link blocks (which auto-create pending
+// embeds). Deduped by normalized URL, capped, invalid URLs skipped.
+function extractLinkBlocksFromText(text: string): NormalizedContentBlock[] {
+  const matches = text.match(/\bhttps?:\/\/[^\s<>()]+/gi);
+  if (!matches) return [];
+  const out: NormalizedContentBlock[] = [];
+  const seen = new Set<string>();
+  for (const raw of matches) {
+    if (out.length >= MAX_AUTO_LINK_BLOCKS) break;
+    // Strip trailing punctuation that commonly clings to a URL in prose.
+    const trimmed = raw.replace(/[.,;:!?)\]}'"]+$/, "");
+    let normalized: { sourceUrl: string; normalizedSourceUrl: string };
+    try {
+      normalized = normalizeUrl(trimmed);
+    } catch {
+      continue;
+    }
+    if (seen.has(normalized.normalizedSourceUrl)) continue;
+    seen.add(normalized.normalizedSourceUrl);
+    out.push({ blockType: "link", url: normalized.sourceUrl, normalizedSourceUrl: normalized.normalizedSourceUrl });
+  }
+  return out;
 }
 
 function normalizeWorkspaceRefId(raw: unknown): string {
@@ -1561,7 +1588,10 @@ export const createCommunityInteractionComposerMessage = mutation({
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
     if (!text) throw new Error("interaction_content_required");
-    const contentBlocks: NormalizedContentBlock[] = [{ blockType: "markdown_text", text }];
+    const contentBlocks: NormalizedContentBlock[] = [
+      { blockType: "markdown_text", text },
+      ...extractLinkBlocksFromText(text),
+    ];
     const summary = contentSummary(contentBlocks);
     const mentionedUserIds = (args.mentions ?? []).map((mention) => mention.userId);
     const nowMs = Date.now();
@@ -1587,7 +1617,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           createdAt: nowMs,
           updatedAt: nowMs,
         });
-        await insertContentBlocksForTarget({
+        const inserted = await insertContentBlocksForTarget({
           ctx,
           communityId: args.communityId,
           rootId,
@@ -1595,6 +1625,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           blocks: contentBlocks,
           nowMs,
         });
+        await scheduleEmbedEnrichment(ctx, inserted.embedIds);
         await insertCommunityInteractionMentionRows({
           ctx,
           communityId: args.communityId,
@@ -1680,7 +1711,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         createdAt: nowMs,
         updatedAt: nowMs,
       });
-      await insertContentBlocksForTarget({
+      const insertedReply = await insertContentBlocksForTarget({
         ctx,
         communityId: root.communityId,
         replyId,
@@ -1688,6 +1719,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         blocks: contentBlocks,
         nowMs,
       });
+      await scheduleEmbedEnrichment(ctx, insertedReply.embedIds);
       await insertCommunityInteractionMentionRows({
         ctx,
         communityId: root.communityId,
@@ -2436,5 +2468,133 @@ export const unseedPolynetChatDemo = internalMutation({
     }
 
     return { ok: true, deletedRoots };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Link embed enrichment: fetch OG metadata for pending link embeds and flip them to ready.
+// ---------------------------------------------------------------------------
+
+const MAX_EMBED_TITLE_CHARS = 300;
+const MAX_EMBED_DESCRIPTION_CHARS = 600;
+const MAX_EMBED_IMAGE_URL_CHARS = 2048;
+
+function boundedEmbedString(raw: unknown, maxChars: number): string | null {
+  const value = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!value) return null;
+  return value.slice(0, maxChars);
+}
+
+function hostnameOfUrl(raw: string): string | null {
+  try {
+    return new URL(raw).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+// Fire-and-forget enrichment for each freshly-created embed (link embeds resolve; others no-op).
+async function scheduleEmbedEnrichment(ctx: any, embedIds: string[]): Promise<void> {
+  for (const embedId of embedIds) {
+    await ctx.scheduler.runAfter(0, internal.communityInteractions.enrichInteractionEmbed, { embedId });
+  }
+}
+
+export const getInteractionEmbedForEnrichment = internalQuery({
+  args: { embedId: v.string() },
+  handler: async (ctx, args) => {
+    const embed = (await ctx.db.get(args.embedId as any)) as EmbedRow | null;
+    if (!embed) return null;
+    return {
+      embedKind: embed.embedKind,
+      status: embed.status,
+      sourceUrl: embed.sourceUrl ?? embed.normalizedSourceUrl ?? null,
+    };
+  },
+});
+
+export const applyInteractionEmbedEnrichment = internalMutation({
+  args: {
+    embedId: v.string(),
+    status: v.union(v.literal("ready"), v.literal("failed")),
+    title: v.optional(v.union(v.string(), v.null())),
+    description: v.optional(v.union(v.string(), v.null())),
+    imageUrl: v.optional(v.union(v.string(), v.null())),
+    provider: v.optional(v.union(v.string(), v.null())),
+    error: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const embed = (await ctx.db.get(args.embedId as any)) as EmbedRow | null;
+    // Only advance embeds still pending — never clobber a redacted/edited embed.
+    if (!embed || embed.status !== "pending") return;
+    await ctx.db.patch(args.embedId as any, {
+      status: args.status,
+      ...(args.title ? { title: args.title } : {}),
+      ...(args.description ? { description: args.description } : {}),
+      ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}),
+      ...(args.provider ? { provider: args.provider } : {}),
+      ...(args.error ? { error: args.error } : {}),
+      fetchedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+async function fetchEmbedOpenGraph(
+  sourceUrl: string,
+): Promise<{ title: string | null; description: string | null; imageUrl: string | null }> {
+  const endpoint = String(process.env.ARX_SOURCE_URL_FETCHER_ENDPOINT ?? "").trim();
+  const secret = String(process.env.ARX_SOURCE_URL_FETCHER_SECRET ?? "").trim();
+  if (!endpoint || !secret) throw new Error("source_url_fetcher_not_configured");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+      authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify({
+      url: sourceUrl,
+      max_bytes: 1_500_000,
+      max_chars: 4000,
+      timeout_ms: 8000,
+      max_redirects: 4,
+    }),
+  });
+  if (!response.ok) throw new Error(`source_url_fetcher_failed_${response.status}`);
+  const payload = (await response.json()) as Record<string, unknown>;
+  if (payload.ok === false) throw new Error(String(payload.error_code ?? "source_url_fetch_failed"));
+  return {
+    title: boundedEmbedString(payload.og_title ?? payload.title, MAX_EMBED_TITLE_CHARS),
+    description: boundedEmbedString(payload.og_description, MAX_EMBED_DESCRIPTION_CHARS),
+    imageUrl: boundedEmbedString(payload.og_image, MAX_EMBED_IMAGE_URL_CHARS),
+  };
+}
+
+export const enrichInteractionEmbed = internalAction({
+  args: { embedId: v.string() },
+  handler: async (ctx, args) => {
+    const embed = await ctx.runQuery(internal.communityInteractions.getInteractionEmbedForEnrichment, {
+      embedId: args.embedId,
+    });
+    if (!embed || embed.embedKind !== "link" || embed.status !== "pending" || !embed.sourceUrl) return;
+    try {
+      const og = await fetchEmbedOpenGraph(embed.sourceUrl);
+      await ctx.runMutation(internal.communityInteractions.applyInteractionEmbedEnrichment, {
+        embedId: args.embedId,
+        status: "ready",
+        title: og.title,
+        description: og.description,
+        imageUrl: og.imageUrl,
+        provider: hostnameOfUrl(embed.sourceUrl),
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.communityInteractions.applyInteractionEmbedEnrichment, {
+        embedId: args.embedId,
+        status: "failed",
+        provider: hostnameOfUrl(embed.sourceUrl),
+        error: String(error instanceof Error ? error.message : error).slice(0, 200),
+      });
+    }
   },
 });

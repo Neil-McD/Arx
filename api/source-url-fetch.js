@@ -453,6 +453,33 @@ function extractTitleFromHtml(html) {
   return title.replace(/\s+/g, " ").trim() || null;
 }
 
+function extractMetaContent(html, keys) {
+  const metas = String(html).match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of metas) {
+    const propMatch = tag.match(/\b(?:property|name)\s*=\s*["']([^"']+)["']/i);
+    const prop = propMatch ? propMatch[1].toLowerCase() : "";
+    if (!prop || !keys.includes(prop)) continue;
+    const contentMatch = tag.match(/\bcontent\s*=\s*["']([\s\S]*?)["']/i);
+    const content = contentMatch ? decodeBasicHtmlEntities(contentMatch[1]).replace(/\s+/g, " ").trim() : "";
+    if (content) return content;
+  }
+  return null;
+}
+
+function extractOpenGraph(html, finalUrl) {
+  const ogTitle = extractMetaContent(html, ["og:title", "twitter:title"]) || extractTitleFromHtml(html);
+  const ogDescription = extractMetaContent(html, ["og:description", "twitter:description", "description"]);
+  let ogImage = extractMetaContent(html, ["og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"]);
+  if (ogImage) {
+    try {
+      ogImage = new URL(ogImage, finalUrl).toString();
+    } catch {
+      ogImage = null;
+    }
+  }
+  return { og_title: ogTitle, og_description: ogDescription, og_image: ogImage };
+}
+
 function extractReadableTextFromHtml(html, maxChars) {
   const title = extractTitleFromHtml(html);
   const withoutScripts = String(html)
@@ -525,12 +552,20 @@ export default async function handler(req, res) {
         "Source URL did not contain readable text.",
       );
     }
+    const isHtml =
+      normalizeContentType(fetched.contentType).includes("text/html") ||
+      /<html[\s>]/i.test(fetched.rawText) ||
+      /<head[\s>]/i.test(fetched.rawText);
+    const openGraph = isHtml
+      ? extractOpenGraph(fetched.rawText, fetched.finalUrl)
+      : { og_title: null, og_description: null, og_image: null };
     sendJson(res, 200, {
       ok: true,
       final_url: fetched.finalUrl,
       content_type: fetched.contentType,
       title: extracted.title,
       text: extracted.text,
+      ...openGraph,
     });
   } catch (error) {
     const isKnown = error instanceof SourceFetchError;
