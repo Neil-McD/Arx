@@ -184,6 +184,16 @@ assert.match(
   "shared send controller should keep the legacy fallback explicit and payload-bounded",
 );
 assert.match(
+  sendController,
+  /if \(sendRoute\.kind === "canonical"\)[\s\S]*await createCanonicalMessageRows\([\s\S]*current\.setCommunityMessages\(\(prev\) => prev\.filter\(\(message\) => message\.id !== optimisticId\)\)[\s\S]*messageId: sendRoute\.idempotencyKey[\s\S]*return;/,
+  "canonical sends should complete from canonical mutation success without legacy row replacement",
+);
+assert.match(
+  sendController,
+  /const threadId = await current\.ensureCommunityChatThread\(activeCommunityId, session\);[\s\S]*const created = await createCloudThreadUserMessageRows[\s\S]*const record = created\[0\] \? current\.toCommunityChatMessage/,
+  "legacy sends should keep the returned-row optimistic replacement path",
+);
+assert.match(
   chatPanel,
   /showInteractionProjection[\s\S]*WebCommunityInteractionProjection[\s\S]*className="chat-messages"/,
   "chat panel should keep canonical projection and legacy fallback in one visible branch",

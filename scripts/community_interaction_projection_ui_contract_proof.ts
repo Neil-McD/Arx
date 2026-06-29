@@ -127,6 +127,16 @@ assert.match(
   "canonical optimistic projection rows should use the route idempotency key and prepared attachments",
 );
 assert.match(
+  app,
+  /function appendPendingRoots[\s\S]*new Set\(roots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*composerStoredIdempotencyKey\(p\.idempotencyKey, "root"\)/,
+  "pending root overlays should dedupe against visible canonical roots by stored idempotency key",
+);
+assert.match(
+  app,
+  /function appendPendingReplies[\s\S]*new Set\(replies\.map\(\(bundle\) => bundle\.reply\.idempotency_key\)\)[\s\S]*composerStoredIdempotencyKey\(p\.idempotencyKey, "reply"\)/,
+  "pending reply overlays should dedupe against visible canonical replies by stored idempotency key",
+);
+assert.match(
   chatPanel,
   /const rootReplyTarget[\s\S]*if \(!root\?\.id \|\| !root\.actor_user_id\) return null[\s\S]*id: root\.legacy_message_id \?\? root\.id[\s\S]*legacy_message_id: root\.legacy_message_id \?\? null/,
   "canonical drawer root reply target should not require a legacy message id",

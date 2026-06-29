@@ -883,8 +883,14 @@ function appendPendingRoots(
   communityId: string | null,
 ): CommunityInteractionRootBundle[] {
   if (!communityId) return roots;
+  const visibleStoredKeys = new Set(roots.map((bundle) => bundle.root.idempotency_key));
   const extra = pending
-    .filter((p) => p.kind === "root" && p.communityId === communityId)
+    .filter(
+      (p) =>
+        p.kind === "root" &&
+        p.communityId === communityId &&
+        !visibleStoredKeys.has(composerStoredIdempotencyKey(p.idempotencyKey, "root")),
+    )
     .map(buildOptimisticRootBundle);
   return extra.length ? [...roots, ...extra] : roots;
 }
@@ -895,8 +901,14 @@ function appendPendingReplies(
   rootId: string | null,
 ): CommunityInteractionReplyBundle[] {
   if (!rootId) return replies;
+  const visibleStoredKeys = new Set(replies.map((bundle) => bundle.reply.idempotency_key));
   const extra = pending
-    .filter((p) => p.kind === "reply" && p.rootId === rootId)
+    .filter(
+      (p) =>
+        p.kind === "reply" &&
+        p.rootId === rootId &&
+        !visibleStoredKeys.has(composerStoredIdempotencyKey(p.idempotencyKey, "reply")),
+    )
     .map(buildOptimisticReplyBundle);
   return extra.length ? [...replies, ...extra] : replies;
 }

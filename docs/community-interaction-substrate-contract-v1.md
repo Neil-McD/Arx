@@ -300,7 +300,9 @@ Rules:
 - the compatibility row preserves bounded attachment metadata in `contentJson.attachments` while legacy consumers remain
 - `communityInteractionLegacyChatLinks` maps the compatibility message to the canonical root/reply
 - the compatibility row keeps old readers, realtime subscribers, archive documents, digests, and recent-context consumers alive
-- the mutation returns the existing legacy chat row shape to preserve optimistic UI replacement behavior
+- while compatibility remains, the mutation may return the existing legacy chat row shape for legacy consumers
+- canonical projection send completion must not depend on that legacy row shape
+- pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
 - drawer replies require a canonical `rootId`; legacy reply target message ids are compatibility metadata when available
 - canonical projection reply targets without a canonical `rootId` fail closed instead of falling back to legacy sends
 - legacy timeline replies stay on `createThreadUserMessage`

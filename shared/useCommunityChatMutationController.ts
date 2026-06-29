@@ -506,10 +506,9 @@ export function useCommunityChatMutationController<
         });
       }
 
-      let created: RowT[];
       if (sendRoute.kind === "canonical") {
         if (!createCanonicalMessageRows) throw new Error("community_interaction_writer_missing");
-        created = await createCanonicalMessageRows({
+        await createCanonicalMessageRows({
           session,
           communityId: activeCommunityId,
           idempotencyKey: sendRoute.idempotencyKey,
@@ -519,16 +518,24 @@ export function useCommunityChatMutationController<
           mentions: mentionsToSend,
           attachments: serializedAttachments,
         });
-      } else {
-        const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
-        created = await createCloudThreadUserMessageRows<SessionT, RowT>({
-          session,
-          threadId,
-          text: bodyToSend,
-          attachments: serializedAttachments,
-          replyToId: legacyReplyToId,
+        current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
+        current.onCommunityMessageSent?.({
+          communityId: activeCommunityId,
+          messageId: sendRoute.idempotencyKey,
+          hasAttachments: preparedAttachments.length > 0,
+          hasReply: Boolean(replySnapshot),
         });
+        return;
       }
+
+      const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
+      const created = await createCloudThreadUserMessageRows<SessionT, RowT>({
+        session,
+        threadId,
+        text: bodyToSend,
+        attachments: serializedAttachments,
+        replyToId: legacyReplyToId,
+      });
       const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;
       if (!record) {
         current.setCommunityChatError(current.missingPayloadMessage);
