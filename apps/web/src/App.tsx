@@ -11520,7 +11520,16 @@ export default function App() {
   );
 
   const recentSignalChatRoots = useMemo(
-    () => communityInteractionRoots.filter((bundle) => !bundle.pending).slice(-15),
+    () => {
+      const toMs = (value: string) => {
+        const ms = Date.parse(value);
+        return Number.isFinite(ms) ? ms : 0;
+      };
+      return communityInteractionRoots
+        .filter((bundle) => !bundle.pending)
+        .sort((left, right) => toMs(right.root.created_at) - toMs(left.root.created_at))
+        .slice(0, 15);
+    },
     [communityInteractionRoots],
   );
   const handleOpenPanelInteractionThread = useCallback(

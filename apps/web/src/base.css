@@ -31281,7 +31281,7 @@ button.message-citation-chip:hover {
      scope on the chat page. The panel renders the feed outside that scope, so map it here — it
      stays theme-aware since --accent-gold is defined per theme at :root. */
   --accent: var(--accent-gold);
-  margin: 2px 0 10px;
+  margin: 0 0 8px;
   max-height: 460px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -31290,11 +31290,109 @@ button.message-citation-chip:hover {
 .workspace-community-signal-feed .community-interaction-feed {
   max-width: 100%;
   padding: 0;
-  gap: 10px;
+  gap: 4px;
 }
 
 .workspace-community-signal-feed .community-interaction-group {
   max-width: 100%;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 0 3px;
+  border-radius: 7px;
+}
+
+.workspace-community-signal-feed .community-interaction-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-group-gutter {
+  padding-top: 1px;
+}
+
+.workspace-community-signal-feed .community-interaction-meta-row {
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.workspace-community-signal-feed .community-interaction-author {
+  font-size: 14px;
+}
+
+.workspace-community-signal-feed .community-interaction-title {
+  margin-top: 1px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workspace-community-signal-feed .community-interaction-body {
+  margin-top: 1px;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.38;
+}
+
+.workspace-community-signal-feed .community-interaction-footer {
+  margin-top: 4px;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.workspace-community-signal-feed .community-interaction-message {
+  margin-left: -4px;
+  padding: 0 4px 2px;
+  border-radius: 5px;
+}
+
+.workspace-community-signal-feed .community-interaction-day {
+  gap: 8px;
+  padding: 8px 2px 2px;
+}
+
+.workspace-community-signal-feed .community-interaction-day span {
+  font-size: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-kind {
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-reply-pill {
+  font-size: 12px;
+  padding: 1px 0;
+}
+
+.workspace-community-signal-feed .community-interaction-thread-row {
+  gap: 5px;
+}
+
+.workspace-community-signal-feed .community-interaction-thread-avatar {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}
+
+.workspace-community-signal-feed .community-interaction-thread-time {
+  font-size: 11px;
+}
+
+.workspace-community-signal-feed .community-interaction-reaction {
+  min-height: 19px;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.workspace-community-signal-feed .community-interaction-reaction > span:first-child {
+  font-size: 13px;
+}
+
+.workspace-community-signal-feed .community-interaction-reaction-add {
+  width: 22px;
+  height: 19px;
 }
 
 .workspace-community-section__subtitle {
