@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
 import {
   type AppConnectionRow,
   type AppToolSnapshotRow,
@@ -282,6 +282,22 @@ export const listEffectiveMcpApps = query({
       communityId: args.communityId,
       userId,
     });
+    const communityMounts = await listCommunityHarnessMounts(
+      ctx,
+      args.communityId,
+    );
+    return buildEffectiveMcpApps([...personalMounts, ...communityMounts]);
+  },
+});
+
+export const listEffectiveMcpAppsInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.optional(v.id("communities")),
+  },
+  handler: async (ctx, args) => {
+    const personalMounts = await listUserHarnessMounts(ctx, args.userId);
+    if (!args.communityId) return buildEffectiveMcpApps(personalMounts);
     const communityMounts = await listCommunityHarnessMounts(
       ctx,
       args.communityId,

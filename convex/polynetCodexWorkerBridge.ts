@@ -454,6 +454,18 @@ export async function streamPolynetCodexWorkerTurn(params: {
     description: string;
     input_schema: Record<string, unknown>;
   }> | null;
+  mcpBridgeTools?: Array<{
+    bridge_tool_name: string;
+    runtime_tool_name: string;
+    connector_name: string;
+    app_identity_key: string;
+    catalog_app_id: string | null;
+    tool_name: string;
+    namespaced_tool_name: string;
+    description: string | null;
+    input_schema: unknown;
+    risk_level: "read" | "write" | "sensitive";
+  }> | null;
   target?: PolynetCodexWorkerResolvedTarget | null;
   onEvent: (event: PolynetCodexWorkerSseEvent) => Promise<void> | void;
 }): Promise<PolynetCodexWorkerBridgeResult> {
@@ -516,6 +528,9 @@ export async function streamPolynetCodexWorkerTurn(params: {
         : {}),
       ...(Array.isArray(params.platformTools) && params.platformTools.length > 0
         ? { platform_tools: params.platformTools }
+        : {}),
+      ...(Array.isArray(params.mcpBridgeTools) && params.mcpBridgeTools.length > 0
+        ? { mcp_bridge_tools: params.mcpBridgeTools }
         : {}),
     }),
     });

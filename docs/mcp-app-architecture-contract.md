@@ -8,6 +8,25 @@ This contract is the source of truth for MCP apps in Polynet. It resolves the dr
 
 Communities grant access. Users own app state. Runtime executes only user harness tools.
 
+Polynet has one capability kernel. MCP, Codex, the native Polynet runtime, and UI rows are adapter or projection surfaces over that kernel, not separate capability systems.
+
+```text
+Polynet capability kernel
+  -> app identity
+  -> actor and authority
+  -> user-owned credentials
+  -> validated tool snapshots
+  -> executable runtime tools
+  -> harness adapters
+      -> Polynet harness
+      -> Codex harness
+      -> external MCP provider adapter
+  -> UI projections
+      -> Discover
+      -> Integrations
+      -> Community apps
+```
+
 ## Canonical objects
 
 ### App Definition
@@ -113,6 +132,7 @@ Rules:
 - Community lens can add prompts, skills, resources, and behavioral context.
 - Community lens must not add a second MCP tool runtime path.
 - Duplicate app identity is collapsed before presentation. The user should see one effective app state, with source labels such as personal, community, or personal + community only as metadata.
+- Harness-specific tool names, prompt blocks, and setup packets are projections. They must not become new credential stores or app ownership sources.
 
 ## Lifecycle
 
@@ -173,4 +193,5 @@ Ongoing cleanup should keep drift low by:
 - keeping obsolete grant/recommend frontend aliases and copy out of app management surfaces,
 - deleting unused community runtime execution APIs after proof,
 - keeping product language direct: add apps to communities, connect apps to personal harnesses,
-- keeping all user-facing status projection backed by the same effective user app resolver.
+- keeping all user-facing status projection backed by the same effective user app resolver,
+- keeping broad architecture proofs focused on capability boundaries while dedicated feature proofs own detailed UI affordances.

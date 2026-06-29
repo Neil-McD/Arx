@@ -21,9 +21,11 @@ const tool = read("convex/polynetCodexWorkerTool.ts");
 const runToken = read("convex/polynetCodexWorkerRunToken.ts");
 const admission = read("convex/polynetCodexWorkerAdmission.ts");
 const communityRecentContext = read("convex/communityRecentContext.ts");
+const harnessMounts = read("convex/harnessMounts.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const platformToolSurface = read("shared/polynetPlatformToolSurface.ts");
 const harnessToolPolicy = read("shared/harnessToolPolicy.ts");
+const mcpHarnessProjection = read("shared/mcpHarnessProjection.ts");
 const runtimeCodexPromptProjection = read("shared/runtimeCodexPromptProjection.ts");
 const workerLimits = read("shared/polynetCodexWorkerLimits.ts");
 const runtimeTurnEnvelope = read("shared/runtimeTurnEnvelope.ts");
@@ -236,9 +238,33 @@ assert.match(
   /eventType: "codex_harness_tool_policy_resolved"[\s\S]*buildCodexHarnessToolPolicyReceipt\(codexHarnessToolPolicy\)[\s\S]*runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
   "runtime handler must emit Codex harness policy receipts before projecting worker tools",
 );
+assert.match(
+  harnessMounts,
+  /export const listEffectiveMcpAppsInternal = internalQuery\(\{[\s\S]*userId: v\.id\("users"\)[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)[\s\S]*const personalMounts = await listUserHarnessMounts\(ctx, args\.userId\)[\s\S]*return buildEffectiveMcpApps\(\[\.\.\.personalMounts, \.\.\.communityMounts\]\)/,
+  "harness mounts must expose a trusted pre-resolved-user effective app projection for runtime receipts",
+);
+assert.match(
+  mcpHarnessProjection,
+  /export type CodexMcpHarnessBridgeTool[\s\S]*credential_boundary: "server_only"[\s\S]*export function buildMcpHarnessProjection[\s\S]*codexBridgeTools/,
+  "shared MCP harness projection must derive Codex bridge tools through the secret-free projection helper",
+);
+assert.match(
+  handlers,
+  /type CodexMcpBridgeProjectionReceipt = \{[\s\S]*executable: boolean[\s\S]*executable_bridge_tool_count: number[\s\S]*credential_boundary: "server_only"/,
+  "Codex MCP bridge projection receipt must expose executable read-only bridge counts while keeping credentials server-side",
+);
+assert.match(
+  handlers,
+  /runtime_tool_name: `me__\$\{tool\.namespaced_tool_name\}`[\s\S]*ctx\.runQuery\(internal\.harnessMounts\.listEffectiveMcpAppsInternal[\s\S]*internal\.userPlatformAppMounts\.listRuntimeUserPlatformMountedToolsInternal[\s\S]*const codexMcpBridgeProjection = buildMcpHarnessProjection\(\{[\s\S]*workerMcpBridgeTools = codexMcpBridgeProjection\.codexBridgeTools\.filter[\s\S]*tool\.risk_level === "read"[\s\S]*eventType: "codex_mcp_bridge_projection_resolved"/,
+  "runtime handler must derive read-only Codex bridge tools from effective apps plus real runtime-mounted MCP tools and emit a receipt",
+);
+assert.doesNotMatch(
+  handlers,
+  /codex_mcp_bridge_projection_resolved[\s\S]{0,900}(endpoint_url|access_token|refresh_token|client_secret|authorization)/,
+  "Codex MCP bridge projection receipts must not expose endpoint URLs or credential material",
+);
 for (const [source, label] of [
   [bridge, "bridge"],
-  [handlers, "runtime handler Codex worker branch"],
   [worker, "worker service"],
 ] as const) {
   assert.doesNotMatch(
@@ -247,6 +273,11 @@ for (const [source, label] of [
     `${label} must not silently run the native PolyNet skill or mounted-app harness composition inside Codex worker turns`,
   );
 }
+assert.doesNotMatch(
+  handlers,
+  /composeResolvedRuntimeHarness|resolveRuntimeSkillSelectionInternal|buildMountedApp(OpenAi|Responses)Tools/,
+  "runtime handler Codex worker branch must not silently run the native PolyNet skill or mounted-app harness composition inside Codex worker turns",
+);
 assert.match(
   tool,
   /runAuthorityAllowsRequiredLane[\s\S]*authority\?\.canManageResources === true[\s\S]*readRunCommunityAuthority[\s\S]*runAuthorityAllowsRequiredAuthority[\s\S]*required_community_authority/,
@@ -284,8 +315,8 @@ assert.match(
 );
 assert.match(
   worker,
-  /function buildCodexDynamicTools\(activeTurn: ActiveTurn\)[\s\S]*buildWorkspaceServeDynamicToolSpec[\s\S]*forbidden_tool_names_present/,
-  "worker service must derive actual Codex adapter tools through one receipt-producing helper",
+  /function buildCodexDynamicTools\(activeTurn: ActiveTurn\)[\s\S]*buildWorkspaceServeDynamicToolSpec[\s\S]*buildMcpBridgeDynamicToolSpec[\s\S]*polynet_mcp_bridge_tool_names[\s\S]*forbidden_tool_names_present/,
+  "worker service must derive actual Codex adapter and MCP bridge tools through one receipt-producing helper",
 );
 assert.doesNotMatch(
   worker,
@@ -301,6 +332,26 @@ assert.match(
   worker,
   /emitWorkerEvent\("codex_dynamic_tools_advertised"[\s\S]*codexDynamicTools\.receipt[\s\S]*dynamicTools: codexDynamicTools\.dynamicTools/,
   "worker service must emit the actual advertised Codex tools before starting the Codex thread",
+);
+assert.match(
+  bridge,
+  /mcpBridgeTools\?: Array<[\s\S]*bridge_tool_name[\s\S]*runtime_tool_name[\s\S]*risk_level[\s\S]*mcp_bridge_tools: params\.mcpBridgeTools/,
+  "Convex-to-worker transport must send secret-free MCP bridge tools as an explicit payload",
+);
+assert.match(
+  worker,
+  /normalizeWorkerMcpBridgeToolSpec[\s\S]*body\.mcp_bridge_tools/,
+  "worker service must parse MCP bridge tools from the turn payload",
+);
+assert.match(
+  worker,
+  /handleMcpBridgeToolCall[\s\S]*tool_kind: "mcp_bridge"[\s\S]*bridge_tool_name: toolName/,
+  "worker service must relay MCP bridge calls through the signed tool endpoint",
+);
+assert.match(
+  tool,
+  /requestedToolKind === "mcp_bridge"[\s\S]*buildMcpHarnessProjection\(\{[\s\S]*projectedTool\.risk_level !== "read"[\s\S]*createRuntimeMcpManager\(\{[\s\S]*runtimeMcpManager\.execute\(\{[\s\S]*runtimeToolName: mountedTool\.runtime_tool_name/,
+  "worker tool endpoint must rebuild the projection, allow only read-only MCP bridge tools, and dispatch through runtimeMcpManager",
 );
 assert.match(
   worker,

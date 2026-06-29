@@ -27,7 +27,7 @@ const POLYNET_MCP_CODEX_ADD_COMMAND = `codex mcp add polynet --url ${POLYNET_MCP
 const POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND =
   "codex mcp login polynet --scopes openid,profile,email,offline_access";
 const POLYNET_MCP_CODEX_DURABLE_CONFIG = [
-  '# Recommended: keep MCP OAuth credentials in the OS keychain when available.',
+  '# Optional: keep MCP OAuth credentials in the OS keychain when available.',
   'mcp_oauth_credentials_store = "keyring"',
 ].join("\n");
 const POLYNET_MCP_GENERIC_HTTP_CONFIG = JSON.stringify(
