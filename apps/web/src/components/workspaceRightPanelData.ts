@@ -1,5 +1,4 @@
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import { parseReplyPrefix } from "../../../../shared/communityMessageParsing";
 import { classifyMediaKind } from "../../../../shared/attachmentHelpers";
 import type {
   AnalyticsRange,
@@ -50,12 +49,19 @@ type WorkspaceRightPanelChatAttachment = {
   data_url?: string | null;
 };
 
-type WorkspaceRightPanelChatMessage = {
-  id: string;
-  sender_id: string;
-  body: string;
-  reply_to_id?: string | null;
-  created_at: string | null;
+// Structural view of an interaction root bundle — Recent signal's chat rows are sourced from these
+// (top-level posts), which carry reaction state + a root id for reacting from the panel.
+type WorkspaceRightPanelInteractionRoot = {
+  pending?: string | null;
+  root: {
+    id: string;
+    actor_user_id: string | null;
+    content_summary: string;
+    reply_count?: number | null;
+    reaction_summary?: readonly { emoji: string; count: number }[] | null;
+    viewer_emojis?: readonly string[] | null;
+    created_at: string | null;
+  };
   attachments?: readonly WorkspaceRightPanelChatAttachment[] | null;
 };
 
@@ -220,8 +226,7 @@ function deriveSignalMedia(
 
 export function buildWorkspaceRightPanelRecentSignals(params: {
   nowMs?: number;
-  communityMessages: readonly WorkspaceRightPanelChatMessage[];
-  communityMessageById: ReadonlyMap<string, WorkspaceRightPanelChatMessage>;
+  communityInteractionRoots: readonly WorkspaceRightPanelInteractionRoot[];
   aiFeedPosts: readonly WorkspaceRightPanelAiFeedPost[];
   resources: readonly WorkspaceRightPanelResource[];
   events: readonly WorkspaceRightPanelEvent[];
@@ -256,43 +261,42 @@ export function buildWorkspaceRightPanelRecentSignals(params: {
       })
       .map(({ sortMs: _sortMs, ...signal }) => signal);
 
-  const sortedMessages = [...params.communityMessages]
-    .filter((message) => !String(message.id ?? "").startsWith("pending-"))
-    .map((message) => ({
-      message,
-      createdAtMs: parsePanelSignalTimestampMs(message.created_at),
+  const sortedRoots = [...params.communityInteractionRoots]
+    .filter((bundle) => !bundle.pending && !String(bundle.root.id ?? "").startsWith("pending:"))
+    .map((bundle) => ({
+      bundle,
+      createdAtMs: parsePanelSignalTimestampMs(bundle.root.created_at),
     }))
-    .filter((entry): entry is { message: WorkspaceRightPanelChatMessage; createdAtMs: number } => entry.createdAtMs !== null)
+    .filter((entry): entry is { bundle: WorkspaceRightPanelInteractionRoot; createdAtMs: number } => entry.createdAtMs !== null)
     .sort((a, b) => b.createdAtMs - a.createdAtMs);
 
-  for (const { message, createdAtMs } of sortedMessages) {
-    const senderId = String(message.sender_id ?? "").trim();
-    const senderName = senderId ? params.displayName(senderId) : "Member";
-    const hasAttachments = Array.isArray(message.attachments) && message.attachments.length > 0;
-    const media = deriveSignalMedia(message.attachments, message.body);
-    const cleanedBody = hasAttachments ? stripSharedAttachmentSummaryLine(message.body) : message.body;
+  for (const { bundle, createdAtMs } of sortedRoots) {
+    const root = bundle.root;
+    const actorId = String(root.actor_user_id ?? "").trim();
+    const actorName = actorId ? params.displayName(actorId) : "Member";
+    const rawBody = String(root.content_summary ?? "");
+    const hasAttachments = Array.isArray(bundle.attachments) && bundle.attachments.length > 0;
+    const media = deriveSignalMedia(bundle.attachments, rawBody);
+    const cleanedBody = hasAttachments ? stripSharedAttachmentSummaryLine(rawBody) : rawBody;
     const snippet = truncatePanelSignalText(cleanedBody, 160);
     if (!snippet && !media) continue;
-    const replyToId = String(message.reply_to_id ?? "").trim();
-    const replyTarget = replyToId ? params.communityMessageById.get(replyToId) ?? null : null;
-    const replyBody = replyTarget
-      ? normalizePanelSignalText(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)
-      : "";
-    const replyPreview = truncatePanelSignalText(replyBody || (replyTarget ? "Message" : ""), 90);
+    const viewerEmojis = new Set(root.viewer_emojis ?? []);
+    const reactions = (root.reaction_summary ?? [])
+      .filter((reaction) => reaction.emoji && reaction.count > 0)
+      .map((reaction) => ({ emoji: reaction.emoji, count: reaction.count, reacted: viewerEmojis.has(reaction.emoji) }));
+    const replyCount = Math.max(0, Math.floor(root.reply_count ?? 0));
     const signal: WorkspaceRightPanelRecentSignalCandidate = {
-      id: `chat:${message.id}`,
+      id: `chat:${root.id}`,
       kind: "chat",
-      title: senderName,
+      title: actorName,
       subtitle: snippet || null,
+      metaLabel: replyCount > 0 ? `${replyCount} ${replyCount === 1 ? "reply" : "replies"}` : null,
       media,
-      avatar: senderId ? buildAvatar(senderId, senderName) : null,
-      replyContext: replyToId
-        ? {
-            sender: replyTarget ? params.displayName(replyTarget.sender_id) : "Reply",
-            text: replyPreview || "Replied message not loaded",
-          }
-        : null,
-      target: { tab: "chat", itemId: message.id },
+      rootId: root.id,
+      reactions: reactions.length > 0 ? reactions : null,
+      avatar: actorId ? buildAvatar(actorId, actorName) : null,
+      replyContext: null,
+      target: { tab: "chat", itemId: root.id },
       sortMs: createdAtMs,
     };
     if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
@@ -481,6 +485,8 @@ export function buildWorkspaceRightPanelUserData(params: {
   onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceRightPanelRecentSignalTarget) => void;
+  onToggleSignalReaction?: (rootId: string, emoji: string) => void;
+  signalQuickReactions?: string[];
   onToggleCommunityMute: (muted: boolean) => Promise<void> | void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
   onApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;

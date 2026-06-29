@@ -31292,6 +31292,66 @@ button.message-citation-chip:hover {
   line-height: 1;
 }
 
+.workspace-community-signal-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.workspace-community-signal-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.workspace-community-signal-reaction.is-active {
+  border-color: var(--accent, #7c5cff);
+  background: color-mix(in srgb, var(--accent, #7c5cff) 16%, transparent);
+  color: var(--text-default);
+}
+
+.workspace-community-signal-react-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.workspace-community-signal-row:hover .workspace-community-signal-react-bar,
+.workspace-community-signal-row:focus-within .workspace-community-signal-react-bar {
+  opacity: 1;
+}
+
+.workspace-community-signal-react-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-community-signal-react-add:hover {
+  background: color-mix(in srgb, var(--accent, #7c5cff) 22%, transparent);
+}
+
 .workspace-community-signal-reply.chat-reply-quote {
   max-width: 100%;
   width: fit-content;

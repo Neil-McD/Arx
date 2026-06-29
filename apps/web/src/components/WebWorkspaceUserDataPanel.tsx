@@ -115,6 +115,9 @@ export type WorkspaceUserPanelRecentSignal = {
     thumbnailUrl?: string | null;
     label?: string | null;
   } | null;
+  /** Interaction root id — present on chat signals; enables reactions from the panel. */
+  rootId?: string | null;
+  reactions?: { emoji: string; count: number; reacted: boolean }[] | null;
   target: {
     tab: "chat" | "ai_feed" | "resources" | "events";
     itemId?: string | null;
@@ -155,6 +158,8 @@ export type WorkspaceUserDataPanelDataProps = {
   onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceUserPanelRecentSignal["target"]) => void;
+  onToggleSignalReaction?: (rootId: string, emoji: string) => void;
+  signalQuickReactions?: string[];
   onOpenActiveCommunitySettings: () => void;
   onOpenActiveCommunityMembers: () => void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
@@ -1416,11 +1421,18 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
             >
               <div className="workspace-community-signal-list">
                 {visibleRecentSignals.map((signal) => (
-                  <button
+                  <div
                     key={signal.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     className={`workspace-community-signal-row is-${signal.kind}${signal.replyContext ? " has-reply" : ""}`}
                     onClick={() => props.onOpenRecentSignal(signal.target)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        props.onOpenRecentSignal(signal.target);
+                      }
+                    }}
                   >
                     {signal.eventMonth && signal.eventDay ? (
                       <span className="workspace-community-signal-date" aria-hidden="true">
@@ -1491,7 +1503,40 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
                         </div>
                       ) : null}
                     </div>
-                  </button>
+                    {signal.kind === "chat" && signal.rootId && (props.onToggleSignalReaction || (signal.reactions && signal.reactions.length > 0)) ? (
+                      <div
+                        className="workspace-community-signal-reactions"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {(signal.reactions ?? []).map((reaction) => (
+                          <button
+                            key={reaction.emoji}
+                            type="button"
+                            className={`workspace-community-signal-reaction${reaction.reacted ? " is-active" : ""}`}
+                            onClick={() => props.onToggleSignalReaction?.(signal.rootId!, reaction.emoji)}
+                          >
+                            <span aria-hidden="true">{reaction.emoji}</span>
+                            <span>{reaction.count}</span>
+                          </button>
+                        ))}
+                        {props.onToggleSignalReaction && props.signalQuickReactions && props.signalQuickReactions.length > 0 ? (
+                          <span className="workspace-community-signal-react-bar">
+                            {props.signalQuickReactions.map((emoji) => (
+                              <button
+                                key={`add:${emoji}`}
+                                type="button"
+                                className="workspace-community-signal-react-add"
+                                onClick={() => props.onToggleSignalReaction?.(signal.rootId!, emoji)}
+                                aria-label={`React ${emoji}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>

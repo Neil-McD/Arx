@@ -11486,8 +11486,7 @@ export default function App() {
 
   const workspacePanelCommunityRecentSignals = useMemo(() => {
     return buildWorkspaceRightPanelRecentSignals({
-      communityMessages,
-      communityMessageById,
+      communityInteractionRoots,
       aiFeedPosts: activeCommunityFeedState.live,
       resources: communityResources,
       events: communityEvents,
@@ -11497,8 +11496,7 @@ export default function App() {
   }, [
     activeCommunityFeedState.live,
     communityEvents,
-    communityMessageById,
-    communityMessages,
+    communityInteractionRoots,
     communityResources,
     displayName,
     savedProfilesByUserId,
@@ -11590,6 +11588,9 @@ export default function App() {
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,
+    onToggleSignalReaction: (rootId: string, emoji: string) =>
+      void handleToggleCommunityInteractionReaction("root", rootId, emoji),
+    signalQuickReactions: ["👍", "❤️", "🔥"],
     onToggleCommunityMute: handleToggleCommunityMute,
     onSetCommunityAnalyticsRange: setCommunityAnalyticsRange,
     onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
