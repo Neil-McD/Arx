@@ -3335,6 +3335,7 @@ export default function App() {
     funnelPreviewOnlineCount,
     funnelPreviewOnlineFaces,
     activeCommunityOnlineUserIds,
+    activeCommunityPresenceSummary,
     reloadActiveCommunityAccess,
   } = useWebActiveCommunityShellController<AuthSession>({
     activeCommunityId,
@@ -11073,6 +11074,7 @@ export default function App() {
         onDiscardPending: handleDiscardPendingCanonicalInteraction,
         typingPresence: communityTypingUsers,
         onlineUserIds: activeCommunityOnlineUserIds,
+        presenceSummary: activeCommunityPresenceSummary,
       },
     });
   const activateDiscoverCommunityCard = useCallback((opts: {

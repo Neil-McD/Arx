@@ -21,6 +21,7 @@ import type {
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
+import { CommunityContextPanel, type CommunityPresenceFace } from "./CommunityContextPanel";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type {
   CommunityTypingPresenceBundle,
@@ -76,6 +77,12 @@ export type WebCommunityInteractionProjectionProps = {
   onLoadOlderRoots?: () => void;
   onCaughtUp?: () => void;
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
+  presenceSummary?: {
+    member_count?: number | null;
+    admin_count?: number | null;
+    online_count?: number | null;
+    online_faces?: CommunityPresenceFace[] | null;
+  } | null;
 };
 
 import {
@@ -225,7 +232,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
   return (
-    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : ""}`}>
+    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}`}>
       <div className="community-interaction-main">
         <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
           <CommunityInteractionFeedList
@@ -504,7 +511,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             <div className="community-interaction-drawer-composer">{props.drawerComposer}</div>
           ) : null}
         </aside>
-      ) : null}
+      ) : (
+        <aside className="community-interaction-drawer community-context-panel" aria-label="Community">
+          <CommunityContextPanel
+            communityName={props.activeCommunityName}
+            memberCount={props.presenceSummary?.member_count ?? null}
+            onlineCount={props.presenceSummary?.online_count ?? null}
+            adminCount={props.presenceSummary?.admin_count ?? null}
+            onlineFaces={props.presenceSummary?.online_faces ?? null}
+          />
+        </aside>
+      )}
     </div>
   );
 }
