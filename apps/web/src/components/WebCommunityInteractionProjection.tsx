@@ -20,7 +20,7 @@ import type {
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
-import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type {
   CommunityTypingPresenceBundle,
@@ -75,6 +75,7 @@ export type WebCommunityInteractionProjectionProps = {
   isLoadingOlderRoots?: boolean;
   onLoadOlderRoots?: () => void;
   onCaughtUp?: () => void;
+  onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
 };
 
 import {
@@ -338,7 +339,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     <div className="community-interaction-title">{selectedRoot.root.title}</div>
                   ) : null}
                   <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
-                  <InteractionAttachments attachments={selectedRoot.attachments} />
+                  <InteractionAttachments attachments={selectedRoot.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
                   <EmbedCards embeds={selectedRoot.embeds} />
                   <div className="community-interaction-thread-anchor-actions">
                     <ReactionSummary
@@ -458,7 +459,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         ) : (
                           <>
                             <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                            <InteractionAttachments attachments={bundle.attachments} />
+                            <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
                             <EmbedCards embeds={bundle.embeds} />
                             {reply.edited_at ? (
                               <span className="community-interaction-edited">(edited)</span>

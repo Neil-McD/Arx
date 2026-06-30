@@ -1084,6 +1084,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             >
               <WebCommunityInteractionProjection
                 {...interactionProjection}
+                onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
                 activeCommunityName={activeCommunity?.name ?? "Community"}
                 profilesByUserId={profilesByUserId}
                 displayName={displayName}

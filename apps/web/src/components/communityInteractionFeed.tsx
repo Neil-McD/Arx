@@ -17,7 +17,7 @@ import type {
   CommunityInteractionReplyBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
-import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -594,7 +594,10 @@ export function InteractionBody(props: {
 
 // Render the attachments carried on a projected legacy chat message: images in a grid, video/audio
 // as inline players, and any other file as a download chip.
-export function InteractionAttachments(props: { attachments: CommunityInteractionAttachment[] }) {
+export function InteractionAttachments(props: {
+  attachments: CommunityInteractionAttachment[];
+  onOpenImage?: (images: CommunityChatMediaImage[], index: number) => void;
+}) {
   const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } =
     partitionCommunityAttachments(props.attachments);
   if (
@@ -617,10 +620,13 @@ export function InteractionAttachments(props: { attachments: CommunityInteractio
       {imageViews.length > 0 ? (
         <CommunityChatMediaGrid
           images={imageViews}
-          onOpenImage={(images, index) => {
-            const target = images[index]?.fullUrl || images[index]?.url;
-            if (target) window.open(target, "_blank", "noopener,noreferrer");
-          }}
+          onOpenImage={
+            props.onOpenImage ??
+            ((images, index) => {
+              const target = images[index]?.fullUrl || images[index]?.url;
+              if (target) window.open(target, "_blank", "noopener,noreferrer");
+            })
+          }
         />
       ) : null}
       <CommunityChatMediaPlayers videos={videoAttachments} audios={audioAttachments} />
@@ -835,7 +841,7 @@ export function CommunityInteractionFeedList(
                             ) : (
                               <>
                                 <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
-                                <InteractionAttachments attachments={bundle.attachments} />
+                                <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
                                 <EmbedCards embeds={bundle.embeds} />
                                 {root.edited_at ? (
                                   <span className="community-interaction-edited">(edited)</span>
