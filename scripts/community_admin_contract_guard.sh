@@ -152,6 +152,12 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 
 echo "[3/12] Ensuring manager access centralizes membership-row reads..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
+  'export async function listCanonicalCommunityMemberMembershipRows\(args: \{[\s\S]*?communityMembershipCountsTowardActiveMemberCount' \
+  "canonical member row helper owns active non-owner membership semantics"
+require_multiline_match "$COMMUNITY_CORE_FILE" \
+  'export function countCanonicalCommunityMembersFromRows\([\s\S]*?return 1 \+ \(rows\?\.length \?\? 0\)' \
+  "canonical member count is synthesized owner plus active non-owner rows"
+require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function listCommunityMembershipRowsForManager\(args: \{' \
   "shared manager-scoped membership helper exists"
 
@@ -172,11 +178,16 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function adjustCommunityActiveMemberCountForMembershipTransition\([\s\S]*?syncCommunityActiveMemberCount' \
   "membership transitions go through the durable member-count helper"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const countCommunityMemberships = query\([\s\S]*?readCommunityActiveMemberCount\(community\)[\s\S]*?if \(activeMemberCount !== null\) return activeMemberCount' \
-  "countCommunityMemberships reads durable count before scan fallback"
+  'export const countCommunityMemberships = query\([\s\S]*?if \(sinceMs === null\) \{[\s\S]*?return await countCanonicalCommunityMembers\(\{' \
+  "countCommunityMemberships computes current count from canonical rows"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const syncCommunityMembershipCount = mutation\([\s\S]*?readCommunityActiveMemberCount\(community\)[\s\S]*?if \(activeMemberCount !== null\) return activeMemberCount[\s\S]*?syncCommunityActiveMemberCount\(\{' \
-  "syncCommunityMembershipCount reads cached count before legacy reconciliation"
+  'export const syncCommunityMembershipCount = mutation\([\s\S]*?return await syncCommunityActiveMemberCount\(\{' \
+  "syncCommunityMembershipCount reconciles durable cache from canonical rows"
+require_block_no_match "$COMMUNITY_ADMIN_FILE" \
+  'export const syncCommunityMembershipCount = mutation' \
+  'export const listCommunityMembershipCreatedAtRows = query' \
+  'readCommunityActiveMemberCount\(community\)[\s\S]*?return activeMemberCount' \
+  "syncCommunityMembershipCount must not return stale cached count"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipsAdminPage = query\([\s\S]*?withIndex\("by_community_createdAt", \(q\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)[\s\S]*?\.paginate\(\{' \
   "listCommunityMembershipsAdminPage paginates membership rows by community creation order"

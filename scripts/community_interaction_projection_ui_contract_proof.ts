@@ -174,8 +174,8 @@ assert.match(
 );
 assert.match(
   communityDirectory,
-  /communityMembershipRowIsActive[\s\S]*String\(row\.userId\) !== String\(args\.ownerId\)/,
-  "directory backend should filter inactive memberships and synthesize the owner row separately",
+  /listCanonicalCommunityMemberMembershipRows[\s\S]*countCanonicalCommunityMembersFromRows/,
+  "directory backend should use the canonical member count and row helpers",
 );
 assert.doesNotMatch(
   communityDirectory,

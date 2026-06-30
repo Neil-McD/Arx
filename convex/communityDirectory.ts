@@ -3,7 +3,8 @@ import { v } from "convex/values";
 import {
   type CommunityLike,
   type CommunityMembershipLike,
-  communityMembershipRowIsActive,
+  countCanonicalCommunityMembersFromRows,
+  listCanonicalCommunityMemberMembershipRows,
   normalizeCommunityRoleForOutput,
   requireCommunityChatAccess,
   resolvePublicUserId,
@@ -85,25 +86,6 @@ async function mapCommunityDirectoryMembershipRow(args: {
   };
 }
 
-async function listActiveCommunityMembershipRows(args: {
-  ctx: any;
-  communityId: any;
-  ownerId: any;
-}): Promise<CommunityMembershipLike[]> {
-  const rows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_createdAt", (q: any) =>
-      q.eq("communityId", args.communityId),
-    )
-    .order("asc")
-    .collect()) as CommunityMembershipLike[];
-  return rows.filter(
-    (row) =>
-      communityMembershipRowIsActive(row) &&
-      String(row.userId) !== String(args.ownerId),
-  );
-}
-
 export const countCommunityDirectoryMembers = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -117,12 +99,12 @@ export const countCommunityDirectoryMembers = query({
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
-    const activeRows = await listActiveCommunityMembershipRows({
+    const canonicalRows = await listCanonicalCommunityMemberMembershipRows({
       ctx,
       communityId: args.communityId,
-      ownerId: community.ownerId,
+      community,
     });
-    return 1 + activeRows.length;
+    return countCanonicalCommunityMembersFromRows(canonicalRows.rows);
   },
 });
 
@@ -143,12 +125,13 @@ export const listCommunityDirectoryPage = query({
     });
     const pageSize = normalizeDirectoryPageSize(args.pageSize);
     const offset = normalizeDirectoryCursor(args.cursor);
-    const activeRows = await listActiveCommunityMembershipRows({
+    const canonicalRows = await listCanonicalCommunityMemberMembershipRows({
       ctx,
       communityId: args.communityId,
-      ownerId: community.ownerId,
+      community,
     });
-    const totalCount = 1 + activeRows.length;
+    const activeRows = canonicalRows.rows;
+    const totalCount = countCanonicalCommunityMembersFromRows(activeRows);
     const userIdCache = new Map<string, string | null>();
     const includeOwner = offset === 0;
     const memberStart = Math.max(0, offset - 1);

@@ -17,6 +17,8 @@ const app = read("apps/web/src/App.tsx");
 const shellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
 const rosterLifecycle = read("shared/useCommunityMemberRosterLifecycle.ts");
 const directoryLifecycle = read("shared/useCommunityDirectoryLifecycle.ts");
+const communityPublic = read("convex/communityPublic.ts");
+const communityCore = read("convex/communityCore.ts");
 const rosterHookCall = sliceBetween(
   app,
   "useCommunityMemberRosterLifecycle<AuthSession>({",
@@ -115,6 +117,21 @@ assert.match(
   directoryHookCall,
   /loadCommunityDirectoryMembers/,
   "chat right rail must load member-facing directory rows",
+);
+assert.match(
+  communityCore,
+  /export async function listCanonicalCommunityMemberMembershipRows[\s\S]*communityMembershipCountsTowardActiveMemberCount/,
+  "backend must centralize canonical active non-owner member rows",
+);
+assert.match(
+  communityCore,
+  /export function countCanonicalCommunityMembersFromRows[\s\S]*return 1 \+ \(rows\?\.length \?\? 0\)/,
+  "backend canonical member count must be synthesized owner plus active non-owner rows",
+);
+assert.match(
+  communityPublic,
+  /resolvePublicCommunityStats[\s\S]*listCanonicalCommunityMemberMembershipRows[\s\S]*countCanonicalCommunityMembersFromRows/,
+  "presence/social summary counts must use the canonical member count helper",
 );
 
 console.log("PASS: community tab hydration splits Members roster reads from chat directory reads.");

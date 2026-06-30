@@ -717,11 +717,11 @@ export function communityMembershipCountsTowardActiveMemberCount(args: {
   return String(args.membership?.userId ?? "") !== String(args.community.ownerId);
 }
 
-export async function computeCommunityActiveMemberCount(args: {
+export async function listCanonicalCommunityMemberMembershipRows(args: {
   ctx: any;
   communityId: any;
   community?: CommunityLike | null;
-}): Promise<number> {
+}): Promise<{ community: CommunityLike; rows: CommunityMembershipLike[] }> {
   const community =
     args.community ??
     ((await args.ctx.db.get(args.communityId as any)) as CommunityLike | null);
@@ -731,12 +731,37 @@ export async function computeCommunityActiveMemberCount(args: {
     .withIndex("by_community_createdAt", (q: any) =>
       q.eq("communityId", args.communityId),
     )
+    .order("asc")
     .collect()) as CommunityMembershipLike[];
-  return rows.reduce((count, row) => {
-    return communityMembershipCountsTowardActiveMemberCount({ community, membership: row })
-      ? count + 1
-      : count;
-  }, 1);
+  return {
+    community,
+    rows: rows.filter((row) =>
+      communityMembershipCountsTowardActiveMemberCount({ community, membership: row })
+    ),
+  };
+}
+
+export function countCanonicalCommunityMembersFromRows(
+  rows: CommunityMembershipLike[] | null | undefined,
+): number {
+  return 1 + (rows?.length ?? 0);
+}
+
+export async function countCanonicalCommunityMembers(args: {
+  ctx: any;
+  communityId: any;
+  community?: CommunityLike | null;
+}): Promise<number> {
+  const { rows } = await listCanonicalCommunityMemberMembershipRows(args);
+  return countCanonicalCommunityMembersFromRows(rows);
+}
+
+export async function computeCommunityActiveMemberCount(args: {
+  ctx: any;
+  communityId: any;
+  community?: CommunityLike | null;
+}): Promise<number> {
+  return await countCanonicalCommunityMembers(args);
 }
 
 export async function syncCommunityActiveMemberCount(args: {
@@ -767,37 +792,12 @@ export async function adjustCommunityActiveMemberCountForMembershipTransition(ar
   before: CommunityMembershipLike | null | undefined;
   after: CommunityMembershipLike | null | undefined;
 }): Promise<void> {
-  const community = (await args.ctx.db.get(args.communityId as any)) as CommunityLike | null;
-  if (!community) return;
-  const beforeCount = communityMembershipCountsTowardActiveMemberCount({
-    community,
-    membership: args.before,
-  })
-    ? 1
-    : 0;
-  const afterCount = communityMembershipCountsTowardActiveMemberCount({
-    community,
-    membership: args.after,
-  })
-    ? 1
-    : 0;
-  const delta = afterCount - beforeCount;
-  if (delta === 0) return;
-  const currentCount = readCommunityActiveMemberCount(community);
-  if (currentCount === null) {
-    await syncCommunityActiveMemberCount({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      community,
-    });
-    return;
-  }
-  const nextCount = Math.max(1, currentCount + delta);
-  if (nextCount !== currentCount) {
-    await args.ctx.db.patch(community._id as any, {
-      activeMemberCount: nextCount,
-    });
-  }
+  void args.before;
+  void args.after;
+  await syncCommunityActiveMemberCount({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
 }
 
 export function pickMostRelevantCommunityMembership(
@@ -954,15 +954,12 @@ export async function listCommunityMembershipRowsForManager(args: {
     communityId: args.communityId,
     userId,
   });
-  const rows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-    .collect()) as CommunityMembershipLike[];
-  const activeRows = rows.filter(
-    (row) => communityMembershipRowIsActive(row) && String(row.userId) !== String(community.ownerId),
-  );
-  activeRows.sort((a, b) => a.createdAt - b.createdAt);
-  return { community, rows: activeRows };
+  const canonicalRows = await listCanonicalCommunityMemberMembershipRows({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    community,
+  });
+  return { community, rows: canonicalRows.rows };
 }
 
 export function mapCommunityPricingRow(row: CommunityPricePointLike) {

@@ -10,6 +10,8 @@ import {
   type CommunityPricePointLike,
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
+  countCanonicalCommunityMembersFromRows,
+  listCanonicalCommunityMemberMembershipRows,
   mapActivePlanSummaries,
   mapJoinRequestRow,
   normalizeCommunityRoleForOutput,
@@ -97,11 +99,11 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   onlineFaces: PublicCommunityFace[];
   onlineUserIds: string[];
 }> {
-  const memberships = (await ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
-    .collect()) as CommunityMembershipLike[];
-  const activeMemberships = memberships.filter((row) => communityMembershipRowIsActive(row));
+  const { rows: activeMemberships } = await listCanonicalCommunityMemberMembershipRows({
+    ctx,
+    communityId: community._id,
+    community,
+  });
 
   const eligibleUserIds = new Set<string>([String(community.ownerId)]);
   const adminUserIds = new Set<string>([String(community.ownerId)]);
@@ -112,7 +114,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
       adminUserIds.add(normalizedUserId);
     }
   }
-  const memberCount = eligibleUserIds.size;
+  const memberCount = countCanonicalCommunityMembersFromRows(activeMemberships);
 
   const cutoff = Date.now() - COMMUNITY_ONLINE_WINDOW_MS;
   const recentPresenceRows = (await ctx.db

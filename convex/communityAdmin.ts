@@ -15,6 +15,7 @@ import {
   type UserEntitlementLike,
   adjustCommunityActiveMemberCountForMembershipTransition,
   communityMembershipRowIsActive,
+  countCanonicalCommunityMembers,
   getCommunityAndMembership,
   getActiveCommunityBlock,
   isActiveEntitlementWindow,
@@ -25,7 +26,6 @@ import {
   normalizeRoleAssignment,
   parseIsoMs,
   pickMostRelevantCommunityMembership,
-  readCommunityActiveMemberCount,
   requireCommunityChatAccess,
   requireCommunityModerator,
   requireCommunityManager,
@@ -1085,8 +1085,11 @@ export const countCommunityMemberships = query({
       communityId: args.communityId,
     });
     if (sinceMs === null) {
-      const activeMemberCount = readCommunityActiveMemberCount(community);
-      if (activeMemberCount !== null) return activeMemberCount;
+      return await countCanonicalCommunityMembers({
+        ctx,
+        communityId: args.communityId,
+        community,
+      });
     }
     const rows = (await ctx.db
       .query("communityMemberships")
@@ -1121,8 +1124,6 @@ export const syncCommunityMembershipCount = mutation({
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
-    const activeMemberCount = readCommunityActiveMemberCount(community);
-    if (activeMemberCount !== null) return activeMemberCount;
     return await syncCommunityActiveMemberCount({
       ctx,
       communityId: args.communityId,
