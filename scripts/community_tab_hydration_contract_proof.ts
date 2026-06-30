@@ -31,7 +31,12 @@ const rosterPredicate = sliceBetween(
 assert.match(
   rosterPredicate,
   /communityTab === "members"/,
-  "member roster hydration must be reserved for the Members tab",
+  "member roster hydration must support the Members tab",
+);
+assert.match(
+  rosterPredicate,
+  /communityTab === "chat"/,
+  "member roster hydration must support the chat right-rail member list",
 );
 assert.doesNotMatch(
   rosterPredicate,
@@ -86,4 +91,4 @@ assert.doesNotMatch(
   "workspace right panel must not force the member roster lifecycle",
 );
 
-console.log("PASS: community tab hydration keeps roster reads on Members and uses summary social proof elsewhere.");
+console.log("PASS: community tab hydration keeps roster reads on Members/chat and uses summary social proof elsewhere.");

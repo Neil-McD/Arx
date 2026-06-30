@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef, type UIEvent } from "react";
+
 export type CommunityPresenceFace = {
   user_id: string;
   display_name?: string | null;
@@ -18,7 +20,13 @@ type CommunityContextPanelProps = {
   communityName: string;
   onlineFaces?: CommunityPresenceFace[] | null;
   onlineCount?: number | null;
+  memberCount?: number | null;
   members?: CommunityRailMember[] | null;
+  membersHasMore?: boolean;
+  isLoadingMembers?: boolean;
+  isLoadingMoreMembers?: boolean;
+  membersLoadError?: string | null;
+  onLoadMoreMembers?: () => void;
   onlineUserIds?: Set<string> | null;
   ownerId?: string | null;
   displayName: (userId: string) => string;
@@ -27,6 +35,7 @@ type CommunityContextPanelProps = {
 };
 
 const FACE_LIMIT = 7;
+const LOAD_MORE_SCROLL_THRESHOLD_PX = 96;
 
 function isAdminRole(member: CommunityRailMember, ownerId?: string | null): boolean {
   return (
@@ -46,11 +55,57 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const faces = (props.onlineFaces ?? []).slice(0, FACE_LIMIT);
   const onlineTotal = typeof props.onlineCount === "number" ? props.onlineCount : faces.length;
   const extraFaces = Math.max(0, onlineTotal - faces.length);
+  const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
+  const loadedMemberCount = members.length;
+  const memberCountLabel = knownMemberCount !== null
+    ? String(knownMemberCount)
+    : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
 
-  const admins = members.filter((member) => isAdminRole(member, props.ownerId));
-  const rest = members.filter((member) => !isAdminRole(member, props.ownerId));
-  const onlineMembers = rest.filter((member) => online.has(member.user_id));
-  const offlineMembers = rest.filter((member) => !online.has(member.user_id));
+  const onlineMembers = members.filter((member) => online.has(member.user_id));
+  const offlineMembers = members.filter((member) => !online.has(member.user_id));
+  const offlineTotal = knownMemberCount !== null
+    ? Math.max(0, knownMemberCount - onlineTotal)
+    : offlineMembers.length;
+  const offlineCountLabel = knownMemberCount !== null
+    ? String(offlineTotal)
+    : `${offlineMembers.length}${props.membersHasMore ? "+" : ""}`;
+  const loadedSummary = knownMemberCount !== null
+    ? `Showing ${Math.min(loadedMemberCount, knownMemberCount)} of ${knownMemberCount}`
+    : props.membersHasMore
+      ? `Showing ${loadedMemberCount}+`
+      : `Showing ${loadedMemberCount}`;
+  const loadMoreRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (!props.isLoadingMoreMembers) loadMoreRequestedRef.current = false;
+  }, [
+    loadedMemberCount,
+    props.isLoadingMoreMembers,
+    props.membersHasMore,
+    props.membersLoadError,
+  ]);
+
+  const requestLoadMoreMembers = useCallback(() => {
+    if (!props.membersHasMore) return;
+    if (props.isLoadingMembers || props.isLoadingMoreMembers) return;
+    if (!props.onLoadMoreMembers) return;
+    if (loadMoreRequestedRef.current) return;
+    loadMoreRequestedRef.current = true;
+    props.onLoadMoreMembers();
+  }, [
+    props.isLoadingMembers,
+    props.isLoadingMoreMembers,
+    props.membersHasMore,
+    props.onLoadMoreMembers,
+  ]);
+
+  const handleMembersScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const remainingScroll = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (remainingScroll <= LOAD_MORE_SCROLL_THRESHOLD_PX) {
+      requestLoadMoreMembers();
+    }
+  }, [requestLoadMoreMembers]);
 
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
@@ -108,24 +163,42 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         </div>
       </div>
 
-      <div className="community-context-members">
-        {admins.length > 0 ? (
+      <div className="community-context-members" onScroll={handleMembersScroll}>
+        <div className="community-context-section community-context-members-total">
+          Members — {memberCountLabel}
+        </div>
+        {onlineTotal > 0 ? (
           <>
-            <div className="community-context-section">Admins — {admins.length}</div>
-            {admins.map((member) => renderMember(member, true))}
+            <div className="community-context-section">Online — {onlineTotal}</div>
+            {onlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {onlineMembers.length > 0 ? (
+        {offlineTotal > 0 || offlineMembers.length > 0 ? (
           <>
-            <div className="community-context-section">Online — {onlineMembers.length}</div>
-            {onlineMembers.map((member) => renderMember(member))}
+            <div className="community-context-section">Offline — {offlineCountLabel}</div>
+            {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {offlineMembers.length > 0 ? (
-          <>
-            <div className="community-context-section">Offline — {offlineMembers.length}</div>
-            {offlineMembers.map((member) => renderMember(member))}
-          </>
+        {loadedMemberCount === 0 && props.isLoadingMembers ? (
+          <div className="community-context-members-status">Loading members...</div>
+        ) : null}
+        {loadedMemberCount > 0 || props.membersHasMore ? (
+          <div className="community-context-members-footer">
+            {props.isLoadingMoreMembers ? "Loading more..." : loadedSummary}
+          </div>
+        ) : null}
+        {props.membersLoadError && !props.membersHasMore ? (
+          <div className="community-context-members-status">Could not load members.</div>
+        ) : null}
+        {props.membersLoadError && props.membersHasMore ? (
+          <button
+            className="community-context-members-retry"
+            type="button"
+            onClick={requestLoadMoreMembers}
+            disabled={props.isLoadingMoreMembers}
+          >
+            Could not load more members. Retry
+          </button>
         ) : null}
       </div>
     </div>

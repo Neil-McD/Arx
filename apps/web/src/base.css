@@ -8918,6 +8918,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   margin-top: 14px;
 }
 
+.community-context-members-total {
+  color: var(--text-secondary);
+}
+
 .community-context-member {
   display: flex;
   align-items: center;
@@ -8977,6 +8981,42 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-context-member-name.is-admin {
   color: var(--accent-gold);
   font-weight: 500;
+}
+
+.community-context-members-footer,
+.community-context-members-status,
+.community-context-members-retry {
+  margin: 12px 8px 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.community-context-members-status {
+  padding: 6px 0;
+}
+
+.community-context-members-retry {
+  display: block;
+  width: calc(100% - 16px);
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-context-members-retry:hover:not(:disabled),
+.community-context-members-retry:focus-visible {
+  background: var(--hover-overlay);
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.community-context-members-retry:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .app-root.mobile-shell .community-interaction-projection.has-context-panel {

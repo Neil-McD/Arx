@@ -12,6 +12,7 @@ const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -91,6 +92,46 @@ assert.match(
   chatPanel,
   /WebCommunityInteractionProjection[\s\S]*profilesByUserId=\{profilesByUserId\}/,
   "chat panel should pass hydrated profile rows into the canonical projection",
+);
+assert.match(
+  app,
+  /interactionProjection:\s*\{[\s\S]*communityMemberCount,[\s\S]*communityMembers:[\s\S]*communityMembersHasMore,[\s\S]*isLoadingCommunityMembers,[\s\S]*isLoadingMoreCommunityMembers,[\s\S]*communityMembersLoadError,[\s\S]*onLoadMoreCommunityMembers:/,
+  "App should pass full roster count/loading/pagination state into the chat right rail",
+);
+assert.match(
+  projection,
+  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
+  "interaction projection should model roster count/loading/pagination state for the right rail",
+);
+assert.match(
+  projection,
+  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
+  "interaction projection should pass roster state through to the context panel",
+);
+assert.match(
+  contextPanel,
+  /Members — \{memberCountLabel\}/,
+  "context panel should label the member population from a total-count label",
+);
+assert.match(
+  contextPanel,
+  /Offline — \{offlineCountLabel\}/,
+  "context panel should label offline members from the total-count model",
+);
+assert.doesNotMatch(
+  contextPanel,
+  /Offline — \{offlineMembers\.length\}/,
+  "context panel must not present the loaded offline row count as the full offline population",
+);
+assert.match(
+  contextPanel,
+  /LOAD_MORE_SCROLL_THRESHOLD_PX[\s\S]*props\.onLoadMoreMembers\(\)/,
+  "context panel should load additional roster pages as the member rail scrolls near the bottom",
+);
+assert.match(
+  contextPanel,
+  /onScroll=\{handleMembersScroll\}/,
+  "context panel should attach the load-more scroll handler to the member rail",
 );
 
 assert.match(

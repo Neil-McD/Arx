@@ -83,7 +83,13 @@ export type WebCommunityInteractionProjectionProps = {
     online_count?: number | null;
     online_faces?: CommunityPresenceFace[] | null;
   } | null;
+  communityMemberCount?: number | null;
   communityMembers?: CommunityRailMember[] | null;
+  communityMembersHasMore?: boolean;
+  isLoadingCommunityMembers?: boolean;
+  isLoadingMoreCommunityMembers?: boolean;
+  communityMembersLoadError?: string | null;
+  onLoadMoreCommunityMembers?: () => void;
   communityOwnerId?: string | null;
 };
 
@@ -519,7 +525,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             communityName={props.activeCommunityName}
             onlineFaces={props.presenceSummary?.online_faces ?? null}
             onlineCount={props.presenceSummary?.online_count ?? null}
+            memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
             members={props.communityMembers ?? null}
+            membersHasMore={props.communityMembersHasMore}
+            isLoadingMembers={props.isLoadingCommunityMembers}
+            isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
+            membersLoadError={props.communityMembersLoadError}
+            onLoadMoreMembers={props.onLoadMoreCommunityMembers}
             onlineUserIds={props.onlineUserIds ?? null}
             ownerId={props.communityOwnerId ?? null}
             displayName={props.displayName}

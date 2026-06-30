@@ -4785,6 +4785,7 @@ export default function App() {
 
   const {
     loadCommunityMembers,
+    loadMoreCommunityMembers,
     handleShowMoreCommunityMembers,
     loadSelfProfile,
     saveProfileToCloud,
@@ -11075,7 +11076,16 @@ export default function App() {
         typingPresence: communityTypingUsers,
         onlineUserIds: activeCommunityOnlineUserIds,
         presenceSummary: activeCommunityPresenceSummary,
+        communityMemberCount,
         communityMembers: communityMembers,
+        communityMembersHasMore,
+        isLoadingCommunityMembers,
+        isLoadingMoreCommunityMembers,
+        communityMembersLoadError,
+        onLoadMoreCommunityMembers: () => {
+          if (!activeCommunityId || !session) return;
+          void loadMoreCommunityMembers(activeCommunityId, session);
+        },
         communityOwnerId: activeCommunity?.owner_id ?? null,
       },
     });
