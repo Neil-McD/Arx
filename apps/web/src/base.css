@@ -9398,7 +9398,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   content: "";
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .community-interaction-day span {
