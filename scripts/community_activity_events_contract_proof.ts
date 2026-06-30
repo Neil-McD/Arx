@@ -46,7 +46,7 @@ assert.match(
 
 assert.match(
   resources,
-  /recordCommunityActivityEventBestEffort\(\{[\s\S]*type: "resource_added"[\s\S]*dedupeKey: `resource_added:\$\{normalizeIdValue\(created\._id\)\}`/,
+  /recordCommunityActivityEventBestEffort\(\{[\s\S]*type: "resource_added"[\s\S]*targetId: (created|hydrated)\._id[\s\S]*dedupeKey: `resource_added:\$\{normalizeIdValue\(\1\._id\)\}`/,
   "resource creation should emit one deduped resource_added marker",
 );
 
