@@ -190,8 +190,8 @@ Migration order:
 
 1. Add canonical interaction tables and read/write APIs.
 2. Project existing chat messages into interaction roots/replies for compatibility.
-3. Route projection-active UI writes through the canonical composer.
-4. Keep the legacy chat writer only for projection-disabled fallback and migration/backfill.
+3. Route web UI reads and writes through the canonical projection/composer.
+4. Keep the legacy chat writer only for compatibility consumers and migration/backfill.
 5. Move reactions, embeds, mentions, unread, and moderation onto canonical tables.
 6. Delete legacy chat writes after parity.
 7. Delete legacy chat reads after backfill and UI projection are stable.
@@ -270,21 +270,21 @@ Rules:
 
 ## Current UI Projection Slice
 
-The first web UI slice projects the canonical interaction read model into the existing community chat panel behind `VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION`.
+The web UI projects the canonical interaction read model into the existing community chat panel by default. Production must not depend on `VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION` or any other deployment env flag to select the canonical thread drawer.
 
 Rules:
 
-- the flag is enabled only in the active staging/dev chat-substrate lane
-- when disabled, the existing legacy chat timeline remains the rendered surface
+- canonical projection is the normal production and staging chat surface
+- the legacy chat timeline is not a production UI routing option
 - the projection reads roots with `listCommunityInteractionRoots`
 - the projection opens exactly one drawer with replies from `listCommunityInteractionReplies`
 - the projection subscribes to canonical interaction roots and replies directly
-- legacy chat realtime is disabled while canonical interaction projection is active and remains only for the legacy timeline fallback
+- legacy chat realtime is disabled for the normal web chat UI
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
-- top-level composer sends use the canonical composer bridge when projection is active, including prepared attachments
-- drawer reply sends use the canonical composer bridge when projection is active and the reply target has a canonical root id, including prepared attachments
-- when projection is active, a missing canonical writer fails closed instead of falling back to the legacy chat writer
-- legacy timeline sends remain on the legacy chat writer only while the legacy timeline fallback is active
+- top-level composer sends use the canonical composer bridge, including prepared attachments
+- drawer reply sends use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
+- a missing canonical writer fails closed instead of falling back to the legacy chat writer
+- legacy timeline sends remain on the legacy chat writer only for non-projection compatibility call paths
 - successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
@@ -331,9 +331,9 @@ Rules:
 
 ## Current Legacy Chat Adapter Slice
 
-The compatibility adapter keeps the projection-disabled legacy chat mutation alive while dual-writing canonical interactions for old-path sends:
+The compatibility adapter keeps the legacy chat mutation alive while dual-writing canonical interactions for old-path compatibility sends:
 
-- `createThreadUserMessage` remains the legacy write entrypoint for the projection-disabled legacy timeline fallback
+- `createThreadUserMessage` remains the legacy write entrypoint for old clients, migration tools, and compatibility paths
 - top-level chat messages are translated into `communityInteractionRoots`
 - chat replies are translated into `communityInteractionReplies`
 - legacy reply targets map to one drawer root; reply-to-reply targets become `targetReplyId` quote/context only
