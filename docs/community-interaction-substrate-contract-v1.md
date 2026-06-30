@@ -289,21 +289,18 @@ Rules:
 
 ## Current Canonical Composer Bridge Slice
 
-The first composer migration slice adds `createCommunityInteractionComposerMessage`.
+The staging clean-room composer slice uses `createCommunityInteractionComposerMessage` as the canonical chat writer.
 
 Rules:
 
-- composer writes create canonical roots/replies before legacy compatibility rows
+- composer writes create canonical roots/replies only
+- composer writes must not create legacy `communityChatMessages`
+- composer writes must not create `communityInteractionLegacyChatLinks`
 - composer writes may include bounded, already-prepared attachment metadata
 - composer attachment rows are written to `communityInteractionAttachments`
-- the compatibility row is written to `communityChatMessages` in the same Convex transaction
-- the compatibility row preserves bounded attachment metadata in `contentJson.attachments` while legacy consumers remain
-- `communityInteractionLegacyChatLinks` maps the compatibility message to the canonical root/reply
-- the compatibility row keeps old readers, realtime subscribers, archive documents, digests, and recent-context consumers alive
-- while compatibility remains, the mutation may return the existing legacy chat row shape for legacy consumers
-- canonical projection send completion must not depend on that legacy row shape
+- the mutation returns an empty legacy `rows` array; canonical projection completion depends on canonical mutation success and idempotency-key reconciliation
 - pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
-- drawer replies require a canonical `rootId`; legacy reply target message ids are compatibility metadata when available
+- drawer replies require a canonical `rootId`; optional reply targets may resolve through canonical reply ids or pre-existing legacy links
 - canonical projection reply targets without a canonical `rootId` fail closed instead of falling back to legacy sends
 - legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`

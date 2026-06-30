@@ -127,10 +127,10 @@ assert.match(
   /getLegacyChatLinkByMessage[\s\S]*query\("communityInteractionLegacyChatLinks" as any\)[\s\S]*withIndex\("by_message"/,
   "adapter should look up legacy mappings through the legacy-link table",
 );
-assert.match(
+assert.doesNotMatch(
   legacyBridge,
-  /createLegacyCompatibilityChatMessageForInteraction[\s\S]*insert\("communityChatMessages" as any,[\s\S]*upsertArchiveDocumentForChatMessage/,
-  "composer compatibility rows should be isolated in the extracted legacy bridge",
+  /createLegacyCompatibilityChatMessageForInteraction|insert\("communityChatMessages" as any,|upsertArchiveDocumentForChatMessage|ensureLegacyCompatibilityChatThread|mapLegacyCompatibilityMessageRow/,
+  "legacy bridge should not keep canonical-composer compatibility row creation helpers",
 );
 assert.doesNotMatch(
   interactions,

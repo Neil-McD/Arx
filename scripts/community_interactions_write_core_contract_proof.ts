@@ -30,7 +30,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical roots\/replies before legacy compatibility rows/,
+  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical chat writer[\s\S]*must not create legacy `communityChatMessages`/,
   "contract should document the active canonical composer bridge slice",
 );
 assert.match(
@@ -218,23 +218,23 @@ assert.doesNotMatch(
 const createComposerMessage = exportedConstBlock(interactions, "createCommunityInteractionComposerMessage");
 assert.match(
   createComposerMessage,
-  /communityInteractionRoots" as any[\s\S]*createLegacyCompatibilityChatMessageForInteraction/,
-  "composer bridge should create canonical roots before legacy compatibility rows",
+  /communityInteractionRoots" as any/,
+  "composer bridge should create canonical roots",
 );
 assert.match(
   createComposerMessage,
-  /communityInteractionReplies" as any[\s\S]*createLegacyCompatibilityChatMessageForInteraction/,
-  "composer bridge should create canonical replies before legacy compatibility rows",
+  /communityInteractionReplies" as any/,
+  "composer bridge should create canonical replies",
+);
+assert.doesNotMatch(
+  createComposerMessage,
+  /createLegacyCompatibilityChatMessageForInteraction|ensureLegacyCompatibilityChatThread|insertLegacyChatLinkIfMissing|mapLegacyCompatibilityMessageRow|communityChatMessages" as any|communityChatThreads" as any|communityInteractionLegacyChatLinks" as any/,
+  "composer bridge should not create legacy compatibility rows or links",
 );
 assert.match(
   createComposerMessage,
-  /insertLegacyChatLinkIfMissing[\s\S]*linkKind: "root"[\s\S]*insertLegacyChatLinkIfMissing[\s\S]*linkKind: "reply"/,
-  "composer bridge should persist root and reply legacy compatibility links",
-);
-assert.match(
-  createComposerMessage,
-  /rows:\s*\[await mapLegacyCompatibilityMessageRow/,
-  "composer bridge should preserve the legacy chat response row shape",
+  /rows:\s*\[\]/,
+  "composer bridge should return an empty legacy rows array",
 );
 assert.match(
   createComposerMessage,
@@ -250,11 +250,6 @@ assert.match(
   createComposerMessage,
   /insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
   "composer bridge should write canonical attachment rows for roots and replies",
-);
-assert.match(
-  createComposerMessage,
-  /attachments: legacyAttachments/,
-  "composer bridge should preserve bounded attachment metadata in compatibility rows",
 );
 assert.doesNotMatch(
   createComposerMessage,

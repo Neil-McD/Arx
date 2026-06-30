@@ -57,17 +57,17 @@ assert.match(
 
 [
   "| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` |",
-  "| R-002 | Legacy compatibility message rows created by canonical composer | `KEEP TEMPORARILY` |",
   "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
   "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
   "| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
+  "| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer.",
   "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
   "Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
-  "No longer blockers: canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement.",
+  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
 assert.match(
@@ -98,13 +98,13 @@ assert.match(
 
 assert.match(
   legacyBridge,
-  /(?=[\s\S]*query\("communityChatThreads" as any\))(?=[\s\S]*insert\("communityChatThreads" as any,)(?=[\s\S]*insert\("communityChatMessages" as any,)(?=[\s\S]*insert\("communityInteractionLegacyChatLinks" as any,)/,
-  "legacy bridge should own canonical-composer compatibility table access",
+  /getLegacyChatLinkByMessage[\s\S]*insertLegacyChatLinkIfMissing[\s\S]*insert\("communityInteractionLegacyChatLinks" as any,/,
+  "legacy bridge should only own legacy chat link table helpers",
 );
-assert.match(
+assert.doesNotMatch(
   legacyBridge,
-  /upsertArchiveDocumentForChatMessage/,
-  "legacy bridge should preserve archive compatibility for compatibility message rows",
+  /communityChatThreads|communityChatMessages|upsertArchiveDocumentForChatMessage|createLegacyCompatibilityChatMessageForInteraction|mapLegacyCompatibilityMessageRow|ensureLegacyCompatibilityChatThread/,
+  "legacy bridge should not create canonical-composer compatibility rows",
 );
 assert.doesNotMatch(
   legacyBridge,
@@ -190,6 +190,17 @@ assert.match(
   sendController,
   /if \(sendRoute\.kind === "canonical"\)[\s\S]*await createCanonicalMessageRows\([\s\S]*current\.setCommunityMessages\(\(prev\) => prev\.filter\(\(message\) => message\.id !== optimisticId\)\)[\s\S]*messageId: sendRoute\.idempotencyKey[\s\S]*return;/,
   "canonical sends should complete from canonical mutation success without legacy row replacement",
+);
+const createComposerMessage = extractExportedConst(interactions, "createCommunityInteractionComposerMessage");
+assert.match(
+  createComposerMessage,
+  /rows:\s*\[\]/,
+  "canonical composer should return an empty legacy rows array",
+);
+assert.doesNotMatch(
+  createComposerMessage,
+  /createLegacyCompatibilityChatMessageForInteraction|ensureLegacyCompatibilityChatThread|insertLegacyChatLinkIfMissing|mapLegacyCompatibilityMessageRow|communityChatMessages" as any|communityChatThreads" as any|communityInteractionLegacyChatLinks" as any/,
+  "canonical composer should not create legacy chat rows or legacy links",
 );
 assert.match(
   sendController,

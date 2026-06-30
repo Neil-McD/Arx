@@ -1,11 +1,6 @@
 import {
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   normalizeIdValue,
-  resolvePublicUserId,
-  toIsoString,
 } from "./communityCore";
-import { upsertArchiveDocumentForChatMessage } from "./communityArchiveDocuments";
 
 export type CommunityInteractionLegacyChatLinkRow = {
   _id: any;
@@ -22,45 +17,6 @@ export type CommunityInteractionLegacyChatLinkRow = {
 
 export function legacyChatIdempotencyKey(messageId: any, kind: "root" | "reply"): string {
   return `legacy_chat_message:${normalizeIdValue(messageId)}:${kind}`;
-}
-
-export async function ensureLegacyCompatibilityChatThread(
-  ctx: any,
-  communityId: any,
-  nowMs: number,
-): Promise<CommunityChatThreadLike> {
-  const existing = (await ctx.db
-    .query("communityChatThreads" as any)
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
-    .order("asc")
-    .first()) as CommunityChatThreadLike | null;
-  if (existing) return existing;
-  const threadId = await ctx.db.insert("communityChatThreads" as any, {
-    communityId,
-    lastSeq: 0,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  });
-  const thread = (await ctx.db.get(threadId as any)) as CommunityChatThreadLike | null;
-  if (!thread) throw new Error("community_chat_thread_create_failed");
-  return thread;
-}
-
-export async function mapLegacyCompatibilityMessageRow(
-  ctx: any,
-  row: CommunityChatMessageLike,
-  userIdCache?: Map<string, string | null>,
-) {
-  return {
-    id: String(row._id),
-    thread_id: String(row.threadId),
-    seq: Math.max(0, Math.floor(row.seq)),
-    role: row.role,
-    content_json: row.contentJson,
-    sender_id: (await resolvePublicUserId(ctx, row.senderUserId, userIdCache)) ?? normalizeIdValue(row.senderUserId),
-    reply_to_id: row.replyToMessageId ? String(row.replyToMessageId) : null,
-    created_at: toIsoString(row.createdAt),
-  };
 }
 
 export async function getLegacyChatLinkByMessage(
@@ -91,14 +47,6 @@ export async function getLegacyChatLinkByReply(
     .query("communityInteractionLegacyChatLinks" as any)
     .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
     .first()) as CommunityInteractionLegacyChatLinkRow | null;
-}
-
-export async function getLinkedLegacyCompatibilityMessage(
-  ctx: any,
-  link: CommunityInteractionLegacyChatLinkRow | null,
-): Promise<CommunityChatMessageLike | null> {
-  if (!link?.messageId) return null;
-  return (await ctx.db.get(link.messageId as any)) as CommunityChatMessageLike | null;
 }
 
 export async function insertLegacyChatLinkIfMissing(args: {
@@ -138,47 +86,4 @@ export async function insertLegacyChatLinkIfMissing(args: {
   const created = (await args.ctx.db.get(linkId as any)) as CommunityInteractionLegacyChatLinkRow | null;
   if (!created) throw new Error("legacy_chat_interaction_link_create_failed");
   return created;
-}
-
-export async function createLegacyCompatibilityChatMessageForInteraction(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  actorUserId: any;
-  text: string;
-  attachments?: Array<Record<string, unknown>>;
-  replyToMessageId?: any;
-  nowMs: number;
-}): Promise<CommunityChatMessageLike> {
-  let replyToMessageId: any | undefined;
-  if (args.replyToMessageId) {
-    const target = (await args.ctx.db.get(args.replyToMessageId as any)) as CommunityChatMessageLike | null;
-    if (!target || normalizeIdValue(target.threadId) !== normalizeIdValue(args.thread._id)) {
-      throw new Error("interaction_legacy_reply_target_invalid");
-    }
-    replyToMessageId = target._id;
-  }
-  const seq = Math.max(0, Math.floor(args.thread.lastSeq ?? 0)) + 1;
-  const messageId = await args.ctx.db.insert("communityChatMessages" as any, {
-    threadId: args.thread._id,
-    seq,
-    role: "user",
-    contentJson: args.attachments && args.attachments.length > 0
-      ? { text: args.text, attachments: args.attachments }
-      : { text: args.text },
-    senderUserId: args.actorUserId,
-    ...(replyToMessageId ? { replyToMessageId } : {}),
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  await args.ctx.db.patch(args.thread._id as any, {
-    lastSeq: seq,
-    updatedAt: args.nowMs,
-  });
-  const row = (await args.ctx.db.get(messageId as any)) as CommunityChatMessageLike | null;
-  if (!row) throw new Error("interaction_legacy_message_create_failed");
-  await upsertArchiveDocumentForChatMessage(args.ctx, {
-    thread: args.thread,
-    message: row,
-  });
-  return row;
 }
