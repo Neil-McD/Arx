@@ -2453,6 +2453,7 @@ export default function App() {
     });
   }, [communityInteractionRoots, communityInteractionRepliesByRootId]);
   const activeCommunityInteractionCommunityIdRef = useRef<string | null>(null);
+  const communityInteractionProjectionBoundaryRef = useRef<string | null>(null);
   const communityInteractionRootsRequestIdRef = useRef(0);
   const communityInteractionRepliesRequestIdRef = useRef<Record<string, number>>({});
   activeCommunityInteractionCommunityIdRef.current = activeCommunityId;
@@ -3072,14 +3073,21 @@ export default function App() {
   // page. The workspace right panel renders the same feed (compact) on the workspace page, so the
   // roots must persist across page navigation. Only reset when there's no active community/session.
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) {
+    const sessionUserId = String(canonicalSessionUserId ?? "").trim();
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session || !sessionUserId) {
+      communityInteractionProjectionBoundaryRef.current = null;
       resetCommunityInteractionProjection();
       return;
     }
-    resetCommunityInteractionProjection();
+    const nextBoundary = `${sessionUserId}:${activeCommunityId}`;
+    if (communityInteractionProjectionBoundaryRef.current !== nextBoundary) {
+      communityInteractionProjectionBoundaryRef.current = nextBoundary;
+      resetCommunityInteractionProjection();
+    }
     void loadCommunityInteractionRoots(activeCommunityId, session);
   }, [
     activeCommunityId,
+    canonicalSessionUserId,
     loadCommunityInteractionRoots,
     resetCommunityInteractionProjection,
     session,
