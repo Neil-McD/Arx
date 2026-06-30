@@ -21,7 +21,7 @@ import type {
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
-import { CommunityContextPanel, type CommunityPresenceFace } from "./CommunityContextPanel";
+import { CommunityContextPanel, type CommunityPresenceFace, type CommunityRailMember } from "./CommunityContextPanel";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type {
   CommunityTypingPresenceBundle,
@@ -83,6 +83,8 @@ export type WebCommunityInteractionProjectionProps = {
     online_count?: number | null;
     online_faces?: CommunityPresenceFace[] | null;
   } | null;
+  communityMembers?: CommunityRailMember[] | null;
+  communityOwnerId?: string | null;
 };
 
 import {
@@ -515,10 +517,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <aside className="community-interaction-drawer community-context-panel" aria-label="Community">
           <CommunityContextPanel
             communityName={props.activeCommunityName}
-            memberCount={props.presenceSummary?.member_count ?? null}
-            onlineCount={props.presenceSummary?.online_count ?? null}
-            adminCount={props.presenceSummary?.admin_count ?? null}
             onlineFaces={props.presenceSummary?.online_faces ?? null}
+            onlineCount={props.presenceSummary?.online_count ?? null}
+            members={props.communityMembers ?? null}
+            onlineUserIds={props.onlineUserIds ?? null}
+            ownerId={props.communityOwnerId ?? null}
+            displayName={props.displayName}
+            getInitials={props.getInitials}
+            getAvatarColor={props.getAvatarColor}
           />
         </aside>
       )}

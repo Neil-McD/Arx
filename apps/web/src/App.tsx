@@ -11075,6 +11075,8 @@ export default function App() {
         typingPresence: communityTypingUsers,
         onlineUserIds: activeCommunityOnlineUserIds,
         presenceSummary: activeCommunityPresenceSummary,
+        communityMembers: communityMembers,
+        communityOwnerId: activeCommunity?.owner_id ?? null,
       },
     });
   const activateDiscoverCommunityCard = useCallback((opts: {
