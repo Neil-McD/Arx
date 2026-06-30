@@ -68,13 +68,13 @@ assert.doesNotMatch(
 
 assert.match(
   activeCommunityShell,
-  /canViewActiveCommunityPolynet = canManageCommunitySettings/,
-  "Polynet nav access should follow the owner/admin community management gate",
+  /canViewActiveCommunityPolynet = communityAccessCapabilities\.canViewCommunity/,
+  "Polynet nav access should follow member community access",
 );
 assert.doesNotMatch(
   activeCommunityShell,
-  /canViewActiveCommunityPolynet = Boolean\([\s\S]*communityAccessCapabilities\.canViewCommunity/,
-  "Polynet nav access must not follow broad member community view access",
+  /canViewActiveCommunityPolynet = canManageCommunitySettings/,
+  "Polynet nav access must not follow the owner/admin community management gate",
 );
 assert.doesNotMatch(
   activeCommunityShell,

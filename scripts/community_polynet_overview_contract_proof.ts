@@ -52,10 +52,10 @@ const overviewStatuses = directory.slice(overviewStatusesStart, overviewStatuses
 
 assert.match(overview, /export const getCommunityPolynetOverview = query/, "Polynet overview should be a read-only query");
 assert.match(overview, /communityId: v\.id\("communities"\)/, "overview should be scoped by one explicit community id");
-assert.match(overview, /requireCommunityManager/, "overview should require owner/admin community access");
-assert.match(overview, /const isManager = true/, "overview should treat authorized viewers as managers after the manager gate");
-assert.doesNotMatch(overview, /requireCommunityChatAccess/, "overview should not be readable through broad member chat access");
-assert.doesNotMatch(overview, /viewerCanManageCommunity/, "overview should not downgrade to member-readable manager probing");
+assert.match(overview, /requireCommunityChatAccess/, "overview should require member community chat access");
+assert.match(overview, /const isManager = await viewerCanManageCommunity\(ctx, args\.communityId, userId\)/, "overview should compute manager status after the member access gate");
+assert.doesNotMatch(overview, /const isManager = true/, "overview should not treat every authorized viewer as a manager");
+assert.doesNotMatch(overview, /await requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\)/, "overview should not require owner/admin access");
 assert.match(communityExports, /getCommunityPolynetOverview as getCommunityPolynetOverviewImpl/, "community module should import the overview query");
 assert.match(communityExports, /export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl/, "community module should export the overview query");
 
