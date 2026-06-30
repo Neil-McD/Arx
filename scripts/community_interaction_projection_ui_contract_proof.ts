@@ -19,8 +19,6 @@ const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
-const envExample = read(".env.example");
-const stagingEnvExample = read(".env.staging.local.example");
 
 assert.match(
   packageJson,
@@ -28,10 +26,15 @@ assert.match(
   "package scripts should expose the community interaction projection UI proof",
 );
 
-assert.match(
+assert.doesNotMatch(
   app,
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
-  "App should gate the projection behind an explicit Vite flag",
+  "App should not gate the production canonical projection behind a Vite env flag",
+);
+assert.match(
+  app,
+  /const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
+  "App should make canonical interaction projection the normal web chat surface",
 );
 assert.match(
   app,
@@ -41,7 +44,7 @@ assert.match(
 assert.match(
   app,
   /interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*appendPendingRoots\(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId\)[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
-  "App should pass a feature-flagged canonical projection with optimistic roots into the chat panel",
+  "App should pass the canonical projection with optimistic roots into the chat panel",
 );
 assert.match(
   app,
@@ -51,7 +54,7 @@ assert.match(
 assert.match(
   app,
   /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
-  "legacy chat realtime should run only for the legacy timeline fallback",
+  "legacy chat realtime should remain disabled while canonical projection is the normal chat surface",
 );
 assert.match(
   app,
@@ -252,19 +255,8 @@ assert.match(
 );
 
 assert.match(
-  envExample,
-  /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION=/,
-  ".env.example should document the projection flag without enabling it globally",
-);
-assert.match(
-  stagingEnvExample,
-  /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION=true/,
-  ".env.staging.local.example should enable the projection for the staging/dev chat lane",
-);
-
-assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled while canonical interaction projection is active[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge when projection is active[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*canonical projection is the normal production and staging chat surface[\s\S]*legacy chat timeline is not a production UI routing option[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled for the normal web chat UI[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(

@@ -1383,14 +1383,7 @@ const WEB_RAIL_WIDTH = 72;
 const WEB_SESSIONS_DRAWER_WIDTH = 240;
 const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 400;
 
-function isTruthyRuntimeFlag(value: unknown): boolean {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-}
-
-const COMMUNITY_INTERACTION_PROJECTION_ENABLED = isTruthyRuntimeFlag(
-  import.meta.env.VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION,
-);
+const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;
 
 function formatCommunityInteractionProjectionError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -3050,8 +3043,8 @@ export default function App() {
   ]);
 
   useCommunityChatRealtime({
-    // Legacy chat realtime is only for the legacy timeline fallback. The canonical
-    // projection subscribes to interaction roots/replies through canonical queries.
+    // The normal web UI uses canonical interaction roots/replies; keep legacy chat
+    // realtime disabled here so it cannot pull production back to the old timeline.
     isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
     session: session,
     ensureSession: ensureUsableAuthSession,

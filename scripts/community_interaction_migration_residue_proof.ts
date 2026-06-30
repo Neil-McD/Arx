@@ -59,16 +59,16 @@ assert.match(
   "| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` |",
   "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
   "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
-  "| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
   "| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer.",
+  "| R-005 | Projection feature flag and legacy timeline fallback | Deleted for production projection promotion.",
   "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
-  "Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.",
+  "Legacy chat realtime must remain disabled for the normal web chat UI; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
-  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement; projection-active sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
-  "The shared community send controller may fall back to legacy sends only when canonical projection is inactive; when projection is active, a missing canonical writer fails closed.",
+  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, production chat rendering, and community attention chat dots no longer require legacy chat row replacement; canonical sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
+  "The shared community send controller may keep legacy sends only for non-projection compatibility call paths; normal web chat uses canonical projection sends, and a missing canonical writer fails closed.",
   "Canonical projection reply targets without a canonical root id fail closed.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
@@ -222,7 +222,17 @@ assert.match(
 assert.match(
   app,
   /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
-  "legacy chat realtime should be disabled while canonical projection is active",
+  "legacy chat realtime should be disabled for the normal web chat UI",
+);
+assert.doesNotMatch(
+  app,
+  /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
+  "production projection should not depend on a Vite env flag",
+);
+assert.match(
+  app,
+  /const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
+  "canonical projection should be the normal app-level chat surface",
 );
 assert.match(
   app,
