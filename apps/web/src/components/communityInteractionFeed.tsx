@@ -857,6 +857,11 @@ export function CommunityInteractionFeedList(
                             ) : null}
                             {hasFooter ? (
                               <div className="community-interaction-footer">
+                                <ReactionSummary
+                                  rows={root.reaction_summary}
+                                  viewerEmojis={root.viewer_emojis}
+                                  onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                                />
                                 {threadTypers.length > 0 ? (
                                   <div className="community-interaction-thread-row">
                                     <ActorAvatar
@@ -909,11 +914,6 @@ export function CommunityInteractionFeedList(
                                     ) : null}
                                   </div>
                                 ) : null}
-                                <ReactionSummary
-                                  rows={root.reaction_summary}
-                                  viewerEmojis={root.viewer_emojis}
-                                  onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
-                                />
                               </div>
                             ) : null}
                           </div>
