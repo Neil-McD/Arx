@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+. "$ROOT_DIR/scripts/guard_rg_compat.sh"
+
 TARGETS=(convex apps shared scripts docs package.json AGENTS.md)
 EXCLUDES=(
   --glob '!scripts/no_builder_plan_infra_guard.sh'

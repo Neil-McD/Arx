@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+. "$ROOT_DIR/scripts/guard_rg_compat.sh"
+
 echo "== Legacy function transport surface guard =="
 
 PATTERN='invokeFunctionAuthJson|invokeFunctionPublicJson|buildCloudFunctionUrl\('

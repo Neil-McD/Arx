@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+. "$ROOT_DIR/scripts/guard_rg_compat.sh"
+
 NEEDLE='platform''_fallback'
 
 if rg -n "$NEEDLE" docs shared convex apps/web/src scripts \

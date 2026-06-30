@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+. "$ROOT_DIR/scripts/guard_rg_compat.sh"
+
 echo "== No legacy provider repo guard =="
 
 PATTERN='s[u]pabase|@s[u]pabase|S[U]PABASE|s[b]_'

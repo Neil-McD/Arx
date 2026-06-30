@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+. "$ROOT_DIR/scripts/guard_rg_compat.sh"
+
 echo "== Auth runtime readiness check =="
 echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Scope: $ROOT_DIR"
