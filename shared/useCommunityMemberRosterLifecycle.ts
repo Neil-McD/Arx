@@ -3,9 +3,7 @@ import type { AppPage, CommunityTab } from "./appShellNavigation";
 
 function needsCommunityMemberRoster(activePage: AppPage, communityTab: CommunityTab): boolean {
   if (activePage !== "community") return false;
-  // The chat view's right-rail member list needs the roster too, not just the
-  // dedicated Members tab.
-  return communityTab === "members" || communityTab === "chat";
+  return communityTab === "members";
 }
 
 export function useCommunityMemberRosterLifecycle<SessionT>(params: {

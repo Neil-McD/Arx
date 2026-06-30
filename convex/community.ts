@@ -25,6 +25,10 @@ import {
   unbanCommunityUser as unbanCommunityUserImpl,
 } from "./communityAdmin";
 import {
+  countCommunityDirectoryMembers as countCommunityDirectoryMembersImpl,
+  listCommunityDirectoryPage as listCommunityDirectoryPageImpl,
+} from "./communityDirectory";
+import {
   getActiveCommunityAgentLanding as getActiveCommunityAgentLandingImpl,
   getActiveCommunityAgentSystemPrompt as getActiveCommunityAgentSystemPromptImpl,
   getCommunityAgentConfig as getCommunityAgentConfigImpl,
@@ -210,6 +214,8 @@ export const listCommunityMembershipsAdminPage = listCommunityMembershipsAdminPa
 export const countCommunityMemberships = countCommunityMembershipsImpl;
 export const syncCommunityMembershipCount = syncCommunityMembershipCountImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
+export const listCommunityDirectoryPage = listCommunityDirectoryPageImpl;
+export const countCommunityDirectoryMembers = countCommunityDirectoryMembersImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
 export const readCommunityRecentContext = readCommunityRecentContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;

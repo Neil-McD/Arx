@@ -16,9 +16,15 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 const app = read("apps/web/src/App.tsx");
 const shellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
 const rosterLifecycle = read("shared/useCommunityMemberRosterLifecycle.ts");
+const directoryLifecycle = read("shared/useCommunityDirectoryLifecycle.ts");
 const rosterHookCall = sliceBetween(
   app,
   "useCommunityMemberRosterLifecycle<AuthSession>({",
+  "  useCommunityDirectoryLifecycle<AuthSession>({",
+);
+const directoryHookCall = sliceBetween(
+  app,
+  "useCommunityDirectoryLifecycle<AuthSession>({",
   "  const activeCommunityMembersJoinReviewMode",
 );
 
@@ -27,16 +33,31 @@ const rosterPredicate = sliceBetween(
   "function needsCommunityMemberRoster",
   "\n}\n\nexport function",
 );
+const directoryPredicate = sliceBetween(
+  directoryLifecycle,
+  "function needsCommunityDirectory",
+  "\n}\n\nexport function",
+);
 
 assert.match(
   rosterPredicate,
   /communityTab === "members"/,
   "member roster hydration must support the Members tab",
 );
-assert.match(
+assert.doesNotMatch(
   rosterPredicate,
   /communityTab === "chat"/,
-  "member roster hydration must support the chat right-rail member list",
+  "chat right rail must not hydrate the admin member roster",
+);
+assert.match(
+  directoryPredicate,
+  /activePage === "community" && communityTab === "chat"/,
+  "chat right rail must hydrate the member-facing community directory",
+);
+assert.doesNotMatch(
+  directoryPredicate,
+  /communityTab === "members"/,
+  "Members tab must keep using the management roster instead of the chat directory",
 );
 assert.doesNotMatch(
   rosterPredicate,
@@ -90,5 +111,10 @@ assert.doesNotMatch(
   /shouldLoad:/,
   "workspace right panel must not force the member roster lifecycle",
 );
+assert.match(
+  directoryHookCall,
+  /loadCommunityDirectoryMembers/,
+  "chat right rail must load member-facing directory rows",
+);
 
-console.log("PASS: community tab hydration keeps roster reads on Members/chat and uses summary social proof elsewhere.");
+console.log("PASS: community tab hydration splits Members roster reads from chat directory reads.");

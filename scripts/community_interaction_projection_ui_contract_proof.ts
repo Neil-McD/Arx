@@ -16,6 +16,9 @@ const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
+const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
+const directoryController = read("shared/useCommunityDirectoryController.ts");
+const communityDirectory = read("convex/communityDirectory.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
@@ -95,8 +98,18 @@ assert.match(
 );
 assert.match(
   app,
-  /interactionProjection:\s*\{[\s\S]*communityMemberCount,[\s\S]*communityMembers:[\s\S]*communityMembersHasMore,[\s\S]*isLoadingCommunityMembers,[\s\S]*isLoadingMoreCommunityMembers,[\s\S]*communityMembersLoadError,[\s\S]*onLoadMoreCommunityMembers:/,
-  "App should pass full roster count/loading/pagination state into the chat right rail",
+  /useCommunityDirectoryController<AuthSession>[\s\S]*loadCommunityDirectoryMembers[\s\S]*loadMoreCommunityDirectoryMembers/,
+  "App should own a member-facing directory controller for the chat right rail",
+);
+assert.match(
+  app,
+  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
+  "App should pass directory count/loading/pagination state into the chat right rail",
+);
+assert.doesNotMatch(
+  app,
+  /interactionProjection:\s*\{[\s\S]*communityMembers:\s*communityMembers[\s\S]*loadMoreCommunityMembers/,
+  "chat right rail must not depend on the admin member roster",
 );
 assert.match(
   projection,
@@ -132,6 +145,42 @@ assert.match(
   contextPanel,
   /onScroll=\{handleMembersScroll\}/,
   "context panel should attach the load-more scroll handler to the member rail",
+);
+
+assert.match(
+  directoryGateway,
+  /client\.query\("community:listCommunityDirectoryPage" as any/,
+  "directory gateway should read chat rail members through the member-facing directory query",
+);
+assert.match(
+  directoryGateway,
+  /client\.query\("community:countCommunityDirectoryMembers" as any/,
+  "directory gateway should expose a read-only member-facing count query",
+);
+assert.doesNotMatch(
+  directoryGateway,
+  /syncCommunityMembershipCount|listCommunityMembershipsAdminPage/,
+  "directory gateway must not use admin roster reads or cache-sync mutations",
+);
+assert.match(
+  directoryController,
+  /listCloudCommunityDirectoryPage[\s\S]*setCommunityDirectoryMemberCount[\s\S]*setCommunityDirectoryMembersHasMore/,
+  "directory controller should drive count and pagination state from directory pages",
+);
+assert.match(
+  communityDirectory,
+  /requireCommunityChatAccess[\s\S]*export const listCommunityDirectoryPage = query/,
+  "directory backend should be gated by community chat access",
+);
+assert.match(
+  communityDirectory,
+  /communityMembershipRowIsActive[\s\S]*String\(row\.userId\) !== String\(args\.ownerId\)/,
+  "directory backend should filter inactive memberships and synthesize the owner row separately",
+);
+assert.doesNotMatch(
+  communityDirectory,
+  /mutation\(|syncCommunityMembershipCount|viewerCanManageMembers|community_forbidden/,
+  "directory backend must stay read-only and member-facing",
 );
 
 assert.match(

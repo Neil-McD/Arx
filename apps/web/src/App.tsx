@@ -378,6 +378,8 @@ import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorksp
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
+import { useCommunityDirectoryController } from "../../../shared/useCommunityDirectoryController";
+import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
 import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
 import type { CloudCommunityEvent } from "../../../shared/cloudCommunityEventsGateway";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
@@ -3308,6 +3310,19 @@ export default function App() {
     setIsSavingFreeAccessMode,
   } = useWebCommunityPeopleController<CommunityMember, CommunityJoinRequest>({
     activeCommunityId,
+  });
+  const {
+    communityDirectoryMembers,
+    communityDirectoryMemberCount,
+    isLoadingCommunityDirectoryMembers,
+    isLoadingMoreCommunityDirectoryMembers,
+    communityDirectoryMembersHasMore,
+    communityDirectoryMembersLoadError,
+    loadCommunityDirectoryMembers,
+    loadMoreCommunityDirectoryMembers,
+  } = useCommunityDirectoryController<AuthSession>({
+    activeCommunityId,
+    ...authenticatedSessionArg,
   });
   const {
     activeCommunityAccess,
@@ -7014,6 +7029,14 @@ export default function App() {
     ...sessionArg,
     activeCommunityId,
     loadCommunityMembers,
+  });
+
+  useCommunityDirectoryLifecycle<AuthSession>({
+    activePage,
+    communityTab,
+    ...sessionArg,
+    activeCommunityId,
+    loadCommunityDirectoryMembers,
   });
 
   const activeCommunityMembersJoinReviewMode = useMemo<CommunityMembersJoinReviewMode | null>(() => {
@@ -11076,15 +11099,15 @@ export default function App() {
         typingPresence: communityTypingUsers,
         onlineUserIds: activeCommunityOnlineUserIds,
         presenceSummary: activeCommunityPresenceSummary,
-        communityMemberCount,
-        communityMembers: communityMembers,
-        communityMembersHasMore,
-        isLoadingCommunityMembers,
-        isLoadingMoreCommunityMembers,
-        communityMembersLoadError,
+        communityMemberCount: communityDirectoryMemberCount,
+        communityMembers: communityDirectoryMembers,
+        communityMembersHasMore: communityDirectoryMembersHasMore,
+        isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,
+        isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,
+        communityMembersLoadError: communityDirectoryMembersLoadError,
         onLoadMoreCommunityMembers: () => {
           if (!activeCommunityId || !session) return;
-          void loadMoreCommunityMembers(activeCommunityId, session);
+          void loadMoreCommunityDirectoryMembers(activeCommunityId, session);
         },
         communityOwnerId: activeCommunity?.owner_id ?? null,
       },
