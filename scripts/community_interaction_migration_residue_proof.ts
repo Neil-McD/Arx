@@ -67,7 +67,9 @@ assert.match(
   "The web interaction gateway must not call legacy chat mutations.",
   "Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
-  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement.",
+  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement; projection-active sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
+  "The shared community send controller may fall back to legacy sends only when canonical projection is inactive; when projection is active, a missing canonical writer fails closed.",
+  "Canonical projection reply targets without a canonical root id fail closed.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
 assert.match(
@@ -163,8 +165,13 @@ assert.doesNotMatch(
 
 assert.match(
   sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*community_interaction_reply_target_unmapped[\s\S]*createCommunityComposerIdempotencyKey/,
-  "shared send controller should route sends through one explicit canonical-vs-legacy decision",
+  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*community_interaction_writer_missing[\s\S]*community_interaction_reply_target_unmapped[\s\S]*createCommunityComposerIdempotencyKey/,
+  "shared send controller should route sends through one explicit fail-closed canonical-vs-legacy decision",
+);
+assert.doesNotMatch(
+  sendController,
+  /reason:\s*"writer_missing"|return\s+\{\s*kind:\s*"legacy",\s*reason:\s*"writer_missing"\s*\}/,
+  "projection-active sends should not fall back to legacy when the canonical writer is missing",
 );
 assert.match(
   sendController,

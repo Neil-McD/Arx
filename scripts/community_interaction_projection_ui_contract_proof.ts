@@ -118,8 +118,13 @@ assert.match(
 );
 assert.match(
   sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*writer_missing[\s\S]*community_interaction_reply_target_unmapped/,
-  "send controller should keep canonical projection writes behind one explicit route decision",
+  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*community_interaction_writer_missing[\s\S]*community_interaction_reply_target_unmapped/,
+  "send controller should keep canonical projection writes behind one explicit fail-closed route decision",
+);
+assert.doesNotMatch(
+  sendController,
+  /reason:\s*"writer_missing"|return\s+\{\s*kind:\s*"legacy",\s*reason:\s*"writer_missing"\s*\}/,
+  "projection-active sends should not fall back to legacy when the canonical writer is missing",
 );
 assert.match(
   sendController,
@@ -259,7 +264,7 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled while canonical interaction projection is active[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends may use the canonical composer bridge, including prepared attachments[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION[\s\S]*existing legacy chat timeline remains[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled while canonical interaction projection is active[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge when projection is active[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(

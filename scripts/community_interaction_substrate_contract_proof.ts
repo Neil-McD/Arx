@@ -53,7 +53,7 @@ const directory = read(directoryPath);
   "### `interactionReadState`",
   "### `interactionModerationEvents`",
   "### `interactionSourceTraceBridge`",
-  "The existing community chat implementation is a live-room adapter, not the final substrate.",
+  "The legacy community chat implementation is a migration adapter, not the final substrate.",
   "The active migration residue inventory lives in `docs/community-interaction-migration-residue-map.md`.",
   "`communityInteractionRoots`",
   "`communityInteractionReplies`",

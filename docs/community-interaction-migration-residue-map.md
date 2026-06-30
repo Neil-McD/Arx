@@ -31,7 +31,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 - Context and digest compatibility: recent context and weekly email digests still read legacy chat rows.
 - Cleanup/account compatibility: account deletion, anonymous cleanup, and community lifecycle cleanup still need legacy chat row reachability.
 - Historical migration: legacy chat backfill still reads old `communityChatMessages` to materialize canonical interactions.
-- No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement.
+- No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement; projection-active sends no longer fall back to the legacy chat writer when the canonical writer is missing.
 
 ## Drift Boundaries
 
@@ -40,7 +40,8 @@ This map is the deletion queue for the community chat substrate migration. It se
 - Canonical composer writes must not insert legacy chat rows or legacy chat links.
 - Canonical read bundles must prefer `communityInteractionAttachments`; legacy attachment hydration may only run as an absent-canonical-row fallback until historical attachments are backfilled.
 - The web interaction gateway must not call legacy chat mutations.
-- The shared community send controller may fall back to legacy sends only when canonical projection is inactive or the canonical writer is unavailable; canonical projection reply targets without a canonical root id fail closed.
+- The shared community send controller may fall back to legacy sends only when canonical projection is inactive; when projection is active, a missing canonical writer fails closed.
+- Canonical projection reply targets without a canonical root id fail closed.
 - Canonical projection sends must not require legacy-shaped row replacement; legacy returned rows are compatibility outputs only.
 - Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.
 - Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.

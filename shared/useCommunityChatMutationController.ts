@@ -168,9 +168,13 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
   }
   if (
     message.includes("community_interaction_reply_target_unmapped") ||
-    message.includes("interaction_legacy_reply_target")
+    message.includes("interaction_legacy_reply_target") ||
+    message.includes("interaction_target_reply_invalid")
   ) {
     return "Reply target is unavailable. Reopen the thread and try again.";
+  }
+  if (message.includes("community_interaction_writer_missing")) {
+    return "Community chat is unavailable. Refresh and try again.";
   }
   return message;
 }
@@ -194,7 +198,7 @@ type CommunityChatSendRoute =
     }
   | {
       kind: "legacy";
-      reason: "projection_disabled" | "writer_missing";
+      reason: "projection_disabled";
     };
 
 function resolveCommunityChatSendRoute(args: {
@@ -208,7 +212,7 @@ function resolveCommunityChatSendRoute(args: {
     return { kind: "legacy", reason: "projection_disabled" };
   }
   if (!args.hasCanonicalWriter) {
-    return { kind: "legacy", reason: "writer_missing" };
+    throw new Error("community_interaction_writer_missing");
   }
   if (args.hasReplyTarget && !args.replyRootId) {
     throw new Error("community_interaction_reply_target_unmapped");

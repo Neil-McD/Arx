@@ -184,16 +184,17 @@ Rules:
 
 ## Migration Rule
 
-The existing community chat implementation is a live-room adapter, not the final substrate.
+The legacy community chat implementation is a migration adapter, not the final substrate.
 
-Migration should be additive first:
+Migration order:
 
 1. Add canonical interaction tables and read/write APIs.
-2. Let current chat UI write roots and one-level replies through an adapter.
-3. Project existing chat messages into interaction roots/replies for compatibility.
-4. Move reactions, embeds, mentions, unread, and moderation onto canonical tables.
-5. Delete legacy chat writes after parity.
-6. Delete legacy chat reads after backfill and UI projection are stable.
+2. Project existing chat messages into interaction roots/replies for compatibility.
+3. Route projection-active UI writes through the canonical composer.
+4. Keep the legacy chat writer only for projection-disabled fallback and migration/backfill.
+5. Move reactions, embeds, mentions, unread, and moderation onto canonical tables.
+6. Delete legacy chat writes after parity.
+7. Delete legacy chat reads after backfill and UI projection are stable.
 
 No big-bang rewrite. No duplicated product truth.
 
@@ -280,9 +281,10 @@ Rules:
 - the projection subscribes to canonical interaction roots and replies directly
 - legacy chat realtime is disabled while canonical interaction projection is active and remains only for the legacy timeline fallback
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
-- top-level composer sends may use the canonical composer bridge, including prepared attachments
-- drawer reply sends may use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
-- legacy timeline reply sends remain on the legacy chat writer while the legacy timeline fallback is active
+- top-level composer sends use the canonical composer bridge when projection is active, including prepared attachments
+- drawer reply sends use the canonical composer bridge when projection is active and the reply target has a canonical root id, including prepared attachments
+- when projection is active, a missing canonical writer fails closed instead of falling back to the legacy chat writer
+- legacy timeline sends remain on the legacy chat writer only while the legacy timeline fallback is active
 - successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
@@ -329,9 +331,9 @@ Rules:
 
 ## Current Legacy Chat Adapter Slice
 
-The first compatibility adapter keeps the existing chat mutation alive while dual-writing canonical interactions:
+The compatibility adapter keeps the projection-disabled legacy chat mutation alive while dual-writing canonical interactions for old-path sends:
 
-- `createThreadUserMessage` remains the legacy write entrypoint for the current chat UI
+- `createThreadUserMessage` remains the legacy write entrypoint for the projection-disabled legacy timeline fallback
 - top-level chat messages are translated into `communityInteractionRoots`
 - chat replies are translated into `communityInteractionReplies`
 - legacy reply targets map to one drawer root; reply-to-reply targets become `targetReplyId` quote/context only
@@ -345,7 +347,7 @@ The first compatibility adapter keeps the existing chat mutation alive while dua
 - the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
 - attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
 - legacy chat response shape is unchanged
-- legacy chat thread/message/link table access for the canonical composer compatibility bridge lives in `communityInteractionLegacyBridge`
+- legacy chat link table access for the legacy adapter and backfill lives in `communityInteractionLegacyBridge`
 
 ## Current Legacy Chat Backfill Slice
 
