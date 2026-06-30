@@ -12155,7 +12155,7 @@ button.chat-reply-quote:hover {
   content: "";
   flex: 1;
   height: 1px;
-  background: var(--border-default);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .chat-date-separator span {
