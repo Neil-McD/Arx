@@ -113,6 +113,7 @@
     "check:runtime-mcp-manager-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_mcp_manager_proof.ts",
     "check:runtime-mounted-tool-exposure-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_mounted_tool_exposure_proof.ts",
     "check:mcp-app-architecture-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mcp_app_architecture_contract_proof.ts",
+    "check:mcp-harness-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mcp_harness_projection_contract_proof.ts",
     "check:private-community-plugin-manifest-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/private_community_plugin_manifest_contract_proof.ts",
     "check:private-community-plugin-manifest-apply-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/private_community_plugin_manifest_apply_contract_proof.ts",
     "check:private-community-mcp-add-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/private_community_mcp_add_contract_proof.ts",

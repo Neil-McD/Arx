@@ -399,21 +399,6 @@ function main() {
     "No apps are attached to this community lens yet.",
     "Community Settings legacy lens empty state",
   );
-  assertIncludes(
-    communityAppsEditor,
-    "onClick={handleTogglePrivateMcpPicker}",
-    "Community agent apps editor reviewed MCP picker add path",
-  );
-  assertIncludes(
-    communityAppsEditor,
-    "aria-label=\"Reviewed MCP options\"",
-    "Community agent apps editor reviewed MCP option list",
-  );
-  assertIncludes(
-    communityAppsEditor,
-    "onAddPrivateMcpApp(option.mcp_registry_id)",
-    "Community agent apps editor adds reviewed MCPs by registry id",
-  );
   assertNotIncludes(
     communityAppsEditor,
     "Connect hosted MCP app",

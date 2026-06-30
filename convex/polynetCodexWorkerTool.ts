@@ -8,9 +8,19 @@ import {
 } from "./polynetCodexWorkerRunToken";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import {
+  createRuntimeMcpManager,
+  type RuntimeMountedMcpTool,
+} from "./runtimeMcpManager";
+import {
+  normalizeRuntimeMountedUserPlatformAppTools,
+} from "./runtimeHarnessShaping";
+import {
   findPolynetPlatformToolSurfaceEntry,
   type PolynetPlatformToolRequiredCommunityAuthority,
 } from "../shared/polynetPlatformToolSurface";
+import {
+  buildMcpHarnessProjection,
+} from "../shared/mcpHarnessProjection";
 import {
   normalizeCommunityResourceRuntimeLane,
   type CommunityResourceRuntimeLane,
@@ -22,6 +32,7 @@ export const POLYNET_CODEX_WORKER_TOOL_PATH =
   "/runtime/polynet_codex_worker_tool";
 
 const PLATFORM_TOOL_OUTPUT_MAX_CHARS = 24_000;
+const MCP_BRIDGE_TOOL_OUTPUT_MAX_CHARS = 24_000;
 const CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES = new Set([
   "community_resource_builder_stage_changeset",
   "community_write",
@@ -40,6 +51,54 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
     : null;
+}
+
+function redactBridgeEventPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactBridgeEventPayload);
+  const record = asRecord(value);
+  if (!record) return value;
+  const redacted: JsonRecord = {};
+  for (const [key, entry] of Object.entries(record)) {
+    const normalizedKey = key.toLowerCase();
+    if (
+      normalizedKey.includes("authorization") ||
+      normalizedKey.includes("access_token") ||
+      normalizedKey.includes("refresh_token") ||
+      normalizedKey.includes("client_secret") ||
+      normalizedKey === "secret" ||
+      normalizedKey === "headers" ||
+      normalizedKey === "endpoint_url"
+    ) {
+      continue;
+    }
+    redacted[key] = redactBridgeEventPayload(entry);
+  }
+  return redacted;
+}
+
+function mapRuntimeMountedUserPlatformAppToolToRuntimeMcpTool(
+  tool: ReturnType<typeof normalizeRuntimeMountedUserPlatformAppTools>[number],
+): RuntimeMountedMcpTool | null {
+  const mountId = String(tool.user_platform_app_mount_id ?? "").trim();
+  const developerAppId = String(tool.developer_app_id ?? "").trim();
+  const namespacedToolName = String(tool.namespaced_tool_name ?? "").trim();
+  const toolName = String(tool.tool_name ?? "").trim();
+  if (!mountId || !developerAppId || !namespacedToolName || !toolName) return null;
+  return {
+    scope: "user",
+    mount_id: mountId,
+    runtime_tool_name: `me__${namespacedToolName}`,
+    developer_app_id: developerAppId,
+    catalog_app_id: tool.catalog_app_id,
+    app_name: tool.app_name,
+    endpoint_url: tool.endpoint_url,
+    auth_type: tool.auth_type,
+    tool_name: toolName,
+    namespaced_tool_name: namespacedToolName,
+    description: tool.description,
+    input_schema: tool.input_schema,
+    risk_level: tool.risk_level,
+  };
 }
 
 function readEnv(name: string): string {
@@ -254,6 +313,31 @@ export async function handlePolynetCodexWorkerTool(
       run_status: runStatus || null,
     });
   }
+  const appendBridgeRunEvent = async (
+    eventType: string,
+    payload: JsonRecord,
+    eventKey?: string,
+  ): Promise<void> => {
+    try {
+      await ctx.runMutation(
+        (internal as any).threads.appendCloudRuntimeRunEventInternal as any,
+        {
+          ownerId: context.owner_id as any,
+          threadId: String(runRow.threadId) as any,
+          runId: context.run_id,
+          eventType,
+          eventKey,
+          payload: {
+            run_id: context.run_id,
+            ...((redactBridgeEventPayload(payload) as JsonRecord) ?? {}),
+          },
+        },
+      );
+    } catch {
+      // Runtime events are operational evidence only; tool dispatch remains
+      // governed by the run token and canonical run row.
+    }
+  };
 
   const requestedToolName = String(body.tool_name ?? "").trim();
   if (requestedToolName === "computer_open_url") {
@@ -328,6 +412,176 @@ export async function handlePolynetCodexWorkerTool(
       screenshot_method: captured.screenshot_method ?? null,
       screenshot_width: captured.screenshot_width ?? null,
       screenshot_height: captured.screenshot_height ?? null,
+    });
+  }
+  const requestedToolKind = String(body.tool_kind ?? "").trim();
+  if (
+    requestedToolKind === "mcp_bridge" ||
+    String(body.bridge_tool_name ?? "").trim() ||
+    requestedToolName.startsWith("polynet_mcp__")
+  ) {
+    const bridgeToolName =
+      String(body.bridge_tool_name ?? "").trim() || requestedToolName;
+    const startedAt = Date.now();
+    await appendBridgeRunEvent("codex_mcp_bridge_tool_requested", {
+      bridge_tool_name: bridgeToolName,
+    });
+    const rejectBridgeTool = async (
+      code: string,
+      message: string,
+      extra: JsonRecord = {},
+    ): Promise<Response> => {
+      await appendBridgeRunEvent("codex_mcp_bridge_tool_rejected", {
+        bridge_tool_name: bridgeToolName,
+        code,
+        message,
+        ...extra,
+      });
+      return json(200, {
+        ok: false,
+        code,
+        message,
+        ...extra,
+      });
+    };
+    if (!bridgeToolName) {
+      return await rejectBridgeTool(
+        "mcp_bridge_tool_name_required",
+        "MCP bridge tool name is required.",
+      );
+    }
+
+    let effectiveMcpApps: unknown[] = [];
+    let runtimeMountedTools: RuntimeMountedMcpTool[] = [];
+    try {
+      const [effectiveAppsPayload, mountedToolsPayload] = await Promise.all([
+        ctx.runQuery(internal.harnessMounts.listEffectiveMcpAppsInternal, {
+          userId: context.owner_id as any,
+          communityId: String(runRow.communityId ?? "").trim()
+            ? (String(runRow.communityId) as any)
+            : undefined,
+        }),
+        ctx.runQuery(
+          internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal,
+          {
+            userId: context.owner_id as any,
+          },
+        ),
+      ]);
+      effectiveMcpApps = Array.isArray(effectiveAppsPayload)
+        ? effectiveAppsPayload
+        : [];
+      runtimeMountedTools = normalizeRuntimeMountedUserPlatformAppTools(
+        mountedToolsPayload,
+      )
+        .map(mapRuntimeMountedUserPlatformAppToolToRuntimeMcpTool)
+        .filter((tool): tool is RuntimeMountedMcpTool => tool !== null);
+    } catch {
+      return await rejectBridgeTool(
+        "mcp_bridge_projection_failed",
+        "PolyNet could not resolve connected MCP tools for this Codex turn.",
+      );
+    }
+
+    const projection = buildMcpHarnessProjection({
+      effectiveApps: effectiveMcpApps as any,
+      runtimeMountedTools,
+    });
+    const projectedTool = projection.codexBridgeTools.find(
+      (tool) => tool.bridge_tool_name === bridgeToolName,
+    );
+    if (!projectedTool) {
+      return await rejectBridgeTool(
+        "mcp_bridge_tool_not_available",
+        `"${bridgeToolName}" is not available for this Codex turn.`,
+      );
+    }
+    if (projectedTool.risk_level !== "read") {
+      return await rejectBridgeTool(
+        "mcp_bridge_write_tool_not_enabled",
+        "Only read-only MCP bridge tools are enabled for Codex worker turns right now.",
+        {
+          bridge_tool_name: projectedTool.bridge_tool_name,
+          runtime_tool_name: projectedTool.runtime_tool_name,
+          risk_level: projectedTool.risk_level,
+        },
+      );
+    }
+    const mountedTool = runtimeMountedTools.find(
+      (tool) => tool.runtime_tool_name === projectedTool.runtime_tool_name,
+    );
+    if (!mountedTool) {
+      return await rejectBridgeTool(
+        "mcp_bridge_runtime_tool_not_found",
+        "The projected MCP bridge tool no longer maps to an active runtime tool.",
+        {
+          bridge_tool_name: projectedTool.bridge_tool_name,
+          runtime_tool_name: projectedTool.runtime_tool_name,
+        },
+      );
+    }
+
+    const runtimeMcpManager = createRuntimeMcpManager({
+      runId: context.run_id,
+      mountedTools: runtimeMountedTools,
+      clientName: "polynet-codex-worker",
+      clientVersion: "0.1.0",
+      loadConnectionBundle: async ({ developerAppId }) =>
+        (await ctx.runAction(
+          internal.appOAuth.getFreshDeveloperAppConnectionBundleInternal,
+          {
+            developerAppId: developerAppId as any,
+          },
+        )) as any,
+      appendRunEvent: async (event) => {
+        await appendBridgeRunEvent(event.eventType, event.payload, event.eventKey);
+      },
+    });
+    const args = asRecord(body.arguments) ?? {};
+    let result;
+    try {
+      result = await runtimeMcpManager.execute({
+        runtimeToolName: mountedTool.runtime_tool_name,
+        argumentsObject: args,
+      });
+    } catch (error) {
+      return await rejectBridgeTool(
+        "mcp_bridge_tool_failed",
+        error instanceof Error ? error.message : "MCP bridge tool execution failed.",
+        {
+          bridge_tool_name: projectedTool.bridge_tool_name,
+          runtime_tool_name: projectedTool.runtime_tool_name,
+        },
+      );
+    }
+
+    const outputText = String(result.outputText ?? "");
+    const ok = result.status === "ok";
+    await appendBridgeRunEvent("codex_mcp_bridge_tool_finished", {
+      bridge_tool_name: projectedTool.bridge_tool_name,
+      runtime_tool_name: projectedTool.runtime_tool_name,
+      connector_name: projectedTool.connector_name,
+      status: result.status,
+      ok,
+      error_code: result.errorCode ?? null,
+      latency_ms: Date.now() - startedAt,
+      output_chars: outputText.length,
+    });
+    if (!ok) {
+      return json(200, {
+        ok: false,
+        code: String(result.errorCode ?? "mcp_bridge_tool_failed"),
+        message: String(result.errorMessage ?? "MCP bridge tool failed."),
+      });
+    }
+    return json(200, {
+      ok: true,
+      tool_name: projectedTool.bridge_tool_name,
+      runtime_tool_name: projectedTool.runtime_tool_name,
+      output:
+        outputText.length > MCP_BRIDGE_TOOL_OUTPUT_MAX_CHARS
+          ? `${outputText.slice(0, MCP_BRIDGE_TOOL_OUTPUT_MAX_CHARS)}\n[output truncated]`
+          : outputText,
     });
   }
 

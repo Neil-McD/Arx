@@ -21,7 +21,11 @@ import {
 } from "./daytonaLocalWorkspaceTool.ts";
 import { TimingCollector, elapsedMs, nowMs } from "./timing.ts";
 import { neutralizeWorkspaceText, previewText, safeResourceName } from "./workerText.ts";
-import { buildWorkspaceServeDynamicToolSpec } from "./workerToolSpecs.ts";
+import {
+  buildMcpBridgeDynamicToolSpec,
+  buildWorkspaceServeDynamicToolSpec,
+  type WorkerMcpBridgeToolSpec,
+} from "./workerToolSpecs.ts";
 import {
   formatWorkspacePreviewPortRange,
   normalizeWorkspacePreviewPort,
@@ -69,6 +73,7 @@ type ActiveTurn = {
   codexThreadId: string | null;
   cancelRequested: boolean;
   platformTools: WorkerPlatformToolSpec[];
+  mcpBridgeTools: WorkerMcpBridgeToolSpec[];
   platformToolBridge: {
     url: string;
     token: string;
@@ -188,6 +193,13 @@ function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildR
       })),
     );
   }
+  if (activeTurn.runtimeToolBridge) {
+    dynamicTools.push(
+      ...activeTurn.mcpBridgeTools
+        .filter((tool) => tool.riskLevel === "read")
+        .map(buildMcpBridgeDynamicToolSpec),
+    );
+  }
 
   const toolNames = dynamicTools.map(readDynamicToolName).filter(Boolean);
   const forbiddenToolNameSet = new Set<string>(CODEX_NATIVE_WORKSPACE_FORBIDDEN_TOOL_NAMES);
@@ -205,6 +217,10 @@ function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildR
   const runtimeAdapterToolNames = toolNames.filter((name) =>
     runtimeAdapterToolNameSet.has(name),
   );
+  const mcpBridgeToolNames = activeTurn.mcpBridgeTools
+    .filter((tool) => tool.riskLevel === "read")
+    .map((tool) => tool.bridgeToolName)
+    .filter(Boolean);
   const duplicateShellTool = toolNames.includes("workspace_bash");
 
   return {
@@ -217,6 +233,7 @@ function buildCodexDynamicTools(activeTurn: ActiveTurn): CodexDynamicToolsBuildR
       tool_names: toolNames,
       runtime_adapter_tool_names: runtimeAdapterToolNames,
       polynet_platform_tool_names: polynetPlatformToolNames,
+      polynet_mcp_bridge_tool_names: mcpBridgeToolNames,
       forbidden_tool_names_present: forbiddenToolNamesPresent,
     },
   };
@@ -264,6 +281,7 @@ type RunTurnParams = {
   chatgptAuth: WorkerChatgptAuth | null;
   ingest: WorkerIngestConfig | null;
   platformTools: WorkerPlatformToolSpec[];
+  mcpBridgeTools: WorkerMcpBridgeToolSpec[];
   writer: StreamWriter | null;
 };
 
@@ -357,6 +375,56 @@ function parseJsonRecord(value: unknown): JsonRecord | null {
   } catch {
     return null;
   }
+}
+
+function normalizeToolInputSchemaForWorker(value: unknown): Record<string, unknown> {
+  const record = asRecord(value);
+  if (record) return record;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = parseJsonRecord(value);
+    if (parsed) return parsed;
+  }
+  return {
+    type: "object",
+    properties: {},
+    additionalProperties: true,
+  };
+}
+
+function normalizeWorkerMcpBridgeToolSpec(value: unknown): WorkerMcpBridgeToolSpec | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const bridgeToolName = String(record.bridge_tool_name ?? "").trim();
+  const runtimeToolName = String(record.runtime_tool_name ?? "").trim();
+  const connectorName = String(record.connector_name ?? "").trim() || "MCP app";
+  const appIdentityKey = String(record.app_identity_key ?? "").trim();
+  const toolName = String(record.tool_name ?? "").trim();
+  const namespacedToolName = String(record.namespaced_tool_name ?? "").trim();
+  const riskLevel =
+    record.risk_level === "write" || record.risk_level === "sensitive"
+      ? record.risk_level
+      : "read";
+  if (!bridgeToolName || !runtimeToolName || !appIdentityKey || !toolName) {
+    return null;
+  }
+  return {
+    bridgeToolName,
+    runtimeToolName,
+    connectorName,
+    appIdentityKey,
+    catalogAppId:
+      typeof record.catalog_app_id === "string" && record.catalog_app_id.trim()
+        ? record.catalog_app_id.trim()
+        : null,
+    toolName,
+    namespacedToolName,
+    description:
+      typeof record.description === "string" && record.description.trim()
+        ? record.description.trim()
+        : null,
+    inputSchema: normalizeToolInputSchemaForWorker(record.input_schema),
+    riskLevel,
+  };
 }
 
 function normalizeCodexDynamicToolArgs(value: unknown): JsonRecord {
@@ -887,6 +955,7 @@ export class PolynetCodexWorkerRuntime {
     workspaceRoot: string | null;
     workspaceServeAvailable: boolean;
     platformToolsAvailable: boolean;
+    mcpBridgeToolsAvailable: boolean;
   }): string {
     const rendered = buildDaytonaCodexConfigToml({
       polynetDeveloperInstructions: params.polynetDeveloperInstructions,
@@ -894,6 +963,7 @@ export class PolynetCodexWorkerRuntime {
       previewUrlPattern: getDaytonaPreviewUrlPattern(),
       workspaceServeAvailable: params.workspaceServeAvailable,
       platformToolsAvailable: params.platformToolsAvailable,
+      mcpBridgeToolsAvailable: params.mcpBridgeToolsAvailable,
     });
     return rendered.developerInstructions;
   }
@@ -1019,6 +1089,7 @@ export class PolynetCodexWorkerRuntime {
       codexThreadId: null,
       cancelRequested: false,
       platformTools: params.platformTools,
+      mcpBridgeTools: params.mcpBridgeTools,
       platformToolBridge:
         params.ingest?.toolUrl && params.platformTools.length > 0
           ? {
@@ -1179,6 +1250,7 @@ export class PolynetCodexWorkerRuntime {
         workspaceRoot: activeTurn.workspaceRoot,
         workspaceServeAvailable: true,
         platformToolsAvailable: Boolean(activeTurn.platformToolBridge),
+        mcpBridgeToolsAvailable: activeTurn.mcpBridgeTools.length > 0,
       });
       const codexThreadCwd = activeTurn.workspaceRoot ?? getDaytonaWorkspaceRoot();
       const codexDynamicTools = buildCodexDynamicTools(activeTurn);
@@ -1730,6 +1802,13 @@ export class PolynetCodexWorkerRuntime {
       await this.handlePlatformToolCall(message.id, activeTurn, toolName, params);
       return;
     }
+    if (
+      params &&
+      activeTurn.mcpBridgeTools.some((tool) => tool.bridgeToolName === toolName)
+    ) {
+      await this.handleMcpBridgeToolCall(message.id, activeTurn, toolName, params);
+      return;
+    }
     this.client.respondError(message.id, -32601, "unsupported dynamic tool");
   }
 
@@ -1994,6 +2073,111 @@ export class PolynetCodexWorkerRuntime {
         waiter({ __codex_app_server_exited: true, message: failure.message });
       }
     }
+  }
+
+  private async handleMcpBridgeToolCall(
+    messageId: unknown,
+    activeTurn: ActiveTurn,
+    toolName: string,
+    params: JsonRecord,
+  ): Promise<void> {
+    const client = this.client;
+    if (!client) {
+      process.stderr.write(
+        `[polynet worker] MCP bridge tool call ${toolName} arrived with no app-server client\n`,
+      );
+      return;
+    }
+    const bridgeTool = activeTurn.mcpBridgeTools.find(
+      (tool) => tool.bridgeToolName === toolName,
+    );
+    const bridge = activeTurn.runtimeToolBridge;
+    if (!bridge || !bridgeTool) {
+      client.respond(messageId, {
+        success: false,
+        contentItems: [
+          {
+            type: "inputText",
+            text: `"${toolName}" is not an available MCP bridge tool for this turn.`,
+          },
+        ],
+      });
+      return;
+    }
+    if (bridgeTool.riskLevel !== "read") {
+      client.respond(messageId, {
+        success: false,
+        contentItems: [
+          {
+            type: "inputText",
+            text: `"${toolName}" is not enabled because only read-only MCP bridge tools are available in Codex worker turns right now.`,
+          },
+        ],
+      });
+      return;
+    }
+
+    const startedAtMs = nowMs();
+    this.emitRuntimeEvent("mcp_bridge_tool_requested", {
+      bridge_tool_name: toolName,
+      runtime_tool_name: bridgeTool.runtimeToolName,
+      connector_name: bridgeTool.connectorName,
+      risk_level: bridgeTool.riskLevel,
+      call_id: typeof params.callId === "string" ? params.callId : null,
+    });
+    let ok = false;
+    let text = "";
+    let failureCode: string | null = null;
+    try {
+      const response = await fetch(bridge.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${bridge.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          run_token: bridge.runToken,
+          context: bridge.context,
+          tool_kind: "mcp_bridge",
+          tool_name: toolName,
+          bridge_tool_name: toolName,
+          arguments: asRecord(params.arguments) ?? {},
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      const payload = (await response.json().catch(() => ({}))) as JsonRecord;
+      ok = response.ok && payload.ok === true;
+      if (ok) {
+        text = String(payload.output ?? "");
+      } else {
+        failureCode = String(payload.code ?? `http_${response.status}`);
+        text = neutralizeWorkspaceText(
+          `${toolName} failed (${failureCode}): ${String(
+            payload.message ?? "MCP bridge tool call failed.",
+          )}`,
+        );
+      }
+    } catch (error) {
+      failureCode = "mcp_bridge_tool_bridge_unreachable";
+      text = neutralizeWorkspaceText(
+        `${toolName} failed: ${
+          error instanceof Error ? error.message : "MCP bridge tool is unreachable"
+        }`,
+      );
+    }
+    this.emitRuntimeEvent("mcp_bridge_tool_finished", {
+      bridge_tool_name: toolName,
+      runtime_tool_name: bridgeTool.runtimeToolName,
+      connector_name: bridgeTool.connectorName,
+      ok,
+      latency_ms: elapsedMs(startedAtMs),
+      failure_code: failureCode,
+      output_preview: previewText(text),
+    });
+    client.respond(messageId, {
+      success: ok,
+      contentItems: [{ type: "inputText", text }],
+    });
   }
 
   async interruptActiveTurnBestEffort(reason: string): Promise<boolean> {
@@ -2527,6 +2711,13 @@ async function handleTurnEndpoint(params: {
         })
         .filter((spec): spec is WorkerPlatformToolSpec => spec !== null)
     : [];
+  const mcpBridgeTools: WorkerMcpBridgeToolSpec[] = Array.isArray(
+    body.mcp_bridge_tools,
+  )
+    ? (body.mcp_bridge_tools as unknown[])
+        .map(normalizeWorkerMcpBridgeToolSpec)
+        .filter((spec): spec is WorkerMcpBridgeToolSpec => spec !== null)
+    : [];
 
   if (!chatgptAuth) {
     sendJson(params.res, 400, {
@@ -2565,6 +2756,7 @@ async function handleTurnEndpoint(params: {
         chatgptAuth,
         ingest,
         platformTools,
+        mcpBridgeTools,
         writer,
       });
     } catch (error) {
@@ -2598,6 +2790,7 @@ async function handleTurnEndpoint(params: {
       chatgptAuth,
       ingest,
       platformTools,
+      mcpBridgeTools,
       writer: null,
     });
     sendJson(params.res, 200, result);

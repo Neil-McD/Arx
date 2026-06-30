@@ -92,6 +92,16 @@ import {
   resolvePolynetHarnessToolPolicy,
 } from "../shared/harnessToolPolicy";
 import {
+  buildMcpHarnessProjection,
+  type CodexMcpHarnessBridgeTool,
+  type McpHarnessProjection,
+  type McpHarnessRuntimeMountedTool,
+} from "../shared/mcpHarnessProjection";
+import {
+  normalizeRuntimeMountedUserPlatformAppTools,
+  type RuntimeMountedUserPlatformAppTool,
+} from "./runtimeHarnessShaping";
+import {
   type RetrievalToolName,
 } from "../shared/retrievalTools";
 import { reservePaidToolCredits } from "./paidToolCreditReservation";
@@ -186,6 +196,150 @@ function buildCommunityLensAuthorityReceipt(
     can_moderate: authority.canModerate,
     can_manage_resources: authority.canManageResources,
     can_review_join_requests: authority.canReviewJoinRequests,
+  };
+}
+
+type CodexMcpBridgeProjectionReceipt = {
+  status: "ok" | "error";
+  bridge_tool_count: number;
+  bridge_tool_names: string[];
+  runtime_tool_names: string[];
+  app_count: number;
+  live_app_count: number;
+  bridge_app_count: number;
+  live_bridge_app_names: string[];
+  app_summaries: Array<{
+    app_identity_key: string;
+    app_name: string;
+    catalog_app_id: string | null;
+    live_for_current_user: boolean;
+    source_label: string;
+    effective_tool_count: number;
+    bridge_tool_count: number;
+    bridge_tool_names: string[];
+    executable_bridge_tool_count: number;
+    setup_needed: boolean;
+    setup_reason: string | null;
+  }>;
+  setup_needed_app_count: number;
+  executable: boolean;
+  executable_bridge_tool_count: number;
+  credential_boundary: "server_only";
+  source_labels: string[];
+  error_code?: "codex_mcp_bridge_projection_failed";
+};
+
+function mapRuntimeMountedUserPlatformAppToolToMcpHarnessTool(
+  tool: RuntimeMountedUserPlatformAppTool,
+): McpHarnessRuntimeMountedTool {
+  return {
+    scope: "user",
+    mount_id: tool.user_platform_app_mount_id,
+    runtime_tool_name: `me__${tool.namespaced_tool_name}`,
+    developer_app_id: tool.developer_app_id,
+    catalog_app_id: tool.catalog_app_id,
+    app_name: tool.app_name,
+    endpoint_url: tool.endpoint_url,
+    auth_type: tool.auth_type,
+    tool_name: tool.tool_name,
+    namespaced_tool_name: tool.namespaced_tool_name,
+    description: tool.description,
+    input_schema: tool.input_schema,
+    risk_level: tool.risk_level,
+  };
+}
+
+function buildCodexMcpBridgeProjectionReceipt(
+  projection: McpHarnessProjection,
+): CodexMcpBridgeProjectionReceipt {
+  const sourceLabels = new Set<string>();
+  const setupHintsByAppIdentityKey = new Map(
+    projection.setupPacketHints.map((hint) => [hint.app_identity_key, hint]),
+  );
+  const bridgeToolsByAppIdentityKey = new Map<
+    string,
+    { bridgeToolNames: string[]; executableBridgeToolCount: number }
+  >();
+  for (const tool of projection.codexBridgeTools) {
+    const entry =
+      bridgeToolsByAppIdentityKey.get(tool.app_identity_key) ??
+      { bridgeToolNames: [], executableBridgeToolCount: 0 };
+    entry.bridgeToolNames.push(tool.bridge_tool_name);
+    if (tool.risk_level === "read") entry.executableBridgeToolCount += 1;
+    bridgeToolsByAppIdentityKey.set(tool.app_identity_key, entry);
+  }
+  const appSummaries = projection.capabilities.map((capability) => {
+    const bridgeTools =
+      bridgeToolsByAppIdentityKey.get(capability.app_identity_key) ??
+      { bridgeToolNames: [], executableBridgeToolCount: 0 };
+    const setupHint = setupHintsByAppIdentityKey.get(
+      capability.app_identity_key,
+    );
+    return {
+      app_identity_key: capability.app_identity_key,
+      app_name: capability.app_name,
+      catalog_app_id: capability.catalog_app_id,
+      live_for_current_user: capability.live_for_current_user,
+      source_label: capability.source_label,
+      effective_tool_count: capability.effective_tool_count,
+      bridge_tool_count: capability.codex_bridge_tool_count,
+      bridge_tool_names: [...bridgeTools.bridgeToolNames].sort(),
+      executable_bridge_tool_count: bridgeTools.executableBridgeToolCount,
+      setup_needed: Boolean(setupHint),
+      setup_reason: setupHint?.setup_reason ?? null,
+    };
+  });
+  for (const capability of projection.capabilities) {
+    sourceLabels.add(capability.source_label);
+  }
+  return {
+    status: "ok",
+    bridge_tool_count: projection.codexBridgeTools.length,
+    bridge_tool_names: projection.codexBridgeTools.map(
+      (tool) => tool.bridge_tool_name,
+    ),
+    runtime_tool_names: projection.codexBridgeTools.map(
+      (tool) => tool.runtime_tool_name,
+    ),
+    app_count: projection.capabilities.length,
+    live_app_count: projection.capabilities.filter(
+      (capability) => capability.live_for_current_user,
+    ).length,
+    bridge_app_count: appSummaries.filter(
+      (summary) => summary.bridge_tool_count > 0,
+    ).length,
+    live_bridge_app_names: appSummaries
+      .filter((summary) => summary.bridge_tool_count > 0)
+      .map((summary) => summary.app_name)
+      .sort(),
+    app_summaries: appSummaries,
+    setup_needed_app_count: projection.setupPacketHints.length,
+    executable: projection.codexBridgeTools.some((tool) => tool.risk_level === "read"),
+    executable_bridge_tool_count: projection.codexBridgeTools.filter(
+      (tool) => tool.risk_level === "read",
+    ).length,
+    credential_boundary: "server_only",
+    source_labels: [...sourceLabels].sort(),
+  };
+}
+
+function buildFailedCodexMcpBridgeProjectionReceipt(): CodexMcpBridgeProjectionReceipt {
+  return {
+    status: "error",
+    bridge_tool_count: 0,
+    bridge_tool_names: [],
+    runtime_tool_names: [],
+    app_count: 0,
+    live_app_count: 0,
+    bridge_app_count: 0,
+    live_bridge_app_names: [],
+    app_summaries: [],
+    setup_needed_app_count: 0,
+    executable: false,
+    executable_bridge_tool_count: 0,
+    credential_boundary: "server_only",
+    source_labels: [],
+    error_code: "codex_mcp_bridge_projection_failed",
   };
 }
 
@@ -1724,8 +1878,46 @@ export async function handleRuntimeTurnRequest(args: {
             });
             return;
           }
+          let codexMcpBridgeProjectionReceipt =
+            buildFailedCodexMcpBridgeProjectionReceipt();
+          let workerMcpBridgeTools: CodexMcpHarnessBridgeTool[] = [];
+          try {
+            const [effectiveMcpApps, mountedTools] = await Promise.all([
+              ctx.runQuery(internal.harnessMounts.listEffectiveMcpAppsInternal, {
+                userId: actor.dbUserId,
+                communityId: runtimeCommunityId
+                  ? (runtimeCommunityId as any)
+                  : undefined,
+              }),
+              ctx.runQuery(
+                internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal,
+                {
+                  userId: actor.dbUserId,
+                },
+              ),
+            ]);
+            const runtimeMountedTools = normalizeRuntimeMountedUserPlatformAppTools(
+              mountedTools,
+            ).map(mapRuntimeMountedUserPlatformAppToolToMcpHarnessTool);
+            const codexMcpBridgeProjection = buildMcpHarnessProjection({
+              effectiveApps: Array.isArray(effectiveMcpApps)
+                ? (effectiveMcpApps as any)
+                : [],
+              runtimeMountedTools,
+            });
+            workerMcpBridgeTools = codexMcpBridgeProjection.codexBridgeTools.filter(
+              (tool) => tool.risk_level === "read",
+            );
+            codexMcpBridgeProjectionReceipt =
+              buildCodexMcpBridgeProjectionReceipt(codexMcpBridgeProjection);
+          } catch {
+            codexMcpBridgeProjectionReceipt =
+              buildFailedCodexMcpBridgeProjectionReceipt();
+          }
           const workerToolTarget =
-            workerPlatformTools.length > 0 || workerRuntimeToolBridgeRequired
+            workerPlatformTools.length > 0 ||
+            workerRuntimeToolBridgeRequired ||
+            workerMcpBridgeTools.length > 0
               ? buildPolynetCodexWorkerToolTarget()
               : null;
           await streamAppendRunEvent({
@@ -1737,6 +1929,14 @@ export async function handleRuntimeTurnRequest(args: {
             },
           });
           await streamAppendRunEvent({
+            eventType: "codex_mcp_bridge_projection_resolved",
+            eventKey: `${runId}:codex_mcp_bridge_projection_resolved:1`,
+            payload: {
+              run_id: runId,
+              ...codexMcpBridgeProjectionReceipt,
+            },
+          });
+          await streamAppendRunEvent({
             eventType: "polynet_codex_worker_tools_projected",
             eventKey: `${runId}:polynet_codex_worker_tools_projected:1`,
             payload: {
@@ -1745,6 +1945,10 @@ export async function handleRuntimeTurnRequest(args: {
               runtime_tool_names: codexHarnessToolPolicy.runtimeAdapterToolNames,
               platform_tool_count: workerPlatformTools.length,
               platform_tool_names: workerPlatformTools.map((tool) => tool.name),
+              mcp_bridge_tool_count: workerMcpBridgeTools.length,
+              mcp_bridge_tool_names: workerMcpBridgeTools.map(
+                (tool) => tool.bridge_tool_name,
+              ),
               platform_tool_policies: workerPlatformTools.map((tool) => ({
                 tool_name: tool.name,
                 billing_policy: tool.billing_policy,
@@ -2036,6 +2240,7 @@ export async function handleRuntimeTurnRequest(args: {
                   }
                 : null,
               platformTools: workerPlatformTools,
+              mcpBridgeTools: workerMcpBridgeTools,
               target: workerResolvedTarget,
               onEvent: async (event) => {
                 if (event.event === "start") {
