@@ -14,6 +14,7 @@ type WebCommunityProfilePanelProps = {
   isMessageDisabled?: boolean;
   onMessage?: () => void | Promise<void>;
   getInitials: (value: string) => string;
+  docked?: boolean;
 };
 
 const SOCIAL_PROFILE_LABELS: Record<SocialProfileKind, string> = {
@@ -65,6 +66,7 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
     isMessageDisabled,
     onMessage,
     getInitials,
+    docked,
   } = props;
   const handleLabel = normalizePanelHandle(profile?.handle);
   const bio = String(profile?.bio ?? "").trim();
@@ -87,8 +89,8 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
 
   return (
     <aside
-      className="community-profile-panel"
-      role="dialog"
+      className={`community-profile-panel${docked ? " community-profile-panel--docked" : ""}`}
+      role={docked ? "group" : "dialog"}
       aria-label={`${displayName} profile`}
     >
       <div className="community-profile-panel-top">

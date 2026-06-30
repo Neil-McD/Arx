@@ -16,6 +16,7 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForChatMessage,
 } from "./communityArchiveDocuments";
+import { recordLegacyChatMessageInteractionBestEffort } from "./communityInteractions";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
@@ -350,6 +351,7 @@ export const setCommunityTyping = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -377,6 +379,9 @@ export const setCommunityTyping = mutation({
       await ctx.db.patch(existing._id as any, {
         displayUntil,
         updatedAt: nowMs,
+        // Always set rootId so switching between channel and a thread updates the scope
+        // (undefined clears it back to channel-level).
+        rootId: args.rootId,
       });
       return { ok: true, display_until_ms: displayUntil };
     }
@@ -384,6 +389,7 @@ export const setCommunityTyping = mutation({
     await ctx.db.insert("communityTypingPresence" as any, {
       communityId: args.communityId,
       userId: args.userId,
+      rootId: args.rootId,
       displayUntil,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -431,6 +437,7 @@ export const listCommunityTyping = query({
           return {
             user_id: publicUserId ?? normalizeIdValue(row.userId),
             ...profile,
+            root_id: row.rootId ? normalizeIdValue(row.rootId) : null,
             display_until_ms: row.displayUntil,
             updated_at: toIsoString(row.updatedAt),
           };
@@ -504,6 +511,12 @@ export const createThreadUserMessage = mutation({
     await upsertArchiveDocumentForChatMessage(ctx, {
       thread,
       message: row,
+    });
+    await recordLegacyChatMessageInteractionBestEffort({
+      ctx,
+      thread,
+      message: row,
+      nowMs,
     });
     return await mapCommunityChatMessageRow(ctx, row);
   },

@@ -13,6 +13,7 @@ export type CloudCommunityAttentionRow = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  chat_last_seen_at?: number | null;
 };
 
 export async function listCloudCommunityAttentionRows<SessionT>(
@@ -44,6 +45,22 @@ export async function markCloudCommunitySurfaceSeen<SessionT>(
     authSubject,
     communityId: params.communityId,
     surface: params.surface,
+    ...(typeof params.seenAtMs === "number" && Number.isFinite(params.seenAtMs)
+      ? { seenAtMs: Math.floor(params.seenAtMs) }
+      : null),
+  });
+}
+
+export async function markCloudCommunityChatReadAt<SessionT>(
+  params: CloudCommunityAttentionGatewayParams<SessionT> & {
+    communityId: string;
+    seenAtMs?: number;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:markCommunityChatReadAt" as any, {
+    authSubject,
+    communityId: params.communityId,
     ...(typeof params.seenAtMs === "number" && Number.isFinite(params.seenAtMs)
       ? { seenAtMs: Math.floor(params.seenAtMs) }
       : null),

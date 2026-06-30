@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+. "$ROOT_DIR/scripts/guard_rg_compat.sh"
+
 echo "== No legacy provider repo guard =="
 
 PATTERN='s[u]pabase|@s[u]pabase|S[U]PABASE|s[b]_'
@@ -22,6 +24,7 @@ EXCLUDES=(
   --glob '!shared/communityWorkflowImportMcpRegistry.ts'
   --glob '!scripts/discover_connect_policy_proof.ts'
   --glob '!scripts/discover_integration_profile_proof.ts'
+  --glob '!scripts/private_community_mcp_ui_contract_proof.ts'
   --glob '!scripts/runtime_profile_policy_proof.ts'
 )
 CODE_TARGETS=(

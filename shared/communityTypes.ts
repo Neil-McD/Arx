@@ -195,6 +195,7 @@ export type CommunityTypingPresenceUser = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  root_id?: string | null;
   display_until_ms: number;
   updated_at?: string | null;
 };

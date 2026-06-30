@@ -57,6 +57,10 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   ) => void;
   appendWorkspaceTranscript?: (transcript: string) => void;
   focusWorkspaceInput?: () => void;
+  resolveCommunityTranscriptTarget?: () => {
+    appendTranscript: (transcript: string) => void;
+    focusInput?: () => void;
+  } | null | undefined;
   setCommunityMessageInput?: Dispatch<SetStateAction<string>>;
   chatInputRef?: MutableRefObject<HTMLTextAreaElement | null>;
   appendDirectMessageTranscript?: (transcript: string) => void;
@@ -217,6 +221,14 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       args.appendDirectMessageTranscript?.(transcript);
       window.setTimeout(() => {
         args.focusDirectMessageInput?.();
+      }, 0);
+      return;
+    }
+    const communityTarget = args.resolveCommunityTranscriptTarget?.() ?? null;
+    if (communityTarget) {
+      communityTarget.appendTranscript(transcript);
+      window.setTimeout(() => {
+        communityTarget.focusInput?.();
       }, 0);
       return;
     }

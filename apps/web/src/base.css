@@ -392,15 +392,15 @@ body {
 .back-to-workspace {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px 6px 8px;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -410,8 +410,8 @@ body {
 }
 
 .back-to-workspace .back-icon {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   fill: none;
   stroke: currentColor;
@@ -819,7 +819,7 @@ body {
 
 .community-nav-banner {
   position: relative;
-  height: 86px;
+  height: clamp(86px, 8vw, 132px);
   border-radius: 12px;
   background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.12), transparent 60%),
     linear-gradient(140deg, rgba(201, 169, 98, 0.2), rgba(110, 212, 216, 0.18));
@@ -8632,6 +8632,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   position: relative;
   min-width: 0;
   gap: 0;
+  /* Container so the chat's drawer collapse is keyed to the chat area width
+     (not the viewport) — keeps the fixed-width drawer from forcing horizontal
+     overflow when the rail + nav consume most of the window. */
+  container: community-chat-area / inline-size;
 }
 
 .community-chat-page-loading-shell {
@@ -8772,6 +8776,1324 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .chat-messages.discover-scroll {
   padding: 20px 48px 20px;
+}
+
+.community-chat {
+  --accent: var(--accent-gold);
+}
+
+.community-interaction-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.community-interaction-projection {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+}
+
+.community-interaction-projection.has-drawer {
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 34vw, 760px);
+}
+
+.community-interaction-main,
+.community-interaction-drawer {
+  min-height: 0;
+  min-width: 0;
+}
+
+.community-interaction-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.community-interaction-feed-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--web-topbar-height, 48px) + 10px) 18px 4px;
+}
+
+.community-interaction-drawer {
+  position: relative;
+  border-left: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Floating back button — plain transparent .back-to-workspace (arrow + "thread" label),
+   matching the workspace back button exactly (no glass pill). Anchored to the drawer's
+   top-left at the same 8px inset as the fixed topbar, so it lands on the same band. */
+.community-interaction-drawer-back {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  z-index: 5;
+}
+
+/* Arrow slightly smaller than the workspace back button's 20px. */
+.community-interaction-drawer-back .back-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.community-interaction-drawer-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Clear the floating back island (top 8px + ~48px pill height). */
+  padding-top: calc(var(--web-topbar-height, 48px) + 12px);
+}
+
+.community-interaction-main-composer,
+.community-interaction-drawer-composer {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.community-interaction-main-composer {
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+  padding-top: 4px;
+}
+
+.community-chat .community-interaction-main-composer .chat-input-bar {
+  margin: 0 14px 14px;
+  max-width: none;
+  border-radius: 12px;
+  box-shadow: none;
+  align-items: center;
+  padding: 13px 14px;
+}
+
+.community-chat .community-interaction-drawer-composer .chat-input-bar {
+  margin: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  align-items: center;
+  padding: 11px 12px;
+}
+
+.community-interaction-drawer-composer {
+  background: transparent;
+  padding: 4px 12px 12px;
+}
+
+.community-interaction-reply-composer-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.community-interaction-reply-composer-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.community-interaction-reply-composer-copy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.community-interaction-reply-composer-copy strong {
+  color: var(--text-primary);
+  font-weight: 700;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-interaction-reply-composer-copy em {
+  color: var(--text-muted);
+  font-style: normal;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-interaction-reply-input-bar {
+  align-items: flex-end;
+  margin: 0;
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.community-interaction-reply-input-bar .chat-input {
+  min-height: 24px;
+}
+
+.community-interaction-feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  margin-bottom: 14px;
+}
+
+.community-interaction-feed-header {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: calc(var(--web-topbar-height, 48px) + 12px) 18px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+}
+
+.community-interaction-feed-title,
+.community-interaction-drawer-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.community-interaction-feed-subtitle,
+.community-interaction-drawer-subtitle {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.community-interaction-icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.community-interaction-icon-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--accent) 6%);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.community-interaction-icon-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.community-interaction-root-list {
+  display: grid;
+  gap: 2px;
+}
+
+.community-interaction-root {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.community-interaction-root:hover,
+.community-interaction-root.selected {
+  background: color-mix(in srgb, var(--bg-card) 84%, var(--accent) 8%);
+}
+
+.community-interaction-root.selected {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Avatar hover wrapper — positioned context for the reused .chat-profile-hover-card. */
+.community-interaction-avatar-hover {
+  position: relative;
+  display: inline-flex;
+}
+
+.community-interaction-avatar-trigger {
+  display: inline-flex;
+  align-items: flex-start;
+  align-self: flex-start;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+/* Author-name trigger — selectable name that opens the profile and shows the hovercard. */
+.community-interaction-author-trigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.community-interaction-author-trigger:hover .community-interaction-author {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+
+.community-interaction-avatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  overflow: hidden;
+}
+
+.community-interaction-avatar.has-image {
+  background: var(--bg-card);
+}
+
+.community-interaction-avatar-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.community-interaction-avatar-fallback {
+  background: color-mix(in srgb, var(--bg-card) 65%, var(--accent) 35%);
+}
+
+.community-interaction-root-content,
+.community-interaction-reply-content,
+.community-interaction-thread-anchor-content {
+  min-width: 0;
+}
+
+.community-interaction-meta-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.community-interaction-author {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.community-interaction-title {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.community-interaction-body {
+  margin-top: 3px;
+  display: grid;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.community-interaction-body p {
+  margin: 0;
+}
+
+.community-interaction-footer {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.community-interaction-reactions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.community-interaction-reaction {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--border-default) 12%);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.community-interaction-reaction:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.community-interaction-reaction:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.community-interaction-reaction:disabled {
+  cursor: default;
+}
+
+.community-interaction-reaction > span:first-child {
+  font-size: 15px;
+}
+
+.community-interaction-reaction.is-mine {
+  background: var(--status-approved);
+  border-color: transparent;
+}
+
+.community-interaction-emoji-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.community-interaction-reaction-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.community-interaction-reaction-add:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.community-interaction-emoji-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card-solid);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* The thread root's add-reaction button is left-aligned, so its popover must open
+   rightward (the default right:0 runs it off the left edge of the panel). */
+.community-interaction-thread-anchor-actions .community-interaction-emoji-popover {
+  right: auto;
+  left: 0;
+}
+
+.community-interaction-emoji-option {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.community-interaction-emoji-option:hover {
+  background: var(--hover-overlay);
+}
+
+.community-interaction-reply-actions {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.community-interaction-state,
+.community-interaction-empty,
+.community-interaction-drawer-empty {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.community-interaction-state button {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  min-height: 32px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.community-interaction-empty span {
+  max-width: 320px;
+  color: var(--text-faint);
+}
+
+.community-interaction-loading {
+  width: 156px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+
+.community-interaction-drawer-root {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.community-interaction-thread-anchor {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.community-interaction-thread-anchor-actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.community-interaction-reply-button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.community-interaction-reply-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.community-interaction-reply-list {
+  display: grid;
+  gap: 2px;
+  padding: 12px 12px 24px;
+}
+
+.community-interaction-reply {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  transition: background 140ms ease;
+}
+
+.community-interaction-reply .community-interaction-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 12px;
+}
+
+.community-interaction-feed {
+  margin-top: auto;
+  display: grid;
+  gap: 2px;
+}
+
+.community-interaction-feed-scroll > .community-interaction-state,
+.community-interaction-feed-scroll > .community-interaction-empty {
+  margin: auto 0;
+}
+
+.community-interaction-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px 6px;
+}
+
+.community-interaction-day::before,
+.community-interaction-day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.community-interaction-day span {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.community-interaction-system {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.community-interaction-system span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80%;
+}
+
+.community-interaction-group {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 12px 4px;
+  border-radius: 10px;
+}
+
+.community-interaction-group.is-agent {
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--accent) 12%);
+}
+
+.community-interaction-group-gutter {
+  padding-top: 2px;
+}
+
+.community-interaction-group-body {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.community-interaction-message {
+  position: relative;
+  margin-left: -6px;
+  padding: 1px 6px 4px;
+  border-radius: 6px;
+  transition: background 140ms ease;
+}
+
+.community-interaction-msg-actions {
+  position: absolute;
+  top: -14px;
+  right: 6px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card-solid);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.community-interaction-message:hover .community-interaction-msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.community-interaction-msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.community-interaction-msg-action:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-interaction-msg-emoji {
+  font-size: 15px;
+}
+
+.community-interaction-reply:hover .community-interaction-msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.community-interaction-message:hover,
+.community-interaction-reply:hover {
+  background: color-mix(in srgb, var(--bg-card) 97%, var(--accent) 3%);
+}
+
+/* Newly-arrived messages animate in (only the ones that land after first load). */
+@keyframes community-interaction-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.community-interaction-message.is-new,
+.community-interaction-reply.is-new {
+  animation: community-interaction-arrive 240ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-interaction-message.is-new,
+  .community-interaction-reply.is-new {
+    animation: none;
+  }
+}
+
+/* Optimistic (not-yet-confirmed) messages. */
+.community-interaction-message.is-pending-sending .community-interaction-body,
+.community-interaction-message.is-pending-sending .community-interaction-title,
+.community-interaction-reply.is-pending-sending .community-interaction-body {
+  opacity: 0.5;
+}
+
+.community-interaction-sending-spinner {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-top-color: var(--text-secondary);
+  animation: community-interaction-spin 0.7s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes community-interaction-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-interaction-sending-spinner {
+    animation: none;
+    border-top-color: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  }
+}
+
+.community-interaction-message.is-pending-failed,
+.community-interaction-reply.is-pending-failed {
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--danger, #e24b4a) 10%);
+}
+
+.community-interaction-pending-status {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.community-interaction-pending-status.is-failed {
+  color: var(--danger, #e24b4a);
+}
+
+.community-interaction-pending-status button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.community-interaction-pending-status button:hover {
+  color: var(--text-primary);
+}
+
+/* Online presence dot on avatars. */
+.community-interaction-avatar-presence {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  line-height: 0;
+}
+
+.community-interaction-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3fbf7f;
+  border: 2px solid color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+  pointer-events: none;
+}
+
+/* Typing indicator above the composer. */
+.community-interaction-typing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 18px 6px;
+  animation: community-interaction-arrive 160ms ease-out;
+}
+
+.community-interaction-typing-avatars {
+  display: inline-flex;
+}
+
+.community-interaction-typing-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  margin-left: -6px;
+  border: 2px solid color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+}
+
+.community-interaction-typing-avatar:first-child {
+  margin-left: 0;
+}
+
+.community-interaction-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 9px;
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.community-interaction-typing-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: community-interaction-typing-bounce 1.2s infinite;
+}
+
+.community-interaction-typing-dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.community-interaction-typing-dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes community-interaction-typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.community-interaction-typing-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-interaction-typing {
+    animation: none;
+  }
+  .community-interaction-typing-dots > span {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Floating "jump to latest" pill — shown when new messages land while scrolled up. */
+.community-interaction-jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--web-floating-chrome-bg);
+  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: community-interaction-arrive 200ms ease-out;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.community-interaction-jump-latest:hover {
+  background: color-mix(in srgb, var(--web-floating-chrome-bg) 80%, var(--accent) 20%);
+}
+
+.community-interaction-jump-latest:active {
+  transform: translateX(-50%) scale(0.96);
+}
+
+.community-interaction-message.selected {
+  background: var(--active-overlay);
+}
+
+.community-interaction-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+}
+
+.community-interaction-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.community-interaction-reply-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.community-interaction-reply-pill:hover {
+  text-decoration: underline;
+}
+
+/* Feed thread row showing live typing instead of the reply count. */
+.community-interaction-reply-pill.is-typing {
+  gap: 6px;
+}
+
+.community-interaction-reply-pill.is-typing:hover {
+  text-decoration: none;
+}
+
+.community-interaction-reply-pill.is-typing .community-interaction-typing-dots {
+  padding: 0;
+  background: none;
+}
+
+.community-interaction-reply-pill.is-typing .community-interaction-typing-dots > span {
+  background: currentColor;
+}
+
+/* Unread read-state: "New messages" divider + thread-row new-reply marker. */
+.community-interaction-unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 2px 2px;
+}
+
+.community-interaction-unread-divider::before {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.community-interaction-unread-divider > span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.community-interaction-reply-pill.is-unread {
+  font-weight: 700;
+}
+
+.community-interaction-unread-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 5px;
+}
+
+.community-interaction-thread-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.community-interaction-thread-avatar {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  overflow: hidden;
+}
+
+.community-interaction-thread-time {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.community-interaction-overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 144px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card-solid);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.community-interaction-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.community-interaction-overflow-item:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-interaction-overflow-item.is-danger {
+  color: #e5666b;
+}
+
+.community-interaction-overflow-item.is-danger:hover {
+  background: color-mix(in srgb, #e5666b 14%, transparent);
+  color: #ef8a8e;
+}
+
+.community-interaction-edit {
+  margin-top: 4px;
+  display: grid;
+  gap: 6px;
+}
+
+.community-interaction-edit-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.community-interaction-edit-input:focus {
+  border-color: var(--border-strong);
+}
+
+.community-interaction-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.community-interaction-edit-cancel,
+.community-interaction-edit-save {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.community-interaction-edit-cancel {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.community-interaction-edit-cancel:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.community-interaction-edit-save {
+  border: 0;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+.community-interaction-edit-save:hover {
+  background: var(--bg-button-hover);
+}
+
+.community-interaction-edited {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.community-interaction-embeds {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.community-interaction-embed {
+  display: block;
+  max-width: 420px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  color: inherit;
+  text-decoration: none;
+}
+
+.community-interaction-embed:hover {
+  border-color: var(--border-default);
+}
+
+.community-interaction-embed-media {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--bg-card) 70%, var(--border-default) 30%);
+}
+
+.community-interaction-embed-text {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+}
+
+.community-interaction-embed-provider {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.community-interaction-embed-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.community-interaction-embed-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.community-interaction-embed.is-pending {
+  height: 60px;
+  max-width: 420px;
+}
+
+.community-interaction-embed.is-bare {
+  padding: 8px 12px;
+  color: var(--accent);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.community-interaction-quote {
+  margin: 4px 0 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.community-interaction-quote-author {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.community-interaction-quote-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Layered collapse: when the chat area itself is too narrow for feed + drawer
+   side-by-side, the drawer takes over the area (back arrow returns to chat).
+   Keyed to the projection's own width (container query) so it triggers based on
+   the real chat area, regardless of how much the rail + nav consume. */
+@container community-chat-area (max-width: 680px) {
+  .community-interaction-projection.has-drawer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-interaction-projection.has-drawer .community-interaction-drawer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border-left: 0;
+    z-index: 6;
+    /* Same translucent drawer color as the side-by-side state, layered over an opaque
+       base so it matches exactly yet the feed never shows through. */
+    background:
+      linear-gradient(
+        color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%),
+        color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%)
+      ),
+      var(--bg-app);
+  }
 }
 
 .chat-empty {
@@ -9017,13 +10339,27 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .chat-profile-hover-name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: inherit;
   color: var(--text-primary);
   font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-profile-hover-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .chat-profile-hover-handle {
@@ -9082,6 +10418,23 @@ button.community-launch-knowledge-integration-chip:disabled {
   .chat-profile-hover-card {
     display: none;
   }
+}
+
+/* Docked variant — fills the right panel slot (the drawer provides the surface + back header). */
+.community-profile-panel.community-profile-panel--docked {
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  z-index: auto;
+  padding: 0 16px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .community-profile-panel {
@@ -10088,6 +11441,76 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: 480px;
 }
 
+.chat-media-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.community-interaction-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.community-interaction-attachments .chat-media-grid,
+.community-interaction-attachments .chat-media-players {
+  max-width: 360px;
+}
+
+.community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) {
+  max-width: min(300px, 72vw);
+}
+
+.community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item {
+  max-width: min(300px, 72vw);
+  max-height: 300px;
+}
+
+.community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item img {
+  max-width: min(300px, 72vw);
+  max-height: 300px;
+}
+
+.community-interaction-attachments .chat-media-player-video video {
+  max-height: 300px;
+}
+
+.chat-media-player {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-media-player-video video {
+  width: 100%;
+  max-height: 360px;
+  border-radius: 12px;
+  background: #000;
+  display: block;
+}
+
+.chat-media-player-audio {
+  gap: 6px;
+}
+
+.chat-media-player-audio audio {
+  width: 100%;
+}
+
+.chat-media-player-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-media-grid.chat-media-grid-composer {
   margin-top: 6px;
   max-width: 280px;
@@ -10164,13 +11587,26 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: rgba(0, 0, 0, 0.55);
 }
 
-.chat-media-grid.count-1 .chat-media-item {
-  max-height: 320px;
+/* Single image in the feed: bounded box at natural aspect ratio (no crop), so any aspect ratio
+   fits without dominating the column. Lightbox shows full-res. Composer preview keeps its own rule. */
+.chat-media-grid.count-1:not(.chat-media-grid-composer) {
+  width: fit-content;
+  max-width: min(340px, 80vw);
 }
 
-.chat-media-grid.count-1 .chat-media-item img {
-  max-height: 320px;
-  object-fit: cover;
+.chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item {
+  width: auto;
+  max-width: min(340px, 80vw);
+  aspect-ratio: auto;
+  max-height: 360px;
+}
+
+.chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item img {
+  width: auto;
+  height: auto;
+  max-width: min(340px, 80vw);
+  max-height: 360px;
+  object-fit: contain;
 }
 
 .chat-media-grid.count-2 .chat-media-item,
@@ -15744,6 +17180,81 @@ button.chat-reply-quote:hover {
   flex-shrink: 0;
   min-width: 0;
   position: relative;
+}
+
+.mention-autocomplete {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 2px;
+  background: var(--bg-card-solid, var(--bg-card));
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  z-index: 40;
+}
+
+.mention-autocomplete-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-default);
+}
+
+.mention-autocomplete-row.is-active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.mention-autocomplete-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+  text-transform: uppercase;
+}
+
+.mention-autocomplete-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.mention-autocomplete-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-autocomplete-handle {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .community-chat-profile-gate {
@@ -28482,6 +29993,45 @@ button.message-citation-chip:hover {
   padding: calc(var(--mobile-topbar-clearance) + 14px) 14px 18px;
 }
 
+.app-root.mobile-shell .community-chat .community-interaction-feed-header {
+  padding: calc(var(--mobile-topbar-clearance) + 12px) 12px 12px;
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-feed-scroll {
+  padding: 8px 12px 18px;
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-projection.has-drawer {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-drawer {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 20;
+  width: min(92vw, 380px);
+  max-width: 100%;
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.28);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-drawer-back {
+  top: calc(var(--mobile-topbar-clearance) + 8px);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-drawer-scroll {
+  padding-top: calc(var(--mobile-topbar-clearance) + 62px);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-root {
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding: 10px 8px;
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-avatar {
+  width: 34px;
+  height: 34px;
+}
+
 .app-root.mobile-shell .community-chat .chat-messages-inner {
   min-height: calc(100dvh - var(--mobile-topbar-clearance) - env(safe-area-inset-bottom, 0px) - 96px);
 }
@@ -28520,6 +30070,15 @@ button.message-citation-chip:hover {
   border-radius: 24px;
   background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-workspace) 12%);
   border-color: color-mix(in srgb, var(--border-default) 84%, transparent);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-main-composer .chat-input-bar {
+  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
+}
+
+.app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
+  margin: 0;
+  border-radius: 18px;
 }
 
 .app-root.mobile-shell .community-chat .chat-input {
@@ -29736,6 +31295,307 @@ button.message-citation-chip:hover {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+/* The community feed rendered compact inside the workspace right panel. Reuses the feed's own
+   row/reaction/reply components; this just bounds + tightens it for the narrow column. */
+.workspace-community-signal-feed {
+  /* The feed's accent token (reply pill, reactions) is normally provided by the .community-chat
+     scope on the chat page. The panel renders the feed outside that scope, so map it here — it
+     stays theme-aware since --accent-gold is defined per theme at :root. */
+  --accent: var(--accent-gold);
+  margin: 0 0 8px;
+  max-height: 460px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.workspace-community-signal-feed .community-interaction-feed {
+  max-width: 100%;
+  padding: 0;
+  gap: 4px;
+}
+
+.workspace-community-signal-feed .community-interaction-group {
+  max-width: 100%;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 0 3px;
+  border-radius: 7px;
+}
+
+.workspace-community-signal-feed .community-interaction-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-group-gutter {
+  padding-top: 1px;
+}
+
+.workspace-community-signal-feed .community-interaction-meta-row {
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.workspace-community-signal-feed .community-interaction-author {
+  font-size: 14px;
+}
+
+.workspace-community-signal-feed .community-interaction-title {
+  margin-top: 1px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workspace-community-signal-feed .community-interaction-body {
+  margin-top: 1px;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.38;
+}
+
+.workspace-community-signal-feed .community-interaction-footer {
+  margin-top: 4px;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.workspace-community-signal-feed .community-interaction-message {
+  margin-left: -4px;
+  padding: 0 4px 2px;
+  border-radius: 5px;
+}
+
+.workspace-community-signal-feed .community-interaction-day {
+  gap: 8px;
+  padding: 8px 2px 2px;
+}
+
+.workspace-community-signal-feed .community-interaction-day span {
+  font-size: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-kind {
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-reply-pill {
+  font-size: 12px;
+  padding: 1px 0;
+}
+
+.workspace-community-signal-feed .community-interaction-thread-row {
+  gap: 5px;
+}
+
+.workspace-community-signal-feed .community-interaction-thread-avatar {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}
+
+.workspace-community-signal-feed .community-interaction-thread-time {
+  font-size: 11px;
+}
+
+.workspace-community-signal-feed .community-interaction-reaction {
+  min-height: 19px;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.workspace-community-signal-feed .community-interaction-reaction > span:first-child {
+  font-size: 13px;
+}
+
+.workspace-community-signal-feed .community-interaction-reaction-add {
+  width: 22px;
+  height: 19px;
+}
+
+.workspace-community-signal-feed .community-interaction-embeds {
+  margin-top: 5px;
+  gap: 5px;
+}
+
+.workspace-community-signal-feed .community-interaction-embed,
+.workspace-community-signal-feed .community-interaction-embed.is-pending {
+  max-width: 220px;
+  border-radius: 9px;
+}
+
+.workspace-community-signal-feed .community-interaction-embed-media {
+  max-height: 110px;
+}
+
+.workspace-community-signal-feed .community-interaction-embed-text {
+  padding: 7px 9px;
+}
+
+.workspace-community-signal-feed .community-interaction-embed-title {
+  font-size: 12px;
+}
+
+.workspace-community-signal-feed .community-interaction-embed-desc {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments {
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid,
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-players {
+  gap: 4px;
+  margin-top: 4px;
+  max-width: 220px;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) {
+  max-width: min(190px, 100%);
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item {
+  max-width: min(190px, 100%);
+  max-height: 190px;
+  border-radius: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid.count-1:not(.chat-media-grid-composer) .chat-media-item img {
+  max-width: min(190px, 100%);
+  max-height: 190px;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid.count-2,
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid.count-3,
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-grid.count-4 {
+  max-width: 220px;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-item {
+  border-radius: 10px;
+}
+
+.workspace-community-signal-feed .community-interaction-attachments .chat-media-player-video video {
+  max-height: 160px;
+  border-radius: 10px;
+}
+
+.workspace-community-section__subtitle {
+  margin-top: 6px;
+  opacity: 0.7;
+}
+
+.workspace-community-signal-media {
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.workspace-community-signal-media-thumb {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+}
+
+.workspace-community-signal-media-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 100%;
+}
+
+.workspace-community-signal-media-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.workspace-community-signal-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.workspace-community-signal-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.workspace-community-signal-reaction.is-active {
+  border-color: var(--accent, #7c5cff);
+  background: color-mix(in srgb, var(--accent, #7c5cff) 16%, transparent);
+  color: var(--text-default);
+}
+
+.workspace-community-signal-react-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.workspace-community-signal-row:hover .workspace-community-signal-react-bar,
+.workspace-community-signal-row:focus-within .workspace-community-signal-react-bar {
+  opacity: 1;
+}
+
+.workspace-community-signal-react-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-community-signal-react-add:hover {
+  background: color-mix(in srgb, var(--accent, #7c5cff) 22%, transparent);
+}
+
+/* Chat-signal footer reuses the feed's reaction + reply-pill components/classes so it reads
+   identically to the main feed, just stacked compactly in the panel. */
+.workspace-community-signal-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.workspace-community-signal-footer .community-interaction-reactions {
+  flex-wrap: wrap;
 }
 
 .workspace-community-signal-reply.chat-reply-quote {

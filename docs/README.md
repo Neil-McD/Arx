@@ -33,8 +33,7 @@
 4. `archive/alpha-builder-only-posture-2026-03-19.md`
 5. `archive/convex-hardening-plan-v1.md`
 6. `archive/community-membership-access-rearchitecture-plan-v1.md`
-7. `archive/community-chat-execution-plan-v1.md`
-8. `archive/auth-foundation-plan-v1.md`
-9. `archive/auth-closure-plan-v1.md`
-10. `archive/convex-schema-skeleton-v1.md`
-11. `archive/convex-web3-posture-execution-plan-v1.md`
+7. `archive/auth-foundation-plan-v1.md`
+8. `archive/auth-closure-plan-v1.md`
+9. `archive/convex-schema-skeleton-v1.md`
+10. `archive/convex-web3-posture-execution-plan-v1.md`

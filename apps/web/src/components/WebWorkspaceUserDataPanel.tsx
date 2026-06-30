@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronLeft,
@@ -33,6 +33,12 @@ import {
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
+import {
+  EmojiPickerButton,
+  QUICK_REACTIONS,
+  ReactionSummary,
+  ThreadReplyPill,
+} from "./communityInteractionRowParts";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
   listWorkspaceDirectoryCanonical,
@@ -58,6 +64,8 @@ export type WorkspaceUserPanelCommunity = {
   analytics: WorkspaceUserPanelCommunityAnalytics;
   operations: WorkspaceUserPanelCommunityOperations;
   recentSignals: WorkspaceUserPanelRecentSignal[];
+  recentSignalFeed?: ReactNode;
+  recentSignalFeedVersion?: string | null;
   integrations: WorkspaceUserPanelIntegration[];
 };
 
@@ -110,6 +118,16 @@ export type WorkspaceUserPanelRecentSignal = {
     sender: string;
     text: string;
   } | null;
+  media?: {
+    kind: "image" | "video" | "audio" | "file" | "link";
+    thumbnailUrl?: string | null;
+    label?: string | null;
+  } | null;
+  /** Interaction root id — present on chat signals; enables reactions from the panel. */
+  rootId?: string | null;
+  reactions?: { emoji: string; count: number; reacted: boolean }[] | null;
+  replyCount?: number | null;
+  lastReplyLabel?: string | null;
   target: {
     tab: "chat" | "ai_feed" | "resources" | "events";
     itemId?: string | null;
@@ -150,6 +168,8 @@ export type WorkspaceUserDataPanelDataProps = {
   onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceUserPanelRecentSignal["target"]) => void;
+  onToggleSignalReaction?: (rootId: string, emoji: string) => void;
+  signalQuickReactions?: string[];
   onOpenActiveCommunitySettings: () => void;
   onOpenActiveCommunityMembers: () => void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
@@ -1279,6 +1299,7 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
   const community = props.activeCommunity;
   const [isRecentSignalsAtBottom, setIsRecentSignalsAtBottom] = useState(true);
   const recentSignalsViewportRef = useRef<HTMLDivElement | null>(null);
+  const recentSignalFeedViewportRef = useRef<HTMLDivElement | null>(null);
   const isRecentSignalsExpanded = props.isRecentSignalsExpanded;
 
   useEffect(() => {
@@ -1286,6 +1307,8 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
   }, [community?.id, isRecentSignalsExpanded]);
 
   const panelRecentSignals = community?.recentSignals ?? [];
+  const recentSignalFeed = community?.recentSignalFeed ?? null;
+  const recentSignalFeedVersion = community?.recentSignalFeedVersion ?? null;
   const recentSignalsCount = panelRecentSignals.length;
   const updateRecentSignalsScrollState = useCallback(() => {
     const viewport = recentSignalsViewportRef.current;
@@ -1302,6 +1325,14 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
     const frame = requestAnimationFrame(updateRecentSignalsScrollState);
     return () => cancelAnimationFrame(frame);
   }, [isRecentSignalsExpanded, recentSignalsCount, updateRecentSignalsScrollState]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const viewport = recentSignalFeedViewportRef.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [community?.id, recentSignalFeedVersion]);
 
   if (!community) {
     return null;
@@ -1398,9 +1429,20 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
           onOpenMembers={props.onOpenActiveCommunityMembers}
         />
       ) : null}
-      {panelRecentSignals.length > 0 ? (
+      {recentSignalFeed || panelRecentSignals.length > 0 ? (
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
+          {recentSignalFeed ? (
+            <div
+              ref={recentSignalFeedViewportRef}
+              className="workspace-community-signal-feed community-interaction-feed-compact"
+            >
+              {recentSignalFeed}
+            </div>
+          ) : null}
+          {panelRecentSignals.length > 0 ? (
+            <div className="workspace-community-section__title workspace-community-section__subtitle">Activity</div>
+          ) : null}
           <div
             className={`workspace-community-signal-viewport${isRecentSignalsExpanded ? " is-expanded" : ""}`}
           >
@@ -1411,11 +1453,18 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
             >
               <div className="workspace-community-signal-list">
                 {visibleRecentSignals.map((signal) => (
-                  <button
+                  <div
                     key={signal.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     className={`workspace-community-signal-row is-${signal.kind}${signal.replyContext ? " has-reply" : ""}`}
                     onClick={() => props.onOpenRecentSignal(signal.target)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        props.onOpenRecentSignal(signal.target);
+                      }
+                    }}
                   >
                     {signal.eventMonth && signal.eventDay ? (
                       <span className="workspace-community-signal-date" aria-hidden="true">
@@ -1460,8 +1509,74 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
                       {signal.subtitle ? (
                         <div className="workspace-community-signal-subtitle">{signal.subtitle}</div>
                       ) : null}
+                      {signal.media ? (
+                        <div className={`workspace-community-signal-media is-${signal.media.kind}`}>
+                          {signal.media.kind === "image" && signal.media.thumbnailUrl ? (
+                            <img
+                              className="workspace-community-signal-media-thumb"
+                              src={signal.media.thumbnailUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span className="workspace-community-signal-media-chip">
+                              <span className="workspace-community-signal-media-icon" aria-hidden="true">
+                                {signal.media.kind === "video"
+                                  ? "▶"
+                                  : signal.media.kind === "audio"
+                                    ? "♪"
+                                    : signal.media.kind === "link"
+                                      ? "🔗"
+                                      : "📎"}
+                              </span>
+                              {signal.media.label ?? "Attachment"}
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-                  </button>
+                    {signal.kind === "chat" && signal.rootId ? (
+                      <div
+                        className="workspace-community-signal-footer"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <ThreadReplyPill
+                          replyCount={signal.replyCount ?? 0}
+                          lastReplyLabel={signal.lastReplyLabel}
+                          onOpen={() => props.onOpenRecentSignal(signal.target)}
+                        />
+                        <ReactionSummary
+                          rows={(signal.reactions ?? []).map((reaction) => ({ emoji: reaction.emoji, count: reaction.count }))}
+                          viewerEmojis={(signal.reactions ?? []).filter((reaction) => reaction.reacted).map((reaction) => reaction.emoji)}
+                          onToggle={
+                            props.onToggleSignalReaction
+                              ? (emoji) => props.onToggleSignalReaction!(signal.rootId!, emoji)
+                              : undefined
+                          }
+                        />
+                        {props.onToggleSignalReaction ? (
+                          <div className="workspace-community-signal-react-bar">
+                            {(props.signalQuickReactions ?? QUICK_REACTIONS).map((emoji) => (
+                              <button
+                                key={`add:${emoji}`}
+                                type="button"
+                                className="workspace-community-signal-react-add"
+                                onClick={() => props.onToggleSignalReaction!(signal.rootId!, emoji)}
+                                aria-label={`React ${emoji}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                            <EmojiPickerButton
+                              className="workspace-community-signal-react-add"
+                              label="Add reaction"
+                              onPick={(emoji) => props.onToggleSignalReaction!(signal.rootId!, emoji)}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>

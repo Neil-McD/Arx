@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+. "$ROOT/scripts/guard_rg_compat.sh"
+
 echo "== Runtime router/loop contract guard =="
 
 HTTP_FILE="$ROOT/convex/httpRuntimeRoutes.ts"

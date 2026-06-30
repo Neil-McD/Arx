@@ -26,6 +26,7 @@ type PresenceSummary = {
   admin_count?: number | null;
   online_count?: number | null;
   online_faces?: PresenceFace[] | null;
+  online_user_ids?: string[] | null;
 };
 
 export function useWebActiveCommunityShellController<SessionT>(params: {
@@ -215,6 +216,11 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const funnelPreviewOnlineCount = communitySocialSummary.onlineCount;
   const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
 
+  const activeCommunityOnlineUserIds = useMemo(() => {
+    const ids = activeCommunityPresenceSummary?.online_user_ids;
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => Boolean(id)) : []);
+  }, [activeCommunityPresenceSummary?.online_user_ids]);
+
   return {
     activeCommunityAccess: currentActiveCommunityAccess,
     isLoadingCommunityAccess,
@@ -246,5 +252,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     funnelPreviewAdminCount,
     funnelPreviewOnlineCount,
     funnelPreviewOnlineFaces,
+    activeCommunityOnlineUserIds,
   };
 }

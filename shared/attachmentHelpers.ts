@@ -41,6 +41,29 @@ export function isLikelyTextFile(file: File): boolean {
   );
 }
 
+const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov", ".m4v", ".ogv"] as const;
+const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".ogg", ".oga", ".aac", ".flac"] as const;
+
+/** Classify an attachment as inline-playable media from its mime/name. Returns null for non-media. */
+export function classifyMediaKind(
+  mime: string | null | undefined,
+  name: string | null | undefined,
+): "video" | "audio" | null {
+  const normalizedMime = (mime ?? "").toLowerCase();
+  const normalizedName = (name ?? "").toLowerCase();
+  if (normalizedMime.startsWith("video/") || VIDEO_EXTENSIONS.some((ext) => normalizedName.endsWith(ext))) {
+    return "video";
+  }
+  if (normalizedMime.startsWith("audio/") || AUDIO_EXTENSIONS.some((ext) => normalizedName.endsWith(ext))) {
+    return "audio";
+  }
+  return null;
+}
+
+export function isLikelyMediaFile(file: File): boolean {
+  return classifyMediaKind(file.type, file.name) !== null;
+}
+
 export function isLikelyImageFile(file: File, options: ImageFileDetectionOptions = {}): boolean {
   const mime = (file.type ?? "").toLowerCase();
   if (mime.startsWith("image/")) return true;

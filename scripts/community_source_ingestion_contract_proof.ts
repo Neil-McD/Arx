@@ -14,6 +14,7 @@ const sourceUrlFetcher = read("api/source-url-fetch.js");
 const schema = read("convex/schema.ts");
 const core = read("convex/communityCore.ts");
 const resources = read("convex/communityResources.ts");
+const sourceUrlPolicy = read("convex/communitySourceUrlPolicy.ts");
 const community = read("convex/community.ts");
 const experience = read("convex/communityExperience.ts");
 const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
@@ -32,6 +33,11 @@ assert.match(
   packageJson,
   /"check:community-source-ingestion-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_ingestion_contract_proof\.ts"/,
   "source ingestion proof should be wired into package scripts",
+);
+assert.match(
+  packageJson,
+  /"check:community-source-url-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_url_policy_behavior_proof\.ts"/,
+  "source URL policy behavior proof should be wired into package scripts",
 );
 assert.match(
   packageJson,
@@ -208,19 +214,24 @@ assert.match(
 );
 
 assert.match(
-  resources,
-  /COMMUNITY_RESOURCE_SOURCE_INGESTION_DENIED_HOSTNAME_SUFFIXES[\s\S]*"\.internal"[\s\S]*"\.arpa"[\s\S]*"\.invalid"/,
+  sourceUrlPolicy,
+  /COMMUNITY_SOURCE_URL_DENIED_HOSTNAME_SUFFIXES[\s\S]*"\.internal"[\s\S]*"\.arpa"[\s\S]*"\.invalid"/,
   "URL ingestion should deny local-only hostname suffixes",
 );
 assert.match(
-  resources,
-  /requireSafeSourceIngestionUrl[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_https_required[\s\S]*parsed\.username \|\| parsed\.password[\s\S]*community_source_url_credentials_not_supported[\s\S]*parsed\.port && parsed\.port !== "443"[\s\S]*community_source_url_port_not_supported/,
+  sourceUrlPolicy,
+  /requireSafeCommunitySourceUrl[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_https_required[\s\S]*parsed\.username \|\| parsed\.password[\s\S]*community_source_url_credentials_not_supported[\s\S]*parsed\.port && parsed\.port !== "443"[\s\S]*community_source_url_port_not_supported/,
   "URL ingestion should only fetch public-shaped HTTPS URLs without credentials or custom ports",
 );
 assert.match(
-  resources,
-  /isDeniedSourceIngestionHostname[\s\S]*localhost[\s\S]*metadata\.google\.internal[\s\S]*isLiteralIpv4[\s\S]*hasEmbeddedPrivateIpv4[\s\S]*COMMUNITY_RESOURCE_SOURCE_INGESTION_DENIED_HOSTNAME_SUFFIXES/,
+  sourceUrlPolicy,
+  /isDeniedCommunitySourceHostname[\s\S]*localhost[\s\S]*metadata\.google\.internal[\s\S]*isLiteralIpv4[\s\S]*hasEmbeddedPrivateIpv4[\s\S]*COMMUNITY_SOURCE_URL_DENIED_HOSTNAME_SUFFIXES/,
   "URL ingestion must reject local, private, literal IP, and embedded-private-IP source targets",
+);
+assert.match(
+  resources,
+  /function requireSafeSourceIngestionUrl\(raw: unknown\): string \{[\s\S]*return requireSafeCommunitySourceUrl\(raw\)/,
+  "community resource ingestion should use the shared source URL policy",
 );
 assert.match(
   resources,
@@ -228,9 +239,14 @@ assert.match(
   "URL ingestion should require a configured first-party fetcher endpoint",
 );
 assert.match(
-  resources,
-  /resolveSourceUrlFetcherEndpoint[\s\S]*community_source_url_fetcher_not_configured[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_fetcher_invalid/,
+  sourceUrlPolicy,
+  /requireSafeCommunitySourceFetcherEndpoint[\s\S]*community_source_url_fetcher_not_configured[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_fetcher_invalid/,
   "URL ingestion fetcher should fail closed unless a valid HTTPS broker is configured",
+);
+assert.match(
+  resources,
+  /resolveSourceUrlFetcherEndpoint[\s\S]*return requireSafeCommunitySourceFetcherEndpoint\(readEnv\(COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV\)\)/,
+  "community resource ingestion should validate the first-party fetcher endpoint through the shared source URL policy",
 );
 assert.match(
   resources,

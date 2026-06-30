@@ -66,6 +66,19 @@ import {
   patchOwnMessageContent as patchOwnMessageContentImpl,
   setCommunityTyping as setCommunityTypingImpl,
 } from "./communityChat";
+import {
+  createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl,
+  createCommunityInteractionReply as createCommunityInteractionReplyImpl,
+  createCommunityInteractionRoot as createCommunityInteractionRootImpl,
+  deleteCommunityInteractionMessage as deleteCommunityInteractionMessageImpl,
+  editCommunityInteractionMessage as editCommunityInteractionMessageImpl,
+  listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
+  listCommunityInteractionRoots as listCommunityInteractionRootsImpl,
+  toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl,
+} from "./communityInteractions";
+import {
+  backfillCommunityInteractionsFromLegacyChatBatch as backfillCommunityInteractionsFromLegacyChatBatchImpl,
+} from "./communityInteractionBackfill";
 import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
 import {
   listCommunityActivityEvents as listCommunityActivityEventsImpl,
@@ -165,6 +178,7 @@ import {
 import {
   listMyCommunityAttention as listMyCommunityAttentionImpl,
   markCommunitySurfaceSeen as markCommunitySurfaceSeenImpl,
+  markCommunityChatReadAt as markCommunityChatReadAtImpl,
 } from "./communityAttention";
 import { listCommunityCompilerInputs as listCommunityCompilerInputsImpl } from "./communityCompilerInputs";
 import {
@@ -263,6 +277,15 @@ export const deleteOwnMessage = deleteOwnMessageImpl;
 export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
+export const createCommunityInteractionRoot = createCommunityInteractionRootImpl;
+export const createCommunityInteractionReply = createCommunityInteractionReplyImpl;
+export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;
+export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
+export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;
+export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;
+export const editCommunityInteractionMessage = editCommunityInteractionMessageImpl;
+export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;
+export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;
 export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;
@@ -328,6 +351,7 @@ export const getCommunityFunnelConfig = getCommunityFunnelConfigImpl;
 export const saveCommunityPublicPresentation = saveCommunityPublicPresentationImpl;
 export const listMyCommunityAttention = listMyCommunityAttentionImpl;
 export const markCommunitySurfaceSeen = markCommunitySurfaceSeenImpl;
+export const markCommunityChatReadAt = markCommunityChatReadAtImpl;
 export const recordCommunitySourceTrace = recordCommunitySourceTraceImpl;
 export const createCommunityIntelligenceChangeRequest = createCommunityIntelligenceChangeRequestImpl;
 export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl;

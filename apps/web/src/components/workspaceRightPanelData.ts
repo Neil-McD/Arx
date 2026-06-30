@@ -1,5 +1,5 @@
+import type { ReactNode } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import { parseReplyPrefix } from "../../../../shared/communityMessageParsing";
 import type {
   AnalyticsRange,
   CommunityAccess,
@@ -39,14 +39,6 @@ type WorkspaceRightPanelAvatarSource = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-};
-
-type WorkspaceRightPanelChatMessage = {
-  id: string;
-  sender_id: string;
-  body: string;
-  reply_to_id?: string | null;
-  created_at: string | null;
 };
 
 type WorkspaceRightPanelAiFeedPost = {
@@ -167,10 +159,9 @@ function formatPanelEventTimeLabel(value: string): string | null {
   }).format(date);
 }
 
+
 export function buildWorkspaceRightPanelRecentSignals(params: {
   nowMs?: number;
-  communityMessages: readonly WorkspaceRightPanelChatMessage[];
-  communityMessageById: ReadonlyMap<string, WorkspaceRightPanelChatMessage>;
   aiFeedPosts: readonly WorkspaceRightPanelAiFeedPost[];
   resources: readonly WorkspaceRightPanelResource[];
   events: readonly WorkspaceRightPanelEvent[];
@@ -204,46 +195,6 @@ export function buildWorkspaceRightPanelRecentSignals(params: {
         return b.sortMs - a.sortMs;
       })
       .map(({ sortMs: _sortMs, ...signal }) => signal);
-
-  const sortedMessages = [...params.communityMessages]
-    .filter((message) => !String(message.id ?? "").startsWith("pending-"))
-    .map((message) => ({
-      message,
-      createdAtMs: parsePanelSignalTimestampMs(message.created_at),
-    }))
-    .filter((entry): entry is { message: WorkspaceRightPanelChatMessage; createdAtMs: number } => entry.createdAtMs !== null)
-    .sort((a, b) => b.createdAtMs - a.createdAtMs);
-
-  for (const { message, createdAtMs } of sortedMessages) {
-    const senderId = String(message.sender_id ?? "").trim();
-    const senderName = senderId ? params.displayName(senderId) : "Member";
-    const snippet = truncatePanelSignalText(message.body, 160);
-    if (!snippet) continue;
-    const replyToId = String(message.reply_to_id ?? "").trim();
-    const replyTarget = replyToId ? params.communityMessageById.get(replyToId) ?? null : null;
-    const replyBody = replyTarget
-      ? normalizePanelSignalText(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)
-      : "";
-    const replyPreview = truncatePanelSignalText(replyBody || (replyTarget ? "Message" : ""), 90);
-    const signal: WorkspaceRightPanelRecentSignalCandidate = {
-      id: `chat:${message.id}`,
-      kind: "chat",
-      title: senderName,
-      subtitle: snippet,
-      avatar: senderId ? buildAvatar(senderId, senderName) : null,
-      replyContext: replyToId
-        ? {
-            sender: replyTarget ? params.displayName(replyTarget.sender_id) : "Reply",
-            text: replyPreview || "Replied message not loaded",
-          }
-        : null,
-      target: { tab: "chat", itemId: message.id },
-      sortMs: createdAtMs,
-    };
-    if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
-      highlightedSignals.push(signal);
-    }
-  }
 
   const sortedAiPosts = [...params.aiFeedPosts]
     .filter((post) => !post.pending)
@@ -354,6 +305,8 @@ export function buildWorkspaceRightPanelCommunityData(params: {
   displayName: (userId: string) => string;
   formatJoinRequestCreatedAt: (createdAt: string) => string;
   recentSignals: readonly WorkspaceUserPanelRecentSignal[];
+  recentSignalFeed?: ReactNode;
+  recentSignalFeedVersion?: string | null;
   integrations: readonly WorkspaceUserPanelIntegration[];
 }): WorkspaceUserPanelCommunity | null {
   const activeCommunity = params.activeCommunity;
@@ -362,6 +315,8 @@ export function buildWorkspaceRightPanelCommunityData(params: {
     id: activeCommunity.id,
     slug: activeCommunity.slug ?? null,
     name: activeCommunity.name,
+    recentSignalFeed: params.recentSignalFeed ?? null,
+    recentSignalFeedVersion: params.recentSignalFeedVersion ?? null,
     oneLiner: activeCommunity.one_liner ?? null,
     visibility: activeCommunity.visibility ?? null,
     memberCount: params.memberCount,
@@ -426,6 +381,8 @@ export function buildWorkspaceRightPanelUserData(params: {
   onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceRightPanelRecentSignalTarget) => void;
+  onToggleSignalReaction?: (rootId: string, emoji: string) => void;
+  signalQuickReactions?: string[];
   onToggleCommunityMute: (muted: boolean) => Promise<void> | void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
   onApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;

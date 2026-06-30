@@ -1436,6 +1436,8 @@ export default defineSchema({
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
+    // Thread scope: present when typing inside a thread, absent for channel-level typing.
+    rootId: v.optional(v.id("communityInteractionRoots")),
     displayUntil: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1444,6 +1446,386 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_displayUntil", ["communityId", "displayUntil"]),
+
+  communityInteractionRoots: defineTable({
+    communityId: v.id("communities"),
+    actorType: v.union(
+      v.literal("human"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    kind: v.union(
+      v.literal("discussion"),
+      v.literal("announcement"),
+      v.literal("question"),
+      v.literal("resource_share"),
+      v.literal("agent_signal"),
+    ),
+    status: v.union(v.literal("live"), v.literal("hidden"), v.literal("deleted")),
+    visibilityScope: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    title: v.optional(v.string()),
+    contentSummary: v.string(),
+    replyCount: v.number(),
+    reactionSummary: v.array(v.object({
+      emoji: v.string(),
+      count: v.number(),
+    })),
+    idempotencyKey: v.string(),
+    lastReplyAt: v.optional(v.number()),
+    pinnedAt: v.optional(v.number()),
+    lockedAt: v.optional(v.number()),
+    hiddenAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+    editedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_kind_status_createdAt", ["communityId", "kind", "status", "createdAt"])
+    .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
+    .index("by_actorUser", ["actorUserId"])
+    .index("by_actorAgent", ["actorAgentKey"]),
+
+  communityInteractionReplies: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.id("communityInteractionRoots"),
+    seq: v.number(),
+    actorType: v.union(
+      v.literal("human"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    targetReplyId: v.optional(v.id("communityInteractionReplies")),
+    status: v.union(v.literal("live"), v.literal("hidden"), v.literal("deleted")),
+    visibilityScope: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    contentSummary: v.string(),
+    reactionSummary: v.array(v.object({
+      emoji: v.string(),
+      count: v.number(),
+    })),
+    idempotencyKey: v.string(),
+    hiddenAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+    editedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root_seq", ["rootId", "seq"])
+    .index("by_root_createdAt", ["rootId", "createdAt"])
+    .index("by_root_status_createdAt", ["rootId", "status", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
+    .index("by_targetReply", ["targetReplyId"])
+    .index("by_actorUser", ["actorUserId"])
+    .index("by_actorAgent", ["actorAgentKey"]),
+
+  communityInteractionAttachments: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    attachmentKind: v.union(v.literal("image"), v.literal("video"), v.literal("file")),
+    status: v.union(
+      v.literal("uploaded"),
+      v.literal("processing"),
+      v.literal("failed"),
+      v.literal("deleted"),
+    ),
+    name: v.string(),
+    mimeType: v.optional(v.string()),
+    sizeBytes: v.number(),
+    storageId: v.optional(v.id("_storage")),
+    externalUrl: v.optional(v.string()),
+    contentHash: v.optional(v.string()),
+    createdByActorType: v.union(
+      v.literal("human"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("system"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    createdByAgentKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root", ["rootId"])
+    .index("by_reply", ["replyId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_storage", ["storageId"])
+    .index("by_contentHash", ["contentHash"]),
+
+  communityInteractionEmbeds: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    embedKind: v.union(v.literal("link"), v.literal("workspace_ref")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("ready"),
+      v.literal("failed"),
+      v.literal("redacted"),
+    ),
+    visibilityScope: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    sourceUrl: v.optional(v.string()),
+    normalizedSourceUrl: v.optional(v.string()),
+    workspaceRefKind: v.optional(
+      v.union(
+        v.literal("thread"),
+        v.literal("project"),
+        v.literal("file"),
+        v.literal("artifact"),
+        v.literal("run"),
+        v.literal("resource"),
+      ),
+    ),
+    workspaceRefId: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    videoUrl: v.optional(v.string()),
+    fetchedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root", ["rootId"])
+    .index("by_reply", ["replyId"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
+    .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
+
+  communityInteractionContentBlocks: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    blockOrder: v.number(),
+    blockType: v.union(
+      v.literal("markdown_text"),
+      v.literal("image"),
+      v.literal("video"),
+      v.literal("file"),
+      v.literal("link"),
+      v.literal("workspace_ref"),
+      v.literal("mention"),
+    ),
+    text: v.optional(v.string()),
+    url: v.optional(v.string()),
+    attachmentId: v.optional(v.id("communityInteractionAttachments")),
+    embedId: v.optional(v.id("communityInteractionEmbeds")),
+    workspaceRefKind: v.optional(
+      v.union(
+        v.literal("thread"),
+        v.literal("project"),
+        v.literal("file"),
+        v.literal("artifact"),
+        v.literal("run"),
+        v.literal("resource"),
+      ),
+    ),
+    workspaceRefId: v.optional(v.string()),
+    mentionKind: v.optional(
+      v.union(
+        v.literal("user"),
+        v.literal("personal_agent"),
+        v.literal("community_agent"),
+        v.literal("role"),
+      ),
+    ),
+    mentionedUserId: v.optional(v.id("users")),
+    mentionedAgentKey: v.optional(v.string()),
+    mentionedRoleKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root_order", ["rootId", "blockOrder"])
+    .index("by_reply_order", ["replyId", "blockOrder"])
+    .index("by_attachment", ["attachmentId"])
+    .index("by_embed", ["embedId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
+  communityInteractionMentions: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    mentionKind: v.union(
+      v.literal("user"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("role"),
+    ),
+    mentionedUserId: v.optional(v.id("users")),
+    mentionedAgentKey: v.optional(v.string()),
+    mentionedRoleKey: v.optional(v.string()),
+    notifyState: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("suppressed"),
+      v.literal("read"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root", ["rootId"])
+    .index("by_reply", ["replyId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_mentionedUser_createdAt", ["mentionedUserId", "createdAt"])
+    .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
+    .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"]),
+
+  communityInteractionReactions: defineTable({
+    communityId: v.id("communities"),
+    targetType: v.union(v.literal("root"), v.literal("reply")),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    actorType: v.union(
+      v.literal("human"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("system"),
+    ),
+    actorKey: v.string(),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    emoji: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_root", ["rootId"])
+    .index("by_reply", ["replyId"])
+    .index("by_root_actor_emoji", ["rootId", "actorKey", "emoji"])
+    .index("by_reply_actor_emoji", ["replyId", "actorKey", "emoji"])
+    .index("by_actor", ["actorKey"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
+  communityInteractionReadStates: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.id("communityInteractionRoots"),
+    userId: v.id("users"),
+    lastReadAt: v.optional(v.number()),
+    lastReadReplySeq: v.optional(v.number()),
+    hasUnread: v.boolean(),
+    notificationState: v.union(
+      v.literal("default"),
+      v.literal("following"),
+      v.literal("muted"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root_user", ["rootId", "userId"])
+    .index("by_user_community", ["userId", "communityId"])
+    .index("by_user_community_unread_updatedAt", ["userId", "communityId", "hasUnread", "updatedAt"]),
+
+  communityInteractionModerationEvents: defineTable({
+    communityId: v.id("communities"),
+    targetType: v.union(v.literal("root"), v.literal("reply")),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    eventType: v.union(
+      v.literal("edit"),
+      v.literal("hide"),
+      v.literal("unhide"),
+      v.literal("tombstone"),
+      v.literal("lock"),
+      v.literal("unlock"),
+      v.literal("pin"),
+      v.literal("unpin"),
+      v.literal("privacy_purge_requested"),
+      v.literal("privacy_purged"),
+    ),
+    actorType: v.union(
+      v.literal("human"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    previousStatus: v.optional(v.union(v.literal("live"), v.literal("hidden"), v.literal("deleted"))),
+    nextStatus: v.optional(v.union(v.literal("live"), v.literal("hidden"), v.literal("deleted"))),
+    reason: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_root_createdAt", ["rootId", "createdAt"])
+    .index("by_reply_createdAt", ["replyId", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_actorUser_createdAt", ["actorUserId", "createdAt"])
+    .index("by_actorAgent_createdAt", ["actorAgentKey", "createdAt"])
+    .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"]),
+
+  communityInteractionSourceTraceLinks: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    sourceTraceId: v.optional(v.id("communitySourceTraces")),
+    sourceTraceSourceId: v.optional(v.string()),
+    linkState: v.union(v.literal("pending"), v.literal("active"), v.literal("removed")),
+    promotionReason: v.union(
+      v.literal("manual"),
+      v.literal("moderator"),
+      v.literal("high_signal"),
+      v.literal("compiler_candidate"),
+      v.literal("agent_signal"),
+    ),
+    actorType: v.union(
+      v.literal("human"),
+      v.literal("personal_agent"),
+      v.literal("community_agent"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root", ["rootId"])
+    .index("by_reply", ["replyId"])
+    .index("by_sourceTrace", ["sourceTraceId"])
+    .index("by_community_state_createdAt", ["communityId", "linkState", "createdAt"])
+    .index("by_community_sourceId", ["communityId", "sourceTraceSourceId"]),
+
+  communityInteractionLegacyChatLinks: defineTable({
+    communityId: v.id("communities"),
+    threadId: v.id("communityChatThreads"),
+    messageId: v.id("communityChatMessages"),
+    targetMessageId: v.optional(v.id("communityChatMessages")),
+    linkKind: v.union(v.literal("root"), v.literal("reply")),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+    replyId: v.optional(v.id("communityInteractionReplies")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_message", ["messageId"])
+    .index("by_thread_message", ["threadId", "messageId"])
+    .index("by_root", ["rootId"])
+    .index("by_reply", ["replyId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_linkKind_createdAt", ["communityId", "linkKind", "createdAt"]),
 
   dmConversations: defineTable({
     kind: v.literal("direct"),
@@ -1800,6 +2182,8 @@ export default defineSchema({
     muted: v.boolean(),
     mutedUntil: v.optional(v.number()),
     chatLastSeenSeq: v.optional(v.number()),
+    // Timestamp boundary for the canonical chat "new messages" divider (roots order by created_at).
+    chatLastSeenAt: v.optional(v.number()),
     aiFeedLastSeenAt: v.optional(v.number()),
     resourcesLastSeenAt: v.optional(v.number()),
     eventsLastSeenAt: v.optional(v.number()),
@@ -2100,6 +2484,7 @@ export default defineSchema({
     communityId: v.id("communities"),
     sourceType: v.union(
       v.literal("chat"),
+      v.literal("interaction"),
       v.literal("ai_feed"),
       v.literal("resource"),
       v.literal("workflow_run"),

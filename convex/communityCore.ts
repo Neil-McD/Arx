@@ -90,6 +90,7 @@ export type CommunityTypingPresenceLike = {
   _id: any;
   communityId: any;
   userId: any;
+  rootId?: any;
   displayUntil: number;
   createdAt: number;
   updatedAt: number;
@@ -192,6 +193,7 @@ export type CommunityMemberSettingsLike = {
   muted: boolean;
   mutedUntil?: number;
   chatLastSeenSeq?: number;
+  chatLastSeenAt?: number;
   aiFeedLastSeenAt?: number;
   resourcesLastSeenAt?: number;
   eventsLastSeenAt?: number;

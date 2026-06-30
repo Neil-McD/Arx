@@ -101,6 +101,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityMessageById: WebCommunityChatPanelProps["communityMessageById"];
   messageReactions: WebCommunityChatPanelProps["messageReactions"];
   typingPresence: WebCommunityChatPanelProps["typingPresence"];
+  onThreadTypingSignal: WebCommunityChatPanelProps["onThreadTypingSignal"];
   profilesByUserId: WebCommunityChatPanelProps["profilesByUserId"];
   editingMessageId: WebCommunityChatPanelProps["editingMessageId"];
   editingMessageText: WebCommunityChatPanelProps["editingMessageText"];
@@ -108,6 +109,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
   replyingToMessage: WebCommunityChatPanelProps["replyingToMessage"];
   communityAttachments: WebCommunityChatPanelProps["communityAttachments"];
   communityMessageInput: WebCommunityChatPanelProps["communityMessageInput"];
+  communityMessageMentions: WebCommunityChatPanelProps["communityMessageMentions"];
+  setCommunityMessageMentions: WebCommunityChatPanelProps["setCommunityMessageMentions"];
   isSendingCommunityMessage: WebCommunityChatPanelProps["isSendingCommunityMessage"];
   communityChatError: WebCommunityChatPanelProps["communityChatError"];
   isUserAtBottom: WebCommunityChatPanelProps["isUserAtBottom"];
@@ -122,6 +125,9 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onScrollToBottom: WebCommunityChatPanelProps["onScrollToBottom"];
   onSetReplyingToMessage: WebCommunityChatPanelProps["onSetReplyingToMessage"];
   onRemoveCommunityAttachment: WebCommunityChatPanelProps["onRemoveCommunityAttachment"];
+  onCommunityAttachmentError: WebCommunityChatPanelProps["onCommunityAttachmentError"];
+  onIngestCommunityAttachmentsFromFileList:
+    WebCommunityChatPanelProps["onIngestCommunityAttachmentsFromFileList"];
   onCommunityFileInputChange: WebCommunityChatPanelProps["onCommunityFileInputChange"];
   onCommunityAttachmentDrop: WebCommunityChatPanelProps["onCommunityAttachmentDrop"];
   onCommunityAttachmentDragEnter: WebCommunityChatPanelProps["onCommunityAttachmentDragEnter"];
@@ -151,7 +157,10 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onSaveEdit: WebCommunityChatPanelProps["onSaveEdit"];
   onCancelEdit: WebCommunityChatPanelProps["onCancelEdit"];
   voiceButtonProps: WebCommunityChatPanelProps["voiceButtonProps"];
+  drawerVoiceButtonProps: WebCommunityChatPanelProps["drawerVoiceButtonProps"];
+  onCommunityVoiceInputClick: WebCommunityChatPanelProps["onCommunityVoiceInputClick"];
   lightboxModalProps: WebCommunityChatPanelProps["lightboxModalProps"];
+  interactionProjection: WebCommunityChatPanelProps["interactionProjection"];
 };
 
 export function buildWebCommunitySurfaceProjection(
@@ -326,6 +335,7 @@ export function buildWebCommunitySurfaceProjection(
     communityMessageById: params.communityMessageById,
     messageReactions: params.messageReactions,
     typingPresence: params.typingPresence,
+    onThreadTypingSignal: params.onThreadTypingSignal,
     profilesByUserId: params.profilesByUserId,
     editingMessageId: params.editingMessageId,
     editingMessageText: params.editingMessageText,
@@ -333,6 +343,8 @@ export function buildWebCommunitySurfaceProjection(
     replyingToMessage: params.replyingToMessage,
     communityAttachments: params.communityAttachments,
     communityMessageInput: params.communityMessageInput,
+    communityMessageMentions: params.communityMessageMentions,
+    setCommunityMessageMentions: params.setCommunityMessageMentions,
     isSendingCommunityMessage: params.isSendingCommunityMessage,
     communityChatError: params.communityChatError,
     isUserAtBottom: params.isUserAtBottom,
@@ -348,6 +360,8 @@ export function buildWebCommunitySurfaceProjection(
     onScrollToBottom: params.onScrollToBottom,
     onSetReplyingToMessage: params.onSetReplyingToMessage,
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,
+    onCommunityAttachmentError: params.onCommunityAttachmentError,
+    onIngestCommunityAttachmentsFromFileList: params.onIngestCommunityAttachmentsFromFileList,
     onCommunityFileInputChange: params.onCommunityFileInputChange,
     onCommunityAttachmentDrop: params.onCommunityAttachmentDrop,
     onCommunityAttachmentDragEnter: params.onCommunityAttachmentDragEnter,
@@ -377,7 +391,10 @@ export function buildWebCommunitySurfaceProjection(
     onSaveEdit: params.onSaveEdit,
     onCancelEdit: params.onCancelEdit,
     voiceButtonProps: params.voiceButtonProps,
+    drawerVoiceButtonProps: params.drawerVoiceButtonProps,
+    onCommunityVoiceInputClick: params.onCommunityVoiceInputClick,
     lightboxModalProps: params.lightboxModalProps,
+    interactionProjection: params.interactionProjection,
   };
 
   return {

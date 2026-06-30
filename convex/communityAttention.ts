@@ -1,8 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   type CommunityMemberSettingsLike,
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
@@ -27,6 +25,22 @@ type CommunityAttentionRow = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  chat_last_seen_at: number | null;
+};
+
+type CommunityInteractionRootLike = {
+  _id: any;
+  communityId: any;
+  status: "live" | "hidden" | "deleted";
+  lastReplyAt?: number;
+  createdAt: number;
+};
+
+type CommunityInteractionReplyLike = {
+  _id: any;
+  communityId: any;
+  status: "live" | "hidden" | "deleted";
+  createdAt: number;
 };
 
 type CommunityEventLike = {
@@ -66,32 +80,30 @@ async function getCommunityMemberSettingsRow(
     .first()) as CommunityMemberSettingsLike | null;
 }
 
-async function getCanonicalCommunityChatThread(
-  ctx: any,
-  communityId: any,
-): Promise<CommunityChatThreadLike | null> {
-  const rows = (await ctx.db
-    .query("communityChatThreads" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityChatThreadLike[];
-  if (rows.length === 0) return null;
-  rows.sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt);
-  return rows[0] ?? null;
-}
-
-async function getLatestCommunityChatSeq(
+async function getLatestCommunityChatActivityAt(
   ctx: any,
   communityId: any,
 ): Promise<number | null> {
-  const thread = await getCanonicalCommunityChatThread(ctx, communityId);
-  if (!thread?._id) return null;
-  const latest = (await ctx.db
-    .query("communityChatMessages" as any)
-    .withIndex("by_thread_seq", (q: any) => q.eq("threadId", thread._id))
+  const latestRoot = (await ctx.db
+    .query("communityInteractionRoots" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "live"),
+    )
     .order("desc")
-    .take(1)) as CommunityChatMessageLike[];
-  const seq = latest[0]?.seq;
-  return typeof seq === "number" && Number.isFinite(seq) && seq > 0 ? Math.floor(seq) : null;
+    .first()) as CommunityInteractionRootLike | null;
+  const latestReply = (await ctx.db
+    .query("communityInteractionReplies" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "live"),
+    )
+    .order("desc")
+    .first()) as CommunityInteractionReplyLike | null;
+  const markers = [
+    normalizePositiveMarker(latestRoot?.createdAt),
+    normalizePositiveMarker(latestRoot?.lastReplyAt),
+    normalizePositiveMarker(latestReply?.createdAt),
+  ].filter((value): value is number => value !== null);
+  return markers.length > 0 ? Math.max(...markers) : null;
 }
 
 async function getLatestCommunityAiFeedCreatedAt(
@@ -159,12 +171,12 @@ async function getCommunityAttentionRow(
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
   const [
-    latestChatSeq,
+    latestChatActivityAt,
     latestAiFeedCreatedAt,
     latestResourcesCreatedAt,
     latestEventsUpdatedAt,
   ] = await Promise.all([
-    getLatestCommunityChatSeq(ctx, communityId),
+    getLatestCommunityChatActivityAt(ctx, communityId),
     getLatestCommunityAiFeedCreatedAt(ctx, communityId),
     getLatestCommunityResourcesCreatedAt(ctx, communityId),
     getLatestCommunityEventsUpdatedAt(ctx, communityId),
@@ -172,8 +184,8 @@ async function getCommunityAttentionRow(
   return {
     community_id: String(communityId),
     chat:
-      typeof latestChatSeq === "number" &&
-      latestChatSeq > Math.max(0, Math.floor(settingsRow?.chatLastSeenSeq ?? 0)),
+      typeof latestChatActivityAt === "number" &&
+      latestChatActivityAt > Math.max(0, Math.floor(settingsRow?.chatLastSeenAt ?? 0)),
     ai_feed:
       typeof latestAiFeedCreatedAt === "number" &&
       latestAiFeedCreatedAt > Math.max(0, Math.floor(settingsRow?.aiFeedLastSeenAt ?? 0)),
@@ -183,6 +195,8 @@ async function getCommunityAttentionRow(
     events:
       typeof latestEventsUpdatedAt === "number" &&
       latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
+    chat_last_seen_at:
+      typeof settingsRow?.chatLastSeenAt === "number" ? Math.floor(settingsRow.chatLastSeenAt) : null,
   };
 }
 
@@ -198,12 +212,14 @@ async function upsertCommunitySurfaceSeen(args: {
   const existing = await getCommunityMemberSettingsRow(ctx, communityId, userId);
 
   if (surface === "chat") {
-    const latestChatSeq = await getLatestCommunityChatSeq(ctx, communityId);
-    if (latestChatSeq === null) return;
-    if ((existing?.chatLastSeenSeq ?? 0) >= latestChatSeq) return;
+    const latestChatActivityAt = await getLatestCommunityChatActivityAt(ctx, communityId);
+    if (latestChatActivityAt === null) return;
+    const requestedChatSeenAt = normalizePositiveMarker(args.seenAtMs) ?? latestChatActivityAt;
+    const nextChatLastSeenAt = Math.min(latestChatActivityAt, requestedChatSeenAt);
+    if ((existing?.chatLastSeenAt ?? 0) >= nextChatLastSeenAt) return;
     if (existing) {
       await ctx.db.patch(existing._id as any, {
-        chatLastSeenSeq: latestChatSeq,
+        chatLastSeenAt: nextChatLastSeenAt,
         updatedAt: nowMs,
       });
       return;
@@ -212,7 +228,7 @@ async function upsertCommunitySurfaceSeen(args: {
       communityId,
       userId,
       muted: false,
-      chatLastSeenSeq: latestChatSeq,
+      chatLastSeenAt: nextChatLastSeenAt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -347,6 +363,43 @@ export const markCommunitySurfaceSeen = mutation({
       surface: args.surface,
       seenAtMs: args.seenAtMs ?? null,
       nowMs: args.nowMs ?? Date.now(),
+    });
+    return { ok: true };
+  },
+});
+
+// Advances the canonical-chat "new messages" divider boundary (created_at timestamp).
+// Kept separate so the divider can persist while reading and only move forward
+// when the reader leaves / catches up.
+export const markCommunityChatReadAt = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    seenAtMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const nowMs = Date.now();
+    const seenAt = Math.max(0, Math.floor(args.seenAtMs ?? nowMs));
+    const existing = await getCommunityMemberSettingsRow(ctx, args.communityId, userId);
+    if (existing) {
+      if ((existing.chatLastSeenAt ?? 0) >= seenAt) return { ok: true };
+      await ctx.db.patch(existing._id as any, { chatLastSeenAt: seenAt, updatedAt: nowMs });
+      return { ok: true };
+    }
+    await ctx.db.insert("communityMemberSettings" as any, {
+      communityId: args.communityId,
+      userId,
+      muted: false,
+      chatLastSeenAt: seenAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
     });
     return { ok: true };
   },

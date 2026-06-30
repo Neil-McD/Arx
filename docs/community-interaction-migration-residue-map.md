@@ -1,0 +1,53 @@
+# Community Interaction Migration Residue Map
+
+This map is the deletion queue for the community chat substrate migration. It separates necessary migration bridges from accidental drift.
+
+## Classification Rules
+
+- `KEEP TEMPORARILY`: required until a named migration condition is complete.
+- `BLOCKED BY PARITY`: cannot be deleted until canonical interaction behavior reaches feature parity.
+- `DELETE CANDIDATE`: should be removed after a narrow proof or live smoke confirms no first-party call path needs it.
+
+## Current Residue
+
+| ID | Residue | Classification | Current Owner | Delete Condition |
+|---|---|---|---|---|
+| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` | `convex/communityChat.ts`, `shared/cloudCommunityChatGateway.ts` | Delete after projection-disabled fallback and any remaining legacy optimistic-row dependencies no longer need it. |
+| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `convex/communityInteractionLegacyBridge.ts` | Delete after historical chat rows are fully backfilled and no UI or adapter needs legacy-to-canonical id mapping. |
+| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` | `convex/communityInteractionAttachmentBridge.ts`, `convex/communityInteractionLegacyAttachments.ts`, `apps/web/src/components/communityInteractionFeed.tsx` | Delete after historical attachment backfill and projection rendering are canonical-only. |
+| R-005 | Projection feature flag and legacy timeline fallback | `KEEP TEMPORARILY` | `VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION`, `WebCommunityChatPanel`, `useCommunityChatRealtime` | Delete after canonical projection is the only community chat surface in staging and production. |
+| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` | `convex/communityInteractionBackfill.ts` | Delete after historical `communityChatMessages` are migrated and audited. |
+
+## Removed Residue
+
+| ID | Residue | Result |
+|---|---|---|
+| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer. New canonical sends no longer create `communityChatMessages`, `communityChatThreads`, or `communityInteractionLegacyChatLinks`. |
+
+## Remaining Legacy Chat Row Blockers
+
+- Legacy timeline fallback: `community:createThreadUserMessage`, `community:listThreadMessages`, legacy reactions, and projection-disabled realtime still use `communityChatMessages`.
+- Archive and knowledge compatibility: old legacy rows still feed chat archive documents and archive backfill.
+- Context and digest compatibility: recent context and weekly email digests still read legacy chat rows.
+- Cleanup/account compatibility: account deletion, anonymous cleanup, and community lifecycle cleanup still need legacy chat row reachability.
+- Historical migration: legacy chat backfill still reads old `communityChatMessages` to materialize canonical interactions.
+- No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, and community attention chat dots no longer require legacy chat row replacement; projection-active sends no longer fall back to the legacy chat writer when the canonical writer is missing.
+
+## Drift Boundaries
+
+- Canonical interaction reads must not use legacy chat rows as source-of-truth.
+- Canonical interaction writes must not insert legacy chat rows directly.
+- Canonical composer writes must not insert legacy chat rows or legacy chat links.
+- Canonical read bundles must prefer `communityInteractionAttachments`; legacy attachment hydration may only run as an absent-canonical-row fallback until historical attachments are backfilled.
+- The web interaction gateway must not call legacy chat mutations.
+- The shared community send controller may fall back to legacy sends only when canonical projection is inactive; when projection is active, a missing canonical writer fails closed.
+- Canonical projection reply targets without a canonical root id fail closed.
+- Canonical projection sends must not require legacy-shaped row replacement; legacy returned rows are compatibility outputs only.
+- Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.
+- Legacy chat realtime must remain scoped to the legacy timeline fallback; canonical projection refresh must use canonical interaction reads/subscriptions.
+
+## Next Deletion Order
+
+1. Backfill historical legacy attachments into canonical attachment rows.
+2. Make canonical projection the only community chat UI.
+3. Delete legacy chat reads and backfill/admin tools after data migration is audited.
