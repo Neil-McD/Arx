@@ -222,24 +222,26 @@ It also adds `interaction` as a product-owned `communitySourceTraces.sourceType`
 
 ## Current Write-Core Slice
 
-The first write API slice exposes:
+The current public write API exposes:
 
-- `createCommunityInteractionRoot`
-- `createCommunityInteractionReply`
+- `createCommunityInteractionComposerMessage`
 
 Rules:
 
-- first slice writes are human-authored only
-- human-authored writes cannot create `agent_signal` roots
+- member-visible writes are human-authored only
+- the composer creates canonical roots and replies directly; generic public root/reply mutations are not exposed
+- new composer roots are `discussion` roots with `community` visibility
+- composer replies inherit the root visibility and cannot broaden it
 - every write requires `idempotencyKey`
 - duplicate root writes return the existing root bundle
 - duplicate reply writes return the existing reply bundle when the key belongs to the same root
 - reply writes create a flat one-level drawer under the root
-- `targetReplyId` is quote/context only and must belong to the same root
-- reply visibility cannot be broader than root visibility
-- typed content blocks are normalized before storage
-- link and workspace reference blocks create pending `communityInteractionEmbeds`
-- mention blocks create canonical `communityInteractionMentions`
+- `replyToMessageId` is quote/context only and must resolve inside the same root when present
+- composer text is normalized into typed canonical content blocks before storage
+- link blocks create pending `communityInteractionEmbeds`
+- user mentions are capped, deduped, resolved to existing users, and must pass community chat access
+- mention rows create canonical `communityInteractionMentions`
+- prepared attachments create canonical `communityInteractionAttachments`
 - write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
 
 ## Current Read-Model Slice
@@ -253,10 +255,13 @@ Rules:
 
 - root reads are access-gated by community membership
 - root reads use bounded indexed reads over live roots
+- root reads return only `community` and `public` roots; `private` and `admin` scopes require a separate future/admin read API
 - root reads may hydrate content blocks, embeds, mentions, and reaction summaries
 - root reads do not hydrate drawer replies inline
 - reply reads are access-gated through the root community
+- reply reads require a live community/public-readable root
 - reply reads use bounded indexed reads by `rootId + seq`
+- reply reads return only live `community` and `public` replies
 - reply reads return only one-level drawer replies
 - read APIs do not use legacy chat tables as source-of-truth
 - read bundles prefer canonical `communityInteractionAttachments` rows before using legacy attachment fallback
@@ -300,6 +305,7 @@ Rules:
 - composer writes must not create `communityInteractionLegacyChatLinks`
 - composer writes may include bounded, already-prepared attachment metadata
 - composer attachment rows are written to `communityInteractionAttachments`
+- composer mentions are limited to existing users who can access the target community chat
 - the mutation returns an empty legacy `rows` array; canonical projection completion depends on canonical mutation success and idempotency-key reconciliation
 - pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
 - drawer replies require a canonical `rootId`; optional reply targets may resolve through canonical reply ids or pre-existing legacy links

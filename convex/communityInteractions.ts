@@ -37,7 +37,6 @@ type InteractionActorType = "human" | "personal_agent" | "community_agent" | "sy
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
 type InteractionStatus = "live" | "hidden" | "deleted";
 type InteractionVisibilityScope = "private" | "admin" | "community" | "public";
-type InteractionBlockType = "markdown_text" | "link" | "workspace_ref" | "mention";
 type WorkspaceRefKind = "thread" | "project" | "file" | "artifact" | "run" | "resource";
 type MentionKind = "user" | "personal_agent" | "community_agent" | "role";
 
@@ -173,23 +172,14 @@ type NormalizedContentBlock =
 const MAX_INTERACTION_BLOCKS_PER_WRITE = 24;
 const MAX_INTERACTION_TEXT_CHARS = 8000;
 const MAX_INTERACTION_SUMMARY_CHARS = 500;
-const MAX_INTERACTION_TITLE_CHARS = 180;
 const MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS = 160;
 const MAX_INTERACTION_URL_CHARS = 2048;
-const MAX_WORKSPACE_REF_ID_CHARS = 512;
-const MAX_MENTION_KEY_CHARS = 160;
 const MAX_INTERACTION_ROOT_READ_LIMIT = 50;
 const MAX_INTERACTION_REPLY_READ_LIMIT = 100;
 const MAX_INTERACTION_EMBEDS_PER_BUNDLE = 24;
 const MAX_INTERACTION_MENTIONS_PER_BUNDLE = 24;
 const MAX_VIEWER_REACTIONS_PER_TARGET = 24;
-
-const visibilityScopeValidator = v.union(
-  v.literal("private"),
-  v.literal("admin"),
-  v.literal("community"),
-  v.literal("public"),
-);
+const MAX_INTERACTION_MENTIONS_PER_WRITE = 24;
 
 const rootKindValidator = v.union(
   v.literal("discussion"),
@@ -197,22 +187,6 @@ const rootKindValidator = v.union(
   v.literal("question"),
   v.literal("resource_share"),
   v.literal("agent_signal"),
-);
-
-const workspaceRefKindValidator = v.union(
-  v.literal("thread"),
-  v.literal("project"),
-  v.literal("file"),
-  v.literal("artifact"),
-  v.literal("run"),
-  v.literal("resource"),
-);
-
-const mentionKindValidator = v.union(
-  v.literal("user"),
-  v.literal("personal_agent"),
-  v.literal("community_agent"),
-  v.literal("role"),
 );
 
 const interactionAttachmentInputValidator = v.object({
@@ -227,39 +201,8 @@ const interactionAttachmentInputValidator = v.object({
   truncated: v.optional(v.boolean()),
 });
 
-const contentBlockInputValidator = v.union(
-  v.object({
-    blockType: v.literal("markdown_text"),
-    text: v.string(),
-  }),
-  v.object({
-    blockType: v.literal("link"),
-    url: v.string(),
-    text: v.optional(v.string()),
-  }),
-  v.object({
-    blockType: v.literal("workspace_ref"),
-    workspaceRefKind: workspaceRefKindValidator,
-    workspaceRefId: v.string(),
-    text: v.optional(v.string()),
-  }),
-  v.object({
-    blockType: v.literal("mention"),
-    mentionKind: mentionKindValidator,
-    mentionedUserId: v.optional(v.id("users")),
-    mentionedAgentKey: v.optional(v.string()),
-    mentionedRoleKey: v.optional(v.string()),
-    text: v.optional(v.string()),
-  }),
-);
-
 function normalizeBoundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
-}
-
-function normalizeOptionalBoundedText(raw: unknown, maxLength: number): string | undefined {
-  const text = normalizeBoundedText(raw, maxLength);
-  return text || undefined;
 }
 
 function normalizeIdempotencyKey(raw: unknown): string {
@@ -380,74 +323,6 @@ function extractLinkBlocksFromText(text: string): NormalizedContentBlock[] {
   return out;
 }
 
-function normalizeWorkspaceRefId(raw: unknown): string {
-  const id = normalizeBoundedText(raw, MAX_WORKSPACE_REF_ID_CHARS);
-  if (!id) throw new Error("interaction_workspace_ref_id_required");
-  return id;
-}
-
-function normalizeMentionKey(raw: unknown): string | undefined {
-  return normalizeOptionalBoundedText(raw, MAX_MENTION_KEY_CHARS);
-}
-
-function normalizeContentBlocks(rawBlocks: unknown[]): NormalizedContentBlock[] {
-  const out: NormalizedContentBlock[] = [];
-  for (const raw of rawBlocks.slice(0, MAX_INTERACTION_BLOCKS_PER_WRITE)) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const block = raw as Record<string, unknown>;
-    const blockType = block.blockType;
-    if (blockType === "markdown_text") {
-      const text = normalizeBoundedText(block.text, MAX_INTERACTION_TEXT_CHARS);
-      if (text) out.push({ blockType, text });
-      continue;
-    }
-    if (blockType === "link") {
-      const { sourceUrl, normalizedSourceUrl } = normalizeUrl(block.url);
-      out.push({
-        blockType,
-        url: sourceUrl,
-        normalizedSourceUrl,
-        text: normalizeOptionalBoundedText(block.text, MAX_INTERACTION_TEXT_CHARS),
-      });
-      continue;
-    }
-    if (blockType === "workspace_ref") {
-      const workspaceRefKind = block.workspaceRefKind as WorkspaceRefKind;
-      out.push({
-        blockType,
-        workspaceRefKind,
-        workspaceRefId: normalizeWorkspaceRefId(block.workspaceRefId),
-        text: normalizeOptionalBoundedText(block.text, MAX_INTERACTION_TEXT_CHARS),
-      });
-      continue;
-    }
-    if (blockType === "mention") {
-      const mentionKind = block.mentionKind as MentionKind;
-      const mentionedAgentKey = normalizeMentionKey(block.mentionedAgentKey);
-      const mentionedRoleKey = normalizeMentionKey(block.mentionedRoleKey);
-      if (mentionKind === "user" && !block.mentionedUserId) {
-        throw new Error("interaction_mention_user_required");
-      }
-      if ((mentionKind === "personal_agent" || mentionKind === "community_agent") && !mentionedAgentKey) {
-        throw new Error("interaction_mention_agent_required");
-      }
-      if (mentionKind === "role" && !mentionedRoleKey) {
-        throw new Error("interaction_mention_role_required");
-      }
-      out.push({
-        blockType,
-        mentionKind,
-        ...(block.mentionedUserId ? { mentionedUserId: block.mentionedUserId } : {}),
-        ...(mentionedAgentKey ? { mentionedAgentKey } : {}),
-        ...(mentionedRoleKey ? { mentionedRoleKey } : {}),
-        text: normalizeOptionalBoundedText(block.text, MAX_INTERACTION_TEXT_CHARS),
-      });
-    }
-  }
-  if (out.length === 0) throw new Error("interaction_content_required");
-  return out;
-}
-
 function contentSummary(blocks: NormalizedContentBlock[]): string {
   const parts = blocks.map((block) => {
     if (block.blockType === "markdown_text") return block.text;
@@ -500,6 +375,66 @@ function resolveReplyVisibilityScope(
     throw new Error("interaction_reply_visibility_exceeds_root");
   }
   return next;
+}
+
+function interactionVisibilityIsCommunityReadable(scope: InteractionVisibilityScope): boolean {
+  return scope === "community" || scope === "public";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isInteractionRootRow(value: unknown): value is InteractionRootRow {
+  return (
+    isRecord(value) &&
+    typeof value.kind === "string" &&
+    typeof value.status === "string" &&
+    typeof value.visibilityScope === "string" &&
+    typeof value.replyCount === "number" &&
+    !("rootId" in value)
+  );
+}
+
+function isInteractionReplyRow(value: unknown): value is InteractionReplyRow {
+  return (
+    isRecord(value) &&
+    Boolean(value.rootId) &&
+    typeof value.seq === "number" &&
+    typeof value.status === "string" &&
+    typeof value.visibilityScope === "string"
+  );
+}
+
+function assertCommunityReadableRoot(root: InteractionRootRow): void {
+  if (root.status !== "live" || !interactionVisibilityIsCommunityReadable(root.visibilityScope)) {
+    throw new Error("interaction_root_not_readable");
+  }
+}
+
+function assertCommunityReadableReply(reply: InteractionReplyRow): void {
+  if (reply.status !== "live" || !interactionVisibilityIsCommunityReadable(reply.visibilityScope)) {
+    throw new Error("interaction_reply_not_readable");
+  }
+}
+
+async function loadCommunityInteractionTarget(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  targetId: string;
+}): Promise<{ target: InteractionRootRow | InteractionReplyRow; communityId: any }> {
+  const target = await args.ctx.db.get(args.targetId as any);
+  if (!target) throw new Error("interaction_target_not_found");
+  if (args.targetType === "root") {
+    if (!isInteractionRootRow(target)) throw new Error("interaction_target_type_mismatch");
+    return { target, communityId: target.communityId };
+  }
+  if (!isInteractionReplyRow(target)) throw new Error("interaction_target_type_mismatch");
+  return { target, communityId: target.communityId };
+}
+
+function assertLiveInteractionTarget(target: InteractionRootRow | InteractionReplyRow): void {
+  if (target.status !== "live") throw new Error("interaction_target_not_live");
 }
 
 async function getExistingRootByIdempotencyKey(ctx: any, communityId: any, idempotencyKey: string) {
@@ -1267,146 +1202,36 @@ async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
   return Math.max(0, Math.floor(last?.seq ?? 0)) + 1;
 }
 
-export const createCommunityInteractionRoot = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    idempotencyKey: v.string(),
-    kind: rootKindValidator,
-    visibilityScope: v.optional(visibilityScopeValidator),
-    title: v.optional(v.string()),
-    contentBlocks: v.array(contentBlockInputValidator),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    await requireProfileSetupCompleteForUser(ctx, userId);
-    if (args.kind === "agent_signal") {
-      throw new Error("interaction_agent_signal_actor_required");
+async function resolveMentionedUserIdsForInteractionWrite(args: {
+  ctx: any;
+  communityId: any;
+  mentions: Array<{ userId: any }>;
+}): Promise<any[]> {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const mention of args.mentions) {
+    const userId = mention.userId;
+    const normalized = normalizeIdValue(userId);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    if (out.length >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
+      throw new Error("interaction_mentions_limit_exceeded");
     }
-
-    const idempotencyKey = normalizeIdempotencyKey(args.idempotencyKey);
-    const existing = await getExistingRootByIdempotencyKey(ctx, args.communityId, idempotencyKey);
-    if (existing) return await mapRootBundle(ctx, existing, true);
-
-    const nowMs = Date.now();
-    const contentBlocks = normalizeContentBlocks(args.contentBlocks);
-    const visibilityScope = args.visibilityScope ?? "community";
-    const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
-      communityId: args.communityId,
-      actorType: "human",
-      actorUserId: userId,
-      kind: args.kind,
-      status: "live",
-      visibilityScope,
-      ...(normalizeOptionalBoundedText(args.title, MAX_INTERACTION_TITLE_CHARS)
-        ? { title: normalizeOptionalBoundedText(args.title, MAX_INTERACTION_TITLE_CHARS) }
-        : {}),
-      contentSummary: contentSummary(contentBlocks),
-      replyCount: 0,
-      reactionSummary: [],
-      idempotencyKey,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await insertContentBlocksForTarget({
-      ctx,
-      communityId: args.communityId,
-      rootId,
-      visibilityScope,
-      blocks: contentBlocks,
-      nowMs,
-    });
-    const root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
-    if (!root) throw new Error("interaction_root_create_failed");
-    return await mapRootBundle(ctx, root, false);
-  },
-});
-
-export const createCommunityInteractionReply = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    rootId: v.id("communityInteractionRoots"),
-    idempotencyKey: v.string(),
-    targetReplyId: v.optional(v.union(v.id("communityInteractionReplies"), v.null())),
-    visibilityScope: v.optional(visibilityScopeValidator),
-    contentBlocks: v.array(contentBlockInputValidator),
-  },
-  handler: async (ctx, args) => {
-    const root = (await ctx.db.get(args.rootId)) as InteractionRootRow | null;
-    if (!root) throw new Error("interaction_root_not_found");
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: root.communityId, userId });
-    await requireProfileSetupCompleteForUser(ctx, userId);
-    if (root.status !== "live" || root.lockedAt) {
-      throw new Error("interaction_root_closed");
+    const user = await args.ctx.db.get(userId);
+    if (!user) throw new Error("interaction_mention_user_not_found");
+    try {
+      await requireCommunityChatAccess({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        userId,
+      });
+    } catch {
+      throw new Error("interaction_mention_user_not_allowed");
     }
-
-    const idempotencyKey = normalizeIdempotencyKey(args.idempotencyKey);
-    const existing = await getExistingReplyByIdempotencyKey(ctx, root.communityId, idempotencyKey);
-    if (existing) {
-      if (normalizeIdValue(existing.rootId) !== normalizeIdValue(root._id)) {
-        throw new Error("interaction_idempotency_key_conflict");
-      }
-      return await mapReplyBundle(ctx, existing, true);
-    }
-
-    let targetReplyId: any | undefined;
-    if (args.targetReplyId) {
-      const targetReply = (await ctx.db.get(args.targetReplyId)) as InteractionReplyRow | null;
-      if (!targetReply || normalizeIdValue(targetReply.rootId) !== normalizeIdValue(root._id)) {
-        throw new Error("interaction_target_reply_invalid");
-      }
-      targetReplyId = targetReply._id;
-    }
-
-    const nowMs = Date.now();
-    const contentBlocks = normalizeContentBlocks(args.contentBlocks);
-    const visibilityScope = resolveReplyVisibilityScope(args.visibilityScope, root.visibilityScope);
-    const seq = await nextReplySeq(ctx, root._id);
-    const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
-      communityId: root.communityId,
-      rootId: root._id,
-      seq,
-      actorType: "human",
-      actorUserId: userId,
-      ...(targetReplyId ? { targetReplyId } : {}),
-      status: "live",
-      visibilityScope,
-      contentSummary: contentSummary(contentBlocks),
-      reactionSummary: [],
-      idempotencyKey,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await insertContentBlocksForTarget({
-      ctx,
-      communityId: root.communityId,
-      replyId,
-      visibilityScope,
-      blocks: contentBlocks,
-      nowMs,
-    });
-    await ctx.db.patch(root._id as any, {
-      replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
-      lastReplyAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
-    if (!reply) throw new Error("interaction_reply_create_failed");
-    return await mapReplyBundle(ctx, reply, false);
-  },
-});
+    out.push(userId);
+  }
+  return out;
+}
 
 async function insertCommunityInteractionMentionRows(args: {
   ctx: any;
@@ -1465,7 +1290,11 @@ export const createCommunityInteractionComposerMessage = mutation({
         ]
       : [];
     const summary = composerContentSummary(contentBlocks, attachments);
-    const mentionedUserIds = (args.mentions ?? []).map((mention) => mention.userId);
+    const mentionedUserIds = await resolveMentionedUserIdsForInteractionWrite({
+      ctx,
+      communityId: args.communityId,
+      mentions: args.mentions ?? [],
+    });
     const nowMs = Date.now();
 
     if (!args.rootId) {
@@ -1655,10 +1484,11 @@ export const listCommunityInteractionRoots = query({
           .order("desc")
           .take(limit))) as InteractionRootRow[];
 
+    const visibleRows = rows.filter((row) => interactionVisibilityIsCommunityReadable(row.visibilityScope));
     const userIdCache = new Map<string, string | null>();
-    const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "root", rows.map((row) => row._id));
+    const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "root", visibleRows.map((row) => row._id));
     const bundles = await Promise.all(
-      rows.map((row) => mapRootBundle(ctx, row, false, userIdCache, viewerMap.get(normalizeIdValue(row._id)) ?? [])),
+      visibleRows.map((row) => mapRootBundle(ctx, row, false, userIdCache, viewerMap.get(normalizeIdValue(row._id)) ?? [])),
     );
     return {
       roots: bundles,
@@ -1678,6 +1508,7 @@ export const listCommunityInteractionReplies = query({
   handler: async (ctx, args) => {
     const root = (await ctx.db.get(args.rootId)) as InteractionRootRow | null;
     if (!root) throw new Error("interaction_root_not_found");
+    assertCommunityReadableRoot(root);
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
@@ -1696,7 +1527,14 @@ export const listCommunityInteractionReplies = query({
       .order("desc")
       .take(MAX_INTERACTION_REPLY_READ_LIMIT)) as InteractionReplyRow[];
     const filtered = rows
-      .filter((row) => row.status === "live")
+      .filter((row) => {
+        try {
+          assertCommunityReadableReply(row);
+          return true;
+        } catch {
+          return false;
+        }
+      })
       .sort((left, right) => left.seq - right.seq)
       .slice(-limit);
     const userIdCache = new Map<string, string | null>();
@@ -1775,9 +1613,12 @@ export const toggleCommunityInteractionReaction = mutation({
   handler: async (ctx, args) => {
     const emoji = String(args.emoji).trim().slice(0, 32);
     if (!emoji) throw new Error("reaction_emoji_required");
-    const target = (await ctx.db.get(args.targetId as any)) as any;
-    if (!target) throw new Error("reaction_target_not_found");
-    const communityId = target.communityId;
+    const { target, communityId } = await loadCommunityInteractionTarget({
+      ctx,
+      targetType: args.targetType,
+      targetId: args.targetId,
+    });
+    assertLiveInteractionTarget(target);
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
@@ -1832,9 +1673,12 @@ export const editCommunityInteractionMessage = mutation({
   handler: async (ctx, args) => {
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
     if (!text) throw new Error("interaction_content_required");
-    const target = (await ctx.db.get(args.targetId as any)) as any;
-    if (!target) throw new Error("interaction_target_not_found");
-    const communityId = target.communityId;
+    const { target, communityId } = await loadCommunityInteractionTarget({
+      ctx,
+      targetType: args.targetType,
+      targetId: args.targetId,
+    });
+    assertLiveInteractionTarget(target);
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
@@ -1895,9 +1739,11 @@ export const deleteCommunityInteractionMessage = mutation({
     targetId: v.string(),
   },
   handler: async (ctx, args) => {
-    const target = (await ctx.db.get(args.targetId as any)) as any;
-    if (!target) throw new Error("interaction_target_not_found");
-    const communityId = target.communityId;
+    const { target, communityId } = await loadCommunityInteractionTarget({
+      ctx,
+      targetType: args.targetType,
+      targetId: args.targetId,
+    });
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
@@ -1921,7 +1767,8 @@ export const deleteCommunityInteractionMessage = mutation({
     const previousStatus = target.status;
     await ctx.db.patch(target._id, { status: "deleted", deletedAt: nowMs, updatedAt: nowMs });
     if (args.targetType === "reply") {
-      const root = (await ctx.db.get(target.rootId as any)) as InteractionRootRow | null;
+      const replyTarget = target as InteractionReplyRow;
+      const root = (await ctx.db.get(replyTarget.rootId as any)) as InteractionRootRow | null;
       if (root) {
         const lastLive = (await ctx.db
           .query("communityInteractionReplies" as any)

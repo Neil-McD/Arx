@@ -9,6 +9,14 @@ const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 
+function section(source: string, heading: string): string {
+  const startToken = `## ${heading}`;
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `${heading} section should exist`);
+  const next = source.indexOf("\n## ", start + startToken.length);
+  return source.slice(start, next < 0 ? source.length : next);
+}
+
 function exportedConstBlock(source: string, exportName: string): string {
   const startToken = `export const ${exportName}`;
   const start = source.indexOf(startToken);
@@ -17,16 +25,46 @@ function exportedConstBlock(source: string, exportName: string): string {
   return source.slice(start, next < 0 ? source.length : next);
 }
 
+function functionBlock(source: string, functionName: string): string {
+  const startTokens = [`async function ${functionName}`, `function ${functionName}`];
+  const startCandidate = startTokens
+    .map((token) => source.indexOf(token))
+    .filter((value) => value >= 0)
+    .sort((a, b) => a - b)[0];
+  assert.notEqual(startCandidate, undefined, `${functionName} should exist`);
+  const start = startCandidate as number;
+  const nextFunction = source.indexOf("\nfunction ", start + functionName.length);
+  const nextAsyncFunction = source.indexOf("\nasync function ", start + functionName.length);
+  const nextExportConst = source.indexOf("\nexport const ", start + functionName.length);
+  const candidates = [nextFunction, nextAsyncFunction, nextExportConst].filter((value) => value >= 0);
+  const end = candidates.length > 0 ? Math.min(...candidates) : source.length;
+  return source.slice(start, end);
+}
+
+function assertNoExportedConst(source: string, exportName: string): void {
+  assert.equal(
+    source.indexOf(`export const ${exportName}`),
+    -1,
+    `${exportName} should not be publicly exported`,
+  );
+}
+
 assert.match(
   packageJson,
   /"check:community-interactions-write-core-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_interactions_write_core_contract_proof\.ts"/,
   "package scripts should expose the community interactions write-core proof",
 );
 
+const writeCoreSection = section(contract, "Current Write-Core Slice");
 assert.match(
-  contract,
-  /Current Write-Core Slice[\s\S]*createCommunityInteractionRoot[\s\S]*createCommunityInteractionReply/,
-  "contract should document the active write-core slice",
+  writeCoreSection,
+  /createCommunityInteractionComposerMessage[\s\S]*generic public root\/reply mutations are not exposed[\s\S]*user mentions are capped, deduped, resolved to existing users, and must pass community chat access/,
+  "contract should document the composer-only public write boundary",
+);
+assert.doesNotMatch(
+  writeCoreSection,
+  /createCommunityInteractionRoot|createCommunityInteractionReply/,
+  "contract should not present generic root/reply mutations as active public write APIs",
 );
 assert.match(
   contract,
@@ -43,12 +81,20 @@ assert.match(
   /Current Async Link Embed Enrichment Slice[\s\S]*Convex never fetches the user-provided source URL directly[\s\S]*source URL fetcher remains authoritative for DNS resolution checks/,
   "contract should document the async link embed fetch boundary",
 );
-assert.match(
-  contract,
-  /human-authored writes cannot create `agent_signal` roots[\s\S]*reply visibility cannot be broader than root visibility/,
-  "contract should constrain first-slice human writes and reply visibility",
+
+assertNoExportedConst(interactions, "createCommunityInteractionRoot");
+assertNoExportedConst(interactions, "createCommunityInteractionReply");
+assert.doesNotMatch(
+  communityFacade,
+  /createCommunityInteractionRoot|createCommunityInteractionReply/,
+  "community facade should not expose generic interaction root/reply writes",
 );
 
+assert.doesNotMatch(
+  interactions,
+  /contentBlockInputValidator|visibilityScopeValidator|workspaceRefKindValidator|mentionKindValidator/,
+  "generic write validators should stay deleted with the public generic write API",
+);
 assert.doesNotMatch(
   interactions,
   /v\.any\(\)|payloadJson/,
@@ -74,16 +120,10 @@ assert.doesNotMatch(
   /upsertCommunitySourceTrace|recordTrustedCommunitySourceTraceCore|communitySourceTraces" as any/,
   "first write-core slice should not promote interactions into community memory",
 );
-
-assert.match(
-  interactions,
-  /const contentBlockInputValidator = v\.union\([\s\S]*v\.literal\("markdown_text"\)[\s\S]*v\.literal\("link"\)[\s\S]*v\.literal\("workspace_ref"\)[\s\S]*v\.literal\("mention"\)/,
-  "write core should accept only typed first-slice content blocks",
-);
 assert.match(
   interactions,
   /MAX_INTERACTION_BLOCKS_PER_WRITE/,
-  "write core should bound content block count",
+  "write core should bound canonical content block hydration",
 );
 assert.match(
   interactions,
@@ -101,145 +141,21 @@ assert.match(
   "reply writes should read existing replies by community idempotency key",
 );
 
-const createRoot = exportedConstBlock(interactions, "createCommunityInteractionRoot");
-assert.doesNotMatch(
-  createRoot,
-  /contentJson|v\.any\(\)|payloadJson/,
-  "public root write should not accept untyped legacy chat payloads",
-);
-assert.match(
-  createRoot,
-  /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*requireProfileSetupCompleteForUser/,
-  "root write should reuse authenticated community chat/profile gates",
-);
-assert.match(
-  createRoot,
-  /const existing = await getExistingRootByIdempotencyKey[\s\S]*if \(existing\) return await mapRootBundle\(ctx, existing, true\)/,
-  "root write should return existing root bundle on duplicate idempotency key",
-);
-assert.match(
-  createRoot,
-  /actorType: "human"[\s\S]*actorUserId: userId/,
-  "first root write slice should be human-authored only",
-);
-assert.match(
-  createRoot,
-  /args\.kind === "agent_signal"[\s\S]*interaction_agent_signal_actor_required/,
-  "first human root write slice should reject agent_signal roots",
-);
-assert.doesNotMatch(
-  createRoot,
-  /actorType: v\.|actorAgentKey: v\.|actorType: args\.actorType/,
-  "public root write args should not accept autonomous actor attribution in this slice",
-);
-assert.match(
-  createRoot,
-  /insertContentBlocksForTarget\([\s\S]*rootId[\s\S]*blocks: contentBlocks/,
-  "root write should write normalized content blocks after root creation",
-);
-assert.doesNotMatch(
-  createRoot,
-  /\bfetch\s*\(|ctx\.scheduler|ctx\.runAction|ctx\.storage\.getUrl|scheduleEmbedEnrichment/,
-  "public root write should not fetch URLs, schedule enrichment, run actions, or resolve storage URLs",
-);
-
-const createReply = exportedConstBlock(interactions, "createCommunityInteractionReply");
-assert.doesNotMatch(
-  createReply,
-  /contentJson|v\.any\(\)|payloadJson/,
-  "public reply write should not accept untyped legacy chat payloads",
-);
-assert.match(
-  createReply,
-  /rootId: v\.id\("communityInteractionRoots"\)/,
-  "reply write should attach directly to a root",
-);
-assert.match(
-  createReply,
-  /targetReplyId: v\.optional\(v\.union\(v\.id\("communityInteractionReplies"\), v\.null\(\)\)\)/,
-  "reply target should be optional quote/context only",
-);
-assert.match(
-  createReply,
-  /targetReply[\s\S]*normalizeIdValue\(targetReply\.rootId\) !== normalizeIdValue\(root\._id\)[\s\S]*interaction_target_reply_invalid/,
-  "reply write should reject target replies outside the same root",
-);
-assert.match(
-  interactions,
-  /resolveReplyVisibilityScope[\s\S]*interaction_reply_visibility_exceeds_root/,
-  "reply writes should not allow broader visibility than the root",
-);
-assert.match(
-  interactions,
-  /async function nextReplySeq\(ctx: any, rootId: any\)[\s\S]*withIndex\("by_root_seq"[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)[\s\S]*Math\.max\(0, Math\.floor\(last\?\.seq \?\? 0\)\) \+ 1/,
-  "reply writes should derive one-level drawer sequence from the latest indexed reply seq",
-);
-assert.match(
-  createReply,
-  /const seq = await nextReplySeq\(ctx, root\._id\)/,
-  "reply write should use the indexed one-level drawer sequence helper",
-);
-assert.match(
-  createReply,
-  /ctx\.db\.patch\(root\._id as any,[\s\S]*replyCount: Math\.max\(0, Math\.floor\(root\.replyCount \?\? 0\)\) \+ 1[\s\S]*lastReplyAt: nowMs/,
-  "reply write should update root reply count and last reply timestamp",
-);
-assert.match(
-  createReply,
-  /if \(existing\) \{[\s\S]*normalizeIdValue\(existing\.rootId\) !== normalizeIdValue\(root\._id\)[\s\S]*interaction_idempotency_key_conflict[\s\S]*return await mapReplyBundle\(ctx, existing, true\)/,
-  "reply write should be idempotent only within the same root",
-);
-assert.match(
-  createReply,
-  /actorType: "human"[\s\S]*actorUserId: userId/,
-  "first reply write slice should be human-authored only",
-);
-assert.match(
-  createReply,
-  /insertContentBlocksForTarget\([\s\S]*replyId[\s\S]*blocks: contentBlocks/,
-  "reply write should write normalized content blocks against the reply target",
-);
-assert.doesNotMatch(
-  createReply,
-  /insertContentBlocksForTarget\([\s\S]{0,220}rootId: root\._id[\s\S]{0,220}replyId/,
-  "reply content blocks should not also be tagged as root content blocks",
-);
-assert.doesNotMatch(
-  createReply,
-  /parentReplyId|replyDepth|depth:/,
-  "reply write should not create recursive reply hierarchy fields",
-);
-assert.doesNotMatch(
-  createReply,
-  /\bfetch\s*\(|ctx\.scheduler|ctx\.runAction|ctx\.storage\.getUrl|scheduleEmbedEnrichment/,
-  "public reply write should not fetch URLs, schedule enrichment, run actions, or resolve storage URLs",
-);
-
 const createComposerMessage = exportedConstBlock(interactions, "createCommunityInteractionComposerMessage");
 assert.match(
   createComposerMessage,
-  /communityInteractionRoots" as any/,
-  "composer bridge should create canonical roots",
+  /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*requireProfileSetupCompleteForUser/,
+  "composer bridge should reuse authenticated community chat/profile gates",
 );
 assert.match(
   createComposerMessage,
-  /communityInteractionReplies" as any/,
-  "composer bridge should create canonical replies",
+  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional[\s\S]*replyToMessageId: v\.optional[\s\S]*mentions: v\.optional\(v\.array\(v\.object\(\{ userId: v\.id\("users"\) \}\)\)\)/,
+  "composer bridge should expose only the canonical composer write shape",
 );
 assert.doesNotMatch(
   createComposerMessage,
-  /createLegacyCompatibilityChatMessageForInteraction|ensureLegacyCompatibilityChatThread|insertLegacyChatLinkIfMissing|mapLegacyCompatibilityMessageRow|communityChatMessages" as any|communityChatThreads" as any|communityInteractionLegacyChatLinks" as any/,
-  "composer bridge should not create legacy compatibility rows or links",
-);
-assert.match(
-  createComposerMessage,
-  /rows:\s*\[\]/,
-  "composer bridge should return an empty legacy rows array",
-);
-assert.match(
-  createComposerMessage,
-  /attachments: v\.optional\(v\.array\(interactionAttachmentInputValidator\)\)/,
-  "composer bridge should accept bounded prepared attachment metadata",
+  /kind: v\.|visibilityScope: v\.|contentBlocks: v\./,
+  "composer bridge should not expose root kind, visibility, or typed block inputs to members",
 );
 assert.match(
   createComposerMessage,
@@ -248,8 +164,68 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
+  /const contentBlocks: NormalizedContentBlock\[\] = text[\s\S]*blockType: "markdown_text"[\s\S]*extractLinkBlocksFromText\(text\)/,
+  "composer bridge should normalize text into canonical typed blocks and async link blocks",
+);
+assert.match(
+  createComposerMessage,
+  /resolveMentionedUserIdsForInteractionWrite\(\{[\s\S]*communityId: args\.communityId[\s\S]*mentions: args\.mentions \?\? \[\]/,
+  "composer bridge should validate mentioned users before inserting mention rows",
+);
+assert.match(
+  createComposerMessage,
+  /communityInteractionRoots" as any[\s\S]*actorType: "human"[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
+  "composer root writes should create only human-authored community discussion roots",
+);
+assert.match(
+  createComposerMessage,
+  /const idempotencyKey = composerIdempotencyKey\(normalizeIdempotencyKey\(args\.idempotencyKey\), "root"\)[\s\S]*getExistingRootByIdempotencyKey/,
+  "composer root writes should be idempotent in the composer root namespace",
+);
+assert.match(
+  createComposerMessage,
+  /if \(normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(args\.communityId\)\)[\s\S]*interaction_root_community_mismatch[\s\S]*root\.status !== "live" \|\| root\.lockedAt[\s\S]*interaction_root_closed/,
+  "composer reply writes should verify root community and live/open state",
+);
+assert.match(
+  createComposerMessage,
+  /resolveOptionalReplyTargetForCanonicalComposer\(\{[\s\S]*replyToMessageId: args\.replyToMessageId \?\? null/,
+  "composer reply quote targets should resolve through the same-root helper",
+);
+assert.match(
+  createComposerMessage,
+  /resolveReplyVisibilityScope\(root\.visibilityScope, root\.visibilityScope\)/,
+  "composer replies should inherit root visibility without a member-supplied broader scope",
+);
+assert.match(
+  createComposerMessage,
+  /const seq = await nextReplySeq\(ctx, root\._id\)/,
+  "composer reply writes should use the indexed one-level drawer sequence helper",
+);
+assert.match(
+  createComposerMessage,
+  /ctx\.db\.patch\(root\._id as any,[\s\S]*replyCount: Math\.max\(0, Math\.floor\(root\.replyCount \?\? 0\)\) \+ 1[\s\S]*lastReplyAt: nowMs/,
+  "composer reply writes should update root reply count and last reply timestamp",
+);
+assert.match(
+  createComposerMessage,
+  /if \(reply && normalizeIdValue\(reply\.rootId\) !== normalizeIdValue\(root\._id\)\)[\s\S]*interaction_idempotency_key_conflict/,
+  "composer reply writes should be idempotent only within the same root",
+);
+assert.match(
+  createComposerMessage,
   /insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
   "composer bridge should write canonical attachment rows for roots and replies",
+);
+assert.match(
+  createComposerMessage,
+  /rows:\s*\[\]/,
+  "composer bridge should return an empty legacy rows array",
+);
+assert.doesNotMatch(
+  createComposerMessage,
+  /createLegacyCompatibilityChatMessageForInteraction|ensureLegacyCompatibilityChatThread|insertLegacyChatLinkIfMissing|mapLegacyCompatibilityMessageRow|communityChatMessages" as any|communityChatThreads" as any|communityInteractionLegacyChatLinks" as any/,
+  "composer bridge should not create legacy compatibility rows or links",
 );
 assert.doesNotMatch(
   createComposerMessage,
@@ -270,6 +246,41 @@ assert.doesNotMatch(
   createComposerMessage,
   /\bfetch\s*\(|ctx\.runAction|ctx\.storage\.getUrl|generateUploadUrl|scrape|crawler|processMedia/,
   "composer bridge should not synchronously fetch URLs, run actions, resolve storage URLs, generate upload URLs, scrape, or process media",
+);
+
+const mentionResolver = functionBlock(interactions, "resolveMentionedUserIdsForInteractionWrite");
+assert.match(
+  mentionResolver,
+  /MAX_INTERACTION_MENTIONS_PER_WRITE[\s\S]*interaction_mentions_limit_exceeded/,
+  "mention resolver should cap mentions per write",
+);
+assert.match(
+  mentionResolver,
+  /args\.ctx\.db\.get\(userId\)[\s\S]*interaction_mention_user_not_found[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId[\s\S]*interaction_mention_user_not_allowed/,
+  "mention resolver should require existing users with community chat access",
+);
+
+const targetLoader = functionBlock(interactions, "loadCommunityInteractionTarget");
+assert.match(
+  targetLoader,
+  /ctx\.db\.get\(args\.targetId as any\)[\s\S]*interaction_target_not_found[\s\S]*isInteractionRootRow[\s\S]*isInteractionReplyRow[\s\S]*interaction_target_type_mismatch/,
+  "target loader should reject missing or wrong-table target ids",
+);
+
+for (const exportName of ["toggleCommunityInteractionReaction", "editCommunityInteractionMessage"] as const) {
+  const block = exportedConstBlock(interactions, exportName);
+  assert.match(
+    block,
+    /loadCommunityInteractionTarget\([\s\S]*assertLiveInteractionTarget\(target\)[\s\S]*requireCommunityChatAccess/,
+    `${exportName} should validate target type, live state, and community access`,
+  );
+}
+
+const deleteMessage = exportedConstBlock(interactions, "deleteCommunityInteractionMessage");
+assert.match(
+  deleteMessage,
+  /loadCommunityInteractionTarget\([\s\S]*requireCommunityChatAccess[\s\S]*requireCommunityModerator/,
+  "delete should validate target type/community and require owner or moderator authority",
 );
 
 const scheduleEmbedEnrichment = interactions.slice(
@@ -373,24 +384,18 @@ assert.match(
 );
 assert.match(
   interactions,
-  /embedKind: "workspace_ref"[\s\S]*status: "pending"[\s\S]*workspaceRefKind[\s\S]*workspaceRefId/,
-  "workspace reference blocks should create pending async embed records",
-);
-assert.match(
-  interactions,
-  /communityInteractionMentions" as any[\s\S]*notifyState: "pending"/,
-  "mention blocks should create canonical pending mention records",
-);
-
-assert.match(
-  communityFacade,
-  /createCommunityInteractionReply as createCommunityInteractionReplyImpl[\s\S]*createCommunityInteractionRoot as createCommunityInteractionRootImpl|createCommunityInteractionRoot as createCommunityInteractionRootImpl[\s\S]*createCommunityInteractionReply as createCommunityInteractionReplyImpl/,
-  "community facade should import interaction write functions",
+  /communityInteractionMentions" as any[\s\S]*mentionKind: "user"[\s\S]*notifyState: "pending"/,
+  "validated user mentions should create canonical pending mention rows",
 );
 assert.match(
   communityFacade,
-  /export const createCommunityInteractionRoot = createCommunityInteractionRootImpl;[\s\S]*export const createCommunityInteractionReply = createCommunityInteractionReplyImpl;/,
-  "community facade should export interaction write functions",
+  /createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl[\s\S]*toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl/,
+  "community facade should import the current interaction write functions",
+);
+assert.match(
+  communityFacade,
+  /export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;[\s\S]*export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;[\s\S]*export const editCommunityInteractionMessage = editCommunityInteractionMessageImpl;[\s\S]*export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;/,
+  "community facade should export only current interaction write functions",
 );
 
 console.log("community_interactions_write_core_contract_proof: ok");

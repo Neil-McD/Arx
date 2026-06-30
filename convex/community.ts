@@ -68,8 +68,6 @@ import {
 } from "./communityChat";
 import {
   createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl,
-  createCommunityInteractionReply as createCommunityInteractionReplyImpl,
-  createCommunityInteractionRoot as createCommunityInteractionRootImpl,
   deleteCommunityInteractionMessage as deleteCommunityInteractionMessageImpl,
   editCommunityInteractionMessage as editCommunityInteractionMessageImpl,
   listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
@@ -277,8 +275,6 @@ export const deleteOwnMessage = deleteOwnMessageImpl;
 export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
-export const createCommunityInteractionRoot = createCommunityInteractionRootImpl;
-export const createCommunityInteractionReply = createCommunityInteractionReplyImpl;
 export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;
 export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
 export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;

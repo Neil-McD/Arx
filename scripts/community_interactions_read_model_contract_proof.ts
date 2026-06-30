@@ -43,7 +43,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /root reads do not hydrate drawer replies inline[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*read bundles prefer canonical `communityInteractionAttachments` rows[\s\S]*migration-only legacy attachment hydration[\s\S]*communityInteractionLegacyAttachments[\s\S]*communityInteractionAttachmentBridge[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
+  /root reads return only `community` and `public` roots[\s\S]*root reads do not hydrate drawer replies inline[\s\S]*reply reads require a live community\/public-readable root[\s\S]*reply reads return only live `community` and `public` replies[\s\S]*read APIs do not use legacy chat tables as source-of-truth[\s\S]*read bundles prefer canonical `communityInteractionAttachments` rows[\s\S]*migration-only legacy attachment hydration[\s\S]*communityInteractionLegacyAttachments[\s\S]*communityInteractionAttachmentBridge[\s\S]*viewer reaction state must be loaded only for the visible root\/reply target ids[\s\S]*reaction summary updates must not rescan every reaction on a target[\s\S]*read APIs do not read compiler, source-trace, archive, or memory tables/,
   "contract should preserve read-model boundaries",
 );
 
@@ -91,6 +91,22 @@ assert.doesNotMatch(
   interactions,
   /SEED_PEOPLE|SEED_AUTH_PREFIX/,
   "canonical interaction core should not contain demo seed tooling",
+);
+
+assert.match(
+  interactions,
+  /function interactionVisibilityIsCommunityReadable\(scope: InteractionVisibilityScope\)[\s\S]*scope === "community" \|\| scope === "public"/,
+  "public member reads should use a narrow community/public visibility predicate",
+);
+assert.match(
+  interactions,
+  /function assertCommunityReadableRoot\(root: InteractionRootRow\)[\s\S]*root\.status !== "live" \|\| !interactionVisibilityIsCommunityReadable\(root\.visibilityScope\)[\s\S]*interaction_root_not_readable/,
+  "root read helper should reject non-live or non-community-readable roots",
+);
+assert.match(
+  interactions,
+  /function assertCommunityReadableReply\(reply: InteractionReplyRow\)[\s\S]*reply\.status !== "live" \|\| !interactionVisibilityIsCommunityReadable\(reply\.visibilityScope\)[\s\S]*interaction_reply_not_readable/,
+  "reply read helper should reject non-live or non-community-readable replies",
 );
 
 assert.doesNotMatch(
@@ -186,7 +202,7 @@ assert.match(
 );
 assert.match(
   listRoots,
-  /loadViewerReactionMapForTargets\(ctx, userId, "root", rows\.map\(\(row\) => row\._id\)\)/,
+  /const visibleRows = rows\.filter\(\(row\) => interactionVisibilityIsCommunityReadable\(row\.visibilityScope\)\)[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
   "root list should load viewer reactions only for visible roots",
 );
 assert.match(
@@ -213,8 +229,8 @@ assert.doesNotMatch(
 const listReplies = exportedConstBlock(interactions, "listCommunityInteractionReplies");
 assert.match(
   listReplies,
-  /query\(\{[\s\S]*ctx\.db\.get\(args\.rootId\)[\s\S]*requireCommunityChatAccess/,
-  "reply list should validate the root and gate access through the root community",
+  /query\(\{[\s\S]*ctx\.db\.get\(args\.rootId\)[\s\S]*assertCommunityReadableRoot\(root\)[\s\S]*requireCommunityChatAccess/,
+  "reply list should validate a readable root and gate access through the root community",
 );
 assert.match(
   listReplies,
@@ -233,8 +249,8 @@ assert.match(
 );
 assert.match(
   listReplies,
-  /\.filter\(\(row\) => row\.status === "live"\)/,
-  "reply list should exclude hidden/deleted replies from the default drawer read",
+  /filter\(\(row\) => \{[\s\S]*assertCommunityReadableReply\(row\)[\s\S]*return true[\s\S]*return false/,
+  "reply list should exclude hidden/deleted/non-community-readable replies from the default drawer read",
 );
 assert.doesNotMatch(
   listReplies,
