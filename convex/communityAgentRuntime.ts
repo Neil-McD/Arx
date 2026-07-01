@@ -220,12 +220,22 @@ function buildCommunityAgentMessages(params: {
   runId: string;
   wakeReason?: string;
   wakeEvidence?: CommunityAgentWakeEvidence;
+  compilerWindow?: unknown;
+  directorySummary?: unknown;
 }): NativeToolAwareMessage[] {
   const communityLabel =
     params.resolved.communityName ||
     params.resolved.communitySlug ||
     normalizeIdValue(params.resolved.communityId);
   const constitution = boundedText(params.resolved.communitySystemPrompt, 12_000);
+  // Front-load the compiler window and directory summary so the agent does not
+  // spend tool budget rediscovering context we already composed server-side.
+  const compilerWindowBlock = params.compilerWindow
+    ? `<compiler_window>\n${boundedText(JSON.stringify(params.compilerWindow), 20_000)}\n</compiler_window>`
+    : "";
+  const directoryStateBlock = params.directorySummary
+    ? `<directory_state>\n${boundedText(JSON.stringify(params.directorySummary), 4_000)}\n</directory_state>`
+    : "";
   return [
     {
       role: "system",
@@ -246,8 +256,8 @@ function buildCommunityAgentMessages(params: {
         "- If no useful action is supported, finish with a short no-op summary.",
         "",
         "Operating procedure:",
-        "1. Read /compiler/window.",
-        "2. If a digest exists, inspect the latest digest and candidate state.",
+        "1. Review the <compiler_window> and <directory_state> blocks provided in the wake message; fall back to reading /compiler/window only if they are absent.",
+        "2. If a digest exists, inspect its items and the existing candidate state before proposing.",
         "3. Inspect directory state only when needed to avoid duplicate or stale proposals.",
         "4. Propose at most three digest-derived candidates, only when evidence supports future workflow value.",
         "5. Finish with a concise internal summary of what you inspected and what you proposed.",
@@ -268,6 +278,8 @@ function buildCommunityAgentMessages(params: {
           : "",
         params.resolved.communityOneLiner ? `One-liner: ${params.resolved.communityOneLiner}` : "",
         params.resolved.communityAbout ? `About: ${params.resolved.communityAbout}` : "",
+        compilerWindowBlock,
+        directoryStateBlock,
         "Begin the bounded community cognition pass now.",
       ].filter(Boolean).join("\n"),
     },
@@ -368,6 +380,43 @@ export const resolveCommunityAgentRunContextInternal = internalQuery({
       communityAbout: boundedText(community.about, 4_000) || null,
       sponsorUserId,
       communitySystemPrompt: boundedText(config?.systemPrompt, 40_000) || null,
+    };
+  },
+});
+
+// Compact directory census for the wake message: enough for the agent to judge
+// duplicates and coverage without spending tool steps on discovery.
+export const summarizeCommunityDirectoryStateInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const rows = (await ctx.db
+      .query("communityIntelligenceNodes" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .take(500)) as Array<Record<string, any>>;
+    const countsByType: Record<string, number> = {};
+    const countsByStatus: Record<string, number> = {};
+    const recentTitles: string[] = [];
+    for (const row of rows) {
+      const type = String(row.type ?? "unknown");
+      const status = String(row.status ?? "unknown");
+      countsByType[type] = (countsByType[type] ?? 0) + 1;
+      countsByStatus[status] = (countsByStatus[status] ?? 0) + 1;
+    }
+    for (const row of rows
+      .slice()
+      .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))
+      .slice(0, 20)) {
+      const title = boundedText(row.title, 120);
+      if (title) recentTitles.push(title);
+    }
+    return {
+      total_nodes: rows.length,
+      counts_are_lower_bound: rows.length >= 500,
+      counts_by_type: countsByType,
+      counts_by_status: countsByStatus,
+      recent_node_titles: recentTitles,
     };
   },
 });
@@ -664,6 +713,25 @@ export const runCommunityAgentLoopInternal = internalAction({
         // ignore: observability is best-effort
       }
     };
+    // Front-load the exact content the agent's first tool steps would fetch.
+    // Best-effort: if either read fails, the agent falls back to its tools.
+    let compilerWindow: unknown;
+    let directorySummary: unknown;
+    try {
+      compilerWindow = await ctx.runQuery(internalRefs.communityAgentFilesystem.readCommunityAgentFilesystemInternal as any, {
+        context: filesystemContext,
+        path: "/compiler/window",
+      });
+    } catch {
+      compilerWindow = undefined;
+    }
+    try {
+      directorySummary = await ctx.runQuery(internalRefs.communityAgentRuntime.summarizeCommunityDirectoryStateInternal as any, {
+        communityId: args.communityId,
+      });
+    } catch {
+      directorySummary = undefined;
+    }
     const messages = buildCommunityAgentMessages({
       resolved,
       agentKey,
@@ -671,6 +739,8 @@ export const runCommunityAgentLoopInternal = internalAction({
       runId,
       wakeReason: boundedText(args.wakeReason, 120) || undefined,
       wakeEvidence: args.wakeEvidence,
+      compilerWindow,
+      directorySummary,
     });
     await emitRunEvents([
       { kind: "system_prompt", content: String(messages[0]?.content ?? "") },
