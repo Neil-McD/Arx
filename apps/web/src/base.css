@@ -9022,6 +9022,34 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-weight: 500;
 }
 
+/* The avatar + name become one hover/click target (profile preview + open profile). */
+.community-context-member .community-interaction-avatar-hover {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.community-context-member-trigger {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The rail column floors at 300px (clamp(300px, 22vw, 380px)) and the panel clips
+   overflow, so cap the preview narrower than the chat card (300px) to keep it inside. */
+.community-context-member .chat-profile-hover-card {
+  width: min(256px, calc(100vw - 48px));
+}
+
 .community-context-member-action {
   width: 26px;
   height: 26px;

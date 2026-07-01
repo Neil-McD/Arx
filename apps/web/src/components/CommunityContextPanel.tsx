@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, type UIEvent } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { MessageCircle, MoreHorizontal } from "lucide-react";
+import { ProfileHoverCard } from "./communityInteractionFeed";
 
 export type CommunityPresenceFace = {
   user_id: string;
@@ -33,6 +34,9 @@ type CommunityContextPanelProps = {
   ownerId?: string | null;
   canManageMembers?: boolean;
   onOpenMemberSettings?: (member: CommunityRailMember) => void;
+  onOpenMemberProfile?: (userId: string) => void;
+  onMessageMember?: (userId: string) => void;
+  currentUserId?: string | null;
   displayName: (userId: string) => string;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
@@ -121,16 +125,45 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         !isOwnerMember &&
         !String(member.id ?? "").startsWith("owner:"),
     );
+    const canMessage = Boolean(props.onMessageMember) && member.user_id !== props.currentUserId;
     return (
       <div key={member.id} className={`community-context-member${isOnline ? "" : " is-offline"}`}>
-        <span
-          className="community-context-member-avatar"
-          style={!member.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}
+        <ProfileHoverCard
+          userId={member.user_id}
+          label={name}
+          seed={member.user_id}
+          profile={{ user_id: member.user_id, display_name: name, avatar_url: member.avatar_url ?? null }}
+          getAvatarColor={props.getAvatarColor}
+          getInitials={props.getInitials}
+          currentUserId={props.currentUserId}
+          onOpenProfile={props.onOpenMemberProfile}
+          onMessageUser={props.onMessageMember}
+          online={isOnline}
+          triggerClassName="community-context-member-trigger"
         >
-          {member.avatar_url ? <img src={member.avatar_url} alt="" /> : <span>{props.getInitials(name)}</span>}
-          {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
-        </span>
-        <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
+          <span
+            className="community-context-member-avatar"
+            style={!member.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}
+          >
+            {member.avatar_url ? <img src={member.avatar_url} alt="" /> : <span>{props.getInitials(name)}</span>}
+            {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
+          </span>
+          <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
+        </ProfileHoverCard>
+        {canMessage ? (
+          <button
+            className="community-context-member-action"
+            type="button"
+            aria-label={`Message ${name}`}
+            title="Direct message"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onMessageMember?.(member.user_id);
+            }}
+          >
+            <MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+        ) : null}
         {canOpenSettings ? (
           <button
             className="community-context-member-action"

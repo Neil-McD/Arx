@@ -576,6 +576,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             ownerId={props.communityOwnerId ?? null}
             canManageMembers={canManageCommunityMembers}
             onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
+            onOpenMemberProfile={props.onOpenProfile}
+            onMessageMember={props.onMessageUser}
+            currentUserId={props.currentUserId}
             displayName={props.displayName}
             getInitials={props.getInitials}
             getAvatarColor={props.getAvatarColor}
