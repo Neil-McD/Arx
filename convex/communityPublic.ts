@@ -200,12 +200,15 @@ export const resolvePublicFunnelBySlug = query({
     const branding = await resolveCommunityBrandingFields(ctx, community);
     const entryPolicy = resolveCommunityEntryPolicy(community);
     const funnel = await resolveCommunityFunnelConfigByCommunityId(ctx, community._id);
+    const owner = community.ownerId ? await ctx.db.get(community.ownerId) : null;
+    const host = owner ? await resolvePublicProfileFaceFields(ctx, owner._id) : null;
 
     return {
       ok: true,
       community: {
         slug: community.slug,
         name: community.name,
+        host,
         one_liner: community.oneLiner ?? null,
         about: community.about ?? null,
         avatar_url: branding.avatar_url,

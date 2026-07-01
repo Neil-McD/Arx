@@ -38,6 +38,13 @@ export type PublicCommunityFunnelCommunityLike = {
     avatar_focus_y?: number | null;
     avatar_zoom?: number | null;
   }> | null;
+  host?: {
+    display_name: string | null;
+    avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  } | null;
   funnel?: CommunityFunnelConfig | null;
 };
 
@@ -295,6 +302,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       aboutText={aboutText}
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       showPoweredBy
+      host={publicCommunity?.host ?? null}
+      gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
     />
   );
 }

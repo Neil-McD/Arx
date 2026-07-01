@@ -9,6 +9,7 @@ export {
   getCommunityPresenceSummary,
   recordPublicFunnelVisitBySlug,
   resolvePublicFunnelBySlug,
+  resolvePublicFunnelStatsBySlug,
   listPublicDiscoverCommunities,
   getMyJoinRequestBySlug,
   joinPublicCommunityBySlug,
