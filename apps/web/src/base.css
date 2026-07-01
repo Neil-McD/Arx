@@ -16901,51 +16901,71 @@ button.chat-reply-quote:hover {
 
 /* Synaptic edges: thin, typed by operational relationship, crisp at any zoom. */
 .cp-edge {
-  stroke: color-mix(in srgb, var(--text-secondary) 36%, transparent);
+  stroke: color-mix(in srgb, var(--text-secondary) 30%, transparent);
   stroke-width: 1.1;
   vector-effect: non-scaling-stroke;
+  transition: opacity 140ms ease, stroke-width 140ms ease;
 }
 
 .cp-edge.supports,
 .cp-edge.has-example,
 .cp-edge.applies-to-workflow {
-  stroke: rgba(52, 211, 153, 0.34);
+  stroke: rgba(52, 211, 153, 0.3);
 }
 
+/* Contradiction is the one relationship worth shouting: red + dashed, the visual
+   opposite of a calm "supports" link. */
 .cp-edge.contradicts {
-  stroke: rgba(245, 158, 11, 0.42);
+  stroke: rgba(239, 68, 68, 0.55);
+  stroke-dasharray: 5 4;
+}
+
+/* Hover: the focused node's own edges brighten, everything else fades back. */
+.cp-edge.active {
+  stroke-width: 1.9;
+  opacity: 1;
+}
+
+.cp-edge.dimmed {
+  opacity: 0.07;
 }
 
 /* The circle IS the node. No box, no inner hotspot, label annotates outside. */
 .cp-node {
   cursor: pointer;
+  transition: opacity 140ms ease;
 }
 
 .cp-node:focus {
   outline: none;
 }
 
+.cp-node.dimmed {
+  opacity: 0.16;
+}
+
+/* Base node dot. Color encodes memory TYPE; status is a treatment layered on top. */
 .cp-node-circle {
   fill: var(--text-secondary);
   stroke: color-mix(in srgb, var(--bg-app) 70%, transparent);
   stroke-width: 1;
-  transition: fill 160ms ease;
+  transition: fill 160ms ease, opacity 160ms ease;
 }
 
-.cp-node-circle.validated {
-  fill: #34d399;
-}
+.cp-node-circle.type-playbook { fill: #5b9bd5; }
+.cp-node-circle.type-insight { fill: #a78bfa; }
+.cp-node-circle.type-example { fill: #34d399; }
+.cp-node-circle.type-warning { fill: #ef6a5e; }
+.cp-node-circle.type-decision { fill: var(--accent-gold); }
+.cp-node-circle.type-question { fill: #8b93a7; }
 
-.cp-node-circle.promising {
-  fill: color-mix(in srgb, var(--accent-gold) 70%, var(--text-primary));
-}
-
-.cp-node-circle.contested {
-  fill: #f59e0b;
-}
-
-.cp-node-circle.stale {
-  fill: #8b93a7;
+/* Status treatment, independent of the type color. */
+.cp-node-circle.status-promising { opacity: 0.8; }
+.cp-node-circle.status-stale { opacity: 0.42; }
+.cp-node-circle.status-contested {
+  stroke: #f59e0b;
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
 }
 
 /* The seed neuron: a clean solid dot in the theme accent, soft outer glow. */

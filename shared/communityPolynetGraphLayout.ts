@@ -12,6 +12,11 @@ export type PolynetLayoutNodeInput = {
   kind: "community" | "directory_node" | string;
 };
 
+export type PolynetLayoutEdgeInput = {
+  from: string;
+  to: string;
+};
+
 export type PolynetLayoutPosition = {
   x: number;
   y: number;
@@ -23,6 +28,17 @@ const FIRST_RING_RADIUS = 150;
 const BASE_RING_CAPACITY = 6;
 const ANGLE_JITTER = 0.42; // radians of wobble around the evenly-spaced slot
 const RADIUS_JITTER = 0.3; // fraction of RING_GAP
+
+// Force-relaxation tuning (Fruchterman-Reingold). The ring layout above is only a
+// deterministic *seed*; when edges are supplied we relax it so linked nodes cluster
+// (the Obsidian feel). The pass is pure/deterministic — it starts from the seed and
+// iterates fixed math, no Math.random / Date — so the graph never jitters.
+const IDEAL_EDGE_LENGTH = 165; // k — the natural spring rest length
+const RELAX_ITERATIONS = 160;
+const RELAX_GRAVITY = 0.025; // mild pull to origin so disconnected clusters don't drift off
+const RELAX_INITIAL_TEMP = IDEAL_EDGE_LENGTH * 1.1;
+const RELAX_COOLING = 0.955;
+const RELAX_MIN_TEMP = 2;
 
 // Deterministic 0..1 hash of a string (FNV-1a derived). Stable across runs.
 function hashUnit(value: string): number {
@@ -43,6 +59,7 @@ function ringCapacity(ringIndex: number): number {
 export function computePolynetLayout(
   nodes: ReadonlyArray<PolynetLayoutNodeInput>,
   rootNodeId: string,
+  edges: ReadonlyArray<PolynetLayoutEdgeInput> = [],
 ): Map<string, PolynetLayoutPosition> {
   const positions = new Map<string, PolynetLayoutPosition>();
   positions.set(rootNodeId, { x: 0, y: 0 });
@@ -79,7 +96,98 @@ export function computePolynetLayout(
     positionInRing += 1;
   });
 
+  // Relax the seed with edge springs so connected memory clusters pull together.
+  relaxPolynetLayout(positions, rootNodeId, edges);
+
   return positions;
+}
+
+// In-place Fruchterman-Reingold relaxation. `positions` already holds the ring seed;
+// the root stays pinned at the origin (the community "core" everything orbits).
+function relaxPolynetLayout(
+  positions: Map<string, PolynetLayoutPosition>,
+  rootNodeId: string,
+  edges: ReadonlyArray<PolynetLayoutEdgeInput>,
+): void {
+  const ids = Array.from(positions.keys());
+  if (ids.length < 3 || edges.length === 0) return;
+
+  // Only springs whose endpoints both exist and differ pull on the layout.
+  const springs = edges.filter(
+    (edge) => edge.from !== edge.to && positions.has(edge.from) && positions.has(edge.to),
+  );
+  if (springs.length === 0) return;
+
+  const k = IDEAL_EDGE_LENGTH;
+  let temp = RELAX_INITIAL_TEMP;
+
+  for (let iteration = 0; iteration < RELAX_ITERATIONS; iteration += 1) {
+    const disp = new Map<string, PolynetLayoutPosition>();
+    for (const id of ids) disp.set(id, { x: 0, y: 0 });
+
+    // Repulsion between every pair (O(n^2); n is bounded to <=120 nodes).
+    for (let i = 0; i < ids.length; i += 1) {
+      const a = positions.get(ids[i])!;
+      const da = disp.get(ids[i])!;
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const b = positions.get(ids[j])!;
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        let dist = Math.hypot(dx, dy);
+        if (dist < 0.01) {
+          // Break exact overlaps deterministically using id order.
+          dx = (i - j) * 0.01;
+          dy = 0.01;
+          dist = Math.hypot(dx, dy);
+        }
+        const force = (k * k) / dist;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        da.x += fx;
+        da.y += fy;
+        const db = disp.get(ids[j])!;
+        db.x -= fx;
+        db.y -= fy;
+      }
+    }
+
+    // Attraction along springs.
+    for (const spring of springs) {
+      const a = positions.get(spring.from)!;
+      const b = positions.get(spring.to)!;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.max(0.01, Math.hypot(dx, dy));
+      const force = (dist * dist) / k;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      const da = disp.get(spring.from)!;
+      const db = disp.get(spring.to)!;
+      da.x -= fx;
+      da.y -= fy;
+      db.x += fx;
+      db.y += fy;
+    }
+
+    // Apply displacement (capped by temperature), with a mild pull to origin.
+    for (const id of ids) {
+      if (id === rootNodeId) continue;
+      const p = positions.get(id)!;
+      const d = disp.get(id)!;
+      d.x -= p.x * RELAX_GRAVITY;
+      d.y -= p.y * RELAX_GRAVITY;
+      const len = Math.hypot(d.x, d.y);
+      if (len > 0.0001) {
+        const step = Math.min(len, temp);
+        p.x += (d.x / len) * step;
+        p.y += (d.y / len) * step;
+      }
+    }
+
+    // Root stays fixed at the center.
+    positions.set(rootNodeId, { x: 0, y: 0 });
+    temp = Math.max(RELAX_MIN_TEMP, temp * RELAX_COOLING);
+  }
 }
 
 export type PolynetBounds = {

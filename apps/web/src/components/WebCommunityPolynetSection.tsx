@@ -59,6 +59,26 @@ function edgeClass(raw: string | null | undefined): string {
   return "default";
 }
 
+// Node color family by memory type (the primary categorical encoding).
+function typeClass(raw: string | null | undefined): string {
+  switch (String(raw ?? "").trim().toLowerCase()) {
+    case "playbook": return "playbook";
+    case "insight": return "insight";
+    case "example": return "example";
+    case "warning_failure": return "warning";
+    case "decision_judgment": return "decision";
+    case "open_question": return "question";
+    default: return "default";
+  }
+}
+
+// Node radius scales with confidence so stronger memory reads as heavier.
+function nodeRadius(confidence: unknown): number {
+  const value = Number(confidence);
+  const clamped = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.4;
+  return 9 + clamped * 7;
+}
+
 function selectInitialNode(overview: CloudCommunityPolynetOverview | null): string | null {
   if (!overview) return null;
   // Prefer a real memory node; never auto-select the seed, so it stays a bare dot.
@@ -92,18 +112,35 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   }, [overview, selectedNodeId]);
 
   const layout = useMemo(
-    () => computePolynetLayout(overview?.graph.nodes ?? [], overview?.graph.root_node_id ?? "community:pending"),
+    () => computePolynetLayout(
+      overview?.graph.nodes ?? [],
+      overview?.graph.root_node_id ?? "community:pending",
+      overview?.graph.edges ?? [],
+    ),
     [overview],
   );
   const nodeIds = useMemo(
     () => new Set((overview?.graph.nodes ?? []).map((node) => node.id)),
     [overview],
   );
+  // Adjacency for the Obsidian-style hover highlight: hovering a node lights it and
+  // its direct neighbors and fades the rest.
+  const adjacency = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const edge of overview?.graph.edges ?? []) {
+      if (!map.has(edge.from)) map.set(edge.from, new Set());
+      if (!map.has(edge.to)) map.set(edge.to, new Set());
+      map.get(edge.from)!.add(edge.to);
+      map.get(edge.to)!.add(edge.from);
+    }
+    return map;
+  }, [overview]);
   const { containerRef, svgRef, transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
     useWebPolynetGraphViewport({ layout, onSelectNode: setSelectedNodeId });
   const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
+  const focusNeighbors = hoveredNodeId ? adjacency.get(hoveredNodeId) ?? null : null;
 
   if (!hasActiveCommunity) {
     return <div className="settings-panel community-settings-panel"><div className="chat-empty">Select a community to open Polynet.</div></div>;
@@ -186,6 +223,10 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) return null;
                     const from = worldPositionFor(edge.from, layout.get(edge.from));
                     const to = worldPositionFor(edge.to, layout.get(edge.to));
+                    const touchesFocus = hoveredNodeId
+                      ? edge.from === hoveredNodeId || edge.to === hoveredNodeId
+                      : false;
+                    const dimmed = hoveredNodeId ? !touchesFocus : false;
                     return (
                       <line
                         key={edge.id}
@@ -193,7 +234,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                         y1={from.y}
                         x2={to.x}
                         y2={to.y}
-                        className={`cp-edge ${edgeClass(edge.type)}`}
+                        className={`cp-edge ${edgeClass(edge.type)}${touchesFocus ? " active" : ""}${dimmed ? " dimmed" : ""}`}
                       />
                     );
                   })}
@@ -203,11 +244,14 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     const isRoot = node.kind === "community";
                     const isSelected = selectedNodeId === node.id;
                     const isHovered = hoveredNodeId === node.id;
-                    const showLabel = isRoot || isSelected || isHovered || showAllLabels;
+                    const isNeighbor = focusNeighbors ? focusNeighbors.has(node.id) : false;
+                    const dimmed = hoveredNodeId ? !(isHovered || isNeighbor) : false;
+                    const showLabel = isRoot || isSelected || isHovered || isNeighbor || showAllLabels;
+                    const radius = isRoot ? 26 : nodeRadius(node.confidence);
                     return (
                       <g
                         key={node.id}
-                        className={`cp-node ${isRoot ? "root" : statusClass(node.status)}${isSelected ? " selected" : ""}`}
+                        className={`cp-node ${isRoot ? "root" : statusClass(node.status)}${isSelected ? " selected" : ""}${dimmed ? " dimmed" : ""}`}
                         transform={`translate(${pos.x} ${pos.y})`}
                         role="button"
                         tabIndex={0}
@@ -222,10 +266,10 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                           }
                         }}
                       >
-                        {isSelected && !isRoot ? <circle className="cp-node-ring" r={18} /> : null}
+                        {isSelected && !isRoot ? <circle className="cp-node-ring" r={radius + 7} /> : null}
                         <circle
-                          className={isRoot ? "cp-root-circle" : `cp-node-circle ${statusClass(node.status)}`}
-                          r={isRoot ? 26 : 11}
+                          className={isRoot ? "cp-root-circle" : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}
+                          r={radius}
                           filter="url(#cp-node-glow)"
                         />
                         {showLabel ? (
@@ -233,7 +277,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                             <text
                               className={`cp-node-label${isRoot ? " root" : ""}`}
                               x={0}
-                              y={isRoot ? 50 : 28}
+                              y={isRoot ? 50 : radius + 16}
                               textAnchor="middle"
                             >
                               {isRoot ? node.label : shortNodeLabel(node.label)}
