@@ -12,6 +12,8 @@ const interactionProjection = readFileSync(join(root, "apps/web/src/components/W
 const communityNav = readFileSync(join(root, "shared/CommunityNav.tsx"), "utf8");
 const desktopChrome = readFileSync(join(root, "apps/web/src/components/WebShellChromeHost.tsx"), "utf8");
 const mobileShell = readFileSync(join(root, "apps/web/src/components/WebMobileCommunityShell.tsx"), "utf8");
+const app = readFileSync(join(root, "apps/web/src/App.tsx"), "utf8");
+const surfaceProjection = readFileSync(join(root, "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts"), "utf8");
 
 // Desktop reaches memory through the rail preview (click -> full graph), so its
 // left nav hides the Polynet item. Mobile has no right rail yet, so it keeps the
@@ -79,6 +81,18 @@ assert.doesNotMatch(
 assert.match(section, /community-polynet-graph/, "Polynet section should render the memory graph workspace");
 assert.match(section, /community-polynet-detail/, "Polynet section should render selected node details");
 assert.match(section, /selectedNodeId/, "Polynet section should support local node selection");
+assert.match(section, /onBackToChat\?: \(\) => void/, "Polynet section should accept a deterministic back-to-chat action");
+assert.match(section, /aria-label="Back to community chat"/, "Polynet section should expose an accessible back-to-chat control");
+assert.match(
+  surfaceProjection,
+  /onBackToChat: params\.onBackToCommunityChat/,
+  "Polynet section should receive the back-to-chat action through the community surface projection",
+);
+assert.match(
+  app,
+  /openCommunityChat\(nextCommunitySlug, \{ clearUnread: true, pushSnapshot: false \}\)/,
+  "Polynet back action should route to the same community chat without relying on browser history",
+);
 assert.match(section, /overview\.graph\.nodes\.map/, "Polynet graph should render backend-projected nodes");
 assert.match(section, /overview\.graph\.edges\.map/, "Polynet graph should render backend-projected edges");
 assert.match(
@@ -160,6 +174,11 @@ assert.match(
   css,
   /\.community-context-memory-preview/,
   "Community memory should render as an inline live graph preview in the rail",
+);
+assert.match(
+  css,
+  /\.community-polynet-back/,
+  "Polynet page should style the back-to-chat control in the title row",
 );
 assert.doesNotMatch(
   css,

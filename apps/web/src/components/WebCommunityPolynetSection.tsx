@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import type {
   CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
@@ -11,6 +12,7 @@ type WebCommunityPolynetSectionProps = {
   hasSession: boolean;
   canViewPolynet: boolean;
   onRequireSignIn: () => void;
+  onBackToChat?: () => void;
   state: {
     overview: CloudCommunityPolynetOverview | null;
     isLoading: boolean;
@@ -175,8 +177,21 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
       <div className="community-polynet-header">
         <div>
           <div className="community-polynet-kicker">Polynet</div>
-          <div className="community-polynet-title">
-            {activeCommunityName ?? overview?.community.name ?? "Community"} memory
+          <div className="community-polynet-title-row">
+            {props.onBackToChat ? (
+              <button
+                className="community-polynet-back"
+                type="button"
+                aria-label="Back to community chat"
+                title="Back to chat"
+                onClick={props.onBackToChat}
+              >
+                <ArrowLeft size={15} strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : null}
+            <div className="community-polynet-title">
+              {activeCommunityName ?? overview?.community.name ?? "Community"} memory
+            </div>
           </div>
           <div className="community-polynet-subtitle">
             Read-only view of what the community has retained and how its agent is currently behaving.

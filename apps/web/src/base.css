@@ -16674,6 +16674,36 @@ button.chat-reply-quote:hover {
   line-height: 1.4;
 }
 
+.community-polynet-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.community-polynet-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.community-polynet-back:hover,
+.community-polynet-back:focus-visible {
+  border-color: var(--border-muted);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  outline: none;
+}
+
 .community-polynet-subtitle {
   color: var(--text-secondary);
   font-size: 13px;

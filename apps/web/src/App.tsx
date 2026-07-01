@@ -10729,6 +10729,12 @@ export default function App() {
       polynetState: communityPolynetController.state,
       polynetActions: communityPolynetController.actions,
       canViewActiveCommunityPolynet,
+      onBackToCommunityChat: () => {
+        const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+        if (nextCommunitySlug) {
+          openCommunityChat(nextCommunitySlug, { clearUnread: true, pushSnapshot: false });
+        }
+      },
       aiAgentHasSession: Boolean(session),
       canManageMembersActiveCommunity,
       aiAgentPreferredTab: communityAiAgentPreferredTab,

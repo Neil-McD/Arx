@@ -63,6 +63,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   polynetState: WebCommunitySecondaryPanelsProps["polynet"]["state"];
   polynetActions: WebCommunitySecondaryPanelsProps["polynet"]["actions"];
   canViewActiveCommunityPolynet: WebCommunitySecondaryPanelsProps["polynet"]["canViewPolynet"];
+  onBackToCommunityChat: WebCommunitySecondaryPanelsProps["polynet"]["onBackToChat"];
   aiAgentHasSession: WebCommunitySecondaryPanelsProps["aiAgent"]["hasSession"];
   canManageMembersActiveCommunity: WebCommunitySecondaryPanelsProps["aiAgent"]["canManageMembersActiveCommunity"];
   aiAgentPreferredTab: WebCommunitySecondaryPanelsProps["aiAgent"]["preferredTab"];
@@ -232,6 +233,7 @@ export function buildWebCommunitySurfaceProjection(
       hasSession: params.hasAuthenticatedPresentation,
       canViewPolynet: params.canViewActiveCommunityPolynet,
       onRequireSignIn: params.requireSignIn,
+      onBackToChat: params.onBackToCommunityChat,
       state: params.polynetState,
       actions: params.polynetActions,
     },
