@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
-import { Brain, Check, ChevronDown, MessageCircle, MoreHorizontal, X } from "lucide-react";
+import { Check, ChevronDown, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type {
@@ -444,17 +444,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       <div className="community-context-memory">
         <div className="community-context-memory-head">
           <div className="community-context-section">{memorySectionLabel}</div>
-          {props.onOpenMemory ? (
-            <button
-              className="community-context-memory-open"
-              type="button"
-              onClick={props.onOpenMemory}
-              title="Open memory"
-            >
-              <Brain size={13} strokeWidth={1.9} aria-hidden="true" />
-              <span>Open</span>
-            </button>
-          ) : null}
         </div>
         {props.isLoadingMemory && !memoryOverview ? (
           <div className="community-context-memory-empty">
@@ -471,9 +460,21 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           </div>
         ) : memoryOverview && memoryNodes.length > 0 ? (
           <div className="community-context-memory-summary">
-            <div className="community-context-memory-preview">
-              <CommunityMemoryGraphPreview overview={memoryOverview} />
-            </div>
+            {props.onOpenMemory ? (
+              <button
+                type="button"
+                className="community-context-memory-preview is-interactive"
+                onClick={props.onOpenMemory}
+                aria-label="Open community memory"
+                title="Open community memory"
+              >
+                <CommunityMemoryGraphPreview overview={memoryOverview} />
+              </button>
+            ) : (
+              <div className="community-context-memory-preview">
+                <CommunityMemoryGraphPreview overview={memoryOverview} />
+              </div>
+            )}
             <div className="community-context-memory-status">
               <span>{memoryActivityLabel ?? "Memory active"}</span>
               {memoryOverview.graph.has_more_nodes ? <span>More retained</span> : null}

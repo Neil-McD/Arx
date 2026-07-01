@@ -95,30 +95,27 @@ assert.match(
   /memoryOverview=\{props\.communityMemoryOverview \?\? null\}/,
   "Interaction projection should pass memory state into the right rail",
 );
+// Memory is embedded inline in the rail as a live graph preview; there is no
+// intermediate drawer — clicking the preview opens the full graph directly.
 assert.match(
-  interactionProjection,
-  /function CommunityMemoryDrawer/,
-  "Interaction projection should render a native memory drawer inside the right rail",
+  contextPanel,
+  /CommunityMemoryGraphPreview/,
+  "Community context rail should render the live memory graph preview inline",
 );
 assert.match(
   interactionProjection,
-  /isCommunityMemoryOpen/,
-  "Interaction projection should track memory drawer state locally",
-);
-assert.match(
-  interactionProjection,
-  /onOpenMemory=\{\(\) => setIsCommunityMemoryOpen\(true\)\}/,
-  "Community context rail memory open should stay inside the right rail",
-);
-assert.match(
-  interactionProjection,
-  /onOpenFullView=\{props\.onOpenCommunityMemory\}/,
-  "Native memory drawer should keep the full Polynet graph as a secondary fallback",
+  /onOpenMemory=\{props\.onOpenCommunityMemory\}/,
+  "Rail memory should open the full graph directly (no intermediate drawer)",
 );
 assert.doesNotMatch(
   interactionProjection,
-  /onOpenMemory=\{props\.onOpenCommunityMemory\}/,
-  "Community context rail should not jump directly to the left Polynet tab",
+  /CommunityMemoryDrawer/,
+  "The intermediate memory drawer should be removed",
+);
+assert.doesNotMatch(
+  interactionProjection,
+  /isCommunityMemoryOpen/,
+  "The local memory drawer state should be removed",
 );
 
 const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
@@ -134,8 +131,13 @@ assert.doesNotMatch(
 );
 assert.match(
   css,
-  /\.community-memory-drawer-scroll/,
-  "Community memory drawer should have native right-rail styling",
+  /\.community-context-memory-preview/,
+  "Community memory should render as an inline live graph preview in the rail",
+);
+assert.doesNotMatch(
+  css,
+  /\.community-memory-drawer/,
+  "The removed memory drawer should leave no dead styling behind",
 );
 
 assert.match(
