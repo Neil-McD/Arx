@@ -1046,7 +1046,7 @@ body {
   gap: 8px;
   font-weight: 500;
   border-radius: 10px;
-  color: var(--accent-gold);
+  color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-gold) 30%, transparent);
 }
@@ -1057,7 +1057,7 @@ body {
 }
 
 .community-nav-invite:hover:not(.is-copied) {
-  color: var(--accent-gold);
+  color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
   border-color: color-mix(in srgb, var(--accent-gold) 42%, transparent);
 }
