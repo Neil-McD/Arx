@@ -171,24 +171,34 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
     );
   }
 
+  const hasBackToChat = Boolean(props.onBackToChat);
+
   return (
     <div className="settings-panel community-settings-panel community-polynet-panel">
-      <div className="community-polynet-header">
-        <div className="community-polynet-heading">
-          {props.onBackToChat ? (
-            <button
-              className="community-polynet-back"
-              type="button"
-              aria-label="Back to community chat"
-              title="Back to chat"
-              onClick={props.onBackToChat}
+      <div className={`community-polynet-header${hasBackToChat ? " has-back" : ""}`}>
+        {hasBackToChat ? (
+          <button
+            className="community-polynet-back"
+            type="button"
+            aria-label="Back to community chat"
+            title="Back to chat"
+            onClick={props.onBackToChat}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M19 12H5" />
-                <path d="m12 19-7-7 7-7" />
-              </svg>
-            </button>
-          ) : null}
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+        ) : null}
+        <div className="community-polynet-heading">
           <div className="community-polynet-kicker">Polynet</div>
           <div className="community-polynet-title">
             {activeCommunityName ?? overview?.community.name ?? "Community"} memory
@@ -197,7 +207,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
             Read-only view of what the community has retained and how its agent is currently behaving.
           </div>
         </div>
-        <button className="secondary" type="button" onClick={actions.refresh} disabled={state.isLoading}>
+        <button className="secondary community-polynet-refresh" type="button" onClick={actions.refresh} disabled={state.isLoading}>
           {state.isLoading ? "Refreshing..." : "Refresh"}
         </button>
       </div>

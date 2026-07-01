@@ -15,6 +15,11 @@ const mobileShell = readFileSync(join(root, "apps/web/src/components/WebMobileCo
 const app = readFileSync(join(root, "apps/web/src/App.tsx"), "utf8");
 const surfaceProjection = readFileSync(join(root, "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts"), "utf8");
 
+function readCssRuleBody(css: string, selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return css.match(new RegExp(`${escapedSelector}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
+}
+
 // Desktop reaches memory through the rail preview (click -> full graph), so its
 // left nav hides the Polynet item. Mobile has no right rail yet, so it keeps the
 // nav item as its only memory path until a mobile memory surface exists.
@@ -83,7 +88,9 @@ assert.match(section, /community-polynet-detail/, "Polynet section should render
 assert.match(section, /selectedNodeId/, "Polynet section should support local node selection");
 assert.match(section, /onBackToChat\?: \(\) => void/, "Polynet section should accept a deterministic back-to-chat action");
 assert.match(section, /aria-label="Back to community chat"/, "Polynet section should expose an accessible back-to-chat control");
-assert.match(section, /<path d="M19 12H5" \/>/, "Polynet back control should render a visible inline arrow shaft");
+assert.match(section, /community-polynet-header\$\{hasBackToChat \? " has-back" : ""\}/, "Polynet back control should be a real header grid cell");
+assert.match(section, /strokeWidth="2"/, "Polynet back control should set SVG stroke width directly");
+assert.match(section, /<path d="M19 12H5M12 19l-7-7 7-7" \/>/, "Polynet back control should render a visible inline arrow");
 assert.doesNotMatch(section, /ArrowLeft/, "Polynet back control should not depend on a collapsed external icon render");
 assert.doesNotMatch(
   section,
@@ -167,6 +174,7 @@ assert.doesNotMatch(
 );
 
 const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+const polynetBackRule = readCssRuleBody(css, ".community-polynet-back");
 assert.match(
   css,
   /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
@@ -189,6 +197,11 @@ assert.match(
 );
 assert.match(
   css,
+  /\.community-polynet-header\.has-back/,
+  "Polynet page should keep the back control inside the header grid instead of hanging outside the copy container",
+);
+assert.match(
+  css,
   /\.community-polynet-heading/,
   "Polynet page should keep the kicker, title, and subtitle in one aligned copy stack",
 );
@@ -197,6 +210,14 @@ assert.match(
   /stroke: currentColor/,
   "Polynet back arrow should have explicit SVG stroke styling",
 );
+assert.match(
+  css,
+  /\.settings-panel button:[^{]+:not\(\.community-polynet-back\)/,
+  "Polynet back control should be excluded from the broad settings-panel button reset",
+);
+assert.match(polynetBackRule, /padding: 0;/, "Polynet back control should reserve its full 28px box for the SVG");
+assert.doesNotMatch(polynetBackRule, /position:\s*absolute/, "Polynet back control should not use fragile absolute positioning");
+assert.doesNotMatch(polynetBackRule, /left:\s*-/, "Polynet back control should not hang outside the header with a negative left offset");
 assert.doesNotMatch(
   css,
   /\.community-polynet-title-row/,
