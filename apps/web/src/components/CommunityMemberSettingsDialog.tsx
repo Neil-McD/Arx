@@ -329,9 +329,6 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
             <div className="modal-title" id="member-settings-title">
               Member settings
             </div>
-            <div className="create-community-subtitle">
-              Review status and billing details for {displayName}.
-            </div>
           </div>
           <button className="modal-close" onClick={props.onClose} title="Close">
             ×
