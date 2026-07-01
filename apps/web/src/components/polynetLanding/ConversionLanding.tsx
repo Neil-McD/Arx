@@ -451,7 +451,7 @@ function Comparison({ onJoin }: JoinProps) {
       <div className="wrap">
         <div className="shead">
           <div className="eyebrow">The difference</div>
-          <h2>Built for the AI era. Skool and Discord weren't.</h2>
+          <h2>Built for the AI era.</h2>
         </div>
         <div className="cmp">
           <div className="row h">
