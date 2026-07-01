@@ -510,10 +510,6 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
     ? renderHeroMedia()
     : renderHeroMediaDefault(heroMediaKind, heroMediaUrl);
   const hasNote = Boolean(aboutContent) || Boolean(aboutText) || Boolean(emptyAboutContent);
-  const faceTail =
-    typeof action.memberCount === "number"
-      ? Math.max(action.memberCount - action.onlineFaces.length, 0)
-      : null;
 
   return (
     <div className={`cfg-page${isMobile ? " is-mobile" : ""}`}>
@@ -522,7 +518,14 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
           <i aria-hidden="true" /> Viewing {title} as a guest
         </span>
         <span className="cfg-brand">
-          {visibilityVariant === "unlisted" ? `${visibilityLabel} · ` : ""}Powered by Polynet
+          {visibilityVariant === "unlisted" ? `${visibilityLabel} · ` : ""}
+          {showPoweredBy ? (
+            <>
+              Powered by Polynet · <a href="/">start your own →</a>
+            </>
+          ) : (
+            "Powered by Polynet"
+          )}
         </span>
       </div>
 
@@ -659,128 +662,7 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
               <b>{isFreePricing ? "Free to join" : pricingLabel}</b>
               {!isFreePricing ? " · cancel anytime" : ""} · instant access
             </div>
-          </div>
-        </div>
-
-        {/* RIGHT — guest rail (funnel-specific; ContextPanel adoption comes with public memory data) */}
-        <div className="cfg-rail">
-          {hostName ? (
-            <div>
-              <div className="cfg-rh">Host</div>
-              <div className="cfg-hostrow">
-                <div className="cfg-hav">
-                  <UserAvatar
-                    className="cfg-fill"
-                    name={hostName}
-                    imageUrl={host?.avatar_url ?? null}
-                    focusX={host?.avatar_focus_x ?? 0.5}
-                    focusY={host?.avatar_focus_y ?? 0.5}
-                    zoom={host?.avatar_zoom ?? 1}
-                    alt=""
-                    fallback={null}
-                  />
-                </div>
-                <span>
-                  <b>{hostName}</b>
-                  <em>Community host</em>
-                </span>
-              </div>
-            </div>
-          ) : null}
-
-          <div>
-            <div className="cfg-rh">Memory</div>
-            <div className="cfg-memline">
-              <i aria-hidden="true" /> Shared memory grows as the room learns
-            </div>
-          </div>
-
-          <div>
-            <div className="cfg-rh">Community</div>
-            <div className="cfg-stats">
-              {typeof action.memberCount === "number" ? (
-                <div className="cfg-stat">
-                  <b>{formatCompactStat(action.memberCount)}</b>
-                  <span>Members</span>
-                </div>
-              ) : null}
-              {typeof action.onlineCount === "number" ? (
-                <div className="cfg-stat">
-                  <b>
-                    <span className="cfg-od" aria-hidden="true" />
-                    {formatCompactStat(action.onlineCount)}
-                  </b>
-                  <span>Online</span>
-                </div>
-              ) : null}
-              {typeof action.adminCount === "number" ? (
-                <div className="cfg-stat">
-                  <b>{formatCompactStat(action.adminCount)}</b>
-                  <span>Admins</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {action.onlineFaces.length > 0 ? (
-            <div>
-              <div className="cfg-rh">Online now</div>
-              {action.onlineFaces.slice(0, 4).map((face) => (
-                <div className="cfg-prow" key={face.user_id}>
-                  <span className="cfg-pod" aria-hidden="true" />
-                  <div className="cfg-fav">
-                    <UserAvatar
-                      className="cfg-fill"
-                      name={face.display_name ?? face.user_id}
-                      imageUrl={face.avatar_url}
-                      focusX={face.avatar_focus_x ?? 0.5}
-                      focusY={face.avatar_focus_y ?? 0.5}
-                      zoom={face.avatar_zoom ?? 1}
-                      alt=""
-                      fallback={null}
-                    />
-                  </div>
-                  {face.display_name ?? "Member"}
-                </div>
-              ))}
-              <div className="cfg-blur" aria-hidden="true">
-                <div className="cfg-prow">
-                  <span className="cfg-fav" /> ████████
-                </div>
-                <div className="cfg-prow">
-                  <span className="cfg-fav" /> ██████████
-                </div>
-              </div>
-              {faceTail !== null && faceTail > 0 ? (
-                <div className="cfg-more">+ {formatCompactStat(faceTail)} more inside</div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="cfg-railjoin">
-            <div className="cfg-offer">
-              {isFreePricing ? (
-                <>
-                  <b>Free</b> to join
-                </>
-              ) : (
-                <b>{pricingLabel}</b>
-              )}
-            </div>
-            <button
-              className="cfg-join cfg-wide"
-              type="button"
-              disabled={action.isPrimaryActionDisabled}
-              onClick={action.onPrimaryAction}
-            >
-              {action.primaryActionLabel}
-            </button>
             <ActionStatusCards action={action} />
-            {showPoweredBy ? (
-              <div className="cfg-powered">
-                Powered by Polynet · <a href="/">start your own →</a>
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
