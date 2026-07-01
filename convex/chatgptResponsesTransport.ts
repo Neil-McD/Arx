@@ -258,6 +258,29 @@ function waitForChatgptCodexRetry(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, CHATGPT_CODEX_RETRY_DELAY_MS));
 }
 
+// Opt-in retry policy for background callers (e.g. the community agent) that
+// can afford patience. Interactive callers keep the default two-attempt,
+// fixed-delay behavior unchanged.
+export type ChatgptTransportRetryPolicy = {
+  maxAttempts?: number;
+  backoffBaseMs?: number;
+};
+
+function resolveChatgptRetryAttempts(policy: ChatgptTransportRetryPolicy | undefined): number {
+  const raw = Math.floor(Number(policy?.maxAttempts ?? 2));
+  return Math.max(1, Math.min(6, Number.isFinite(raw) ? raw : 2));
+}
+
+function waitForChatgptPolicyRetry(
+  policy: ChatgptTransportRetryPolicy | undefined,
+  attempt: number,
+): Promise<void> {
+  const base = Math.max(0, Math.floor(Number(policy?.backoffBaseMs ?? 0)));
+  if (!base) return waitForChatgptCodexRetry();
+  const delay = base * 2 ** attempt + Math.floor(Math.random() * 100);
+  return new Promise((resolve) => setTimeout(resolve, Math.min(delay, 15_000)));
+}
+
 function looksLikeSsePayload(decoded: string, contentType: string): boolean {
   const normalizedContentType = String(contentType ?? "").toLowerCase();
   if (normalizedContentType.includes("text/event-stream")) return true;
@@ -806,6 +829,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
   reasoningSummary?: ChatgptReasoningSummaryLevel | null;
   reasoningEffort?: ChatgptReasoningEffort | null;
   requestMetadata?: ChatgptCodexRequestMetadata | null;
+  retryPolicy?: ChatgptTransportRetryPolicy;
 }): Promise<
   | {
       ok: true;
@@ -841,8 +865,12 @@ export async function runChatgptResponsesStreamingRequest(params: {
     };
   }
 
+  const maxAttempts = resolveChatgptRetryAttempts(params.retryPolicy);
+  // Patient callers also retry transient network throws, not only classified
+  // HTTP failures. Default (two-attempt) behavior is unchanged.
+  const patient = maxAttempts > 2;
   let firstFailure: ChatgptCompletionFailure | null = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const auth = await getFreshChatgptAuthForUser({
       ctx: params.ctx,
       userId: params.userId,
@@ -871,7 +899,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return {
+      const failure: ChatgptCompletionFailure = {
         ok: false,
         status: 503,
         code: "provider_unavailable",
@@ -881,6 +909,12 @@ export async function runChatgptResponsesStreamingRequest(params: {
         upstreamRequestId: null,
         cfRay: null,
       };
+      if (patient && attempt < maxAttempts - 1) {
+        firstFailure = firstFailure ?? failure;
+        await waitForChatgptPolicyRetry(params.retryPolicy, attempt);
+        continue;
+      }
+      return firstFailure ?? failure;
     }
 
     const contentType = String(getHeaderValue(response, "content-type") ?? "");
@@ -900,9 +934,9 @@ export async function runChatgptResponsesStreamingRequest(params: {
         upstreamRequestId,
         cfRay,
       });
-      if (attempt === 0 && failure.retryWithFreshAuth) {
-        firstFailure = failureWithoutRetryFlag(failure);
-        await waitForChatgptCodexRetry();
+      if (attempt < maxAttempts - 1 && failure.retryWithFreshAuth) {
+        firstFailure = firstFailure ?? failureWithoutRetryFlag(failure);
+        await waitForChatgptPolicyRetry(params.retryPolicy, attempt);
         continue;
       }
       return firstFailure || failureWithoutRetryFlag(failure);

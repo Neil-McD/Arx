@@ -21,6 +21,7 @@ import {
   type ChatgptCodexRequestMetadata,
   type ChatgptCompletionFailure,
   type ChatgptFunctionTool,
+  type ChatgptTransportRetryPolicy,
   type ChatgptResponsesParseResult,
   type ChatgptToolAwareMessage,
   type RuntimeChatgptMessage,
@@ -118,6 +119,7 @@ export async function runChatgptNativeToolCompletion(params: {
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
   requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
+  retryPolicy?: ChatgptTransportRetryPolicy;
 }): Promise<ChatgptNativeToolCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesStreamingRequest({
     ...params,

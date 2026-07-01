@@ -766,6 +766,9 @@ export const runCommunityAgentLoopInternal = internalAction({
             maxTokens: 1600,
             tools: buildCommunityAgentFunctionTools(),
             parallelToolCalls: false,
+            // Background steward: patience is free. Transient provider failures
+            // retry with backoff instead of killing the whole cognition pass.
+            retryPolicy: { maxAttempts: 4, backoffBaseMs: 500 },
             onReasoningSummaryTextDelta: ({ delta }) => {
               reasoningBuffer += delta;
             },
