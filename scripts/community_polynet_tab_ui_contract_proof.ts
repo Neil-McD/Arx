@@ -9,6 +9,33 @@ const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"
 const activeCommunityShell = readFileSync(join(root, "apps/web/src/controllers/useWebActiveCommunityShellController.ts"), "utf8");
 const contextPanel = readFileSync(join(root, "apps/web/src/components/CommunityContextPanel.tsx"), "utf8");
 const interactionProjection = readFileSync(join(root, "apps/web/src/components/WebCommunityInteractionProjection.tsx"), "utf8");
+const communityNav = readFileSync(join(root, "shared/CommunityNav.tsx"), "utf8");
+const desktopChrome = readFileSync(join(root, "apps/web/src/components/WebShellChromeHost.tsx"), "utf8");
+const mobileShell = readFileSync(join(root, "apps/web/src/components/WebMobileCommunityShell.tsx"), "utf8");
+
+// Desktop reaches memory through the rail preview (click -> full graph), so its
+// left nav hides the Polynet item. Mobile has no right rail yet, so it keeps the
+// nav item as its only memory path until a mobile memory surface exists.
+assert.match(
+  communityNav,
+  /showPolynetItem = true/,
+  "CommunityNav should keep the Polynet item available by default (mobile path)",
+);
+assert.match(
+  communityNav,
+  /const showPolynetButton = canViewActiveCommunityPolynet && showPolynetItem;/,
+  "CommunityNav should gate the Polynet item on both access and surface visibility",
+);
+assert.match(
+  desktopChrome,
+  /showPolynetItem=\{false\}/,
+  "Desktop community nav should hide the Polynet tab (memory opens from the rail preview)",
+);
+assert.doesNotMatch(
+  mobileShell,
+  /showPolynetItem=\{false\}/,
+  "Mobile community nav must keep the Polynet item until mobile has a memory surface",
+);
 
 assert.match(
   gateway,

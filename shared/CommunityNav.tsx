@@ -26,6 +26,9 @@ type CommunityNavProps = {
   buttonType?: "button" | "submit" | "reset";
   includeButtonTitles?: boolean;
   showSettingsItem?: boolean;
+  // Desktop reaches memory through the right-rail preview (click -> full graph),
+  // so it hides this nav item; mobile keeps it until it has its own memory path.
+  showPolynetItem?: boolean;
 };
 
 function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
@@ -50,6 +53,7 @@ export function CommunityNav({
   buttonType,
   includeButtonTitles = false,
   showSettingsItem = true,
+  showPolynetItem = true,
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -57,9 +61,10 @@ export function CommunityNav({
     return includeButtonTitles ? label : undefined;
   };
   const showSettingsButton = canViewActiveCommunitySettings && showSettingsItem;
+  const showPolynetButton = canViewActiveCommunityPolynet && showPolynetItem;
   const showManagementSection =
     showSettingsButton ||
-    canViewActiveCommunityPolynet ||
+    showPolynetButton ||
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -219,7 +224,7 @@ export function CommunityNav({
               Settings
             </button>
           ) : null}
-          {canViewActiveCommunityPolynet && (
+          {showPolynetButton && (
             <button
               className={communityTab === "polynet" ? "nav-item active" : "nav-item"}
               type={buttonType}
