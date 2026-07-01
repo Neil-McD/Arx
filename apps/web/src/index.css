@@ -62,10 +62,10 @@
 
 :root[data-theme="dark"],
 :root[data-theme="polynet"] {
-  --web-floating-chrome-bg: rgba(12, 12, 12, 0.22);
-  --web-floating-chrome-border: rgba(255, 255, 255, 0.08);
-  --web-floating-chrome-shadow: none;
-  --web-floating-chrome-highlight: rgba(255, 255, 255, 0.12);
+  --web-floating-chrome-bg: rgba(20, 20, 23, 0.92);
+  --web-floating-chrome-border: rgba(255, 255, 255, 0.1);
+  --web-floating-chrome-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --web-floating-chrome-highlight: rgba(255, 255, 255, 0.1);
 }
 
 /* Prefer deriving the "glass" tint from the current theme's background so it matches. */
@@ -73,10 +73,10 @@
   :root,
   :root[data-theme="dark"],
   :root[data-theme="polynet"] {
-    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 84%, transparent);
-    --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 9%, transparent);
-    --web-floating-chrome-shadow: none;
-    --web-floating-chrome-highlight: color-mix(in srgb, #fff 16%, transparent);
+    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 96%, transparent);
+    --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 12%, transparent);
+    --web-floating-chrome-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    --web-floating-chrome-highlight: color-mix(in srgb, #fff 12%, transparent);
   }
 }
 
