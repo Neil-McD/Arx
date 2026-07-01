@@ -8971,6 +8971,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-context-member-name {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -8981,6 +8983,37 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-context-member-name.is-admin {
   color: var(--accent-gold);
   font-weight: 500;
+}
+
+.community-context-member-action {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.community-context-member:hover .community-context-member-action,
+.community-context-member-action:focus-visible {
+  opacity: 1;
+}
+
+.community-context-member-action:hover,
+.community-context-member-action:focus-visible {
+  border-color: var(--border-muted);
+  background: var(--hover-overlay);
+  color: var(--text-secondary);
+  outline: none;
 }
 
 .community-context-members-footer,

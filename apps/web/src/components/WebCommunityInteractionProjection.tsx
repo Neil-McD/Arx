@@ -3,7 +3,6 @@ import {
   CornerUpLeft,
   MessageCircle,
   MessageSquare,
-  MoreHorizontal,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -23,6 +22,8 @@ import { partitionCommunityAttachments } from "../../../../shared/communityAttac
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityContextPanel, type CommunityPresenceFace, type CommunityRailMember } from "./CommunityContextPanel";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
+import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import type { CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
 import type {
   CommunityTypingPresenceBundle,
   CommunityTypingPresenceUser,
@@ -90,7 +91,16 @@ export type WebCommunityInteractionProjectionProps = {
   isLoadingMoreCommunityMembers?: boolean;
   communityMembersLoadError?: string | null;
   onLoadMoreCommunityMembers?: () => void;
+  communityId?: string | null;
   communityOwnerId?: string | null;
+  canManageCommunityMembers?: boolean;
+  canViewMemberPlanDetails?: boolean;
+  isActiveCommunityOwner?: boolean;
+  communityInitials?: (value: string) => string;
+  onSetCommunityMemberRole?: (membershipId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
+  onRemoveCommunityMember?: (membershipId: string) => Promise<void> | void;
+  onBanCommunityMember?: (membershipId: string) => Promise<void> | void;
+  loadMemberBillingHistory?: (membershipId: string) => Promise<CloudCommunityMemberBillingHistory | null>;
 };
 
 import {
@@ -126,6 +136,35 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
   const [editText, setEditText] = useState("");
+  const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
+  const selectedCommunityMember = useMemo(() => {
+    if (!selectedCommunityMemberId) return null;
+    return (props.communityMembers ?? []).find((member) => member.id === selectedCommunityMemberId) ?? null;
+  }, [props.communityMembers, selectedCommunityMemberId]);
+  const canManageCommunityMembers = Boolean(
+    props.canManageCommunityMembers &&
+      props.communityId &&
+      props.onSetCommunityMemberRole &&
+      props.onRemoveCommunityMember &&
+      props.onBanCommunityMember,
+  );
+  const communityMemberSettingsCommunity = props.communityId
+    ? {
+        id: props.communityId,
+        owner_id: props.communityOwnerId ?? null,
+      }
+    : null;
+
+  useEffect(() => {
+    if (!selectedCommunityMemberId) return;
+    if (!canManageCommunityMembers) {
+      setSelectedCommunityMemberId(null);
+      return;
+    }
+    if (selectedCommunityMember) return;
+    setSelectedCommunityMemberId(null);
+  }, [canManageCommunityMembers, selectedCommunityMember, selectedCommunityMemberId]);
+
   const startEdit = (type: "root" | "reply", id: string, body: string) => {
     setEditing({ type, id });
     setEditText(body);
@@ -240,6 +279,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
   return (
+    <>
     <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}`}>
       <div className="community-interaction-main">
         <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
@@ -534,6 +574,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             onLoadMoreMembers={props.onLoadMoreCommunityMembers}
             onlineUserIds={props.onlineUserIds ?? null}
             ownerId={props.communityOwnerId ?? null}
+            canManageMembers={canManageCommunityMembers}
+            onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
             displayName={props.displayName}
             getInitials={props.getInitials}
             getAvatarColor={props.getAvatarColor}
@@ -541,5 +583,29 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         </aside>
       )}
     </div>
+    <CommunityMemberSettingsDialog
+      member={selectedCommunityMember}
+      activeCommunity={communityMemberSettingsCommunity}
+      canManageMembers={canManageCommunityMembers}
+      canViewMemberPlanDetails={Boolean(props.canViewMemberPlanDetails)}
+      isActiveCommunityOwner={Boolean(props.isActiveCommunityOwner)}
+      onClose={() => setSelectedCommunityMemberId(null)}
+      displayName={props.displayName}
+      getInitials={props.getInitials}
+      communityInitials={props.communityInitials ?? props.getInitials}
+      handleSetCommunityMemberRole={(membershipId, role) =>
+        props.onSetCommunityMemberRole?.(membershipId, role)
+      }
+      handleRemoveCommunityMember={(membershipId) =>
+        props.onRemoveCommunityMember?.(membershipId)
+      }
+      handleBanCommunityMember={(membershipId) =>
+        props.onBanCommunityMember?.(membershipId)
+      }
+      loadMemberBillingHistory={(membershipId) =>
+        props.loadMemberBillingHistory?.(membershipId) ?? Promise.resolve(null)
+      }
+    />
+    </>
   );
 }

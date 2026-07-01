@@ -4882,6 +4882,27 @@ export default function App() {
       limit: 20,
     });
   }, [activeCommunityId, ensureUsableAuthSession]);
+  const reloadActiveCommunityDirectoryMembers = useCallback(async () => {
+    const usableSession = await ensureUsableAuthSession();
+    const communityId = activeCommunityIdRef.current ?? activeCommunityId;
+    if (!usableSession || !communityId) return;
+    await loadCommunityDirectoryMembers(communityId, usableSession);
+  }, [activeCommunityId, ensureUsableAuthSession, loadCommunityDirectoryMembers]);
+  const handleSetCommunityContextMemberRole = useCallback(async (
+    membershipId: string,
+    role: "admin" | "moderator" | "member",
+  ) => {
+    await handleSetCommunityMemberRole(membershipId, role);
+    await reloadActiveCommunityDirectoryMembers();
+  }, [handleSetCommunityMemberRole, reloadActiveCommunityDirectoryMembers]);
+  const handleRemoveCommunityContextMember = useCallback(async (membershipId: string) => {
+    await handleRemoveCommunityMember(membershipId);
+    await reloadActiveCommunityDirectoryMembers();
+  }, [handleRemoveCommunityMember, reloadActiveCommunityDirectoryMembers]);
+  const handleBanCommunityContextMember = useCallback(async (membershipId: string) => {
+    await handleBanCommunityMember(membershipId);
+    await reloadActiveCommunityDirectoryMembers();
+  }, [handleBanCommunityMember, reloadActiveCommunityDirectoryMembers]);
 
   const {
     loadCommunityAgentConfig,
@@ -11109,7 +11130,16 @@ export default function App() {
           if (!activeCommunityId || !session) return;
           void loadMoreCommunityDirectoryMembers(activeCommunityId, session);
         },
+        communityId: activeCommunityId,
         communityOwnerId: activeCommunity?.owner_id ?? null,
+        canManageCommunityMembers: canManageMembersActiveCommunity,
+        canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
+        isActiveCommunityOwner,
+        communityInitials,
+        onSetCommunityMemberRole: handleSetCommunityContextMemberRole,
+        onRemoveCommunityMember: handleRemoveCommunityContextMember,
+        onBanCommunityMember: handleBanCommunityContextMember,
+        loadMemberBillingHistory: loadCommunityMemberBillingHistory,
       },
     });
   const activateDiscoverCommunityCard = useCallback((opts: {

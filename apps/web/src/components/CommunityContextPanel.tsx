@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type UIEvent } from "react";
+import { MoreHorizontal } from "lucide-react";
 
 export type CommunityPresenceFace = {
   user_id: string;
@@ -14,6 +15,7 @@ export type CommunityRailMember = {
   display_name?: string | null;
   avatar_url?: string | null;
   role: string;
+  created_at?: string | null;
 };
 
 type CommunityContextPanelProps = {
@@ -29,6 +31,8 @@ type CommunityContextPanelProps = {
   onLoadMoreMembers?: () => void;
   onlineUserIds?: Set<string> | null;
   ownerId?: string | null;
+  canManageMembers?: boolean;
+  onOpenMemberSettings?: (member: CommunityRailMember) => void;
   displayName: (userId: string) => string;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
@@ -110,6 +114,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
     const isOnline = online.has(member.user_id);
+    const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
+    const canOpenSettings = Boolean(
+      props.canManageMembers &&
+        props.onOpenMemberSettings &&
+        !isOwnerMember &&
+        !String(member.id ?? "").startsWith("owner:"),
+    );
     return (
       <div key={member.id} className={`community-context-member${isOnline ? "" : " is-offline"}`}>
         <span
@@ -120,6 +131,20 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
         </span>
         <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
+        {canOpenSettings ? (
+          <button
+            className="community-context-member-action"
+            type="button"
+            aria-label={`Open settings for ${name}`}
+            title="Member settings"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onOpenMemberSettings?.(member);
+            }}
+          >
+            <MoreHorizontal size={16} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     );
   };

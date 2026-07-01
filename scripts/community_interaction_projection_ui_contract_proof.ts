@@ -13,6 +13,8 @@ const app = read("apps/web/src/App.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
+const memberSettingsDialog = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
+const membersSection = read("apps/web/src/components/WebCommunityMembersSection.tsx");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -145,6 +147,106 @@ assert.match(
   contextPanel,
   /onScroll=\{handleMembersScroll\}/,
   "context panel should attach the load-more scroll handler to the member rail",
+);
+assert.match(
+  contextPanel,
+  /canManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
+  "context panel should model an optional manager-only member settings affordance",
+);
+assert.match(
+  contextPanel,
+  /const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)/,
+  "context panel should hide member settings for normal viewers and owner rows",
+);
+assert.match(
+  contextPanel,
+  /className="community-context-member-action"[\s\S]*aria-label=\{`Open settings for \$\{name\}`\}[\s\S]*props\.onOpenMemberSettings\?\.\(member\)/,
+  "context panel should open the supplied settings callback from the stable row action button",
+);
+assert.match(
+  baseCss,
+  /\.community-context-member-action\s*\{[\s\S]*width:\s*24px;[\s\S]*height:\s*24px;[\s\S]*opacity:\s*0;/,
+  "member rail settings action should reserve a stable icon footprint without always showing management chrome",
+);
+assert.match(
+  baseCss,
+  /\.community-context-member:hover \.community-context-member-action,[\s\S]*\.community-context-member-action:focus-visible\s*\{[\s\S]*opacity:\s*1;/,
+  "member rail settings action should reveal on hover and keyboard focus",
+);
+assert.match(
+  projection,
+  /import \{ CommunityMemberSettingsDialog \} from "\.\/CommunityMemberSettingsDialog";/,
+  "interaction projection should reuse the shared member settings dialog",
+);
+assert.match(
+  projection,
+  /canManageCommunityMembers\?: boolean;[\s\S]*onSetCommunityMemberRole\?: \(membershipId: string, role: "admin" \| "moderator" \| "member"\) => Promise<void> \| void;[\s\S]*loadMemberBillingHistory\?: \(membershipId: string\) => Promise<CloudCommunityMemberBillingHistory \| null>;/,
+  "interaction projection should accept the existing member-management controller contract explicitly",
+);
+assert.match(
+  projection,
+  /const canManageCommunityMembers = Boolean\([\s\S]*props\.canManageCommunityMembers[\s\S]*props\.communityId[\s\S]*props\.onSetCommunityMemberRole[\s\S]*props\.onRemoveCommunityMember[\s\S]*props\.onBanCommunityMember/,
+  "interaction projection should fail closed unless community id and member-management mutation callbacks are available",
+);
+assert.match(
+  projection,
+  /if \(!canManageCommunityMembers\) \{[\s\S]*setSelectedCommunityMemberId\(null\);[\s\S]*return;[\s\S]*\}/,
+  "interaction projection should close member settings if the manager gate disappears while open",
+);
+assert.match(
+  projection,
+  /CommunityContextPanel[\s\S]*canManageMembers=\{canManageCommunityMembers\}[\s\S]*onOpenMemberSettings=\{\(member\) => setSelectedCommunityMemberId\(member\.id\)\}/,
+  "interaction projection should only wire right-rail member settings through the manager gate",
+);
+assert.match(
+  projection,
+  /<CommunityMemberSettingsDialog[\s\S]*member=\{selectedCommunityMember\}[\s\S]*canManageMembers=\{canManageCommunityMembers\}[\s\S]*handleSetCommunityMemberRole=\{\(membershipId, role\) =>[\s\S]*props\.onSetCommunityMemberRole\?\.\(membershipId, role\)/,
+  "interaction projection should route right-panel role changes through the existing mutation callback",
+);
+assert.match(
+  app,
+  /const reloadActiveCommunityDirectoryMembers = useCallback\(async \(\) => \{[\s\S]*await loadCommunityDirectoryMembers\(communityId, usableSession\);/,
+  "App should provide a right-panel directory reload after member-management mutations",
+);
+assert.match(
+  app,
+  /const handleSetCommunityContextMemberRole = useCallback\(async \([\s\S]*await handleSetCommunityMemberRole\(membershipId, role\);[\s\S]*await reloadActiveCommunityDirectoryMembers\(\);/,
+  "right-panel role changes should reuse the existing member role mutation and then refresh the directory projection",
+);
+assert.match(
+  app,
+  /interactionProjection:\s*\{[\s\S]*canManageCommunityMembers:\s*canManageMembersActiveCommunity[\s\S]*onSetCommunityMemberRole:\s*handleSetCommunityContextMemberRole[\s\S]*onRemoveCommunityMember:\s*handleRemoveCommunityContextMember[\s\S]*onBanCommunityMember:\s*handleBanCommunityContextMember[\s\S]*loadMemberBillingHistory:\s*loadCommunityMemberBillingHistory/,
+  "App should wire manager-only right-panel controls from the existing active-community permission and action contract",
+);
+assert.match(
+  memberSettingsDialog,
+  /export function CommunityMemberSettingsDialog\(props: CommunityMemberSettingsDialogProps\)/,
+  "member settings dialog should be a reusable shared component",
+);
+assert.match(
+  memberSettingsDialog,
+  /const canChangeRole = Boolean\([\s\S]*props\.canManageMembers[\s\S]*!memberIsOwner[\s\S]*\(props\.isActiveCommunityOwner \|\| !memberIsAdmin\)/,
+  "member settings dialog should prevent non-owners from role-changing owners or admins",
+);
+assert.match(
+  memberSettingsDialog,
+  /props\.isActiveCommunityOwner[\s\S]*\(\["member", "moderator", "admin"\] as const\)[\s\S]*memberIsAdmin[\s\S]*\(\["admin"\] as const\)[\s\S]*\(\["member", "moderator"\] as const\)/,
+  "member settings dialog should expose owner/admin role options according to the existing management split",
+);
+assert.match(
+  memberSettingsDialog,
+  /return \(\) => \{[\s\S]*didCancel = true;[\s\S]*requestedMemberBillingHistoryIdsRef\.current\.delete\(memberId\);[\s\S]*setLoadingMemberBillingHistoryId\(\(current\) => \([\s\S]*current === memberId \? null : current/,
+  "member settings dialog should clear in-flight billing history state when closed or switched",
+);
+assert.match(
+  membersSection,
+  /import \{ CommunityMemberSettingsDialog \} from "\.\/CommunityMemberSettingsDialog";[\s\S]*<CommunityMemberSettingsDialog/,
+  "legacy members management surface should reuse the same settings dialog while it still exists",
+);
+assert.doesNotMatch(
+  membersSection,
+  /function formatBaseUnitsAmount|function formatBillingEventTitle|function formatBillingEventDetail/,
+  "legacy members management surface should not keep a forked billing/settings formatter implementation",
 );
 
 assert.match(
