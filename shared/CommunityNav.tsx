@@ -29,7 +29,22 @@ type CommunityNavProps = {
   // Desktop reaches memory through the right-rail preview (click -> full graph),
   // so it hides this nav item; mobile keeps it until it has its own memory path.
   showPolynetItem?: boolean;
+  /** Guest mode (public funnel): subtitle line under the banner (the community's promise). */
+  subtitle?: string | null;
+  /** Guest mode (public funnel): tabs rendered with a lock glyph instead of an indicator dot. */
+  lockedTabs?: Partial<Record<CommunityTab, boolean>>;
 };
+
+function NavLockGlyph() {
+  return (
+    <span className="nav-item-lock" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    </span>
+  );
+}
 
 function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
   const slug = String(slugRaw ?? "").trim();
@@ -54,6 +69,8 @@ export function CommunityNav({
   includeButtonTitles = false,
   showSettingsItem = true,
   showPolynetItem = true,
+  subtitle = null,
+  lockedTabs = {},
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -126,6 +143,7 @@ export function CommunityNav({
           <div className="community-nav-banner-overlay" />
           <div className="community-nav-name">{activeCommunity?.name ?? "Community"}</div>
         </div>
+        {subtitle ? <div className="community-nav-subtitle">{subtitle}</div> : null}
       </div>
       <button
         className={communityTab === "chat" ? "nav-item active" : "nav-item"}
@@ -139,7 +157,7 @@ export function CommunityNav({
           </svg>
         </span>
         <span className="nav-item-label">Chat</span>
-        {communityTab !== "chat" && tabIndicators.chat ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+        {lockedTabs.chat ? <NavLockGlyph /> : communityTab !== "chat" && tabIndicators.chat ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
         className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
@@ -163,7 +181,7 @@ export function CommunityNav({
           </svg>
         </span>
         <span className="nav-item-label">AI Feed</span>
-        {communityTab !== "ai_feed" && tabIndicators.ai_feed ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+        {lockedTabs.ai_feed ? <NavLockGlyph /> : communityTab !== "ai_feed" && tabIndicators.ai_feed ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
         className={communityTab === "resources" ? "nav-item active" : "nav-item"}
@@ -178,7 +196,7 @@ export function CommunityNav({
           </svg>
         </span>
         <span className="nav-item-label">Resources</span>
-        {communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+        {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
         className={communityTab === "events" ? "nav-item active" : "nav-item"}
@@ -198,7 +216,7 @@ export function CommunityNav({
           </svg>
         </span>
         <span className="nav-item-label">Events</span>
-        {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+        {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       {showManagementSection && (
         <>

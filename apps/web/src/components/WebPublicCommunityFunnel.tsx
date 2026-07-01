@@ -303,6 +303,16 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       showPoweredBy
       host={publicCommunity?.host ?? null}
+      banner={
+        publicCommunity?.banner_url
+          ? {
+              url: publicCommunity.banner_url,
+              focusX: publicCommunity.banner_focus_x ?? null,
+              focusY: publicCommunity.banner_focus_y ?? null,
+              zoom: publicCommunity.banner_zoom ?? null,
+            }
+          : null
+      }
       gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
     />
   );

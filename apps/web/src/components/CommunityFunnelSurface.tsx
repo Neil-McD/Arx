@@ -1,10 +1,13 @@
-/* Guest-pass lobby — the public community funnel is the community in visitor mode.
-   Design locked in polynet-landing-mocks/10-guest-pass-funnel.html.
-   The join-action contract (CommunityFunnelSurfaceAction) is unchanged; the gate,
-   the rope, and the rail are three renderings of the same action object. */
+/* Guest-pass funnel — the community rendered in visitor mode, built from the REAL
+   product shell components (CommunityNav, CommunityChatMessageRow) plus funnel-only
+   conversion chrome (gate, rope, guest rail) in product theme tokens.
+   Design: polynet-landing-mocks/11-guest-shell-product-skin.html.
+   The join-action contract (CommunityFunnelSurfaceAction) is unchanged. */
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { CommunityChatMessageRow } from "../../../../shared/CommunityChatMessageRow";
+import { CommunityNav } from "../../../../shared/CommunityNav";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
@@ -26,6 +29,13 @@ export type CommunityFunnelSurfaceHost = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
+};
+
+export type CommunityFunnelSurfaceBanner = {
+  url: string | null;
+  focusX?: number | null;
+  focusY?: number | null;
+  zoom?: number | null;
 };
 
 export type CommunityFunnelSurfaceAction = {
@@ -79,8 +89,10 @@ type CommunityFunnelSurfaceProps = {
   inlineActionClassName?: string;
   sidebarActionClassName?: string;
   showPoweredBy?: boolean;
-  /** Public host identity (owner) — rendered in the rail when present. */
+  /** Public host identity (owner) — pinned-note sender + rail host card. */
   host?: CommunityFunnelSurfaceHost | null;
+  /** Community banner (raw fields) for the real CommunityNav header. */
+  banner?: CommunityFunnelSurfaceBanner | null;
   /** When set (and not preview mode), the arrival gate shows on first visit, keyed per community. */
   gateSlugKey?: string | null;
 };
@@ -244,7 +256,7 @@ function renderHeroMediaDefault(kind: CommunityFunnelHeroMediaKind, url: string 
   );
 }
 
-const GATE_STORAGE_PREFIX = "pf2-gate-seen:";
+const GATE_STORAGE_PREFIX = "cfg-gate-seen:";
 
 function hasSeenGate(slugKey: string): boolean {
   try {
@@ -262,15 +274,88 @@ function markGateSeen(slugKey: string) {
   }
 }
 
+const NOOP = () => {};
+
+function getInitialsFromLabel(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+/** The real product message row, configured as an inert guest rendering. */
+function GuestPinnedRow(props: {
+  body: string;
+  senderLabel: string;
+  avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
+}) {
+  const senderLabel = props.senderLabel;
+  return (
+    <CommunityChatMessageRow
+      message={{
+        id: "guest-pinned-note",
+        sender_id: "community-host",
+        body: props.body,
+        attachments: [],
+        reply_to_id: null,
+        created_at: "",
+      }}
+      copied={false}
+      dateSeparator={null}
+      isPending={false}
+      showMeta={true}
+      isOwn={false}
+      canModerateContent={false}
+      senderLabel={senderLabel}
+      senderHandle={null}
+      senderBio={null}
+      avatarUrl={props.avatarUrl}
+      avatarFocusX={props.avatarFocusX ?? null}
+      avatarFocusY={props.avatarFocusY ?? null}
+      avatarZoom={props.avatarZoom ?? null}
+      avatarColor="var(--accent-gold, #d66a8a)"
+      shortTime="pinned"
+      formattedTime="Pinned by the host"
+      isEditing={false}
+      editingMessageText=""
+      isReactionPickerOpen={false}
+      messageReactions={[]}
+      sessionUserId={null}
+      replyToId={null}
+      replyTarget={null}
+      reactionEmojis={[]}
+      getInitials={getInitialsFromLabel}
+      displayName={() => senderLabel}
+      parseReplyPrefix={() => null}
+      truncateReplyPreview={(value: string) => value}
+      renderTextWithLinks={renderTextWithLinks}
+      onScrollToReplyMessage={NOOP}
+      onOpenCommunityChatLightbox={NOOP}
+      onToggleReaction={NOOP}
+      onSetReactionPickerMessageId={NOOP}
+      onStartReply={NOOP}
+      onCopyMessage={NOOP}
+      onStartEdit={NOOP}
+      onDeleteMessage={NOOP}
+      onEditingMessageTextChange={NOOP}
+      onSaveEdit={NOOP}
+      onCancelEdit={NOOP}
+    />
+  );
+}
+
 function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction }) {
   const { action } = props;
   return (
     <>
       {action.canJoinWithApproval && !action.showSignIn && action.approvalPending ? (
-        <div className="pf2-status-card" role="status" aria-live="polite">
+        <div className="cfg-status-card" role="status" aria-live="polite">
           {action.canCancelPendingRequest && action.onCancelPendingRequest ? (
             <button
-              className="pf2-sc-dismiss"
+              className="cfg-sc-dismiss"
               type="button"
               onClick={action.onCancelPendingRequest}
               disabled={action.isCancelPendingRequestDisabled}
@@ -278,8 +363,8 @@ function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction }) {
               {action.cancelPendingRequestLabel ?? "Cancel"}
             </button>
           ) : null}
-          <div className="pf2-sc-title">Request pending</div>
-          <div className="pf2-sc-body">
+          <div className="cfg-sc-title">Request pending</div>
+          <div className="cfg-sc-body">
             You&apos;re waiting for approval to join {action.communityName}.
           </div>
         </div>
@@ -288,9 +373,9 @@ function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction }) {
       !action.showSignIn &&
       action.approvalDenied &&
       !action.canRequestAgain ? (
-        <div className="pf2-status-card is-error" role="status" aria-live="polite">
-          <div className="pf2-sc-title">Request denied</div>
-          <div className="pf2-sc-body">
+        <div className="cfg-status-card is-error" role="status" aria-live="polite">
+          <div className="cfg-sc-title">Request denied</div>
+          <div className="cfg-sc-body">
             {action.approvalReapplyLabel
               ? `Your join request for ${action.communityName} was denied. You can request access again on ${action.approvalReapplyLabel}.`
               : `Your join request for ${action.communityName} was denied.`}
@@ -298,54 +383,47 @@ function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction }) {
         </div>
       ) : null}
       {action.isPreviewMode ? (
-        <div className="pf2-preview-note">Preview mode. Actions are disabled.</div>
+        <div className="cfg-preview-note">Preview mode. Actions are disabled.</div>
       ) : null}
     </>
   );
 }
 
-function CommunityAvatarBlock(props: {
-  className: string;
-  action: CommunityFunnelSurfaceAction;
-}) {
-  return (
-    <div className={props.className}>
-      <CommunityAvatar
-        className="pf2-fill"
-        imageUrl={props.action.avatarUrl}
-        focusX={props.action.avatarFocusX}
-        focusY={props.action.avatarFocusY}
-        zoom={props.action.avatarZoom}
-        name={props.action.communityName}
-        alt={`${props.action.communityName} avatar`}
-      />
-    </div>
-  );
-}
-
 function GateCard(props: {
   action: CommunityFunnelSurfaceAction;
+  hostName: string | null;
   pricingLabel: string;
   isFreePricing: boolean;
-  heroArtImageUrl: string | null;
-  heroArtImageStyle: CSSProperties | null;
+  bannerUrl: string | null;
+  bannerStyle: CSSProperties | null;
   onLookAround: () => void;
 }) {
   const { action } = props;
   return (
-    <div className="pf2-gatecard">
-      <div className="pf2-gbanner" aria-hidden="true">
-        {props.heroArtImageUrl ? (
-          <img src={props.heroArtImageUrl} alt="" draggable={false} style={props.heroArtImageStyle ?? undefined} />
+    <div className="cfg-gatecard">
+      <div className="cfg-gbanner" aria-hidden="true">
+        {props.bannerUrl ? (
+          <img src={props.bannerUrl} alt="" draggable={false} style={props.bannerStyle ?? undefined} />
         ) : null}
       </div>
-      <CommunityAvatarBlock className="pf2-gav" action={action} />
-      <div className="pf2-gname">{action.communityName}</div>
-      {action.communityLinkLabel ? (
-        <div className="pf2-ghandle">{action.communityLinkLabel}</div>
-      ) : null}
-      <p className="pf2-gpromise">{action.cardBlurb}</p>
-      <div className="pf2-gstats">
+      <div className="cfg-gav">
+        <CommunityAvatar
+          className="cfg-fill"
+          imageUrl={action.avatarUrl}
+          focusX={action.avatarFocusX}
+          focusY={action.avatarFocusY}
+          zoom={action.avatarZoom}
+          name={action.communityName}
+          alt={`${action.communityName} avatar`}
+        />
+      </div>
+      <div className="cfg-gname">{action.communityName}</div>
+      <div className="cfg-ghandle">
+        {action.communityLinkLabel ?? ""}
+        {props.hostName ? `${action.communityLinkLabel ? " · " : ""}hosted by ${props.hostName}` : ""}
+      </div>
+      <p className="cfg-gpromise">{action.cardBlurb}</p>
+      <div className="cfg-gstats">
         {typeof action.memberCount === "number" ? (
           <span>
             <b>{formatCompactStat(action.memberCount)}</b> members
@@ -353,24 +431,24 @@ function GateCard(props: {
         ) : null}
         {typeof action.onlineCount === "number" && action.onlineCount > 0 ? (
           <span>
-            <span className="pf2-od" aria-hidden="true" />
+            <span className="cfg-od" aria-hidden="true" />
             <b>{formatCompactStat(action.onlineCount)}</b> online now
           </span>
         ) : null}
-        {!props.isFreePricing ? <span>{props.pricingLabel}</span> : <span>Free to join</span>}
+        <span>{props.isFreePricing ? "Free to join" : props.pricingLabel}</span>
       </div>
       <button
-        className="pf2-join"
+        className="cfg-join"
         type="button"
         disabled={action.isPrimaryActionDisabled}
         onClick={action.onPrimaryAction}
       >
         {action.primaryActionLabel}
       </button>
-      <div className="pf2-gmicro">Instant access · Cancel anytime</div>
+      <div className="cfg-gmicro">Instant access{props.isFreePricing ? "" : " · Cancel anytime"}</div>
       <ActionStatusCards action={action} />
       <br />
-      <button className="pf2-glook" type="button" onClick={props.onLookAround}>
+      <button className="cfg-glook" type="button" onClick={props.onLookAround}>
         Look around first ↓
       </button>
     </div>
@@ -398,6 +476,7 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
     alertMessages = [],
     showPoweredBy = false,
     host = null,
+    banner = null,
     gateSlugKey = null,
   } = props;
 
@@ -416,137 +495,159 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
   const dismissGate = () => {
     if (gateSlugKey) markGateSeen(gateSlugKey);
     setGateOpen(false);
-    window.setTimeout(() => setGateMounted(false), 500);
+    window.setTimeout(() => setGateMounted(false), 450);
+  };
+
+  const reopenGate = () => {
+    if (action.isPreviewMode) return;
+    setGateMounted(true);
+    window.setTimeout(() => setGateOpen(true), 20);
   };
 
   const hostName = host?.display_name?.trim() || null;
+  const bannerUrl = banner?.url ?? heroArtImageUrl;
   const mediaNode = renderHeroMedia
     ? renderHeroMedia()
     : renderHeroMediaDefault(heroMediaKind, heroMediaUrl);
-  const noteBody =
-    aboutContent ?? (aboutText ? renderTextWithLinks(aboutText) : emptyAboutContent);
+  const hasNote = Boolean(aboutContent) || Boolean(aboutText) || Boolean(emptyAboutContent);
   const faceTail =
     typeof action.memberCount === "number"
       ? Math.max(action.memberCount - action.onlineFaces.length, 0)
       : null;
-  const priceParts = isFreePricing ? { amt: "Free", per: "to join" } : splitPrice(pricingLabel);
 
   return (
-    <div className={`pf2-page${isMobile ? " is-mobile" : ""}`}>
-      <div className="pf2-guestbar">
-        <span className="pf2-tag">
+    <div className={`cfg-page${isMobile ? " is-mobile" : ""}`}>
+      <div className="cfg-guestbar">
+        <span className="cfg-tag">
           <i aria-hidden="true" /> Viewing {title} as a guest
         </span>
-        <span className="pf2-brand">
+        <span className="cfg-brand">
           {visibilityVariant === "unlisted" ? `${visibilityLabel} · ` : ""}Powered by Polynet
         </span>
       </div>
 
-      <div className="pf2-shell">
-        <div className="pf2-mobile-ident">
-          <CommunityAvatarBlock className="pf2-cav" action={action} />
+      <div className="cfg-shell">
+        <div className="cfg-mobile-ident">
+          <div className="cfg-mav">
+            <CommunityAvatar
+              className="cfg-fill"
+              imageUrl={action.avatarUrl}
+              focusX={action.avatarFocusX}
+              focusY={action.avatarFocusY}
+              zoom={action.avatarZoom}
+              name={action.communityName}
+              alt=""
+            />
+          </div>
           <span>
             <b>{title}</b>
             <em>{action.cardBlurb}</em>
           </span>
         </div>
 
-        {/* LEFT — the room */}
-        <div className="pf2-left">
-          <div className="pf2-banner" aria-hidden="true">
-            {heroArtImageUrl ? (
-              <img src={heroArtImageUrl} alt="" draggable={false} style={heroArtImageStyle ?? undefined} />
-            ) : null}
-          </div>
-          <div className="pf2-ident">
-            <CommunityAvatarBlock className="pf2-cav" action={action} />
-            <div className="pf2-cname">{title}</div>
-            <div className="pf2-promise">{action.cardBlurb}</div>
-          </div>
-          <div className="pf2-nav">
-            <div className="pf2-nit on">
-              <span className="pf2-d" /> Chat <span className="pf2-ct">public preview</span>
-            </div>
-            <div className="pf2-nit locked">
-              <span className="pf2-d" /> AI Feed <span className="pf2-ct">🔒</span>
-            </div>
-            <div className="pf2-nit locked">
-              <span className="pf2-d" /> Resources <span className="pf2-ct">🔒</span>
-            </div>
-            <div className="pf2-nit locked">
-              <span className="pf2-d" /> Events <span className="pf2-ct">🔒</span>
-            </div>
-            <div className="pf2-nit locked">
-              <span className="pf2-d" /> Members <span className="pf2-ct">🔒</span>
-            </div>
-          </div>
-          <div className="pf2-leftfoot">
+        {/* LEFT — the real product nav in guest mode */}
+        <div className="cfg-nav">
+          <CommunityNav
+            activeCommunity={{
+              slug: null,
+              name: title,
+              banner_url: bannerUrl,
+              banner_focus_x: banner?.focusX ?? null,
+              banner_focus_y: banner?.focusY ?? null,
+              banner_zoom: banner?.zoom ?? null,
+            }}
+            communityTab="chat"
+            canViewMembersActiveCommunity={false}
+            canViewActiveCommunitySettings={false}
+            canViewActiveCommunityPolynet={false}
+            canManageMembersActiveCommunity={false}
+            canViewActiveCommunityAnalytics={false}
+            onSelectTab={(tab) => {
+              if (tab !== "chat") reopenGate();
+            }}
+            buttonType="button"
+            subtitle={action.cardBlurb}
+            lockedTabs={{ ai_feed: true, resources: true, events: true }}
+          />
+          <div className="cfg-navfoot">
             Most rooms are members-only. <b>Join to enter.</b>
           </div>
         </div>
 
-        {/* CENTER — life + the rope */}
-        <div className="pf2-center">
-          <div className="pf2-topic">
-            <span className="pf2-h"># chat</span>
-            <span className="pf2-t">the main room · public preview</span>
+        {/* CENTER — the real chat surface, guest view */}
+        <div className="cfg-center">
+          <div className="cfg-topic">
+            <b># chat</b>
+            <span>the main room · public preview</span>
             {typeof action.onlineCount === "number" && action.onlineCount > 0 ? (
-              <span className="pf2-live">
+              <span className="cfg-live">
                 <i aria-hidden="true" /> {formatCompactStat(action.onlineCount)} online now
               </span>
             ) : null}
           </div>
-          <div className="pf2-feed">
+          <div className="chat-messages cfg-feed">
             {alertMessages.length > 0 ? (
-              <div className="pf2-alerts">
+              <div className="cfg-alerts">
                 {alertMessages.map((message) => (
-                  <div key={message} className="pf2-alert">
+                  <div key={message} className="cfg-alert">
                     {message}
                   </div>
                 ))}
               </div>
             ) : null}
 
-            {noteBody ? (
+            {hasNote ? (
               <>
-                <div className="pf2-curated">From the host</div>
-                <div className="pf2-msg">
-                  <div className={`pf2-av${host?.avatar_url ? "" : " host"}`}>
-                    {host ? (
-                      <UserAvatar
-                        className="pf2-fill"
-                        name={hostName ?? title}
-                        imageUrl={host.avatar_url}
-                        focusX={host.avatar_focus_x ?? 0.5}
-                        focusY={host.avatar_focus_y ?? 0.5}
-                        zoom={host.avatar_zoom ?? 1}
-                        alt=""
-                        fallback={null}
-                      />
-                    ) : null}
-                  </div>
-                  <div className="pf2-bd">
-                    <div className="pf2-pin">📌 Pinned by the host</div>
-                    <div className="pf2-nm">
-                      {hostName ?? title}
-                      <span className="pf2-role">Host</span>
-                    </div>
-                    <div className="pf2-tx">{noteBody}</div>
-                  </div>
+                <div className="chat-date-separator cfg-daysep">
+                  <span>Pinned by the host</span>
                 </div>
+                {aboutContent || (!aboutText && emptyAboutContent) ? (
+                  <div className="chat-message cfg-custom-note">
+                    <div className="cfg-note-av">
+                      {host ? (
+                        <UserAvatar
+                          className="cfg-fill"
+                          name={hostName ?? title}
+                          imageUrl={host.avatar_url}
+                          focusX={host.avatar_focus_x ?? 0.5}
+                          focusY={host.avatar_focus_y ?? 0.5}
+                          zoom={host.avatar_zoom ?? 1}
+                          alt=""
+                          fallback={null}
+                        />
+                      ) : null}
+                    </div>
+                    <div className="cfg-note-bd">
+                      <div className="cfg-note-nm">
+                        {hostName ?? title}
+                        <span>Host</span>
+                      </div>
+                      <div className="cfg-note-tx">{aboutContent ?? emptyAboutContent}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <GuestPinnedRow
+                    body={aboutText}
+                    senderLabel={hostName ?? title}
+                    avatarUrl={host?.avatar_url ?? null}
+                    avatarFocusX={host?.avatar_focus_x}
+                    avatarFocusY={host?.avatar_focus_y}
+                    avatarZoom={host?.avatar_zoom}
+                  />
+                )}
               </>
             ) : null}
 
-            {mediaNode ? <div className="pf2-media-item">{mediaNode}</div> : null}
+            {mediaNode ? <div className="cfg-media">{mediaNode}</div> : null}
           </div>
 
-          <div className="pf2-rope">
-            <div className="pf2-fakebox">
-              <span className="pf2-ph">
+          <div className="cfg-rope">
+            <div className="cfg-ropebox">
+              <span className="cfg-roph">
                 This is where you&apos;d talk — and where the community answers you, any hour…
               </span>
               <button
-                className="pf2-join"
+                className="cfg-join"
                 type="button"
                 disabled={action.isPrimaryActionDisabled}
                 onClick={action.onPrimaryAction}
@@ -554,22 +655,22 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
                 {action.primaryActionLabel}
               </button>
             </div>
-            <div className="pf2-terms">
+            <div className="cfg-terms">
               <b>{isFreePricing ? "Free to join" : pricingLabel}</b>
               {!isFreePricing ? " · cancel anytime" : ""} · instant access
             </div>
           </div>
         </div>
 
-        {/* RIGHT — host + people + the rope again */}
-        <div className="pf2-right">
+        {/* RIGHT — guest rail (funnel-specific; ContextPanel adoption comes with public memory data) */}
+        <div className="cfg-rail">
           {hostName ? (
             <div>
-              <div className="pf2-rh">Host</div>
-              <div className="pf2-hostcard">
-                <div className="pf2-hav">
+              <div className="cfg-rh">Host</div>
+              <div className="cfg-hostrow">
+                <div className="cfg-hav">
                   <UserAvatar
-                    className="pf2-fill"
+                    className="cfg-fill"
                     name={hostName}
                     imageUrl={host?.avatar_url ?? null}
                     focusX={host?.avatar_focus_x ?? 0.5}
@@ -588,34 +689,34 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
           ) : null}
 
           <div>
-            <div className="pf2-rh">Memory</div>
-            <div className="pf2-memline">
+            <div className="cfg-rh">Memory</div>
+            <div className="cfg-memline">
               <i aria-hidden="true" /> Shared memory grows as the room learns
             </div>
           </div>
 
           <div>
-            <div className="pf2-rh">Community</div>
-            <div className="pf2-stats">
+            <div className="cfg-rh">Community</div>
+            <div className="cfg-stats">
               {typeof action.memberCount === "number" ? (
-                <div className="pf2-stat">
-                  <div className="pf2-v">{formatCompactStat(action.memberCount)}</div>
-                  <div className="pf2-k">Members</div>
+                <div className="cfg-stat">
+                  <b>{formatCompactStat(action.memberCount)}</b>
+                  <span>Members</span>
                 </div>
               ) : null}
               {typeof action.onlineCount === "number" ? (
-                <div className="pf2-stat">
-                  <div className="pf2-v">
-                    <span className="pf2-od" aria-hidden="true" />
+                <div className="cfg-stat">
+                  <b>
+                    <span className="cfg-od" aria-hidden="true" />
                     {formatCompactStat(action.onlineCount)}
-                  </div>
-                  <div className="pf2-k">Online</div>
+                  </b>
+                  <span>Online</span>
                 </div>
               ) : null}
               {typeof action.adminCount === "number" ? (
-                <div className="pf2-stat">
-                  <div className="pf2-v">{formatCompactStat(action.adminCount)}</div>
-                  <div className="pf2-k">Admins</div>
+                <div className="cfg-stat">
+                  <b>{formatCompactStat(action.adminCount)}</b>
+                  <span>Admins</span>
                 </div>
               ) : null}
             </div>
@@ -623,12 +724,13 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
 
           {action.onlineFaces.length > 0 ? (
             <div>
-              <div className="pf2-rh">Online now</div>
+              <div className="cfg-rh">Online now</div>
               {action.onlineFaces.slice(0, 4).map((face) => (
-                <div className="pf2-mrow" key={face.user_id}>
-                  <div className="pf2-fav">
+                <div className="cfg-prow" key={face.user_id}>
+                  <span className="cfg-pod" aria-hidden="true" />
+                  <div className="cfg-fav">
                     <UserAvatar
-                      className="pf2-fill"
+                      className="cfg-fill"
                       name={face.display_name ?? face.user_id}
                       imageUrl={face.avatar_url}
                       focusX={face.avatar_focus_x ?? 0.5}
@@ -641,27 +743,32 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
                   {face.display_name ?? "Member"}
                 </div>
               ))}
-              <div className="pf2-blurlist" aria-hidden="true">
-                <div className="pf2-mrow">
-                  <span className="pf2-fav" /> ████████
+              <div className="cfg-blur" aria-hidden="true">
+                <div className="cfg-prow">
+                  <span className="cfg-fav" /> ████████
                 </div>
-                <div className="pf2-mrow">
-                  <span className="pf2-fav" /> ██████
+                <div className="cfg-prow">
+                  <span className="cfg-fav" /> ██████████
                 </div>
               </div>
               {faceTail !== null && faceTail > 0 ? (
-                <div className="pf2-morebehind">+ {formatCompactStat(faceTail)} more inside</div>
+                <div className="cfg-more">+ {formatCompactStat(faceTail)} more inside</div>
               ) : null}
             </div>
           ) : null}
 
-          <div className="pf2-rjoin">
-            <div className="pf2-offer">
-              <span className={`pf2-amt${isFreePricing ? " is-free" : ""}`}>{priceParts.amt}</span>
-              <span className="pf2-per">{priceParts.per}</span>
+          <div className="cfg-railjoin">
+            <div className="cfg-offer">
+              {isFreePricing ? (
+                <>
+                  <b>Free</b> to join
+                </>
+              ) : (
+                <b>{pricingLabel}</b>
+              )}
             </div>
             <button
-              className="pf2-join pf2-wide"
+              className="cfg-join cfg-wide"
               type="button"
               disabled={action.isPrimaryActionDisabled}
               onClick={action.onPrimaryAction}
@@ -670,9 +777,8 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
             </button>
             <ActionStatusCards action={action} />
             {showPoweredBy ? (
-              <div className="pf2-powered">
-                Powered by Polynet ·{" "}
-                <a href="/">start your own →</a>
+              <div className="cfg-powered">
+                Powered by Polynet · <a href="/">start your own →</a>
               </div>
             ) : null}
           </div>
@@ -681,27 +787,22 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
 
       {gateMounted ? (
         <div
-          className={`pf2-gate${gateOpen ? "" : " off"}`}
+          className={`cfg-gate${gateOpen ? "" : " off"}`}
           onClick={(event) => {
             if (event.target === event.currentTarget) dismissGate();
           }}
         >
           <GateCard
             action={action}
+            hostName={hostName}
             pricingLabel={pricingLabel}
             isFreePricing={isFreePricing}
-            heroArtImageUrl={heroArtImageUrl}
-            heroArtImageStyle={heroArtImageStyle}
+            bannerUrl={bannerUrl}
+            bannerStyle={banner?.url ? null : heroArtImageStyle}
             onLookAround={dismissGate}
           />
         </div>
       ) : null}
     </div>
   );
-}
-
-function splitPrice(pricingLabel: string): { amt: string; per: string } {
-  const match = pricingLabel.match(/^([^/]+)(\/.*)?$/);
-  if (!match) return { amt: pricingLabel, per: "" };
-  return { amt: match[1].trim(), per: (match[2] ?? "").trim() };
 }
