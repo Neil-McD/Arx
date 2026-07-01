@@ -20,7 +20,13 @@ import type {
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
-import { CommunityContextPanel, type CommunityPresenceFace, type CommunityRailMember } from "./CommunityContextPanel";
+import {
+  CommunityContextPanel,
+  type CommunityAdmissionEntryPolicy,
+  type CommunityAdmissionJoinRequest,
+  type CommunityPresenceFace,
+  type CommunityRailMember,
+} from "./CommunityContextPanel";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import type { CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
@@ -94,6 +100,19 @@ export type WebCommunityInteractionProjectionProps = {
   communityId?: string | null;
   communityOwnerId?: string | null;
   canManageCommunityMembers?: boolean;
+  communityEntryPolicy?: CommunityAdmissionEntryPolicy | null;
+  canSetCommunityFreeAccessMode?: boolean;
+  isSettingCommunityFreeAccessMode?: boolean;
+  communityFreeAccessModeError?: string | null;
+  onSetCommunityFreeAccessMode?: (mode: "open" | "approval") => Promise<void> | void;
+  canReviewCommunityJoinRequests?: boolean;
+  communityJoinReviewMode?: "paid" | "free_auto" | "free_approval" | null;
+  communityJoinRequests?: CommunityAdmissionJoinRequest[] | null;
+  isLoadingCommunityJoinRequests?: boolean;
+  communityJoinRequestsError?: string | null;
+  decidingCommunityJoinRequestId?: string | null;
+  onApproveCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
+  onDenyCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;
@@ -575,6 +594,19 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             onlineUserIds={props.onlineUserIds ?? null}
             ownerId={props.communityOwnerId ?? null}
             canManageMembers={canManageCommunityMembers}
+            entryPolicy={props.communityEntryPolicy ?? null}
+            canSetFreeAccessMode={props.canSetCommunityFreeAccessMode}
+            isSettingFreeAccessMode={props.isSettingCommunityFreeAccessMode}
+            freeAccessModeError={props.communityFreeAccessModeError}
+            onSetFreeAccessMode={props.onSetCommunityFreeAccessMode}
+            canReviewJoinRequests={props.canReviewCommunityJoinRequests}
+            joinReviewMode={props.communityJoinReviewMode}
+            pendingJoinRequests={props.communityJoinRequests ?? null}
+            isLoadingJoinRequests={props.isLoadingCommunityJoinRequests}
+            joinRequestsError={props.communityJoinRequestsError}
+            decidingJoinRequestId={props.decidingCommunityJoinRequestId}
+            onApproveJoinRequest={props.onApproveCommunityJoinRequest}
+            onDenyJoinRequest={props.onDenyCommunityJoinRequest}
             onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
             onOpenMemberProfile={props.onOpenProfile}
             onMessageMember={props.onMessageUser}

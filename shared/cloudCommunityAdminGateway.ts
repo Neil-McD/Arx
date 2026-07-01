@@ -341,6 +341,8 @@ export type CloudCommunityLaunchKnowledgeSourceListResult = {
 type CloudCommunityFreeAccessModeResult = {
   community_id?: string;
   entry_policy?: "open" | "approval" | "paid_subscription";
+  approved_pending_request_count?: number;
+  pending_request_overflow?: boolean;
   updated_at?: string;
 };
 
@@ -1442,7 +1444,7 @@ export async function listCloudCommunityJoinRequestRows<SessionT, TJoinRequest =
   const payload = await client.query("community:listCommunityJoinRequests" as any, {
     authSubject,
     communityId: params.communityId,
-    limit: 200,
+    limit: 201,
     includeStatuses: ["pending"],
   });
   return coerceGatewayRows<TJoinRequest>(payload);

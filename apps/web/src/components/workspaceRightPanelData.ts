@@ -8,7 +8,6 @@ import type {
 } from "../../../../shared/communityTypes";
 import type { WorkspaceComputerStartResult } from "../../../../shared/workspaceTerminalsGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
-import type { CommunityMembersJoinReviewMode } from "../communityJoinPolicy";
 import type { WorkspaceUserPanelIntegration } from "./WebWorkspaceUserDataPanel";
 import type {
   WorkspaceUserDataPanelDataProps,
@@ -78,13 +77,6 @@ type WorkspaceRightPanelOnlineFaceSource = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-};
-
-type WorkspaceRightPanelJoinRequest = {
-  id: string;
-  user_id: string;
-  message: string | null;
-  created_at: string;
 };
 
 function normalizeWorkspaceRightPanelCommunityRole(
@@ -293,17 +285,8 @@ export function buildWorkspaceRightPanelCommunityData(params: {
     summary: CommunityAnalyticsSummary;
     series: CommunityAnalyticsSeries;
   };
-  operations: {
-    canReviewJoinRequests: boolean;
-    joinReviewMode: CommunityMembersJoinReviewMode | null;
-    joinRequests: readonly WorkspaceRightPanelJoinRequest[];
-    isLoadingJoinRequests: boolean;
-    joinRequestsError: string | null;
-    decidingJoinRequestId: string | null;
-  };
   savedProfilesByUserId: Record<string, WorkspaceRightPanelProfile>;
   displayName: (userId: string) => string;
-  formatJoinRequestCreatedAt: (createdAt: string) => string;
   recentSignals: readonly WorkspaceUserPanelRecentSignal[];
   recentSignalFeed?: ReactNode;
   recentSignalFeedVersion?: string | null;
@@ -332,27 +315,6 @@ export function buildWorkspaceRightPanelCommunityData(params: {
       avatarZoom: face.avatar_zoom ?? null,
     })),
     analytics: params.analytics,
-    operations: {
-      canReviewJoinRequests: params.operations.canReviewJoinRequests,
-      joinReviewMode: params.operations.joinReviewMode,
-      pendingJoinRequests: params.operations.joinRequests.map((request) => {
-        const profile = params.savedProfilesByUserId[request.user_id] ?? null;
-        return {
-          id: request.id,
-          userId: request.user_id,
-          displayName: profile?.display_name ?? params.displayName(request.user_id),
-          avatarUrl: profile?.avatar_url ?? null,
-          avatarFocusX: profile?.avatar_focus_x ?? null,
-          avatarFocusY: profile?.avatar_focus_y ?? null,
-          avatarZoom: profile?.avatar_zoom ?? null,
-          message: (request.message ?? "").trim() || null,
-          createdAtLabel: params.formatJoinRequestCreatedAt(request.created_at),
-        };
-      }),
-      isLoadingJoinRequests: params.operations.isLoadingJoinRequests,
-      joinRequestsError: params.operations.joinRequestsError,
-      decidingJoinRequestId: params.operations.decidingJoinRequestId,
-    },
     recentSignals: [...params.recentSignals],
     integrations: [...params.integrations],
   };
@@ -384,8 +346,6 @@ export function buildWorkspaceRightPanelUserData(params: {
   signalQuickReactions?: string[];
   onToggleCommunityMute: (muted: boolean) => Promise<void> | void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
-  onApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
-  onDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
   onOpenWorkspaceIntegrationSetup: () => void;
   onToggleCommunityIntegration: (
     communityAppMountId: string,

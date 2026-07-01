@@ -62,7 +62,6 @@ export type WorkspaceUserPanelCommunity = {
   muted: boolean;
   onlineFaces: WorkspaceUserPanelOnlineFace[];
   analytics: WorkspaceUserPanelCommunityAnalytics;
-  operations: WorkspaceUserPanelCommunityOperations;
   recentSignals: WorkspaceUserPanelRecentSignal[];
   recentSignalFeed?: ReactNode;
   recentSignalFeedVersion?: string | null;
@@ -76,22 +75,6 @@ export type WorkspaceUserPanelCommunityAnalytics = {
   error: string | null;
   summary: CommunityAnalyticsSummary;
   series: CommunityAnalyticsSeries;
-};
-
-export type WorkspaceUserPanelJoinRequest = WorkspaceUserPanelOnlineFace & {
-  id: string;
-  userId: string;
-  message: string | null;
-  createdAtLabel: string;
-};
-
-export type WorkspaceUserPanelCommunityOperations = {
-  canReviewJoinRequests: boolean;
-  joinReviewMode: "paid" | "free_auto" | "free_approval" | null;
-  pendingJoinRequests: WorkspaceUserPanelJoinRequest[];
-  isLoadingJoinRequests: boolean;
-  joinRequestsError: string | null;
-  decidingJoinRequestId: string | null;
 };
 
 export type WorkspaceUserPanelOnlineFace = {
@@ -171,8 +154,6 @@ export type WorkspaceUserDataPanelDataProps = {
   signalQuickReactions?: string[];
   onOpenActiveCommunitySettings: () => void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
-  onApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
-  onDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
   onOpenWorkspaceIntegrationSetup: () => void;
   onToggleCommunityIntegration: (
     communityAppMountId: string,
@@ -601,83 +582,6 @@ function WorkspaceCommunityAnalyticsPreview(props: {
           }
         />
       </div>
-    </section>
-  );
-}
-
-function WorkspaceCommunityOperations(props: {
-  operations: WorkspaceUserPanelCommunityOperations;
-  onApprove: (requestId: string) => Promise<void> | void;
-  onDeny: (requestId: string) => Promise<void> | void;
-}) {
-  if (!props.operations.canReviewJoinRequests || props.operations.joinReviewMode !== "free_approval") {
-    return null;
-  }
-
-  return (
-    <section className="workspace-community-section workspace-community-operations">
-      <div className="workspace-community-section__title">Operations</div>
-      {props.operations.isLoadingJoinRequests ? (
-        <div className="workspace-community-note">Loading approvals...</div>
-      ) : props.operations.pendingJoinRequests.length === 0 ? (
-        <div className="workspace-community-note">No pending approvals.</div>
-      ) : (
-        <div className="workspace-community-approval-list">
-          {props.operations.pendingJoinRequests.map((request) => {
-            const isDeciding = props.operations.decidingJoinRequestId === request.id;
-            return (
-              <div key={request.id} className="workspace-community-approval-row">
-                <UserAvatar
-                  className="workspace-community-approval-avatar public-funnel-face"
-                  readyClassName="has-image"
-                  name={request.displayName ?? request.userId}
-                  imageUrl={request.avatarUrl}
-                  focusX={request.avatarFocusX ?? 0.5}
-                  focusY={request.avatarFocusY ?? 0.5}
-                  zoom={request.avatarZoom ?? 1}
-                  alt=""
-                  aria-hidden={true}
-                  fallback={null}
-                />
-                <div className="workspace-community-approval-copy">
-                  <div className="workspace-community-approval-title">
-                    <strong>{request.displayName ?? "Member"}</strong>
-                    <span>{request.createdAtLabel}</span>
-                  </div>
-                  {request.message ? (
-                    <div className="workspace-community-approval-message">{request.message}</div>
-                  ) : null}
-                </div>
-                <div className="workspace-community-approval-actions">
-                  <button
-                    type="button"
-                    className="workspace-community-approval-action"
-                    disabled={isDeciding}
-                    onClick={() => void props.onApprove(request.id)}
-                    aria-label={`Approve ${request.displayName ?? "member"}`}
-                    title="Approve"
-                  >
-                    ✓
-                  </button>
-                  <button
-                    type="button"
-                    className="workspace-community-approval-action is-danger"
-                    disabled={isDeciding}
-                    onClick={() => void props.onDeny(request.id)}
-                    aria-label={`Deny ${request.displayName ?? "member"}`}
-                    title="Deny"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {props.operations.joinRequestsError ? (
-        <div className="workspace-community-note">{props.operations.joinRequestsError}</div>
-      ) : null}
     </section>
   );
 }
@@ -1328,8 +1232,7 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
   const isOwnerAdminCommunityView =
     community.role === "owner" ||
     community.role === "admin" ||
-    community.analytics.canView ||
-    community.operations.canReviewJoinRequests;
+    community.analytics.canView;
 
   const visibleRecentSignals = isRecentSignalsExpanded
     ? panelRecentSignals
@@ -1407,13 +1310,6 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
         <WorkspaceCommunityAnalyticsPreview
           analytics={community.analytics}
           onSetRange={props.onSetCommunityAnalyticsRange}
-        />
-      ) : null}
-      {isOwnerAdminCommunityView ? (
-        <WorkspaceCommunityOperations
-          operations={community.operations}
-          onApprove={props.onApproveCommunityJoinRequest}
-          onDeny={props.onDenyCommunityJoinRequest}
         />
       ) : null}
       {recentSignalFeed || panelRecentSignals.length > 0 ? (

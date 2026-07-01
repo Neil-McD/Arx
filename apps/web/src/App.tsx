@@ -3283,6 +3283,12 @@ export default function App() {
   } = useWebCommunityJoinRequestsController<CommunityJoinRequest>({
     activeCommunityId,
   });
+  const [isSettingCommunityFreeAccessMode, setIsSettingCommunityFreeAccessMode] = useState(false);
+  const [communityFreeAccessModeError, setCommunityFreeAccessModeError] = useState<string | null>(null);
+  useEffect(() => {
+    setIsSettingCommunityFreeAccessMode(false);
+    setCommunityFreeAccessModeError(null);
+  }, [activeCommunityId]);
   const {
     communityDirectoryMembers,
     communityDirectoryMemberCount,
@@ -4855,6 +4861,62 @@ export default function App() {
     await handleBanCommunityMember(membershipId);
     await reloadActiveCommunityDirectoryMembers();
   }, [handleBanCommunityMember, reloadActiveCommunityDirectoryMembers]);
+  const handleSetCommunityContextFreeAccessMode = useCallback(async (mode: "open" | "approval") => {
+    const usableSession = await ensureUsableAuthSession();
+    const communityId = activeCommunityIdRef.current ?? activeCommunityId;
+    if (!usableSession || !communityId || !canManageMembersActiveCommunity) return;
+    const isStillActiveCommunity = () =>
+      (activeCommunityIdRef.current ?? activeCommunityId) === communityId;
+    setCommunityFreeAccessModeError(null);
+    setIsSettingCommunityFreeAccessMode(true);
+    try {
+      const result = await setCloudCommunityFreeAccessMode({
+        session: usableSession,
+        communityId,
+        mode,
+      });
+      setCommunities((prev) =>
+        prev.map((community) =>
+          community.id === communityId
+            ? {
+                ...community,
+                entry_policy: result?.entry_policy ?? mode,
+                updated_at: result?.updated_at ?? community.updated_at,
+              }
+            : community,
+        ),
+      );
+      const approvedPendingRequestCount = Math.max(
+        0,
+        Number(result?.approved_pending_request_count ?? 0) || 0,
+      );
+      if ((result?.entry_policy ?? mode) !== "approval" && isStillActiveCommunity()) {
+        setCommunityJoinRequests([]);
+      }
+      if (approvedPendingRequestCount > 0 && isStillActiveCommunity()) {
+        await loadCommunityDirectoryMembers(communityId, usableSession);
+      }
+    } catch (error) {
+      if (!isStillActiveCommunity()) return;
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to update auto-join.";
+      setCommunityFreeAccessModeError(message || "Failed to update auto-join.");
+    } finally {
+      if (isStillActiveCommunity()) {
+        setIsSettingCommunityFreeAccessMode(false);
+      }
+    }
+  }, [
+    activeCommunityId,
+    canManageMembersActiveCommunity,
+    ensureUsableAuthSession,
+    loadCommunityDirectoryMembers,
+    setCommunityJoinRequests,
+  ]);
 
   const {
     loadCommunityAgentConfig,
@@ -6576,6 +6638,9 @@ export default function App() {
     activePage === "workspace" &&
     activeView === "home" &&
     isWorkspaceRightPanelOpen;
+  const shouldHydrateCommunityContextPanel =
+    activePage === "community" &&
+    communityTab === "chat";
   useWebCommunityChatPreloadLifecycle<AuthSession>({
     session: session,
     activePage,
@@ -7016,7 +7081,7 @@ export default function App() {
     communities,
     canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
-    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
+    shouldLoad: shouldHydrateWorkspaceCommunityPanel || shouldHydrateCommunityContextPanel,
     loadCommunityJoinRequests,
     setCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
@@ -10562,6 +10627,27 @@ export default function App() {
     setIsSavingCommunitySettings,
   ]);
 
+  const communityContextJoinRequests = useMemo(
+    () =>
+      communityJoinRequests
+        .filter((request) => String(request.status ?? "").trim().toLowerCase() === "pending")
+        .map((request) => {
+          const profile = savedProfilesByUserId[request.user_id] ?? null;
+          return {
+            id: request.id,
+            userId: request.user_id,
+            displayName: profile?.display_name ?? displayName(request.user_id),
+            avatarUrl: profile?.avatar_url ?? null,
+            avatarFocusX: profile?.avatar_focus_x ?? null,
+            avatarFocusY: profile?.avatar_focus_y ?? null,
+            avatarZoom: profile?.avatar_zoom ?? null,
+            message: (request.message ?? "").trim() || null,
+            createdAtLabel: formatRelativeTime(request.created_at),
+          };
+        }),
+    [communityJoinRequests, displayName, savedProfilesByUserId],
+  );
+
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
       activePage,
@@ -11030,6 +11116,21 @@ export default function App() {
         communityId: activeCommunityId,
         communityOwnerId: activeCommunity?.owner_id ?? null,
         canManageCommunityMembers: canManageMembersActiveCommunity,
+        communityEntryPolicy: activeCommunity?.entry_policy ?? null,
+        canSetCommunityFreeAccessMode:
+          canManageMembersActiveCommunity &&
+          (activeCommunity?.entry_policy === "open" || activeCommunity?.entry_policy === "approval"),
+        isSettingCommunityFreeAccessMode,
+        communityFreeAccessModeError,
+        onSetCommunityFreeAccessMode: handleSetCommunityContextFreeAccessMode,
+        canReviewCommunityJoinRequests: canReviewJoinRequestsActiveCommunity,
+        communityJoinReviewMode: activeCommunityMembersJoinReviewMode,
+        communityJoinRequests: communityContextJoinRequests,
+        isLoadingCommunityJoinRequests,
+        communityJoinRequestsError,
+        decidingCommunityJoinRequestId,
+        onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
+        onDenyCommunityJoinRequest: handleDenyCommunityJoinRequest,
         canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
         communityInitials,
@@ -11774,17 +11875,8 @@ export default function App() {
       summary: communityAnalyticsSummary,
       series: communityAnalyticsSeries,
     },
-    operations: {
-      canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
-      joinReviewMode: activeCommunityMembersJoinReviewMode,
-      joinRequests: communityJoinRequests,
-      isLoadingJoinRequests: isLoadingCommunityJoinRequests,
-      joinRequestsError: communityJoinRequestsError,
-      decidingJoinRequestId: decidingCommunityJoinRequestId,
-    },
     savedProfilesByUserId,
     displayName,
-    formatJoinRequestCreatedAt: formatRelativeTime,
     recentSignals: workspacePanelCommunityRecentSignals,
     integrations: workspacePanelCommunityIntegrations,
   });
@@ -11823,8 +11915,6 @@ export default function App() {
     signalQuickReactions: ["👍", "❤️", "🔥"],
     onToggleCommunityMute: handleToggleCommunityMute,
     onSetCommunityAnalyticsRange: setCommunityAnalyticsRange,
-    onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
-    onDenyCommunityJoinRequest: handleDenyCommunityJoinRequest,
     onOpenWorkspaceIntegrationSetup: handleOpenIntegrationsSettings,
     onToggleCommunityIntegration: (communityAppMountId: string, enabled: boolean) =>
       handleUpdateCommunityAppMount(communityAppMountId, { enabled }),

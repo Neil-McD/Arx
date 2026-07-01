@@ -23,9 +23,11 @@ const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChrom
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
+const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const directoryController = read("shared/useCommunityDirectoryController.ts");
 const communityDirectory = read("convex/communityDirectory.ts");
+const communityAdmin = read("convex/communityAdmin.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
@@ -225,7 +227,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-context-member-action\s*\{[\s\S]*width:\s*24px;[\s\S]*height:\s*24px;[\s\S]*opacity:\s*0;/,
+  /\.community-context-member-action\s*\{[\s\S]*width:\s*26px;[\s\S]*height:\s*26px;[\s\S]*opacity:\s*0;/,
   "member rail settings action should reserve a stable icon footprint without always showing management chrome",
 );
 assert.match(
@@ -278,6 +280,129 @@ assert.match(
   /interactionProjection:\s*\{[\s\S]*canManageCommunityMembers:\s*canManageMembersActiveCommunity[\s\S]*onSetCommunityMemberRole:\s*handleSetCommunityContextMemberRole[\s\S]*onRemoveCommunityMember:\s*handleRemoveCommunityContextMember[\s\S]*onBanCommunityMember:\s*handleBanCommunityContextMember[\s\S]*loadMemberBillingHistory:\s*loadCommunityMemberBillingHistory/,
   "App should wire manager-only right-panel controls from the existing active-community permission and action contract",
 );
+assert.match(
+  contextPanel,
+  /entryPolicy\?: CommunityAdmissionEntryPolicy \| null;[\s\S]*canSetFreeAccessMode\?: boolean;[\s\S]*onSetFreeAccessMode\?: \(mode: "open" \| "approval"\) => Promise<void> \| void;/,
+  "context panel should model a manager-only free-access mode control instead of inventing an autojoin data model",
+);
+assert.match(
+  contextPanel,
+  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canSetFreeAccessMode[\s\S]*props\.onSetFreeAccessMode/,
+  "context panel should hide the Auto-join switch for paid communities and unauthorized viewers",
+);
+assert.match(
+  contextPanel,
+  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
+  "context panel should render the free-access mode as an accessible Auto-join switch",
+);
+assert.match(
+  contextPanel,
+  /canReviewJoinRequests\?: boolean;[\s\S]*joinReviewMode\?: "paid" \| "free_auto" \| "free_approval" \| null;[\s\S]*pendingJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;/,
+  "context panel should receive the existing join-review queue projection explicitly",
+);
+assert.match(
+  contextPanel,
+  /const canShowJoinRequests = Boolean\([\s\S]*props\.canReviewJoinRequests[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
+  "context panel should only pop the request affordance for free approval queues the viewer can review",
+);
+assert.match(
+  contextPanel,
+  /PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200[\s\S]*hasPendingJoinRequestOverflow[\s\S]*\? "200\+"[\s\S]*aria-label=\{requestChipAriaLabel\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
+  "context panel should render a bounded 200+ pending-request projection with an accessible request chip",
+);
+assert.match(
+  adminGateway,
+  /approved_pending_request_count\?: number;[\s\S]*pending_request_overflow\?: boolean;[\s\S]*listCommunityJoinRequests[\s\S]*limit: 201,[\s\S]*includeStatuses: \["pending"\]/,
+  "admin gateway should fetch one extra pending request so the context rail can honestly show 200+ without an exact count query",
+);
+assert.match(
+  contextPanel,
+  /className=\{`community-context-request-chip[\s\S]*aria-expanded=\{joinRequestsExpanded\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
+  "context panel should render pending join requests from a compact member-header dropdown",
+);
+assert.match(
+  contextPanel,
+  /props\.onApproveJoinRequest\?\.\(request\.id\)[\s\S]*props\.onDenyJoinRequest\?\.\(request\.id\)/,
+  "context panel request rows should reuse the existing approve and deny callbacks",
+);
+assert.match(
+  projection,
+  /communityEntryPolicy\?: CommunityAdmissionEntryPolicy \| null;[\s\S]*canSetCommunityFreeAccessMode\?: boolean;[\s\S]*communityJoinRequests\?: CommunityAdmissionJoinRequest\[\] \| null;[\s\S]*onApproveCommunityJoinRequest\?: \(requestId: string\) => Promise<void> \| void;/,
+  "interaction projection should carry admission controls and join-review callbacks into the context rail",
+);
+assert.match(
+  projection,
+  /<CommunityContextPanel[\s\S]*entryPolicy=\{props\.communityEntryPolicy \?\? null\}[\s\S]*onSetFreeAccessMode=\{props\.onSetCommunityFreeAccessMode\}[\s\S]*pendingJoinRequests=\{props\.communityJoinRequests \?\? null\}[\s\S]*onApproveJoinRequest=\{props\.onApproveCommunityJoinRequest\}/,
+  "interaction projection should pass admission controls through to CommunityContextPanel",
+);
+assert.match(
+  app,
+  /const handleSetCommunityContextFreeAccessMode = useCallback\(async \(mode: "open" \| "approval"\) => \{[\s\S]*setCloudCommunityFreeAccessMode\(\{[\s\S]*mode,[\s\S]*\}\);[\s\S]*entry_policy: result\?\.entry_policy \?\? mode/,
+  "App should use the existing free-access-mode mutation and update the local community entry policy",
+);
+assert.match(
+  app,
+  /const isStillActiveCommunity = \(\) =>[\s\S]*activeCommunityIdRef\.current[\s\S]*=== communityId;[\s\S]*approved_pending_request_count[\s\S]*setCommunityJoinRequests\(\[\]\)[\s\S]*loadCommunityDirectoryMembers\(communityId, usableSession\)[\s\S]*if \(!isStillActiveCommunity\(\)\) return;/,
+  "App should key Auto-join side effects to the community that started the mutation and refresh member counts after backend approvals",
+);
+assert.match(
+  app,
+  /canSetCommunityFreeAccessMode:[\s\S]*canManageMembersActiveCommunity &&[\s\S]*\(activeCommunity\?\.entry_policy === "open" \|\| activeCommunity\?\.entry_policy === "approval"\)/,
+  "App should expose the Auto-join switch only to managers of free communities",
+);
+assert.match(
+  app,
+  /communityContextJoinRequests = useMemo\([\s\S]*\.filter\(\(request\) => String\(request\.status \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "pending"\)[\s\S]*createdAtLabel: formatRelativeTime\(request\.created_at\)/,
+  "App should pass only pending request rows into the context rail request dropdown",
+);
+assert.match(
+  app,
+  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*communityTab === "chat";[\s\S]*shouldLoad: shouldHydrateWorkspaceCommunityPanel \|\| shouldHydrateCommunityContextPanel/,
+  "join request review data should load for the community chat context rail, not only the older workspace panel",
+);
+assert.match(
+  communityAdmin,
+  /approveCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*ctx\.db\.get\(args\.requestId\)/,
+  "approve join request should validate request ids as communityJoinRequests ids",
+);
+assert.match(
+  communityAdmin,
+  /approveCommunityJoinRequestForFreeAccess[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition[\s\S]*enqueueCommunityAccessGrantedEmailInternal[\s\S]*approveCommunityJoinRequest = mutation\(\{[\s\S]*approveCommunityJoinRequestForFreeAccess\(\{[\s\S]*grantReason: "join_request_approved"/,
+  "manual join-request approval should use the shared free-access approval helper so membership, counts, app grants, and emails stay canonical",
+);
+assert.match(
+  communityAdmin,
+  /OPEN_ACCESS_PENDING_APPROVAL_BATCH_LIMIT = 100[\s\S]*approvePendingJoinRequestsForOpenAccessBatch[\s\S]*approvePendingJoinRequestsForOpenAccessInternal = internalMutation[\s\S]*resolveCommunityEntryPolicy\(community\) !== "open"[\s\S]*scheduleOpenAccessPendingApprovalContinuation/,
+  "opening Auto-join should resolve pending requests in bounded backend batches and stop if the community is no longer open",
+);
+assert.match(
+  communityAdmin,
+  /setCommunityFreeAccessMode = mutation\(\{[\s\S]*entryPolicy === "open" && currentEntryPolicy !== "paid_subscription"[\s\S]*approvePendingJoinRequestsForOpenAccessBatch[\s\S]*approved_pending_request_count: approvedPendingRequestCount[\s\S]*pending_request_overflow: pendingRequestOverflow/,
+  "setCommunityFreeAccessMode should canonicalize existing pending requests when free Auto-join is enabled",
+);
+assert.match(
+  communityAdmin,
+  /denyCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*ctx\.db\.get\(args\.requestId\)/,
+  "deny join request should validate request ids as communityJoinRequests ids",
+);
+assert.doesNotMatch(
+  read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx"),
+  /WorkspaceCommunityOperations|workspace-community-approval|onApproveCommunityJoinRequest/,
+  "old workspace operations approvals projection should stay removed once member-header approvals own the queue",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.workspace-community-approval-|\.workspace-community-operations/,
+  "base CSS should not keep stale workspace approval styles after the queue moves to the member rail",
+);
+[
+  ".community-context-autojoin",
+  ".community-context-request-chip",
+  ".community-context-request-panel",
+  ".community-context-request-row",
+].forEach((selector) => {
+  assert.ok(baseCss.includes(selector), `base.css should include ${selector}`);
+});
 assert.match(
   memberSettingsDialog,
   /export function CommunityMemberSettingsDialog\(props: CommunityMemberSettingsDialogProps\)/,
