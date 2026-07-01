@@ -1053,6 +1053,7 @@ export const runCommunityAgentCycleInternal = internalAction({
       stop_reason: string | null;
       tool_step_count: number;
       candidate_proposal_ids: string[];
+      auto_apply?: unknown;
     }> = [];
     let endedEarly: string | null = null;
     for (const roleKey of COMMUNITY_AGENT_CYCLE_ROLES) {
@@ -1078,6 +1079,25 @@ export const runCommunityAgentCycleInternal = internalAction({
       if (!result.ok && result.stop_reason !== "tool_budget_exhausted") {
         endedEarly = `${roleKey}_failed`;
         break;
+      }
+      // Steward auto-apply: only THIS cycle's own proposals — never a sweep of
+      // older pending candidates (those stay for owner curation).
+      if (roleKey === "steward" && result.candidate_proposal_ids.length > 0) {
+        try {
+          const outcome = await ctx.runMutation(internalRefs.communityIntelligenceDirectory.autoApplyCommunityAgentProposalsInternal as any, {
+            communityId: args.communityId,
+            changeRequestIds: result.candidate_proposal_ids,
+          });
+          roleResults[roleResults.length - 1] = {
+            ...roleResults[roleResults.length - 1]!,
+            auto_apply: outcome,
+          } as (typeof roleResults)[number];
+        } catch (error) {
+          roleResults[roleResults.length - 1] = {
+            ...roleResults[roleResults.length - 1]!,
+            auto_apply: { ok: false, error: error instanceof Error ? error.message : String(error) },
+          } as (typeof roleResults)[number];
+        }
       }
       if (roleKey === "observer") {
         let notes: Array<{ content: string }> = [];

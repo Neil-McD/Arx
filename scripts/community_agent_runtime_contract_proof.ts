@@ -172,4 +172,45 @@ assert.match(
   "a woken heartbeat should run the role cycle, not a single pass",
 );
 
+// Steward auto-apply policy (Amendment v1.1): the current cycle's own proposals
+// land at promising through the trusted airlock cores with an agent actor —
+// capped, title-deduped, visibility gated by privacy risk. Never a sweep of
+// older pending candidates.
+const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
+assert.match(
+  directory,
+  /autoApplyCommunityAgentProposalsInternal = internalMutation/,
+  "steward auto-apply must be an internal mutation",
+);
+assert.match(
+  directory,
+  /STEWARD_AUTO_APPLY_LANDING_STATUS = "promising"/,
+  "agent proposals land at promising, never higher",
+);
+assert.match(
+  directory,
+  /STEWARD_AUTO_APPLY_MAX_PER_CYCLE = 3/,
+  "auto-apply is capped per cycle",
+);
+assert.match(
+  directory,
+  /privacyRisk <= STEWARD_AUTO_APPLY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK[\s\S]*"community"[\s\S]*"admin"/,
+  "privacy risk gates the visibility ceiling",
+);
+assert.match(
+  directory,
+  /duplicate_title/,
+  "auto-apply must dedupe against existing node titles",
+);
+assert.match(
+  directory,
+  /normalizePolicyDecisionActor\(\{[\s\S]*actorType: "agent",[\s\S]*actorAgentKey: "community_agent",/,
+  "auto-apply decisions are attributed to the community agent actor",
+);
+assert.match(
+  runtime,
+  /roleKey === "steward" && result\.candidate_proposal_ids\.length > 0[\s\S]*autoApplyCommunityAgentProposalsInternal[\s\S]*changeRequestIds: result\.candidate_proposal_ids/,
+  "the cycle auto-applies only the steward's own proposals",
+);
+
 console.log("community_agent_runtime_contract_proof: ok");

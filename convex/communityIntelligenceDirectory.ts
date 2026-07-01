@@ -2949,6 +2949,100 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
   },
 });
 
+// Steward auto-apply policy (contract Amendment v1.1): agent proposals from the
+// current cycle land at "promising" with no human gate. Promotion above
+// promising is earned by exogenous evidence, never clicked and never justified
+// by steward-generated nodes. Visibility ceiling is gated by privacy risk.
+const STEWARD_AUTO_APPLY_LANDING_STATUS = "promising";
+const STEWARD_AUTO_APPLY_MAX_PER_CYCLE = 3;
+const STEWARD_AUTO_APPLY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0.3;
+const STEWARD_AUTO_APPLY_REASON = "steward_auto_apply_v1";
+
+function normalizeTitleKey(raw: unknown): string {
+  return String(raw ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export const autoApplyCommunityAgentProposalsInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    changeRequestIds: v.array(v.id("communityIntelligenceChangeRequests")),
+  },
+  handler: async (ctx, args) => {
+    const applied: string[] = [];
+    const skipped: Array<{ id: string; reason: string }> = [];
+    const actor = normalizePolicyDecisionActor({
+      actorType: "agent",
+      actorAgentKey: "community_agent",
+    });
+    const existingNodes = (await ctx.db
+      .query("communityIntelligenceNodes" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .take(500)) as Array<Record<string, any>>;
+    const existingTitleKeys = new Set(
+      existingNodes.map((row) => normalizeTitleKey(row.title)).filter(Boolean),
+    );
+    for (const changeRequestId of args.changeRequestIds.slice(0, 20)) {
+      const idValue = normalizeIdValue(changeRequestId);
+      if (applied.length >= STEWARD_AUTO_APPLY_MAX_PER_CYCLE) {
+        skipped.push({ id: idValue, reason: "cycle_cap_reached" });
+        continue;
+      }
+      const row = (await ctx.db.get(changeRequestId)) as IntelligenceChangeRequestRow | null;
+      if (!row || normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)) {
+        skipped.push({ id: idValue, reason: "not_found_in_community" });
+        continue;
+      }
+      if (row.status !== "pending_decision") {
+        skipped.push({ id: idValue, reason: `status_${row.status}` });
+        continue;
+      }
+      if (row.operation !== "create_node") {
+        skipped.push({ id: idValue, reason: "unsupported_operation" });
+        continue;
+      }
+      if (row.createdByActorType !== "agent" && row.createdByActorType !== "compiler") {
+        skipped.push({ id: idValue, reason: "not_agent_created" });
+        continue;
+      }
+      const payload = (row.requestedPayload ?? {}) as Record<string, any>;
+      const titleKey = normalizeTitleKey(payload.title);
+      if (titleKey && existingTitleKeys.has(titleKey)) {
+        skipped.push({ id: idValue, reason: "duplicate_title" });
+        continue;
+      }
+      const privacyRisk = clampScore(row.privacyRisk, 0.25);
+      const visibilityScope =
+        privacyRisk <= STEWARD_AUTO_APPLY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK
+          ? "community"
+          : "admin";
+      await ctx.db.patch(row._id as any, {
+        requestedPayload: {
+          ...payload,
+          status: STEWARD_AUTO_APPLY_LANDING_STATUS,
+          visibilityScope,
+        },
+        updatedAt: Date.now(),
+      });
+      await decideTrustedCommunityIntelligenceChangeRequestCore({
+        ctx,
+        changeRequestId: row._id,
+        status: "accepted",
+        decisionReason: STEWARD_AUTO_APPLY_REASON,
+        actor,
+      });
+      await applyTrustedCommunityIntelligenceChangeRequestCore({
+        ctx,
+        changeRequestId: row._id,
+        actor,
+        reason: STEWARD_AUTO_APPLY_REASON,
+      });
+      applied.push(idValue);
+      if (titleKey) existingTitleKeys.add(titleKey);
+    }
+    return { ok: true, applied, skipped };
+  },
+});
+
 export const listCommunityIntelligenceDirectoryView = query({
   args: {
     userId: v.optional(v.id("users")),
