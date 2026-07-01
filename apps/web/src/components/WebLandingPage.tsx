@@ -1,20 +1,7 @@
 import { useEffect } from "react";
 import { recordCloudBusinessPageVisit } from "../../../../shared/cloudBusinessAnalyticsGateway";
-import {
-  Argument,
-  Communities,
-  FinalCTA,
-  Hero,
-  Manifesto,
-  Marquee,
-  MemorySection,
-  NetworkSection,
-  Pillars,
-  SiteFooter,
-  StackCollapse,
-  TopNav,
-} from "./polynetLanding/LandingSections";
-import "./WebLandingPage.css";
+import { ConversionLanding } from "./polynetLanding/ConversionLanding";
+import "./polynetLanding/ConversionLanding.css";
 
 type WebLandingPageProps = {
   onTryFree: () => void;
@@ -29,22 +16,5 @@ export function WebLandingPage(props: WebLandingPageProps) {
     });
   }, []);
 
-  return (
-    <div className="polynet-network-landing">
-      <TopNav onJoin={props.onTryFree} />
-      <main>
-        <Hero onJoin={props.onTryFree} />
-        <Marquee />
-        <Argument />
-        <NetworkSection />
-        <MemorySection />
-        <Pillars />
-        <Communities />
-        <StackCollapse onJoin={props.onTryFree} />
-        <Manifesto />
-        <FinalCTA onJoin={props.onTryFree} />
-      </main>
-      <SiteFooter />
-    </div>
-  );
+  return <ConversionLanding onJoin={props.onTryFree} />;
 }
