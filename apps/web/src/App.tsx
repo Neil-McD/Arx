@@ -263,7 +263,6 @@ import {
   DISCOVER_APP_CATALOG,
   type DiscoverAppCatalogEntry,
 } from "../../../shared/discoverCatalog";
-import { buildCommunityIntegrationSurfaceRows } from "./lib/integrationSurfaceRows";
 import {
   DISCOVER_SKILL_CATALOG,
   type DiscoverSkillCatalogEntry,
@@ -534,12 +533,8 @@ import {
   useWorkspaceRightPanelController,
 } from "./components/useWorkspaceRightPanelController";
 import {
-  buildWorkspaceRightPanelCommunityData,
-  buildWorkspaceRightPanelRecentSignals,
   buildWorkspaceRightPanelUserData,
-  type WorkspaceRightPanelRecentSignalTarget,
 } from "./components/workspaceRightPanelData";
-import { CommunityInteractionFeedList } from "./components/communityInteractionFeed";
 import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
@@ -6460,9 +6455,7 @@ export default function App() {
   }, [profileStorageUserId]);
 
   const visibleCommunityProfileIds = useMemo(() => {
-    const shouldLoadCommunityProfiles =
-      activePage === "community" ||
-      (activePage === "workspace" && activeView === "home" && isWorkspaceRightPanelOpen);
+    const shouldLoadCommunityProfiles = activePage === "community";
     if (!shouldLoadCommunityProfiles) return [] as string[];
     const ids = new Set<string>();
     for (const member of communityDirectoryMembers) {
@@ -6493,14 +6486,12 @@ export default function App() {
     return Array.from(ids);
   }, [
     activePage,
-    activeView,
     canonicalSessionUserId,
     communityActivityEvents,
     communityDirectoryMembers,
     communityInteractionRepliesByRootId,
     communityInteractionRoots,
     communityMessages,
-    isWorkspaceRightPanelOpen,
   ]);
 
   const savedProfilesByUserId = useMemo(() => {
@@ -6634,10 +6625,6 @@ export default function App() {
     lastDiscoverLoadAttemptedAt,
     loadDiscoverCommunities,
   });
-  const shouldHydrateWorkspaceCommunityPanel =
-    activePage === "workspace" &&
-    activeView === "home" &&
-    isWorkspaceRightPanelOpen;
   const shouldHydrateCommunityContextPanel =
     activePage === "community" &&
     communityTab === "chat";
@@ -6647,7 +6634,6 @@ export default function App() {
     activeCommunityId,
     hasResolvedCommunityChat,
     loadCommunityChat,
-    shouldPreload: shouldHydrateWorkspaceCommunityPanel,
   });
 
   useCommunitySettingsAccessLifecycle<AuthSession, CommunityRecord>({
@@ -6675,7 +6661,7 @@ export default function App() {
     retry: retryCommunityAiFeed,
   } = useCommunityAiFeedController<AuthSession>({
     activeCommunityId,
-    isAiFeedTabActive: communityTab === "ai_feed" || shouldHydrateWorkspaceCommunityPanel,
+    isAiFeedTabActive: communityTab === "ai_feed",
     viewerCacheKey: session?.user?.id ?? "anonymous",
     session: session,
     ensureSession: ensureUsableAuthSession,
@@ -6872,7 +6858,6 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadCommunityApps =
-      (activePage === "workspace" && activeView === "home" && isWorkspaceRightPanelOpen) ||
       (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "community" && communityTab === "settings") ||
       activePage === "discover";
@@ -6891,17 +6876,13 @@ export default function App() {
     void loadCommunityAppMounts(activeCommunityId, session);
   }, [
     activePage,
-    activeView,
     communityTab,
     session,
-    settingsPage,
     activeCommunityId,
     activeCommunityAccess?.can_enter_community,
     activeCommunityAccess?.can_view,
-    canManageCommunitySettings,
     canViewActiveCommunitySettings,
     canManageMembersActiveCommunity,
-    isWorkspaceRightPanelOpen,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     communityAppMountsLoadedCommunityIdRef,
@@ -6936,9 +6917,6 @@ export default function App() {
       (activePage === "community" && communityTab === "settings") ||
       (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "workspace" &&
-        activeView === "home" &&
-        isWorkspaceRightPanelOpen) ||
-      (activePage === "workspace" &&
         activeView === "settings" &&
         settingsPage === "integrations");
     if (!shouldLoadEffectiveMcpApps) return;
@@ -6954,7 +6932,6 @@ export default function App() {
     activePage,
     activeView,
     communityTab,
-    isWorkspaceRightPanelOpen,
     session,
     settingsPage,
     clearEffectiveMcpApps,
@@ -7081,7 +7058,7 @@ export default function App() {
     communities,
     canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
-    shouldLoad: shouldHydrateWorkspaceCommunityPanel || shouldHydrateCommunityContextPanel,
+    shouldLoad: shouldHydrateCommunityContextPanel,
     loadCommunityJoinRequests,
     setCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
@@ -7096,7 +7073,6 @@ export default function App() {
     activeCommunityId,
     loadCommunityResources,
     requireCommunityPage: true,
-    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
   });
   useCommunityEventsTabLifecycle<AuthSession>({
     activePage,
@@ -7106,7 +7082,6 @@ export default function App() {
     range: communityEventsVisibleRange,
     loadCommunityEvents,
     requireCommunityPage: true,
-    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
   });
 
   useCommunityAdminAnalyticsLifecycle({
@@ -7115,7 +7090,6 @@ export default function App() {
     ...sessionArg,
     activeCommunityId,
     canViewActiveCommunityAnalytics,
-    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
     communityAnalyticsRange,
     loadCommunityAnalytics,
     resetCommunityAnalytics,
@@ -9558,43 +9532,6 @@ export default function App() {
 		    if (!communitySlug) return;
 		    openCommunityChat(communitySlug, { clearUnread: true });
 		  };
-		  const handleOpenWorkspacePanelCommunitySignal = (target: WorkspaceRightPanelRecentSignalTarget) => {
-		    const communitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-		    if (!communitySlug) return;
-		    const itemId = String(target.itemId ?? "").trim();
-		    if (target.tab === "chat") {
-		      openCommunityChat(communitySlug, { clearUnread: true, pushSnapshot: false });
-		    } else {
-		      if (target.tab === "events" && itemId) {
-		        const matchedEvent = communityEvents.find((event) => event.id === itemId);
-		        if (matchedEvent) {
-		          setCommunityEventsVisibleMonthIso(normalizeCommunityEventsMonthIso(matchedEvent.starts_at));
-		        }
-		      }
-		      openCommunityTab(communitySlug, target.tab, { pushSnapshot: false });
-		    }
-		    if (!itemId) return;
-		    const scrollToTarget = () => {
-		      if (target.tab === "chat") {
-		        scrollToCommunityMessage(itemId);
-		        return;
-		      }
-		      const targetIds =
-		        target.tab === "ai_feed"
-		          ? [`community-ai-feed-${itemId}`]
-		          : target.tab === "resources"
-		            ? [`community-resource-${itemId}`]
-		            : [`community-event-${itemId}`, `community-event-pill-${itemId}`];
-		      for (const targetId of targetIds) {
-		        const node = document.getElementById(targetId);
-		        if (!node) continue;
-		        node.scrollIntoView({ behavior: "smooth", block: "center" });
-		        break;
-		      }
-		    };
-		    window.setTimeout(scrollToTarget, 120);
-		    window.setTimeout(scrollToTarget, 420);
-		  };
 		  const handleOpenLandingProject = () => {
 		    if (!currentWorkspaceProjectId) return;
 		    handleStartDraftInCloudProject(currentWorkspaceProjectId);
@@ -11757,129 +11694,6 @@ export default function App() {
     showWorkspaceRightPanelControl,
   ]);
 
-  const workspacePanelCommunityRecentSignals = useMemo(() => {
-    return buildWorkspaceRightPanelRecentSignals({
-      aiFeedPosts: activeCommunityFeedState.live,
-      resources: communityResources,
-      events: communityEvents,
-      savedProfilesByUserId,
-      displayName,
-    });
-  }, [
-    activeCommunityFeedState.live,
-    communityEvents,
-    communityResources,
-    displayName,
-    savedProfilesByUserId,
-  ]);
-
-  const workspacePanelCommunityIntegrations = useMemo(
-    () =>
-      buildCommunityIntegrationSurfaceRows(communityAppMounts, effectiveMcpApps, {
-        canToggle: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
-        busyMountIds: new Set(
-          [
-            updatingCommunityAppMountId,
-            refreshingCommunityAppMountId,
-            removingCommunityAppMountId,
-          ].filter(Boolean) as string[],
-        ),
-        isResolvingCanonicalState: isLoadingEffectiveMcpApps,
-        limit: 8,
-      }),
-    [
-      canManageMembersActiveCommunity,
-      canViewActiveCommunitySettings,
-      communityAppMounts,
-      effectiveMcpApps,
-      isLoadingEffectiveMcpApps,
-      refreshingCommunityAppMountId,
-      removingCommunityAppMountId,
-      updatingCommunityAppMountId,
-    ],
-  );
-
-  const recentSignalChatRoots = useMemo(
-    () => {
-      return communityInteractionRoots
-        .filter((bundle) => !bundle.pending)
-        .sort(
-          (left, right) =>
-            communityInteractionRootCreatedAtMs(right) - communityInteractionRootCreatedAtMs(left),
-        )
-        .slice(0, 15);
-    },
-    [communityInteractionRoots],
-  );
-  const recentSignalChatRootsVersion = useMemo(
-    () => recentSignalChatRoots.map((bundle) => bundle.root.id).join("|"),
-    [recentSignalChatRoots],
-  );
-  const handleOpenPanelInteractionThread = useCallback(
-    (rootId: string) => {
-      const slug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-      if (slug) openCommunityChat(slug, { clearUnread: false, pushSnapshot: true });
-      handleSelectCommunityInteractionRoot(rootId);
-    },
-    [activeCommunity?.slug, handleSelectCommunityInteractionRoot, openCommunityChat, selectedActiveCommunitySlug],
-  );
-  const noopPanelHandler = useCallback(() => {}, []);
-  const workspaceRecentSignalFeed = COMMUNITY_INTERACTION_PROJECTION_ENABLED ? (
-    <CommunityInteractionFeedList
-      density="compact"
-      activeCommunityName={activeCommunity?.name ?? ""}
-      roots={recentSignalChatRoots}
-      selectedRootId={null}
-      replies={[]}
-      isLoadingRoots={isLoadingCommunityInteractions}
-      isLoadingReplies={false}
-      error={communityInteractionError}
-      repliesError={null}
-      onSelectRoot={handleOpenPanelInteractionThread}
-      onCloseDrawer={noopPanelHandler}
-      onRetryRoots={() => {
-        if (activeCommunityId) void loadCommunityInteractionRoots(activeCommunityId, session);
-      }}
-      onRetryReplies={noopPanelHandler}
-      profilesByUserId={savedProfilesByUserId}
-      displayName={displayName}
-      getAvatarColor={getAvatarColor}
-      getInitials={getInitials}
-      formatChatTime={formatChatTime}
-      renderTextWithLinks={renderTextWithLinks}
-      onToggleReaction={handleToggleCommunityInteractionReaction}
-      currentUserId={canonicalSessionUserId}
-      editing={null}
-      editText=""
-      onStartEdit={noopPanelHandler}
-      onEditTextChange={noopPanelHandler}
-      onSaveEdit={noopPanelHandler}
-      onCancelEdit={noopPanelHandler}
-    />
-  ) : null;
-  const workspaceUserDataPanelCommunity = buildWorkspaceRightPanelCommunityData({
-    recentSignalFeed: workspaceRecentSignalFeed,
-    recentSignalFeedVersion: recentSignalChatRootsVersion,
-    activeCommunity,
-    activeCommunityAccess,
-    fallbackRole: activeCommunity ? communityRoleById[activeCommunity.id] : null,
-    memberCount: activeCommunitySocialMemberCount,
-    canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
-    muted: communityMemberMuted,
-    onlineFaces: funnelPreviewOnlineFaces,
-    analytics: {
-      canView: canViewActiveCommunityAnalytics,
-      range: communityAnalyticsRange,
-      isLoading: isLoadingCommunityAnalytics,
-      error: communityAnalyticsError,
-      summary: communityAnalyticsSummary,
-      series: communityAnalyticsSeries,
-    },
-    savedProfilesByUserId,
-    displayName,
-    recentSignals: workspacePanelCommunityRecentSignals,
-    integrations: workspacePanelCommunityIntegrations,
-  });
   const workspaceUserDataPanel = buildWorkspaceRightPanelUserData({
     workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
@@ -11898,9 +11712,6 @@ export default function App() {
     activeProjectName: currentWorkspaceProjectName,
     activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
     activeModelLabel: workspace.derived.activeModelLabel,
-    activeCommunity: workspaceUserDataPanelCommunity,
-    isLoadingCommunityMemberSettings,
-    communityMemberSettingsError,
     onOpenWorkspaceCreditTopup: () => {
       pushNavSnapshot();
       setActivePage("workspace");
@@ -11909,20 +11720,6 @@ export default function App() {
     },
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
-    onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,
-    onToggleSignalReaction: (rootId: string, emoji: string) =>
-      void handleToggleCommunityInteractionReaction("root", rootId, emoji),
-    signalQuickReactions: ["👍", "❤️", "🔥"],
-    onToggleCommunityMute: handleToggleCommunityMute,
-    onSetCommunityAnalyticsRange: setCommunityAnalyticsRange,
-    onOpenWorkspaceIntegrationSetup: handleOpenIntegrationsSettings,
-    onToggleCommunityIntegration: (communityAppMountId: string, enabled: boolean) =>
-      handleUpdateCommunityAppMount(communityAppMountId, { enabled }),
-    onOpenActiveCommunitySettings: () => {
-      const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-      if (!nextCommunitySlug) return;
-      openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
-    },
   });
 
   const workspaceRightPanelToggle = showWorkspaceRightPanelControl ? (

@@ -116,9 +116,6 @@ const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX = "polynet-workspace-r
 const WORKSPACE_RIGHT_PANEL_MODE_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-mode:v1";
 const WORKSPACE_RIGHT_PANEL_MODE_TAB_STORAGE_KEY_PREFIX =
   "polynet-workspace-right-panel-tab-by-mode:v1";
-const WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL_STORAGE_KEY_PREFIX =
-  "polynet-workspace-right-panel-community-label:v1";
-const DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL = "Polynet";
 
 function buildLegacyWorkspaceRightPanelTabStorageKey(userId: string): string {
   return `${LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX}:${userId}`;
@@ -140,14 +137,6 @@ function buildWorkspaceRightPanelPreferenceLoadKey(
   showOperatorTabs: boolean,
 ): string | null {
   return userId ? `${userId}:${showOperatorTabs ? "operator-enabled" : "user-only"}` : null;
-}
-
-function buildWorkspaceRightPanelCommunityLabelStorageKey(userId: string): string {
-  return `${WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL_STORAGE_KEY_PREFIX}:${userId}`;
-}
-
-function normalizeWorkspaceRightPanelCommunityLabel(value: string | null | undefined): string {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function readLegacyWorkspaceRightPanelTab(userId: string | null): WorkspaceRightPanelTab | null {
@@ -202,17 +191,6 @@ function loadWorkspaceRightPanelTab(
   }
 }
 
-function loadWorkspaceRightPanelCommunityLabel(userId: string | null): string {
-  try {
-    if (typeof window === "undefined" || !userId) return DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL;
-    return normalizeWorkspaceRightPanelCommunityLabel(
-      window.localStorage.getItem(buildWorkspaceRightPanelCommunityLabelStorageKey(userId)),
-    ) || DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL;
-  } catch {
-    return DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL;
-  }
-}
-
 function storeWorkspaceRightPanelMode(userId: string | null, mode: WorkspaceRightPanelMode): void {
   try {
     if (typeof window === "undefined" || !userId) return;
@@ -233,17 +211,6 @@ function storeWorkspaceRightPanelTab(
     window.localStorage.setItem(buildWorkspaceRightPanelModeTabStorageKey(userId, mode), tab);
   } catch {
     // Right-panel tab selection is a local display preference only.
-  }
-}
-
-function storeWorkspaceRightPanelCommunityLabel(userId: string | null, label: string): void {
-  const normalizedLabel = normalizeWorkspaceRightPanelCommunityLabel(label);
-  if (!normalizedLabel) return;
-  try {
-    if (typeof window === "undefined" || !userId) return;
-    window.localStorage.setItem(buildWorkspaceRightPanelCommunityLabelStorageKey(userId), normalizedLabel);
-  } catch {
-    // The community tab label cache is visual continuity only.
   }
 }
 
@@ -1355,9 +1322,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     initialRightPanelStorageUserId,
     Boolean(props.operatorRightPanelSession),
   );
-  const initialRightPanelCommunityLabel =
-    normalizeWorkspaceRightPanelCommunityLabel(props.workspaceUserDataPanel?.activeCommunity?.name) ||
-    loadWorkspaceRightPanelCommunityLabel(initialRightPanelStorageUserId);
   const [messageInput, setMessageInput] = useState(props.initialComposerDraft.text);
   const [workspaceAttachments, setWorkspaceAttachments] = useState<WorkspaceAttachmentView[]>(
     props.initialComposerDraft.attachments,
@@ -1385,9 +1349,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     useState<WorkspaceRightPanelMode>(initialRightPanelMode);
   const [requestedRightPanelTab, setRequestedRightPanelTab] =
     useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(initialRightPanelStorageUserId, initialRightPanelMode));
-  const [workspaceRightPanelCommunityLabel, setWorkspaceRightPanelCommunityLabel] =
-    useState<string>(initialRightPanelCommunityLabel);
-  const [isCommunityRecentSignalsExpanded, setIsCommunityRecentSignalsExpanded] = useState(false);
   const [workspaceFilesResetNonce, setWorkspaceFilesResetNonce] = useState(0);
   const [workspaceRightPanelWidth, setWorkspaceRightPanelWidth] = useState(WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH);
   const loadedRightPanelPreferencesKeyRef = useRef<string | null>(
@@ -1396,7 +1357,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       Boolean(props.operatorRightPanelSession),
     ),
   );
-  const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const wasWorkspaceRightPanelVisibleRef = useRef(false);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
@@ -1461,19 +1421,14 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     rightPanelStorageUserId,
     showOperatorTabs,
   );
-  const activeRightPanelCommunityName = normalizeWorkspaceRightPanelCommunityLabel(
-    props.workspaceUserDataPanel?.activeCommunity?.name,
-  );
-  const activeRightPanelCommunityId = props.workspaceUserDataPanel?.activeCommunity?.id ?? null;
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
         showPartnerTab,
         showOperatorTabs,
-        communityLabel: workspaceRightPanelCommunityLabel,
         mode: activeRightPanelMode,
       }),
-    [activeRightPanelMode, showOperatorTabs, showPartnerTab, workspaceRightPanelCommunityLabel],
+    [activeRightPanelMode, showOperatorTabs, showPartnerTab],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const isOperatorRightPanelTabActive =
@@ -1524,35 +1479,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     setRequestedRightPanelMode(nextMode);
     setRequestedRightPanelTab(loadWorkspaceRightPanelTab(rightPanelStorageUserId, nextMode));
   }, [rightPanelPreferenceLoadKey, rightPanelStorageUserId, showOperatorTabs]);
-
-  useEffect(() => {
-    if (
-      !rightPanelStorageUserId ||
-      loadedRightPanelCommunityLabelUserIdRef.current === rightPanelStorageUserId
-    ) {
-      return;
-    }
-    loadedRightPanelCommunityLabelUserIdRef.current = rightPanelStorageUserId;
-    if (activeRightPanelCommunityName) return;
-    setWorkspaceRightPanelCommunityLabel(loadWorkspaceRightPanelCommunityLabel(rightPanelStorageUserId));
-  }, [activeRightPanelCommunityName, rightPanelStorageUserId]);
-
-  useEffect(() => {
-    if (!activeRightPanelCommunityName) return;
-    setWorkspaceRightPanelCommunityLabel((current) =>
-      current === activeRightPanelCommunityName ? current : activeRightPanelCommunityName,
-    );
-    storeWorkspaceRightPanelCommunityLabel(rightPanelStorageUserId, activeRightPanelCommunityName);
-  }, [activeRightPanelCommunityName, rightPanelStorageUserId]);
-
-  useEffect(() => {
-    setIsCommunityRecentSignalsExpanded(false);
-  }, [activeRightPanelCommunityId]);
-
-  useEffect(() => {
-    if (isWorkspaceRightPanelVisible) return;
-    setIsCommunityRecentSignalsExpanded(false);
-  }, [isWorkspaceRightPanelVisible]);
 
   useEffect(() => {
     const wasVisible = wasWorkspaceRightPanelVisibleRef.current;
@@ -2552,7 +2478,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           <WebWorkspaceRightPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
             workspaceFilesResetNonce={workspaceFilesResetNonce}
-            isCommunityRecentSignalsExpanded={isCommunityRecentSignalsExpanded}
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
@@ -2565,7 +2490,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             activeInsightTab={activeRightPanelTab}
             onActiveModeChange={handleWorkspaceRightPanelModeChange}
             onActiveInsightTabChange={handleWorkspaceRightPanelTabChange}
-            onCommunityRecentSignalsExpandedChange={setIsCommunityRecentSignalsExpanded}
             onResizePointerDown={handleWorkspaceRightPanelResizePointerDown}
             onResizePointerMove={(event) => {
               if (event.buttons === 1) resizeWorkspaceRightPanelFromPointer(event);

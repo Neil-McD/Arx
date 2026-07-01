@@ -59,7 +59,7 @@ const socialSummarySlice = sliceBetween(
 assert.match(
   socialSummarySlice,
   /member_count[\s\S]*admin_count[\s\S]*online_count[\s\S]*online_faces/,
-  "Funnel/workspace social proof must be backed by the cheap presence summary",
+  "Funnel social proof must be backed by the cheap presence summary",
 );
 assert.doesNotMatch(
   socialSummarySlice,
@@ -82,10 +82,10 @@ assert.match(
   /previewMemberCount: activeCommunitySocialMemberCount/,
   "Funnel preview must use the summary-backed member count",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /buildWorkspaceRightPanelCommunityData\(\{[\s\S]*memberCount: activeCommunitySocialMemberCount/,
-  "workspace right panel must use the summary-backed member count",
+  /buildWorkspaceRightPanelCommunityData|workspacePanelCommunityRecentSignals|workspacePanelCommunityIntegrations/,
+  "workspace right panel must not keep a duplicate community member-count projection",
 );
 assert.match(
   directoryHookCall,

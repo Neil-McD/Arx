@@ -11,6 +11,7 @@ const workspaceRightPanel = read("apps/web/src/components/WebWorkspaceRightPanel
 const baseCss = read("apps/web/src/base.css");
 const operatorDashboardDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
 const workspaceRightPanelData = read("apps/web/src/components/workspaceRightPanelData.ts");
+const workspaceRightPanelModel = read("apps/web/src/components/workspaceRightPanelModel.ts");
 const operatorPlatformPanelView = read("apps/web/src/components/OperatorPlatformPanelView.tsx");
 const operatorBusinessPanelView = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
 const operatorCommunitiesPanelView = read("apps/web/src/components/OperatorCommunitiesPanelView.tsx");
@@ -100,19 +101,24 @@ assert.match(
   /export function OperatorCommunitiesPanelView[\s\S]*Community performance overview[\s\S]*Top communities/,
   "communities operator view must own community performance presentation",
 );
-assert.match(
-  app,
-  /buildWorkspaceRightPanelRecentSignals\(\{[\s\S]*communityMessages[\s\S]*aiFeedPosts: activeCommunityFeedState\.live[\s\S]*resources: communityResources[\s\S]*events: communityEvents/,
-  "workspace right panel recent signal projection must be centralized in the panel data builder",
+assert.doesNotMatch(
+  workspaceRightPanelModel,
+  /"community"/,
+  "workspace right panel tabs must not expose a duplicate community tab",
+);
+assert.doesNotMatch(
+  workspaceRightPanel,
+  /CommunityPanelContent/,
+  "workspace right panel shell must not render the deleted community projection",
+);
+assert.doesNotMatch(
+  workspaceRightPanelData + app,
+  /buildWorkspaceRightPanelCommunityData|buildWorkspaceRightPanelRecentSignals|workspacePanelCommunityRecentSignals|workspacePanelCommunityIntegrations/,
+  "workspace right panel data must stay workspace-only after community context moved to the chat rail",
 );
 assert.match(
   app,
-  /buildWorkspaceRightPanelCommunityData\(\{[\s\S]*recentSignals: workspacePanelCommunityRecentSignals[\s\S]*integrations: workspacePanelCommunityIntegrations/,
-  "workspace right panel community projection must be centralized before rendering",
-);
-assert.match(
-  app,
-  /buildWorkspaceRightPanelUserData\(\{[\s\S]*workspaceCreditBalance[\s\S]*activeCommunity: workspaceUserDataPanelCommunity[\s\S]*onTurnOnComputer: turnOnWorkspaceComputer/,
+  /buildWorkspaceRightPanelUserData\(\{[\s\S]*workspaceCreditBalance[\s\S]*onTurnOnComputer: turnOnWorkspaceComputer[\s\S]*onTurnOffComputer: turnOffWorkspaceComputer/,
   "workspace right panel user data props must be assembled through the panel data builder",
 );
 assert.match(
@@ -195,15 +201,15 @@ assert.match(
   /const turnOnWorkspaceComputer = useCallback[\s\S]*const projectId = currentWorkspaceProjectId[\s\S]*startProjectWorkspaceComputer\(\{[\s\S]*projectId/,
   "turn-on computer action must target the same current workspace project shown in the panel",
 );
-assert.match(
+assert.doesNotMatch(
   workspaceRightPanelData,
-  /kind: "chat"[\s\S]*kind: "ai_feed"[\s\S]*kind: "resource"[\s\S]*kind: "event"/,
-  "recent signal builder must include only real content/activity signal types",
+  /WorkspaceRightPanelRecentSignal|buildWorkspaceRightPanelRecentSignals|kind: "chat"[\s\S]*kind: "ai_feed"/,
+  "workspace right panel data must not reintroduce a community recent-signal builder",
 );
 assert.doesNotMatch(
   workspaceRightPanelData,
   /kind:\s*"(joined|member|membership)"/,
-  "recent signal builder must not reintroduce joined-member items as signal feed items",
+  "workspace right panel data must not reintroduce joined-member signal feed items",
 );
 assert.match(
   baseCss,

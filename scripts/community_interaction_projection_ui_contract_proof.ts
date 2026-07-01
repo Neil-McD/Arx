@@ -357,8 +357,13 @@ assert.match(
 );
 assert.match(
   app,
-  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*communityTab === "chat";[\s\S]*shouldLoad: shouldHydrateWorkspaceCommunityPanel \|\| shouldHydrateCommunityContextPanel/,
-  "join request review data should load for the community chat context rail, not only the older workspace panel",
+  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*communityTab === "chat";[\s\S]*shouldLoad: shouldHydrateCommunityContextPanel/,
+  "join request review data should load from the community chat context rail",
+);
+assert.doesNotMatch(
+  app,
+  /shouldHydrateWorkspaceCommunityPanel/,
+  "deleted workspace community panel must not keep a separate hydration trigger",
 );
 assert.match(
   communityAdmin,
@@ -577,10 +582,10 @@ assert.match(
   /export function CommunityInteractionFeedList[\s\S]*density: "full" \| "compact"[\s\S]*props\.roots[\s\S]*community-interaction-message/,
   "shared feed renderer should own root row rendering for full and compact projections",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /workspaceRecentSignalFeed[\s\S]*<CommunityInteractionFeedList[\s\S]*density="compact"/,
-  "workspace panel should use the shared compact interaction feed projection",
+  /workspaceRecentSignalFeed|<CommunityInteractionFeedList[\s\S]*density="compact"/,
+  "workspace panel should not keep a compact community feed projection after the right rail owns community context",
 );
 
 [

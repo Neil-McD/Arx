@@ -2,7 +2,6 @@ import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { OperatorCommunityRecord } from "../../../../shared/operatorTypes";
 import {
-  CommunityPanelContent,
   WorkspacePanelContent,
   type WorkspaceUserDataPanelDataProps,
 } from "./WebWorkspaceUserDataPanel";
@@ -38,7 +37,6 @@ export function clampWorkspaceRightPanelWidth(width: number): number {
 export function WebWorkspaceRightPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
   workspaceFilesResetNonce: number;
-  isCommunityRecentSignalsExpanded: boolean;
   insightTabs: WorkspaceRightPanelTabItem[];
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
@@ -51,7 +49,6 @@ export function WebWorkspaceRightPanel(props: {
   activeInsightTab: WorkspaceRightPanelTab;
   onActiveModeChange: (mode: WorkspaceRightPanelMode) => void;
   onActiveInsightTabChange: (tab: WorkspaceRightPanelTab) => void;
-  onCommunityRecentSignalsExpandedChange: (expanded: boolean) => void;
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>) => void;
   onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void;
   onResizeDoubleClick: () => void;
@@ -131,12 +128,6 @@ export function WebWorkspaceRightPanel(props: {
           <WorkspacePanelContent
             {...props.workspaceUserDataPanel}
             filesResetNonce={props.workspaceFilesResetNonce}
-          />
-        ) : activeInsightTab === "community" ? (
-          <CommunityPanelContent
-            {...props.workspaceUserDataPanel}
-            isRecentSignalsExpanded={props.isCommunityRecentSignalsExpanded}
-            onRecentSignalsExpandedChange={props.onCommunityRecentSignalsExpandedChange}
           />
         ) : activeInsightTab === "partner" && props.builderPartnerProgramPanel ? (
           <WebBuilderPartnerProgramPanel
