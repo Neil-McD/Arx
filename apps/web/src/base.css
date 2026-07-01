@@ -9751,6 +9751,51 @@ button.community-launch-knowledge-integration-chip:disabled {
   text-underline-offset: 2px;
 }
 
+/* Mention chips: a tagged name renders as a pill, not inert text. Quiet tint
+   for others, filled accent when YOU are the one tagged, violet family for
+   agent mentions (never mistakable for a human). */
+.community-mention-trigger {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.community-mention-chip {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: color-mix(in srgb, var(--accent) 55%, var(--text-primary));
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.community-mention-trigger:hover .community-mention-chip {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.community-mention-chip.is-self {
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 6px;
+}
+
+.community-mention-chip.is-agent {
+  background: rgba(167, 139, 250, 0.16);
+  color: #c4b5fd;
+}
+
+/* A message that tags you catches the eye at scroll speed: accent edge + wash. */
+.community-interaction-message.is-self-mentioned {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+}
+
 .community-interaction-avatar {
   position: relative;
   width: 40px;

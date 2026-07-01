@@ -422,7 +422,20 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   {selectedRoot.root.title ? (
                     <div className="community-interaction-title">{selectedRoot.root.title}</div>
                   ) : null}
-                  <InteractionBody text={selectedRootText} renderTextWithLinks={props.renderTextWithLinks} />
+                  <InteractionBody
+                    text={selectedRootText}
+                    renderTextWithLinks={props.renderTextWithLinks}
+                    mentionContext={{
+                      mentions: selectedRoot.mentions ?? [],
+                      displayName: props.displayName,
+                      profilesByUserId: props.profilesByUserId,
+                      currentUserId: props.currentUserId,
+                      onOpenProfile: props.onOpenProfile,
+                      onMessageUser: props.onMessageUser,
+                      getAvatarColor: props.getAvatarColor,
+                      getInitials: props.getInitials,
+                    }}
+                  />
                   <InteractionAttachments attachments={selectedRoot.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
                   <EmbedCards embeds={selectedRoot.embeds} />
                   <div className="community-interaction-thread-anchor-actions">
@@ -542,7 +555,20 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           />
                         ) : (
                           <>
-                            <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                            <InteractionBody
+                              text={body}
+                              renderTextWithLinks={props.renderTextWithLinks}
+                              mentionContext={{
+                                mentions: bundle.mentions ?? [],
+                                displayName: props.displayName,
+                                profilesByUserId: props.profilesByUserId,
+                                currentUserId: props.currentUserId,
+                                onOpenProfile: props.onOpenProfile,
+                                onMessageUser: props.onMessageUser,
+                                getAvatarColor: props.getAvatarColor,
+                                getInitials: props.getInitials,
+                              }}
+                            />
                             <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
                             <EmbedCards embeds={bundle.embeds} />
                             {reply.edited_at ? (

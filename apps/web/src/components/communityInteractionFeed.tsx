@@ -14,8 +14,13 @@ import type {
   CommunityInteractionAttachment,
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
+  CommunityInteractionMention,
   CommunityInteractionReplyBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
+import {
+  splitBodyIntoMentionSegments,
+  type ResolvedMentionForRendering,
+} from "../../../../shared/communityMentionRendering";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
@@ -577,16 +582,107 @@ export function TypingIndicator(props: {
   );
 }
 
+// Everything a mention chip needs to render, hover, and open a profile —
+// bundled so call sites thread one object instead of eight props.
+export type InteractionMentionContext = {
+  mentions: CommunityInteractionMention[];
+  displayName: (userId: string) => string;
+  profilesByUserId?: Record<string, UserProfile>;
+  currentUserId?: string | null;
+  onOpenProfile?: (userId: string) => void;
+  onMessageUser?: (userId: string) => void;
+  getAvatarColor: (seed: string) => string;
+  getInitials: (value: string) => string;
+};
+
+export function interactionMentionsSelf(
+  mentions: CommunityInteractionMention[] | undefined,
+  currentUserId: string | null | undefined,
+): boolean {
+  if (!currentUserId || !Array.isArray(mentions)) return false;
+  return mentions.some((mention) => mention.mentioned_user_id === currentUserId);
+}
+
+function resolveMentionsForRendering(
+  context: InteractionMentionContext,
+): ResolvedMentionForRendering[] {
+  return context.mentions
+    .filter((mention) => mention.mention_kind === "user" && mention.mentioned_user_id)
+    .map((mention) => {
+      const userId = String(mention.mentioned_user_id);
+      const profileName = context.profilesByUserId?.[userId]?.display_name?.trim();
+      return {
+        key: mention.id,
+        label: profileName || context.displayName(userId),
+        kind: mention.mention_kind,
+        userId,
+        isSelf: Boolean(context.currentUserId && userId === context.currentUserId),
+      };
+    });
+}
+
+function MentionChipSpan(props: {
+  text: string;
+  mention: ResolvedMentionForRendering;
+  context: InteractionMentionContext;
+}) {
+  const { mention, context } = props;
+  const isAgent = mention.kind !== "user";
+  const chipClassName = `community-mention-chip${mention.isSelf ? " is-self" : ""}${isAgent ? " is-agent" : ""}`;
+  if (!mention.userId || !context.onOpenProfile) {
+    return <span className={chipClassName}>{props.text}</span>;
+  }
+  return (
+    <ProfileHoverCard
+      userId={mention.userId}
+      label={mention.label}
+      seed={mention.userId}
+      profile={context.profilesByUserId?.[mention.userId] ?? null}
+      getAvatarColor={context.getAvatarColor}
+      getInitials={context.getInitials}
+      currentUserId={context.currentUserId}
+      onOpenProfile={context.onOpenProfile}
+      onMessageUser={context.onMessageUser}
+      triggerClassName="community-mention-trigger"
+    >
+      <span className={chipClassName}>{props.text}</span>
+    </ProfileHoverCard>
+  );
+}
+
 export function InteractionBody(props: {
   text: string;
   renderTextWithLinks: (text: string) => ReactNode;
+  mentionContext?: InteractionMentionContext;
 }) {
   const parts = props.text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   if (parts.length === 0) return null;
+  const resolvedMentions =
+    props.mentionContext && props.mentionContext.mentions.length > 0
+      ? resolveMentionsForRendering(props.mentionContext)
+      : [];
+  const renderPart = (part: string): ReactNode => {
+    if (resolvedMentions.length === 0 || !props.mentionContext) {
+      return props.renderTextWithLinks(part);
+    }
+    const segments = splitBodyIntoMentionSegments(part, resolvedMentions);
+    return segments.map((segment, index) =>
+      segment.type === "mention" ? (
+        <MentionChipSpan
+          key={`m:${index}:${segment.mention.key}`}
+          text={segment.text}
+          mention={segment.mention}
+          context={props.mentionContext!}
+        />
+      ) : (
+        <Fragment key={`t:${index}`}>{props.renderTextWithLinks(segment.text)}</Fragment>
+      ),
+    );
+  };
   return (
     <div className="community-interaction-body">
       {parts.map((part, index) => (
-        <p key={`${index}:${part.slice(0, 24)}`}>{props.renderTextWithLinks(part)}</p>
+        <p key={`${index}:${part.slice(0, 24)}`}>{renderPart(part)}</p>
       ))}
     </div>
   );
@@ -807,7 +903,7 @@ export function CommunityInteractionFeedList(
                         return (
                           <div
                             key={root.id}
-                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
+                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsSelf(bundle.mentions, props.currentUserId) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
                           >
                             {bundle.pending ? null : (
                               <MessageActions
@@ -840,7 +936,20 @@ export function CommunityInteractionFeedList(
                               />
                             ) : (
                               <>
-                                <InteractionBody text={body} renderTextWithLinks={props.renderTextWithLinks} />
+                                <InteractionBody
+                                  text={body}
+                                  renderTextWithLinks={props.renderTextWithLinks}
+                                  mentionContext={{
+                                    mentions: bundle.mentions ?? [],
+                                    displayName: props.displayName,
+                                    profilesByUserId: props.profilesByUserId,
+                                    currentUserId: props.currentUserId,
+                                    onOpenProfile: props.onOpenProfile,
+                                    onMessageUser: props.onMessageUser,
+                                    getAvatarColor: props.getAvatarColor,
+                                    getInitials: props.getInitials,
+                                  }}
+                                />
                                 <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
                                 <EmbedCards embeds={bundle.embeds} />
                                 {root.edited_at ? (
