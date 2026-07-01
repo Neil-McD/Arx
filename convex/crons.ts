@@ -165,4 +165,17 @@ crons.daily(
   {},
 );
 
+// Ignition (contract Amendment v1.1): every 6 hours, refresh each community's
+// compiler digest (free, deterministic) and knock for a memory cycle. The
+// knock is triple-gated — owner off-switch, 2-cycles/day cap, and a delta
+// check so unchanged signal never re-wakes the roles — and the heartbeat's
+// evidence gate has the final word. Founder-funded; no owner connection, no
+// cycle.
+crons.interval(
+  "community memory sweep",
+  { hours: 6 },
+  (internal as any).communityAgentHeartbeat.runCommunityMemorySweepInternal,
+  { limitCommunities: 500 },
+);
+
 export default crons;

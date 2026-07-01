@@ -213,4 +213,34 @@ assert.match(
   "the cycle auto-applies only the steward's own proposals",
 );
 
+// Ignition (Amendment v1.1): the 6h sweep is triple-gated before spend —
+// owner off-switch, 2-cycles/day cap, delta check on new signal — and memory
+// is founder-funded (no owner connection, no cycle).
+assert.match(
+  heartbeat,
+  /COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2/,
+  "founder spend is capped at two cycles per day",
+);
+assert.match(
+  heartbeat,
+  /agent_disabled[\s\S]*daily_cycle_cap_reached[\s\S]*no_source_traces[\s\S]*no_new_signal/,
+  "the sweep assessment must gate on off-switch, cap, and signal delta",
+);
+assert.match(
+  heartbeat,
+  /getChatgptConnectionForUserInternal[\s\S]*owner_connection_missing/,
+  "no owner connection means no cycle (founder-funded memory)",
+);
+assert.match(
+  heartbeat,
+  /runCommunityCompilerDigestPassInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  "the sweep refreshes the digest before knocking for a cycle",
+);
+const cronsFile = readFileSync(join(root, "convex/crons.ts"), "utf8");
+assert.match(
+  cronsFile,
+  /"community memory sweep",\s*\{ hours: 6 \},[\s\S]*runCommunityMemorySweepInternal/,
+  "the memory sweep runs every six hours",
+);
+
 console.log("community_agent_runtime_contract_proof: ok");

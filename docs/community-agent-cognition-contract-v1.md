@@ -1627,12 +1627,33 @@ expertise routing for open questions — built on the person provenance edges th
 Steward writes at apply time. Recognition surfaces on profiles and provenance,
 never as node size in the communal graph.
 
+### Economics (resolved 2026-07-01)
+
+Two payment lanes, split by what the spend produces:
+
+- Memory is founder-funded. The directory is the community's compounding
+  asset and the founder owns that asset, so cycle inference runs on the
+  owner's connection. Defaults: on wherever the owner has a usable
+  connection, capped at two cycles per day, with an owner off-switch
+  (communityAgentConfigs.agentEnabled).
+- Chat is asker-funded. A member who tags the agent pays for the answer from
+  their own connection; the wallet is the rate limit. The Concierge speaks as
+  the agent's identity but bills the asker — and therefore retrieves only
+  what the asker is permitted to see (requester-pays and requester-scoped
+  visibility are the same boundary).
+
+### Cadence (resolved 2026-07-01)
+
+A memory sweep runs every six hours: refresh the community's compiler digest
+(deterministic, free), then knock for a cycle ten minutes later. The knock is
+triple-gated before any tokens can be spent — owner off-switch, daily cycle
+cap, and a delta check (new raw signal since the last successful observer
+pass; unchanged material never re-wakes the roles) — and the heartbeat's
+evidence gate has the final word. Frequency controls worst-case latency only;
+the gates own cost.
+
 ### Decisions Pending
 
-- Heartbeat spend policy: default-on with daily cap where the owner has a
-  usable key, vs opt-in per community.
-- Concierge economics: owner-sponsored with per-member rate caps, vs member
-  BYOK.
 - Concierge evidence reach: directory + resources first; raw archive search
   later, behind guardrails (the archive RAG lane is the recorded attack
   surface).

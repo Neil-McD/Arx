@@ -1888,6 +1888,9 @@ export default defineSchema({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
+    // Owner off-switch for the memory agent. Absent means enabled: the memory
+    // system is on by default wherever the owner has a usable connection.
+    agentEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
