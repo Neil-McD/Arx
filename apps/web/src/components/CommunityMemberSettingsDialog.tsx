@@ -352,26 +352,36 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
                 fallback={memberInitials}
               />
               <div className="member-settings-summary-copy">
-                <div className="member-settings-summary-name">
-                  {displayName}
+                <div className="member-settings-summary-name-row">
+                  <span className="member-settings-summary-name">{displayName}</span>
+                  <span className="member-settings-role-badge">
+                    {memberIsOwner ? "Owner" : memberRole}
+                  </span>
                 </div>
                 <div className="member-settings-summary-meta">
                   Joined {formatJoinedAt(member.created_at)}
                 </div>
               </div>
             </div>
-            <div className="member-settings-grid">
-              <div className="member-settings-field">
-                <span>Status</span>
-                <div className="member-settings-value">
-                  {memberIsOwner ? "Owner" : memberRole}
-                </div>
-              </div>
-              <div className="member-settings-field">
-                <span>Joined</span>
-                <div className="member-settings-value">{formatJoinedAt(member.created_at)}</div>
-              </div>
-            </div>
+            <label className="member-settings-block">
+              <span className="member-settings-block-label">Role</span>
+              <select
+                className="select-styled members-surface-select member-settings-role-select"
+                value={memberRole}
+                disabled={!canChangeRole}
+                onChange={(event) => {
+                  const next = event.target.value as "admin" | "moderator" | "member";
+                  if (next === memberRole) return;
+                  void props.handleSetCommunityMemberRole(member.id, next);
+                }}
+              >
+                {roleOptions.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+            </label>
             {planLabel ? (
               <div className="member-settings-payment-card">
                 <div className="member-settings-payment-title">Current plan</div>
@@ -421,53 +431,39 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
                 )}
               </div>
             ) : null}
-            <div className="member-settings-actions">
-              <label className="member-settings-field member-settings-field-full">
-                <span>Role</span>
-                <select
-                  className="select-styled members-surface-select member-settings-role-select"
-                  value={memberRole}
-                  disabled={!canChangeRole}
-                  onChange={(event) => {
-                    const next = event.target.value as "admin" | "moderator" | "member";
-                    if (next === memberRole) return;
-                    void props.handleSetCommunityMemberRole(member.id, next);
-                  }}
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="danger member-settings-remove"
-                type="button"
-                disabled={!canRemoveMember}
-                title={canRemoveMember ? "Remove member" : "Only owners can remove admins"}
-                onClick={() => {
-                  if (!canRemoveMember) return;
-                  props.onClose();
-                  void props.handleRemoveCommunityMember(member.id);
-                }}
-              >
-                Remove member
-              </button>
-              <button
-                className="danger member-settings-remove"
-                type="button"
-                disabled={!canRemoveMember}
-                title={canRemoveMember ? "Ban member" : "Only owners can ban admins"}
-                onClick={() => {
-                  if (!canRemoveMember) return;
-                  props.onClose();
-                  void props.handleBanCommunityMember(member.id);
-                }}
-              >
-                Ban member
-              </button>
-            </div>
+            {props.canManageMembers ? (
+              <div className="member-settings-danger">
+                <span className="member-settings-danger-label">Danger zone</span>
+                <div className="member-settings-danger-actions">
+                  <button
+                    className="member-settings-danger-btn"
+                    type="button"
+                    disabled={!canRemoveMember}
+                    title={canRemoveMember ? "Remove member" : "Only owners can remove admins"}
+                    onClick={() => {
+                      if (!canRemoveMember) return;
+                      props.onClose();
+                      void props.handleRemoveCommunityMember(member.id);
+                    }}
+                  >
+                    Remove
+                  </button>
+                  <button
+                    className="member-settings-danger-btn"
+                    type="button"
+                    disabled={!canRemoveMember}
+                    title={canRemoveMember ? "Ban member" : "Only owners can ban admins"}
+                    onClick={() => {
+                      if (!canRemoveMember) return;
+                      props.onClose();
+                      void props.handleBanCommunityMember(member.id);
+                    }}
+                  >
+                    Ban
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
