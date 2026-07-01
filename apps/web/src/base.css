@@ -8921,12 +8921,40 @@ button.community-launch-knowledge-integration-chip:disabled {
   border-bottom: 1px solid var(--border-muted);
 }
 
+.community-context-memory-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .community-context-section {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.community-context-memory-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.community-context-memory-open:hover {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+  background: var(--bg-card);
 }
 
 .community-context-memory-empty {
@@ -8937,6 +8965,74 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-faint);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.community-context-memory-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.community-context-memory-error button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.community-context-memory-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.community-context-memory-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.community-context-memory-list {
+  display: grid;
+  gap: 5px;
+}
+
+.community-context-memory-node {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-card) 58%, transparent);
+}
+
+.community-context-memory-node strong,
+.community-context-memory-node span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-context-memory-node strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.community-context-memory-node span {
+  color: var(--text-faint);
+  font-size: 11px;
 }
 
 .community-context-members {
@@ -9430,6 +9526,175 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow-x: hidden;
   /* Clear the floating back island (top 8px + ~48px pill height). */
   padding-top: calc(var(--web-topbar-height, 48px) + 12px);
+}
+
+.community-memory-drawer-scroll {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 18px;
+}
+
+.community-memory-drawer-header {
+  display: grid;
+  gap: 12px;
+}
+
+.community-memory-drawer-kicker {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.community-memory-drawer-title {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 560;
+  line-height: 1.2;
+}
+
+.community-memory-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.community-memory-drawer-actions button {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.community-memory-drawer-actions button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.community-memory-drawer-actions button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.community-memory-drawer-state {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.community-memory-drawer-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.community-memory-drawer-stats > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-card) 50%, transparent);
+}
+
+.community-memory-drawer-stats span,
+.community-memory-drawer-node-meta {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.community-memory-drawer-stats strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-memory-drawer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.community-memory-drawer-node {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-card) 58%, transparent);
+}
+
+.community-memory-drawer-node-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.community-memory-drawer-node-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-memory-drawer-node-status {
+  max-width: 92px;
+  overflow: hidden;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 560;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-memory-drawer-node-status.validated,
+.community-memory-drawer-node-status.promising {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  color: var(--accent-gold);
+}
+
+.community-memory-drawer-node-status.contested,
+.community-memory-drawer-node-status.stale {
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #f87171;
+}
+
+.community-memory-drawer-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
 }
 
 .community-interaction-main-composer,

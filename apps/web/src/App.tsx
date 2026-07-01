@@ -11068,6 +11068,16 @@ export default function App() {
         decidingCommunityJoinRequestId,
         onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
         onDenyCommunityJoinRequest: handleDenyCommunityJoinRequest,
+        communityMemoryOverview: communityPolynetController.state.overview,
+        isLoadingCommunityMemory: communityPolynetController.state.isLoading,
+        communityMemoryError: communityPolynetController.state.error,
+        onRefreshCommunityMemory: communityPolynetController.actions.refresh,
+        onOpenCommunityMemory: () => {
+          const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+          if (nextCommunitySlug) {
+            openCommunityTab(nextCommunitySlug, "polynet", { pushSnapshot: false });
+          }
+        },
         canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
         communityInitials,

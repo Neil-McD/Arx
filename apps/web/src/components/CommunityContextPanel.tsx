@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
-import { Check, ChevronDown, MessageCircle, MoreHorizontal, X } from "lucide-react";
+import { Brain, Check, ChevronDown, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import type {
+  CloudCommunityPolynetOverview,
+  CloudCommunityPolynetOverviewNode,
+} from "../../../../shared/cloudCommunityPolynetGateway";
 
 const PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200;
 
@@ -62,6 +66,11 @@ type CommunityContextPanelProps = {
   decidingJoinRequestId?: string | null;
   onApproveJoinRequest?: (requestId: string) => Promise<void> | void;
   onDenyJoinRequest?: (requestId: string) => Promise<void> | void;
+  memoryOverview?: CloudCommunityPolynetOverview | null;
+  isLoadingMemory?: boolean;
+  memoryLoadError?: string | null;
+  onRefreshMemory?: () => void;
+  onOpenMemory?: () => void;
   onOpenMemberSettings?: (member: CommunityRailMember) => void;
   onOpenMemberProfile?: (userId: string) => void;
   onMessageMember?: (userId: string) => void;
@@ -81,6 +90,25 @@ function isAdminRole(member: CommunityRailMember, ownerId?: string | null): bool
     || member.role === "admin"
     || member.role === "moderator"
   );
+}
+
+function formatMemoryLabel(raw: string | null | undefined): string {
+  const value = String(raw ?? "").trim();
+  if (!value) return "Untitled";
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatMemoryCount(overview: CloudCommunityPolynetOverview | null): string | null {
+  if (!overview) return null;
+  const count = overview.memory.total_visible_nodes;
+  if (!Number.isFinite(count)) return null;
+  return `${count}${overview.memory.node_counts_are_lower_bound ? "+" : ""}`;
+}
+
+function isDirectoryMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
+  return node.kind === "directory_node";
 }
 
 // The community context rail (chat right column, resting state): community name,
@@ -103,6 +131,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const memberCountLabel = knownMemberCount !== null
     ? String(knownMemberCount)
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
+  const memoryOverview = props.memoryOverview ?? null;
+  const memoryCountLabel = formatMemoryCount(memoryOverview);
+  const memoryNodes = (memoryOverview?.graph.nodes ?? []).filter(isDirectoryMemoryNode).slice(0, 3);
+  const memorySectionLabel = memoryCountLabel ? `Memory — ${memoryCountLabel}` : "Memory";
+  const memoryActivityLabel = memoryOverview
+    ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
+    : null;
 
   const onlineMembers = members.filter((member) => online.has(member.user_id));
   const offlineMembers = members.filter((member) => !online.has(member.user_id));
@@ -406,18 +441,61 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       ) : null}
 
       <div className="community-context-memory">
-        <div className="community-context-section">Memory</div>
-        <div className="community-context-memory-empty">
-          <svg viewBox="0 0 32 32" width="22" height="22" fill="none" aria-hidden="true">
-            <line x1="8" y1="10" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="24" y1="9" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
-            <line x1="8" y1="10" x2="24" y2="9" stroke="currentColor" strokeWidth="1.4" />
-            <circle cx="8" cy="10" r="2.2" fill="currentColor" />
-            <circle cx="24" cy="9" r="2.2" fill="currentColor" />
-            <circle cx="16" cy="20" r="3" fill="currentColor" />
-          </svg>
-          <span>Builds as the room shares knowledge</span>
+        <div className="community-context-memory-head">
+          <div className="community-context-section">{memorySectionLabel}</div>
+          {props.onOpenMemory ? (
+            <button
+              className="community-context-memory-open"
+              type="button"
+              onClick={props.onOpenMemory}
+              title="Open memory"
+            >
+              <Brain size={13} strokeWidth={1.9} aria-hidden="true" />
+              <span>Open</span>
+            </button>
+          ) : null}
         </div>
+        {props.isLoadingMemory && !memoryOverview ? (
+          <div className="community-context-memory-empty">
+            <span>Loading memory...</span>
+          </div>
+        ) : props.memoryLoadError ? (
+          <div className="community-context-memory-error">
+            <span>Could not load memory.</span>
+            {props.onRefreshMemory ? (
+              <button type="button" onClick={props.onRefreshMemory}>
+                Retry
+              </button>
+            ) : null}
+          </div>
+        ) : memoryOverview && memoryNodes.length > 0 ? (
+          <div className="community-context-memory-summary">
+            <div className="community-context-memory-status">
+              <span>{memoryActivityLabel ?? "Memory active"}</span>
+              {memoryOverview.graph.has_more_nodes ? <span>More retained</span> : null}
+            </div>
+            <div className="community-context-memory-list">
+              {memoryNodes.map((node) => (
+                <div key={node.id} className="community-context-memory-node">
+                  <strong>{node.title ?? node.label}</strong>
+                  <span>{formatMemoryLabel(node.type)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="community-context-memory-empty">
+            <svg viewBox="0 0 32 32" width="22" height="22" fill="none" aria-hidden="true">
+              <line x1="8" y1="10" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
+              <line x1="24" y1="9" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
+              <line x1="8" y1="10" x2="24" y2="9" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="8" cy="10" r="2.2" fill="currentColor" />
+              <circle cx="24" cy="9" r="2.2" fill="currentColor" />
+              <circle cx="16" cy="20" r="3" fill="currentColor" />
+            </svg>
+            <span>{memoryOverview ? "No retained memory yet" : "Builds as the room shares knowledge"}</span>
+          </div>
+        )}
       </div>
 
       <div

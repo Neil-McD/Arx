@@ -7,6 +7,8 @@ const controller = readFileSync(join(root, "apps/web/src/controllers/useWebCommu
 const section = readFileSync(join(root, "apps/web/src/components/WebCommunityPolynetSection.tsx"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"), "utf8");
 const activeCommunityShell = readFileSync(join(root, "apps/web/src/controllers/useWebActiveCommunityShellController.ts"), "utf8");
+const contextPanel = readFileSync(join(root, "apps/web/src/components/CommunityContextPanel.tsx"), "utf8");
+const interactionProjection = readFileSync(join(root, "apps/web/src/components/WebCommunityInteractionProjection.tsx"), "utf8");
 
 assert.match(
   gateway,
@@ -21,7 +23,26 @@ assert.doesNotMatch(
 
 assert.match(controller, /fetchCloudCommunityPolynetOverview/, "Polynet controller should load the overview projection");
 assert.match(controller, /canViewPolynet/, "Polynet controller should model view access, not manage access");
-assert.match(controller, /activePage !== "community"[\s\S]*communityTab !== "polynet"/, "Polynet controller should only load in the active Polynet tab");
+assert.match(
+  controller,
+  /communityTab === "chat" \|\| communityTab === "polynet"/,
+  "Polynet controller should hydrate for the chat context rail and the full Polynet tab",
+);
+assert.match(
+  controller,
+  /COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12/,
+  "Polynet controller should use a compact node limit for the chat rail",
+);
+assert.match(
+  controller,
+  /communityTab === "chat" \? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined/,
+  "Polynet controller should only apply the compact limit to the chat rail",
+);
+assert.match(
+  controller,
+  /current\.communityTab !== communityTab/,
+  "Polynet controller should invalidate pending compact requests when switching tabs",
+);
 assert.doesNotMatch(
   controller,
   /ArchiveHealth|archiveHealth|Backfill|backfill|processPending|retryFailed|getCommunityArchiveHealth|requestCommunityArchiveBackfill|processCommunityArchivePending|retryCommunityArchiveFailures/,
@@ -54,6 +75,52 @@ assert.doesNotMatch(
   "Polynet tab should remain read-only in this slice",
 );
 
+assert.match(
+  contextPanel,
+  /memoryOverview\?: CloudCommunityPolynetOverview \| null/,
+  "Community context rail should accept the Polynet overview projection",
+);
+assert.match(
+  contextPanel,
+  /Memory — \$\{memoryCountLabel\}/,
+  "Community context rail should project a compact memory count",
+);
+assert.match(
+  contextPanel,
+  /onOpenMemory/,
+  "Community context rail should expose memory as the member-facing entry point",
+);
+assert.match(
+  interactionProjection,
+  /memoryOverview=\{props\.communityMemoryOverview \?\? null\}/,
+  "Interaction projection should pass memory state into the right rail",
+);
+assert.match(
+  interactionProjection,
+  /function CommunityMemoryDrawer/,
+  "Interaction projection should render a native memory drawer inside the right rail",
+);
+assert.match(
+  interactionProjection,
+  /isCommunityMemoryOpen/,
+  "Interaction projection should track memory drawer state locally",
+);
+assert.match(
+  interactionProjection,
+  /onOpenMemory=\{\(\) => setIsCommunityMemoryOpen\(true\)\}/,
+  "Community context rail memory open should stay inside the right rail",
+);
+assert.match(
+  interactionProjection,
+  /onOpenFullView=\{props\.onOpenCommunityMemory\}/,
+  "Native memory drawer should keep the full Polynet graph as a secondary fallback",
+);
+assert.doesNotMatch(
+  interactionProjection,
+  /onOpenMemory=\{props\.onOpenCommunityMemory\}/,
+  "Community context rail should not jump directly to the left Polynet tab",
+);
+
 const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
 assert.match(
   css,
@@ -64,6 +131,11 @@ assert.doesNotMatch(
   css,
   /min-width: 92px;[\s\S]{0,80}padding: 0 14px;/,
   "Polynet root node should not regress to the old rectangular pill shape",
+);
+assert.match(
+  css,
+  /\.community-memory-drawer-scroll/,
+  "Community memory drawer should have native right-rail styling",
 );
 
 assert.match(

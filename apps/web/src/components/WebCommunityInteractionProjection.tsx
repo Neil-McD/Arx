@@ -36,6 +36,10 @@ import type {
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import type {
+  CloudCommunityPolynetOverview,
+  CloudCommunityPolynetOverviewNode,
+} from "../../../../shared/cloudCommunityPolynetGateway";
 
 export type WebCommunityInteractionProjectionProps = {
   activeCommunityName: string;
@@ -113,6 +117,11 @@ export type WebCommunityInteractionProjectionProps = {
   decidingCommunityJoinRequestId?: string | null;
   onApproveCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
   onDenyCommunityJoinRequest?: (requestId: string) => Promise<void> | void;
+  communityMemoryOverview?: CloudCommunityPolynetOverview | null;
+  isLoadingCommunityMemory?: boolean;
+  communityMemoryError?: string | null;
+  onRefreshCommunityMemory?: () => void;
+  onOpenCommunityMemory?: () => void;
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;
@@ -145,6 +154,153 @@ import {
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
 
+function formatCommunityMemoryLabel(raw: string | null | undefined): string {
+  const value = String(raw ?? "").trim();
+  if (!value) return "Untitled";
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatCommunityMemoryPercent(raw: unknown): string {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return "0%";
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+function formatCommunityMemoryDate(raw: string | null | undefined): string | null {
+  const time = new Date(String(raw ?? "")).getTime();
+  if (!Number.isFinite(time)) return null;
+  return formatRelativeTime(new Date(time).toISOString());
+}
+
+function memoryStatusClass(raw: string | null | undefined): string {
+  const status = String(raw ?? "").trim().toLowerCase();
+  if (status === "canonical" || status === "validated") return "validated";
+  if (status === "promising") return "promising";
+  if (status === "contested") return "contested";
+  if (status === "stale") return "stale";
+  return "default";
+}
+
+function isCommunityMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
+  return node.kind === "directory_node";
+}
+
+function CommunityMemoryDrawer(props: {
+  overview?: CloudCommunityPolynetOverview | null;
+  isLoading?: boolean;
+  error?: string | null;
+  onClose: () => void;
+  onRefresh?: () => void;
+  onOpenFullView?: () => void;
+}) {
+  const overview = props.overview ?? null;
+  const memoryNodes = (overview?.graph.nodes ?? []).filter(isCommunityMemoryNode);
+  const totalVisibleNodes = overview?.memory.total_visible_nodes ?? 0;
+  const memoryCountLabel = `${totalVisibleNodes}${overview?.memory.node_counts_are_lower_bound ? "+" : ""}`;
+  const agentStateLabel = overview
+    ? formatCommunityMemoryLabel(overview.agent.activity_state || overview.agent.status)
+    : "Memory";
+  return (
+    <aside className="community-interaction-drawer community-memory-drawer" aria-label="Community memory">
+      <div className="community-interaction-drawer-back">
+        <button
+          className="back-to-workspace"
+          type="button"
+          onClick={props.onClose}
+          title="Back to community"
+        >
+          <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          <span className="back-path">memory</span>
+        </button>
+      </div>
+      <div className="community-interaction-drawer-scroll community-memory-drawer-scroll">
+        <div className="community-memory-drawer-header">
+          <div>
+            <div className="community-memory-drawer-kicker">Memory</div>
+            <div className="community-memory-drawer-title">Community memory</div>
+          </div>
+          <div className="community-memory-drawer-actions">
+            {props.onRefresh ? (
+              <button type="button" onClick={props.onRefresh} disabled={props.isLoading}>
+                {props.isLoading ? "Refreshing" : "Refresh"}
+              </button>
+            ) : null}
+            {props.onOpenFullView ? (
+              <button type="button" onClick={props.onOpenFullView}>
+                View graph
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {props.error ? (
+          <div className="community-memory-drawer-state" role="alert">
+            <span>{props.error}</span>
+          </div>
+        ) : null}
+
+        {!overview && props.isLoading ? (
+          <div className="community-memory-drawer-state" aria-live="polite">
+            <span>Loading memory...</span>
+          </div>
+        ) : !overview ? (
+          <div className="community-memory-drawer-state">
+            <span>No memory overview is available yet.</span>
+          </div>
+        ) : (
+          <>
+            <div className="community-memory-drawer-stats">
+              <div>
+                <span>Retained</span>
+                <strong>{memoryCountLabel}</strong>
+              </div>
+              <div>
+                <span>State</span>
+                <strong>{agentStateLabel}</strong>
+              </div>
+              <div>
+                <span>Contested</span>
+                <strong>{overview.memory.contested_count}</strong>
+              </div>
+            </div>
+
+            {memoryNodes.length === 0 ? (
+              <div className="community-memory-drawer-state">
+                <span>No retained memory yet.</span>
+              </div>
+            ) : (
+              <div className="community-memory-drawer-list">
+                {memoryNodes.map((node) => {
+                  const updatedAtLabel = formatCommunityMemoryDate(node.updated_at);
+                  return (
+                    <div key={node.id} className="community-memory-drawer-node">
+                      <div className="community-memory-drawer-node-head">
+                        <strong>{node.title ?? node.label}</strong>
+                        <span className={`community-memory-drawer-node-status ${memoryStatusClass(node.status)}`}>
+                          {formatCommunityMemoryLabel(node.status)}
+                        </span>
+                      </div>
+                      <div className="community-memory-drawer-node-meta">
+                        <span>{formatCommunityMemoryLabel(node.type)}</span>
+                        <span>{formatCommunityMemoryPercent(node.confidence)} confidence</span>
+                        {updatedAtLabel ? <span>{updatedAtLabel}</span> : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
@@ -156,6 +312,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
   const [editText, setEditText] = useState("");
   const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
+  const [isCommunityMemoryOpen, setIsCommunityMemoryOpen] = useState(false);
   const selectedCommunityMember = useMemo(() => {
     if (!selectedCommunityMemberId) return null;
     return (props.communityMembers ?? []).find((member) => member.id === selectedCommunityMemberId) ?? null;
@@ -297,9 +454,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
+  useEffect(() => {
+    if (!props.profilePanel && !selectedRoot) return;
+    setIsCommunityMemoryOpen(false);
+  }, [Boolean(props.profilePanel), selectedRoot?.root.id]);
+
+  useEffect(() => {
+    setIsCommunityMemoryOpen(false);
+  }, [props.communityId]);
+
   return (
     <>
-    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}`}>
+    <div className={`community-interaction-projection${selectedRoot || props.profilePanel || isCommunityMemoryOpen ? " has-drawer" : " has-context-panel"}`}>
       <div className="community-interaction-main">
         <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
           <CommunityInteractionFeedList
@@ -578,6 +744,15 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             <div className="community-interaction-drawer-composer">{props.drawerComposer}</div>
           ) : null}
         </aside>
+      ) : isCommunityMemoryOpen ? (
+        <CommunityMemoryDrawer
+          overview={props.communityMemoryOverview ?? null}
+          isLoading={props.isLoadingCommunityMemory}
+          error={props.communityMemoryError}
+          onClose={() => setIsCommunityMemoryOpen(false)}
+          onRefresh={props.onRefreshCommunityMemory}
+          onOpenFullView={props.onOpenCommunityMemory}
+        />
       ) : (
         <aside className="community-interaction-drawer community-context-panel" aria-label="Community">
           <CommunityContextPanel
@@ -607,6 +782,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             decidingJoinRequestId={props.decidingCommunityJoinRequestId}
             onApproveJoinRequest={props.onApproveCommunityJoinRequest}
             onDenyJoinRequest={props.onDenyCommunityJoinRequest}
+            memoryOverview={props.communityMemoryOverview ?? null}
+            isLoadingMemory={props.isLoadingCommunityMemory}
+            memoryLoadError={props.communityMemoryError}
+            onRefreshMemory={props.onRefreshCommunityMemory}
+            onOpenMemory={() => setIsCommunityMemoryOpen(true)}
             onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
             onOpenMemberProfile={props.onOpenProfile}
             onMessageMember={props.onMessageUser}

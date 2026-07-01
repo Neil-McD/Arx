@@ -29,6 +29,16 @@ type UseWebCommunityPolynetControllerArgs<SessionT> = {
   canViewPolynet: boolean;
 };
 
+const COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12;
+
+function shouldLoadCommunityPolynet(activePage: AppPage, communityTab: CommunityTab): boolean {
+  return activePage === "community" && (communityTab === "chat" || communityTab === "polynet");
+}
+
+function resolveCommunityPolynetNodeLimit(communityTab: CommunityTab): number | undefined {
+  return communityTab === "chat" ? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined;
+}
+
 export function useWebCommunityPolynetController<SessionT>(
   args: UseWebCommunityPolynetControllerArgs<SessionT>,
 ) {
@@ -40,12 +50,12 @@ export function useWebCommunityPolynetController<SessionT>(
   const [error, setError] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
 
-  const isStaleRequest = useCallback((requestSeq: number, communityId: string) => {
+  const isStaleRequest = useCallback((requestSeq: number, communityId: string, communityTab: CommunityTab) => {
     const current = argsRef.current;
     return (
       requestSeq !== requestSeqRef.current
-      || current.activePage !== "community"
-      || current.communityTab !== "polynet"
+      || !shouldLoadCommunityPolynet(current.activePage, current.communityTab)
+      || current.communityTab !== communityTab
       || current.activeCommunityId !== communityId
       || !current.canViewPolynet
     );
@@ -63,11 +73,13 @@ export function useWebCommunityPolynetController<SessionT>(
     sessionInput?: SessionT | null,
   ) => {
     const requestSeq = ++requestSeqRef.current;
+    const communityTab = argsRef.current.communityTab;
+    const nodeLimit = resolveCommunityPolynetNodeLimit(communityTab);
     setIsLoading(true);
     setError(null);
     try {
       const usableSession = await argsRef.current.ensureSession(sessionInput ?? argsRef.current.session);
-      if (isStaleRequest(requestSeq, communityId)) return null;
+      if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
       if (!usableSession) {
         setOverview(null);
         return null;
@@ -75,17 +87,18 @@ export function useWebCommunityPolynetController<SessionT>(
       const nextOverview = await fetchCloudCommunityPolynetOverview<SessionT>({
         session: usableSession,
         communityId,
+        ...(typeof nodeLimit === "number" ? { nodeLimit } : {}),
       });
-      if (isStaleRequest(requestSeq, communityId)) return null;
+      if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
       setOverview(nextOverview ?? null);
       return nextOverview ?? null;
     } catch (err) {
-      if (isStaleRequest(requestSeq, communityId)) return null;
+      if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
       setOverview(null);
       setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
       return null;
     } finally {
-      if (!isStaleRequest(requestSeq, communityId)) {
+      if (!isStaleRequest(requestSeq, communityId, communityTab)) {
         setIsLoading(false);
       }
     }
@@ -104,7 +117,7 @@ export function useWebCommunityPolynetController<SessionT>(
   }, [loadOverview]);
 
   useEffect(() => {
-    if (args.activePage !== "community" || args.communityTab !== "polynet" || !args.activeCommunityId) {
+    if (!shouldLoadCommunityPolynet(args.activePage, args.communityTab) || !args.activeCommunityId) {
       resetPolynetState();
       return;
     }
