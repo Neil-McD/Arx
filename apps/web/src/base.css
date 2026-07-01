@@ -9008,8 +9008,11 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-context-member-name {
-  flex: 1;
+  /* Hug the text (don't grow into the blank space up to the DM button) so the
+     name's hover target is the text itself, not the whole row width. */
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -9044,13 +9047,13 @@ button.community-launch-knowledge-integration-chip:disabled {
   opacity: 1;
 }
 
-.community-context-member-trigger:hover .community-context-member-name {
+.community-context-member-name:hover {
   color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.community-context-member-trigger:hover .community-context-member-name.is-admin {
+.community-context-member-name.is-admin:hover {
   color: var(--accent-gold);
 }
 
