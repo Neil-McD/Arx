@@ -124,10 +124,11 @@ export async function runChatgptNativeToolCompletion(params: {
   // so subsequent turns re-send them and the model keeps its chain of thought.
   // Off by default: long many-step loops could push the request size budget.
   carryReasoningItems?: boolean;
+  reasoningEffort?: "low" | "medium" | "high";
 }): Promise<ChatgptNativeToolCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesStreamingRequest({
     ...params,
-    reasoningEffort: DEFAULT_CHATGPT_REASONING_EFFORT,
+    reasoningEffort: params.reasoningEffort ?? DEFAULT_CHATGPT_REASONING_EFFORT,
     reasoningSummary: DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL,
   });
   if (!("ok" in response) || response.ok === false) return response;

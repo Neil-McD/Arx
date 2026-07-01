@@ -1895,6 +1895,9 @@ export default defineSchema({
   communityAgentRuns: defineTable({
     communityId: v.id("communities"),
     agentKey: v.string(),
+    // Which role prompt this run executed (observer/questioner/steward);
+    // absent for legacy single-pass runs.
+    role: v.optional(v.string()),
     triggerType: v.union(
       v.literal("manual_internal"),
       v.literal("heartbeat"),
@@ -1933,6 +1936,20 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
+
+  // Shared working ledger for one heartbeat cycle: the observer, questioner,
+  // and steward roles append notes here and read each other's context. The
+  // cycleId is the heartbeatId that woke the cycle.
+  communityAgentCycleLedgers: defineTable({
+    communityId: v.id("communities"),
+    cycleId: v.string(),
+    seq: v.number(),
+    role: v.string(),
+    content: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_cycle_seq", ["cycleId", "seq"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   // Per-run event log for community agent runs: prompts, reasoning summaries,
   // tool calls/results, and the final outcome, in sequence. This is the audit

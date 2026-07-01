@@ -65,9 +65,13 @@ assert.match(
 assert.match(runtime, /runChatgptNativeToolCompletion\([\s\S]*userId: normalizeIdValue\(resolved\.sponsorUserId\)[\s\S]*modelId/);
 assert.doesNotMatch(runtime, /runOpenRouterNativeToolCompletion|runOpenAi|OPENAI_API_KEY|platform.*fallback|demo_public/);
 
-assert.match(protocol, /export type CommunityAgentToolName = "list" \| "read" \| "search" \| "write"/);
-assert.match(protocol, /COMMUNITY_AGENT_TOOL_NAMES = \["list", "read", "search", "write"\] as const/);
-assert.match(protocol, /buildCommunityAgentFunctionTools\(\)[\s\S]*COMMUNITY_AGENT_TOOL_NAMES\.map/);
+assert.match(protocol, /export type CommunityAgentToolName = "list" \| "read" \| "search" \| "note" \| "write"/);
+assert.match(protocol, /COMMUNITY_AGENT_TOOL_NAMES = \["list", "read", "search", "note", "write"\] as const/);
+assert.match(
+  protocol,
+  /buildCommunityAgentFunctionTools\([\s\S]*toolNames\?: readonly CommunityAgentToolName\[\]/,
+  "tool builder should accept a role allowlist (authority by absence)",
+);
 assert.match(protocol, /operation:[\s\S]*enum: \["propose_directory_candidate_from_digest_item"\]/);
 assert.doesNotMatch(protocol, /activity|communityId|authSubject|userId|crossCommunity|globalMemory/);
 
@@ -124,6 +128,48 @@ assert.match(
   runtime,
   /catch \{[\s\S]*ignore: observability is best-effort/,
   "run-event persistence failures must never fail the run",
+);
+
+// Role harness (Amendment v1.1): one agent entity, role prompts on the same
+// harness, chained per heartbeat cycle over a shared ledger. Authority is
+// structural: only the steward's tool list contains the airlock write tool.
+const roles = readFileSync(join(root, "shared/communityAgentRoles.ts"), "utf8");
+assert.match(
+  roles,
+  /observer:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*questioner:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*steward:[\s\S]*toolNames: \["list", "read", "search", "note", "write"\]/,
+  "only the steward role may carry the airlock write tool",
+);
+assert.match(
+  roles,
+  /COMMUNITY_AGENT_NO_SIGNAL_MARKER = "NO_SIGNAL"/,
+  "observer short-circuit convention should be a shared constant",
+);
+assert.match(
+  runtime,
+  /runCommunityAgentCycleInternal = internalAction[\s\S]*COMMUNITY_AGENT_CYCLE_ROLES[\s\S]*observer_no_signal/,
+  "heartbeat cycles should chain roles and short-circuit on a no-signal observer pass",
+);
+assert.match(
+  runtime,
+  /appendCommunityAgentCycleLedgerNoteInternal = internalMutation/,
+  "cycle ledger appends must be a separate mutation from the directory airlock write",
+);
+assert.match(
+  runtime,
+  /buildCommunityAgentFunctionTools\(roleDefinition\?\.toolNames\)/,
+  "the loop must send only the active role's tool schemas",
+);
+assert.match(
+  runtime,
+  /reasoningEffort: roleDefinition\?\.reasoningEffort/,
+  "roles should control their own reasoning effort",
+);
+
+const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
+assert.match(
+  heartbeat,
+  /runCommunityAgentCycleInternal/,
+  "a woken heartbeat should run the role cycle, not a single pass",
 );
 
 console.log("community_agent_runtime_contract_proof: ok");

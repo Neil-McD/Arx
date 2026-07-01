@@ -20,9 +20,18 @@ import {
   type RuntimeKernelToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
+import {
+  COMMUNITY_AGENT_CYCLE_ROLES,
+  COMMUNITY_AGENT_NO_SIGNAL_MARKER,
+  getCommunityAgentRoleDefinition,
+  isCommunityAgentRoleKey,
+  type CommunityAgentRoleDefinition,
+  type CommunityAgentRoleKey,
+} from "../shared/communityAgentRoles";
+import { renderCommunityAgentSkills } from "../shared/communityAgentSkills";
 import { normalizeIdValue, toIsoString } from "./communityCore";
 
-const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 8;
+const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
 const COMMUNITY_AGENT_RUNTIME_MAX_ERROR_CHARS = 500;
 const COMMUNITY_AGENT_RUNNING_RUN_STALE_MS = 30 * 60 * 1000;
@@ -62,6 +71,7 @@ type CommunityAgentRunView = {
   id: string;
   community_id: string;
   agent_key: string;
+  role: string | null;
   trigger_type: string;
   heartbeat_id: string | null;
   sponsor_user_id: string;
@@ -213,6 +223,35 @@ function coerceCommunityAgentCompletion(
   };
 }
 
+// Shared harness rules: identical across every role and every run, and kept as
+// the longest common prompt prefix so role runs share the provider's prompt
+// cache. Role-specific instruction lives in the <role_definition> layer below.
+const COMMUNITY_AGENT_SHARED_RULES = [
+  "You are the autonomous community agent for exactly one Polynet community.",
+  "You are not a member's personal agent and you are not a public chat assistant.",
+  "You wake from platform triggers and inspect the community compiler and directory filesystem.",
+  "",
+  "Hard rules:",
+  "- Operate only inside the single community provided in this run.",
+  "- Use only the tools provided in this run.",
+  "- The filesystem exposes only /compiler and /directory.",
+  "- Do not ask for raw activity. Activity must already be compiler evidence.",
+  "- Treat compiler digests and candidates as non-canonical.",
+  "- Use write, when available, only to propose a directory candidate from a compiler digest item.",
+  "- Never claim a directory node or edge was changed unless a tool result says so.",
+  "- Prefer no write over a weak or private-looking proposal.",
+  "- If no useful action is supported, finish with a short no-op summary.",
+].join("\n");
+
+const COMMUNITY_AGENT_LEGACY_PROCEDURE = [
+  "Operating procedure:",
+  "1. Review the <compiler_window> and <directory_state> blocks provided in the wake message; fall back to reading /compiler/window only if they are absent.",
+  "2. If a digest exists, inspect its items and the existing candidate state before proposing.",
+  "3. Inspect directory state only when needed to avoid duplicate or stale proposals.",
+  "4. Propose at most three digest-derived candidates, only when evidence supports future workflow value.",
+  "5. Finish with a concise internal summary of what you inspected and what you proposed.",
+].join("\n");
+
 function buildCommunityAgentMessages(params: {
   resolved: CommunityAgentResolvedContext;
   agentKey: string;
@@ -222,45 +261,39 @@ function buildCommunityAgentMessages(params: {
   wakeEvidence?: CommunityAgentWakeEvidence;
   compilerWindow?: unknown;
   directorySummary?: unknown;
+  role?: CommunityAgentRoleDefinition;
+  cycleLedger?: string;
 }): NativeToolAwareMessage[] {
   const communityLabel =
     params.resolved.communityName ||
     params.resolved.communitySlug ||
     normalizeIdValue(params.resolved.communityId);
   const constitution = boundedText(params.resolved.communitySystemPrompt, 12_000);
-  // Front-load the compiler window and directory summary so the agent does not
-  // spend tool budget rediscovering context we already composed server-side.
+  // Front-loaded context blocks: the caller decides which each role receives
+  // (the cycle ledger is the diff between roles — later roles do not get the
+  // full compiler window re-sent).
   const compilerWindowBlock = params.compilerWindow
     ? `<compiler_window>\n${boundedText(JSON.stringify(params.compilerWindow), 20_000)}\n</compiler_window>`
     : "";
   const directoryStateBlock = params.directorySummary
     ? `<directory_state>\n${boundedText(JSON.stringify(params.directorySummary), 4_000)}\n</directory_state>`
     : "";
+  const cycleLedgerBlock = params.cycleLedger
+    ? `<cycle_ledger>\n${boundedText(params.cycleLedger, 16_000)}\n</cycle_ledger>`
+    : "";
+  const roleLayer = params.role
+    ? [
+        `<role_definition>\n${params.role.rolePrompt}\n</role_definition>`,
+        renderCommunityAgentSkills(params.role.skillKeys),
+      ].join("\n")
+    : COMMUNITY_AGENT_LEGACY_PROCEDURE;
   return [
     {
       role: "system",
       content: [
-        "You are the autonomous community agent for exactly one Polynet community.",
-        "You are not a member's personal agent and you are not a public chat assistant.",
-        "You wake from platform triggers and inspect the community compiler and directory filesystem.",
+        COMMUNITY_AGENT_SHARED_RULES,
         "",
-        "Hard rules:",
-        "- Operate only inside the single community provided in this run.",
-        "- Use only the list, read, search, and write tools.",
-        "- The filesystem exposes only /compiler and /directory.",
-        "- Do not ask for raw activity. Activity must already be compiler evidence.",
-        "- Treat compiler digests and candidates as non-canonical.",
-        "- Use write only to propose a directory candidate from a compiler digest item.",
-        "- Never claim a directory node or edge was changed unless a tool result says so.",
-        "- Prefer no write over a weak or private-looking proposal.",
-        "- If no useful action is supported, finish with a short no-op summary.",
-        "",
-        "Operating procedure:",
-        "1. Review the <compiler_window> and <directory_state> blocks provided in the wake message; fall back to reading /compiler/window only if they are absent.",
-        "2. If a digest exists, inspect its items and the existing candidate state before proposing.",
-        "3. Inspect directory state only when needed to avoid duplicate or stale proposals.",
-        "4. Propose at most three digest-derived candidates, only when evidence supports future workflow value.",
-        "5. Finish with a concise internal summary of what you inspected and what you proposed.",
+        roleLayer,
         constitution ? `\nCommunity constitution:\n${constitution}` : "",
       ].filter(Boolean).join("\n"),
     },
@@ -280,10 +313,30 @@ function buildCommunityAgentMessages(params: {
         params.resolved.communityAbout ? `About: ${params.resolved.communityAbout}` : "",
         compilerWindowBlock,
         directoryStateBlock,
+        cycleLedgerBlock,
         "Begin the bounded community cognition pass now.",
       ].filter(Boolean).join("\n"),
     },
   ];
+}
+
+// The steward does not need the full window (the ledger carries the analysis);
+// it needs the coordinates for the propose op: digest id + item indices/titles.
+function slimCompilerWindowForSteward(window: unknown): unknown {
+  if (!window || typeof window !== "object") return window;
+  const raw = window as Record<string, any>;
+  const digest = raw.latest_digest;
+  if (!digest || typeof digest !== "object") return window;
+  const items = Array.isArray(digest.items) ? digest.items : [];
+  return {
+    latest_digest_id: digest.id ?? null,
+    pending_change_request_count: raw.pending_change_request_count ?? null,
+    digest_items: items.slice(0, 40).map((item: Record<string, any>, index: number) => ({
+      index,
+      category: item?.category ?? null,
+      title: typeof item?.title === "string" ? item.title.slice(0, 160) : null,
+    })),
+  };
 }
 
 async function executeCommunityAgentTool(args: {
@@ -291,6 +344,7 @@ async function executeCommunityAgentTool(args: {
   filesystemContext: CommunityAgentFilesystemContext;
   toolName: CommunityAgentToolName;
   normalizedArgs: Record<string, unknown>;
+  role?: string;
 }): Promise<RuntimeKernelToolExecutionResult> {
   try {
     if (args.toolName === "list") {
@@ -316,6 +370,17 @@ async function executeCommunityAgentTool(args: {
       });
       return toolOk(result);
     }
+    if (args.toolName === "note") {
+      const cycleId = String(args.filesystemContext.heartbeatId ?? "").trim();
+      if (!cycleId) throw new Error("community_agent_ledger_requires_cycle");
+      const result = await args.ctx.runMutation(internalRefs.communityAgentRuntime.appendCommunityAgentCycleLedgerNoteInternal as any, {
+        communityId: args.filesystemContext.communityId,
+        cycleId,
+        role: args.role ?? "unknown",
+        note: String(args.normalizedArgs.note ?? ""),
+      });
+      return toolOk(result);
+    }
     if (args.toolName === "write") {
       const result = await args.ctx.runMutation(internalRefs.communityAgentFilesystem.writeCommunityAgentFilesystemInternal as any, {
         context: args.filesystemContext,
@@ -335,6 +400,7 @@ function mapRun(row: Record<string, any>): CommunityAgentRunView {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
     agent_key: row.agentKey,
+    role: row.role ?? null,
     trigger_type: row.triggerType,
     heartbeat_id: row.heartbeatId ?? null,
     sponsor_user_id: normalizeIdValue(row.sponsorUserId),
@@ -421,6 +487,59 @@ export const summarizeCommunityDirectoryStateInternal = internalQuery({
   },
 });
 
+// Cycle ledger: the shared working document the sleep roles hand each other.
+// Deliberately separate from the directory airlock write mutation — ledger
+// notes never touch directory truth.
+export const appendCommunityAgentCycleLedgerNoteInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    cycleId: v.string(),
+    role: v.string(),
+    note: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const cycleId = boundedText(args.cycleId, 200);
+    if (!cycleId) throw new Error("community_agent_cycle_id_required");
+    const note = boundedText(args.note, 2_000);
+    if (!note) throw new Error("community_agent_ledger_note_required");
+    const last = (await ctx.db
+      .query("communityAgentCycleLedgers" as any)
+      .withIndex("by_cycle_seq", (q: any) => q.eq("cycleId", cycleId))
+      .order("desc")
+      .first()) as Record<string, any> | null;
+    const seq = (typeof last?.seq === "number" ? last.seq : -1) + 1;
+    if (seq >= 60) throw new Error("community_agent_ledger_full");
+    await ctx.db.insert("communityAgentCycleLedgers" as any, {
+      communityId: args.communityId,
+      cycleId,
+      seq,
+      role: boundedText(args.role, 40) || "unknown",
+      content: note,
+      createdAt: Date.now(),
+    });
+    return { ok: true, seq };
+  },
+});
+
+export const listCommunityAgentCycleLedgerInternal = internalQuery({
+  args: {
+    cycleId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const rows = (await ctx.db
+      .query("communityAgentCycleLedgers" as any)
+      .withIndex("by_cycle_seq", (q: any) => q.eq("cycleId", boundedText(args.cycleId, 200)))
+      .take(60)) as Array<Record<string, any>>;
+    return rows
+      .sort((a, b) => Number(a.seq ?? 0) - Number(b.seq ?? 0))
+      .map((row) => ({
+        seq: Number(row.seq ?? 0),
+        role: String(row.role ?? "unknown"),
+        content: String(row.content ?? ""),
+      }));
+  },
+});
+
 export const createCommunityAgentRunInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -432,6 +551,7 @@ export const createCommunityAgentRunInternal = internalMutation({
     sponsorUserId: v.id("users"),
     modelId: v.string(),
     heartbeatId: v.optional(v.string()),
+    role: v.optional(v.string()),
     wakeReason: v.optional(v.string()),
     wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
     nowMs: v.optional(v.number()),
@@ -477,6 +597,7 @@ export const createCommunityAgentRunInternal = internalMutation({
     const id = await ctx.db.insert("communityAgentRuns" as any, {
       communityId: args.communityId,
       agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+      role: boundedText(args.role, 40) || undefined,
       triggerType: args.triggerType,
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
       sponsorUserId: args.sponsorUserId,
@@ -645,11 +766,15 @@ export const runCommunityAgentLoopInternal = internalAction({
     heartbeatId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     maxToolSteps: v.optional(v.number()),
+    role: v.optional(v.string()),
     wakeReason: v.optional(v.string()),
     wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
   },
   handler: async (ctx, args): Promise<CommunityAgentRuntimeResult> => {
     const agentKey = CANONICAL_COMMUNITY_AGENT_KEY;
+    const roleDefinition: CommunityAgentRoleDefinition | undefined = isCommunityAgentRoleKey(args.role)
+      ? getCommunityAgentRoleDefinition(args.role)
+      : undefined;
     const triggerType = normalizeTriggerType(args.triggerType);
     const modelId = normalizeModelId(args.modelId);
     const resolved = (await ctx.runQuery(internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal as any, {
@@ -661,6 +786,7 @@ export const runCommunityAgentLoopInternal = internalAction({
       sponsorUserId: resolved.sponsorUserId,
       modelId,
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
+      role: roleDefinition?.roleKey,
       wakeReason: boundedText(args.wakeReason, 120) || undefined,
       wakeEvidence: args.wakeEvidence,
     })) as CommunityAgentCreateRunResult;
@@ -714,16 +840,25 @@ export const runCommunityAgentLoopInternal = internalAction({
       }
     };
     // Front-load the exact content the agent's first tool steps would fetch.
-    // Best-effort: if either read fails, the agent falls back to its tools.
+    // Best-effort: if any read fails, the agent falls back to its tools.
+    // Per-role diffing: the observer gets the full compiler window; later roles
+    // get the cycle ledger instead (the ledger IS the diff); the steward also
+    // gets a slim digest reference list so the propose op has its coordinates.
+    const roleKey = roleDefinition?.roleKey;
+    const wantsWindow = !roleKey || roleKey === "observer" || roleKey === "steward";
+    const wantsLedger = roleKey === "questioner" || roleKey === "steward";
     let compilerWindow: unknown;
     let directorySummary: unknown;
-    try {
-      compilerWindow = await ctx.runQuery(internalRefs.communityAgentFilesystem.readCommunityAgentFilesystemInternal as any, {
-        context: filesystemContext,
-        path: "/compiler/window",
-      });
-    } catch {
-      compilerWindow = undefined;
+    let cycleLedger: string | undefined;
+    if (wantsWindow) {
+      try {
+        compilerWindow = await ctx.runQuery(internalRefs.communityAgentFilesystem.readCommunityAgentFilesystemInternal as any, {
+          context: filesystemContext,
+          path: "/compiler/window",
+        });
+      } catch {
+        compilerWindow = undefined;
+      }
     }
     try {
       directorySummary = await ctx.runQuery(internalRefs.communityAgentRuntime.summarizeCommunityDirectoryStateInternal as any, {
@@ -732,6 +867,18 @@ export const runCommunityAgentLoopInternal = internalAction({
     } catch {
       directorySummary = undefined;
     }
+    if (wantsLedger && filesystemContext.heartbeatId) {
+      try {
+        const notes = (await ctx.runQuery(internalRefs.communityAgentRuntime.listCommunityAgentCycleLedgerInternal as any, {
+          cycleId: filesystemContext.heartbeatId,
+        })) as Array<{ seq: number; role: string; content: string }>;
+        cycleLedger = notes.map((note) => `[${note.seq}] ${note.role}: ${note.content}`).join("\n") || undefined;
+      } catch {
+        cycleLedger = undefined;
+      }
+    }
+    const injectedWindow =
+      roleKey === "steward" ? slimCompilerWindowForSteward(compilerWindow) : compilerWindow;
     const messages = buildCommunityAgentMessages({
       resolved,
       agentKey,
@@ -739,8 +886,10 @@ export const runCommunityAgentLoopInternal = internalAction({
       runId,
       wakeReason: boundedText(args.wakeReason, 120) || undefined,
       wakeEvidence: args.wakeEvidence,
-      compilerWindow,
+      compilerWindow: injectedWindow,
       directorySummary,
+      role: roleDefinition,
+      cycleLedger,
     });
     await emitRunEvents([
       { kind: "system_prompt", content: String(messages[0]?.content ?? "") },
@@ -752,7 +901,7 @@ export const runCommunityAgentLoopInternal = internalAction({
         messages,
         budget: {
           ...DEFAULT_RUNTIME_KERNEL_BUDGET,
-          maxToolSteps: clampToolSteps(args.maxToolSteps),
+          maxToolSteps: clampToolSteps(args.maxToolSteps ?? roleDefinition?.maxToolSteps),
           maxConsecutiveFailures: 3,
           maxNoProgressSteps: 3,
           maxRepeatedIdenticalCalls: 2,
@@ -764,8 +913,10 @@ export const runCommunityAgentLoopInternal = internalAction({
             modelId,
             messages: kernelMessages,
             maxTokens: 1600,
-            tools: buildCommunityAgentFunctionTools(),
+            // Authority by absence: only this role's tool schemas are sent.
+            tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
             parallelToolCalls: false,
+            reasoningEffort: roleDefinition?.reasoningEffort,
             // Background steward: patience is free. Transient provider failures
             // retry with backoff instead of killing the whole cognition pass.
             retryPolicy: { maxAttempts: 4, backoffBaseMs: 500 },
@@ -789,6 +940,7 @@ export const runCommunityAgentLoopInternal = internalAction({
             filesystemContext,
             toolName,
             normalizedArgs,
+            role: roleDefinition?.roleKey,
           }),
         onToolStepFinish: async ({ step, toolResult }) => {
           if (step.toolName === "write" && toolResult.status === "ok") {
@@ -870,5 +1022,86 @@ export const runCommunityAgentLoopInternal = internalAction({
         candidate_proposal_ids: [...candidateProposalIds],
       };
     }
+  },
+});
+
+// One heartbeat cycle: the sleep roles run as chained passes over a shared
+// ledger (Amendment v1.1). The observer is the economizer — if it finds no
+// signal, the cycle ends after one cheap low-effort run.
+export const runCommunityAgentCycleInternal = internalAction({
+  args: {
+    communityId: v.id("communities"),
+    triggerType: v.optional(
+      v.union(
+        v.literal("manual_internal"),
+        v.literal("heartbeat"),
+        v.literal("event"),
+      ),
+    ),
+    heartbeatId: v.optional(v.string()),
+    modelId: v.optional(v.string()),
+    wakeReason: v.optional(v.string()),
+    wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
+  },
+  handler: async (ctx, args) => {
+    const cycleId =
+      boundedText(args.heartbeatId, 200) ||
+      `cycle:${normalizeIdValue(args.communityId)}:${Date.now()}`;
+    const roleResults: Array<{
+      role: CommunityAgentRoleKey;
+      ok: boolean;
+      stop_reason: string | null;
+      tool_step_count: number;
+      candidate_proposal_ids: string[];
+    }> = [];
+    let endedEarly: string | null = null;
+    for (const roleKey of COMMUNITY_AGENT_CYCLE_ROLES) {
+      const result = (await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentLoopInternal as any, {
+        communityId: args.communityId,
+        triggerType: args.triggerType,
+        heartbeatId: cycleId,
+        modelId: args.modelId,
+        role: roleKey,
+        wakeReason: boundedText(args.wakeReason, 120) || undefined,
+        wakeEvidence: args.wakeEvidence,
+      })) as CommunityAgentRuntimeResult;
+      roleResults.push({
+        role: roleKey,
+        ok: result.ok,
+        stop_reason: result.stop_reason ?? null,
+        tool_step_count: result.tool_step_count,
+        candidate_proposal_ids: result.candidate_proposal_ids,
+      });
+      // Budget exhaustion is a soft end: the role's notes are already banked in
+      // the ledger, so the next role should judge what exists. Only hard
+      // failures (model/provider/runtime errors) end the cycle.
+      if (!result.ok && result.stop_reason !== "tool_budget_exhausted") {
+        endedEarly = `${roleKey}_failed`;
+        break;
+      }
+      if (roleKey === "observer") {
+        let notes: Array<{ content: string }> = [];
+        try {
+          notes = (await ctx.runQuery(internalRefs.communityAgentRuntime.listCommunityAgentCycleLedgerInternal as any, {
+            cycleId,
+          })) as Array<{ content: string }>;
+        } catch {
+          notes = [];
+        }
+        const hasSignal =
+          notes.length > 0 &&
+          !String(notes[0]?.content ?? "").trim().startsWith(COMMUNITY_AGENT_NO_SIGNAL_MARKER);
+        if (!hasSignal) {
+          endedEarly = "observer_no_signal";
+          break;
+        }
+      }
+    }
+    return {
+      ok: roleResults.every((entry) => entry.ok),
+      cycle_id: cycleId,
+      ended_early: endedEarly,
+      roles: roleResults,
+    };
   },
 });

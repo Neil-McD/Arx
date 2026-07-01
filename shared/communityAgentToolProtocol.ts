@@ -14,11 +14,11 @@ type JsonSchema =
   | boolean
   | Record<string, unknown>;
 
-export type CommunityAgentToolName = "list" | "read" | "search" | "write";
+export type CommunityAgentToolName = "list" | "read" | "search" | "note" | "write";
 
 export const CANONICAL_COMMUNITY_AGENT_KEY = "community_agent" as const;
 
-export const COMMUNITY_AGENT_TOOL_NAMES = ["list", "read", "search", "write"] as const;
+export const COMMUNITY_AGENT_TOOL_NAMES = ["list", "read", "search", "note", "write"] as const;
 
 export type CommunityAgentFunctionTool = {
   type: "function";
@@ -106,6 +106,24 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
       },
     },
   },
+  note: {
+    type: "function",
+    name: "note",
+    description: "Append a note to this cycle's shared ledger. Notes are how roles hand context to each other; they never touch the directory.",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["note"],
+      properties: {
+        note: {
+          type: "string",
+          minLength: 1,
+          maxLength: 2000,
+        },
+      },
+    },
+  },
   write: {
     type: "function",
     name: "write",
@@ -180,8 +198,14 @@ function normalizeNodeType(raw: unknown): string | undefined {
   return value;
 }
 
-export function buildCommunityAgentFunctionTools(): CommunityAgentFunctionTool[] {
-  return COMMUNITY_AGENT_TOOL_NAMES.map((name) => TOOL_DEFINITIONS[name]);
+// Role-filtered builder: pass a role's tool allowlist and only those schemas
+// are sent to the model. Authority by absence — a role that cannot write never
+// sees the write tool at all. No argument keeps the full legacy set.
+export function buildCommunityAgentFunctionTools(
+  toolNames?: readonly CommunityAgentToolName[],
+): CommunityAgentFunctionTool[] {
+  const names = toolNames && toolNames.length > 0 ? toolNames : COMMUNITY_AGENT_TOOL_NAMES;
+  return names.map((name) => TOOL_DEFINITIONS[name]);
 }
 
 export function normalizeCommunityAgentToolArguments(
@@ -204,6 +228,11 @@ export function normalizeCommunityAgentToolArguments(
     return {
       query: requireNonEmptyString(args.query, "query", 512),
       limit: boundedLimit(args.limit),
+    };
+  }
+  if (toolName === "note") {
+    return {
+      note: requireNonEmptyString(args.note, "note", 2000),
     };
   }
   if (toolName === "write") {

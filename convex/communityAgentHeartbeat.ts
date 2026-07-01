@@ -115,12 +115,14 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
         wake_evidence: wakeEvidence,
       };
     }
-    return await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentLoopInternal, {
+    // A woken heartbeat runs the full role cycle (observer -> questioner ->
+    // steward over a shared ledger); the observer ends the cycle early when
+    // the window holds no real signal.
+    return await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentCycleInternal, {
       communityId: args.communityId,
       triggerType: "heartbeat",
       heartbeatId,
       modelId,
-      maxToolSteps: clampToolSteps(args.maxToolSteps),
       wakeReason: wakeEvidence.reason,
       wakeEvidence,
     });
