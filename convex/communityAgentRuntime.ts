@@ -769,6 +769,9 @@ export const runCommunityAgentLoopInternal = internalAction({
             // Background steward: patience is free. Transient provider failures
             // retry with backoff instead of killing the whole cognition pass.
             retryPolicy: { maxAttempts: 4, backoffBaseMs: 500 },
+            // Carry reasoning forward across tool steps so the model resumes its
+            // chain of thought instead of re-deriving it (coherence + tokens).
+            carryReasoningItems: true,
             onReasoningSummaryTextDelta: ({ delta }) => {
               reasoningBuffer += delta;
             },

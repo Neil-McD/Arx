@@ -120,6 +120,10 @@ export async function runChatgptNativeToolCompletion(params: {
   requestMetadata?: ChatgptCodexRequestMetadata | null;
   signal?: AbortSignal;
   retryPolicy?: ChatgptTransportRetryPolicy;
+  // Opt-in: attach captured reasoning items to the assistant tool-call message
+  // so subsequent turns re-send them and the model keeps its chain of thought.
+  // Off by default: long many-step loops could push the request size budget.
+  carryReasoningItems?: boolean;
 }): Promise<ChatgptNativeToolCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesStreamingRequest({
     ...params,
@@ -167,6 +171,9 @@ export async function runChatgptNativeToolCompletion(params: {
         rawArguments: toolCall.rawArguments,
       })),
     });
+    if (params.carryReasoningItems && response.parsed.reasoningItems.length > 0) {
+      assistantToolCallMessage.reasoningItems = response.parsed.reasoningItems;
+    }
     if (parsedToolCalls.length > 1) {
       return {
         ok: true,

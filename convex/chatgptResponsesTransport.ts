@@ -45,6 +45,9 @@ export type ChatgptResponsesParseResult = {
     name: string;
     arguments: string;
   }>;
+  // Raw reasoning output items (with encrypted_content), captured verbatim so
+  // callers can re-send them and let the model resume its chain of thought.
+  reasoningItems: Array<Record<string, unknown>>;
 };
 
 export type ChatgptCodexRequestMetadata = {
@@ -441,6 +444,16 @@ function normalizeChatgptResponsesRequest(params: {
     }
     if (role === "assistant") {
       const assistantMessage = message as Extract<ChatgptToolAwareMessage, { role: "assistant" }>;
+      // Re-send captured reasoning items verbatim, ahead of the assistant output
+      // they preceded, so the model resumes its chain of thought. The API
+      // requires reasoning items to appear before their following output items.
+      if (Array.isArray(assistantMessage.reasoningItems)) {
+        for (const reasoningItem of assistantMessage.reasoningItems) {
+          if (!reasoningItem || typeof reasoningItem !== "object") continue;
+          addToBudget(JSON.stringify(reasoningItem));
+          inputItems.push(reasoningItem);
+        }
+      }
       const content = String(assistantMessage.content ?? "").trim();
       if (content) {
         addToBudget(content);
@@ -549,6 +562,7 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
     let sawDoneText = false;
     let modelId: string | null = null;
     const functionCalls: ChatgptResponsesParseResult["functionCalls"] = [];
+    const reasoningItems: ChatgptResponsesParseResult["reasoningItems"] = [];
 
     for (const data of ssePayloads) {
       if (data === "[DONE]") break;
@@ -606,6 +620,10 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
           );
           continue;
         }
+        if (item.type === "reasoning") {
+          reasoningItems.push(item as Record<string, unknown>);
+          continue;
+        }
         if (sawDelta || sawDoneText || item.type !== "message") continue;
         const doneText = extractMessageTextFromOutputItem(item);
         if (doneText.trim()) {
@@ -615,7 +633,7 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
       }
     }
 
-    return { text, modelId, functionCalls };
+    return { text, modelId, functionCalls, reasoningItems };
   }
 
   let parsed: Record<string, any>;
@@ -634,6 +652,7 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
     null;
   const outputItems = Array.isArray(parsed?.output) ? parsed.output : [];
   const functionCalls: ChatgptResponsesParseResult["functionCalls"] = [];
+  const reasoningItems: ChatgptResponsesParseResult["reasoningItems"] = [];
   let text = typeof parsed?.output_text === "string" ? parsed.output_text : "";
   for (const item of outputItems) {
     if (!item || typeof item !== "object") continue;
@@ -646,11 +665,15 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
       );
       continue;
     }
+    if (item.type === "reasoning") {
+      reasoningItems.push(item as Record<string, unknown>);
+      continue;
+    }
     if (!text && item.type === "message") {
       text = extractMessageTextFromOutputItem(item);
     }
   }
-  return { text, modelId, functionCalls };
+  return { text, modelId, functionCalls, reasoningItems };
 }
 
 export async function runChatgptResponsesRequest(params: {
@@ -966,6 +989,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
       let sawDoneText = false;
       let modelId: string | null = null;
       const functionCalls: ChatgptResponsesParseResult["functionCalls"] = [];
+      const reasoningItems: ChatgptResponsesParseResult["reasoningItems"] = [];
       let doneSeen = false;
       const flushEvent = async (): Promise<Error | null> => {
         const raw = dataBuffer.trim();
@@ -1055,6 +1079,10 @@ export async function runChatgptResponsesStreamingRequest(params: {
             );
             return null;
           }
+          if (item.type === "reasoning") {
+            reasoningItems.push(item as Record<string, unknown>);
+            return null;
+          }
           if (!sawDelta && !sawDoneText && item.type === "message") {
             const doneText = extractMessageTextFromOutputItem(item);
             if (doneText.trim()) {
@@ -1092,7 +1120,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
       if (trailingError) throw trailingError;
       return {
         ok: true,
-        parsed: { text, modelId, functionCalls },
+        parsed: { text, modelId, functionCalls, reasoningItems },
         promptTokens: null,
         completionTokens: null,
       };

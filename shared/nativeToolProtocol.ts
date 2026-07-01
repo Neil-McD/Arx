@@ -32,6 +32,10 @@ export type NativeToolAwareMessage =
           arguments: string;
         };
       }>;
+      // Provider-opaque reasoning items (e.g. ChatGPT encrypted reasoning) that
+      // preceded this assistant output. Re-sent verbatim ahead of the message so
+      // the model resumes its chain of thought instead of re-deriving it.
+      reasoningItems?: Array<Record<string, unknown>>;
     }
   | {
       role: "tool";
