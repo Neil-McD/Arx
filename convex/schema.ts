@@ -1694,6 +1694,7 @@ export default defineSchema({
     .index("by_reply", ["replyId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_mentionedUser_createdAt", ["mentionedUserId", "createdAt"])
+    .index("by_mentionedUser_community_createdAt", ["mentionedUserId", "communityId", "createdAt"])
     .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
     .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"]),
 
@@ -2231,6 +2232,9 @@ export default defineSchema({
     // Timestamp boundary for the canonical chat "new messages" divider (roots order by created_at).
     chatLastSeenAt: v.optional(v.number()),
     aiFeedLastSeenAt: v.optional(v.number()),
+    // Latest mention-of-me the user has seen in this community (the mention
+    // ping clears when they open the community chat).
+    mentionsLastSeenAt: v.optional(v.number()),
     resourcesLastSeenAt: v.optional(v.number()),
     eventsLastSeenAt: v.optional(v.number()),
     createdAt: v.number(),

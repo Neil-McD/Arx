@@ -924,6 +924,15 @@ body {
   flex-shrink: 0;
 }
 
+/* Someone tagged you: the chat dot upgrades to the accent (mention) variant —
+   "someone needs me" reads differently from "there is chatter". */
+.nav-item-dot.is-mention {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 .nav-item:hover {
   background: var(--hover-overlay);
   color: var(--text-ink-primary);

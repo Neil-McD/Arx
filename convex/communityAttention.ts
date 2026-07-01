@@ -10,7 +10,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 
-type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events";
+type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
 type CommunityAiFeedPostLike = {
   _id: any;
@@ -25,6 +25,10 @@ type CommunityAttentionRow = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  // Someone tagged this user and they have not seen it yet. Rides the chat
+  // surface visually (accent dot) but has its own marker so a mention ping is
+  // distinguishable from ordinary chatter.
+  mentions: boolean;
   chat_last_seen_at: number | null;
 };
 
@@ -164,6 +168,24 @@ async function getLatestCommunityEventsUpdatedAt(
     : null;
 }
 
+async function getLatestCommunityMentionOfUserCreatedAt(
+  ctx: any,
+  communityId: any,
+  userId: any,
+): Promise<number | null> {
+  const latest = (await ctx.db
+    .query("communityInteractionMentions" as any)
+    .withIndex("by_mentionedUser_community_createdAt", (q: any) =>
+      q.eq("mentionedUserId", userId).eq("communityId", communityId),
+    )
+    .order("desc")
+    .take(1)) as Array<{ createdAt?: number }>;
+  const createdAt = latest[0]?.createdAt;
+  return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
+    ? Math.floor(createdAt)
+    : null;
+}
+
 async function getCommunityAttentionRow(
   ctx: any,
   communityId: any,
@@ -175,11 +197,13 @@ async function getCommunityAttentionRow(
     latestAiFeedCreatedAt,
     latestResourcesCreatedAt,
     latestEventsUpdatedAt,
+    latestMentionCreatedAt,
   ] = await Promise.all([
     getLatestCommunityChatActivityAt(ctx, communityId),
     getLatestCommunityAiFeedCreatedAt(ctx, communityId),
     getLatestCommunityResourcesCreatedAt(ctx, communityId),
     getLatestCommunityEventsUpdatedAt(ctx, communityId),
+    getLatestCommunityMentionOfUserCreatedAt(ctx, communityId, userId),
   ]);
   return {
     community_id: String(communityId),
@@ -195,6 +219,9 @@ async function getCommunityAttentionRow(
     events:
       typeof latestEventsUpdatedAt === "number" &&
       latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
+    mentions:
+      typeof latestMentionCreatedAt === "number" &&
+      latestMentionCreatedAt > Math.max(0, Math.floor(settingsRow?.mentionsLastSeenAt ?? 0)),
     chat_last_seen_at:
       typeof settingsRow?.chatLastSeenAt === "number" ? Math.floor(settingsRow.chatLastSeenAt) : null,
   };
@@ -251,6 +278,28 @@ async function upsertCommunitySurfaceSeen(args: {
       userId,
       muted: false,
       aiFeedLastSeenAt: latestAiFeedCreatedAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return;
+  }
+
+  if (surface === "mentions") {
+    const latestMentionCreatedAt = await getLatestCommunityMentionOfUserCreatedAt(ctx, communityId, userId);
+    if (latestMentionCreatedAt === null) return;
+    if ((existing?.mentionsLastSeenAt ?? 0) >= latestMentionCreatedAt) return;
+    if (existing) {
+      await ctx.db.patch(existing._id as any, {
+        mentionsLastSeenAt: latestMentionCreatedAt,
+        updatedAt: nowMs,
+      });
+      return;
+    }
+    await ctx.db.insert("communityMemberSettings" as any, {
+      communityId,
+      userId,
+      muted: false,
+      mentionsLastSeenAt: latestMentionCreatedAt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -341,7 +390,7 @@ export const markCommunitySurfaceSeen = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    surface: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resources"), v.literal("events")),
+    surface: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resources"), v.literal("events"), v.literal("mentions")),
     seenAtMs: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -388,9 +437,30 @@ export const markCommunityChatReadAt = mutation({
     const nowMs = Date.now();
     const seenAt = Math.max(0, Math.floor(args.seenAtMs ?? nowMs));
     const existing = await getCommunityMemberSettingsRow(ctx, args.communityId, userId);
+    // Opening chat is the mention-clearing gesture: advance the mention marker
+    // alongside the chat marker and flip this user's now-seen pending mention
+    // rows to "read" so the ledger's lifecycle reflects reality.
+    const markMentionsSeen = async () => {
+      const pending = (await ctx.db
+        .query("communityInteractionMentions" as any)
+        .withIndex("by_mentionedUser_community_createdAt", (q: any) =>
+          q.eq("mentionedUserId", userId).eq("communityId", args.communityId),
+        )
+        .order("desc")
+        .take(50)) as Array<{ _id: any; notifyState?: string; createdAt?: number }>;
+      for (const row of pending) {
+        if (row.notifyState !== "pending") continue;
+        if (Math.floor(row.createdAt ?? 0) > seenAt) continue;
+        await ctx.db.patch(row._id as any, { notifyState: "read", updatedAt: nowMs });
+      }
+    };
     if (existing) {
-      if ((existing.chatLastSeenAt ?? 0) >= seenAt) return { ok: true };
-      await ctx.db.patch(existing._id as any, { chatLastSeenAt: seenAt, updatedAt: nowMs });
+      const patch: Record<string, number> = { updatedAt: nowMs };
+      if ((existing.chatLastSeenAt ?? 0) < seenAt) patch.chatLastSeenAt = seenAt;
+      if ((existing.mentionsLastSeenAt ?? 0) < seenAt) patch.mentionsLastSeenAt = seenAt;
+      if (Object.keys(patch).length === 1) return { ok: true };
+      await ctx.db.patch(existing._id as any, patch);
+      await markMentionsSeen();
       return { ok: true };
     }
     await ctx.db.insert("communityMemberSettings" as any, {
@@ -398,9 +468,11 @@ export const markCommunityChatReadAt = mutation({
       userId,
       muted: false,
       chatLastSeenAt: seenAt,
+      mentionsLastSeenAt: seenAt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await markMentionsSeen();
     return { ok: true };
   },
 });

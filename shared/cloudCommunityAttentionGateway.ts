@@ -5,7 +5,7 @@ type CloudCommunityAttentionGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-export type CloudCommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events";
+export type CloudCommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
 export type CloudCommunityAttentionRow = {
   community_id: string;
@@ -13,6 +13,7 @@ export type CloudCommunityAttentionRow = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  mentions: boolean;
   chat_last_seen_at?: number | null;
 };
 

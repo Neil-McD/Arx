@@ -12131,18 +12131,20 @@ export default function App() {
     </Suspense>
   );
   const activeIndicators = activeCommunityId
-    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
-    : { chat: false, ai_feed: false, resources: false, events: false };
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false, mentions: false })
+    : { chat: false, ai_feed: false, resources: false, events: false, mentions: false };
   const localActiveCommunityChatAttention = Boolean(activePage === "community" && activeCommunityId && unreadCount > 0);
   const communityTabIndicators = {
     chat: Boolean(activeIndicators.chat || localActiveCommunityChatAttention),
     ai_feed: Boolean(activeIndicators.ai_feed),
     resources: Boolean(activeIndicators.resources),
     events: Boolean(activeIndicators.events),
+    // An unseen mention-of-you upgrades the chat dot to the accent variant.
+    mentions: Boolean(activeIndicators.mentions),
   };
   const communityRailAttentionById: Record<string, boolean> = {};
   for (const [communityId, indicators] of Object.entries(attentionByCommunityId)) {
-    if (indicators.chat || indicators.ai_feed || indicators.resources || indicators.events) {
+    if (indicators.chat || indicators.ai_feed || indicators.resources || indicators.events || indicators.mentions) {
       communityRailAttentionById[communityId] = true;
     }
   }

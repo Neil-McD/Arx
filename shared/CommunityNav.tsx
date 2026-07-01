@@ -15,7 +15,7 @@ type CommunityNavCommunityLike = {
 type CommunityNavProps = {
   activeCommunity: CommunityNavCommunityLike;
   communityTab: CommunityTab;
-  tabIndicators?: Partial<Record<CommunityTab, boolean>>;
+  tabIndicators?: Partial<Record<CommunityTab, boolean>> & { mentions?: boolean };
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
@@ -157,7 +157,9 @@ export function CommunityNav({
           </svg>
         </span>
         <span className="nav-item-label">Chat</span>
-        {lockedTabs.chat ? <NavLockGlyph /> : communityTab !== "chat" && tabIndicators.chat ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+        {lockedTabs.chat ? <NavLockGlyph /> : communityTab !== "chat" && (tabIndicators.chat || tabIndicators.mentions) ? (
+          <span className={`nav-item-dot${tabIndicators.mentions ? " is-mention" : ""}`} aria-hidden="true" />
+        ) : null}
       </button>
       <button
         className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}

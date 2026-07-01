@@ -14,6 +14,8 @@ export type CommunityAttentionIndicators = {
   ai_feed: boolean;
   resources: boolean;
   events: boolean;
+  // Unseen mention-of-me: rides the chat surface visually as the accent dot.
+  mentions: boolean;
   chat_last_seen_at?: number | null;
 };
 
@@ -41,6 +43,7 @@ function buildAttentionMap(
       ai_feed: false,
       resources: false,
       events: false,
+      mentions: false,
       chat_last_seen_at: null,
     };
   }
@@ -52,6 +55,7 @@ function buildAttentionMap(
       ai_feed: Boolean(row.ai_feed),
       resources: Boolean(row.resources),
       events: Boolean(row.events),
+      mentions: Boolean(row.mentions),
       chat_last_seen_at: typeof row.chat_last_seen_at === "number" ? row.chat_last_seen_at : null,
     };
   }
@@ -106,7 +110,7 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
         const [communityId, surface] = key.split(":");
         if (
           !communityId ||
-          (surface !== "chat" && surface !== "ai_feed" && surface !== "resources" && surface !== "events")
+          (surface !== "chat" && surface !== "ai_feed" && surface !== "resources" && surface !== "events" && surface !== "mentions")
         ) continue;
         if (!nextAttentionMap[communityId]) continue;
         nextAttentionMap[communityId] = {

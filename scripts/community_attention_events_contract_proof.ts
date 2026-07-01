@@ -28,7 +28,7 @@ assert.match(
 
 assert.match(
   backend,
-  /type CommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events"/,
+  /type CommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events" \| "mentions"/,
   "Events must be a first-class community attention surface",
 );
 
@@ -46,7 +46,7 @@ assert.match(
 
 assert.match(
   backend,
-  /surface: v\.union\(v\.literal\("chat"\), v\.literal\("ai_feed"\), v\.literal\("resources"\), v\.literal\("events"\)\)[\s\S]*seenAtMs: v\.optional\(v\.number\(\)\)/,
+  /surface: v\.union\(v\.literal\("chat"\), v\.literal\("ai_feed"\), v\.literal\("resources"\), v\.literal\("events"\), v\.literal\("mentions"\)\)[\s\S]*seenAtMs: v\.optional\(v\.number\(\)\)/,
   "markCommunitySurfaceSeen must accept the Events surface and visible seen marker",
 );
 
@@ -58,7 +58,7 @@ assert.match(
 
 assert.match(
   gateway,
-  /CloudCommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events"/,
+  /CloudCommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events" \| "mentions"/,
   "shared gateway must expose the Events surface",
 );
 
@@ -108,6 +108,41 @@ assert.doesNotMatch(
   resourcesPanel,
   /Resource saved successfully!/,
   "Resource saves should not show noisy success toasts",
+);
+
+// Mentions surface (M2): an unseen mention-of-me is its own attention marker,
+// derived from a single indexed latest-mention read, cleared by opening the
+// community chat (which also flips the mention ledger rows to "read"), and
+// rendered as the accent variant of the chat nav dot plus the rail OR.
+assert.match(
+  backend,
+  /getLatestCommunityMentionOfUserCreatedAt[\s\S]*by_mentionedUser_community_createdAt/,
+  "mention attention must derive from one indexed latest-mention read",
+);
+assert.match(
+  backend,
+  /mentions:\s*[\s\S]*latestMentionCreatedAt > Math\.max\(0, Math\.floor\(settingsRow\?\.mentionsLastSeenAt \?\? 0\)\)/,
+  "mention attention compares against the per-user mentionsLastSeenAt marker",
+);
+assert.match(
+  backend,
+  /markCommunityChatReadAt[\s\S]*notifyState: "read"[\s\S]*mentionsLastSeenAt/,
+  "opening chat clears the mention ping and flips seen pending mentions to read",
+);
+assert.match(
+  schema,
+  /mentionsLastSeenAt: v\.optional\(v\.number\(\)\)/,
+  "member settings must carry the mention seen marker",
+);
+assert.match(
+  nav,
+  /nav-item-dot\$\{tabIndicators\.mentions \? " is-mention" : ""\}/,
+  "an unseen mention upgrades the chat dot to the accent variant",
+);
+assert.match(
+  app,
+  /indicators\.chat \|\| indicators\.ai_feed \|\| indicators\.resources \|\| indicators\.events \|\| indicators\.mentions/,
+  "the community rail attention OR must include mentions",
 );
 
 console.log("community_attention_events_contract_proof: ok");

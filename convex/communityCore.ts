@@ -41,7 +41,7 @@ export type CommunityLike = {
 };
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
-export type CommunityAccessRelation = "pending" | "member" | "moderator" | "admin" | "owner";
+export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
 export type CommunityPrimaryCta = "open_community" | "join" | "checkout";
 
 export type CommunityMembershipLike = {
@@ -197,6 +197,7 @@ export type CommunityMemberSettingsLike = {
   aiFeedLastSeenAt?: number;
   resourcesLastSeenAt?: number;
   eventsLastSeenAt?: number;
+  mentionsLastSeenAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -1261,7 +1262,9 @@ export async function resolveCommunityAccessBundle(args: {
           ? "member"
           : joinRequestStatus === "pending" && !isBlocked
             ? "pending"
-            : null;
+            : !isBlocked && args.community.visibility === "published"
+              ? "visitor"
+              : null;
   const canViewLanding = true;
   const canEnterCommunity = isEntitled;
   const canReadChat = isEntitled;
