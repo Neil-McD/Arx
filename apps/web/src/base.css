@@ -16660,6 +16660,11 @@ button.chat-reply-quote:hover {
   gap: 16px;
 }
 
+.community-polynet-heading {
+  position: relative;
+  min-width: 0;
+}
+
 .community-polynet-kicker {
   color: color-mix(in srgb, var(--text-secondary) 86%, var(--text-primary));
   font-size: 12px;
@@ -16674,26 +16679,32 @@ button.chat-reply-quote:hover {
   line-height: 1.4;
 }
 
-.community-polynet-title-row {
+.community-polynet-back {
+  position: absolute;
+  top: 19px;
+  left: -38px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.community-polynet-back {
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin-left: -4px;
+  width: 28px;
+  height: 28px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
-  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.community-polynet-back svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .community-polynet-back:hover,
@@ -16702,6 +16713,16 @@ button.chat-reply-quote:hover {
   background: var(--bg-card);
   color: var(--text-primary);
   outline: none;
+}
+
+@media (max-width: 720px) {
+  .community-polynet-heading {
+    padding-left: 34px;
+  }
+
+  .community-polynet-back {
+    left: 0;
+  }
 }
 
 .community-polynet-subtitle {

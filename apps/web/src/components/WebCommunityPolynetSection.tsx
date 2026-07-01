@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import type {
   CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
@@ -175,23 +174,24 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   return (
     <div className="settings-panel community-settings-panel community-polynet-panel">
       <div className="community-polynet-header">
-        <div>
+        <div className="community-polynet-heading">
+          {props.onBackToChat ? (
+            <button
+              className="community-polynet-back"
+              type="button"
+              aria-label="Back to community chat"
+              title="Back to chat"
+              onClick={props.onBackToChat}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+            </button>
+          ) : null}
           <div className="community-polynet-kicker">Polynet</div>
-          <div className="community-polynet-title-row">
-            {props.onBackToChat ? (
-              <button
-                className="community-polynet-back"
-                type="button"
-                aria-label="Back to community chat"
-                title="Back to chat"
-                onClick={props.onBackToChat}
-              >
-                <ArrowLeft size={15} strokeWidth={2} aria-hidden="true" />
-              </button>
-            ) : null}
-            <div className="community-polynet-title">
-              {activeCommunityName ?? overview?.community.name ?? "Community"} memory
-            </div>
+          <div className="community-polynet-title">
+            {activeCommunityName ?? overview?.community.name ?? "Community"} memory
           </div>
           <div className="community-polynet-subtitle">
             Read-only view of what the community has retained and how its agent is currently behaving.

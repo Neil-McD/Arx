@@ -83,6 +83,13 @@ assert.match(section, /community-polynet-detail/, "Polynet section should render
 assert.match(section, /selectedNodeId/, "Polynet section should support local node selection");
 assert.match(section, /onBackToChat\?: \(\) => void/, "Polynet section should accept a deterministic back-to-chat action");
 assert.match(section, /aria-label="Back to community chat"/, "Polynet section should expose an accessible back-to-chat control");
+assert.match(section, /<path d="M19 12H5" \/>/, "Polynet back control should render a visible inline arrow shaft");
+assert.doesNotMatch(section, /ArrowLeft/, "Polynet back control should not depend on a collapsed external icon render");
+assert.doesNotMatch(
+  section,
+  /community-polynet-title-row/,
+  "Polynet title text should not be shifted away from the kicker/subtitle by an inline back button",
+);
 assert.match(
   surfaceProjection,
   /onBackToChat: params\.onBackToCommunityChat/,
@@ -178,7 +185,22 @@ assert.match(
 assert.match(
   css,
   /\.community-polynet-back/,
-  "Polynet page should style the back-to-chat control in the title row",
+  "Polynet page should style the back-to-chat control",
+);
+assert.match(
+  css,
+  /\.community-polynet-heading/,
+  "Polynet page should keep the kicker, title, and subtitle in one aligned copy stack",
+);
+assert.match(
+  css,
+  /stroke: currentColor/,
+  "Polynet back arrow should have explicit SVG stroke styling",
+);
+assert.doesNotMatch(
+  css,
+  /\.community-polynet-title-row/,
+  "Polynet page should not use a title-only row that misaligns the header copy",
 );
 assert.doesNotMatch(
   css,
