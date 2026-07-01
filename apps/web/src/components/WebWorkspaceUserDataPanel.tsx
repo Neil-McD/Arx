@@ -89,7 +89,6 @@ export type WorkspaceUserPanelCommunityOperations = {
   canReviewJoinRequests: boolean;
   joinReviewMode: "paid" | "free_auto" | "free_approval" | null;
   pendingJoinRequests: WorkspaceUserPanelJoinRequest[];
-  hiddenJoinRequestCount: number;
   isLoadingJoinRequests: boolean;
   joinRequestsError: string | null;
   decidingJoinRequestId: string | null;
@@ -171,7 +170,6 @@ export type WorkspaceUserDataPanelDataProps = {
   onToggleSignalReaction?: (rootId: string, emoji: string) => void;
   signalQuickReactions?: string[];
   onOpenActiveCommunitySettings: () => void;
-  onOpenActiveCommunityMembers: () => void;
   onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
   onApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
   onDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
@@ -611,7 +609,6 @@ function WorkspaceCommunityOperations(props: {
   operations: WorkspaceUserPanelCommunityOperations;
   onApprove: (requestId: string) => Promise<void> | void;
   onDeny: (requestId: string) => Promise<void> | void;
-  onOpenMembers: () => void;
 }) {
   if (!props.operations.canReviewJoinRequests || props.operations.joinReviewMode !== "free_approval") {
     return null;
@@ -678,15 +675,6 @@ function WorkspaceCommunityOperations(props: {
           })}
         </div>
       )}
-      {props.operations.hiddenJoinRequestCount > 0 ? (
-        <button
-          type="button"
-          className="workspace-community-signal-view-more"
-          onClick={props.onOpenMembers}
-        >
-          {props.operations.hiddenJoinRequestCount} more
-        </button>
-      ) : null}
       {props.operations.joinRequestsError ? (
         <div className="workspace-community-note">{props.operations.joinRequestsError}</div>
       ) : null}
@@ -1426,7 +1414,6 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
           operations={community.operations}
           onApprove={props.onApproveCommunityJoinRequest}
           onDeny={props.onDenyCommunityJoinRequest}
-          onOpenMembers={props.onOpenActiveCommunityMembers}
         />
       ) : null}
       {recentSignalFeed || panelRecentSignals.length > 0 ? (

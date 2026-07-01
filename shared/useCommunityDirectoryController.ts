@@ -26,6 +26,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   const communityDirectoryLoadSeqRef = useRef(0);
 
   useEffect(() => {
+    communityDirectoryLoadSeqRef.current += 1;
     setCommunityDirectoryMembers([]);
     setCommunityDirectoryMemberCount(null);
     setIsLoadingCommunityDirectoryMembers(false);

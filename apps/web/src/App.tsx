@@ -71,7 +71,7 @@ import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebC
 import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
 import { useWebCommunityResourceUiController } from "./controllers/useWebCommunityResourceUiController";
-import { useWebCommunityPeopleController } from "./controllers/useWebCommunityPeopleController";
+import { useWebCommunityJoinRequestsController } from "./controllers/useWebCommunityJoinRequestsController";
 import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMemoryUiController";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
@@ -380,7 +380,6 @@ import { useWebThreadDataController } from "../../../shared/useWebThreadDataCont
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityDirectoryController } from "../../../shared/useCommunityDirectoryController";
 import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
-import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
 import type { CloudCommunityEvent } from "../../../shared/cloudCommunityEventsGateway";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
 import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
@@ -505,7 +504,6 @@ import { buildWebWorkspaceLandingProjection } from "./controllers/buildWebWorksp
 import { useWebVoiceInputController } from "../../../shared/useWebVoiceInputController";
 import { useCommunityAgentLandingLifecycle } from "../../../shared/useCommunityAgentLandingLifecycle";
 import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
-import { useCommunityMemberRosterLifecycle } from "../../../shared/useCommunityMemberRosterLifecycle";
 import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
 import {
   COMMUNITY_RESOURCES_MUTATED_EVENT,
@@ -1272,8 +1270,6 @@ type CommunityResourceModule = {
 
 type CommunityEvent = CloudCommunityEvent;
 
-type CommunityMember = CloudCommunityMembershipAdminRow;
-
 type CommunityAccess = SharedCommunityAccess;
 type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
 type CommunityAnalyticsSeries = SharedCommunityAnalyticsSeries;
@@ -1670,7 +1666,6 @@ export default function App() {
         setCommunityEvents: resetCommunityEventsCache,
         setIsLoadingCommunityEvents,
         setCommunityEventsError,
-        setCommunityMembers,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
         setCommunitySettingsOneLiner,
@@ -1745,7 +1740,6 @@ export default function App() {
         setCommunityEvents: resetCommunityEventsCache,
         setIsLoadingCommunityEvents,
         setCommunityEventsError,
-        setCommunityMembers,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
         setCommunitySettingsOneLiner,
@@ -3278,24 +3272,6 @@ export default function App() {
     });
   }, []);
   const {
-    communityMembers,
-    setCommunityMembers,
-    communityMemberCount,
-    setCommunityMemberCount,
-    isLoadingCommunityMembers,
-    setIsLoadingCommunityMembers,
-    isLoadingMoreCommunityMembers,
-    setIsLoadingMoreCommunityMembers,
-    hasResolvedCommunityMembers,
-    setHasResolvedCommunityMembers,
-    communityMembersNextCursor,
-    setCommunityMembersNextCursor,
-    communityMembersHasMore,
-    setCommunityMembersHasMore,
-    communityMembersLoadError,
-    setCommunityMembersLoadError,
-    communityMembersPageIndex,
-    setCommunityMembersPageIndex,
     communityJoinRequests,
     setCommunityJoinRequests,
     isLoadingCommunityJoinRequests,
@@ -3304,11 +3280,7 @@ export default function App() {
     setCommunityJoinRequestsError,
     decidingCommunityJoinRequestId,
     setDecidingCommunityJoinRequestId,
-    isJoinRequestsModalOpen,
-    setIsJoinRequestsModalOpen,
-    isSavingFreeAccessMode,
-    setIsSavingFreeAccessMode,
-  } = useWebCommunityPeopleController<CommunityMember, CommunityJoinRequest>({
+  } = useWebCommunityJoinRequestsController<CommunityJoinRequest>({
     activeCommunityId,
   });
   const {
@@ -3364,7 +3336,6 @@ export default function App() {
     if (isLoadingCommunityAccess) return;
     if (activeCommunityAccess?.community_id !== activeCommunityId) return;
     const normalizedTab = normalizeCommunityTabForAccess(communityTab, {
-      canViewMembers: canViewMembersActiveCommunity,
       canViewSettings: canViewActiveCommunitySettings,
       canViewPolynet: canViewActiveCommunityPolynet,
       canManageMembers: canManageMembersActiveCommunity,
@@ -3382,7 +3353,6 @@ export default function App() {
     canViewActiveCommunityAnalytics,
     canViewActiveCommunityPolynet,
     canViewActiveCommunitySettings,
-    canViewMembersActiveCommunity,
     communityTab,
     isLoadingCommunityAccess,
   ]);
@@ -4799,9 +4769,6 @@ export default function App() {
   );
 
   const {
-    loadCommunityMembers,
-    loadMoreCommunityMembers,
-    handleShowMoreCommunityMembers,
     loadSelfProfile,
     saveProfileToCloud,
     loadCommunityAnalytics,
@@ -4811,7 +4778,6 @@ export default function App() {
     handleBanCommunityMember,
   } = useCommunityAdminController<
     AuthSession,
-    CommunityMember,
     UserProfile,
     UserProfileDetail
   >({
@@ -4821,7 +4787,6 @@ export default function App() {
     confirmAction: (message) => confirm(message),
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
-    loadUserProfiles: (userIds, session) => loadUserProfiles(userIds, session),
     getProfileSaveSession: () => sessionRef.current ?? session,
     profileName: profileUi.profileName,
     profileHandle: profileUi.profileHandle,
@@ -4839,19 +4804,6 @@ export default function App() {
       requireSignIn();
     },
     applyLoadedProfileToLocal: profileUi.applyLoadedProfileToLocal,
-    communityMembers,
-    communityMemberCount,
-    communityMembersPageIndex,
-    communityMembersNextCursor,
-    setCommunityMembers,
-    setCommunityMemberCount,
-    setIsLoadingCommunityMembers,
-    setIsLoadingMoreCommunityMembers,
-    setHasResolvedCommunityMembers,
-    setCommunityMembersPageIndex,
-    setCommunityMembersNextCursor,
-    setCommunityMembersHasMore,
-    setCommunityMembersLoadError,
     setProfilesByUserId,
     setCloudProfile,
     setProfileName: profileUi.setProfileName,
@@ -5462,30 +5414,25 @@ export default function App() {
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,
-    handleSetCommunityFreeAccessMode,
   } = useCommunityMembersReviewController<
     AuthSession,
-    CommunityJoinRequest,
-    CommunityRecord
+    CommunityJoinRequest
   >({
     activeCommunityId,
     ...authenticatedSessionArg,
-    isSavingFreeAccessMode,
     loadUserProfiles: (userIds, session) => loadUserProfiles(userIds, session),
-    loadCommunityMembers,
+    reloadCommunityDirectoryMembers: loadCommunityDirectoryMembers,
     onJoinRequestApproved: ({ communityId, requestId }) => {
       captureProductAnalyticsEvent("community join request approved", {
         community_id: communityId,
         request_id: requestId,
-        surface: "community_members",
+        surface: "workspace_community_panel",
       });
     },
-    setCommunities,
     setCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
     setCommunityJoinRequestsError,
     setDecidingCommunityJoinRequestId,
-    setIsSavingFreeAccessMode,
   });
 
   const [exportError, setExportError] = useState<string | null>(null);
@@ -6456,7 +6403,7 @@ export default function App() {
       (activePage === "workspace" && activeView === "home" && isWorkspaceRightPanelOpen);
     if (!shouldLoadCommunityProfiles) return [] as string[];
     const ids = new Set<string>();
-    for (const member of communityMembers) {
+    for (const member of communityDirectoryMembers) {
       const userId = String(member.user_id ?? "").trim();
       if (userId) ids.add(userId);
     }
@@ -6487,9 +6434,9 @@ export default function App() {
     activeView,
     canonicalSessionUserId,
     communityActivityEvents,
+    communityDirectoryMembers,
     communityInteractionRepliesByRootId,
     communityInteractionRoots,
-    communityMembers,
     communityMessages,
     isWorkspaceRightPanelOpen,
   ]);
@@ -7044,14 +6991,6 @@ export default function App() {
     ownedSkillPackagesLoadedRef,
   ]);
 
-  useCommunityMemberRosterLifecycle<AuthSession>({
-    activePage,
-    communityTab,
-    ...sessionArg,
-    activeCommunityId,
-    loadCommunityMembers,
-  });
-
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
     communityTab,
@@ -7072,21 +7011,17 @@ export default function App() {
     CommunityJoinRequest,
     CommunityRecord
   >({
-    activePage,
-    communityTab,
     ...sessionArg,
     activeCommunityId,
     communities,
     canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
     shouldLoad: shouldHydrateWorkspaceCommunityPanel,
-    isJoinRequestsModalOpen,
     loadCommunityJoinRequests,
     setCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
     setCommunityJoinRequestsError,
     setDecidingCommunityJoinRequestId,
-    setIsJoinRequestsModalOpen,
   });
 
   useCommunityResourcesTabLifecycle<AuthSession>({
@@ -10776,7 +10711,6 @@ export default function App() {
       aiAgentPreferredTab: communityAiAgentPreferredTab,
       isLoadingCommunityAgentConfig,
       communityAgentConfigError,
-      isActiveCommunityOwner,
       aiAgentWorkspaceEditorProps: {
         communityAgentConfigDirtyRef,
         handleSaveCommunityAgentConfig: handleSaveCommunityAgentConfigAndRefreshLanding,
@@ -10934,43 +10868,6 @@ export default function App() {
       },
       canManageResourcesActiveCommunity,
       canModerateContentActiveCommunity,
-      membersState: {
-        communityMembers,
-        communityMemberCount,
-        isLoadingCommunityMembers,
-        isLoadingMoreCommunityMembers,
-        hasResolvedCommunityMembers,
-        communityMembersHasMore,
-        communityMembersLoadError,
-        communityMembersPageIndex,
-        activeCommunityMembersJoinReviewMode,
-        communityJoinRequests,
-        communityJoinRequestsError,
-        decidingCommunityJoinRequestId,
-        isLoadingCommunityJoinRequests,
-        isSavingFreeAccessMode,
-        isJoinRequestsModalOpen,
-        profilesByUserId: savedProfilesByUserId,
-      },
-      membersActions: {
-        setCommunityMembersPageIndex,
-        handleShowMoreCommunityMembers,
-        setIsJoinRequestsModalOpen,
-        displayName,
-        handleSetCommunityFreeAccessMode,
-        handleSetCommunityMemberRole,
-        handleRemoveCommunityMember,
-        handleBanCommunityMember,
-        loadMemberBillingHistory: loadCommunityMemberBillingHistory,
-        handleApproveCommunityJoinRequest,
-        handleDenyCommunityJoinRequest,
-        copyTextToClipboard,
-        getAvatarColor,
-        getInitials,
-        formatRelativeTime,
-      },
-      canReviewJoinRequestsActiveCommunity,
-      canViewMemberPlanDetailsActiveCommunity,
       resourceModuleModalProps,
       resourceModuleDeleteModalProps,
       resourceModalProps,
@@ -11931,11 +11828,6 @@ export default function App() {
     onOpenWorkspaceIntegrationSetup: handleOpenIntegrationsSettings,
     onToggleCommunityIntegration: (communityAppMountId: string, enabled: boolean) =>
       handleUpdateCommunityAppMount(communityAppMountId, { enabled }),
-    onOpenActiveCommunityMembers: () => {
-      const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-      if (!nextCommunitySlug) return;
-      openCommunityTab(nextCommunitySlug, "members", { pushSnapshot: false });
-    },
     onOpenActiveCommunitySettings: () => {
       const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
       if (!nextCommunitySlug) return;

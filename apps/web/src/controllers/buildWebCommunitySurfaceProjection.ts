@@ -3,8 +3,10 @@ import type { WebCommunityChatPanelProps } from "../components/WebCommunityChatP
 import type { WebCommunitySecondaryPanelsProps } from "../components/WebCommunitySecondaryPanels";
 
 type CommunitySurfaceCommunityLike =
-  | (NonNullable<WebCommunitySecondaryPanelsProps["settings"]["activeCommunity"]> &
-      NonNullable<WebCommunitySecondaryPanelsProps["members"]["activeCommunity"]> & {
+  | (NonNullable<WebCommunitySecondaryPanelsProps["settings"]["activeCommunity"]> & {
+        id: string;
+        name: string;
+        owner_id?: string | null;
         avatar_url?: string | null;
         banner_url?: string | null;
         banner_focus_x?: number | null;
@@ -66,7 +68,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   aiAgentPreferredTab: WebCommunitySecondaryPanelsProps["aiAgent"]["preferredTab"];
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
-  isActiveCommunityOwner: WebCommunitySecondaryPanelsProps["members"]["capabilities"]["isActiveCommunityOwner"];
   aiAgentWorkspaceEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["workspaceEditorProps"];
   aiAgentAppsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["appsEditorProps"];
   aiAgentSkillsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["skillsEditorProps"];
@@ -82,11 +83,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   eventsActions: WebCommunitySecondaryPanelsProps["events"]["actions"];
   canManageResourcesActiveCommunity: boolean;
   canModerateContentActiveCommunity: boolean;
-  membersState: WebCommunitySecondaryPanelsProps["members"]["state"];
-  membersActions: WebCommunitySecondaryPanelsProps["members"]["actions"];
-  canReviewJoinRequestsActiveCommunity: WebCommunitySecondaryPanelsProps["members"]["capabilities"]["canReviewJoinRequests"];
-  canViewMemberPlanDetailsActiveCommunity:
-    WebCommunitySecondaryPanelsProps["members"]["capabilities"]["canViewMemberPlanDetails"];
   resourceModuleModalProps: WebCommunitySecondaryPanelsProps["resourceModuleModal"];
   resourceModuleDeleteModalProps: WebCommunitySecondaryPanelsProps["resourceModuleDeleteModal"];
   resourceModalProps: WebCommunitySecondaryPanelsProps["resourceModal"];
@@ -285,18 +281,6 @@ export function buildWebCommunitySurfaceProjection(
       },
       state: params.eventsState,
       actions: params.eventsActions,
-    },
-    members: {
-      activeCommunity: params.activeCommunity,
-      capabilities: {
-        canManageMembers: params.canManageMembersActiveCommunity,
-        canManageJoinPolicy: params.canManageMembersActiveCommunity,
-        canReviewJoinRequests: params.canReviewJoinRequestsActiveCommunity,
-        canViewMemberPlanDetails: params.canViewMemberPlanDetailsActiveCommunity,
-        isActiveCommunityOwner: params.isActiveCommunityOwner,
-      },
-      state: params.membersState,
-      actions: params.membersActions,
     },
     resourceModuleModal: params.resourceModuleModalProps,
     resourceModuleDeleteModal: params.resourceModuleDeleteModalProps,

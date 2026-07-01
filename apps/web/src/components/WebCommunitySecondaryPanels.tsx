@@ -7,7 +7,6 @@ import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
-import { WebCommunityMembersSection } from "./WebCommunityMembersSection";
 import { WebCommunityPolynetSection } from "./WebCommunityPolynetSection";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
@@ -55,9 +54,6 @@ export type WebCommunitySecondaryPanelsProps = {
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resources: ComponentProps<typeof WebCommunityResourcesSection>;
   events: ComponentProps<typeof WebCommunityEventsSection>;
-  members: Omit<ComponentProps<typeof WebCommunityMembersSection>, "actions"> & {
-    actions: Omit<ComponentProps<typeof WebCommunityMembersSection>["actions"], "communityInitials">;
-  };
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
   resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
@@ -107,14 +103,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
     onClose: () => props.bannerEditor.setIsCommunityBannerFocusModalOpen(false),
   };
 
-  const membersSectionProps: ComponentProps<typeof WebCommunityMembersSection> = {
-    ...props.members,
-    actions: {
-      ...props.members.actions,
-      communityInitials,
-    },
-  };
-
   return (
     <>
       {props.communityTab === "settings" &&
@@ -141,9 +129,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "events" &&
         renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
-
-      {props.communityTab === "members" &&
-        renderCenteredPane(<WebCommunityMembersSection {...membersSectionProps} />)}
 
       <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
       <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />

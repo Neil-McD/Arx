@@ -335,7 +335,7 @@ export function buildWorkspaceRightPanelCommunityData(params: {
     operations: {
       canReviewJoinRequests: params.operations.canReviewJoinRequests,
       joinReviewMode: params.operations.joinReviewMode,
-      pendingJoinRequests: params.operations.joinRequests.slice(0, 4).map((request) => {
+      pendingJoinRequests: params.operations.joinRequests.map((request) => {
         const profile = params.savedProfilesByUserId[request.user_id] ?? null;
         return {
           id: request.id,
@@ -349,7 +349,6 @@ export function buildWorkspaceRightPanelCommunityData(params: {
           createdAtLabel: params.formatJoinRequestCreatedAt(request.created_at),
         };
       }),
-      hiddenJoinRequestCount: Math.max(0, params.operations.joinRequests.length - 4),
       isLoadingJoinRequests: params.operations.isLoadingJoinRequests,
       joinRequestsError: params.operations.joinRequestsError,
       decidingJoinRequestId: params.operations.decidingJoinRequestId,
@@ -392,7 +391,6 @@ export function buildWorkspaceRightPanelUserData(params: {
     communityAppMountId: string,
     enabled: boolean,
   ) => Promise<boolean> | boolean | Promise<void> | void;
-  onOpenActiveCommunityMembers: () => void;
   onOpenActiveCommunitySettings: () => void;
 }): WorkspaceUserDataPanelDataProps {
   return params;

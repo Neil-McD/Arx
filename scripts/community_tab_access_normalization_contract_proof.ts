@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   isCommunityTabAllowedForAccess,
   normalizeCommunityTabForAccess,
+  parseCommunityTab,
   type CommunityTabAccess,
 } from "../shared/appShellNavigation.ts";
 
@@ -11,7 +12,6 @@ function read(path: string): string {
 }
 
 const memberAccess: CommunityTabAccess = {
-  canViewMembers: true,
   canViewSettings: true,
   canViewPolynet: true,
   canManageMembers: false,
@@ -19,20 +19,25 @@ const memberAccess: CommunityTabAccess = {
 };
 
 const builderAccess: CommunityTabAccess = {
-  canViewMembers: true,
   canViewSettings: true,
   canViewPolynet: true,
   canManageMembers: true,
   canViewAnalytics: true,
 };
 
-for (const tab of ["chat", "ai_feed", "resources", "events", "members", "settings", "polynet"] as const) {
+for (const tab of ["chat", "ai_feed", "resources", "events", "settings", "polynet"] as const) {
   assert.equal(
     normalizeCommunityTabForAccess(tab, memberAccess),
     tab,
     `members should keep member-safe tab ${tab}`,
   );
 }
+
+assert.equal(
+  parseCommunityTab("members"),
+  "chat",
+  "legacy /members routes should collapse to the member-facing chat/right-panel surface",
+);
 
 for (const tab of ["ai_agent", "funnel", "analytics"] as const) {
   assert.equal(
@@ -59,8 +64,13 @@ const membersReviewController = read("shared/useCommunityMembersReviewController
 
 assert.match(
   navigation,
-  /export type CommunityTabAccess = \{[\s\S]*canViewMembers: boolean;[\s\S]*canViewSettings: boolean;[\s\S]*canViewPolynet: boolean;[\s\S]*canManageMembers: boolean;[\s\S]*canViewAnalytics: boolean;[\s\S]*\};/,
+  /export type CommunityTabAccess = \{[\s\S]*canViewSettings: boolean;[\s\S]*canViewPolynet: boolean;[\s\S]*canManageMembers: boolean;[\s\S]*canViewAnalytics: boolean;[\s\S]*\};/,
   "community tab access contract must stay centralized",
+);
+assert.doesNotMatch(
+  navigation,
+  /canViewMembers: boolean;/,
+  "CommunityTabAccess must not keep a deleted Members-tab permission",
 );
 assert.match(
   navigation,
@@ -89,7 +99,7 @@ assert.match(
 );
 assert.match(
   app,
-  /const normalizedTab = normalizeCommunityTabForAccess\(communityTab, \{[\s\S]*canViewMembers: canViewMembersActiveCommunity,[\s\S]*canViewSettings: canViewActiveCommunitySettings,[\s\S]*canViewPolynet: canViewActiveCommunityPolynet,[\s\S]*canManageMembers: canManageMembersActiveCommunity,[\s\S]*canViewAnalytics: canViewActiveCommunityAnalytics,[\s\S]*\}\);/,
+  /const normalizedTab = normalizeCommunityTabForAccess\(communityTab, \{[\s\S]*canViewSettings: canViewActiveCommunitySettings,[\s\S]*canViewPolynet: canViewActiveCommunityPolynet,[\s\S]*canManageMembers: canManageMembersActiveCommunity,[\s\S]*canViewAnalytics: canViewActiveCommunityAnalytics,[\s\S]*\}\);/,
   "App must normalize the active tab from the same capability booleans used by CommunityNav",
 );
 assert.match(

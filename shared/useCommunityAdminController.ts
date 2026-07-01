@@ -7,7 +7,6 @@ import {
   type AnalyticsMetricSeriesLike,
   type AnalyticsRange,
   type AnalyticsSummaryLike,
-  type CommunityMemberLike,
   type SessionLike,
   type UserProfileDetailLike,
   type UserProfileLike,
@@ -16,10 +15,7 @@ import {
   trimProfileFields,
 } from "./communityAdminCore";
 
-import {
-  countCloudCommunityMembershipRows,
-  listCloudCommunityMembershipAdminPage,
-} from "./cloudCommunityMembershipGateway";
+import { countCloudCommunityMembershipRows } from "./cloudCommunityMembershipGateway";
 import {
   banCloudCommunityMember,
   fetchCloudCommunityAnalyticsSnapshot,
@@ -28,13 +24,10 @@ import {
 } from "./cloudCommunityAdminGateway";
 import {
   fetchCloudProfileDetailByUserId,
-  listCloudProfileRowsByUserIds,
   prepareCloudProfileAvatarField,
   upsertCloudProfileDetail,
 } from "./cloudProfilesGateway";
 import { preloadImageUrls } from "./preloadImageUrls";
-
-const COMMUNITY_MEMBERS_PAGE_SIZE = 25;
 
 type SaveProfileToCloudOptions = {
   socialLinks?: SocialProfileLinks;
@@ -42,7 +35,6 @@ type SaveProfileToCloudOptions = {
 
 type UseCommunityAdminControllerArgs<
   SessionT extends SessionLike,
-  CommunityMemberT extends CommunityMemberLike,
   UserProfileT extends UserProfileLike,
   UserProfileDetailT extends UserProfileDetailLike,
 > = {
@@ -53,7 +45,6 @@ type UseCommunityAdminControllerArgs<
   confirmAction?: (message: string) => boolean;
   reloadCommunities: (session: SessionT) => Promise<void>;
   reloadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
-  loadUserProfiles?: (userIds: string[], session: SessionT) => Promise<void> | void;
 
   getProfileSaveSession: () => SessionT | null;
   profileName: string;
@@ -71,19 +62,6 @@ type UseCommunityAdminControllerArgs<
   onProfileSaveUnauthenticated?: () => void;
   applyLoadedProfileToLocal?: (profile: UserProfileDetailT) => void;
 
-  communityMembers: CommunityMemberT[];
-  communityMemberCount: number | null;
-  communityMembersPageIndex: number;
-  communityMembersNextCursor: string | null;
-  setCommunityMembers: Dispatch<SetStateAction<CommunityMemberT[]>>;
-  setCommunityMemberCount: Dispatch<SetStateAction<number | null>>;
-  setIsLoadingCommunityMembers: Dispatch<SetStateAction<boolean>>;
-  setIsLoadingMoreCommunityMembers: Dispatch<SetStateAction<boolean>>;
-  setHasResolvedCommunityMembers: Dispatch<SetStateAction<boolean>>;
-  setCommunityMembersPageIndex: Dispatch<SetStateAction<number>>;
-  setCommunityMembersNextCursor: Dispatch<SetStateAction<string | null>>;
-  setCommunityMembersHasMore: Dispatch<SetStateAction<boolean>>;
-  setCommunityMembersLoadError: Dispatch<SetStateAction<string | null>>;
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   setCloudProfile: Dispatch<SetStateAction<UserProfileDetailT | null>>;
   setProfileName: Dispatch<SetStateAction<string>>;
@@ -107,240 +85,22 @@ type UseCommunityAdminControllerArgs<
 
 export function useCommunityAdminController<
   SessionT extends SessionLike,
-  CommunityMemberT extends CommunityMemberLike,
   UserProfileT extends UserProfileLike,
   UserProfileDetailT extends UserProfileDetailLike,
 >(
   args: UseCommunityAdminControllerArgs<
     SessionT,
-    CommunityMemberT,
     UserProfileT,
     UserProfileDetailT
   >,
 ) {
-  type CurrentArgs = UseCommunityAdminControllerArgs<
-    SessionT,
-    CommunityMemberT,
-    UserProfileT,
-    UserProfileDetailT
-  >;
-
   const resolveCanonicalProfileUserId = useCallback((sessionRaw: SessionT | null): string | null => {
     return resolveAuthSubject(sessionRaw as any);
   }, []);
 
   const argsRef = useRef(args);
   argsRef.current = args;
-  const communityMembersLoadSeqRef = useRef(0);
   const communityAnalyticsLoadSeqRef = useRef(0);
-
-  const hydrateCommunityMemberRows = useCallback((
-    current: UseCommunityAdminControllerArgs<
-      SessionT,
-      CommunityMemberT,
-      UserProfileT,
-      UserProfileDetailT
-    >,
-    rows: CommunityMemberT[],
-    usableSession: SessionT,
-    seq: number,
-  ) => {
-    if (communityMembersLoadSeqRef.current !== seq) return;
-
-    current.setProfilesByUserId((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const row of rows) {
-        const profileLike = row as unknown as UserProfileT & {
-          display_name?: string | null;
-          avatar_url?: string | null;
-          avatar_storage_id?: string | null;
-          avatar_focus_x?: number | null;
-          avatar_focus_y?: number | null;
-          avatar_zoom?: number | null;
-        };
-        if (!profileLike.user_id) continue;
-        if (profileLike.display_name == null && profileLike.avatar_url == null) continue;
-        next[profileLike.user_id] = {
-          ...(next[profileLike.user_id] ?? ({} as UserProfileT)),
-          user_id: profileLike.user_id,
-          display_name: profileLike.display_name ?? null,
-          avatar_url: profileLike.avatar_url ?? null,
-          avatar_storage_id: profileLike.avatar_storage_id ?? null,
-          avatar_focus_x: profileLike.avatar_focus_x ?? 0.5,
-          avatar_focus_y: profileLike.avatar_focus_y ?? 0.5,
-          avatar_zoom: profileLike.avatar_zoom ?? 1,
-        } as UserProfileT;
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-
-    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
-    if (userIds.length > 0) {
-      if (current.loadUserProfiles) {
-        void Promise.resolve(current.loadUserProfiles(userIds, usableSession)).catch(() => {
-          // Profile enrichment should never block or break roster rendering.
-        });
-      } else {
-        void (async () => {
-          try {
-            const profiles = await listCloudProfileRowsByUserIds<SessionT, UserProfileT>({
-              session: usableSession,
-              userIds,
-            });
-            if (communityMembersLoadSeqRef.current !== seq) return;
-            current.setProfilesByUserId((prev) => {
-              const next = { ...prev };
-              for (const profile of profiles) {
-                next[profile.user_id] = profile;
-              }
-              return next;
-            });
-          } catch {
-            // Profiles are enrichment; member rows can still render.
-          }
-        })();
-      }
-    }
-  }, []);
-
-  const loadCommunityMemberCount = useCallback((
-    current: UseCommunityAdminControllerArgs<
-      SessionT,
-      CommunityMemberT,
-      UserProfileT,
-      UserProfileDetailT
-    >,
-    communityId: string,
-    usableSession: SessionT,
-    seq: number,
-  ) => {
-    void countCloudCommunityMembershipRows({
-      session: usableSession,
-      communityId,
-      sinceIso: null,
-    })
-      .then((count) => {
-        if (communityMembersLoadSeqRef.current !== seq) return;
-        if (typeof count !== "number") return;
-        current.setCommunityMemberCount(count);
-      })
-      .catch(() => {
-        // Exact counts are enrichment; roster rendering must not depend on them.
-      });
-  }, []);
-
-  const loadCommunityMembers = useCallback(async (
-    communityId: string,
-    session: SessionT,
-  ) => {
-    const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
-    const seq = (communityMembersLoadSeqRef.current += 1);
-    current.setIsLoadingCommunityMembers(true);
-    current.setIsLoadingMoreCommunityMembers(false);
-    current.setCommunityMembersLoadError(null);
-    current.setCommunityMembersNextCursor(null);
-    current.setCommunityMembersHasMore(false);
-    current.setCommunityMembersPageIndex(0);
-    try {
-      const page = await listCloudCommunityMembershipAdminPage({
-        session: usableSession,
-        communityId,
-        cursor: null,
-        pageSize: COMMUNITY_MEMBERS_PAGE_SIZE,
-      });
-      if (communityMembersLoadSeqRef.current !== seq) return;
-      const rows = page.rows as unknown as CommunityMemberT[];
-      current.setCommunityMembers(rows);
-      if (page.isDone) {
-        current.setCommunityMemberCount(rows.length);
-      } else {
-        loadCommunityMemberCount(current, communityId, usableSession, seq);
-      }
-      current.setCommunityMembersNextCursor(page.continueCursor);
-      current.setCommunityMembersHasMore(!page.isDone);
-      hydrateCommunityMemberRows(current, rows, usableSession, seq);
-    } catch (error) {
-      if (communityMembersLoadSeqRef.current === seq) {
-        current.setCommunityMembers([]);
-        current.setCommunityMemberCount(null);
-        current.setCommunityMembersNextCursor(null);
-        current.setCommunityMembersHasMore(false);
-        current.setCommunityMembersLoadError(
-          error instanceof Error ? error.message : "Failed to load members.",
-        );
-      }
-    } finally {
-      if (communityMembersLoadSeqRef.current === seq) {
-        current.setHasResolvedCommunityMembers(true);
-        current.setIsLoadingCommunityMembers(false);
-      }
-    }
-  }, [hydrateCommunityMemberRows, loadCommunityMemberCount]);
-
-  const loadMoreCommunityMembers = useCallback(async (
-    communityId: string,
-    session: SessionT,
-  ) => {
-    const current = argsRef.current;
-    const cursor = current.communityMembersNextCursor;
-    if (!cursor) return;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
-    const seq = communityMembersLoadSeqRef.current;
-    current.setIsLoadingMoreCommunityMembers(true);
-    current.setCommunityMembersLoadError(null);
-    try {
-      const page = await listCloudCommunityMembershipAdminPage({
-        session: usableSession,
-        communityId,
-        cursor,
-        pageSize: COMMUNITY_MEMBERS_PAGE_SIZE,
-      });
-      if (communityMembersLoadSeqRef.current !== seq) return;
-      const rows = page.rows as unknown as CommunityMemberT[];
-      let mergedMemberCount: number | null = null;
-      current.setCommunityMembers((previous) => {
-        const seen = new Set(previous.map((row: any) => String(row.id ?? "")));
-        const nextRows = rows.filter((row: any) => {
-          const id = String(row.id ?? "");
-          return id && !seen.has(id);
-        });
-        const mergedRows = nextRows.length > 0 ? [...previous, ...nextRows] : previous;
-        mergedMemberCount = mergedRows.length;
-        return mergedRows;
-      });
-      if (page.isDone && typeof current.communityMemberCount !== "number") {
-        current.setCommunityMemberCount(mergedMemberCount);
-      }
-      current.setCommunityMembersNextCursor(page.continueCursor);
-      current.setCommunityMembersHasMore(!page.isDone);
-      current.setCommunityMembersPageIndex((previous) => previous + 1);
-      hydrateCommunityMemberRows(current, rows, usableSession, seq);
-    } catch (error) {
-      current.setCommunityMembersLoadError(
-        error instanceof Error ? error.message : "Failed to load more members.",
-      );
-    } finally {
-      current.setIsLoadingMoreCommunityMembers(false);
-    }
-  }, [hydrateCommunityMemberRows]);
-
-  const handleShowMoreCommunityMembers = useCallback(async () => {
-    const current = argsRef.current;
-    const communityId = current.activeCommunityId;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!communityId || !session) return;
-    const loadedPageCount = Math.max(1, Math.ceil(current.communityMembers.length / COMMUNITY_MEMBERS_PAGE_SIZE));
-    if (current.communityMembersPageIndex < loadedPageCount - 1) {
-      current.setCommunityMembersPageIndex((previous) => previous + 1);
-      return;
-    }
-    await loadMoreCommunityMembers(communityId, session);
-  }, [loadMoreCommunityMembers]);
 
   const loadSelfProfile = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
@@ -515,45 +275,6 @@ export function useCommunityAdminController<
     current.setIsLoadingCommunityAnalytics(false);
   }, []);
 
-  const patchCommunityMemberRoleLocally = useCallback((
-    current: CurrentArgs,
-    membershipId: string,
-    role: "admin" | "moderator" | "member",
-  ) => {
-    const targetId = String(membershipId);
-    current.setCommunityMembers((previous) =>
-      previous.map((row) => (
-        String((row as any).id ?? "") === targetId
-          ? ({ ...(row as any), role } as CommunityMemberT)
-          : row
-      )),
-    );
-  }, []);
-
-  const decrementCommunityMemberCountIfKnown = useCallback((current: CurrentArgs) => {
-    current.setCommunityMemberCount((previous) => (
-      typeof previous === "number" ? Math.max(0, previous - 1) : previous
-    ));
-  }, []);
-
-  const removeCommunityMemberLocally = useCallback((
-    current: CurrentArgs,
-    membershipId: string,
-  ) => {
-    const targetId = String(membershipId);
-    const removedLoadedMember = current.communityMembers.some(
-      (row) => String((row as any).id ?? "") === targetId,
-    );
-    current.setCommunityMembers((previous) =>
-      previous.filter((row) => String((row as any).id ?? "") !== targetId),
-    );
-    if (!removedLoadedMember) return;
-    decrementCommunityMemberCountIfKnown(current);
-    const nextLoadedCount = Math.max(0, current.communityMembers.length - 1);
-    const maxPageIndex = Math.max(0, Math.ceil(nextLoadedCount / COMMUNITY_MEMBERS_PAGE_SIZE) - 1);
-    current.setCommunityMembersPageIndex((previous) => Math.min(previous, maxPageIndex));
-  }, [decrementCommunityMemberCountIfKnown]);
-
   const reconcileCommunityMembershipViews = useCallback((communityId: string, session: SessionT) => {
     const current = argsRef.current;
     void (async () => {
@@ -565,11 +286,6 @@ export function useCommunityAdminController<
             session: usableSession,
             communityId,
             sinceIso: null,
-          }).then((count) => {
-            if (typeof count !== "number") return;
-            const latest = argsRef.current;
-            if (latest.activeCommunityId !== communityId) return;
-            latest.setCommunityMemberCount(count);
           }),
           argsRef.current.reloadCommunities(usableSession),
           argsRef.current.reloadCommunityAccess(communityId, usableSession),
@@ -595,12 +311,11 @@ export function useCommunityAdminController<
         membershipId,
         role,
       });
-      patchCommunityMemberRoleLocally(current, membershipId, role);
       reconcileCommunityMembershipViews(communityId, session);
     } catch (error) {
       console.warn("Failed to set member role:", error);
     }
-  }, [patchCommunityMemberRoleLocally, reconcileCommunityMembershipViews]);
+  }, [reconcileCommunityMembershipViews]);
 
   const handleRemoveCommunityMember = useCallback(async (membershipId: string) => {
     const current = argsRef.current;
@@ -617,12 +332,11 @@ export function useCommunityAdminController<
         communityId,
         membershipId,
       });
-      removeCommunityMemberLocally(current, membershipId);
       reconcileCommunityMembershipViews(communityId, session);
     } catch (error) {
       console.warn("Failed to remove member:", error);
     }
-  }, [reconcileCommunityMembershipViews, removeCommunityMemberLocally]);
+  }, [reconcileCommunityMembershipViews]);
 
   const handleBanCommunityMember = useCallback(async (membershipId: string) => {
     const current = argsRef.current;
@@ -639,17 +353,13 @@ export function useCommunityAdminController<
         communityId,
         membershipId,
       });
-      removeCommunityMemberLocally(current, membershipId);
       reconcileCommunityMembershipViews(communityId, session);
     } catch (error) {
       console.warn("Failed to ban member:", error);
     }
-  }, [reconcileCommunityMembershipViews, removeCommunityMemberLocally]);
+  }, [reconcileCommunityMembershipViews]);
 
   return {
-    loadCommunityMembers,
-    loadMoreCommunityMembers,
-    handleShowMoreCommunityMembers,
     loadSelfProfile,
     saveProfileToCloud,
     loadCommunityAnalytics,

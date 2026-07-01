@@ -13,21 +13,17 @@ type LifecycleParams<
   JoinRequestT,
   CommunityT extends CommunityLike,
 > = {
-  activePage: string;
-  communityTab: string;
   session: SessionT | null;
   activeCommunityId: string | null;
   communities: CommunityT[];
   canReviewJoinRequests: boolean;
   activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
   shouldLoad?: boolean;
-  isJoinRequestsModalOpen: boolean;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
   setDecidingCommunityJoinRequestId: Dispatch<SetStateAction<string | null>>;
-  setIsJoinRequestsModalOpen: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useCommunityMembersReviewLifecycle<
@@ -48,19 +44,10 @@ export function useCommunityMembersReviewLifecycle<
     params.setIsLoadingCommunityJoinRequests(false);
     params.setCommunityJoinRequestsError(null);
     params.setDecidingCommunityJoinRequestId(null);
-    params.setIsJoinRequestsModalOpen(false);
   }, [params.activeCommunityId]);
 
   useEffect(() => {
-    if (params.activePage !== "community") return;
-    if (params.communityTab === "members") return;
-    params.setIsJoinRequestsModalOpen(false);
-  }, [params.activePage, params.communityTab]);
-
-  useEffect(() => {
-    const shouldLoadForSurface =
-      (params.activePage === "community" && params.communityTab === "members") ||
-      params.shouldLoad === true;
+    const shouldLoadForSurface = params.shouldLoad === true;
     if (!shouldLoadForSurface) return;
     const session = params.session;
     const communityId = params.activeCommunityId;
@@ -69,7 +56,6 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
       params.setDecidingCommunityJoinRequestId(null);
-      params.setIsJoinRequestsModalOpen(false);
       return;
     }
     if (!params.canReviewJoinRequests) {
@@ -77,7 +63,6 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
       params.setDecidingCommunityJoinRequestId(null);
-      params.setIsJoinRequestsModalOpen(false);
       return;
     }
 
@@ -90,7 +75,6 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
       params.setDecidingCommunityJoinRequestId(null);
-      params.setIsJoinRequestsModalOpen(false);
       return;
     }
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
@@ -100,7 +84,6 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
       params.setDecidingCommunityJoinRequestId(null);
-      params.setIsJoinRequestsModalOpen(false);
       return;
     }
 
@@ -114,7 +97,6 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
       params.setDecidingCommunityJoinRequestId(null);
-      params.setIsJoinRequestsModalOpen(false);
       return;
     }
 
@@ -130,36 +112,13 @@ export function useCommunityMembersReviewLifecycle<
         params.setIsLoadingCommunityJoinRequests(false);
         params.setCommunityJoinRequestsError(message);
         params.setDecidingCommunityJoinRequestId(null);
-        params.setIsJoinRequestsModalOpen(false);
       });
   }, [
-    params.activePage,
-    params.communityTab,
     params.session,
     params.activeCommunityId,
     params.canReviewJoinRequests,
     params.activeCommunityMembersJoinReviewMode,
     params.shouldLoad,
     params.communities,
-  ]);
-
-  useEffect(() => {
-    if (!params.isJoinRequestsModalOpen) return;
-    if (
-      params.activePage !== "community" ||
-      params.communityTab !== "members" ||
-      !params.activeCommunityId ||
-      !params.canReviewJoinRequests ||
-      params.activeCommunityMembersJoinReviewMode !== "free_approval"
-    ) {
-      params.setIsJoinRequestsModalOpen(false);
-    }
-  }, [
-    params.isJoinRequestsModalOpen,
-    params.activePage,
-    params.communityTab,
-    params.activeCommunityId,
-    params.canReviewJoinRequests,
-    params.activeCommunityMembersJoinReviewMode,
   ]);
 }

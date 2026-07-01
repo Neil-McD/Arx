@@ -27,7 +27,6 @@ export const COMMUNITY_TABS = [
   "ai_feed",
   "resources",
   "events",
-  "members",
   "settings",
   "polynet",
   "ai_agent",
@@ -59,7 +58,6 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
 }
 
 export type CommunityTabAccess = {
-  canViewMembers: boolean;
   canViewSettings: boolean;
   canViewPolynet: boolean;
   canManageMembers: boolean;
@@ -71,8 +69,6 @@ export function isCommunityTabAllowedForAccess(
   access: CommunityTabAccess,
 ): boolean {
   switch (tab) {
-    case "members":
-      return access.canViewMembers;
     case "settings":
       return access.canViewSettings;
     case "polynet":
@@ -113,8 +109,6 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
       return "events";
     case "calendar":
       return "events";
-    case "members":
-      return "members";
     case "settings":
       return "settings";
     case "polynet":

@@ -1898,15 +1898,6 @@
     padding: calc(12px + var(--web-topbar-height)) 16px 16px;
   }
 
-  .invite-create-row,
-  .invite-create-row-cta {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .invite-create-btn {
-    width: 100%;
-  }
-
   .invite-row {
     flex-direction: column;
     align-items: stretch;

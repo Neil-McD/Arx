@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brain, Check, Link2 } from "lucide-react";
+import { Brain, Check, UserPlus } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 
@@ -195,24 +195,6 @@ export function CommunityNav({
         <span className="nav-item-label">Events</span>
         {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
-      {canViewMembersActiveCommunity && (
-        <button
-          className={communityTab === "members" ? "nav-item active" : "nav-item"}
-          type={buttonType}
-          onClick={() => onSelectTab("members")}
-          title={maybeTitle("Members")}
-        >
-          <span className="nav-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </span>
-          Members
-        </button>
-      )}
       {showManagementSection && (
         <>
           <div className="community-nav-divider" />
@@ -324,10 +306,10 @@ export function CommunityNav({
               {didCopyJoinLink ? (
                 <Check size={16} strokeWidth={1.9} aria-hidden="true" />
               ) : (
-                <Link2 size={16} strokeWidth={1.9} aria-hidden="true" />
+                <UserPlus size={16} strokeWidth={1.9} aria-hidden="true" />
               )}
             </span>
-            <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite"}</span>
+            <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite people"}</span>
           </button>
         </div>
       ) : null}

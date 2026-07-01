@@ -15,41 +15,25 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 
 const app = read("apps/web/src/App.tsx");
 const shellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
-const rosterLifecycle = read("shared/useCommunityMemberRosterLifecycle.ts");
 const directoryLifecycle = read("shared/useCommunityDirectoryLifecycle.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const communityCore = read("convex/communityCore.ts");
-const rosterHookCall = sliceBetween(
-  app,
-  "useCommunityMemberRosterLifecycle<AuthSession>({",
-  "  useCommunityDirectoryLifecycle<AuthSession>({",
-);
 const directoryHookCall = sliceBetween(
   app,
   "useCommunityDirectoryLifecycle<AuthSession>({",
   "  const activeCommunityMembersJoinReviewMode",
 );
 
-const rosterPredicate = sliceBetween(
-  rosterLifecycle,
-  "function needsCommunityMemberRoster",
-  "\n}\n\nexport function",
-);
 const directoryPredicate = sliceBetween(
   directoryLifecycle,
   "function needsCommunityDirectory",
   "\n}\n\nexport function",
 );
 
-assert.match(
-  rosterPredicate,
-  /communityTab === "members"/,
-  "member roster hydration must support the Members tab",
-);
 assert.doesNotMatch(
-  rosterPredicate,
-  /communityTab === "chat"/,
-  "chat right rail must not hydrate the admin member roster",
+  app,
+  /useCommunityMemberRosterLifecycle|loadCommunityMembers|handleShowMoreCommunityMembers/,
+  "App must not hydrate or page the deleted admin Members-tab roster",
 );
 assert.match(
   directoryPredicate,
@@ -59,17 +43,12 @@ assert.match(
 assert.doesNotMatch(
   directoryPredicate,
   /communityTab === "members"/,
-  "Members tab must keep using the management roster instead of the chat directory",
+  "deleted Members tab must not own the member-facing directory lifecycle",
 );
 assert.doesNotMatch(
-  rosterPredicate,
-  /communityTab === "funnel"|communityTab === "ai_agent"/,
-  "Funnel and AI Agent tabs must not hydrate the full member roster",
-);
-assert.doesNotMatch(
-  rosterLifecycle,
-  /shouldLoad/,
-  "member roster lifecycle must not expose a broad preload override",
+  app,
+  /listCommunityMembershipsAdminPage|CloudCommunityMembershipAdminRow/,
+  "App must not depend on the admin membership page query for member-facing context",
 );
 
 const socialSummarySlice = sliceBetween(
@@ -108,11 +87,6 @@ assert.match(
   /buildWorkspaceRightPanelCommunityData\(\{[\s\S]*memberCount: activeCommunitySocialMemberCount/,
   "workspace right panel must use the summary-backed member count",
 );
-assert.doesNotMatch(
-  rosterHookCall,
-  /shouldLoad:/,
-  "workspace right panel must not force the member roster lifecycle",
-);
 assert.match(
   directoryHookCall,
   /loadCommunityDirectoryMembers/,
@@ -134,4 +108,4 @@ assert.match(
   "presence/social summary counts must use the canonical member count helper",
 );
 
-console.log("PASS: community tab hydration splits Members roster reads from chat directory reads.");
+console.log("PASS: community tab hydration uses the member-facing directory and leaves no Members-tab roster read.");

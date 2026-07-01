@@ -34,7 +34,6 @@ Current canonical/pathname routes include:
 - `/c/:slug/chat`
 - `/c/:slug/ai-feed`
 - `/c/:slug/resources`
-- `/c/:slug/members`
 - `/c/:slug/settings`
 - `/c/:slug/agent`
 - `/c/:slug/funnel`
@@ -115,7 +114,6 @@ Preferred direction:
 - `/c/:slug/chat`
 - `/c/:slug/ai-feed`
 - `/c/:slug/resources`
-- `/c/:slug/members`
 - `/c/:slug/settings`
 - `/c/:slug/agent`
 - `/c/:slug/funnel`

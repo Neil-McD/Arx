@@ -14,7 +14,6 @@ const editor = read("apps/web/src/components/WebCommunityAvatarEditorModal.tsx")
 const userEditor = read("apps/web/src/components/WebUserAvatarEditorModal.tsx");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
-const membersSection = read("apps/web/src/components/WebCommunityMembersSection.tsx");
 const baseCss = read("apps/web/src/base.css");
 const indexCss = read("apps/web/src/index.css");
 
@@ -223,11 +222,6 @@ assert.match(
   baseCss,
   /\.member-avatar\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-card-alt\)/,
   "member avatar fallbacks must use neutral surface styling",
-);
-assert.doesNotMatch(
-  membersSection,
-  /fallbackStyle=\{\{ backgroundColor: actions\.getAvatarColor/,
-  "member roster fallbacks must not use rainbow chat avatar colors",
 );
 assert.match(
   baseCss,

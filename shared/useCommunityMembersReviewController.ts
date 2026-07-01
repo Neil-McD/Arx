@@ -5,7 +5,6 @@ import {
   approveCloudCommunityJoinRequest,
   denyCloudCommunityJoinRequest,
   listCloudCommunityJoinRequestRows,
-  setCloudCommunityFreeAccessMode,
 } from "./cloudCommunityAdminGateway";
 
 type SessionLike = {
@@ -17,12 +16,6 @@ type SessionLike = {
 type JoinRequestLike = {
   id: string;
   user_id: string;
-};
-
-type CommunityLike = {
-  id: string;
-  entry_policy?: "open" | "approval" | "paid_subscription" | null;
-  updated_at: string;
 };
 
 function readCommunityJoinRequestErrorText(error: unknown): string {
@@ -65,29 +58,24 @@ function formatCommunityJoinRequestError(error: unknown, fallback: string): stri
 type UseCommunityMembersReviewControllerArgs<
   SessionT extends SessionLike,
   JoinRequestT extends JoinRequestLike,
-  CommunityT extends CommunityLike,
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  isSavingFreeAccessMode: boolean;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
-  loadCommunityMembers: (communityId: string, session: SessionT) => Promise<void> | void;
-  onJoinRequestApproved?: (params: { communityId: string; requestId: string }) => void;
-  setCommunities: Dispatch<SetStateAction<CommunityT[]>>;
+  reloadCommunityDirectoryMembers: (communityId: string, session: SessionT) => Promise<void> | void;
+  onJoinRequestApproved?: (params: { communityId: string; requestId: string }) => Promise<void> | void;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
   setDecidingCommunityJoinRequestId: Dispatch<SetStateAction<string | null>>;
-  setIsSavingFreeAccessMode: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useCommunityMembersReviewController<
   SessionT extends SessionLike,
   JoinRequestT extends JoinRequestLike,
-  CommunityT extends CommunityLike,
 >(
-  args: UseCommunityMembersReviewControllerArgs<SessionT, JoinRequestT, CommunityT>,
+  args: UseCommunityMembersReviewControllerArgs<SessionT, JoinRequestT>,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
@@ -130,13 +118,13 @@ export function useCommunityMembersReviewController<
         requestId,
       });
       await Promise.all([
-        current.loadCommunityMembers(communityId, session),
+        current.reloadCommunityDirectoryMembers(communityId, session),
         loadCommunityJoinRequests(communityId, session),
+        current.onJoinRequestApproved?.({
+          communityId,
+          requestId,
+        }),
       ]);
-      current.onJoinRequestApproved?.({
-        communityId,
-        requestId,
-      });
     } catch (error) {
       current.setCommunityJoinRequestsError(
         formatCommunityJoinRequestError(error, "Failed to approve request."),
@@ -168,60 +156,9 @@ export function useCommunityMembersReviewController<
     }
   }, [loadCommunityJoinRequests]);
 
-  const handleSetCommunityFreeAccessMode = useCallback(async (nextMode: "open" | "approval") => {
-    const current = argsRef.current;
-    const communityId = current.activeCommunityId;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !communityId) return;
-    if (current.isSavingFreeAccessMode) return;
-    current.setCommunityJoinRequestsError(null);
-    current.setIsSavingFreeAccessMode(true);
-    try {
-      const row = await setCloudCommunityFreeAccessMode({
-        session,
-        communityId,
-        mode: nextMode,
-      });
-      const updatedCommunityId = typeof row?.community_id === "string" ? row.community_id : communityId;
-      const updatedEntryPolicy =
-        row?.entry_policy === "approval" ||
-        row?.entry_policy === "open" ||
-        row?.entry_policy === "paid_subscription"
-          ? row.entry_policy
-          : nextMode;
-      const updatedAt = typeof row?.updated_at === "string" ? row.updated_at : null;
-
-      current.setCommunities((prev) =>
-        prev.map((community) =>
-          community.id === updatedCommunityId
-            ? {
-                ...community,
-                entry_policy: updatedEntryPolicy,
-                updated_at: updatedAt ?? community.updated_at,
-              }
-            : community,
-        ),
-      );
-
-      if (updatedEntryPolicy === "approval") {
-        await loadCommunityJoinRequests(updatedCommunityId, session);
-      } else {
-        current.setCommunityJoinRequestsError(null);
-        current.setDecidingCommunityJoinRequestId(null);
-      }
-    } catch (error) {
-      current.setCommunityJoinRequestsError(
-        formatCommunityJoinRequestError(error, "Failed to update join approvals."),
-      );
-    } finally {
-      current.setIsSavingFreeAccessMode(false);
-    }
-  }, [loadCommunityJoinRequests]);
-
   return {
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,
-    handleSetCommunityFreeAccessMode,
   };
 }

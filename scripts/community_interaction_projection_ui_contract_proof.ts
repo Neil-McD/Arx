@@ -14,7 +14,6 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
-const membersSection = read("apps/web/src/components/WebCommunityMembersSection.tsx");
 const communityNav = read("shared/CommunityNav.tsx");
 const communityAccessViewModel = read("shared/communityAccessViewModel.ts");
 const chromeShared = read("apps/web/src/components/webShellChromeShared.ts");
@@ -299,15 +298,10 @@ assert.match(
   /return \(\) => \{[\s\S]*didCancel = true;[\s\S]*requestedMemberBillingHistoryIdsRef\.current\.delete\(memberId\);[\s\S]*setLoadingMemberBillingHistoryId\(\(current\) => \([\s\S]*current === memberId \? null : current/,
   "member settings dialog should clear in-flight billing history state when closed or switched",
 );
-assert.match(
-  membersSection,
-  /import \{ CommunityMemberSettingsDialog \} from "\.\/CommunityMemberSettingsDialog";[\s\S]*<CommunityMemberSettingsDialog/,
-  "legacy members management surface should reuse the same settings dialog while it still exists",
-);
 assert.doesNotMatch(
-  membersSection,
-  /function formatBaseUnitsAmount|function formatBillingEventTitle|function formatBillingEventDetail/,
-  "legacy members management surface should not keep a forked billing/settings formatter implementation",
+  surfaceProjection,
+  /members:\s*\{/,
+  "legacy Members page projection should stay deleted; the right rail owns member context",
 );
 
 assert.match(

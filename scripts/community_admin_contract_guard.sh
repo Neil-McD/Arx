@@ -20,8 +20,10 @@ SCHEMA_FILE="convex/schema.ts"
 ADMIN_GATEWAY_FILE="shared/cloudCommunityAdminGateway.ts"
 MEMBERSHIP_GATEWAY_FILE="shared/cloudCommunityMembershipGateway.ts"
 WEB_APP_FILE="apps/web/src/App.tsx"
-WEB_MEMBERS_FILE="apps/web/src/components/WebCommunityMembersSection.tsx"
-WEB_PEOPLE_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityPeopleController.ts"
+WEB_CONTEXT_PANEL_FILE="apps/web/src/components/CommunityContextPanel.tsx"
+WEB_MEMBER_DIALOG_FILE="apps/web/src/components/CommunityMemberSettingsDialog.tsx"
+WEB_INTERACTION_PROJECTION_FILE="apps/web/src/components/WebCommunityInteractionProjection.tsx"
+WEB_JOIN_REQUESTS_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityJoinRequestsController.ts"
 ADMIN_CONTROLLER_FILE="shared/useCommunityAdminController.ts"
 
 if [[ ! -f "$COMMUNITY_FILE" ]]; then
@@ -70,6 +72,26 @@ if [[ ! -f "$MEMBERSHIP_GATEWAY_FILE" ]]; then
 fi
 if [[ ! -f "$WEB_APP_FILE" ]]; then
   echo "FAIL: missing $WEB_APP_FILE"
+  exit 1
+fi
+if [[ -f "apps/web/src/components/WebCommunityMembersSection.tsx" ]]; then
+  echo "FAIL: legacy Members tab component should stay deleted"
+  exit 1
+fi
+if [[ ! -f "$WEB_CONTEXT_PANEL_FILE" ]]; then
+  echo "FAIL: missing $WEB_CONTEXT_PANEL_FILE"
+  exit 1
+fi
+if [[ ! -f "$WEB_MEMBER_DIALOG_FILE" ]]; then
+  echo "FAIL: missing $WEB_MEMBER_DIALOG_FILE"
+  exit 1
+fi
+if [[ ! -f "$WEB_INTERACTION_PROJECTION_FILE" ]]; then
+  echo "FAIL: missing $WEB_INTERACTION_PROJECTION_FILE"
+  exit 1
+fi
+if [[ ! -f "$WEB_JOIN_REQUESTS_CONTROLLER_FILE" ]]; then
+  echo "FAIL: missing $WEB_JOIN_REQUESTS_CONTROLLER_FILE"
   exit 1
 fi
 if [[ ! -f "$ADMIN_CONTROLLER_FILE" ]]; then
@@ -232,72 +254,72 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'blockCommunityUserInternal[\s\S]*?targetMembershipRows[\s\S]*?pickMostRelevantCommunityMembership\(targetMembershipRows\)[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership,' \
   "member ban requires owner for admin targets"
-require_no_match "$WEB_PEOPLE_CONTROLLER_FILE" \
-  'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter' \
-  "members controller does not keep loaded-subset filter state"
-require_no_match "$WEB_MEMBERS_FILE" \
-  'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|members-filter-row|members-filter-field' \
-  "members UI does not expose loaded-subset filters"
-require_multiline_match "$WEB_MEMBERS_FILE" \
-  'const isActiveCommunityOwner = capabilities\.isActiveCommunityOwner[\s\S]*?selectedMemberRoleOptions[\s\S]*?isActiveCommunityOwner[\s\S]*?\["member", "moderator", "admin"\][\s\S]*?selectedMemberIsAdmin[\s\S]*?\["admin"\][\s\S]*?\["member", "moderator"\]' \
-  "members UI role options reserve admin role controls for owners"
-require_multiline_match "$WEB_MEMBERS_FILE" \
-  'disabled=\{!canChangeSelectedMemberRole\}[\s\S]*?selectedMemberRoleOptions\.map' \
-  "members UI disables admin role changes for non-owner admins"
-require_multiline_match "$WEB_MEMBERS_FILE" \
-  'disabled=\{!canRemoveSelectedMember\}[\s\S]*?Only owners can remove admins[\s\S]*?disabled=\{!canRemoveSelectedMember\}[\s\S]*?Only owners can ban admins' \
-  "members UI disables admin removal and ban actions for non-owner admins"
-require_no_match "$WEB_MEMBERS_FILE" \
+require_no_match "$WEB_APP_FILE" \
+  'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|useCommunityMemberRosterLifecycle|loadCommunityMembers|handleShowMoreCommunityMembers' \
+  "App does not keep legacy loaded-subset member roster state"
+require_no_match "$WEB_JOIN_REQUESTS_CONTROLLER_FILE" \
+  'communityMembers|filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|isJoinRequestsModalOpen' \
+  "join-request controller does not keep member roster or deleted modal state"
+require_multiline_match "$WEB_CONTEXT_PANEL_FILE" \
+  'const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)' \
+  "right-panel member settings action is manager-gated and hidden for owner rows"
+require_multiline_match "$WEB_INTERACTION_PROJECTION_FILE" \
+  'const canManageCommunityMembers = Boolean\([\s\S]*props\.canManageCommunityMembers[\s\S]*props\.communityId[\s\S]*props\.onSetCommunityMemberRole[\s\S]*props\.onRemoveCommunityMember[\s\S]*props\.onBanCommunityMember' \
+  "right-panel member settings fail closed unless manager callbacks are wired"
+require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
+  'const canChangeRole = Boolean\([\s\S]*props\.canManageMembers[\s\S]*!memberIsOwner[\s\S]*\(props\.isActiveCommunityOwner \|\| !memberIsAdmin\)' \
+  "member settings dialog prevents non-owners from role-changing owners or admins"
+require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
+  'props\.isActiveCommunityOwner[\s\S]*\(\["member", "moderator", "admin"\] as const\)[\s\S]*memberIsAdmin[\s\S]*\(\["admin"\] as const\)[\s\S]*\(\["member", "moderator"\] as const\)' \
+  "member settings dialog reserves admin role controls for owners"
+require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
+  'disabled=\{!canChangeRole\}[\s\S]*roleOptions\.map' \
+  "member settings dialog disables admin role changes for non-owner admins"
+require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
+  'disabled=\{!canRemoveMember\}[\s\S]*Only owners can remove admins[\s\S]*disabled=\{!canRemoveMember\}[\s\S]*Only owners can ban admins' \
+  "member settings dialog disables admin removal and ban actions for non-owner admins"
+require_no_match "$WEB_MEMBER_DIALOG_FILE" \
   '\(\["member", "moderator", "admin"\] as const\)\.map' \
-  "members UI does not render admin role options unconditionally"
-require_multiline_match "$ADMIN_CONTROLLER_FILE" \
-  'const patchCommunityMemberRoleLocally = useCallback\([\s\S]*?current\.setCommunityMembers\(\(previous\) =>[\s\S]*?\.\.\.\(row as any\), role' \
-  "member role mutations patch the local roster after backend success"
-require_multiline_match "$ADMIN_CONTROLLER_FILE" \
-  'const removeCommunityMemberLocally = useCallback\([\s\S]*?current\.setCommunityMembers\(\(previous\) =>[\s\S]*?previous\.filter[\s\S]*?decrementCommunityMemberCountIfKnown\(current\)' \
-  "member remove and ban mutations remove the local row and decrement known counts"
+  "member settings dialog does not render admin role options unconditionally"
+require_no_match "$ADMIN_CONTROLLER_FILE" \
+  'patchCommunityMemberRoleLocally|removeCommunityMemberLocally|setCommunityMembers|setCommunityMemberCount|listCloudCommunityMembershipAdminPage|loadCommunityMembers|handleShowMoreCommunityMembers' \
+  "member mutations no longer patch a deleted local Members-tab roster"
 require_multiline_match "$ADMIN_CONTROLLER_FILE" \
   'const reconcileCommunityMembershipViews = useCallback\([\s\S]*?void \(async \(\) =>[\s\S]*?Promise\.allSettled\(\[[\s\S]*?countCloudCommunityMembershipRows[\s\S]*?reloadCommunities[\s\S]*?reloadCommunityAccess' \
   "member mutations use non-blocking narrow background reconciliation"
 require_multiline_match "$ADMIN_CONTROLLER_FILE" \
-  'handleSetCommunityMemberRole[\s\S]*?await setCloudCommunityMemberRole[\s\S]*?patchCommunityMemberRoleLocally\(current, membershipId, role\)[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
-  "role mutation patches local row only after backend success"
+  'handleSetCommunityMemberRole[\s\S]*?await setCloudCommunityMemberRole[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
+  "role mutation reconciles only after backend success"
 require_multiline_match "$ADMIN_CONTROLLER_FILE" \
-  'handleRemoveCommunityMember[\s\S]*?await removeCloudCommunityMember[\s\S]*?removeCommunityMemberLocally\(current, membershipId\)[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
-  "remove mutation removes local row only after backend success"
+  'handleRemoveCommunityMember[\s\S]*?await removeCloudCommunityMember[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
+  "remove mutation reconciles only after backend success"
 require_multiline_match "$ADMIN_CONTROLLER_FILE" \
-  'handleBanCommunityMember[\s\S]*?await banCloudCommunityMember[\s\S]*?removeCommunityMemberLocally\(current, membershipId\)[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
-  "ban mutation removes local row only after backend success"
+  'handleBanCommunityMember[\s\S]*?await banCloudCommunityMember[\s\S]*?reconcileCommunityMembershipViews\(communityId, session\)' \
+  "ban mutation reconciles only after backend success"
 require_no_match "$ADMIN_CONTROLLER_FILE" \
   'refreshCommunityMembershipViews' \
   "member mutations do not keep the old full refresh helper"
 require_block_no_match "$ADMIN_CONTROLLER_FILE" \
   'const handleSetCommunityMemberRole = useCallback' \
-  '^\s*\}, \[patchCommunityMemberRoleLocally, reconcileCommunityMembershipViews\]\);' \
+  '^\s*\}, \[reconcileCommunityMembershipViews\]\);' \
   'finally|await reconcileCommunityMembershipViews|await reloadCommunities|await reloadCommunityAccess' \
   "role mutation does not block on refresh or reconciliation"
 require_block_no_match "$ADMIN_CONTROLLER_FILE" \
   'const handleRemoveCommunityMember = useCallback' \
-  '^\s*\}, \[reconcileCommunityMembershipViews, removeCommunityMemberLocally\]\);' \
+  '^\s*\}, \[reconcileCommunityMembershipViews\]\);' \
   'finally|await reconcileCommunityMembershipViews|await reloadCommunities|await reloadCommunityAccess' \
   "remove mutation does not block on refresh or reconciliation"
 require_block_no_match "$ADMIN_CONTROLLER_FILE" \
   'const handleBanCommunityMember = useCallback' \
-  '^\s*\}, \[reconcileCommunityMembershipViews, removeCommunityMemberLocally\]\);' \
+  '^\s*\}, \[reconcileCommunityMembershipViews\]\);' \
   'finally|await reconcileCommunityMembershipViews|await reloadCommunities|await reloadCommunityAccess' \
   "ban mutation does not block on refresh or reconciliation"
-require_multiline_match "$ADMIN_CONTROLLER_FILE" \
-  'current\.setCommunityMembers\(rows\);[\s\S]*?loadCommunityMemberCount\(current, communityId, usableSession, seq\);' \
-  "members roster publishes before exact count enrichment"
 require_no_match "$ADMIN_CONTROLLER_FILE" \
   'await countCloudCommunityMembershipRows' \
-  "members initial load does not await exact member count"
+  "member reconciliation does not block mutation handlers on count sync"
 require_no_match "$ADMIN_CONTROLLER_FILE" \
   'Promise\.all\([\s\S]*?(listCloudCommunityMembershipAdminPage[\s\S]*?countCloudCommunityMembershipRows|countCloudCommunityMembershipRows[\s\S]*?listCloudCommunityMembershipAdminPage)' \
-  "members initial load does not join roster and count promises"
-require_multiline_match "$WEB_MEMBERS_FILE" \
-  'loadedCommunityMemberCountLabel[\s\S]*communityMemberCountLabel' \
-  "members header keeps a loaded-count fallback while exact count loads"
+  "frontend no longer joins admin roster and count promises"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'approveCommunityJoinRequest[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
   "join approvals maintain active member count"
@@ -375,10 +397,10 @@ require_multiline_match "$ADMIN_GATEWAY_FILE" \
   "member billing history gateway forwards authSubject and target membership"
 require_multiline_match "$WEB_APP_FILE" \
   'fetchCloudCommunityMemberBillingHistory\(\{[\s\S]*?session: usableSession,\s*communityId,\s*membershipId,' \
-  "members surface loads billing history on demand"
-require_no_match "$WEB_MEMBERS_FILE" \
+  "right-panel member settings surface loads billing history on demand"
+require_no_match "$WEB_MEMBER_DIALOG_FILE" \
   'Payment history|Historical payments unavailable|No payment history' \
-  "members UI does not expose unbacked payment-history placeholder text"
+  "member settings dialog does not expose unbacked payment-history placeholder text"
 require_block_no_match "$COMMUNITY_ADMIN_FILE" \
   '^async function mapCommunityOwnerAdminMemberRow' \
   '^async function mapCommunityAdminMembershipRow' \
@@ -392,9 +414,9 @@ require_block_no_match "$COMMUNITY_ADMIN_FILE" \
 require_no_match "$MEMBERSHIP_GATEWAY_FILE" \
   'price_point_id|billing_period|amount_base_units|currency_decimals|CommunityBillingPeriod' \
   "membership admin gateway row type excludes billing detail"
-require_no_match "$WEB_MEMBERS_FILE" \
+require_no_match "$WEB_INTERACTION_PROJECTION_FILE" \
   'member-price-label|formatMemberAccess|member\.(price_point_id|billing_period|amount_base_units|currency_decimals)' \
-  "members roster UI excludes plan badges and billing detail fields"
+  "right-panel member directory projection excludes plan badges and billing detail fields"
 
 echo "[10/12] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
