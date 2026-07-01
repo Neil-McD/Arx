@@ -134,7 +134,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
   const memoryOverview = props.memoryOverview ?? null;
   const memoryCountLabel = formatMemoryCount(memoryOverview);
-  const memoryNodes = (memoryOverview?.graph.nodes ?? []).filter(isDirectoryMemoryNode).slice(0, 3);
+  const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isDirectoryMemoryNode);
   const memorySectionLabel = memoryCountLabel ? `Memory — ${memoryCountLabel}` : "Memory";
   const memoryActivityLabel = memoryOverview
     ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
@@ -458,7 +458,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               </button>
             ) : null}
           </div>
-        ) : memoryOverview && memoryNodes.length > 0 ? (
+        ) : memoryOverview ? (
           <div className="community-context-memory-summary">
             {props.onOpenMemory ? (
               <button
@@ -476,8 +476,17 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               </div>
             )}
             <div className="community-context-memory-status">
-              <span>{memoryActivityLabel ?? "Memory active"}</span>
-              {memoryOverview.graph.has_more_nodes ? <span>More retained</span> : null}
+              {hasRetainedMemory ? (
+                <>
+                  <span>{memoryActivityLabel ?? "Memory active"}</span>
+                  {memoryOverview.graph.has_more_nodes ? <span>More retained</span> : null}
+                </>
+              ) : (
+                <>
+                  <span>Builds as the room shares knowledge</span>
+                  {memoryActivityLabel ? <span>{memoryActivityLabel}</span> : null}
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -490,7 +499,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               <circle cx="24" cy="9" r="2.2" fill="currentColor" />
               <circle cx="16" cy="20" r="3" fill="currentColor" />
             </svg>
-            <span>{memoryOverview ? "No retained memory yet" : "Builds as the room shares knowledge"}</span>
+            <span>Builds as the room shares knowledge</span>
           </div>
         )}
       </div>
