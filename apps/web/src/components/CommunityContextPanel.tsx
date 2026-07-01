@@ -117,7 +117,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     : props.membersHasMore
       ? `Showing ${loadedMemberCount}+`
       : `Showing ${loadedMemberCount}`;
+  const hasUnloadedKnownMembers =
+    knownMemberCount !== null && loadedMemberCount < knownMemberCount;
+  const shouldShowMembersFooter =
+    loadedMemberCount > 0 || props.membersHasMore || hasUnloadedKnownMembers;
   const loadMoreRequestedRef = useRef(false);
+  const membersViewportRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const [joinRequestsExpanded, setJoinRequestsExpanded] = useState(false);
   const entryPolicy = props.entryPolicy ?? null;
   const isFreeAdmissionMode = entryPolicy === "open" || entryPolicy === "approval";
@@ -142,6 +148,15 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     : pendingJoinRequestCount > 0
       ? `${pendingJoinRequestCount} pending join request${pendingJoinRequestCount === 1 ? "" : "s"}`
       : "Join requests";
+  const membersFooterLabel = props.membersHasMore
+    ? props.isLoadingMoreMembers
+      ? "Loading more..."
+      : props.membersLoadError
+        ? "More members available"
+        : "Loading more..."
+    : hasUnloadedKnownMembers
+      ? "Member list out of sync"
+    : loadedSummary;
 
   useEffect(() => {
     if (!props.isLoadingMoreMembers) loadMoreRequestedRef.current = false;
@@ -156,10 +171,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     if (!canShowJoinRequests) setJoinRequestsExpanded(false);
   }, [canShowJoinRequests]);
 
-  const requestLoadMoreMembers = useCallback(() => {
+  const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
     if (!props.membersHasMore) return;
     if (props.isLoadingMembers || props.isLoadingMoreMembers) return;
     if (!props.onLoadMoreMembers) return;
+    if (props.membersLoadError && !options?.force) return;
     if (loadMoreRequestedRef.current) return;
     loadMoreRequestedRef.current = true;
     props.onLoadMoreMembers();
@@ -167,8 +183,21 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     props.isLoadingMembers,
     props.isLoadingMoreMembers,
     props.membersHasMore,
+    props.membersLoadError,
     props.onLoadMoreMembers,
   ]);
+
+  const isMembersViewportNearBottom = useCallback(() => {
+    const viewport = membersViewportRef.current;
+    if (!viewport) return false;
+    const remainingScroll = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    return remainingScroll <= LOAD_MORE_SCROLL_THRESHOLD_PX;
+  }, []);
+
+  const requestVisibleMemberPage = useCallback(() => {
+    if (!isMembersViewportNearBottom()) return;
+    requestLoadMoreMembers();
+  }, [isMembersViewportNearBottom, requestLoadMoreMembers]);
 
   const handleMembersScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
@@ -177,6 +206,57 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       requestLoadMoreMembers();
     }
   }, [requestLoadMoreMembers]);
+
+  useEffect(() => {
+    if (!props.membersHasMore || props.isLoadingMembers || props.isLoadingMoreMembers || props.membersLoadError) {
+      return;
+    }
+    const frame = requestAnimationFrame(requestVisibleMemberPage);
+    return () => cancelAnimationFrame(frame);
+  }, [
+    joinRequestsExpanded,
+    loadedMemberCount,
+    props.isLoadingMembers,
+    props.isLoadingMoreMembers,
+    props.membersHasMore,
+    props.membersLoadError,
+    requestVisibleMemberPage,
+  ]);
+
+  useEffect(() => {
+    const viewport = membersViewportRef.current;
+    const sentinel = loadMoreSentinelRef.current;
+    if (
+      !viewport ||
+      !sentinel ||
+      !props.membersHasMore ||
+      props.isLoadingMembers ||
+      props.isLoadingMoreMembers ||
+      props.membersLoadError ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) requestLoadMoreMembers();
+      },
+      {
+        root: viewport,
+        rootMargin: `${LOAD_MORE_SCROLL_THRESHOLD_PX}px 0px`,
+        threshold: 0,
+      },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    loadedMemberCount,
+    props.isLoadingMembers,
+    props.isLoadingMoreMembers,
+    props.membersHasMore,
+    props.membersLoadError,
+    requestLoadMoreMembers,
+  ]);
 
   const handleToggleFreeAccessMode = useCallback(() => {
     if (!canShowFreeAccessSwitch || props.isSettingFreeAccessMode) return;
@@ -340,7 +420,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         </div>
       </div>
 
-      <div className="community-context-members" onScroll={handleMembersScroll}>
+      <div
+        ref={membersViewportRef}
+        className="community-context-members"
+        onScroll={handleMembersScroll}
+      >
         <div className="community-context-section community-context-members-total">
           <span>Members — {memberCountLabel}</span>
           <div className="community-context-members-controls">
@@ -404,9 +488,12 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         {loadedMemberCount === 0 && props.isLoadingMembers ? (
           <div className="community-context-members-status">Loading members...</div>
         ) : null}
-        {loadedMemberCount > 0 || props.membersHasMore ? (
-          <div className="community-context-members-footer">
-            {props.isLoadingMoreMembers ? "Loading more..." : loadedSummary}
+        {shouldShowMembersFooter ? (
+          <div
+            ref={props.membersHasMore ? loadMoreSentinelRef : undefined}
+            className="community-context-members-footer"
+          >
+            {membersFooterLabel}
           </div>
         ) : null}
         {props.membersLoadError && !props.membersHasMore ? (
@@ -416,7 +503,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           <button
             className="community-context-members-retry"
             type="button"
-            onClick={requestLoadMoreMembers}
+            onClick={() => requestLoadMoreMembers({ force: true })}
             disabled={props.isLoadingMoreMembers}
           >
             Could not load more members. Retry

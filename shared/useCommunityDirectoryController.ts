@@ -61,7 +61,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
         typeof page.totalCount === "number" ? page.totalCount : page.rows.length,
       );
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
-      setCommunityDirectoryMembersHasMore(!page.isDone);
+      setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {
       if (communityDirectoryLoadSeqRef.current === seq) {
         setCommunityDirectoryMembers([]);
@@ -110,7 +110,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
         setCommunityDirectoryMemberCount(page.totalCount);
       }
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
-      setCommunityDirectoryMembersHasMore(!page.isDone);
+      setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {
       if (communityDirectoryLoadSeqRef.current === seq) {
         setCommunityDirectoryMembersLoadError(

@@ -212,6 +212,36 @@ assert.match(
 );
 assert.match(
   contextPanel,
+  /membersViewportRef[\s\S]*loadMoreSentinelRef[\s\S]*IntersectionObserver[\s\S]*observer\.observe\(sentinel\)/,
+  "context panel should observe a footer sentinel so visible additional pages load without requiring another scroll event",
+);
+assert.match(
+  contextPanel,
+  /requestAnimationFrame\(requestVisibleMemberPage\)/,
+  "context panel should re-check after render when the member viewport is already near the bottom",
+);
+assert.match(
+  contextPanel,
+  /const membersFooterLabel = props\.membersHasMore[\s\S]*\? "Loading more\.\.\."[\s\S]*: loadedSummary;/,
+  "context panel must not show the terminal loaded-summary label while more member pages are available",
+);
+assert.match(
+  contextPanel,
+  /const hasUnloadedKnownMembers =[\s\S]*loadedMemberCount < knownMemberCount[\s\S]*Member list out of sync/,
+  "context panel should not present a partial loaded member page as terminal when known total is higher",
+);
+assert.match(
+  contextPanel,
+  /ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
+  "context panel footer should be the load-more sentinel while additional member pages exist",
+);
+assert.match(
+  directoryController,
+  /setCommunityDirectoryMembersHasMore\(Boolean\(page\.continueCursor && !page\.isDone\)\)/,
+  "directory controller should only advertise more pages when a continue cursor exists",
+);
+assert.match(
+  contextPanel,
   /canManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
   "context panel should model an optional manager-only member settings affordance",
 );
