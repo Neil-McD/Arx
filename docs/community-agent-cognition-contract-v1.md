@@ -2,7 +2,7 @@
 
 Status: planned architecture
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-05-15
+Last updated: 2026-07-01 (Amendment v1.1 appended)
 
 ## Purpose
 
@@ -1531,3 +1531,108 @@ Start with:
 Every successful action should strengthen the network.
 
 The community agent exists to make that true without violating privacy, authority, or trust.
+
+## Amendment v1.1 (2026-07-01)
+
+This amendment refines the agent operating model after the memory-surface work
+(rail preview + full graph) shipped and the activation gap was measured. It
+supersedes earlier language where noted. Everything else in v1 stands.
+
+### One Agent, Four Roles
+
+There is one community agent entity per community: one runtime, one filesystem,
+one audit trail. Roles are system prompts and skill sets on that entity, not
+separate services. This makes concrete the v1 rule "separate prompts or agent
+personas for each pass."
+
+```txt
+Sleep roles (heartbeat/event-woken, owner-sponsored):
+1. Observer   - triages the compiler window: meaningful, novel, repeated,
+                sensitive, private? (the ingress/compiler filter questions)
+2. Questioner - the reflection pass: what could the community learn, what is
+                the rejected alternative, what would falsify this? Produces
+                learning envelopes; surfaces contradictions and open questions.
+3. Steward    - judges and writes through the airlock; nurtures the directory:
+                merge near-duplicates, mark stale, flag contested, lint,
+                regenerate overviews. Posts one-way announcements.
+
+Serve role (member-triggered, realtime):
+4. Concierge  - answers member questions in community chat from the directory
+                and resources, with citations. Read-only.
+```
+
+### The Two-Authorities Invariant
+
+> The roles that can write memory cannot be spoken to.
+> The role that can be spoken to cannot write memory.
+
+Sleep roles hold write authority via the airlock and wake only from heartbeats
+and events; no member or admin prompt can steer them. The Concierge holds chat
+voice and zero write authority. A prompt injection in chat can at worst produce
+a bad chat reply; it can never reach the directory except the long way — traces
+through the compiler and its gates. This refines (does not break) the v1 rule
+that no human prompts the community agent: the rule always protected the write
+path, and it still does.
+
+### The Cycle Ledger
+
+Sleep roles run as chained passes sharing one per-cycle working document in the
+agent filesystem (alongside /compiler and /directory). Observer writes triage
+notes; Questioner reads them and appends reflections; Steward reads both and
+acts. Every role can see the compiler window, the directory, and each other's
+notes. Nothing is hidden between roles; the ledger persists with the run record.
+
+### Promotion Policy (supersedes one-tap accept)
+
+Agent-proposed create_node candidates are auto-decided and auto-applied at
+status "promising" in the same cycle, with guardrails:
+
+- per-cycle cap on applied nodes
+- duplicate check against the existing directory before apply
+- "repetition is not evidence" lint: high-frequency, low-outcome claims are
+  flagged, not promoted
+- person provenance edges are written at apply time (node -> contributing
+  members, derived from source traces)
+
+Promotion above "promising" is earned, not clicked: validated by outcome
+evidence, canonical by sustained validation. Owners retain curation verbs
+(deprecate, mark contested, fast-track promote) as optional tools, never as a
+gate the loop depends on. There is no member-facing accept/reject queue.
+
+### Agent Identity
+
+The community agent has its own account on Polynet:
+
+- its own user handle, taggable in community chat (@mention is the Concierge
+  invocation path)
+- its own display name and avatar; only the community owner can name it
+- a permanent, non-removable agent badge on every surface where it appears,
+  regardless of name — it must never be mistakable for a human member
+- no login credentials; it cannot authenticate, join other communities, or be
+  operated interactively
+- all chat it produces is attributed to this identity (Concierge answers and
+  Steward announcements); all directory writes remain attributed through the
+  existing actor/provenance fields
+
+The agent is a visible participant in the community's transactive memory, not
+hidden machinery.
+
+### People in the Graph
+
+Knowledge topology is the spine; members are a lens. Member identities never
+become structural nodes in the memory graph (power-law contribution makes
+person-hubs collapse force layouts, and provenance is not meaning). The people
+layer renders as an overlay: contributor halos, per-member local subgraphs,
+expertise routing for open questions — built on the person provenance edges the
+Steward writes at apply time. Recognition surfaces on profiles and provenance,
+never as node size in the communal graph.
+
+### Decisions Pending
+
+- Heartbeat spend policy: default-on with daily cap where the owner has a
+  usable key, vs opt-in per community.
+- Concierge economics: owner-sponsored with per-member rate caps, vs member
+  BYOK.
+- Concierge evidence reach: directory + resources first; raw archive search
+  later, behind guardrails (the archive RAG lane is the recorded attack
+  surface).
