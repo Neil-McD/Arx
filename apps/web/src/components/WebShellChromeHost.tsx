@@ -72,6 +72,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           canViewActiveCommunityAnalytics={props.communityShell.canViewActiveCommunityAnalytics}
           buttonType="button"
           includeButtonTitles
+          onCopyCommunityJoinLink={props.communityShell.onCopyCommunityJoinLink}
           onSelectTab={props.communityShell.onSelectCommunityTab}
         />
       ) : null}

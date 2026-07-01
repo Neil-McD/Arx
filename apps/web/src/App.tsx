@@ -12403,6 +12403,7 @@ export default function App() {
     canViewActiveCommunityAnalytics,
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
+    onCopyCommunityJoinLink: copyTextToClipboard,
     openMobileAgentSettings,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,

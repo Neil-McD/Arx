@@ -1,8 +1,10 @@
-import { Brain } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Brain, Check, Link2 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 
 type CommunityNavCommunityLike = {
+  slug?: string | null;
   name?: string | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
@@ -20,10 +22,19 @@ type CommunityNavProps = {
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   onSelectTab: (tab: CommunityTab) => void;
+  onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
   buttonType?: "button" | "submit" | "reset";
   includeButtonTitles?: boolean;
   showSettingsItem?: boolean;
 };
+
+function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
+  const slug = String(slugRaw ?? "").trim();
+  if (!slug) return null;
+  const joinPath = `/c/${encodeURIComponent(slug)}`;
+  if (typeof window === "undefined") return joinPath;
+  return new URL(joinPath, window.location.origin).toString();
+}
 
 export function CommunityNav({
   activeCommunity,
@@ -35,10 +46,13 @@ export function CommunityNav({
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
   onSelectTab,
+  onCopyCommunityJoinLink,
   buttonType,
   includeButtonTitles = false,
   showSettingsItem = true,
 }: CommunityNavProps) {
+  const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
+  const copyResetTimeoutRef = useRef<number | null>(null);
   const maybeTitle = (label: string): string | undefined => {
     return includeButtonTitles ? label : undefined;
   };
@@ -48,6 +62,42 @@ export function CommunityNav({
     canViewActiveCommunityPolynet ||
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
+  const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
+  const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
+  const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setDidCopyJoinLink(false);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+      copyResetTimeoutRef.current = null;
+    }
+  }, [joinUrl]);
+
+  const handleCopyJoinLink = async () => {
+    if (!joinUrl || !onCopyCommunityJoinLink) return;
+    try {
+      await onCopyCommunityJoinLink(joinUrl);
+      setDidCopyJoinLink(true);
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+      copyResetTimeoutRef.current = window.setTimeout(() => {
+        setDidCopyJoinLink(false);
+        copyResetTimeoutRef.current = null;
+      }, 1800);
+    } catch (error) {
+      console.warn("Failed to copy community invite link:", error);
+    }
+  };
 
   return (
     <aside className="community-nav">
@@ -261,6 +311,26 @@ export function CommunityNav({
           )}
         </>
       )}
+      {canCopyJoinLink ? (
+        <div className="community-nav-footer">
+          <button
+            className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
+            type={buttonType}
+            onClick={() => void handleCopyJoinLink()}
+            title={maybeTitle(inviteTitle)}
+            aria-label={inviteTitle}
+          >
+            <span className="nav-icon">
+              {didCopyJoinLink ? (
+                <Check size={16} strokeWidth={1.9} aria-hidden="true" />
+              ) : (
+                <Link2 size={16} strokeWidth={1.9} aria-hidden="true" />
+              )}
+            </span>
+            <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite"}</span>
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

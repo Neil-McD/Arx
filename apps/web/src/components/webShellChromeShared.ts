@@ -69,6 +69,7 @@ export type WebCommunityShellProps = {
   canViewActiveCommunityAnalytics: boolean;
   onSelectCommunityTab: (tab: CommunityTab) => void;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
+  onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
   onOpenMobileAgentSettings: () => void;
   canOpenDirectMessages: boolean;
   directMessagesUnreadCount: number;

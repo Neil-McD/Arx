@@ -1035,6 +1035,25 @@ body {
   opacity: 0.6;
 }
 
+.community-nav-footer {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.community-nav-invite {
+  margin-bottom: 0;
+}
+
+.community-nav-invite.is-copied {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-success, #45d483) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-success, #45d483) 34%, transparent);
+}
+
+.community-nav-invite.is-copied .nav-icon {
+  color: var(--accent-success, #45d483);
+}
+
 .workspace.community-mode {
   /* Match the workspace feed layout: flush to topbar, input at bottom */
   grid-template-rows: 1fr auto;

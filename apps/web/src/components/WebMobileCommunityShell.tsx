@@ -56,6 +56,7 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
           buttonType="button"
           includeButtonTitles
+          onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}
           onSelectTab={communityShell.onSelectCommunityTabFromMobile}
         />
       </WebMobileDrawer>

@@ -15,6 +15,12 @@ const projection = read("apps/web/src/components/WebCommunityInteractionProjecti
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
 const membersSection = read("apps/web/src/components/WebCommunityMembersSection.tsx");
+const communityNav = read("shared/CommunityNav.tsx");
+const communityAccessViewModel = read("shared/communityAccessViewModel.ts");
+const chromeShared = read("apps/web/src/components/webShellChromeShared.ts");
+const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
+const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
+const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -97,6 +103,61 @@ assert.match(
   chatPanel,
   /WebCommunityInteractionProjection[\s\S]*profilesByUserId=\{profilesByUserId\}/,
   "chat panel should pass hydrated profile rows into the canonical projection",
+);
+assert.match(
+  communityAccessViewModel,
+  /const canEnterCommunity = access \? Boolean\(access\.can_enter_community \?\? access\.can_view\) : false;[\s\S]*canViewMembers: canEnterCommunity,/,
+  "member-facing community nav visibility should derive from community entry access, not admin authority",
+);
+assert.match(
+  communityNav,
+  /function resolveCommunityJoinUrl[\s\S]*const joinPath = `\/c\/\$\{encodeURIComponent\(slug\)\}`;[\s\S]*new URL\(joinPath, window\.location\.origin\)\.toString\(\)/,
+  "community nav should copy the canonical public community funnel path for invites",
+);
+assert.match(
+  communityNav,
+  /const canCopyJoinLink = Boolean\(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink\);/,
+  "community nav invite action should be available to member-facing viewers with a resolvable slug",
+);
+assert.match(
+  communityNav,
+  /useEffect\(\(\) => \{[\s\S]*setDidCopyJoinLink\(false\);[\s\S]*copyResetTimeoutRef\.current = null;[\s\S]*\}, \[joinUrl\]\);/,
+  "community nav should clear copied state when the active community join URL changes",
+);
+assert.match(
+  communityNav,
+  /className=\{`nav-item community-nav-invite\$\{didCopyJoinLink \? " is-copied" : ""\}`\}[\s\S]*onClick=\{\(\) => void handleCopyJoinLink\(\)\}/,
+  "community nav should render the invite action as a stable left-nav item",
+);
+assert.match(
+  chromeShared,
+  /onCopyCommunityJoinLink: \(joinUrl: string\) => Promise<void> \| void;/,
+  "web shell shared props should expose the invite copy callback explicitly",
+);
+assert.match(
+  chromeHost,
+  /<CommunityNav[\s\S]*onCopyCommunityJoinLink=\{props\.communityShell\.onCopyCommunityJoinLink\}/,
+  "desktop community nav should receive the invite copy callback",
+);
+assert.match(
+  mobileCommunityShell,
+  /<CommunityNav[\s\S]*onCopyCommunityJoinLink=\{communityShell\.onCopyCommunityJoinLink\}/,
+  "mobile community drawer nav should receive the invite copy callback",
+);
+assert.match(
+  chromeHostPropsBuilder,
+  /onCopyCommunityJoinLink: WebShellChromeHostProps\["communityShell"\]\["onCopyCommunityJoinLink"\];[\s\S]*onCopyCommunityJoinLink: params\.onCopyCommunityJoinLink,/,
+  "web shell prop builder should carry the invite copy callback into the community shell",
+);
+assert.match(
+  app,
+  /buildWebShellChromeHostProps\(\{[\s\S]*onCopyCommunityJoinLink: copyTextToClipboard,/,
+  "App should wire community invite copying through the existing clipboard helper",
+);
+assert.match(
+  baseCss,
+  /\.community-nav-footer\s*\{[\s\S]*margin-top:\s*auto;[\s\S]*padding-top:\s*12px;/,
+  "community nav invite action should be bottom-pinned in the left nav",
 );
 assert.match(
   app,
