@@ -62,7 +62,7 @@
 
 :root[data-theme="dark"],
 :root[data-theme="polynet"] {
-  --web-floating-chrome-bg: rgba(20, 20, 23, 0.92);
+  --web-floating-chrome-bg: rgba(20, 20, 23, 0.97);
   --web-floating-chrome-border: rgba(255, 255, 255, 0.06);
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: transparent;
@@ -73,7 +73,7 @@
   :root,
   :root[data-theme="dark"],
   :root[data-theme="polynet"] {
-    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 96%, transparent);
+    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 55%, var(--bg-app, #121214));
     --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 6%, transparent);
     --web-floating-chrome-shadow: none;
     --web-floating-chrome-highlight: transparent;
