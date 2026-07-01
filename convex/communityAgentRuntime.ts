@@ -534,6 +534,55 @@ export const finishCommunityAgentRunInternal = internalMutation({
   },
 });
 
+const RUN_EVENT_CONTENT_MAX_CHARS = 8_000;
+const RUN_EVENT_MAX_SEQ = 240;
+
+export const recordCommunityAgentRunEventsInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    runId: v.string(),
+    events: v.array(
+      v.object({
+        seq: v.number(),
+        kind: v.union(
+          v.literal("system_prompt"),
+          v.literal("wake_context"),
+          v.literal("reasoning"),
+          v.literal("assistant"),
+          v.literal("tool_call"),
+          v.literal("tool_result"),
+          v.literal("final"),
+          v.literal("error"),
+        ),
+        toolName: v.optional(v.string()),
+        status: v.optional(v.string()),
+        errorCode: v.optional(v.string()),
+        content: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    for (const event of args.events) {
+      const seq = Math.max(0, Math.floor(event.seq));
+      // Hard cap so a pathological run cannot flood the log.
+      if (seq >= RUN_EVENT_MAX_SEQ) continue;
+      await ctx.db.insert("communityAgentRunEvents" as any, {
+        communityId: args.communityId,
+        runId: boundedText(args.runId, 128),
+        seq,
+        kind: event.kind,
+        toolName: boundedText(event.toolName, 80) || undefined,
+        status: boundedText(event.status, 40) || undefined,
+        errorCode: boundedText(event.errorCode, 120) || undefined,
+        content: boundedText(event.content, RUN_EVENT_CONTENT_MAX_CHARS),
+        createdAt: nowMs,
+      });
+    }
+    return { ok: true, recorded: args.events.length };
+  },
+});
+
 export const runCommunityAgentLoopInternal = internalAction({
   args: {
     communityId: v.id("communities"),
@@ -584,16 +633,53 @@ export const runCommunityAgentLoopInternal = internalAction({
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
     };
     const candidateProposalIds = new Set<string>();
+    // Sequential run-event log. Persistence failures are swallowed: the audit
+    // trail must never be the reason a memory run dies.
+    let eventSeq = 0;
+    const emitRunEvents = async (
+      events: Array<{
+        kind:
+          | "system_prompt"
+          | "wake_context"
+          | "reasoning"
+          | "assistant"
+          | "tool_call"
+          | "tool_result"
+          | "final"
+          | "error";
+        toolName?: string;
+        status?: string;
+        errorCode?: string;
+        content: string;
+      }>,
+    ) => {
+      const numbered = events.map((event) => ({ ...event, seq: eventSeq++ }));
+      try {
+        await ctx.runMutation(internalRefs.communityAgentRuntime.recordCommunityAgentRunEventsInternal as any, {
+          communityId: args.communityId,
+          runId,
+          events: numbered,
+        });
+      } catch {
+        // ignore: observability is best-effort
+      }
+    };
+    const messages = buildCommunityAgentMessages({
+      resolved,
+      agentKey,
+      triggerType,
+      runId,
+      wakeReason: boundedText(args.wakeReason, 120) || undefined,
+      wakeEvidence: args.wakeEvidence,
+    });
+    await emitRunEvents([
+      { kind: "system_prompt", content: String(messages[0]?.content ?? "") },
+      { kind: "wake_context", content: String(messages[1]?.content ?? "") },
+    ]);
+    let reasoningBuffer = "";
     try {
       const result = await runNativeRuntimeKernel<CommunityAgentToolName>({
-        messages: buildCommunityAgentMessages({
-          resolved,
-          agentKey,
-          triggerType,
-          runId,
-          wakeReason: boundedText(args.wakeReason, 120) || undefined,
-          wakeEvidence: args.wakeEvidence,
-        }),
+        messages,
         budget: {
           ...DEFAULT_RUNTIME_KERNEL_BUDGET,
           maxToolSteps: clampToolSteps(args.maxToolSteps),
@@ -601,16 +687,23 @@ export const runCommunityAgentLoopInternal = internalAction({
           maxNoProgressSteps: 3,
           maxRepeatedIdenticalCalls: 2,
         },
-        runCompletion: async (messages) => {
+        runCompletion: async (kernelMessages) => {
           const completion = await runChatgptNativeToolCompletion({
             ctx,
             userId: normalizeIdValue(resolved.sponsorUserId),
             modelId,
-            messages,
+            messages: kernelMessages,
             maxTokens: 1600,
             tools: buildCommunityAgentFunctionTools(),
             parallelToolCalls: false,
+            onReasoningSummaryTextDelta: ({ delta }) => {
+              reasoningBuffer += delta;
+            },
           });
+          if (reasoningBuffer.trim()) {
+            await emitRunEvents([{ kind: "reasoning", content: reasoningBuffer.trim() }]);
+            reasoningBuffer = "";
+          }
           return coerceCommunityAgentCompletion(completion);
         },
         normalizeToolArguments: normalizeCommunityAgentToolArguments,
@@ -621,12 +714,45 @@ export const runCommunityAgentLoopInternal = internalAction({
             toolName,
             normalizedArgs,
           }),
-        onToolStepFinish: ({ step, toolResult }) => {
+        onToolStepFinish: async ({ step, toolResult }) => {
           if (step.toolName === "write" && toolResult.status === "ok") {
             collectCandidateProposalIdFromToolOutput(toolResult.outputText, candidateProposalIds);
           }
+          await emitRunEvents([
+            {
+              kind: "tool_call",
+              toolName: step.toolName,
+              content: JSON.stringify(step.normalizedArgs ?? {}),
+            },
+            {
+              kind: "tool_result",
+              toolName: step.toolName,
+              status: toolResult.status,
+              errorCode: toolResult.errorCode ?? undefined,
+              content: toolResult.status === "ok" ? toolResult.outputText ?? "" : toolResult.errorMessage ?? "",
+            },
+          ]);
         },
       });
+      {
+        const lastAssistant = [...result.transcript]
+          .reverse()
+          .find((message) => message.role === "assistant" && typeof message.content === "string" && message.content.trim());
+        await emitRunEvents([
+          result.ok
+            ? {
+                kind: "final",
+                status: result.stopReason,
+                content: typeof lastAssistant?.content === "string" ? lastAssistant.content : "",
+              }
+            : {
+                kind: "error",
+                status: result.stopReason,
+                errorCode: result.code,
+                content: result.message ?? "",
+              },
+        ]);
+      }
 
       const finished: unknown = await ctx.runMutation(internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal as any, {
         runId,
@@ -647,6 +773,9 @@ export const runCommunityAgentLoopInternal = internalAction({
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      await emitRunEvents([
+        { kind: "error", status: "runtime_exception", errorCode: "community_agent_runtime_exception", content: message },
+      ]);
       const finished: unknown = await ctx.runMutation(internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal as any, {
         runId,
         status: "error",

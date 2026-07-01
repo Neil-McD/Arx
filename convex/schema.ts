@@ -1934,6 +1934,32 @@ export default defineSchema({
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
 
+  // Per-run event log for community agent runs: prompts, reasoning summaries,
+  // tool calls/results, and the final outcome, in sequence. This is the audit
+  // trail that makes a headless steward run reconstructable after the fact.
+  communityAgentRunEvents: defineTable({
+    communityId: v.id("communities"),
+    runId: v.string(),
+    seq: v.number(),
+    kind: v.union(
+      v.literal("system_prompt"),
+      v.literal("wake_context"),
+      v.literal("reasoning"),
+      v.literal("assistant"),
+      v.literal("tool_call"),
+      v.literal("tool_result"),
+      v.literal("final"),
+      v.literal("error"),
+    ),
+    toolName: v.optional(v.string()),
+    status: v.optional(v.string()),
+    errorCode: v.optional(v.string()),
+    content: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_run_seq", ["runId", "seq"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
   developerApps: defineTable({
     ownerUserId: v.id("users"),
     catalogAppId: v.optional(v.string()),

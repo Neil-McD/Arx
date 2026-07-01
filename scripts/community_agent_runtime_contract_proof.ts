@@ -101,4 +101,29 @@ assert.match(
   "docs should describe the first internal community-agent runtime slice",
 );
 
+// Observability: every run persists a reconstructable event trail (prompts,
+// reasoning summaries, tool calls/results, final outcome), written
+// incrementally so even crashed runs leave their trace. Best-effort only —
+// event persistence must never fail the run itself.
+assert.match(
+  runtime,
+  /recordCommunityAgentRunEventsInternal = internalMutation/,
+  "runtime should persist run events for post-hoc reconstruction",
+);
+assert.match(
+  runtime,
+  /onReasoningSummaryTextDelta/,
+  "runtime should capture the reasoning summaries the transport already requests",
+);
+assert.match(
+  runtime,
+  /onToolStepFinish: async[\s\S]*kind: "tool_call"[\s\S]*kind: "tool_result"/,
+  "runtime should record tool calls and results incrementally, not only post-run",
+);
+assert.match(
+  runtime,
+  /catch \{[\s\S]*ignore: observability is best-effort/,
+  "run-event persistence failures must never fail the run",
+);
+
 console.log("community_agent_runtime_contract_proof: ok");
