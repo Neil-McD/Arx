@@ -946,6 +946,8 @@ export default defineSchema({
     weeklyDigestEnabled: v.boolean(),
     founderDigestEnabled: v.boolean(),
     eventReminderEnabled: v.boolean(),
+    // Mention ping emails; absent means enabled.
+    mentionEmailsEnabled: v.optional(v.boolean()),
     founderAdminEmailsEnabled: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1695,6 +1697,7 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_mentionedUser_createdAt", ["mentionedUserId", "createdAt"])
     .index("by_mentionedUser_community_createdAt", ["mentionedUserId", "communityId", "createdAt"])
+    .index("by_notifyState_createdAt", ["notifyState", "createdAt"])
     .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
     .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"]),
 

@@ -6,6 +6,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "weekly_member_digest",
   "weekly_founder_digest",
   "event_reminder",
+  "mention_notification",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -281,6 +282,18 @@ export function renderEmailTemplate(params: {
         html: shell.html,
         text: [shell.text, renderedItems.text].filter(Boolean).join("\n\n"),
       };
+    }
+    case "mention_notification": {
+      const communityName = readString((payload as any)?.communityName) || "your community";
+      const mentionerName = readString((payload as any)?.mentionerName) || "A community member";
+      const snippet = readString((payload as any)?.snippet);
+      return renderTransactionalTemplate(
+        `${mentionerName} mentioned you in ${communityName}`,
+        payload,
+        `${mentionerName} mentioned you`,
+        snippet ? `"${snippet}"` : `You were mentioned in ${communityName}.`,
+        "Open chat",
+      );
     }
     case "event_reminder":
       return renderTransactionalTemplate(

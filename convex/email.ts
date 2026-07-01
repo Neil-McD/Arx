@@ -72,7 +72,8 @@ function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean 
   return (
     templateKey === "weekly_member_digest" ||
     templateKey === "weekly_founder_digest" ||
-    templateKey === "event_reminder"
+    templateKey === "event_reminder" ||
+    templateKey === "mention_notification"
   );
 }
 
@@ -82,6 +83,9 @@ function preferenceAllowsTemplate(preferences: Record<string, unknown>, template
   }
   if (templateKey === "weekly_founder_digest") {
     return preferences.founderDigestEnabled !== false;
+  }
+  if (templateKey === "mention_notification") {
+    return preferences.mentionEmailsEnabled !== false;
   }
   if (templateKey === "event_reminder") {
     return preferences.eventReminderEnabled !== false;

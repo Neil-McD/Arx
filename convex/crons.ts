@@ -178,4 +178,13 @@ crons.interval(
   { limitCommunities: 500 },
 );
 
+// Mention email pings: mentions still "pending" after the in-app grace window
+// get one email each, preference-gated and deduped per mention.
+crons.interval(
+  "process pending mention emails",
+  { minutes: 15 },
+  (internal as any).communityMentionEmails.processPendingMentionEmailsInternal,
+  {},
+);
+
 export default crons;

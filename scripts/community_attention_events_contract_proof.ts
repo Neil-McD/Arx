@@ -11,6 +11,10 @@ const gateway = read("shared/cloudCommunityAttentionGateway.ts");
 const controller = read("shared/useCommunityAttentionController.ts");
 const app = read("apps/web/src/App.tsx");
 const nav = read("shared/CommunityNav.tsx");
+const mentionEmails = read("convex/communityMentionEmails.ts");
+const emailCore = read("convex/emailCore.ts");
+const emailModule = read("convex/email.ts");
+const cronsFile = read("convex/crons.ts");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 
@@ -143,6 +147,41 @@ assert.match(
   app,
   /indicators\.chat \|\| indicators\.ai_feed \|\| indicators\.resources \|\| indicators\.events \|\| indicators\.mentions/,
   "the community rail attention OR must include mentions",
+);
+
+// M2b: mention email pings. Grace window before emailing (the in-app dot gets
+// first chance), preference-gated (mentionEmailsEnabled), deduped per mention,
+// and the ledger advances pending -> sent/suppressed while in-app reads keep
+// winning (only pending rows advance).
+assert.match(
+  mentionEmails,
+  /MENTION_EMAIL_GRACE_MS = 15 \* 60 \* 1000/,
+  "mention emails wait out an in-app grace window first",
+);
+assert.match(
+  mentionEmails,
+  /dedupeKey: `mention_notification:\$\{job\.mentionId\}`/,
+  "each mention can produce at most one email",
+);
+assert.match(
+  mentionEmails,
+  /row\.notifyState !== "pending"\) continue/,
+  "only pending mention rows advance to sent or suppressed",
+);
+assert.match(
+  emailModule,
+  /mention_notification[\s\S]*mentionEmailsEnabled !== false/,
+  "mention emails respect the recipient preference",
+);
+assert.match(
+  emailCore,
+  /"mention_notification",/,
+  "mention notification is a registered email template",
+);
+assert.match(
+  cronsFile,
+  /"process pending mention emails",\s*\{ minutes: 15 \}/,
+  "mention email processing runs on a 15-minute cron",
 );
 
 console.log("community_attention_events_contract_proof: ok");
