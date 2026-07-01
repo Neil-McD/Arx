@@ -9022,13 +9022,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-weight: 500;
 }
 
-/* The avatar + name become one hover/click target (profile preview + open profile). */
-.community-context-member .community-interaction-avatar-hover {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-}
-
+/* The avatar + name are one click target that opens the full profile (no hover card). */
 .community-context-member-trigger {
   flex: 1;
   min-width: 0;
@@ -9044,10 +9038,20 @@ button.community-launch-knowledge-integration-chip:disabled {
   cursor: pointer;
 }
 
-/* The rail column floors at 300px (clamp(300px, 22vw, 380px)) and the panel clips
-   overflow, so cap the preview narrower than the chat card (300px) to keep it inside. */
-.community-context-member .chat-profile-hover-card {
-  width: min(256px, calc(100vw - 48px));
+/* Hover lights the person up: the dimmed (offline) row returns to full, the name
+   brightens, and the name underlines — so the one you're pointing at stands out. */
+.community-context-member.is-offline:hover {
+  opacity: 1;
+}
+
+.community-context-member-trigger:hover .community-context-member-name {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.community-context-member-trigger:hover .community-context-member-name.is-admin {
+  color: var(--accent-gold);
 }
 
 .community-context-member-action {
@@ -9392,7 +9396,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-author-trigger:hover .community-interaction-author {
   text-decoration: underline;
-  text-decoration-color: var(--border-strong);
   text-underline-offset: 2px;
 }
 

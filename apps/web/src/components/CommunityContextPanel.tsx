@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, type UIEvent } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
-import { ProfileHoverCard } from "./communityInteractionFeed";
-import type { UserProfile } from "../../../../shared/communityTypes";
 
 export type CommunityPresenceFace = {
   user_id: string;
@@ -37,7 +35,6 @@ type CommunityContextPanelProps = {
   onOpenMemberSettings?: (member: CommunityRailMember) => void;
   onOpenMemberProfile?: (userId: string) => void;
   onMessageMember?: (userId: string) => void;
-  getMemberProfile?: (userId: string) => UserProfile | null;
   currentUserId?: string | null;
   displayName: (userId: string) => string;
   getInitials: (value: string) => string;
@@ -128,24 +125,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         !String(member.id ?? "").startsWith("owner:"),
     );
     const canMessage = Boolean(props.onMessageMember) && member.user_id !== props.currentUserId;
-    // Prefer the hydrated profile (bio, @handle, avatar focus/zoom) already cached for the
-    // community; fall back to the thin roster fields so first paint never shows an empty card.
-    const profile = props.getMemberProfile?.(member.user_id)
-      ?? { user_id: member.user_id, display_name: name, avatar_url: member.avatar_url ?? null };
     return (
       <div key={member.id} className={`community-context-member${isOnline ? "" : " is-offline"}`}>
-        <ProfileHoverCard
-          userId={member.user_id}
-          label={name}
-          seed={member.user_id}
-          profile={profile}
-          getAvatarColor={props.getAvatarColor}
-          getInitials={props.getInitials}
-          currentUserId={props.currentUserId}
-          onOpenProfile={props.onOpenMemberProfile}
-          onMessageUser={props.onMessageMember}
-          online={isOnline}
-          triggerClassName="community-context-member-trigger"
+        <button
+          className="community-context-member-trigger"
+          type="button"
+          aria-label={`Open ${name}'s profile`}
+          onClick={() => props.onOpenMemberProfile?.(member.user_id)}
         >
           <span
             className="community-context-member-avatar"
@@ -155,7 +141,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
           </span>
           <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
-        </ProfileHoverCard>
+        </button>
         {canMessage ? (
           <button
             className="community-context-member-action"
