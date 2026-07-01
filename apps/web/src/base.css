@@ -9226,7 +9226,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   justify-content: center;
   font-size: 11px;
   font-weight: 500;
-  overflow: hidden;
   flex-shrink: 0;
 }
 
@@ -9234,6 +9233,9 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* Self-clip to the circle so the parent doesn't need overflow:hidden — which
+     was clipping the presence dot that sits on the bottom-right edge. */
+  border-radius: 50%;
 }
 
 .community-context-member-dot {
@@ -9244,7 +9246,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   height: 9px;
   border-radius: 50%;
   background: #3fb950;
-  border: 2px solid var(--bg-workspace);
+  border: 2px solid color-mix(in srgb, var(--bg-workspace) 88%, var(--bg-card) 12%);
 }
 
 .community-context-member-name {
