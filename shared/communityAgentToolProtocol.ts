@@ -28,14 +28,17 @@ export type CommunityAgentFunctionTool = {
   strict: boolean;
 };
 
+// Strict function calling requires every property to be listed in `required`;
+// optionality is expressed as a nullable type instead. The parse layer treats
+// null as "not provided" for all of these.
 const LIMIT_SCHEMA: JsonSchema = {
-  type: "integer",
+  type: ["integer", "null"],
   minimum: 1,
   maximum: 100,
 };
 
 const NODE_TYPE_SCHEMA: JsonSchema = {
-  type: "string",
+  type: ["string", "null"],
   enum: [
     "playbook",
     "insight",
@@ -43,6 +46,7 @@ const NODE_TYPE_SCHEMA: JsonSchema = {
     "warning_failure",
     "decision_judgment",
     "open_question",
+    null,
   ],
 };
 
@@ -55,10 +59,10 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
     parameters: {
       type: "object",
       additionalProperties: false,
+      required: ["path", "limit"],
       properties: {
         path: {
-          type: "string",
-          minLength: 1,
+          type: ["string", "null"],
           maxLength: 1024,
         },
         limit: LIMIT_SCHEMA,
@@ -91,7 +95,7 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["query"],
+      required: ["query", "limit"],
       properties: {
         query: {
           type: "string",
@@ -119,7 +123,7 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
         payload: {
           type: "object",
           additionalProperties: false,
-          required: ["digestId", "itemIndex"],
+          required: ["digestId", "itemIndex", "nodeType"],
           properties: {
             digestId: {
               type: "string",

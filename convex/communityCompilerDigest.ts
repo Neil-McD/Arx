@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -260,7 +260,29 @@ export const runCommunityCompilerDigestPass = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    return await runCommunityCompilerDigestPassCore(ctx, {
+      communityId: args.communityId,
+      triggeredByUserId: userId,
+    });
+  },
+});
 
+// Trusted entry for crons and operator CLI runs: the same deterministic digest
+// pass without a member session. The pass itself does no LLM work.
+export const runCommunityCompilerDigestPassInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    return await runCommunityCompilerDigestPassCore(ctx, { communityId: args.communityId });
+  },
+});
+
+async function runCommunityCompilerDigestPassCore(
+  ctx: any,
+  args: { communityId: any; triggeredByUserId?: any },
+) {
+    const userId = args.triggeredByUserId ?? undefined;
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;
     const dedupeKey = `community_compiler_digest:v1:${normalizeIdValue(args.communityId)}:${utcDayKey(nowMs)}`;
@@ -476,8 +498,7 @@ export const runCommunityCompilerDigestPass = mutation({
       });
     }
     return mapDigestRow(row);
-  },
-});
+}
 
 export const listCommunityCompilerDigests = query({
   args: {
