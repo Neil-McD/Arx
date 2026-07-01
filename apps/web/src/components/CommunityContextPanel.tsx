@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
 import { Brain, Check, ChevronDown, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type {
   CloudCommunityPolynetOverview,
   CloudCommunityPolynetOverviewNode,
@@ -470,17 +471,12 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           </div>
         ) : memoryOverview && memoryNodes.length > 0 ? (
           <div className="community-context-memory-summary">
+            <div className="community-context-memory-preview">
+              <CommunityMemoryGraphPreview overview={memoryOverview} />
+            </div>
             <div className="community-context-memory-status">
               <span>{memoryActivityLabel ?? "Memory active"}</span>
               {memoryOverview.graph.has_more_nodes ? <span>More retained</span> : null}
-            </div>
-            <div className="community-context-memory-list">
-              {memoryNodes.map((node) => (
-                <div key={node.id} className="community-context-memory-node">
-                  <strong>{node.title ?? node.label}</strong>
-                  <span>{formatMemoryLabel(node.type)}</span>
-                </div>
-              ))}
             </div>
           </div>
         ) : (

@@ -8992,6 +8992,22 @@ button.community-launch-knowledge-integration-chip:disabled {
   margin-top: 9px;
 }
 
+/* Live mini-render of the memory graph — same layout + node/edge encoding as the
+   full Polynet page, fit into the rail slot. */
+.community-context-memory-preview {
+  height: 132px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+  overflow: hidden;
+}
+
+.community-context-memory-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .community-context-memory-status {
   display: flex;
   align-items: center;

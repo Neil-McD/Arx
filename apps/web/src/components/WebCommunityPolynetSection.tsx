@@ -141,6 +141,9 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
   const focusNeighbors = hoveredNodeId ? adjacency.get(hoveredNodeId) ?? null : null;
+  // Only dim when the hovered node actually has neighbors to focus. Hovering the
+  // community root (which has no edges) or an orphan node should not fade the graph.
+  const hasFocus = Boolean(hoveredNodeId && focusNeighbors && focusNeighbors.size > 0);
 
   if (!hasActiveCommunity) {
     return <div className="settings-panel community-settings-panel"><div className="chat-empty">Select a community to open Polynet.</div></div>;
@@ -223,10 +226,10 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) return null;
                     const from = worldPositionFor(edge.from, layout.get(edge.from));
                     const to = worldPositionFor(edge.to, layout.get(edge.to));
-                    const touchesFocus = hoveredNodeId
+                    const touchesFocus = hasFocus
                       ? edge.from === hoveredNodeId || edge.to === hoveredNodeId
                       : false;
-                    const dimmed = hoveredNodeId ? !touchesFocus : false;
+                    const dimmed = hasFocus ? !touchesFocus : false;
                     return (
                       <line
                         key={edge.id}
@@ -245,7 +248,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     const isSelected = selectedNodeId === node.id;
                     const isHovered = hoveredNodeId === node.id;
                     const isNeighbor = focusNeighbors ? focusNeighbors.has(node.id) : false;
-                    const dimmed = hoveredNodeId ? !(isHovered || isNeighbor) : false;
+                    const dimmed = hasFocus ? !(isHovered || isNeighbor) : false;
                     const showLabel = isRoot || isSelected || isHovered || isNeighbor || showAllLabels;
                     const radius = isRoot ? 26 : nodeRadius(node.confidence);
                     return (
