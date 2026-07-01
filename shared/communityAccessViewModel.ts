@@ -3,6 +3,10 @@ import type { CommunityAccess } from "./communityTypes";
 export type CommunityAccessCapabilities = {
   canViewCommunity: boolean;
   isOwner: boolean;
+  /** True when the viewer's relation is "visitor" — a non-member looking at a
+      published community. UI renders gated previews where a capability is false
+      AND the viewer is a visitor; members with false capabilities see nothing. */
+  isVisitor: boolean;
   canViewMembers: boolean;
   canViewSettings: boolean;
   canPostMessages: boolean;
@@ -55,6 +59,7 @@ export function deriveCommunityAccessCapabilities(
   return {
     canViewCommunity: canEnterCommunity,
     isOwner,
+    isVisitor: access?.relation === "visitor",
     canViewMembers: canEnterCommunity,
     canViewSettings: canEnterCommunity,
     canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),

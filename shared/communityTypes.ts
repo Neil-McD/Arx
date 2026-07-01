@@ -208,7 +208,7 @@ export type CommunityTypingPresenceBundle = {
 export type CommunityAccess = {
   community_id: string;
   user_id: string;
-  relation?: "pending" | "member" | "moderator" | "admin" | "owner" | null;
+  relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner" | null;
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
   join_request_status?: string | null;
