@@ -26,6 +26,7 @@ import {
   filterDiscoverAppEnabledToolNames,
   isDiscoverAppCatalogSingletonIdentity,
   resolveDiscoverAppCatalogConnectPolicy,
+  resolveDiscoverAppProjectedToolRisk,
   validateDiscoverAppSecretForCatalogAppId,
 } from "../shared/discoverCatalog";
 import {
@@ -646,6 +647,7 @@ function normalizeStringList(input: unknown): string[] {
 
 function normalizeSnapshotTools(
   snapshot: AppToolSnapshotRow | null,
+  catalogAppId?: string | null,
 ): Array<{
   tool_name: string;
   namespaced_tool_name: string;
@@ -656,12 +658,17 @@ function normalizeSnapshotTools(
     tool_name: tool.tool_name,
     namespaced_tool_name: tool.namespaced_tool_name,
     description: tool.description,
-    risk_level: tool.risk_level,
+    risk_level: resolveDiscoverAppProjectedToolRisk({
+      catalogAppId: catalogAppId ?? null,
+      storedRisk: tool.risk_level,
+      toolName: tool.tool_name,
+    }),
   }));
 }
 
 function normalizeRuntimeSnapshotTools(
   snapshot: AppToolSnapshotRow | null,
+  catalogAppId?: string | null,
 ): Array<{
   tool_name: string;
   namespaced_tool_name: string;
@@ -675,7 +682,11 @@ function normalizeRuntimeSnapshotTools(
     namespaced_tool_name: tool.namespaced_tool_name,
     description: tool.description,
     ...buildStoredMcpToolSchemaTransport(tool),
-    risk_level: tool.risk_level,
+    risk_level: resolveDiscoverAppProjectedToolRisk({
+      catalogAppId: catalogAppId ?? null,
+      storedRisk: tool.risk_level,
+      toolName: tool.tool_name,
+    }),
   }));
 }
 
@@ -744,7 +755,10 @@ function mapUserPlatformAppMountReadModel(args: {
   connection: AppConnectionRow | null;
   snapshot: AppToolSnapshotRow | null;
 }) {
-  const tools = normalizeSnapshotTools(args.snapshot);
+  const tools = normalizeSnapshotTools(
+    args.snapshot,
+    args.app.catalogAppId ?? null,
+  );
   const selectedToolNames = new Set(
     computeSelectedToolNames(args.mount, tools, args.app.catalogAppId ?? null),
   );
@@ -784,7 +798,10 @@ function resolveRuntimeMountedUserPlatformAppTools(args: {
   ) {
     return [];
   }
-  const tools = normalizeRuntimeSnapshotTools(args.snapshot);
+  const tools = normalizeRuntimeSnapshotTools(
+    args.snapshot,
+    args.app.catalogAppId ?? null,
+  );
   const selectedToolNames = new Set(
     computeSelectedToolNames(args.mount, tools, args.app.catalogAppId ?? null),
   );

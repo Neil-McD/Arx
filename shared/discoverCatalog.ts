@@ -903,18 +903,140 @@ function normalizeDiscoverAppToolRisk(value: unknown): DiscoverAppDefaultToolRis
   return value === "write" || value === "sensitive" ? value : "read";
 }
 
+const READ_SHAPED_MCP_TOOL_NAME_PREFIXES = [
+  "describe",
+  "fetch",
+  "find",
+  "get",
+  "inspect",
+  "list",
+  "lookup",
+  "ping",
+  "query",
+  "read",
+  "retrieve",
+  "search",
+  "show",
+  "whoami",
+];
+
+const MUTATION_OR_SENSITIVE_MCP_TOOL_NAME_SEGMENTS = [
+  "approve",
+  "archive",
+  "cancel",
+  "capture",
+  "charge",
+  "checkout",
+  "close",
+  "command",
+  "confirm",
+  "create",
+  "credential",
+  "delete",
+  "deploy",
+  "destroy",
+  "disconnect",
+  "drop",
+  "edit",
+  "exec",
+  "expire",
+  "finalize",
+  "insert",
+  "merge",
+  "patch",
+  "pay",
+  "payment",
+  "post",
+  "purchase",
+  "refund",
+  "reply",
+  "reset",
+  "restart",
+  "reverse",
+  "revoke",
+  "run",
+  "save",
+  "secret",
+  "send",
+  "shell",
+  "start",
+  "stop",
+  "submit",
+  "terminal",
+  "token",
+  "update",
+  "void",
+  "write",
+];
+
+function isReadShapedMcpToolName(toolName: unknown): boolean {
+  const normalized = normalizeDiscoverAppToolName(toolName);
+  if (!normalized) return false;
+  if (
+    READ_SHAPED_MCP_TOOL_NAME_PREFIXES.some((prefix) =>
+      normalized.startsWith(prefix),
+    )
+  ) {
+    return true;
+  }
+  const segments = splitDiscoverAppToolNameSegments(normalized);
+  return segments.some((segment) =>
+    READ_SHAPED_MCP_TOOL_NAME_PREFIXES.includes(segment),
+  );
+}
+
+function hasMutationOrSensitiveMcpToolNameSegment(toolName: unknown): boolean {
+  const segments = splitDiscoverAppToolNameSegments(
+    normalizeDiscoverAppToolName(toolName),
+  );
+  if (segments.length === 0) return true;
+  return segments.some((segment) =>
+    MUTATION_OR_SENSITIVE_MCP_TOOL_NAME_SEGMENTS.includes(segment),
+  );
+}
+
 export function applyDiscoverAppDefaultToolRiskFloor(
   catalogAppId: unknown,
   risk: unknown,
+  toolName?: unknown,
 ): DiscoverAppDefaultToolRisk {
   const normalizedRisk = normalizeDiscoverAppToolRisk(risk);
   const app = findDiscoverAppCatalogEntryById(catalogAppId);
   if (!app) return normalizedRisk;
   const riskFloor = resolveDiscoverAppIntegrationProfile(app).runtimePolicy
     .defaultToolRisk;
+  if (
+    riskFloor === "write" &&
+    normalizedRisk === "read" &&
+    isReadShapedMcpToolName(toolName) &&
+    !hasMutationOrSensitiveMcpToolNameSegment(toolName)
+  ) {
+    return "read";
+  }
   return compareDiscoverAppRisk(normalizedRisk, riskFloor) >= 0
     ? normalizedRisk
     : riskFloor;
+}
+
+export function resolveDiscoverAppProjectedToolRisk(args: {
+  catalogAppId: unknown;
+  storedRisk: unknown;
+  toolName: unknown;
+}): DiscoverAppDefaultToolRisk {
+  const normalizedRisk = normalizeDiscoverAppToolRisk(args.storedRisk);
+  if (normalizedRisk === "sensitive") return "sensitive";
+  const app = findDiscoverAppCatalogEntryById(args.catalogAppId);
+  if (!app) return normalizedRisk;
+  const riskFloor = resolveDiscoverAppIntegrationProfile(app).runtimePolicy
+    .defaultToolRisk;
+  if (
+    riskFloor === "write" &&
+    isReadShapedMcpToolName(args.toolName) &&
+    !hasMutationOrSensitiveMcpToolNameSegment(args.toolName)
+  ) {
+    return "read";
+  }
+  return normalizedRisk;
 }
 
 export function resolveDiscoverAppResultPolicyForCatalogAppId(

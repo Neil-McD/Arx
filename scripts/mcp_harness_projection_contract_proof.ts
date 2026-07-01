@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { buildEffectiveMcpApps } from "../shared/effectiveMcpApps.ts";
+import { resolveDiscoverAppProjectedToolRisk } from "../shared/discoverCatalog.ts";
 import type { HarnessMount } from "../shared/harnessMountTypes.ts";
 import {
   buildMcpHarnessProjection,
@@ -551,6 +552,213 @@ function proveOnlyLiveAppsWithRuntimeToolsProject() {
   console.log("PASS: only live apps with runtime tools project to harnesses");
 }
 
+function proveWriteFlooredReadToolsRemainCodexExecutable() {
+  const effectiveApps = buildEffectiveMcpApps([
+    mount({
+      id: "user:u-airtable",
+      source_mount_id: "u-airtable",
+      scope: "user",
+      live_status: "live",
+      enabled_tools: [
+        "ping",
+        "list_records",
+        "create_table",
+        "delete_records_for_table",
+      ],
+      app: {
+        catalog_app_id: "airtable",
+        name: "Airtable",
+        slug: "airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        auth_type: "bearer",
+        status: "valid",
+      },
+      tools: [
+        {
+          tool_name: "ping",
+          namespaced_tool_name: "airtable__ping",
+          description: "Check Airtable MCP health",
+          risk_level: "read",
+          enabled: true,
+        },
+        {
+          tool_name: "list_records",
+          namespaced_tool_name: "airtable__list_records",
+          description: "List Airtable records",
+          risk_level: "read",
+          enabled: true,
+        },
+        {
+          tool_name: "create_table",
+          namespaced_tool_name: "airtable__create_table",
+          description: "Create Airtable table",
+          risk_level: "write",
+          enabled: true,
+        },
+        {
+          tool_name: "delete_records_for_table",
+          namespaced_tool_name: "airtable__delete_records_for_table",
+          description: "Delete Airtable records",
+          risk_level: "sensitive",
+          enabled: true,
+        },
+      ],
+    }),
+    mount({
+      id: "user:u-notion",
+      source_mount_id: "u-notion",
+      scope: "user",
+      live_status: "live",
+      enabled_tools: ["notion_fetch", "notion_create_pages"],
+      app: {
+        catalog_app_id: "notion",
+        name: "Notion",
+        slug: "notion",
+        endpoint_url: "https://notion.example.com/mcp",
+        auth_type: "oauth",
+        status: "valid",
+      },
+      tools: [
+        {
+          tool_name: "notion_fetch",
+          namespaced_tool_name: "notion__notion_fetch",
+          description: "Fetch Notion page content",
+          risk_level: "read",
+          enabled: true,
+        },
+        {
+          tool_name: "notion_create_pages",
+          namespaced_tool_name: "notion__notion_create_pages",
+          description: "Create Notion pages",
+          risk_level: "write",
+          enabled: true,
+        },
+      ],
+    }),
+  ]);
+  const projection = buildMcpHarnessProjection({
+    effectiveApps,
+    runtimeMountedTools: [
+      runtimeTool({
+        mount_id: "u-airtable",
+        runtime_tool_name: "me__airtable__ping",
+        developer_app_id: "dev-airtable",
+        catalog_app_id: "airtable",
+        app_name: "Airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        tool_name: "ping",
+        namespaced_tool_name: "airtable__ping",
+        risk_level: resolveDiscoverAppProjectedToolRisk({
+          catalogAppId: "airtable",
+          storedRisk: "write",
+          toolName: "ping",
+        }),
+      }),
+      runtimeTool({
+        mount_id: "u-airtable",
+        runtime_tool_name: "me__airtable__list_records",
+        developer_app_id: "dev-airtable",
+        catalog_app_id: "airtable",
+        app_name: "Airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        tool_name: "list_records",
+        namespaced_tool_name: "airtable__list_records",
+        risk_level: resolveDiscoverAppProjectedToolRisk({
+          catalogAppId: "airtable",
+          storedRisk: "write",
+          toolName: "list_records",
+        }),
+      }),
+      runtimeTool({
+        mount_id: "u-airtable",
+        runtime_tool_name: "me__airtable__create_table",
+        developer_app_id: "dev-airtable",
+        catalog_app_id: "airtable",
+        app_name: "Airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        tool_name: "create_table",
+        namespaced_tool_name: "airtable__create_table",
+        risk_level: resolveDiscoverAppProjectedToolRisk({
+          catalogAppId: "airtable",
+          storedRisk: "write",
+          toolName: "create_table",
+        }),
+      }),
+      runtimeTool({
+        mount_id: "u-airtable",
+        runtime_tool_name: "me__airtable__delete_records_for_table",
+        developer_app_id: "dev-airtable",
+        catalog_app_id: "airtable",
+        app_name: "Airtable",
+        endpoint_url: "https://airtable.example.com/mcp",
+        tool_name: "delete_records_for_table",
+        namespaced_tool_name: "airtable__delete_records_for_table",
+        risk_level: resolveDiscoverAppProjectedToolRisk({
+          catalogAppId: "airtable",
+          storedRisk: "sensitive",
+          toolName: "delete_records_for_table",
+        }),
+      }),
+      runtimeTool({
+        mount_id: "u-notion",
+        runtime_tool_name: "me__notion__notion_fetch",
+        developer_app_id: "dev-notion",
+        catalog_app_id: "notion",
+        app_name: "Notion",
+        endpoint_url: "https://notion.example.com/mcp",
+        auth_type: "oauth",
+        tool_name: "notion_fetch",
+        namespaced_tool_name: "notion__notion_fetch",
+        risk_level: resolveDiscoverAppProjectedToolRisk({
+          catalogAppId: "notion",
+          storedRisk: "write",
+          toolName: "notion_fetch",
+        }),
+      }),
+      runtimeTool({
+        mount_id: "u-notion",
+        runtime_tool_name: "me__notion__notion_create_pages",
+        developer_app_id: "dev-notion",
+        catalog_app_id: "notion",
+        app_name: "Notion",
+        endpoint_url: "https://notion.example.com/mcp",
+        auth_type: "oauth",
+        tool_name: "notion_create_pages",
+        namespaced_tool_name: "notion__notion_create_pages",
+        risk_level: resolveDiscoverAppProjectedToolRisk({
+          catalogAppId: "notion",
+          storedRisk: "write",
+          toolName: "notion_create_pages",
+        }),
+      }),
+    ],
+  });
+  const executableCodexTools = projection.codexBridgeTools.filter(
+    (tool) => tool.risk_level === "read",
+  );
+
+  assert.deepEqual(
+    executableCodexTools.map((tool) => tool.bridge_tool_name),
+    [
+      "polynet_mcp__airtable__list_records",
+      "polynet_mcp__airtable__ping",
+      "polynet_mcp__notion__notion_fetch",
+    ],
+  );
+  assert.deepEqual(
+    projection.codexBridgeTools
+      .filter((tool) => tool.risk_level !== "read")
+      .map((tool) => [tool.bridge_tool_name, tool.risk_level]),
+    [
+      ["polynet_mcp__airtable__create_table", "write"],
+      ["polynet_mcp__airtable__delete_records_for_table", "sensitive"],
+      ["polynet_mcp__notion__notion_create_pages", "write"],
+    ],
+  );
+
+  console.log("PASS: write-floored read tools remain Codex executable");
+}
+
 function proveBridgeNamesAreCollisionSafeAcrossRuntimeTools() {
   const effectiveApps = buildEffectiveMcpApps([
     mount({
@@ -655,6 +863,7 @@ proveCommunityAttachmentDoesNotDuplicateRuntimeTools();
 proveCommunityOnlyAttachmentIsSetupNeeded();
 proveDisabledToolsStayOutOfRuntimeProjections();
 proveOnlyLiveAppsWithRuntimeToolsProject();
+proveWriteFlooredReadToolsRemainCodexExecutable();
 proveBridgeNamesAreCollisionSafeAcrossRuntimeTools();
 proveRuntimeToolsWithoutMatchingLivePersonalAppFailClosed();
 

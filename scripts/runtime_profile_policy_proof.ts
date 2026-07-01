@@ -7,6 +7,7 @@ import {
   filterDiscoverAppEnabledToolNames,
   getDiscoverAppDisabledToolReason,
   isDiscoverAppToolDisabledByPolicy,
+  resolveDiscoverAppProjectedToolRisk,
   resolveDiscoverAppMcpRequestHeadersForCatalogAppId,
   resolveDiscoverAppResultPolicyForCatalogAppId,
   validateDiscoverAppSecretForCatalogAppId,
@@ -28,9 +29,34 @@ function main() {
     "Linear tools must not classify below the write profile floor",
   );
   assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("linear", "read", "search_issues"),
+    "read",
+    "Read-shaped Linear tools should stay read for hosted Codex projection",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("linear", "write", "create_issue"),
+    "write",
+    "Mutation-shaped Linear tools must still classify as write",
+  );
+  assert.equal(
     applyDiscoverAppDefaultToolRiskFloor("airtable", "sensitive"),
     "sensitive",
     "Classifier escalation must survive the profile floor",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("airtable", "read", "ping"),
+    "read",
+    "Airtable ping should stay read despite Airtable's write-capable profile",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("airtable", "read", "list_records"),
+    "read",
+    "Airtable list tools should stay read despite Airtable's write-capable profile",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("airtable", "write", "create_table"),
+    "write",
+    "Airtable create tools must remain write",
   );
   assert.equal(
     applyDiscoverAppDefaultToolRiskFloor(null, "read"),
@@ -43,14 +69,65 @@ function main() {
     "Notion tools must not classify below the write profile floor",
   );
   assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("notion", "read", "notion_fetch"),
+    "read",
+    "Notion fetch should stay read despite Notion's write-capable profile",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("notion", "write", "create_page"),
+    "write",
+    "Notion create tools must remain write",
+  );
+  assert.equal(
     applyDiscoverAppDefaultToolRiskFloor("github", "read"),
     "sensitive",
     "GitHub read-only tools can still expose private repository data and must keep a sensitive floor",
   );
   assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("github", "read", "search_repositories"),
+    "sensitive",
+    "Sensitive-floor apps must not be downgraded by read-shaped tool names",
+  );
+  assert.equal(
     applyDiscoverAppDefaultToolRiskFloor("stripe", "read"),
     "sensitive",
     "Stripe tools can expose payment and customer data and must keep a sensitive floor",
+  );
+  assert.equal(
+    resolveDiscoverAppProjectedToolRisk({
+      catalogAppId: "airtable",
+      storedRisk: "write",
+      toolName: "ping",
+    }),
+    "read",
+    "Projection should recover read-shaped tools from old write-floored snapshots",
+  );
+  assert.equal(
+    resolveDiscoverAppProjectedToolRisk({
+      catalogAppId: "notion",
+      storedRisk: "write",
+      toolName: "notion_fetch",
+    }),
+    "read",
+    "Projection should recover Notion fetch from old write-floored snapshots",
+  );
+  assert.equal(
+    resolveDiscoverAppProjectedToolRisk({
+      catalogAppId: "airtable",
+      storedRisk: "write",
+      toolName: "delete_records_for_table",
+    }),
+    "write",
+    "Projection must not downgrade mutation-shaped tools from old snapshots",
+  );
+  assert.equal(
+    resolveDiscoverAppProjectedToolRisk({
+      catalogAppId: "stripe",
+      storedRisk: "sensitive",
+      toolName: "retrieve_balance",
+    }),
+    "sensitive",
+    "Projection must not downgrade sensitive-floor tools",
   );
   assert.equal(
     isDiscoverAppToolDisabledByPolicy("stripe", "create_customer"),
@@ -209,7 +286,7 @@ function main() {
     "Personal app token setup must reject provider-disallowed secrets",
   );
   assert.ok(
-    userPlatformMountsSource.includes("user_platform_app_connection_secret_policy_rejected"),
+    userPlatformMountsSource.includes("developer_app_connection_secret_policy_rejected"),
     "Direct mounted app execution must also reject provider-disallowed persisted secrets",
   );
 

@@ -222,6 +222,7 @@ function normalizeToolArray(
     const risk = applyDiscoverAppDefaultToolRiskFloor(
       app.catalogAppId,
       classifyToolRisk(toolName, description),
+      toolName,
     );
     tools.push(
       encodeMcpToolForStorage({
