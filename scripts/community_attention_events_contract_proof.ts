@@ -218,6 +218,33 @@ assert.match(
   "collapsed mentions still advance the ledger so they are never re-pinged",
 );
 
+// Mention-target resolution at write time: clients may know members by
+// canonical users id OR auth subject (the profiles projection exposes the
+// latter as user_id); either resolves to the canonical id on the row, unknown
+// targets fail closed, and every target must pass the community access gate
+// (live-verified 2026-07-01: non-member target -> interaction_mention_user_not_allowed).
+const interactions = read("convex/communityInteractions.ts");
+assert.match(
+  interactions,
+  /normalizeId\("users" as any, rawUserId\)[\s\S]*?withIndex\("by_authSubject"/,
+  "mention targets must resolve from canonical users id or auth subject",
+);
+assert.match(
+  interactions,
+  /if \(!user\) throw new Error\("interaction_mention_user_not_found"\)/,
+  "unknown mention targets must fail closed",
+);
+assert.match(
+  interactions,
+  /requireCommunityChatAccess\(\{[\s\S]*?userId: user\._id,[\s\S]*?\}\);[\s\S]*?catch \{[\s\S]*?interaction_mention_user_not_allowed/,
+  "every mention target must pass the community access gate",
+);
+assert.match(
+  interactions,
+  /out\.push\(\{ kind: "user", userId: user\._id \}\)/,
+  "mention rows must store the canonical users id, never the raw client value",
+);
+
 // Injection posture (verified 2026-07-01): every payload-derived string the
 // mention email renders — title (mentioner name), intro (chat snippet), CTA
 // URL — passes through escapeHtml in the shared email shell. Chat text must

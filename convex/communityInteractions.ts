@@ -1206,7 +1206,7 @@ type InteractionMentionSpec =
   | { kind: "user"; userId: any }
   | { kind: "community_agent"; agentKey: string };
 
-async function resolveMentionedUserIdsForInteractionWrite(args: {
+export async function resolveMentionedUserIdsForInteractionWrite(args: {
   ctx: any;
   communityId: any;
   mentions: Array<{ userId?: any; agentKey?: any }>;
@@ -1227,25 +1227,35 @@ async function resolveMentionedUserIdsForInteractionWrite(args: {
       out.push({ kind: "community_agent", agentKey });
       continue;
     }
-    const userId = mention.userId;
-    const normalized = normalizeIdValue(userId);
+    // Clients know members by canonical users id or by auth subject (the
+    // profiles projection exposes the latter as user_id) — resolve either
+    // form here; the mention row always stores the canonical users id.
+    const rawUserId = String(mention.userId ?? "").trim();
+    if (!rawUserId) continue;
+    const canonicalId = args.ctx.db.normalizeId("users" as any, rawUserId);
+    const user = canonicalId
+      ? await args.ctx.db.get(canonicalId)
+      : await args.ctx.db
+          .query("users" as any)
+          .withIndex("by_authSubject", (q: any) => q.eq("authSubject", rawUserId))
+          .first();
+    if (!user) throw new Error("interaction_mention_user_not_found");
+    const normalized = normalizeIdValue(user._id);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     if (out.length >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
       throw new Error("interaction_mentions_limit_exceeded");
     }
-    const user = await args.ctx.db.get(userId);
-    if (!user) throw new Error("interaction_mention_user_not_found");
     try {
       await requireCommunityChatAccess({
         ctx: args.ctx,
         communityId: args.communityId,
-        userId,
+        userId: user._id,
       });
     } catch {
       throw new Error("interaction_mention_user_not_allowed");
     }
-    out.push({ kind: "user", userId });
+    out.push({ kind: "user", userId: user._id });
   }
   return out;
 }
@@ -1282,7 +1292,9 @@ export const createCommunityInteractionComposerMessage = mutation({
     text: v.string(),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
-    mentions: v.optional(v.array(v.object({ userId: v.optional(v.id("users")), agentKey: v.optional(v.string()) }))),
+    // userId accepts a canonical users id OR an auth subject — the profiles
+    // projection (the composer's member source) only knows the latter.
+    mentions: v.optional(v.array(v.object({ userId: v.optional(v.string()), agentKey: v.optional(v.string()) }))),
     attachments: v.optional(v.array(interactionAttachmentInputValidator)),
   },
   handler: async (ctx, args) => {
