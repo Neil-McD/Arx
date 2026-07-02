@@ -546,15 +546,26 @@ function mapEmbed(row: EmbedRow) {
   };
 }
 
-function mapMention(row: MentionRow) {
+async function mapMention(ctx: any, row: MentionRow, userIdCache?: Map<string, string | null>) {
   return {
     id: normalizeIdValue(row._id),
     mention_kind: row.mentionKind,
-    mentioned_user_id: row.mentionedUserId ? normalizeIdValue(row.mentionedUserId) : null,
+    // Same identity conversion as actors: the frontend knows users by their
+    // public (auth-subject) id, so a raw canonical id here can never resolve
+    // to a profile — the chip would silently degrade to plain text.
+    mentioned_user_id: row.mentionedUserId
+      ? await resolvePublicUserId(ctx, row.mentionedUserId, userIdCache)
+      : null,
     mentioned_agent_key: row.mentionedAgentKey ?? null,
     mentioned_role_key: row.mentionedRoleKey ?? null,
     notify_state: row.notifyState,
   };
+}
+
+export async function mapMentions(ctx: any, rows: MentionRow[], userIdCache?: Map<string, string | null>) {
+  const mapped = [];
+  for (const row of rows) mapped.push(await mapMention(ctx, row, userIdCache));
+  return mapped;
 }
 
 async function mapRootBundle(
@@ -615,7 +626,7 @@ async function mapRootBundle(
     },
     content_blocks: blocks.map(mapContentBlock),
     embeds: embeds.map(mapEmbed),
-    mentions: mentions.map(mapMention),
+    mentions: await mapMentions(ctx, mentions, userIdCache),
     attachments,
   };
 }
@@ -664,7 +675,7 @@ async function mapReplyBundle(
     },
     content_blocks: blocks.map(mapContentBlock),
     embeds: embeds.map(mapEmbed),
-    mentions: mentions.map(mapMention),
+    mentions: await mapMentions(ctx, mentions, userIdCache),
     attachments,
   };
 }

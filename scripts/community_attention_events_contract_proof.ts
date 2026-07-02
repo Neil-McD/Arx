@@ -244,6 +244,11 @@ assert.match(
   /out\.push\(\{ kind: "user", userId: user\._id \}\)/,
   "mention rows must store the canonical users id, never the raw client value",
 );
+assert.match(
+  interactions,
+  /mentioned_user_id: row\.mentionedUserId\s*\?\s*await resolvePublicUserId\(ctx, row\.mentionedUserId, userIdCache\)/,
+  "the mention projection must convert to the public id like actors — raw canonical ids never resolve to profiles on the frontend",
+);
 
 // Injection posture (verified 2026-07-01): every payload-derived string the
 // mention email renders — title (mentioner name), intro (chat snippet), CTA
