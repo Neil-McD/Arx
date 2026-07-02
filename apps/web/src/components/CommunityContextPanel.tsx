@@ -484,14 +484,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             )}
           </div>
         ) : lockedMemory ? (
-          <button
-            type="button"
-            className="community-context-locked"
-            onClick={() => props.onLockedSectionActivate?.("memory")}
-          >
-            <Lock size={15} strokeWidth={1.9} aria-hidden="true" />
-            <span>Everything this community has learned. Unlocks when you join.</span>
-          </button>
+          /* Overview still in flight: render nothing rather than a card that
+             the graph will replace a beat later — absent beats flicker. */
+          null
         ) : props.isLoadingMemory && !memoryOverview ? (
           <div className="community-context-memory-empty">
             <span>Loading memory...</span>
