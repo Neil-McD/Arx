@@ -141,11 +141,16 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     ? String(knownMemberCount)
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
   const memoryOverview = props.memoryOverview ?? null;
-  const memoryCountLabel = formatMemoryCount(memoryOverview) ?? props.memoryCountLabelOverride ?? null;
   const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isDirectoryMemoryNode);
-  const memorySectionLabel = memoryCountLabel ? `Memory — ${memoryCountLabel}` : "Memory";
   const lockedMembers = Boolean(props.lockedSections?.members);
   const lockedMemory = Boolean(props.lockedSections?.memory);
+  /* Visitor lens: an empty memory is young, not locked — plain header, the
+     member view's own "builds as the room shares knowledge" state. */
+  const showLockedEmptyMemory = lockedMemory && Boolean(memoryOverview) && !hasRetainedMemory;
+  const memoryCountLabel = showLockedEmptyMemory
+    ? null
+    : formatMemoryCount(memoryOverview) ?? props.memoryCountLabelOverride ?? null;
+  const memorySectionLabel = memoryCountLabel ? `Memory — ${memoryCountLabel}` : "Memory";
   const memoryActivityLabel = memoryOverview
     ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
     : null;
@@ -455,7 +460,19 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <div className="community-context-memory-head">
           <div className="community-context-section">{memorySectionLabel}</div>
         </div>
-        {lockedMemory && memoryOverview ? (
+        {showLockedEmptyMemory ? (
+          <div className="community-context-memory-empty">
+            <svg viewBox="0 0 32 32" width="22" height="22" fill="none" aria-hidden="true">
+              <line x1="8" y1="10" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
+              <line x1="24" y1="9" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
+              <line x1="8" y1="10" x2="24" y2="9" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="8" cy="10" r="2.2" fill="currentColor" />
+              <circle cx="24" cy="9" r="2.2" fill="currentColor" />
+              <circle cx="16" cy="20" r="3" fill="currentColor" />
+            </svg>
+            <span>Builds as the room shares knowledge</span>
+          </div>
+        ) : lockedMemory && memoryOverview ? (
           <div className="community-context-memory-summary">
             <div
               className="community-context-memory-preview community-context-memory-inert"

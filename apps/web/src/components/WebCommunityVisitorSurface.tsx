@@ -193,7 +193,12 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
       const feedRect = feedScroll.getBoundingClientRect();
       const groupRect = firstGroup.getBoundingClientRect();
       const top = Math.max(feedRect.top, groupRect.bottom + 6) - shellRect.top;
-      const height = feedRect.bottom - shellRect.top - top;
+      /* With nothing behind the glass (pinned post only), the frost is a
+         boundary band, not an ocean — it hugs the post. With featured rows
+         under it, it covers them fully. */
+      const groupCount = shell.querySelectorAll(".community-interaction-group").length;
+      const fullHeight = feedRect.bottom - shellRect.top - top;
+      const height = groupCount <= 1 ? Math.min(fullHeight, 140) : fullHeight;
       if (height < 48) {
         setFrostRect(null);
         return;
