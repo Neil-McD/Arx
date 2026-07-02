@@ -255,7 +255,7 @@ export const runCommunityMemorySweepInternal = internalAction({
       }
       try {
         const metabolizerResult = (await ctx.runMutation(
-          internalRefs.communityIntelligenceDirectory.settleCommunityMemorySignalsInternal,
+          internalRefs.communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
           {
             communityId: target.communityId,
           },

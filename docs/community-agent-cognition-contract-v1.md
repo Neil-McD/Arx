@@ -1520,7 +1520,7 @@ retrieval logs + outcome observations
 
 Rules:
 
-- `settleCommunityMemorySignalsInternal` is internal-only and scoped to exactly one `communityId`.
+- `settleCommunityMemorySignalsInternal` lives in `convex/communityMemoryMetabolizer.ts`; it is internal-only and scoped to exactly one `communityId`.
 - It reads recent `communityIntelligenceRetrievalLogs` and `communityOutcomeObservations` through bounded same-community indexes.
 - It settles persistent derived scores for nodes touched by recent bounded evidence; no-signal nodes are left unchanged in v0.
 - Score dimensions are independent: retrieval-only evidence cannot erase `outcomeImpactScore`, and outcome-only evidence cannot erase `retrievalUsefulnessScore`.

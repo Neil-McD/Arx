@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
+const metabolizer = readFileSync(join(root, "convex/communityMemoryMetabolizer.ts"), "utf8");
+const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
@@ -22,22 +23,27 @@ assert.match(
 );
 
 assert.match(
-  directory,
+  metabolizer,
   /METABOLIZER_RETRIEVAL_LOG_LIMIT = 500[\s\S]*METABOLIZER_OUTCOME_LIMIT = 500[\s\S]*METABOLIZER_NODE_UPDATE_LIMIT = 200/,
   "metabolizer should use fixed bounded settlement limits",
 );
 assert.match(
-  directory,
+  metabolizer,
   /METABOLIZER_EXCLUDED_AGENT_KEYS = new Set\(\["community_agent"\]\)/,
   "metabolizer should explicitly exclude the canonical community agent from self-authored outcome evidence",
 );
 assert.match(
-  directory,
+  metabolizer,
   /function metabolizedRetrievalUsefulnessScore[\s\S]*function hasMetabolizerRetrievalSignal[\s\S]*function metabolizedOutcomeImpactScore[\s\S]*function hasMetabolizerOutcomeSignal[\s\S]*function metabolizedStalenessScore/,
   "metabolizer should compute the three derived learning scores deterministically",
 );
+assert.match(
+  heartbeat,
+  /internalRefs\.communityMemoryMetabolizer\.settleCommunityMemorySignalsInternal/,
+  "memory sweep should call the dedicated metabolizer module, not the directory module",
+);
 
-const block = exportedFunctionBlock(directory, "settleCommunityMemorySignalsInternal");
+const block = exportedFunctionBlock(metabolizer, "settleCommunityMemorySignalsInternal");
 assert.match(
   block,
   /export const settleCommunityMemorySignalsInternal = internalMutation/,
@@ -110,8 +116,8 @@ assert.doesNotMatch(
   "metabolizer score settlement should not mutate canonical content, status, confidence, version, updatedAt, or last-updated attribution",
 );
 assert.match(
-  block,
-  /insertMutationLog\(\{[\s\S]*operation: "update_node"[\s\S]*actorType: "system"[\s\S]*beforeSnapshot[\s\S]*afterSnapshot[\s\S]*reason: "metabolizer_score_settlement"/,
+  metabolizer,
+  /insertMetabolizerMutationLog[\s\S]*operation: "update_node"[\s\S]*actorType: "system"[\s\S]*beforeSnapshot[\s\S]*afterSnapshot[\s\S]*reason: "metabolizer_score_settlement"/,
   "metabolizer score settlement should still write an audit mutation with before/after snapshots",
 );
 assert.match(
