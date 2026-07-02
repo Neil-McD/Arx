@@ -612,31 +612,18 @@ function resolveMentionsForRendering(
   for (const mention of context.mentions) {
     if (mention.mention_kind === "user" && mention.mentioned_user_id) {
       const userId = String(mention.mentioned_user_id);
-      const profile = context.profilesByUserId?.[userId];
-      const handle = profile?.handle?.trim();
-      const profileName = profile?.display_name?.trim() || context.displayName(userId);
-      const isSelf = Boolean(context.currentUserId && userId === context.currentUserId);
-      // Handles are the ground truth token (@handle, unique and stable);
-      // display-name labels remain as a fallback so messages written before
-      // handle tokens — or after a rename — still resolve to chips.
-      if (handle) {
-        resolved.push({
-          key: `${mention.id}:handle`,
-          label: handle,
-          kind: mention.mention_kind,
-          userId,
-          isSelf,
-        });
-      }
-      if (profileName && profileName !== handle) {
-        resolved.push({
-          key: `${mention.id}:name`,
-          label: profileName,
-          kind: mention.mention_kind,
-          userId,
-          isSelf,
-        });
-      }
+      const handle = context.profilesByUserId?.[userId]?.handle?.trim();
+      // Handles are the ONLY chip token for users (@handle — unique, stable).
+      // Display-name text never chips: pre-handle messages and hand-typed
+      // names stay plain text by design.
+      if (!handle) continue;
+      resolved.push({
+        key: mention.id,
+        label: handle,
+        kind: mention.mention_kind,
+        userId,
+        isSelf: Boolean(context.currentUserId && userId === context.currentUserId),
+      });
       continue;
     }
     if (mention.mention_kind === "community_agent") {

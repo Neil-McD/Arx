@@ -119,8 +119,9 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
 }
 
-// The feed must resolve chips handle-first with a display-name fallback, so
-// messages written before handle tokens — or after a rename — still chip.
+// Handles are the ONLY chip token for user mentions (Neil's ruling,
+// 2026-07-02): @handle is unique and stable; display-name text never chips —
+// pre-handle messages and hand-typed names stay plain text by design.
 {
   const { readFileSync } = await import("node:fs");
   const feedSource = readFileSync(
@@ -129,13 +130,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     feedSource,
-    /key: `\$\{mention\.id\}:handle`,\s*label: handle,/,
-    "feed must emit a handle label for user mentions",
+    /const handle = context\.profilesByUserId\?\.\[userId\]\?\.handle\?\.trim\(\);[\s\S]*?if \(!handle\) continue;[\s\S]*?label: handle,/,
+    "user mention chips must resolve from the handle and only the handle",
   );
-  assert.match(
+  assert.doesNotMatch(
     feedSource,
-    /if \(profileName && profileName !== handle\) \{[\s\S]*?key: `\$\{mention\.id\}:name`,/,
-    "feed must keep the display-name label as a fallback",
+    /key: `\$\{mention\.id\}:name`/,
+    "the display-name chip fallback must not return — handles are the ground truth",
   );
 }
 
