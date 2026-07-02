@@ -224,6 +224,7 @@ export const runCommunityMemorySweepInternal = internalAction({
       limit: args.limitCommunities,
     })) as Array<{ communityId: string; ownerId: string }>;
     let enqueued = 0;
+    let metabolized = 0;
     const skipped: Record<string, number> = {};
     for (const target of targets) {
       const assessment = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
@@ -252,12 +253,24 @@ export const runCommunityMemorySweepInternal = internalAction({
       } catch {
         // A failed digest pass should not block the knock; the gate decides.
       }
+      try {
+        const metabolizerResult = (await ctx.runMutation(
+          internalRefs.communityIntelligenceDirectory.settleCommunityMemorySignalsInternal,
+          {
+            communityId: target.communityId,
+          },
+        )) as Record<string, any>;
+        if (Number(metabolizerResult.settled_node_count ?? 0) > 0) metabolized += 1;
+      } catch {
+        // Score settlement is mechanical memory metabolism; it should not
+        // block the heartbeat's evidence gate or role cycle.
+      }
       await ctx.runMutation(internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal, {
         communityId: target.communityId,
         runAfterMs: COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS,
       });
       enqueued += 1;
     }
-    return { ok: true, targets: targets.length, enqueued, skipped };
+    return { ok: true, targets: targets.length, enqueued, metabolized, skipped };
   },
 });

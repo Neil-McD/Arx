@@ -9,6 +9,14 @@ const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
+function exportedFunctionBlock(source: string, exportName: string): string {
+  const startToken = `export const ${exportName} =`;
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `${exportName} should exist`);
+  const nextConst = source.indexOf("\nexport const ", start + startToken.length);
+  return source.slice(start, nextConst === -1 ? source.length : nextConst);
+}
+
 assert.match(
   packageJson,
   /"check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_heartbeat_contract_proof\.ts"/,
@@ -77,6 +85,28 @@ assert.match(
   heartbeat,
   /runCommunityAgentCycleInternal[\s\S]*wakeReason: wakeEvidence\.reason[\s\S]*wakeEvidence/,
   "heartbeat action should pass wake reason and evidence into real community-agent runs",
+);
+
+const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
+assert.match(
+  sweepBlock,
+  /runCommunityCompilerDigestPassInternal[\s\S]*settleCommunityMemorySignalsInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  "memory sweep should refresh digest, settle metabolizer scores, then enqueue the delayed heartbeat",
+);
+assert.match(
+  sweepBlock,
+  /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId/,
+  "metabolizer settlement should be scoped to the same single community target as the sweep",
+);
+assert.match(
+  sweepBlock,
+  /catch \{[\s\S]*Score settlement is mechanical memory metabolism[\s\S]*block the heartbeat's evidence gate/,
+  "metabolizer failures should not block heartbeat evidence assessment",
+);
+assert.match(
+  sweepBlock,
+  /metabolized[\s\S]*settled_node_count[\s\S]*return \{ ok: true, targets: targets\.length, enqueued, metabolized, skipped \}/,
+  "memory sweep should expose compact metabolizer settlement diagnostics",
 );
 
 assert.match(

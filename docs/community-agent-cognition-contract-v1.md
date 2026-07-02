@@ -1507,6 +1507,50 @@ Rules:
 - The UI styles edges by typed edge semantics, not by node status classes.
 - This fixture is a product-readiness check for the visible memory surface. It does not weaken the airlock rule: live directory mutations still flow through the community-agent filesystem and typed write gates.
 
+## Twenty-First Implementation Slice
+
+Metabolizer v0 adds deterministic score settlement:
+
+```txt
+retrieval logs + outcome observations
+  -> bounded same-community settlement
+  -> derived node scores
+  -> better future retrieval ranking
+```
+
+Rules:
+
+- `settleCommunityMemorySignalsInternal` is internal-only and scoped to exactly one `communityId`.
+- It reads recent `communityIntelligenceRetrievalLogs` and `communityOutcomeObservations` through bounded same-community indexes.
+- It settles persistent derived scores for nodes touched by recent bounded evidence; no-signal nodes are left unchanged in v0.
+- Score dimensions are independent: retrieval-only evidence cannot erase `outcomeImpactScore`, and outcome-only evidence cannot erase `retrievalUsefulnessScore`.
+- It excludes outcome observations authored by the canonical `community_agent`; the community agent cannot validate its own memories.
+- It updates only `retrievalUsefulnessScore`, `outcomeImpactScore`, and `stalenessScore`.
+- It does not promote statuses, rewrite node content, change confidence, attach outcomes, mutate edges, or create change requests.
+- It does not bump node `version` or `updatedAt`; derived telemetry must not stale pending content change requests.
+- Its node update cap limits actual settled nodes, not noisy signal inspection.
+- It writes a `communityIntelligenceMutations` audit row with before/after snapshots for every changed node.
+- It does not call an LLM. Metabolizer v0 is mechanical metabolism, not a new agent role.
+
+## Twenty-Second Implementation Slice
+
+The memory sweep now wires metabolism into cadence:
+
+```txt
+6-hour memory sweep
+  -> refresh compiler digest
+  -> settle metabolizer scores
+  -> enqueue delayed heartbeat
+  -> heartbeat evidence gate decides whether roles wake
+```
+
+Rules:
+
+- Settlement runs for the same explicit `communityId` as the sweep target.
+- Digest refresh still runs before score settlement so the compiler window is fresh before the knock.
+- Metabolizer failure does not block the delayed heartbeat; derived score settlement is learning pressure, not the source of truth or the wake gate.
+- The sweep returns compact `metabolized` diagnostics, but canonical audit remains the `communityIntelligenceMutations` rows written by the metabolizer itself.
+
 ## What Not To Build Yet
 
 Do not start with:
@@ -1649,12 +1693,13 @@ Two payment lanes, split by what the spend produces:
 ### Cadence (resolved 2026-07-01)
 
 A memory sweep runs every six hours: refresh the community's compiler digest
-(deterministic, free), then knock for a cycle ten minutes later. The knock is
-triple-gated before any tokens can be spent — owner off-switch, daily cycle
-cap, and a delta check (new raw signal since the last successful observer
-pass; unchanged material never re-wakes the roles) — and the heartbeat's
-evidence gate has the final word. Frequency controls worst-case latency only;
-the gates own cost.
+(deterministic, free), settle metabolizer scores from retrieval/outcome
+signals, then knock for a cycle ten minutes later. The knock is triple-gated
+before any tokens can be spent — owner off-switch, daily cycle cap, and a
+delta check (new raw signal since the last successful observer pass;
+unchanged material never re-wakes the roles) — and the heartbeat's evidence
+gate has the final word. Frequency controls worst-case latency only; the
+gates own cost.
 
 ### Decisions Pending
 

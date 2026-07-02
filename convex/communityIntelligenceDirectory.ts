@@ -235,6 +235,11 @@ const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
 const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
 const POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT = 8;
 const POLYNET_OVERVIEW_RUN_LIMIT = 6;
+const METABOLIZER_RETRIEVAL_LOG_LIMIT = 500;
+const METABOLIZER_OUTCOME_LIMIT = 500;
+const METABOLIZER_NODE_UPDATE_LIMIT = 200;
+const METABOLIZER_SCORE_EPSILON = 0.005;
+const METABOLIZER_EXCLUDED_AGENT_KEYS = new Set(["community_agent"]);
 const NODE_TYPES = new Set<NodeType>([
   "playbook",
   "insight",
@@ -568,6 +573,157 @@ function resolveNodeVisibility(args: {
 
 function retrievalLogBelongsToUser(log: RetrievalLogRow, userId: any, isManager: boolean): boolean {
   return isManager || normalizeIdValue(log.userId) === normalizeIdValue(userId);
+}
+
+function boundedMetabolizerLimit(raw: unknown, fallback: number, max: number): number {
+  const parsed = Math.floor(Number(raw ?? fallback));
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.max(1, Math.min(max, parsed));
+}
+
+function retrievalLogNodeIds(log: RetrievalLogRow): any[] {
+  const result: any[] = [];
+  const seen = new Set<string>();
+  for (const id of [...(log.retrievedNodeIds ?? []), ...(log.injectedNodeIds ?? [])]) {
+    const normalized = normalizeIdValue(id);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(id);
+  }
+  return result;
+}
+
+type MetabolizerNodeSignal = {
+  nodeId: any;
+  usefulFeedback: number;
+  notUsefulFeedback: number;
+  wrongFeedback: number;
+  staleFeedback: number;
+  workedOutcomeWeight: number;
+  failedOutcomeWeight: number;
+  mixedOutcomeWeight: number;
+  unknownOutcomeWeight: number;
+};
+
+function ensureMetabolizerSignal(map: Map<string, MetabolizerNodeSignal>, nodeId: any): MetabolizerNodeSignal | null {
+  const normalized = normalizeIdValue(nodeId);
+  if (!normalized) return null;
+  const existing = map.get(normalized);
+  if (existing) return existing;
+  const signal: MetabolizerNodeSignal = {
+    nodeId,
+    usefulFeedback: 0,
+    notUsefulFeedback: 0,
+    wrongFeedback: 0,
+    staleFeedback: 0,
+    workedOutcomeWeight: 0,
+    failedOutcomeWeight: 0,
+    mixedOutcomeWeight: 0,
+    unknownOutcomeWeight: 0,
+  };
+  map.set(normalized, signal);
+  return signal;
+}
+
+function applyRetrievalFeedbackSignal(signal: MetabolizerNodeSignal, feedback?: RetrievalLogRow["feedback"]): void {
+  if (feedback === "useful") signal.usefulFeedback += 1;
+  if (feedback === "not_useful") signal.notUsefulFeedback += 1;
+  if (feedback === "wrong") signal.wrongFeedback += 1;
+  if (feedback === "stale") signal.staleFeedback += 1;
+}
+
+function evidenceStrengthWeight(strength: EvidenceStrength): number {
+  if (strength === "validated") return 1;
+  if (strength === "measured") return 0.85;
+  if (strength === "observed") return 0.6;
+  if (strength === "anecdotal") return 0.4;
+  return 0.2;
+}
+
+function applyOutcomeSignal(signal: MetabolizerNodeSignal, outcome: OutcomeObservationRow): void {
+  const weight = evidenceStrengthWeight(outcome.evidenceStrength);
+  if (outcome.resultStatus === "worked") signal.workedOutcomeWeight += weight;
+  if (outcome.resultStatus === "failed") signal.failedOutcomeWeight += weight;
+  if (outcome.resultStatus === "mixed") signal.mixedOutcomeWeight += weight;
+  if (outcome.resultStatus === "unknown") signal.unknownOutcomeWeight += weight;
+}
+
+function volumeAdjustedRatio(args: {
+  positive: number;
+  negative: number;
+  neutral?: number;
+  volumeUnit?: number;
+}): number {
+  const positive = Math.max(0, args.positive);
+  const negative = Math.max(0, args.negative);
+  const neutral = Math.max(0, args.neutral ?? 0);
+  const total = positive + negative + neutral;
+  if (total <= 0) return 0;
+  const ratio = (positive + neutral * 0.5) / total;
+  const volume = Math.min(1, total / Math.max(1, args.volumeUnit ?? 4));
+  return clampScore(ratio * volume);
+}
+
+function metabolizedRetrievalUsefulnessScore(signal: MetabolizerNodeSignal): number {
+  return volumeAdjustedRatio({
+    positive: signal.usefulFeedback,
+    negative: signal.notUsefulFeedback * 0.75 + signal.wrongFeedback + signal.staleFeedback * 0.6,
+    volumeUnit: 4,
+  });
+}
+
+function hasMetabolizerRetrievalSignal(signal: MetabolizerNodeSignal): boolean {
+  return (
+    signal.usefulFeedback +
+      signal.notUsefulFeedback +
+      signal.wrongFeedback +
+      signal.staleFeedback >
+    0
+  );
+}
+
+function metabolizedOutcomeImpactScore(signal: MetabolizerNodeSignal): number {
+  return volumeAdjustedRatio({
+    positive: signal.workedOutcomeWeight,
+    negative: signal.failedOutcomeWeight,
+    neutral: signal.mixedOutcomeWeight + signal.unknownOutcomeWeight * 0.25,
+    volumeUnit: 3,
+  });
+}
+
+function hasMetabolizerOutcomeSignal(signal: MetabolizerNodeSignal): boolean {
+  return (
+    signal.workedOutcomeWeight +
+      signal.failedOutcomeWeight +
+      signal.mixedOutcomeWeight +
+      signal.unknownOutcomeWeight >
+    0
+  );
+}
+
+function metabolizedStalenessScore(signal: MetabolizerNodeSignal): number {
+  const feedbackWeight =
+    signal.usefulFeedback +
+    signal.notUsefulFeedback +
+    signal.wrongFeedback +
+    signal.staleFeedback;
+  const outcomeWeight =
+    signal.workedOutcomeWeight +
+    signal.failedOutcomeWeight +
+    signal.mixedOutcomeWeight +
+    signal.unknownOutcomeWeight;
+  const total = feedbackWeight + outcomeWeight;
+  if (total <= 0) return 0;
+  const stalePressure =
+    signal.staleFeedback +
+    signal.wrongFeedback * 0.8 +
+    signal.notUsefulFeedback * 0.25 +
+    signal.failedOutcomeWeight * 0.4;
+  return clampScore((stalePressure / total) * Math.min(1, total / 4));
+}
+
+function scoreChanged(current: number, next: number): boolean {
+  return Math.abs(clampScore(current) - clampScore(next)) >= METABOLIZER_SCORE_EPSILON;
 }
 
 function resolveTraceVisibility(args: {
@@ -3837,6 +3993,160 @@ export const recordCommunityOutcomeObservation = mutation({
       notes: args.notes,
       actorType: args.actorType,
     });
+  },
+});
+
+export const settleCommunityMemorySignalsInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    retrievalLogLimit: v.optional(v.number()),
+    outcomeLimit: v.optional(v.number()),
+    nodeUpdateLimit: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    if (!community) throw new Error("community_metabolizer_community_not_found");
+
+    const retrievalLogLimit = boundedMetabolizerLimit(
+      args.retrievalLogLimit,
+      METABOLIZER_RETRIEVAL_LOG_LIMIT,
+      METABOLIZER_RETRIEVAL_LOG_LIMIT,
+    );
+    const outcomeLimit = boundedMetabolizerLimit(
+      args.outcomeLimit,
+      METABOLIZER_OUTCOME_LIMIT,
+      METABOLIZER_OUTCOME_LIMIT,
+    );
+    const nodeUpdateLimit = boundedMetabolizerLimit(
+      args.nodeUpdateLimit,
+      METABOLIZER_NODE_UPDATE_LIMIT,
+      METABOLIZER_NODE_UPDATE_LIMIT,
+    );
+    const nowMs = args.nowMs ?? Date.now();
+
+    const [retrievalLogs, outcomes] = await Promise.all([
+      ctx.db
+        .query("communityIntelligenceRetrievalLogs" as any)
+        .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+        .order("desc")
+        .take(retrievalLogLimit) as Promise<RetrievalLogRow[]>,
+      ctx.db
+        .query("communityOutcomeObservations" as any)
+        .withIndex("by_community_observedAt", (q: any) => q.eq("communityId", args.communityId))
+        .order("desc")
+        .take(outcomeLimit) as Promise<OutcomeObservationRow[]>,
+    ]);
+
+    const retrievalLogById = new Map<string, RetrievalLogRow>();
+    for (const log of retrievalLogs) {
+      retrievalLogById.set(normalizeIdValue(log._id), log);
+    }
+
+    const signals = new Map<string, MetabolizerNodeSignal>();
+    for (const log of retrievalLogs) {
+      if (!log.feedback) continue;
+      for (const nodeId of retrievalLogNodeIds(log)) {
+        const signal = ensureMetabolizerSignal(signals, nodeId);
+        if (signal) applyRetrievalFeedbackSignal(signal, log.feedback);
+      }
+    }
+
+    for (const outcome of outcomes) {
+      if (METABOLIZER_EXCLUDED_AGENT_KEYS.has(String(outcome.observedByAgentKey ?? ""))) continue;
+      const targetNodeIds: any[] = [];
+      if (outcome.nodeId) {
+        targetNodeIds.push(outcome.nodeId);
+      } else if (outcome.retrievalLogId) {
+        const logId = normalizeIdValue(outcome.retrievalLogId);
+        let retrievalLog = retrievalLogById.get(logId) ?? null;
+        if (!retrievalLog) {
+          const fetched = (await ctx.db.get(outcome.retrievalLogId as any)) as RetrievalLogRow | null;
+          retrievalLog =
+            fetched && normalizeIdValue(fetched.communityId) === normalizeIdValue(args.communityId)
+              ? fetched
+              : null;
+          if (retrievalLog) retrievalLogById.set(logId, retrievalLog);
+        }
+        if (retrievalLog) targetNodeIds.push(...retrievalLogNodeIds(retrievalLog));
+      }
+      for (const nodeId of targetNodeIds) {
+        const signal = ensureMetabolizerSignal(signals, nodeId);
+        if (signal) applyOutcomeSignal(signal, outcome);
+      }
+    }
+
+    const changedNodes: Array<{
+      node_id: string;
+      title: string;
+      staleness_score: number;
+      retrieval_usefulness_score: number;
+      outcome_impact_score: number;
+    }> = [];
+    let inspectedNodes = 0;
+    for (const signal of signals.values()) {
+      inspectedNodes += 1;
+      const node = (await ctx.db.get(signal.nodeId as any)) as IntelligenceNodeRow | null;
+      if (!node || normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) continue;
+      if (!ACTIVE_RETRIEVAL_STATUSES.includes(node.status)) continue;
+
+      const hasRetrievalSignal = hasMetabolizerRetrievalSignal(signal);
+      const hasOutcomeSignal = hasMetabolizerOutcomeSignal(signal);
+      const nextRetrievalUsefulnessScore = hasRetrievalSignal
+        ? metabolizedRetrievalUsefulnessScore(signal)
+        : node.retrievalUsefulnessScore;
+      const nextOutcomeImpactScore = hasOutcomeSignal
+        ? metabolizedOutcomeImpactScore(signal)
+        : node.outcomeImpactScore;
+      const nextStalenessScore = metabolizedStalenessScore(signal);
+      if (
+        !scoreChanged(node.retrievalUsefulnessScore, nextRetrievalUsefulnessScore) &&
+        !scoreChanged(node.outcomeImpactScore, nextOutcomeImpactScore) &&
+        !scoreChanged(node.stalenessScore, nextStalenessScore)
+      ) {
+        continue;
+      }
+
+      const beforeSnapshot = mapNodeRow(node);
+      await ctx.db.patch(node._id as any, {
+        retrievalUsefulnessScore: nextRetrievalUsefulnessScore,
+        outcomeImpactScore: nextOutcomeImpactScore,
+        stalenessScore: nextStalenessScore,
+      });
+      const updated = (await ctx.db.get(node._id as any)) as IntelligenceNodeRow | null;
+      if (!updated) throw new Error("community_metabolizer_node_not_found_after_patch");
+      await insertMutationLog({
+        ctx,
+        communityId: args.communityId,
+        operation: "update_node",
+        actorType: "system",
+        targetNodeIds: [node._id],
+        beforeSnapshot,
+        afterSnapshot: mapNodeRow(updated),
+        reason: "metabolizer_score_settlement",
+        nowMs,
+      });
+      changedNodes.push({
+        node_id: normalizeIdValue(updated._id),
+        title: updated.title,
+        staleness_score: updated.stalenessScore,
+        retrieval_usefulness_score: updated.retrievalUsefulnessScore,
+        outcome_impact_score: updated.outcomeImpactScore,
+      });
+      if (changedNodes.length >= nodeUpdateLimit) break;
+    }
+
+    return {
+      ok: true,
+      community_id: normalizeIdValue(args.communityId),
+      inspected_retrieval_log_count: retrievalLogs.length,
+      inspected_outcome_count: outcomes.length,
+      signal_node_count: signals.size,
+      inspected_node_count: inspectedNodes,
+      settled_node_count: changedNodes.length,
+      node_update_limit: nodeUpdateLimit,
+      changed_nodes: changedNodes,
+    };
   },
 });
 
