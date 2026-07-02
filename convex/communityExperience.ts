@@ -8,6 +8,7 @@ export {
   heartbeatCommunityPresence,
   getCommunityPresenceSummary,
   recordPublicFunnelVisitBySlug,
+  resolvePublicCommunityAccessBySlug,
   resolvePublicFunnelBySlug,
   resolvePublicFunnelStatsBySlug,
   listPublicDiscoverCommunities,

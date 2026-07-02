@@ -22,12 +22,14 @@ import {
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   requireCommunityUserNotBlocked,
+  resolveCommunityAccessBundle,
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { findAuthenticatedActorState } from "./authActor";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
@@ -293,6 +295,53 @@ export const resolvePublicFunnelStatsBySlug = query({
     return {
       ok: true,
       community: mapPublicCommunityStats(await resolvePublicCommunityStats(ctx, community)),
+    };
+  },
+});
+
+export const resolvePublicCommunityAccessBySlug = query({
+  args: {
+    communitySlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const slug = normalizeSlug(args.communitySlug);
+    const community = (await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first()) as CommunityLike | null;
+    if (!community) return { ok: false as const };
+
+    let userId: any = null;
+    try {
+      const { actor } = await findAuthenticatedActorState({ ctx, authSubject: null });
+      userId = actor?.dbUserId ?? null;
+    } catch {
+      userId = null;
+    }
+
+    let membership: CommunityMembershipLike | null = null;
+    if (userId) {
+      const membershipRows = (await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
+        .collect()) as CommunityMembershipLike[];
+      membership = pickMostRelevantCommunityMembership(membershipRows);
+    }
+
+    const access = await resolveCommunityAccessBundle({
+      ctx,
+      community,
+      membership,
+      userId,
+    });
+    if (!access.relation) return { ok: false as const };
+
+    return {
+      ok: true as const,
+      access: {
+        ...access,
+        user_id: userId ? access.user_id : null,
+      },
     };
   },
 });

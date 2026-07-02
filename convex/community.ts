@@ -140,6 +140,7 @@ import {
   listCommunityResources as listCommunityResourcesImpl,
   listCommunityResourceModules as listCommunityResourceModulesImpl,
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
+  resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   resolvePublicFunnelStatsBySlug as resolvePublicFunnelStatsBySlugImpl,
   reorderCommunityResourceModules as reorderCommunityResourceModulesImpl,
@@ -263,6 +264,7 @@ export const cancelCommunityEvent = cancelCommunityEventImpl;
 export const getMyCommunityAccess = getMyCommunityAccessImpl;
 export const getMyCommunityAccessBySlug = getMyCommunityAccessBySlugImpl;
 export const getCommunityPresenceSummary = getCommunityPresenceSummaryImpl;
+export const resolvePublicCommunityAccessBySlug = resolvePublicCommunityAccessBySlugImpl;
 export const resolvePublicFunnelBySlug = resolvePublicFunnelBySlugImpl;
 export const resolvePublicFunnelStatsBySlug = resolvePublicFunnelStatsBySlugImpl;
 export const listPublicDiscoverCommunities = listPublicDiscoverCommunitiesImpl;
