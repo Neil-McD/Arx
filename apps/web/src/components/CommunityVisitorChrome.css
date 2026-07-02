@@ -29,28 +29,29 @@
   transition: width 220ms ease;
 }
 
-/* Gate play button: dark glass over the film, not a white disc on it. */
+/* Gate play button: dark glass with a strong white ring — the ring reads
+   on dark footage, the disc reads on bright footage. Creator thumbnails
+   are arbitrary; the button must survive both. */
 .cvs-gate-media .public-funnel-media-play {
-  width: 56px;
-  height: 56px;
-  background: rgba(12, 12, 16, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  width: 60px;
+  height: 60px;
+  background: rgba(10, 10, 14, 0.62);
+  border: 1.5px solid rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 8px 30px -8px rgba(0, 0, 0, 0.6);
-  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+  box-shadow: 0 10px 34px -6px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: transform 140ms ease, background 140ms ease;
 }
 
 .cvs-gate-media .public-funnel-media-play svg {
-  width: 24px;
-  height: 24px;
+  width: 27px;
+  height: 27px;
   fill: #fff;
 }
 
 .cvs-gate-media .public-funnel-media-deferred:hover .public-funnel-media-play {
   transform: translate(-50%, -50%) scale(1.08);
-  border-color: rgba(255, 255, 255, 0.55);
-  background: rgba(12, 12, 16, 0.72);
+  background: rgba(10, 10, 14, 0.8);
 }
 
 .public-funnel-media-hint {
