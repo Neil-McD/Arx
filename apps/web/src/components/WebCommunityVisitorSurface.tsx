@@ -87,7 +87,6 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     title,
     action,
     host,
-    banner,
     aboutText,
     stats,
     pricingLabel,
@@ -127,7 +126,6 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.gateOpenNonce]);
 
-  const bannerUrl = banner?.url ?? props.heroArtImageUrl ?? null;
   const [isVslPlaying, setIsVslPlaying] = useState(false);
   const gateMediaNode = renderHeroMediaDefault(props.heroMediaKind, props.heroMediaUrl, {
     eager: true,
@@ -318,8 +316,6 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
             action={action}
             pricingLabel={pricingLabel}
             isFreePricing={isFreePricing}
-            bannerUrl={bannerUrl}
-            bannerStyle={banner?.url ? null : props.heroArtImageStyle ?? null}
             media={gateMediaNode}
             isMediaPlaying={isVslPlaying}
             onViewFirst={dismissGate}

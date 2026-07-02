@@ -1,7 +1,7 @@
 /* Visitor conversion chrome: the join gate and the composer-slot rope.
    The gate is the community's front door — logo, banner, VSL, member count,
    who's online, the one-liner, Join, and "View it first". Nothing else. */
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
@@ -15,30 +15,21 @@ export function CommunityVisitorGate(props: {
   action: CommunityFunnelSurfaceAction;
   pricingLabel: string;
   isFreePricing: boolean;
-  bannerUrl: string | null;
-  bannerStyle: CSSProperties | null;
   media: ReactNode;
   isMediaPlaying?: boolean;
   onViewFirst: () => void;
 }) {
   const { action } = props;
-  /* One hero per card: the VSL when it exists, the banner otherwise. */
-  const hasMediaHero = Boolean(props.media);
+  /* No banner in the gate: the VSL is the only hero when present; otherwise
+     the card leads with the logo. The banner belongs to the page, not the popup. */
   return (
     <div
-      className={`cfg-gatecard cvs-gatecard${hasMediaHero ? " cvs-gatecard-no-banner" : ""}${
+      className={`cfg-gatecard cvs-gatecard cvs-gatecard-no-banner${
         props.isMediaPlaying ? " cvs-gatecard-wide" : ""
       }`}
       style={props.isMediaPlaying ? { width: "min(720px, 94vw)" } : undefined}
     >
-      {!hasMediaHero ? (
-        <div className="cfg-gbanner" aria-hidden="true">
-          {props.bannerUrl ? (
-            <img src={props.bannerUrl} alt="" draggable={false} style={props.bannerStyle ?? undefined} />
-          ) : null}
-        </div>
-      ) : null}
-      <div className={`cfg-gav${hasMediaHero ? " cvs-gav-plain" : ""}`}>
+      <div className="cfg-gav cvs-gav-plain">
         <CommunityAvatar
           className="cfg-fill"
           imageUrl={action.avatarUrl}
