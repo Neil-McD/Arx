@@ -9,6 +9,7 @@ import {
   requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import { settleMentionRowInternal } from "./communityMentionLifecycle";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
@@ -441,25 +442,36 @@ export const markCommunityChatReadAt = mutation({
     // alongside the chat marker and flip this user's now-seen pending mention
     // rows to "read" so the ledger's lifecycle reflects reality.
     const markMentionsSeen = async () => {
-      const pending = (await ctx.db
-        .query("communityInteractionMentions" as any)
-        .withIndex("by_mentionedUser_community_createdAt", (q: any) =>
-          q.eq("mentionedUserId", userId).eq("communityId", args.communityId),
-        )
-        .order("desc")
-        .take(50)) as Array<{ _id: any; notifyState?: string; createdAt?: number }>;
-      for (const row of pending) {
-        if (row.notifyState !== "pending") continue;
-        if (Math.floor(row.createdAt ?? 0) > seenAt) continue;
-        await ctx.db.patch(row._id as any, { notifyState: "read", updatedAt: nowMs });
+      for (let pass = 0; pass < 5; pass += 1) {
+        const pending = (await ctx.db
+          .query("communityInteractionMentions" as any)
+          .withIndex("by_mentionedUser_community_notifyState_createdAt", (q: any) =>
+            q.eq("mentionedUserId", userId).eq("communityId", args.communityId).eq("notifyState", "pending"),
+          )
+          .order("asc")
+          .take(100)) as Array<{ _id: any; createdAt?: number }>;
+        if (pending.length === 0) break;
+        let settled = 0;
+        for (const row of pending) {
+          if (Math.floor(row.createdAt ?? 0) > seenAt) return;
+          const result = await settleMentionRowInternal({
+            ctx,
+            mentionId: row._id,
+            toState: "read",
+            nowMs,
+          });
+          if (result.settled) settled += 1;
+        }
+        if (settled === 0 || pending.length < 100) break;
       }
     };
     if (existing) {
       const patch: Record<string, number> = { updatedAt: nowMs };
       if ((existing.chatLastSeenAt ?? 0) < seenAt) patch.chatLastSeenAt = seenAt;
       if ((existing.mentionsLastSeenAt ?? 0) < seenAt) patch.mentionsLastSeenAt = seenAt;
-      if (Object.keys(patch).length === 1) return { ok: true };
-      await ctx.db.patch(existing._id as any, patch);
+      if (Object.keys(patch).length > 1) {
+        await ctx.db.patch(existing._id as any, patch);
+      }
       await markMentionsSeen();
       return { ok: true };
     }

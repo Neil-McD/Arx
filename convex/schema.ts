@@ -1708,7 +1708,9 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_mentionedUser_createdAt", ["mentionedUserId", "createdAt"])
     .index("by_mentionedUser_community_createdAt", ["mentionedUserId", "communityId", "createdAt"])
+    .index("by_mentionedUser_community_notifyState_createdAt", ["mentionedUserId", "communityId", "notifyState", "createdAt"])
     .index("by_notifyState_createdAt", ["notifyState", "createdAt"])
+    .index("by_mentionKind_notifyState_createdAt", ["mentionKind", "notifyState", "createdAt"])
     .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
     .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"]),
 

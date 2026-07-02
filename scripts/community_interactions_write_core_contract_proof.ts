@@ -149,7 +149,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional[\s\S]*replyToMessageId: v\.optional[\s\S]*mentions: v\.optional\(v\.array\(v\.object\(\{ userId: v\.id\("users"\) \}\)\)\)/,
+  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional[\s\S]*replyToMessageId: v\.optional[\s\S]*mentions: v\.optional\(v\.array\(v\.object\(\{ userId: v\.optional\(v\.string\(\)\), agentKey: v\.optional\(v\.string\(\)\) \}\)\)\)/,
   "composer bridge should expose only the canonical composer write shape",
 );
 assert.doesNotMatch(
@@ -256,8 +256,8 @@ assert.match(
 );
 assert.match(
   mentionResolver,
-  /args\.ctx\.db\.get\(userId\)[\s\S]*interaction_mention_user_not_found[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId[\s\S]*interaction_mention_user_not_allowed/,
-  "mention resolver should require existing users with community chat access",
+  /normalizeId\("users" as any, rawUserId\)[\s\S]*withIndex\("by_authSubject"[\s\S]*interaction_mention_user_not_found[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId: user\._id[\s\S]*interaction_mention_user_not_allowed/,
+  "mention resolver should resolve existing users by canonical id or auth subject and require community chat access",
 );
 
 const targetLoader = functionBlock(interactions, "loadCommunityInteractionTarget");
@@ -384,8 +384,8 @@ assert.match(
 );
 assert.match(
   interactions,
-  /communityInteractionMentions" as any[\s\S]*mentionKind: "user"[\s\S]*notifyState: "pending"/,
-  "validated user mentions should create canonical pending mention rows",
+  /communityInteractionMentions" as any[\s\S]*mentionKind: spec\.kind[\s\S]*spec\.kind === "user"[\s\S]*mentionedUserId[\s\S]*spec\.kind === "community_agent"[\s\S]*mentionedAgentKey[\s\S]*notifyState: "pending"/,
+  "validated user and canonical community-agent mentions should create pending mention rows",
 );
 assert.match(
   communityFacade,

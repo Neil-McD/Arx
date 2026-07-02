@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { communityMembershipRowIsActive, normalizeIdValue } from "./communityCore";
+import { settleMentionRowInternal } from "./communityMentionLifecycle";
 
 // M2b: the mention email ping. In-app attention (the accent dot) is the
 // primary signal; email is the fallback for people who are not around. A
@@ -74,7 +75,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
     const dueBefore = nowMs - MENTION_EMAIL_GRACE_MS;
     const pending = (await ctx.db
       .query("communityInteractionMentions" as any)
-      .withIndex("by_notifyState_createdAt", (q: any) => q.eq("notifyState", "pending"))
+      .withIndex("by_mentionKind_notifyState_createdAt", (q: any) =>
+        q.eq("mentionKind", "user").eq("notifyState", "pending"),
+      )
+      .order("asc")
       .take(100)) as Array<Record<string, any>>;
     const jobs: Array<{
       mentionId: string;
@@ -86,25 +90,56 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       snippet: string;
       urlPath: string;
     }> = [];
+    const suppressOnlyJob = (mention: Record<string, any>) => {
+      jobs.push({
+        mentionId: normalizeIdValue(mention._id),
+        recipientUserId: normalizeIdValue(mention.mentionedUserId),
+        suppressed: true,
+        collapsed: false,
+        communityName: "",
+        mentionerName: "",
+        snippet: "",
+        urlPath: "/",
+      });
+    };
     // Per-recipient email caps: one send per run, and a cooldown since the
     // recipient's last mention email (checked once per recipient).
     const cooldownByRecipient = new Map<string, boolean>();
     const emailedThisRun = new Set<string>();
+    let emailJobsThisRun = 0;
     for (const mention of pending) {
-      if (jobs.length >= MENTION_EMAIL_BATCH_LIMIT) break;
-      if (mention.mentionKind !== "user" || !mention.mentionedUserId) continue;
+      if (!mention.mentionedUserId) {
+        suppressOnlyJob(mention);
+        continue;
+      }
       if (Number(mention.createdAt ?? 0) > dueBefore) continue;
       const source = mention.replyId
         ? ((await ctx.db.get(mention.replyId)) as Record<string, any> | null)
         : mention.rootId
           ? ((await ctx.db.get(mention.rootId)) as Record<string, any> | null)
           : null;
-      if (!source || source.status !== "live") continue;
+      if (!source || source.status !== "live") {
+        suppressOnlyJob(mention);
+        continue;
+      }
+      if (mention.replyId && source.rootId) {
+        const root = (await ctx.db.get(source.rootId)) as Record<string, any> | null;
+        if (!root || root.status !== "live") {
+          suppressOnlyJob(mention);
+          continue;
+        }
+      }
       const authorUserId = source.actorUserId ?? null;
       // Never ping someone about their own message.
-      if (authorUserId && normalizeIdValue(authorUserId) === normalizeIdValue(mention.mentionedUserId)) continue;
+      if (authorUserId && normalizeIdValue(authorUserId) === normalizeIdValue(mention.mentionedUserId)) {
+        suppressOnlyJob(mention);
+        continue;
+      }
       const community = (await ctx.db.get(mention.communityId)) as Record<string, any> | null;
-      if (!community) continue;
+      if (!community) {
+        suppressOnlyJob(mention);
+        continue;
+      }
       // Membership re-check at email time: the recipient may have left (or
       // been removed) since the mention was written; no content leaves the
       // community for ex-members.
@@ -139,7 +174,11 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         // recipient's next email instead of sending now.
         if (cooldownByRecipient.get(recipientKey)) continue;
         collapsed = emailedThisRun.has(recipientKey);
-        if (!collapsed) emailedThisRun.add(recipientKey);
+        if (!collapsed) {
+          if (emailJobsThisRun >= MENTION_EMAIL_BATCH_LIMIT) continue;
+          emailedThisRun.add(recipientKey);
+          emailJobsThisRun += 1;
+        }
       }
       const author = authorUserId
         ? ((await ctx.db.get(authorUserId)) as Record<string, any> | null)
@@ -179,10 +218,13 @@ export const markMentionNotifyStatesInternal = internalMutation({
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     for (const update of args.updates) {
-      const row = (await ctx.db.get(update.mentionId)) as Record<string, any> | null;
       // Only pending rows advance here; a mention read in-app stays "read".
-      if (!row || row.notifyState !== "pending") continue;
-      await ctx.db.patch(update.mentionId, { notifyState: update.notifyState, updatedAt: nowMs });
+      await settleMentionRowInternal({
+        ctx,
+        mentionId: update.mentionId,
+        toState: update.notifyState,
+        nowMs,
+      });
     }
     return { ok: true };
   },

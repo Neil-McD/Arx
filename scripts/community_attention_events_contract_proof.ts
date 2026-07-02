@@ -130,8 +130,13 @@ assert.match(
 );
 assert.match(
   backend,
-  /markCommunityChatReadAt[\s\S]*notifyState: "read"[\s\S]*mentionsLastSeenAt/,
+  /markCommunityChatReadAt[\s\S]*mentionsLastSeenAt/,
   "opening chat clears the mention ping and flips seen pending mentions to read",
+);
+assert.match(
+  backend,
+  /markCommunityChatReadAt[\s\S]*settleMentionRowInternal\(\{[\s\S]*toState: "read"/,
+  "opening chat must settle seen pending mentions through the guarded lifecycle helper",
 );
 assert.match(
   schema,
@@ -165,7 +170,7 @@ assert.match(
 );
 assert.match(
   mentionEmails,
-  /row\.notifyState !== "pending"\) continue/,
+  /settleMentionRowInternal\(\{[\s\S]*toState: update\.notifyState/,
   "only pending mention rows advance to sent or suppressed",
 );
 assert.match(

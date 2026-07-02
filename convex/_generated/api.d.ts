@@ -79,6 +79,7 @@ import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityMentionEmails from "../communityMentionEmails.js";
+import type * as communityMentionLifecycle from "../communityMentionLifecycle.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
@@ -276,6 +277,7 @@ declare const fullApi: ApiFromModules<{
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
   communityMentionEmails: typeof communityMentionEmails;
+  communityMentionLifecycle: typeof communityMentionLifecycle;
   communityPublic: typeof communityPublic;
   communityRecentContext: typeof communityRecentContext;
   communityRecipientCore: typeof communityRecipientCore;

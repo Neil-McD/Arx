@@ -32,6 +32,7 @@ import {
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
 } from "./communitySourceUrlPolicy";
+import { settleMentionRowInternal } from "./communityMentionLifecycle";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -495,6 +496,37 @@ async function listMentionsForReply(ctx: any, replyId: any): Promise<MentionRow[
     .query("communityInteractionMentions" as any)
     .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
     .take(MAX_INTERACTION_MENTIONS_PER_BUNDLE)) as MentionRow[];
+}
+
+async function suppressPendingMentionRows(ctx: any, rows: Array<{ _id: any }>, nowMs: number): Promise<void> {
+  for (const row of rows) {
+    await settleMentionRowInternal({
+      ctx,
+      mentionId: row._id,
+      toState: "suppressed",
+      nowMs,
+    });
+  }
+}
+
+async function suppressPendingMentionsForDeletedInteractionTarget(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  targetId: any;
+  nowMs: number;
+}): Promise<void> {
+  if (args.targetType === "reply") {
+    await suppressPendingMentionRows(args.ctx, await listMentionsForReply(args.ctx, args.targetId), args.nowMs);
+    return;
+  }
+  await suppressPendingMentionRows(args.ctx, await listMentionsForRoot(args.ctx, args.targetId), args.nowMs);
+  const replies = (await args.ctx.db
+    .query("communityInteractionReplies" as any)
+    .withIndex("by_root_createdAt", (q: any) => q.eq("rootId", args.targetId))
+    .take(500)) as InteractionReplyRow[];
+  for (const reply of replies) {
+    await suppressPendingMentionRows(args.ctx, await listMentionsForReply(args.ctx, reply._id), args.nowMs);
+  }
 }
 
 function mapReactionSummary(rows: Array<{ emoji: string; count: number }> | undefined) {
@@ -1803,6 +1835,12 @@ export const deleteCommunityInteractionMessage = mutation({
     const nowMs = Date.now();
     const previousStatus = target.status;
     await ctx.db.patch(target._id, { status: "deleted", deletedAt: nowMs, updatedAt: nowMs });
+    await suppressPendingMentionsForDeletedInteractionTarget({
+      ctx,
+      targetType: args.targetType,
+      targetId: target._id,
+      nowMs,
+    });
     if (args.targetType === "reply") {
       const replyTarget = target as InteractionReplyRow;
       const root = (await ctx.db.get(replyTarget.rootId as any)) as InteractionRootRow | null;

@@ -235,7 +235,8 @@
     "probe:daytona-stop-resume-persistence": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_sandbox_stop_resume_persistence_probe.ts",
     "promote:daytona-codex-runtime-snapshot": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_snapshot_promote.ts",
     "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh",
-    "check:community-mention-rendering-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_rendering_contract_proof.ts"
+    "check:community-mention-rendering-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_rendering_contract_proof.ts",
+    "check:community-mention-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_lifecycle_contract_proof.ts"
   },
   "dependencies": {
     "@blaxel/core": "^0.2.94",
