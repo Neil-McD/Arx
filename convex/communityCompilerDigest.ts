@@ -7,6 +7,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
+  drainSelfAuthoredPendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
   type SourceTraceRow,
 } from "./communityCompilerEvidenceCore";
@@ -286,6 +287,11 @@ async function runCommunityCompilerDigestPassCore(
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;
     const dedupeKey = `community_compiler_digest:v1:${normalizeIdValue(args.communityId)}:${utcDayKey(nowMs)}`;
+    await drainSelfAuthoredPendingSourceTracesForCommunity({
+      ctx,
+      communityId: args.communityId,
+      nowMs,
+    });
     const existingDigestPromise = ctx.db
       .query("communityCompilerDigests" as any)
       .withIndex("by_community_dedupeKey", (q: any) =>

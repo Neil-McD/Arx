@@ -10,7 +10,7 @@ import {
 } from "./communityCore";
 import {
   COMPILER_EVIDENCE_VISIBILITY_SCOPES,
-  isCommunityCompilerEligibleVisibility,
+  isCommunityCompilerEvidenceTrace,
 } from "./communityCompilerEvidenceCore";
 
 const COMMUNITY_COMPILER_WINDOW_DAYS = 30;
@@ -411,7 +411,7 @@ export const readCommunityCompilerWindow = query({
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, sourceTraceFetchLimit);
     const sourceTraces = traceCandidateRows
-      .filter((row) => isCommunityCompilerEligibleVisibility(row.visibilityScope))
+      .filter((row) => isCommunityCompilerEvidenceTrace(row))
       .slice(0, sourceTraceLimit);
     const rankedAiFeedSignals = aiFeedRows
       .slice()

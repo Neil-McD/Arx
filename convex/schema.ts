@@ -2601,6 +2601,7 @@ export default defineSchema({
         v.literal("dismissed_low_signal"),
         v.literal("carried_forward"),
         v.literal("excluded_by_visibility"),
+        v.literal("excluded_self_authored"),
       ),
     ),
     compilerPendingSince: v.optional(v.number()),

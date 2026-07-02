@@ -56,8 +56,8 @@ assert.match(
 );
 assert.match(
   compilerWindow,
-  /isCommunityCompilerEligibleVisibility/,
-  "compiler window should include trusted non-private source traces, including redacted/admin evidence",
+  /isCommunityCompilerEvidenceTrace/,
+  "compiler window should include trusted non-private source traces while excluding community-agent self-authored evidence",
 );
 assert.match(
   compilerWindow,

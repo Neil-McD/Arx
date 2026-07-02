@@ -16,6 +16,17 @@ function exportedFunctionBlock(source: string, exportName: string): string {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+function namedFunctionBlock(source: string, functionName: string): string {
+  const startToken = `async function ${functionName}`;
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `${functionName} should exist`);
+  const nextAsync = source.indexOf("\nasync function ", start + startToken.length);
+  const nextExport = source.indexOf("\nexport const ", start + startToken.length);
+  const candidates = [nextAsync, nextExport].filter((index) => index !== -1);
+  const end = candidates.length > 0 ? Math.min(...candidates) : source.length;
+  return source.slice(start, end);
+}
+
 assert.match(
   directory,
   /export async function upsertCommunitySourceTrace[\s\S]*by_community_source[\s\S]*communitySourceTraces/,
@@ -32,16 +43,16 @@ assert.match(
   "AI feed trace bridge should create agent-attributed ai_feed traces",
 );
 {
-  const block = exportedFunctionBlock(aiFeed, "publishCommunityAiFeedAgentPost");
+  const block = namedFunctionBlock(aiFeed, "publishCommunityAiFeedAgentPostForUser");
   assert.match(
     block,
     /requireCommunityModerator\(\{/,
-    "AI feed agent publication should require governance authority before it can create compiler evidence",
+    "AI feed agent publication helper should require governance authority before it can create compiler evidence",
   );
   assert.doesNotMatch(
     block,
     /requireCommunityChatAccess\(\{/,
-    "AI feed agent publication should not be member-callable through chat access alone",
+    "AI feed agent publication helper should not be member-callable through chat access alone",
   );
 }
 assert.match(
@@ -81,8 +92,8 @@ assert.match(
 );
 assert.match(
   compilerInputs,
-  /COMPILER_EVIDENCE_VISIBILITY_SCOPES[\s\S]*by_community_visibility_createdAt[\s\S]*isCommunityCompilerEligibleVisibility/,
-  "compiler input read model should use visibility-aware source trace reads for trusted non-private evidence",
+  /COMPILER_EVIDENCE_VISIBILITY_SCOPES[\s\S]*by_community_visibility_createdAt[\s\S]*isCommunityCompilerEvidenceTrace/,
+  "compiler input read model should use visibility-aware source trace reads for trusted non-private non-self-authored evidence",
 );
 for (const tableName of [
   "communitySourceTraces",

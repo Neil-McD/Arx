@@ -1256,8 +1256,11 @@ Rules:
 - Active evidence is limited to `visibilityScope`: `admin`, `community`, or `public`.
 - Private source traces may exist, but they are not part of the community compiler backlog.
 - Private source traces use `compilerState: excluded_by_visibility` instead of `pending`.
+- Community-agent-authored source traces are not compiler evidence. They use `compilerState: excluded_self_authored` instead of `pending`.
+- The self-authored exclusion is keyed only by `actorAgentKey: community_agent`; personal-agent traces can still be member evidence.
 - If a private trace later becomes `admin`, `community`, or `public`, the material visibility change can reopen it as pending.
 - If a pending trace later becomes private, it leaves the pending backlog and clears handled/digest metadata.
+- If a pending trace is discovered to be self-authored by the community agent, the digest pass drains it to `excluded_self_authored` before measurement.
 - The pending selector must use visibility-aware indexes. It must not scan all pending traces and filter private rows afterward.
 - Evidence priority has only three tiers:
   - `standard`
@@ -1270,8 +1273,9 @@ Rules:
 - `communitySourceTraces` own compiler lifecycle state. The digest table is not the backlog ledger.
 - New eligible source traces enter with `compilerState: pending` and `compilerPendingSince` set to creation time.
 - Material source trace updates reopen eligible traces as `compilerState: pending`, clear handled metadata, and set a fresh pending clock unless the trace was already pending.
+- Community-agent-authored source traces are born terminal as `excluded_self_authored`; they must not inflate trigger counts, selected trace ids, or digest source-trace evidence.
 - Idempotent source trace upserts should not reopen already handled evidence.
-- Legacy source traces without compiler lifecycle fields are treated as pending only when their visibility is compiler-eligible.
+- Legacy source traces without compiler lifecycle fields are treated as pending only when their visibility is compiler-eligible and they are not self-authored by the community agent.
 - The compiler should run when any of these are true:
   - 20 pending eligible evidence units exist
   - 5 strong evidence units exist

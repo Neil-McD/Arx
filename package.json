@@ -201,6 +201,7 @@
     "check:community-compiler-digest-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_digest_contract_proof.ts",
     "check:community-compiler-candidates-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_candidates_contract_proof.ts",
     "check:community-compiler-evidence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_evidence_contract_proof.ts",
+    "check:community-compiler-evidence-diet-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_evidence_diet_contract_proof.ts",
     "check:community-agent-filesystem-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_filesystem_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts",

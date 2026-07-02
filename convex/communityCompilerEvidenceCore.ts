@@ -6,6 +6,7 @@ export const COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 72 * 60 * 60 * 1000;
 export const COMPILER_EVIDENCE_RUN_LIMIT = 100;
 export const COMPILER_EVIDENCE_SCAN_LIMIT = 500;
 export const COMPILER_EVIDENCE_VISIBILITY_SCOPES = ["admin", "community", "public"] as const;
+export const COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY = "community_agent";
 
 export type EvidencePriority = "standard" | "strong" | "critical";
 export type SourceTraceCompilerState =
@@ -13,7 +14,8 @@ export type SourceTraceCompilerState =
   | "compiled"
   | "dismissed_low_signal"
   | "carried_forward"
-  | "excluded_by_visibility";
+  | "excluded_by_visibility"
+  | "excluded_self_authored";
 type CompilerEligibleVisibility = typeof COMPILER_EVIDENCE_VISIBILITY_SCOPES[number];
 type TriggerReason =
   | "critical_evidence"
@@ -53,8 +55,27 @@ export function compilerStateForSourceTraceVisibility(visibilityScope: string): 
   return isCommunityCompilerEligibleVisibility(visibilityScope) ? "pending" : "excluded_by_visibility";
 }
 
+export function isCommunityAgentSelfAuthoredTrace(row: { actorAgentKey?: string }): boolean {
+  return String(row.actorAgentKey ?? "").trim() === COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY;
+}
+
+export function compilerStateForSourceTraceLifecycle(args: {
+  visibilityScope: string;
+  actorAgentKey?: string;
+}): SourceTraceCompilerState {
+  if (isCommunityAgentSelfAuthoredTrace(args)) return "excluded_self_authored";
+  return compilerStateForSourceTraceVisibility(args.visibilityScope);
+}
+
+export function isCommunityCompilerEvidenceTrace(row: {
+  visibilityScope: string;
+  actorAgentKey?: string;
+}): boolean {
+  return !isCommunityAgentSelfAuthoredTrace(row) && isCommunityCompilerEligibleVisibility(row.visibilityScope);
+}
+
 function compilerState(row: SourceTraceRow): SourceTraceCompilerState {
-  return row.compilerState ?? compilerStateForSourceTraceVisibility(row.visibilityScope);
+  return row.compilerState ?? compilerStateForSourceTraceLifecycle(row);
 }
 
 export function compilerPendingSince(row: SourceTraceRow): number {
@@ -168,20 +189,17 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
   const pendingRowsFetch = pendingRowsByVisibility.flatMap((rows) => rows.slice(0, COMPILER_EVIDENCE_SCAN_LIMIT));
   const legacyRowsFetch = legacyRowsByVisibility.flatMap((rows) => rows.slice(0, COMPILER_EVIDENCE_SCAN_LIMIT));
   const legacyPendingRows = legacyRowsFetch.filter((row) =>
-    row.compilerState === undefined && isCommunityCompilerEligibleVisibility(row.visibilityScope)
+    row.compilerState === undefined && isCommunityCompilerEvidenceTrace(row)
   );
   const hasMorePending =
     pendingRowsByVisibility.some((rows) => rows.length > COMPILER_EVIDENCE_SCAN_LIMIT) ||
-    legacyRowsByVisibility.some((rows) =>
-      rows.length > COMPILER_EVIDENCE_SCAN_LIMIT &&
-      rows.some((row) => row.compilerState === undefined && isCommunityCompilerEligibleVisibility(row.visibilityScope))
-    );
+    legacyRowsByVisibility.some((rows) => rows.length > COMPILER_EVIDENCE_SCAN_LIMIT);
   const traceRows = uniqueTraceRows([
     ...pendingRowsFetch,
     ...legacyPendingRows,
   ])
     .filter((row) => compilerState(row) === "pending")
-    .filter((row) => isCommunityCompilerEligibleVisibility(row.visibilityScope))
+    .filter((row) => isCommunityCompilerEvidenceTrace(row))
     .sort((a, b) => compilerPendingSince(a) - compilerPendingSince(b) || a.createdAt - b.createdAt || a.updatedAt - b.updatedAt)
     .slice(0, COMPILER_EVIDENCE_SCAN_LIMIT);
   const pending = traceRows.map((row) => ({ row, priority: classifyEvidencePriority(row) }));
@@ -235,4 +253,36 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
     },
     selectedRows: selected.map((item) => item.row),
   };
+}
+
+export async function drainSelfAuthoredPendingSourceTracesForCommunity(args: {
+  ctx: any;
+  communityId: any;
+  nowMs: number;
+}): Promise<number> {
+  let drained = 0;
+  for (const visibilityScope of COMPILER_EVIDENCE_VISIBILITY_SCOPES) {
+    const rows = (await args.ctx.db
+      .query("communitySourceTraces" as any)
+      .withIndex("by_community_compilerState_visibility_pendingSince", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("compilerState", "pending")
+          .eq("visibilityScope", visibilityScope),
+      )
+      .order("asc")
+      .take(COMPILER_EVIDENCE_SCAN_LIMIT)) as SourceTraceRow[];
+    for (const row of rows) {
+      if (!isCommunityAgentSelfAuthoredTrace(row)) continue;
+      await args.ctx.db.patch(row._id as any, {
+        compilerState: "excluded_self_authored" as const,
+        compilerPendingSince: undefined,
+        compilerLastHandledAt: args.nowMs,
+        compilerLastDigestId: undefined,
+        updatedAt: args.nowMs,
+      });
+      drained += 1;
+    }
+  }
+  return drained;
 }

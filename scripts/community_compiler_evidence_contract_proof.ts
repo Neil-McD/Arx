@@ -60,13 +60,13 @@ assert.match(
 );
 assert.match(
   evidenceCore,
-  /COMPILER_EVIDENCE_VISIBILITY_SCOPES\.map\(\(visibilityScope\)[\s\S]*\.withIndex\("by_community_visibility_createdAt"[\s\S]*\.eq\("communityId", args\.communityId\)\.eq\("visibilityScope", visibilityScope\)[\s\S]*legacyPendingRows = legacyRowsFetch\.filter\(\(row\) =>[\s\S]*row\.compilerState === undefined && isCommunityCompilerEligibleVisibility\(row\.visibilityScope\)/,
-  "measurement should treat legacy eligible source traces without compiler state as pending until handled",
+  /COMPILER_EVIDENCE_VISIBILITY_SCOPES\.map\(\(visibilityScope\)[\s\S]*\.withIndex\("by_community_visibility_createdAt"[\s\S]*\.eq\("communityId", args\.communityId\)\.eq\("visibilityScope", visibilityScope\)[\s\S]*legacyPendingRows = legacyRowsFetch\.filter\(\(row\) =>[\s\S]*row\.compilerState === undefined && isCommunityCompilerEvidenceTrace\(row\)/,
+  "measurement should treat legacy eligible non-self-authored source traces without compiler state as pending until handled",
 );
 assert.match(
   evidenceCore,
-  /hasMorePending =[\s\S]*pendingRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*legacyRowsByVisibility\.some\(\(rows\) =>[\s\S]*isCommunityCompilerEligibleVisibility\(row\.visibilityScope\)/,
-  "scan-cap lower-bound reporting should be tied to eligible pending evidence, not total community trace volume",
+  /hasMorePending =[\s\S]*pendingRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*legacyRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)/,
+  "scan-cap lower-bound reporting should be conservative whenever the bounded fetch may hide more rows",
 );
 assert.match(
   evidenceCore,
@@ -90,7 +90,7 @@ assert.match(
 );
 assert.match(
   schema,
-  /communitySourceTraces: defineTable\(\{[\s\S]*compilerState: v\.optional\([\s\S]*v\.literal\("pending"\)[\s\S]*v\.literal\("compiled"\)[\s\S]*v\.literal\("dismissed_low_signal"\)[\s\S]*v\.literal\("carried_forward"\)[\s\S]*v\.literal\("excluded_by_visibility"\)[\s\S]*compilerPendingSince: v\.optional\(v\.number\(\)\)[\s\S]*compilerLastHandledAt: v\.optional\(v\.number\(\)\)[\s\S]*compilerLastDigestId: v\.optional\(v\.id\("communityCompilerDigests"\)\)/,
+  /communitySourceTraces: defineTable\(\{[\s\S]*compilerState: v\.optional\([\s\S]*v\.literal\("pending"\)[\s\S]*v\.literal\("compiled"\)[\s\S]*v\.literal\("dismissed_low_signal"\)[\s\S]*v\.literal\("carried_forward"\)[\s\S]*v\.literal\("excluded_by_visibility"\)[\s\S]*v\.literal\("excluded_self_authored"\)[\s\S]*compilerPendingSince: v\.optional\(v\.number\(\)\)[\s\S]*compilerLastHandledAt: v\.optional\(v\.number\(\)\)[\s\S]*compilerLastDigestId: v\.optional\(v\.id\("communityCompilerDigests"\)\)/,
   "source trace schema should store explicit compiler lifecycle state",
 );
 assert.match(
@@ -110,8 +110,8 @@ assert.match(
 );
 assert.match(
   directory,
-  /sourceTraceCompilerLifecyclePatch[\s\S]*compilerState: nextState[\s\S]*compilerPendingSince: undefined[\s\S]*compilerState: "pending" as const[\s\S]*compilerPendingSince: nextSourceTracePendingSince/,
-  "source trace lifecycle should exclude private traces and reopen eligible material updates as pending",
+  /sourceTraceCompilerLifecyclePatch[\s\S]*compilerStateForSourceTraceLifecycle[\s\S]*compilerState: nextState[\s\S]*compilerPendingSince: undefined[\s\S]*compilerState: "pending" as const[\s\S]*compilerPendingSince: nextSourceTracePendingSince/,
+  "source trace lifecycle should exclude private/self-authored traces and reopen eligible material updates as pending",
 );
 assert.match(
   directory,
@@ -124,6 +124,7 @@ assert.match(
   "docs should describe the simple evidence measurement model",
 );
 assert.match(docs, /Private source traces use `compilerState: excluded_by_visibility`/);
+assert.match(docs, /Community-agent-authored source traces are not compiler evidence/);
 assert.match(docs, /pending selector must use visibility-aware indexes/);
 assert.match(docs, /New eligible source traces enter with `compilerState: pending`/);
 assert.match(docs, /does not use the 30-day compiler window as an eligibility cutoff/);

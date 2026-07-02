@@ -1,6 +1,9 @@
-import { internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { measureCommunityCompilerEvidenceForCommunity } from "./communityCompilerEvidenceCore";
+import {
+  drainSelfAuthoredPendingSourceTracesForCommunity,
+  measureCommunityCompilerEvidenceForCommunity,
+} from "./communityCompilerEvidenceCore";
 
 export const measureCommunityCompilerEvidenceInternal = internalQuery({
   args: {
@@ -17,5 +20,23 @@ export const measureCommunityCompilerEvidenceInternal = internalQuery({
       nowMs: args.nowMs ?? Date.now(),
     });
     return measurement;
+  },
+});
+
+export const drainSelfAuthoredPendingSourceTracesInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    if (!community) throw new Error("community_compiler_evidence_community_not_found");
+
+    const drained = await drainSelfAuthoredPendingSourceTracesForCommunity({
+      ctx,
+      communityId: args.communityId,
+      nowMs: args.nowMs ?? Date.now(),
+    });
+    return { ok: true, drained };
   },
 });

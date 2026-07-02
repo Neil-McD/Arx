@@ -85,6 +85,12 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
   handler: async (ctx, args) => {
     const heartbeatId = boundedText(args.heartbeatId, 200) || undefined;
     const modelId = boundedText(args.modelId, 128) || undefined;
+    await ctx.runMutation(
+      internalRefs.communityCompilerEvidence.drainSelfAuthoredPendingSourceTracesInternal,
+      {
+        communityId: args.communityId,
+      },
+    );
     const compilerEvidence = (await ctx.runQuery(
       internalRefs.communityCompilerEvidence.measureCommunityCompilerEvidenceInternal,
       {
@@ -167,7 +173,7 @@ export const assessCommunityAgentCycleInternal = internalQuery({
     const configRows = (await ctx.db
       .query("communityAgentConfigs" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as Array<Record<string, any>>;
+      .take(5)) as Array<Record<string, any>>;
     const config = configRows
       .slice()
       .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null;

@@ -18,8 +18,25 @@ assert.match(
 assert.match(heartbeat, /export const enqueueCommunityAgentHeartbeatInternal = internalMutation/);
 assert.match(heartbeat, /export const runCommunityAgentHeartbeatInternal = internalAction/);
 assert.doesNotMatch(heartbeat, /export const .* = action\(|export const .* = mutation\(/);
-assert.doesNotMatch(heartbeat, /userPrompt|prompt: v\.string|authSubject|userId|agentKey/);
-assert.doesNotMatch(heartbeat, /query\("communities"|\.collect\(\)/);
+assert.doesNotMatch(heartbeat, /userPrompt|prompt: v\.string|authSubject/);
+assert.doesNotMatch(heartbeat, /\.collect\(\)/);
+
+{
+  const singleCommunityHeartbeatSurface = heartbeat.slice(
+    0,
+    heartbeat.indexOf("export const listCommunityMemorySweepTargetsInternal"),
+  );
+  assert.doesNotMatch(
+    singleCommunityHeartbeatSurface,
+    /query\("communities"/,
+    "single-community heartbeat enqueue/run path should not enumerate communities",
+  );
+}
+assert.match(
+  heartbeat,
+  /listCommunityMemorySweepTargetsInternal[\s\S]*query\("communities" as any\)\.take\(limit\)/,
+  "only the platform sweep target lister should enumerate communities, and it must be bounded",
+);
 
 assert.match(
   heartbeat,
@@ -38,8 +55,13 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /ctx\.runAction\(internalRefs\.communityAgentRuntime\.runCommunityAgentLoopInternal[\s\S]*communityId: args\.communityId[\s\S]*triggerType: "heartbeat"[\s\S]*heartbeatId/,
+  /ctx\.runAction\(internalRefs\.communityAgentRuntime\.runCommunityAgentCycleInternal[\s\S]*communityId: args\.communityId[\s\S]*triggerType: "heartbeat"[\s\S]*heartbeatId/,
   "heartbeat action should bridge into the canonical runtime with heartbeat trigger",
+);
+assert.match(
+  heartbeat,
+  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*measureCommunityCompilerEvidenceInternal/,
+  "heartbeat action should drain self-authored pending traces before measuring trigger evidence",
 );
 assert.match(
   heartbeat,
@@ -53,7 +75,7 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /runCommunityAgentLoopInternal[\s\S]*wakeReason: wakeEvidence\.reason[\s\S]*wakeEvidence/,
+  /runCommunityAgentCycleInternal[\s\S]*wakeReason: wakeEvidence\.reason[\s\S]*wakeEvidence/,
   "heartbeat action should pass wake reason and evidence into real community-agent runs",
 );
 

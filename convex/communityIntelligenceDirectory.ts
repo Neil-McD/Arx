@@ -10,7 +10,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
-  compilerStateForSourceTraceVisibility,
+  compilerStateForSourceTraceLifecycle,
   type SourceTraceCompilerState,
 } from "./communityCompilerEvidenceCore";
 
@@ -383,7 +383,7 @@ function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
 }
 
 function sourceTraceCompilerState(row: SourceTraceRow): SourceTraceCompilerState {
-  return row.compilerState ?? compilerStateForSourceTraceVisibility(row.visibilityScope);
+  return row.compilerState ?? compilerStateForSourceTraceLifecycle(row);
 }
 
 function shouldMarkSourceTracePending(existing: SourceTraceRow, materialChanged: boolean): boolean {
@@ -402,11 +402,15 @@ function nextSourceTracePendingSince(existing: SourceTraceRow, materialChanged: 
 function sourceTraceCompilerLifecyclePatch(args: {
   existing?: SourceTraceRow;
   visibilityScope: VisibilityScope;
+  actorAgentKey?: string;
   materialChanged: boolean;
   nowMs: number;
 }) {
-  const nextState = compilerStateForSourceTraceVisibility(args.visibilityScope);
-  if (nextState === "excluded_by_visibility") {
+  const nextState = compilerStateForSourceTraceLifecycle({
+    visibilityScope: args.visibilityScope,
+    actorAgentKey: args.actorAgentKey,
+  });
+  if (nextState === "excluded_by_visibility" || nextState === "excluded_self_authored") {
     return {
       compilerState: nextState,
       compilerPendingSince: undefined,
@@ -1537,6 +1541,7 @@ export async function upsertCommunitySourceTrace(args: {
     const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch({
       existing,
       visibilityScope,
+      actorAgentKey,
       materialChanged,
       nowMs: args.nowMs,
     });
@@ -1561,6 +1566,7 @@ export async function upsertCommunitySourceTrace(args: {
 
   const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch({
     visibilityScope,
+    actorAgentKey,
     materialChanged: true,
     nowMs: args.nowMs,
   });
