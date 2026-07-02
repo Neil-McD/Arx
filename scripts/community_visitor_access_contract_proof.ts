@@ -88,4 +88,50 @@ assert.match(
   "chat access must stay entitlement-gated — visitor mode must never loosen requireCommunityChatAccess",
 );
 
+const activityCounts = communityPublic.slice(
+  communityPublic.indexOf("async function resolvePublicCommunityActivityCounts"),
+  communityPublic.indexOf("async function resolvePublicCommunityStats"),
+);
+assert.notEqual(activityCounts.length, 0, "public activity counts helper must exist");
+assert.match(
+  activityCounts,
+  /\.take\(cap\)/,
+  "every public activity count must be a capped read — this surface serves unauthenticated traffic",
+);
+assert.doesNotMatch(
+  activityCounts,
+  /\.collect\(\)/,
+  "public activity counts must never collect unbounded rows",
+);
+assert.match(
+  activityCounts,
+  /eq\("status", "live"\)/,
+  "messages-today must count only live interactions — hidden and deleted rows are not truths",
+);
+assert.match(
+  activityCounts,
+  /communityResourceIsLiveModulePage/,
+  "the public resource count must reuse the member-visibility filter — the visitor number is what a member would see",
+);
+assert.match(
+  activityCounts,
+  /visibilityScope === "community" \|\| row\.visibilityScope === "public"/,
+  "the public memory count must only include member-readable notes — private and admin notes stay invisible",
+);
+assert.match(
+  communityPublic,
+  /const PUBLIC_MEMORY_NOTE_STATUSES = \["promising", "validated", "canonical", "contested", "stale"\]/,
+  "public memory statuses must stay in parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory",
+);
+assert.match(
+  communityPublic,
+  /messages_today_count[\s\S]*resource_count[\s\S]*memory_note_count/,
+  "the public stats payload must carry the lock metadata for the visitor surface",
+);
+assert.match(
+  communityPublic,
+  /joined_last_30d_count: stats\.joinedLast30dCount/,
+  "the public stats payload must carry the joined-recently social proof count",
+);
+
 console.log("community visitor access contract proof passed");

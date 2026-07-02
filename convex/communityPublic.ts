@@ -9,8 +9,11 @@ import {
   type CommunityLike,
   type CommunityMembershipLike,
   type CommunityPricePointLike,
+  type CommunityResourceModuleLike,
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   countCanonicalCommunityMembersFromRows,
   listCanonicalCommunityMemberMembershipRows,
   mapActivePlanSummaries,
@@ -95,12 +98,88 @@ async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Pr
   return mapActivePlanSummaries(activePricePoints);
 }
 
+const PUBLIC_ACTIVITY_COUNT_CAP = 200;
+const PUBLIC_MESSAGES_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const PUBLIC_JOINED_RECENTLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+/* Parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory:
+   the visitor number must only count notes a member could actually read. */
+const PUBLIC_MEMORY_NOTE_STATUSES = ["promising", "validated", "canonical", "contested", "stale"];
+
+/* True-metadata counts for the visitor surface (locked tabs + gate receipt).
+   Serves unauthenticated traffic: capped index-range reads only, and every
+   number is one a member could verify from inside — live messages,
+   member-visible resources, member-readable memory notes. */
+async function resolvePublicCommunityActivityCounts(ctx: any, communityId: any): Promise<{
+  messagesTodayCount: number;
+  messagesTodayCapped: boolean;
+  resourceCount: number;
+  resourceCountCapped: boolean;
+  memoryNoteCount: number;
+  memoryNoteCountCapped: boolean;
+}> {
+  const cap = PUBLIC_ACTIVITY_COUNT_CAP;
+  const sinceMs = Date.now() - PUBLIC_MESSAGES_TODAY_WINDOW_MS;
+  const liveRootsToday = await ctx.db
+    .query("communityInteractionRoots" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "live").gte("createdAt", sinceMs),
+    )
+    .take(cap);
+  const liveRepliesToday = await ctx.db
+    .query("communityInteractionReplies" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "live").gte("createdAt", sinceMs),
+    )
+    .take(cap);
+  const rawMessagesToday = liveRootsToday.length + liveRepliesToday.length;
+
+  const resourceRows = await ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .take(cap);
+  const moduleRows = (await ctx.db
+    .query("communityResourceModules" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .take(cap)) as CommunityResourceModuleLike[];
+  const liveModuleIds = new Set(
+    moduleRows.filter(communityResourceModuleIsLive).map((module) => String(module._id)),
+  );
+  const memberVisibleResources = resourceRows.filter((row: any) =>
+    communityResourceIsLiveModulePage(row, liveModuleIds),
+  );
+
+  let memoryNoteCount = 0;
+  let memoryNoteCountCapped = false;
+  for (const status of PUBLIC_MEMORY_NOTE_STATUSES) {
+    const bucket = await ctx.db
+      .query("communityIntelligenceNodes" as any)
+      .withIndex("by_community_status_updatedAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", status),
+      )
+      .take(cap);
+    if (bucket.length >= cap) memoryNoteCountCapped = true;
+    memoryNoteCount += bucket.filter(
+      (row: any) => row.visibilityScope === "community" || row.visibilityScope === "public",
+    ).length;
+  }
+
+  return {
+    messagesTodayCount: Math.min(rawMessagesToday, cap),
+    messagesTodayCapped: rawMessagesToday >= cap,
+    resourceCount: memberVisibleResources.length,
+    resourceCountCapped: resourceRows.length >= cap,
+    memoryNoteCount,
+    memoryNoteCountCapped,
+  };
+}
+
 async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): Promise<{
   memberCount: number;
   adminCount: number;
   onlineCount: number;
   onlineFaces: PublicCommunityFace[];
   onlineUserIds: string[];
+  joinedLast30dCount: number;
 }> {
   const { rows: activeMemberships } = await listCanonicalCommunityMemberMembershipRows({
     ctx,
@@ -161,12 +240,19 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     )
   ).filter(Boolean) as string[];
 
+  const joinedSinceMs = Date.now() - PUBLIC_JOINED_RECENTLY_WINDOW_MS;
+  const joinedLast30dCount = activeMemberships.reduce(
+    (count, membership) => count + (membership.createdAt >= joinedSinceMs ? 1 : 0),
+    0,
+  );
+
   return {
     memberCount,
     adminCount: adminUserIds.size,
     onlineCount: onlineUserIds.length,
     onlineFaces,
     onlineUserIds: onlineUserPublicIds,
+    joinedLast30dCount,
   };
 }
 
@@ -176,6 +262,7 @@ function mapPublicCommunityStats(stats: {
   onlineCount: number;
   onlineFaces: PublicCommunityFace[];
   onlineUserIds: string[];
+  joinedLast30dCount: number;
 }) {
   return {
     member_count: stats.memberCount,
@@ -183,6 +270,7 @@ function mapPublicCommunityStats(stats: {
     online_count: stats.onlineCount,
     online_faces: stats.onlineFaces,
     online_user_ids: stats.onlineUserIds,
+    joined_last_30d_count: stats.joinedLast30dCount,
   };
 }
 
@@ -292,9 +380,18 @@ export const resolvePublicFunnelStatsBySlug = query({
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
 
+    const activityCounts = await resolvePublicCommunityActivityCounts(ctx, community._id);
     return {
       ok: true,
-      community: mapPublicCommunityStats(await resolvePublicCommunityStats(ctx, community)),
+      community: {
+        ...mapPublicCommunityStats(await resolvePublicCommunityStats(ctx, community)),
+        messages_today_count: activityCounts.messagesTodayCount,
+        messages_today_capped: activityCounts.messagesTodayCapped,
+        resource_count: activityCounts.resourceCount,
+        resource_count_capped: activityCounts.resourceCountCapped,
+        memory_note_count: activityCounts.memoryNoteCount,
+        memory_note_count_capped: activityCounts.memoryNoteCountCapped,
+      },
     };
   },
 });
