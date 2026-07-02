@@ -7,6 +7,7 @@ import {
   filterOnlineAvatarFaces,
 } from "../../../../shared/communityFunnelUi";
 import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
+import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
 
 type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
@@ -30,6 +31,10 @@ export type PublicCommunityFunnelCommunityLike = {
   member_count?: number | null;
   admin_count?: number | null;
   online_count?: number | null;
+  joined_last_30d_count?: number | null;
+  messages_today_count?: number | null;
+  memory_note_count?: number | null;
+  resource_count?: number | null;
   online_faces?: Array<{
     user_id: string;
     display_name: string | null;
@@ -294,6 +299,47 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
           </aside>
         </div>
       </div>
+    );
+  }
+
+  if (!isPreviewMode) {
+    return (
+      <WebCommunityVisitorSurface
+        isMobile={isMobile}
+        title={communityName}
+        action={action}
+        host={publicCommunity?.host ?? null}
+        banner={
+          publicCommunity?.banner_url
+            ? {
+                url: publicCommunity.banner_url,
+                focusX: publicCommunity.banner_focus_x ?? null,
+                focusY: publicCommunity.banner_focus_y ?? null,
+                zoom: publicCommunity.banner_zoom ?? null,
+              }
+            : null
+        }
+        aboutText={aboutText}
+        heroMediaKind={funnel?.hero_media_kind ?? "image"}
+        heroMediaUrl={funnel?.hero_media_url ?? null}
+        heroArtImageUrl={actionCardArt.imageUrl}
+        heroArtImageStyle={actionCardArt.imageStyle ?? null}
+        featuredMessages={publicCommunity?.featured_messages ?? null}
+        stats={{
+          onlineCount,
+          onlineFaces,
+          memberCount,
+          joinedLast30dCount: publicCommunity?.joined_last_30d_count ?? null,
+          messagesTodayCount: publicCommunity?.messages_today_count ?? null,
+          memoryNoteCount: publicCommunity?.memory_note_count ?? null,
+          resourceCount: publicCommunity?.resource_count ?? null,
+        }}
+        pricingLabel={pricingLabel}
+        isFreePricing={isFreePricing}
+        alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
+        gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
+        showPoweredBy
+      />
     );
   }
 

@@ -126,7 +126,7 @@ function splitTrailingPunctuation(url: string): { core: string; trailing: string
   };
 }
 
-function renderTextWithLinks(text: string): JSX.Element[] {
+export function renderTextWithLinks(text: string): JSX.Element[] {
   const lines = text.split(/\r?\n/);
   const urlPattern = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
 
@@ -252,7 +252,7 @@ function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
   );
 }
 
-function renderHeroMediaDefault(kind: CommunityFunnelHeroMediaKind, url: string | null) {
+export function renderHeroMediaDefault(kind: CommunityFunnelHeroMediaKind, url: string | null) {
   if (!url) return null;
   if (kind === "video") {
     const embed = parseEmbedUrl(url);
@@ -274,7 +274,7 @@ function renderHeroMediaDefault(kind: CommunityFunnelHeroMediaKind, url: string 
 
 const GATE_STORAGE_PREFIX = "cfg-gate-seen:";
 
-function hasSeenGate(slugKey: string): boolean {
+export function hasSeenGate(slugKey: string): boolean {
   try {
     return window.localStorage.getItem(`${GATE_STORAGE_PREFIX}${slugKey}`) === "1";
   } catch {
@@ -282,7 +282,7 @@ function hasSeenGate(slugKey: string): boolean {
   }
 }
 
-function markGateSeen(slugKey: string) {
+export function markGateSeen(slugKey: string) {
   try {
     window.localStorage.setItem(`${GATE_STORAGE_PREFIX}${slugKey}`, "1");
   } catch {
@@ -388,7 +388,7 @@ function GuestInertRow(props: {
   );
 }
 
-function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction }) {
+export function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction }) {
   const { action } = props;
   return (
     <>
