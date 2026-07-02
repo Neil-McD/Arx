@@ -1262,14 +1262,14 @@ export async function resolveCommunityAccessBundle(args: {
           ? "member"
           : joinRequestStatus === "pending" && !isBlocked
             ? "pending"
-            : !isBlocked && args.community.visibility === "published"
+            : !isBlocked
               ? "visitor"
               : null;
   const canViewLanding = true;
   const canEnterCommunity = isEntitled;
   const canReadChat = isEntitled;
   const canPostChat = isEntitled;
-  const canView = isEntitled || args.community.visibility === "published";
+  const canView = !isBlocked;
   const canManageMembers = isOwner || isAdmin;
   const canManageResources = isOwner || isAdmin;
   const canModerateContent = isOwner || isAdmin || isModerator;

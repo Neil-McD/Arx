@@ -3250,7 +3250,7 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q: any) => q.eq("slug", slug))
       .first();
-    if (!community || community.visibility !== "published") return { ok: false as const };
+    if (!community) return { ok: false as const };
 
     const { nodes, hasMoreNodes } = await readPolynetOverviewNodes({
       ctx,

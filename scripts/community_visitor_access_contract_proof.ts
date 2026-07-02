@@ -48,7 +48,7 @@ assert.match(
 assert.match(
   accessQuery,
   /if \(!access\.relation\) return \{ ok: false as const \}/,
-  "null relation (blocked or unpublished-to-strangers) must be absent, not teased",
+  "null relation (blocked callers only) must be absent, not teased",
 );
 assert.match(
   accessQuery,
@@ -79,8 +79,13 @@ assert.match(
 
 assert.match(
   communityCore,
-  /: !isBlocked && args\.community\.visibility === "published"\s*\?\s*"visitor"/,
-  "the visitor relation must require published visibility and no block — the ladder is the single source of the visitor state",
+  /: !isBlocked\s*\?\s*"visitor"\s*:\s*null;/,
+  "the visitor relation gates on block ONLY — visibility is discovery, never a view gate (unlisted grants visitor exactly like published)",
+);
+assert.doesNotMatch(
+  communityCore,
+  /args\.community\.visibility === "published"/,
+  "no branch in the access bundle may gate on community visibility — the Discover directory is its sole consumer",
 );
 assert.match(
   communityCore,
@@ -151,10 +156,10 @@ const publicMemoryOverview = intelligenceDirectory.slice(
   intelligenceDirectory.indexOf("export const retrieveCommunityIntelligenceForWorkflow"),
 );
 assert.notEqual(publicMemoryOverview.length, 0, "public memory overview query must exist");
-assert.match(
+assert.doesNotMatch(
   publicMemoryOverview,
-  /visibility !== "published"\) return \{ ok: false as const \}/,
-  "the public memory overview must serve published communities only",
+  /visibility !== "published"/,
+  "the public memory overview must NOT gate on visibility — unlisted communities serve their memory graph exactly like published",
 );
 assert.match(
   publicMemoryOverview,
@@ -175,6 +180,14 @@ assert.match(
   communityModule,
   /export const resolvePublicCommunityMemoryOverviewBySlug = resolvePublicCommunityMemoryOverviewBySlugImpl/,
   "community.ts must expose the public memory overview (re-export chain)",
+);
+
+// The ONE legitimate reader of community visibility: the Discover directory.
+const discoverQuery = sliceExport(communityPublic, "listPublicDiscoverCommunities");
+assert.match(
+  discoverQuery,
+  /visibility", "published"/,
+  "the Discover directory must remain the sole surface that filters on published visibility — visibility = discovery, nothing else",
 );
 
 console.log("community visitor access contract proof passed");
