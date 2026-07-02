@@ -8966,6 +8966,34 @@ button.community-launch-knowledge-integration-chip:disabled {
   line-height: 1.4;
 }
 
+/* Visitor mode: a locked section body. The header above it keeps its true
+   count — the lock gates the content, never the metadata. */
+.community-context-locked {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 9px;
+  padding: 12px 11px;
+  border: 1px dashed var(--border-default);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-context-locked:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-strong, var(--border-default));
+}
+
+.community-context-locked svg {
+  flex: none;
+}
+
 .community-context-memory-error button {
   border: 0;
   background: transparent;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
-import { Check, ChevronDown, MessageCircle, MoreHorizontal, X } from "lucide-react";
+import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type {
@@ -72,6 +72,11 @@ type CommunityContextPanelProps = {
   memoryLoadError?: string | null;
   onRefreshMemory?: () => void;
   onOpenMemory?: () => void;
+  /* Visitor mode: sections render a visible lock body instead of live data.
+     Headers keep their true counts — gate the content, show the metadata. */
+  lockedSections?: { members?: boolean; memory?: boolean } | null;
+  onLockedSectionActivate?: (section: "members" | "memory") => void;
+  memoryCountLabelOverride?: string | null;
   onOpenMemberSettings?: (member: CommunityRailMember) => void;
   onOpenMemberProfile?: (userId: string) => void;
   onMessageMember?: (userId: string) => void;
@@ -133,9 +138,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     ? String(knownMemberCount)
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
   const memoryOverview = props.memoryOverview ?? null;
-  const memoryCountLabel = formatMemoryCount(memoryOverview);
+  const memoryCountLabel = formatMemoryCount(memoryOverview) ?? props.memoryCountLabelOverride ?? null;
   const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isDirectoryMemoryNode);
   const memorySectionLabel = memoryCountLabel ? `Memory — ${memoryCountLabel}` : "Memory";
+  const lockedMembers = Boolean(props.lockedSections?.members);
+  const lockedMemory = Boolean(props.lockedSections?.memory);
   const memoryActivityLabel = memoryOverview
     ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
     : null;
@@ -445,7 +452,16 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <div className="community-context-memory-head">
           <div className="community-context-section">{memorySectionLabel}</div>
         </div>
-        {props.isLoadingMemory && !memoryOverview ? (
+        {lockedMemory ? (
+          <button
+            type="button"
+            className="community-context-locked"
+            onClick={() => props.onLockedSectionActivate?.("memory")}
+          >
+            <Lock size={15} strokeWidth={1.9} aria-hidden="true" />
+            <span>Everything this community has learned. Unlocks when you join.</span>
+          </button>
+        ) : props.isLoadingMemory && !memoryOverview ? (
           <div className="community-context-memory-empty">
             <span>Loading memory...</span>
           </div>
@@ -557,22 +573,32 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             ) : null}
           </div>
         ) : null}
-        {onlineTotal > 0 ? (
+        {lockedMembers ? (
+          <button
+            type="button"
+            className="community-context-locked"
+            onClick={() => props.onLockedSectionActivate?.("members")}
+          >
+            <Lock size={15} strokeWidth={1.9} aria-hidden="true" />
+            <span>See who&apos;s here when you&apos;re in.</span>
+          </button>
+        ) : null}
+        {!lockedMembers && onlineTotal > 0 ? (
           <>
             <div className="community-context-section">Online — {onlineTotal}</div>
             {onlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {offlineTotal > 0 || offlineMembers.length > 0 ? (
+        {!lockedMembers && (offlineTotal > 0 || offlineMembers.length > 0) ? (
           <>
             <div className="community-context-section">Offline — {offlineCountLabel}</div>
             {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {loadedMemberCount === 0 && props.isLoadingMembers ? (
+        {!lockedMembers && loadedMemberCount === 0 && props.isLoadingMembers ? (
           <div className="community-context-members-status">Loading members...</div>
         ) : null}
-        {shouldShowMembersFooter ? (
+        {!lockedMembers && shouldShowMembersFooter ? (
           <div
             ref={props.membersHasMore ? loadMoreSentinelRef : undefined}
             className="community-context-members-footer"
