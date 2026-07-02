@@ -184,4 +184,58 @@ assert.match(
   "mention email processing runs on a 15-minute cron",
 );
 
+// M2b abuse posture: the email fires >=15 minutes after the mention, so the
+// snippet must not leak to people who left in between, and a hostile burst of
+// mentions must not become a burst of emails.
+assert.match(
+  mentionEmails,
+  /withIndex\("by_community_user"[\s\S]*?communityMembershipRowIsActive\(/,
+  "mention emails must re-check active membership at email time (ex-members get no snippet)",
+);
+assert.match(
+  mentionEmails,
+  /MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 \* 60 \* 1000/,
+  "mention emails enforce a per-recipient cooldown between runs",
+);
+assert.match(
+  mentionEmails,
+  /withIndex\("by_recipientUserId"[\s\S]*?"mention_notification"/,
+  "the cooldown derives from the recipient's latest mention email in the outbox",
+);
+assert.match(
+  mentionEmails,
+  /cooldownByRecipient\.get\(recipientKey\)\) continue/,
+  "mentions inside the cooldown stay pending and batch into the next email",
+);
+assert.match(
+  mentionEmails,
+  /emailedThisRun\.has\(recipientKey\)/,
+  "at most one mention email per recipient per run; extras collapse into it",
+);
+assert.match(
+  mentionEmails,
+  /if \(job\.collapsed\) \{[\s\S]*?notifyState: "sent"/,
+  "collapsed mentions still advance the ledger so they are never re-pinged",
+);
+
+// Injection posture (verified 2026-07-01): every payload-derived string the
+// mention email renders — title (mentioner name), intro (chat snippet), CTA
+// URL — passes through escapeHtml in the shared email shell. Chat text must
+// never become live markup in an inbox.
+assert.match(
+  emailCore,
+  /\$\{escapeHtml\(params\.title\)\}/,
+  "email shell must HTML-escape the title slot (carries user display names)",
+);
+assert.match(
+  emailCore,
+  /\$\{escapeHtml\(intro\)\}/,
+  "email shell must HTML-escape the intro slot (carries chat snippets)",
+);
+assert.match(
+  emailCore,
+  /href="\$\{escapeHtml\(url\)\}"/,
+  "email shell must HTML-escape CTA URLs",
+);
+
 console.log("community_attention_events_contract_proof: ok");

@@ -1,15 +1,22 @@
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { normalizeIdValue } from "./communityCore";
+import { communityMembershipRowIsActive, normalizeIdValue } from "./communityCore";
 
 // M2b: the mention email ping. In-app attention (the accent dot) is the
 // primary signal; email is the fallback for people who are not around. A
 // grace window gives the dot a chance first — mentions still "pending" after
 // it are emailed, preference-gated, and their ledger rows advance to "sent"
 // (or "suppressed" when the recipient has mention emails off).
+//
+// Abuse posture: membership is re-checked at email time (the mention was
+// written >=15 minutes earlier — ex-members must not receive message
+// content), and volume is capped per recipient: one email per run (extra due
+// mentions collapse into it) plus a cooldown between runs (mentions inside
+// it stay pending and batch into the next email).
 
 const MENTION_EMAIL_GRACE_MS = 15 * 60 * 1000;
+const MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 * 60 * 1000;
 const MENTION_EMAIL_BATCH_LIMIT = 25;
 const MENTION_EMAIL_SNIPPET_MAX_CHARS = 140;
 
@@ -73,11 +80,16 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       mentionId: string;
       recipientUserId: string;
       suppressed: boolean;
+      collapsed: boolean;
       communityName: string;
       mentionerName: string;
       snippet: string;
       urlPath: string;
     }> = [];
+    // Per-recipient email caps: one send per run, and a cooldown since the
+    // recipient's last mention email (checked once per recipient).
+    const cooldownByRecipient = new Map<string, boolean>();
+    const emailedThisRun = new Set<string>();
     for (const mention of pending) {
       if (jobs.length >= MENTION_EMAIL_BATCH_LIMIT) break;
       if (mention.mentionKind !== "user" || !mention.mentionedUserId) continue;
@@ -93,24 +105,60 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       if (authorUserId && normalizeIdValue(authorUserId) === normalizeIdValue(mention.mentionedUserId)) continue;
       const community = (await ctx.db.get(mention.communityId)) as Record<string, any> | null;
       if (!community) continue;
-      const author = authorUserId
-        ? ((await ctx.db.get(authorUserId)) as Record<string, any> | null)
-        : null;
+      // Membership re-check at email time: the recipient may have left (or
+      // been removed) since the mention was written; no content leaves the
+      // community for ex-members.
+      const membership = (await ctx.db
+        .query("communityMemberships" as any)
+        .withIndex("by_community_user", (q: any) =>
+          q.eq("communityId", mention.communityId).eq("userId", mention.mentionedUserId))
+        .first()) as Record<string, any> | null;
       const preferences = (await ctx.db
         .query("emailPreferences" as any)
         .withIndex("by_user", (q: any) => q.eq("userId", mention.mentionedUserId))
         .first()) as Record<string, any> | null;
-      const snippet = await readFirstMarkdownBlockText(ctx, {
-        rootId: mention.rootId,
-        replyId: mention.replyId,
-      });
+      const suppressed =
+        !communityMembershipRowIsActive(membership as any) ||
+        preferences?.mentionEmailsEnabled === false;
+      const recipientKey = normalizeIdValue(mention.mentionedUserId);
+      let collapsed = false;
+      if (!suppressed) {
+        if (!cooldownByRecipient.has(recipientKey)) {
+          const lastMentionEmail = (await ctx.db
+            .query("emailOutbox" as any)
+            .withIndex("by_recipientUserId", (q: any) => q.eq("recipientUserId", mention.mentionedUserId))
+            .order("desc")
+            .filter((q: any) => q.eq(q.field("kind"), "mention_notification"))
+            .first()) as Record<string, any> | null;
+          cooldownByRecipient.set(
+            recipientKey,
+            Number(lastMentionEmail?.createdAt ?? 0) > nowMs - MENTION_EMAIL_RECIPIENT_COOLDOWN_MS,
+          );
+        }
+        // In cooldown: leave the mention pending so it batches into the
+        // recipient's next email instead of sending now.
+        if (cooldownByRecipient.get(recipientKey)) continue;
+        collapsed = emailedThisRun.has(recipientKey);
+        if (!collapsed) emailedThisRun.add(recipientKey);
+      }
+      const author = authorUserId
+        ? ((await ctx.db.get(authorUserId)) as Record<string, any> | null)
+        : null;
+      const snippet =
+        suppressed || collapsed
+          ? ""
+          : await readFirstMarkdownBlockText(ctx, {
+              rootId: mention.rootId,
+              replyId: mention.replyId,
+            });
       const slug = boundedText(community.slug, 200);
       jobs.push({
         mentionId: normalizeIdValue(mention._id),
-        recipientUserId: normalizeIdValue(mention.mentionedUserId),
-        suppressed: preferences?.mentionEmailsEnabled === false,
+        recipientUserId: recipientKey,
+        suppressed,
+        collapsed,
         communityName: boundedText(community.name, 200) || "your community",
-        mentionerName: boundedText(author?.name, 120) || "A community member",
+        mentionerName: boundedText(author?.displayName, 120) || "A community member",
         snippet,
         urlPath: slug ? `/c/${encodeURIComponent(slug)}/chat` : "/",
       });
@@ -147,6 +195,7 @@ export const processPendingMentionEmailsInternal = internalAction({
       mentionId: string;
       recipientUserId: string;
       suppressed: boolean;
+      collapsed: boolean;
       communityName: string;
       mentionerName: string;
       snippet: string;
@@ -154,11 +203,19 @@ export const processPendingMentionEmailsInternal = internalAction({
     }>;
     let enqueued = 0;
     let suppressed = 0;
+    let collapsed = 0;
     const updates: Array<{ mentionId: string; notifyState: "sent" | "suppressed" }> = [];
     for (const job of jobs) {
       if (job.suppressed) {
         suppressed += 1;
         updates.push({ mentionId: job.mentionId, notifyState: "suppressed" });
+        continue;
+      }
+      if (job.collapsed) {
+        // Covered by the one email this run's earlier mention sent to the
+        // same recipient; the ledger still advances so we never re-ping.
+        collapsed += 1;
+        updates.push({ mentionId: job.mentionId, notifyState: "sent" });
         continue;
       }
       await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
@@ -181,6 +238,6 @@ export const processPendingMentionEmailsInternal = internalAction({
         updates: updates as any,
       });
     }
-    return { ok: true, considered: jobs.length, enqueued, suppressed };
+    return { ok: true, considered: jobs.length, enqueued, suppressed, collapsed };
   },
 });

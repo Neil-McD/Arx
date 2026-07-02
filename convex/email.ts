@@ -129,11 +129,15 @@ async function getEmailPreferencesByUserId(ctx: any, userId: any): Promise<Recor
         weeklyDigestEnabled: Boolean(row.weeklyDigestEnabled),
         founderDigestEnabled: Boolean(row.founderDigestEnabled),
         eventReminderEnabled: Boolean(row.eventReminderEnabled),
+        // Opt-out (absent = enabled): keeps the outbox-layer gate real so a
+        // preference change between enqueue and send is still honored.
+        mentionEmailsEnabled: row.mentionEmailsEnabled !== false,
       }
     : {
         weeklyDigestEnabled: true,
         founderDigestEnabled: true,
         eventReminderEnabled: true,
+        mentionEmailsEnabled: true,
       };
 }
 
