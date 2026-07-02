@@ -14,10 +14,6 @@ import {
   formatCommunityLink,
 } from "../../../../shared/communityFunnelUi";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
-import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
-
-/* Stable placeholder date for the editor's pinned-note preview row. */
-const editorPreviewCreatedAt = new Date().toISOString();
 
 type PreviewCommunityLike = {
   slug?: string | null;
@@ -122,9 +118,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [videoUrlDraft, setVideoUrlDraft] = useState("");
   const [videoUrlError, setVideoUrlError] = useState<string | null>(null);
   const [isAboutEditing, setIsAboutEditing] = useState(false);
-  /* Bumped to re-open the join popup in the preview so the host can edit the
-     VSL after dismissing it to reach the about note behind it. */
-  const [gatePreviewNonce, setGatePreviewNonce] = useState(0);
   const videoUrlInputRef = useRef<HTMLInputElement | null>(null);
   const aboutTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
@@ -272,13 +265,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       <div className="settings-section-title">Public funnel</div>
 
       <div className="agent-preview-actions">
-        <button
-          type="button"
-          onClick={() => setGatePreviewNonce((nonce) => nonce + 1)}
-          disabled={isSaving}
-        >
-          Show popup
-        </button>
         {isDirty ? (
           <button type="button" onClick={handleReset} disabled={isSaving}>
             Cancel
@@ -301,96 +287,60 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       {communitySettingsError ? <div className="auth-error">{communitySettingsError}</div> : null}
       {communityFunnelSaveError ? <div className="auth-error">{communityFunnelSaveError}</div> : null}
 
-      <div className="funnel-editor-preview">
-        <WebCommunityVisitorSurface
-          title={previewCommunity.name}
-          action={previewAction}
-          host={{
-            display_name: previewCommunity.name,
-            avatar_url: previewCommunity.avatar_url ?? null,
-            avatar_focus_x: previewCommunity.avatar_focus_x ?? null,
-            avatar_focus_y: previewCommunity.avatar_focus_y ?? null,
-            avatar_zoom: previewCommunity.avatar_zoom ?? null,
-          }}
-          banner={
-            previewCommunity.banner_url
-              ? {
-                  url: previewCommunity.banner_url,
-                  focusX: previewCommunity.banner_focus_x ?? null,
-                  focusY: previewCommunity.banner_focus_y ?? null,
-                  zoom: previewCommunity.banner_zoom ?? null,
-                }
-              : null
-          }
-          aboutText={aboutText}
-          communityCreatedAt={editorPreviewCreatedAt}
-          heroMediaKind={communityFunnelConfig.hero_media_kind}
-          heroMediaUrl={mediaPreviewUrl}
-          heroArtImageUrl={actionCardArt.imageUrl}
-          heroArtImageStyle={actionCardArt.imageStyle ?? null}
-          featuredMessages={null}
-          stats={{
-            onlineCount: previewOnlineCount,
-            onlineFaces: previewFaces,
-            memberCount: typeof previewMemberCount === "number" ? previewMemberCount : null,
-            memoryNoteCount: null,
-            messagesTodayCount: null,
-            memberFacesPreview: [],
-          }}
-          memoryOverview={null}
-          pricingLabel={pricingLabel}
-          isFreePricing={isFreePricing}
-          previewMode
-          gateOpenNonce={gatePreviewNonce}
-          gateMediaOverride={
-            <div
-              className="public-funnel-media-placeholder funnel-editor-media-dropzone"
-              role="button"
-              tabIndex={0}
-              onClick={openVideoUrlModal}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openVideoUrlModal();
-                }
-              }}
-            >
-              {mediaPreviewUrl ? (
-                communityFunnelConfig.hero_media_kind === "video" ? (
-                  <div className="public-funnel-media-shell">
-                    {mediaPreviewEmbed ? (
-                      <iframe
-                        className="public-funnel-media-embed"
-                        src={mediaPreviewEmbed.src}
-                        title="Community funnel preview video"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                        allowFullScreen
-                      />
-                    ) : (
-                      <video
-                        className="public-funnel-media-video"
-                        src={mediaPreviewUrl}
-                        controls
-                        playsInline
-                        preload="metadata"
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="public-funnel-media-shell">
-                    <img className="public-funnel-media-image" src={mediaPreviewUrl} alt="" draggable={false} />
-                  </div>
-                )
+      <div className="funnel-editor-fields">
+        <div className="funnel-editor-field">
+          <div className="funnel-editor-field-label">Intro video</div>
+          <div
+            className="public-funnel-media-placeholder funnel-editor-media-dropzone"
+            role="button"
+            tabIndex={0}
+            onClick={openVideoUrlModal}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openVideoUrlModal();
+              }
+            }}
+          >
+            {mediaPreviewUrl ? (
+              communityFunnelConfig.hero_media_kind === "video" ? (
+                <div className="public-funnel-media-shell">
+                  {mediaPreviewEmbed ? (
+                    <iframe
+                      className="public-funnel-media-embed"
+                      src={mediaPreviewEmbed.src}
+                      title="Community funnel preview video"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      className="public-funnel-media-video"
+                      src={mediaPreviewUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                    />
+                  )}
+                </div>
               ) : (
-                <div className="public-funnel-media-placeholder-text">Click here to paste a video link.</div>
-              )}
-              <div className="funnel-editor-media-hint">
-                {mediaPreviewUrl ? "Click to replace" : "Video link"}
-              </div>
+                <div className="public-funnel-media-shell">
+                  <img className="public-funnel-media-image" src={mediaPreviewUrl} alt="" draggable={false} />
+                </div>
+              )
+            ) : (
+              <div className="public-funnel-media-placeholder-text">Click here to paste a video link.</div>
+            )}
+            <div className="funnel-editor-media-hint">
+              {mediaPreviewUrl ? "Click to replace" : "Video link"}
             </div>
-          }
-          pinnedNoteEditor={renderAboutEditor()}
-        />
+          </div>
+        </div>
+
+        <div className="funnel-editor-field">
+          <div className="funnel-editor-field-label">About</div>
+          {renderAboutEditor()}
+        </div>
       </div>
 
       {isVideoUrlModalOpen ? (

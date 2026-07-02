@@ -918,17 +918,12 @@ export function CommunityInteractionFeedList(
                         );
                         const isEditingRoot = editing?.type === "root" && editing.id === root.id;
                         const isNewRoot = rootsLoadedOnce.current && !seenRootIds.current.has(root.id);
-                        /* Preview-only: the funnel editor renders an editable
-                           node in place of a specific root's body. Members
-                           never pass rootBodyOverrides, so their feed is
-                           unchanged. */
-                        const bodyOverride = props.rootBodyOverrides?.[root.id] ?? null;
                         return (
                           <div
                             key={root.id}
                             className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsSelf(bundle.mentions, props.currentUserId) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
                           >
-                            {bundle.pending || bodyOverride ? null : (
+                            {bundle.pending ? null : (
                               <MessageActions
                                 onReact={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
                                 onReply={() => props.onSelectRoot(root.id)}
@@ -950,9 +945,7 @@ export function CommunityInteractionFeedList(
                               />
                             )}
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}
-                            {bodyOverride ? (
-                              bodyOverride
-                            ) : isEditingRoot ? (
+                            {isEditingRoot ? (
                               <EditForm
                                 value={editText}
                                 onChange={setEditText}

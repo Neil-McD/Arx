@@ -352,7 +352,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
       gateOpenNonce={gateOpenNonce}
-      previewMode={isPreviewMode}
     />
   );
 }

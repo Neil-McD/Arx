@@ -40,8 +40,11 @@ export function buildWebShellProjection(params: {
   const isPublicAppPage = isLandingPage || isOnboardingPage;
   /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
      shell a member gets — one column, the middle panel is the page. */
+  const isVisitorCommunityRoute =
+    params.publicRouteKind === "community_funnel" ||
+    params.publicRouteKind === "community_funnel_preview";
   const isMobileVisitorCommunity =
-    params.shellVariant === "mobile" && params.publicRouteKind === "community_funnel";
+    params.shellVariant === "mobile" && isVisitorCommunityRoute;
   const showMobileAppShell =
     (params.shellVariant === "mobile" &&
       isAppRoute &&
@@ -66,10 +69,10 @@ export function buildWebShellProjection(params: {
     params.activePage === "workspace" &&
     !isWorkspaceSettings;
   const isSessionsDrawerOpen = sessionsDrawerEnabled && params.userWantsSessions;
-  /* The visitor lens: /c/:slug renders the SAME community layout a member
-     sees — shell nav column included. Editor preview keeps its own frame. */
+  /* The visitor lens: /c/:slug and its /preview render the SAME community
+     layout a member sees — shell nav column included. One render path. */
   const showDesktopPublicFunnelNav =
-    params.publicRouteKind === "community_funnel" && params.shellVariant !== "mobile";
+    isVisitorCommunityRoute && params.shellVariant !== "mobile";
   const showDesktopCommunityNav =
     (isAppRoute &&
       params.activePage === "community" &&

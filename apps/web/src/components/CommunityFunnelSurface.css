@@ -116,8 +116,3 @@
   .cfg-topic .cfg-live i, .cfg-od { animation: none; }
   .cfg-gate { transition: none; }
 }
-
-/* contained contexts (funnel editor preview) — don't fill the viewport */
-.funnel-editor-preview .cfg-page { min-height: 0; }
-.funnel-editor-preview .cfg-shell { min-height: 480px; }
-.funnel-editor-preview .cfg-guestbar { display: none; }

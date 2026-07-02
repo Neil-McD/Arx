@@ -16,9 +16,9 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 const app = read("apps/web/src/App.tsx");
 const baseCss = read("apps/web/src/base.css");
 const funnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
-const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
-const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
-const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
+const surfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const governanceController = read("shared/useCommunitySettingsGovernanceController.ts");
 const saveFunnelAboutSlice = sliceBetween(
   app,
@@ -31,87 +31,75 @@ const resetFunnelAboutSlice = sliceBetween(
   "const handleSaveCommunityFunnelAbout",
 );
 
-// --- The editor previews the REAL visitor page, not a separate scaffold ---
-assert.match(
-  funnelEditor,
-  /import \{ WebCommunityVisitorSurface \} from "\.\/WebCommunityVisitorSurface"/,
-  "funnel editor must preview the live visitor surface, not a bespoke funnel scaffold",
-);
-assert.match(
-  funnelEditor,
-  /<WebCommunityVisitorSurface[\s\S]*previewMode/,
-  "funnel editor must render the visitor surface in preview mode",
-);
+// --- The builder is fields + a Preview button, NOT an inline funnel render ---
 assert.doesNotMatch(
   funnelEditor,
-  /CommunityFunnelSurface/,
-  "funnel editor must not render the deleted guest-shell scaffold",
+  /WebCommunityVisitorSurface|CommunityFunnelSurface/,
+  "the funnel builder must not render a funnel surface inline — it is config fields plus a Preview button",
+);
+assert.match(
+  funnelEditor,
+  /className="funnel-editor-fields"[\s\S]*Intro video[\s\S]*About/,
+  "the builder must present the intro video and About as explicit fields",
+);
+assert.match(
+  funnelEditor,
+  /className="public-funnel-media-placeholder funnel-editor-media-dropzone"[\s\S]*openVideoUrlModal/,
+  "the intro-video field must open the paste-URL modal",
+);
+assert.match(
+  funnelEditor,
+  /onClick=\{handlePreviewCommunityFunnel\}[\s\S]*Preview/,
+  "the builder must keep a Preview button that opens the live visitor page",
 );
 
-// --- Model A: VSL + About stay WYSIWYG-editable inside the previewed page ---
+// --- The About field: inline editor internals (unchanged intent) ---
 assert.match(
   funnelEditor,
-  /gateMediaOverride=\{[\s\S]*funnel-editor-media-dropzone[\s\S]*openVideoUrlModal/,
-  "the VSL must be edited by clicking the video inside the previewed gate",
-);
-assert.match(
-  funnelEditor,
-  /pinnedNoteEditor=\{renderAboutEditor\(\)\}/,
-  "About must be edited inline in the pinned host note of the previewed feed",
-);
-
-// --- About inline editor internals (unchanged intent) ---
-assert.match(
-  funnelEditor,
-  /funnelOneLiner: string;[\s\S]*funnelAbout: string;[\s\S]*setFunnelAbout: \(value: string\) => void;/,
-  "funnel editor must receive the display one-liner and editable about copy",
-);
-assert.doesNotMatch(
-  funnelEditor,
-  /setFunnelOneLiner|funnel-editor-copy-fields/,
-  "funnel editor must not add a separate one-liner/about copy form above the actual funnel",
-);
-assert.match(
-  funnelEditor,
-  /const isMediaDirty = communityFunnelDirtyRef\.current;[\s\S]*const isDirty = isMediaDirty \|\| isFunnelAboutDirty;/,
-  "funnel save state must combine media dirtiness and inline About dirtiness",
-);
-assert.match(
-  funnelEditor,
-  /if \(isFunnelAboutDirty\) \{[\s\S]*const savedCopy = await handleSaveCommunityFunnelAbout\(\);[\s\S]*if \(savedCopy === false\) return;[\s\S]*setIsAboutEditing\(false\);[\s\S]*\}[\s\S]*if \(isMediaDirty\) \{[\s\S]*const savedMedia = await handleSaveCommunityFunnel\(\);/,
-  "combined funnel save must save inline About before media and stop if About save fails",
+  /funnelAbout: string;[\s\S]*setFunnelAbout: \(value: string\) => void;/,
+  "the builder must receive the editable About copy",
 );
 assert.match(
   funnelEditor,
   /const renderAboutEditor = \(\) => \{[\s\S]*className="public-funnel-about funnel-editor-about-input"[\s\S]*setFunnelAbout\(event\.target\.value\);[\s\S]*markCommunitySettingsDirty\(\);/,
-  "About edits must happen inside the rendered funnel About area and mark canonical settings dirty",
+  "About edits must go through the inline About editor and mark canonical settings dirty",
 );
 assert.match(
   funnelEditor,
   /const syncAboutTextareaHeight = \(\) => \{[\s\S]*textarea\.style\.height = "auto";[\s\S]*textarea\.style\.height = `\$\{textarea\.scrollHeight\}px`;/,
-  "inline About editing must auto-size to content instead of collapsing into a small textbox",
+  "About editing must auto-size to content",
 );
 assert.doesNotMatch(
   sliceBetween(funnelEditor, "const renderAboutEditor", "return ("),
   /\.select\(\)/,
-  "inline About editing must not select all text on open",
+  "About editing must not select all text on open",
+);
+assert.match(
+  funnelEditor,
+  /if \(isFunnelAboutDirty\) \{[\s\S]*const savedCopy = await handleSaveCommunityFunnelAbout\(\);[\s\S]*if \(savedCopy === false\) return;[\s\S]*\}[\s\S]*if \(isMediaDirty\) \{[\s\S]*const savedMedia = await handleSaveCommunityFunnel\(\);/,
+  "combined save must save About before media and stop if About save fails",
 );
 
-// --- The inline-edit seam: a surgical, member-safe override on the feed ---
+// --- ONE render path: /preview renders the live visitor surface, no scaffold ---
 assert.match(
-  projection,
-  /rootBodyOverrides\?: Record<string, ReactNode> \| null;/,
-  "the shared feed must accept an optional per-root body override for the editor",
+  publicFunnel,
+  /<WebCommunityVisitorSurface/,
+  "the public funnel must render the live visitor surface",
+);
+assert.doesNotMatch(
+  publicFunnel,
+  /CommunityFunnelSurface/,
+  "the public funnel must not fall back to the deleted scaffold for preview",
+);
+assert.doesNotMatch(
+  surfaceHost,
+  /public-route-panel|public-community-funnel-panel/,
+  "the preview route must render through the plain community-body, identical to live",
 );
 assert.match(
-  feed,
-  /const bodyOverride = props\.rootBodyOverrides\?\.\[root\.id\] \?\? null;/,
-  "the feed renders the override in place of a root's body when supplied",
-);
-assert.match(
-  visitorSurface,
-  /rootBodyOverrides=\{[\s\S]*previewMode && props\.pinnedNoteEditor[\s\S]*"visitor-pinned-note": props\.pinnedNoteEditor/,
-  "the visitor surface only overrides the pinned-note body, and only in preview",
+  shellProjection,
+  /const isVisitorCommunityRoute =[\s\S]*"community_funnel"[\s\S]*"community_funnel_preview";/,
+  "the shell must treat /c/:slug and its /preview as the same visitor route (rail + nav)",
 );
 
 // --- App-side About save wiring (unchanged truth) ---
@@ -125,11 +113,6 @@ assert.match(
   /setCommunitySettingsAbout\(activeCommunity\?\.about \?\? ""\);[\s\S]*communitySettingsDirtyRef\.current = hasCommunitySettingsDirtyOutsideFunnelAbout\(\);/,
   "App must reset Funnel About back to active community truth",
 );
-assert.doesNotMatch(
-  resetFunnelAboutSlice,
-  /setCommunitySettingsOneLiner/,
-  "resetting inline Funnel About must not reset unrelated one-liner edits",
-);
 assert.match(
   saveFunnelAboutSlice,
   /saveCloudCommunityLaunchProfile\(\{[\s\S]*input: \{[\s\S]*about: communitySettingsAbout\.trim\(\) \|\| null,/,
@@ -141,14 +124,9 @@ assert.doesNotMatch(
   "inline Funnel About save must not write the one-liner",
 );
 assert.match(
-  saveFunnelAboutSlice,
-  /communitySettingsDirtyRef\.current = hasCommunitySettingsDirtyOutsideFunnelAbout\(\);[\s\S]*return true;/,
-  "Funnel About save must preserve unrelated dirty settings instead of blindly clearing them",
-);
-assert.match(
   app,
   /funnelOneLiner: communitySettingsOneLiner,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*setFunnelAbout: setCommunitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
-  "App must wire Funnel editor inline About controls to canonical community settings state",
+  "App must wire the builder's About controls to canonical community settings state",
 );
 assert.doesNotMatch(
   governanceController,
@@ -168,4 +146,4 @@ assert.match(
   "Funnel About resting and editing states should share native transparent styling",
 );
 
-console.log("PASS: community Funnel editor previews the live visitor surface and edits VSL + About inline.");
+console.log("PASS: the funnel builder is fields + a Preview button, and /preview renders the one live visitor surface.");

@@ -7,23 +7,6 @@
   z-index: 120;
 }
 
-/* Funnel-editor preview: the surface is a self-contained box and the gate
-   centers within it, not over the whole app. */
-.cvs-surface-root {
-  display: contents;
-}
-
-.cvs-surface-root.is-preview {
-  display: block;
-  position: relative;
-  height: 100%;
-}
-
-.cfg-gate.cvs-gate.cvs-gate-contained {
-  position: absolute;
-  z-index: 40;
-}
-
 .cvs-gatecard .cfg-gpromise {
   min-height: 0;
 }
