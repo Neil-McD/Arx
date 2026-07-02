@@ -68,6 +68,7 @@ import type * as communityCore from "../communityCore.js";
 import type * as communityDirectory from "../communityDirectory.js";
 import type * as communityEvents from "../communityEvents.js";
 import type * as communityExperience from "../communityExperience.js";
+import type * as communityFeatured from "../communityFeatured.js";
 import type * as communityFunnel from "../communityFunnel.js";
 import type * as communityIntelligenceDirectory from "../communityIntelligenceDirectory.js";
 import type * as communityInteractionAttachmentBridge from "../communityInteractionAttachmentBridge.js";
@@ -77,6 +78,7 @@ import type * as communityInteractionLegacyBridge from "../communityInteractionL
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
+import type * as communityMentionEmails from "../communityMentionEmails.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
@@ -263,6 +265,7 @@ declare const fullApi: ApiFromModules<{
   communityDirectory: typeof communityDirectory;
   communityEvents: typeof communityEvents;
   communityExperience: typeof communityExperience;
+  communityFeatured: typeof communityFeatured;
   communityFunnel: typeof communityFunnel;
   communityIntelligenceDirectory: typeof communityIntelligenceDirectory;
   communityInteractionAttachmentBridge: typeof communityInteractionAttachmentBridge;
@@ -272,6 +275,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractions: typeof communityInteractions;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
+  communityMentionEmails: typeof communityMentionEmails;
   communityPublic: typeof communityPublic;
   communityRecentContext: typeof communityRecentContext;
   communityRecipientCore: typeof communityRecipientCore;

@@ -31,6 +31,20 @@ export type CommunityFunnelSurfaceHost = {
   avatar_zoom?: number | null;
 };
 
+export type CommunityFunnelSurfaceFeaturedMessage = {
+  id: string;
+  body: string;
+  created_at?: string | null;
+  sender?: {
+    display_name?: string | null;
+    avatar_url?: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  } | null;
+  reactions?: Array<{ emoji: string; count: number }> | null;
+};
+
 export type CommunityFunnelSurfaceBanner = {
   url: string | null;
   focusX?: number | null;
@@ -95,6 +109,8 @@ type CommunityFunnelSurfaceProps = {
   banner?: CommunityFunnelSurfaceBanner | null;
   /** When set (and not preview mode), the arrival gate shows on first visit, keyed per community. */
   gateSlugKey?: string | null;
+  /** Host-featured messages (public-safe projection) rendered through the real message row. */
+  featuredMessages?: CommunityFunnelSurfaceFeaturedMessage[] | null;
 };
 
 function normalizeHref(url: string): string {
@@ -276,6 +292,20 @@ function markGateSeen(slugKey: string) {
 
 const NOOP = () => {};
 
+function formatFeaturedTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatFeaturedTimeLong(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function getInitialsFromLabel(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -284,20 +314,31 @@ function getInitialsFromLabel(label: string): string {
 }
 
 /** The real product message row, configured as an inert guest rendering. */
-function GuestPinnedRow(props: {
+function GuestInertRow(props: {
+  id: string;
   body: string;
   senderLabel: string;
   avatarUrl: string | null;
   avatarFocusX?: number | null;
   avatarFocusY?: number | null;
   avatarZoom?: number | null;
+  shortTime: string;
+  formattedTime: string;
+  reactions?: Array<{ emoji: string; count: number }> | null;
 }) {
   const senderLabel = props.senderLabel;
+  const reactionRecords = (props.reactions ?? []).flatMap((entry) =>
+    Array.from({ length: Math.max(entry.count, 0) }, (_, index) => ({
+      message_id: props.id,
+      user_id: `guest-reaction-${entry.emoji}-${index}`,
+      emoji: entry.emoji,
+    })),
+  );
   return (
     <CommunityChatMessageRow
       message={{
-        id: "guest-pinned-note",
-        sender_id: "community-host",
+        id: props.id,
+        sender_id: "guest-inert-sender",
         body: props.body,
         attachments: [],
         reply_to_id: null,
@@ -317,12 +358,12 @@ function GuestPinnedRow(props: {
       avatarFocusY={props.avatarFocusY ?? null}
       avatarZoom={props.avatarZoom ?? null}
       avatarColor="var(--accent-gold, #d66a8a)"
-      shortTime="pinned"
-      formattedTime="Pinned by the host"
+      shortTime={props.shortTime}
+      formattedTime={props.formattedTime}
       isEditing={false}
       editingMessageText=""
       isReactionPickerOpen={false}
-      messageReactions={[]}
+      messageReactions={reactionRecords}
       sessionUserId={null}
       replyToId={null}
       replyTarget={null}
@@ -478,6 +519,7 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
     host = null,
     banner = null,
     gateSlugKey = null,
+    featuredMessages = null,
   } = props;
 
   const action = sidebarAction;
@@ -629,19 +671,45 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
                     </div>
                   </div>
                 ) : (
-                  <GuestPinnedRow
+                  <GuestInertRow
+                    id="guest-pinned-note"
                     body={aboutText}
                     senderLabel={hostName ?? title}
                     avatarUrl={host?.avatar_url ?? null}
                     avatarFocusX={host?.avatar_focus_x}
                     avatarFocusY={host?.avatar_focus_y}
                     avatarZoom={host?.avatar_zoom}
+                    shortTime="pinned"
+                    formattedTime="Pinned by the host"
                   />
                 )}
               </>
             ) : null}
 
             {mediaNode ? <div className="cfg-media">{mediaNode}</div> : null}
+
+            {featuredMessages && featuredMessages.length > 0 ? (
+              <>
+                <div className="chat-date-separator cfg-daysep">
+                  <span>Featured from inside · picked by the host</span>
+                </div>
+                {featuredMessages.map((entry) => (
+                  <GuestInertRow
+                    key={entry.id}
+                    id={entry.id}
+                    body={entry.body}
+                    senderLabel={entry.sender?.display_name?.trim() || "Member"}
+                    avatarUrl={entry.sender?.avatar_url ?? null}
+                    avatarFocusX={entry.sender?.avatar_focus_x}
+                    avatarFocusY={entry.sender?.avatar_focus_y}
+                    avatarZoom={entry.sender?.avatar_zoom}
+                    shortTime={formatFeaturedTime(entry.created_at)}
+                    formattedTime={formatFeaturedTimeLong(entry.created_at)}
+                    reactions={entry.reactions}
+                  />
+                ))}
+              </>
+            ) : null}
           </div>
 
           <div className="cfg-rope">

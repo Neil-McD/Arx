@@ -239,7 +239,7 @@ function scoreResearchSnippet(snippet: string, tokens: string[]): number {
   return Number((matches / tokens.length).toFixed(4));
 }
 
-function extractMessageText(contentJson: unknown): string {
+export function extractMessageText(contentJson: unknown): string {
   if (typeof contentJson === "string") return contentJson.trim();
   if (contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)) {
     const text = String((contentJson as Record<string, unknown>).text ?? "").trim();
