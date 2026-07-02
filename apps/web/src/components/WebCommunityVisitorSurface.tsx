@@ -15,8 +15,6 @@ import {
   type VisitorHostLike,
 } from "../controllers/buildWebCommunityVisitorProjection";
 import {
-  hasSeenGate,
-  markGateSeen,
   renderHeroMediaDefault,
   renderTextWithLinks,
   type CommunityFunnelSurfaceAction,
@@ -92,15 +90,15 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
   const [gateMounted, setGateMounted] = useState(false);
   const lastGateNonceRef = useRef(props.gateOpenNonce ?? 0);
 
+  /* The gate shows on EVERY arrival — "View it first" dismisses for this
+     visit only; a fresh load brings the front door back. */
   useEffect(() => {
     if (!gateEligible || !gateSlugKey) return;
-    if (hasSeenGate(gateSlugKey)) return;
     setGateMounted(true);
     setGateOpen(true);
   }, [gateEligible, gateSlugKey]);
 
   const dismissGate = () => {
-    if (gateSlugKey) markGateSeen(gateSlugKey);
     setGateOpen(false);
     window.setTimeout(() => setGateMounted(false), 450);
   };

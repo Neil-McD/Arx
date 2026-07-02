@@ -1482,7 +1482,6 @@ export default function App() {
         readShellVariantFromPathname(window.location.pathname || "/");
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
-  const hasResolvedInitialStandaloneSignedOutLaunchRef = useRef(false);
   const lastIdentifiedBusinessVisitorSubjectRef = useRef<string | null>(null);
   const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
     useState<AccountGraphHydrationPhase>("idle");
@@ -4311,29 +4310,9 @@ export default function App() {
     applyStandaloneWorkspaceLaunch(nextPath);
   }, [applyStandaloneWorkspaceLaunch]);
 
-  useEffect(() => {
-    if (!isAuthBootstrapComplete) return;
-    if (hasResolvedInitialStandaloneSignedOutLaunchRef.current) return;
-    hasResolvedInitialStandaloneSignedOutLaunchRef.current = true;
-    if (session) return;
-    if (!isStandaloneWebApp()) return;
-    if (initialPublicRoute.kind !== "community_funnel" && initialPublicRoute.kind !== "community_funnel_preview") return;
-    if (publicRoute.kind !== initialPublicRoute.kind || publicRoute.slug !== initialPublicRoute.slug) return;
-    if (hasRecentAuthFlowPending()) return;
-    if (readAuthResumeState()?.intent) return;
-
-    const shellVariantForLaunch = readShellVariantFromPathname(window.location.pathname || "/");
-    const canonicalAppPath = applyShellVariantToAppPath(buildWorkspaceDraftPath(), shellVariantForLaunch);
-    const canonicalUrl = new URL(canonicalAppPath, window.location.origin);
-    const nextPath = `${canonicalUrl.pathname}${canonicalUrl.search}${canonicalUrl.hash}` || buildWorkspaceDraftPath();
-    applyStandaloneWorkspaceLaunch(nextPath);
-  }, [
-    applyStandaloneWorkspaceLaunch,
-    session,
-    initialPublicRoute,
-    isAuthBootstrapComplete,
-    publicRoute,
-  ]);
+  /* (Deleted 2026-07-02: the standalone signed-out funnel deferral used to
+     bounce /c/:slug to a workspace launch. The visitor lens made that
+     backwards — a signed-out /c/ visit IS the community page now.) */
 
   useEffect(() => {
     if (activePage !== "onboarding") return;
@@ -4377,22 +4356,7 @@ export default function App() {
     session,
   ]);
 
-  const isInitialStandaloneFunnelRoute =
-    initialPublicRoute.kind === "community_funnel" || initialPublicRoute.kind === "community_funnel_preview";
-  const matchesInitialStandaloneFunnelRoute =
-    isInitialStandaloneFunnelRoute &&
-    publicRoute.kind === initialPublicRoute.kind &&
-    publicRoute.slug === initialPublicRoute.slug;
-  const shouldDeferStandaloneSignedOutFunnelBoot =
-    !hasResolvedInitialStandaloneSignedOutLaunchRef.current &&
-    !session &&
-    isStandaloneWebApp() &&
-    matchesInitialStandaloneFunnelRoute &&
-    !hasRecentAuthFlowPending() &&
-    !readAuthResumeState()?.intent;
-  const shellPublicRoute: PublicRoute = shouldDeferStandaloneSignedOutFunnelBoot
-    ? { kind: "app" }
-    : publicRoute;
+  const shellPublicRoute: PublicRoute = publicRoute;
   const isSignedOutAppPresentation =
     shellPublicRoute.kind === "app" && authPresentationState === "signed_out";
 
@@ -8819,6 +8783,9 @@ export default function App() {
   const currentWorkspaceProjectId = currentWorkspaceProjectSelection.currentProjectId;
   const currentWorkspaceProjectName = currentWorkspaceProjectSelection.currentProjectName;
   useEffect(() => {
+    /* Public routes (/c/:slug etc.) own their URL — the workspace draft
+       canonicalizer must never rewrite them out from under the funnel. */
+    if (publicRoute.kind !== "app") return;
     if (activePage !== "workspace" || activeView !== "home" || activeThreadId) return;
     const draftProjectId = workspaceProject.state.activeProjectId;
     const routePath = buildAppRoutePath({
@@ -8846,6 +8813,7 @@ export default function App() {
     activeThreadId,
     activeView,
     currentWorkspaceProjectId,
+    publicRoute.kind,
     selectedActiveCommunitySlug,
     shellVariant,
     workspaceProject.state.activeProjectId,
