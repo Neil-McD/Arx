@@ -191,7 +191,37 @@ function buildActivatedEmbedSrc(embed: ParsedEmbed): string {
   return url.toString();
 }
 
-function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
+const preconnectedOrigins = new Set<string>();
+
+/* Warm the player's connection before the click so play feels instant. */
+function preconnectEmbedOrigins(embed: ParsedEmbed) {
+  try {
+    const origins = [new URL(embed.src).origin];
+    for (const origin of origins) {
+      if (preconnectedOrigins.has(origin)) continue;
+      preconnectedOrigins.add(origin);
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = origin;
+      link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export type DeferredEmbedHeroOptions = {
+  /** The embed is the visible hero (e.g. inside the join gate): load the
+      thumbnail eagerly and warm the player connection on hover. */
+  eager?: boolean;
+  /** Called when the visitor starts playback. */
+  onActivate?: () => void;
+  /** Honest hint under the play button ("Watch the intro"). */
+  playHint?: string | null;
+};
+
+function DeferredEmbedHero(props: { embed: ParsedEmbed } & DeferredEmbedHeroOptions) {
   const [isActive, setIsActive] = useState(false);
   const thumbnailUrls =
     "thumbnailUrls" in props.embed && props.embed.thumbnailUrls.length > 0
@@ -220,11 +250,18 @@ function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
     );
   }
 
+  const warmConnection = () => preconnectEmbedOrigins(props.embed);
+
   return (
     <button
       className="public-funnel-media-shell public-funnel-media-deferred"
       type="button"
-      onClick={() => setIsActive(true)}
+      onClick={() => {
+        setIsActive(true);
+        props.onActivate?.();
+      }}
+      onPointerEnter={props.eager ? warmConnection : undefined}
+      onFocus={props.eager ? warmConnection : undefined}
       aria-label="Play community funnel video"
     >
       {thumbnailUrl ? (
@@ -233,7 +270,8 @@ function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
           src={thumbnailUrl}
           alt=""
           draggable={false}
-          loading="lazy"
+          loading={props.eager ? "eager" : "lazy"}
+          {...(props.eager ? ({ fetchpriority: "high" } as Record<string, string>) : null)}
           onError={() => {
             setThumbnailIndex((current) => Math.min(current + 1, thumbnailUrls.length));
           }}
@@ -248,16 +286,21 @@ function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
           <path d="M9 7.5v9l7-4.5-7-4.5z" />
         </svg>
       </span>
+      {props.playHint ? <span className="public-funnel-media-hint">{props.playHint}</span> : null}
     </button>
   );
 }
 
-export function renderHeroMediaDefault(kind: CommunityFunnelHeroMediaKind, url: string | null) {
+export function renderHeroMediaDefault(
+  kind: CommunityFunnelHeroMediaKind,
+  url: string | null,
+  options?: DeferredEmbedHeroOptions,
+) {
   if (!url) return null;
   if (kind === "video") {
     const embed = parseEmbedUrl(url);
     if (embed) {
-      return <DeferredEmbedHero embed={embed} />;
+      return <DeferredEmbedHero embed={embed} {...options} />;
     }
     return (
       <div className="public-funnel-media-shell">

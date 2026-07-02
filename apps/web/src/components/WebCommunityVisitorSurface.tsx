@@ -128,7 +128,12 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
   }, [props.gateOpenNonce]);
 
   const bannerUrl = banner?.url ?? props.heroArtImageUrl ?? null;
-  const mediaNode = renderHeroMediaDefault(props.heroMediaKind, props.heroMediaUrl);
+  const [isVslPlaying, setIsVslPlaying] = useState(false);
+  const gateMediaNode = renderHeroMediaDefault(props.heroMediaKind, props.heroMediaUrl, {
+    eager: true,
+    onActivate: () => setIsVslPlaying(true),
+    playHint: "Watch the intro",
+  });
 
   const { roots, profilesByUserId } = useMemo(
     () =>
@@ -314,7 +319,8 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
             isFreePricing={isFreePricing}
             bannerUrl={bannerUrl}
             bannerStyle={banner?.url ? null : props.heroArtImageStyle ?? null}
-            media={mediaNode}
+            media={gateMediaNode}
+            isMediaPlaying={isVslPlaying}
             onViewFirst={dismissGate}
           />
         </div>

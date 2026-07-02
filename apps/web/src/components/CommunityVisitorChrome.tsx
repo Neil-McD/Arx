@@ -18,17 +18,27 @@ export function CommunityVisitorGate(props: {
   bannerUrl: string | null;
   bannerStyle: CSSProperties | null;
   media: ReactNode;
+  isMediaPlaying?: boolean;
   onViewFirst: () => void;
 }) {
   const { action } = props;
+  /* One hero per card: the VSL when it exists, the banner otherwise. */
+  const hasMediaHero = Boolean(props.media);
   return (
-    <div className="cfg-gatecard cvs-gatecard">
-      <div className="cfg-gbanner" aria-hidden="true">
-        {props.bannerUrl ? (
-          <img src={props.bannerUrl} alt="" draggable={false} style={props.bannerStyle ?? undefined} />
-        ) : null}
-      </div>
-      <div className="cfg-gav">
+    <div
+      className={`cfg-gatecard cvs-gatecard${hasMediaHero ? " cvs-gatecard-no-banner" : ""}${
+        props.isMediaPlaying ? " cvs-gatecard-wide" : ""
+      }`}
+      style={props.isMediaPlaying ? { width: "min(720px, 94vw)" } : undefined}
+    >
+      {!hasMediaHero ? (
+        <div className="cfg-gbanner" aria-hidden="true">
+          {props.bannerUrl ? (
+            <img src={props.bannerUrl} alt="" draggable={false} style={props.bannerStyle ?? undefined} />
+          ) : null}
+        </div>
+      ) : null}
+      <div className={`cfg-gav${hasMediaHero ? " cvs-gav-plain" : ""}`}>
         <CommunityAvatar
           className="cfg-fill"
           imageUrl={action.avatarUrl}
