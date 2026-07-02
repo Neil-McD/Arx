@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import {
   normalizeIdValue,
   normalizeOptionalText,
+  normalizeSlug,
   requireCommunityChatAccess,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
@@ -3225,6 +3226,90 @@ export const getCommunityPolynetOverview = query({
         has_more_edges: hasMoreEdges,
       },
       memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
+    };
+  },
+});
+
+/* Visitor lens: the memory graph's SHAPE for the public community page —
+   member-readable nodes and edges as anonymous dots. Titles and labels are
+   stripped, no run history, published communities only. Viewable, never
+   selectable; note content never leaves the community. */
+export const resolvePublicCommunityMemoryOverviewBySlug = query({
+  args: {
+    communitySlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const slug = normalizeSlug(args.communitySlug);
+    const community = await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+      .first();
+    if (!community || community.visibility !== "published") return { ok: false as const };
+
+    const { nodes, hasMoreNodes } = await readPolynetOverviewNodes({
+      ctx,
+      communityId: community._id,
+      isManager: false,
+      limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
+    });
+    const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
+      ctx,
+      communityId: community._id,
+      nodes,
+      isManager: false,
+    });
+    const latestRun = ((await ctx.db
+      .query("communityAgentRuns" as any)
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id))
+      .order("desc")
+      .take(POLYNET_OVERVIEW_RUN_LIMIT * 2)) as Record<string, any>[])
+      .filter((row) => row.agentKey === "community_agent")[0] ?? null;
+
+    return {
+      ok: true as const,
+      overview: {
+        community: {
+          id: normalizeIdValue(community._id),
+          name: community.name,
+          slug: community.slug,
+        },
+        viewer: {
+          is_manager: false,
+        },
+        agent: {
+          key: "community_agent",
+          status: latestRun?.status ?? "not_started",
+          activity_state: communityAgentActivityState(latestRun),
+          last_run_at: null,
+          last_run_status: null,
+          last_wake_reason: null,
+          recent_actions_summary: { proposed: 0, accepted: 0, rejected: 0, applied: 0 },
+          recent_runs: [],
+        },
+        graph: {
+          root_node_id: communityGraphRootId(community._id),
+          nodes: [
+            {
+              id: communityGraphRootId(community._id),
+              kind: "community",
+              community_id: normalizeIdValue(community._id),
+              label: community.name,
+              type: "community",
+            },
+            ...nodes.map((row) => ({
+              ...mapPolynetOverviewNode(row),
+              label: null,
+              title: null,
+            })),
+          ],
+          edges: edges.map(mapPolynetOverviewEdge),
+          node_limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
+          edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
+          has_more_nodes: hasMoreNodes,
+          has_more_edges: hasMoreEdges,
+        },
+        memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
+      },
     };
   },
 });

@@ -197,6 +197,7 @@ import {
   applyCommunityIntelligenceChangeRequest as applyCommunityIntelligenceChangeRequestImpl,
   createCommunityIntelligenceChangeRequest as createCommunityIntelligenceChangeRequestImpl,
   getCommunityPolynetOverview as getCommunityPolynetOverviewImpl,
+  resolvePublicCommunityMemoryOverviewBySlug as resolvePublicCommunityMemoryOverviewBySlugImpl,
   listCommunityIntelligenceDirectoryView as listCommunityIntelligenceDirectoryViewImpl,
   listCommunityIntelligenceEdges as listCommunityIntelligenceEdgesImpl,
   listCommunityIntelligenceMutations as listCommunityIntelligenceMutationsImpl,
@@ -361,6 +362,7 @@ export const markCommunityChatReadAt = markCommunityChatReadAtImpl;
 export const recordCommunitySourceTrace = recordCommunitySourceTraceImpl;
 export const createCommunityIntelligenceChangeRequest = createCommunityIntelligenceChangeRequestImpl;
 export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl;
+export const resolvePublicCommunityMemoryOverviewBySlug = resolvePublicCommunityMemoryOverviewBySlugImpl;
 export const listCommunityIntelligenceChangeRequests = listCommunityIntelligenceChangeRequestsImpl;
 export const decideCommunityIntelligenceChangeRequest = decideCommunityIntelligenceChangeRequestImpl;
 export const applyCommunityIntelligenceChangeRequest = applyCommunityIntelligenceChangeRequestImpl;

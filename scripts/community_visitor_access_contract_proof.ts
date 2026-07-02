@@ -134,4 +134,47 @@ assert.match(
   "the public stats payload must carry the joined-recently social proof count",
 );
 
+assert.match(
+  communityPublic,
+  /const PUBLIC_MEMBER_FACES_PREVIEW_LIMIT = 5/,
+  "the public members preview must stay capped at 5 faces",
+);
+assert.match(
+  communityPublic,
+  /member_faces_preview: stats\.memberFacesPreview/,
+  "the public stats payload must carry the members preview for the visitor rail",
+);
+
+const intelligenceDirectory = read("convex/communityIntelligenceDirectory.ts");
+const publicMemoryOverview = intelligenceDirectory.slice(
+  intelligenceDirectory.indexOf("export const resolvePublicCommunityMemoryOverviewBySlug"),
+  intelligenceDirectory.indexOf("export const retrieveCommunityIntelligenceForWorkflow"),
+);
+assert.notEqual(publicMemoryOverview.length, 0, "public memory overview query must exist");
+assert.match(
+  publicMemoryOverview,
+  /visibility !== "published"\) return \{ ok: false as const \}/,
+  "the public memory overview must serve published communities only",
+);
+assert.match(
+  publicMemoryOverview,
+  /isManager: false/,
+  "the public memory overview must read with member visibility, never manager",
+);
+assert.match(
+  publicMemoryOverview,
+  /label: null,\s*\n\s*title: null/,
+  "public memory nodes must strip titles and labels — the shape is public, the content is not",
+);
+assert.match(
+  publicMemoryOverview,
+  /recent_runs: \[\]/,
+  "the public memory overview must not expose run history",
+);
+assert.match(
+  communityModule,
+  /export const resolvePublicCommunityMemoryOverviewBySlug = resolvePublicCommunityMemoryOverviewBySlugImpl/,
+  "community.ts must expose the public memory overview (re-export chain)",
+);
+
 console.log("community visitor access contract proof passed");

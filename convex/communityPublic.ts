@@ -99,6 +99,7 @@ async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Pr
 }
 
 const PUBLIC_ACTIVITY_COUNT_CAP = 200;
+const PUBLIC_MEMBER_FACES_PREVIEW_LIMIT = 5;
 const PUBLIC_MESSAGES_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PUBLIC_JOINED_RECENTLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /* Parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory:
@@ -180,6 +181,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   onlineFaces: PublicCommunityFace[];
   onlineUserIds: string[];
   joinedLast30dCount: number;
+  memberFacesPreview: PublicCommunityFace[];
 }> {
   const { rows: activeMemberships } = await listCanonicalCommunityMemberMembershipRows({
     ctx,
@@ -246,6 +248,32 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     0,
   );
 
+  /* Visitor members preview: owner + the most recent joins, capped at 5.
+     Same public exposure as online_faces (display name + avatar only). */
+  const previewUserIds: any[] = [community.ownerId];
+  const seenPreviewIds = new Set<string>([String(community.ownerId)]);
+  for (const membership of [...activeMemberships].sort((a, b) => b.createdAt - a.createdAt)) {
+    if (previewUserIds.length >= PUBLIC_MEMBER_FACES_PREVIEW_LIMIT) break;
+    const normalizedUserId = String(membership.userId);
+    if (seenPreviewIds.has(normalizedUserId)) continue;
+    seenPreviewIds.add(normalizedUserId);
+    previewUserIds.push(membership.userId);
+  }
+  const memberFacesPreview = (
+    await Promise.all(
+      previewUserIds.slice(0, PUBLIC_MEMBER_FACES_PREVIEW_LIMIT).map(
+        async (userId): Promise<PublicCommunityFace | null> => {
+          const user = await ctx.db.get(userId);
+          if (!user) return null;
+          return {
+            user_id: (await resolvePublicUserId(ctx, user._id, userIdCache)) ?? String(user._id),
+            ...(await resolvePublicProfileFaceFields(ctx, user._id)),
+          };
+        },
+      ),
+    )
+  ).filter(Boolean) as PublicCommunityFace[];
+
   return {
     memberCount,
     adminCount: adminUserIds.size,
@@ -253,6 +281,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     onlineFaces,
     onlineUserIds: onlineUserPublicIds,
     joinedLast30dCount,
+    memberFacesPreview,
   };
 }
 
@@ -263,6 +292,7 @@ function mapPublicCommunityStats(stats: {
   onlineFaces: PublicCommunityFace[];
   onlineUserIds: string[];
   joinedLast30dCount: number;
+  memberFacesPreview: PublicCommunityFace[];
 }) {
   return {
     member_count: stats.memberCount,
@@ -271,6 +301,7 @@ function mapPublicCommunityStats(stats: {
     online_faces: stats.onlineFaces,
     online_user_ids: stats.onlineUserIds,
     joined_last_30d_count: stats.joinedLast30dCount,
+    member_faces_preview: stats.memberFacesPreview,
   };
 }
 
