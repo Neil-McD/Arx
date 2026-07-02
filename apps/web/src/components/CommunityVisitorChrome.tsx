@@ -73,6 +73,8 @@ export function CommunityVisitorGate(props: {
   );
 }
 
+/* The member composer's visual twin: same .chat-input-bar anatomy, inert.
+   Hovering it shows you can't type — and lights the Join button up. */
 export function CommunityVisitorJoinRope(props: {
   action: CommunityFunnelSurfaceAction;
   ropePrompt: string;
@@ -82,13 +84,38 @@ export function CommunityVisitorJoinRope(props: {
 }) {
   const { action } = props;
   return (
-    <div className="cfg-rope cvs-rope">
-      <div className="cfg-ropebox">
-        <button className="cfg-roph cvs-roph" type="button" onClick={props.onRopeFieldActivate}>
-          {props.ropePrompt}
-        </button>
+    <div className="cvs-composer">
+      <div className="cvs-composer-row">
+        <div
+          className="chat-input-bar cvs-composer-bar"
+          role="button"
+          tabIndex={0}
+          onClick={props.onRopeFieldActivate}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") props.onRopeFieldActivate();
+          }}
+        >
+          <span className="ask-icon-btn ask-plus" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <textarea
+            className="chat-input"
+            placeholder={props.ropePrompt}
+            rows={1}
+            readOnly
+            tabIndex={-1}
+            aria-label="Join to message the community"
+          />
+          <span className="chat-send ask-send-btn ask-send-btn-v2" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+            </svg>
+          </span>
+        </div>
         <button
-          className="cfg-join"
+          className="cfg-join cvs-composer-join"
           type="button"
           disabled={action.isPrimaryActionDisabled}
           onClick={action.onPrimaryAction}
@@ -102,5 +129,26 @@ export function CommunityVisitorJoinRope(props: {
       </div>
       <ActionStatusCards action={action} />
     </div>
+  );
+}
+
+/* The frost over the rest of the conversation: real rows behind glass,
+   one lock chip floating on top. */
+export function CommunityVisitorChatFrostChip(props: {
+  messagesTodayCount: number | null;
+  onActivate: () => void;
+}) {
+  const label =
+    typeof props.messagesTodayCount === "number" && props.messagesTodayCount > 0
+      ? `${props.messagesTodayCount} message${props.messagesTodayCount === 1 ? "" : "s"} today — unlocks when you join`
+      : "The conversation unlocks when you join";
+  return (
+    <button className="cvs-frost-chip" type="button" onClick={props.onActivate}>
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <rect x="5" y="11" width="14" height="9" rx="2" />
+        <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+      </svg>
+      <span>{label}</span>
+    </button>
   );
 }

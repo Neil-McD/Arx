@@ -7,6 +7,7 @@
    rope in the composer slot. Locks reopen the gate. */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
+import type { CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import {
@@ -20,19 +21,27 @@ import {
   type CommunityFunnelSurfaceAction,
   type CommunityFunnelSurfaceBanner,
 } from "./CommunityFunnelSurface";
-import { CommunityVisitorGate, CommunityVisitorJoinRope } from "./CommunityVisitorChrome";
+import {
+  CommunityVisitorChatFrostChip,
+  CommunityVisitorGate,
+  CommunityVisitorJoinRope,
+} from "./CommunityVisitorChrome";
 import { WebCommunityInteractionProjection } from "./WebCommunityInteractionProjection";
 import "./CommunityVisitorChrome.css";
 
+type VisitorPublicFace = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
 export type WebCommunityVisitorSurfaceStats = {
   onlineCount: number | null;
-  onlineFaces: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  }>;
+  onlineFaces: VisitorPublicFace[];
   memberCount: number | null;
   memoryNoteCount: number | null;
+  messagesTodayCount: number | null;
+  memberFacesPreview: VisitorPublicFace[];
 };
 
 type WebCommunityVisitorSurfaceProps = {
@@ -48,6 +57,7 @@ type WebCommunityVisitorSurfaceProps = {
   heroArtImageStyle?: CSSProperties | null;
   featuredMessages: VisitorFeaturedMessageLike[] | null;
   stats: WebCommunityVisitorSurfaceStats;
+  memoryOverview: CloudCommunityPolynetOverview | null;
   pricingLabel: string;
   isFreePricing: boolean;
   alertMessages?: string[];
@@ -143,9 +153,67 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     [stats.onlineFaces],
   );
 
+  const memberPreviewFaces = useMemo(
+    () =>
+      stats.memberFacesPreview.map((face) => ({
+        user_id: face.user_id,
+        display_name: face.display_name,
+        avatar_url: face.avatar_url,
+        initials: getInitialsFromLabel(face.display_name ?? "?"),
+      })),
+    [stats.memberFacesPreview],
+  );
+
   const ropePrompt = props.featuredMessages?.length
     ? `Reply to ${profilesByUserId["visitor-sender-0"]?.display_name ?? "the room"}, ask the room anything…`
     : "This is where you'd talk — and where the community answers you, any hour…";
+
+  /* The frost: everything in the feed below the pinned host post sits behind
+     glass. Measured against the real DOM (static content, remeasured on
+     resize) so the pinned post stays clear and the frost fills the rest. */
+  const previewShellRef = useRef<HTMLDivElement | null>(null);
+  const [frostRect, setFrostRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const shell = previewShellRef.current;
+    if (!shell) return;
+    const measure = () => {
+      const feedScroll = shell.querySelector(".community-interaction-feed-scroll");
+      const firstGroup = shell.querySelector(".community-interaction-group");
+      if (!feedScroll || !firstGroup) {
+        setFrostRect(null);
+        return;
+      }
+      const shellRect = shell.getBoundingClientRect();
+      const feedRect = feedScroll.getBoundingClientRect();
+      const groupRect = firstGroup.getBoundingClientRect();
+      const top = Math.max(feedRect.top, groupRect.bottom + 6) - shellRect.top;
+      const height = feedRect.bottom - shellRect.top - top;
+      if (height < 48) {
+        setFrostRect(null);
+        return;
+      }
+      setFrostRect({
+        top,
+        left: feedRect.left - shellRect.left,
+        width: feedRect.width,
+        height,
+      });
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(shell);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [roots]);
 
   return (
     <>
@@ -160,7 +228,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
               ))}
             </div>
           ) : null}
-          <div className="community-interaction-scroll">
+          <div className="community-interaction-scroll cvs-preview" ref={previewShellRef}>
             <WebCommunityInteractionProjection
               activeCommunityName={title}
               roots={roots}
@@ -204,14 +272,33 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
                   ? formatCompactStat(stats.memoryNoteCount)
                   : null
               }
+              contextPanelMembersPreview={memberPreviewFaces}
+              communityMemoryOverview={props.memoryOverview}
             />
+            {frostRect ? (
+              <div
+                className="cvs-frost"
+                style={{
+                  top: frostRect.top,
+                  left: frostRect.left,
+                  width: frostRect.width,
+                  height: frostRect.height,
+                }}
+                onClick={reopenGate}
+              >
+                <CommunityVisitorChatFrostChip
+                  messagesTodayCount={stats.messagesTodayCount}
+                  onActivate={reopenGate}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
 
       {gateMounted ? (
         <div
-          className={`cfg-gate${gateOpen ? "" : " off"}`}
+          className={`cfg-gate cvs-gate${gateOpen ? "" : " off"}`}
           onClick={(event) => {
             if (event.target === event.currentTarget) dismissGate();
           }}

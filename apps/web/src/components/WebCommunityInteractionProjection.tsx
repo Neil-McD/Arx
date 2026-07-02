@@ -125,6 +125,7 @@ export type WebCommunityInteractionProjectionProps = {
   contextPanelLockedSections?: { members?: boolean; memory?: boolean } | null;
   onContextPanelLockedSectionActivate?: (section: "members" | "memory") => void;
   communityMemoryCountLabel?: string | null;
+  contextPanelMembersPreview?: CommunityPresenceFace[] | null;
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;
@@ -656,6 +657,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             lockedSections={props.contextPanelLockedSections ?? null}
             onLockedSectionActivate={props.onContextPanelLockedSectionActivate}
             memoryCountLabelOverride={props.communityMemoryCountLabel ?? null}
+            membersPreview={props.contextPanelMembersPreview ?? null}
             onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
             onOpenMemberProfile={props.onOpenProfile}
             onMessageMember={props.onMessageUser}

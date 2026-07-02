@@ -12200,7 +12200,11 @@ export default function App() {
           if (tab !== "chat") setVisitorGateNonce((nonce) => nonce + 1);
         }
       : handleSelectCommunityTab,
-    handleSelectCommunityTabFromMobile,
+    handleSelectCommunityTabFromMobile: isVisitorCommunitySurface
+      ? (tab) => {
+          if (tab !== "chat") setVisitorGateNonce((nonce) => nonce + 1);
+        }
+      : handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
     openMobileAgentSettings,
     canOpenDirectMessages: Boolean(session),

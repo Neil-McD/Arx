@@ -6,6 +6,7 @@ import {
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
 } from "../../../../shared/communityFunnelUi";
+import type { ComponentProps } from "react";
 import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
 import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
 
@@ -36,6 +37,12 @@ export type PublicCommunityFunnelCommunityLike = {
   memory_note_count?: number | null;
   resource_count?: number | null;
   created_at?: string | null;
+  member_faces_preview?: Array<{
+    user_id: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  }> | null;
+  memory_overview?: unknown;
   online_faces?: Array<{
     user_id: string;
     display_name: string | null;
@@ -334,7 +341,14 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
           onlineFaces,
           memberCount,
           memoryNoteCount: publicCommunity?.memory_note_count ?? null,
+          messagesTodayCount: publicCommunity?.messages_today_count ?? null,
+          memberFacesPreview: publicCommunity?.member_faces_preview ?? [],
         }}
+        memoryOverview={
+          (publicCommunity?.memory_overview as ComponentProps<
+            typeof WebCommunityVisitorSurface
+          >["memoryOverview"]) ?? null
+        }
         pricingLabel={pricingLabel}
         isFreePricing={isFreePricing}
         alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}

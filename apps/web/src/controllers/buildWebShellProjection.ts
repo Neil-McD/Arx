@@ -38,21 +38,29 @@ export function buildWebShellProjection(params: {
   const isLandingPage = isAppRoute && params.activePage === "landing";
   const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
   const isPublicAppPage = isLandingPage || isOnboardingPage;
+  /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
+     shell a member gets — one column, the middle panel is the page. */
+  const isMobileVisitorCommunity =
+    params.shellVariant === "mobile" && params.publicRouteKind === "community_funnel";
   const showMobileAppShell =
-    params.shellVariant === "mobile" &&
-    isAppRoute &&
-    !isPublicAppPage &&
-    !params.isPublicCommunityFunnel &&
-    (params.activePage === "workspace" ||
-      params.activePage === "community" ||
-      params.activePage === "discover" ||
-      params.activePage === "docs");
-  const showMobileSettingsShell = showMobileAppShell && isWorkspaceSettings;
-  const showMobileShell = showMobileAppShell && !isWorkspaceSettings;
+    (params.shellVariant === "mobile" &&
+      isAppRoute &&
+      !isPublicAppPage &&
+      !params.isPublicCommunityFunnel &&
+      (params.activePage === "workspace" ||
+        params.activePage === "community" ||
+        params.activePage === "discover" ||
+        params.activePage === "docs")) ||
+    isMobileVisitorCommunity;
+  const showMobileSettingsShell = showMobileAppShell && isWorkspaceSettings && !isMobileVisitorCommunity;
+  const showMobileShell = showMobileAppShell && !showMobileSettingsShell;
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
   const showMobilePublicFunnel =
-    params.shellVariant === "mobile" && !isAppRoute && params.isPublicCommunityFunnel;
+    params.shellVariant === "mobile" &&
+    !isAppRoute &&
+    params.isPublicCommunityFunnel &&
+    !isMobileVisitorCommunity;
   const sessionsDrawerEnabled =
     isAppRoute &&
     params.activePage === "workspace" &&
@@ -75,17 +83,17 @@ export function buildWebShellProjection(params: {
     showDesktopCommunityRail && !isPublicAppPage;
   const hasLeftPanel =
     (isWorkspaceSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
-  const mobileShellMode: MobileShellMode =
-    params.activePage === "workspace"
+  const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
+    ? "community"
+    : params.activePage === "workspace"
       ? "agent"
       : params.activePage === "discover"
         ? "discover"
         : params.activePage === "docs"
           ? "discover"
           : "community";
-  const mobileSecondaryMode: MobileSecondaryMode = params.hasSelectedCommunity
-    ? "community"
-    : "discover";
+  const mobileSecondaryMode: MobileSecondaryMode =
+    params.hasSelectedCommunity || isMobileVisitorCommunity ? "community" : "discover";
   const showHeaderIslands =
     isAppRoute &&
     params.activePage === "workspace" &&

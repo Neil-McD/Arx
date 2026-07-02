@@ -1,5 +1,12 @@
 /* Visitor conversion chrome. Extends CommunityFunnelSurface.css cfg-* vocabulary. */
 
+/* The gate is the page's front door — it centers on the VIEWPORT, above all
+   shell chrome, not on the content column it happens to mount inside. */
+.cfg-gate.cvs-gate {
+  position: fixed;
+  z-index: 120;
+}
+
 .cvs-gatecard .cfg-gpromise {
   min-height: 0;
 }
@@ -14,14 +21,100 @@
   margin: 0;
 }
 
-.cvs-roph {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  text-align: left;
+/* Composer twin: hover says "not yours yet" and lights the join button. */
+.cvs-composer {
+  display: grid;
+  gap: 7px;
+  padding: 10px 14px 12px;
+}
+
+.cvs-composer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cvs-composer-bar {
+  flex: 1;
+  cursor: not-allowed;
+}
+
+.cvs-composer-bar .chat-input {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.cvs-composer-bar .ask-icon-btn,
+.cvs-composer-bar .chat-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.cvs-composer-join {
+  white-space: nowrap;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+@media (max-width: 700px) {
+  .cvs-composer-row {
+    flex-wrap: wrap;
+  }
+
+  .cvs-composer-row .cvs-composer-join {
+    flex: 1 1 100%;
+  }
+}
+
+.cvs-composer-row:has(.cvs-composer-bar:hover) .cvs-composer-join {
+  box-shadow: 0 0 0 2px var(--accent-gold, #d66a8a), 0 0 18px 0 color-mix(in srgb, var(--accent-gold, #d66a8a) 55%, transparent);
+  transform: translateY(-1px);
+}
+
+/* The visitor feed reads top-down like a page: pinned post first. */
+.cvs-preview {
+  position: relative;
+}
+
+.cvs-preview .community-interaction-feed {
+  margin-top: 0;
+}
+
+/* The frost over the rest of the chat: real rows behind glass. */
+.cvs-frost {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  font: inherit;
-  color: inherit;
+  backdrop-filter: blur(7px) saturate(0.85);
+  -webkit-backdrop-filter: blur(7px) saturate(0.85);
+  background: color-mix(in srgb, var(--bg-workspace, #121214) 35%, transparent);
+}
+
+.cvs-frost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-card, rgba(23, 23, 26, 0.9));
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.cvs-frost-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong, var(--border-default));
+}
+
+.cvs-frost-chip svg {
+  flex: none;
 }
 
 /* The visitor panel is the member chat panel's DOM shape. */

@@ -8994,6 +8994,92 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex: none;
 }
 
+/* Visitor glass layer: real content visible, verbs gated. */
+.community-context-memory-inert {
+  pointer-events: none;
+  user-select: none;
+}
+
+.community-context-locked-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-context-locked-hint:hover {
+  color: var(--text-muted);
+}
+
+.community-context-locked-hint svg {
+  flex: none;
+}
+
+.community-context-members-glass {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-context-member-inert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  pointer-events: none;
+}
+
+.community-context-members-frost {
+  position: relative;
+  display: block;
+  margin-top: 2px;
+}
+
+.community-context-members-frost .community-context-member-ghost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  filter: blur(3px);
+  opacity: 0.45;
+}
+
+.community-context-member-ghost .community-context-member-avatar {
+  background: var(--bg-card, rgba(255, 255, 255, 0.06));
+}
+
+.community-context-member-ghost-bar {
+  display: inline-block;
+  width: 64%;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--border-default);
+}
+
+.community-context-members-frost-more {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  backdrop-filter: blur(1.5px);
+}
+
 .community-context-memory-error button {
   border: 0;
   background: transparent;

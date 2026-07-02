@@ -77,6 +77,23 @@ export async function fetchCloudPublicFunnelStats<SessionT, TPublicCommunityStat
   };
 }
 
+export async function fetchCloudPublicCommunityMemoryOverview<SessionT, TOverview>(
+  params: CloudPublicFunnelParams<SessionT> & {
+    communitySlug: string;
+  },
+): Promise<{
+  ok?: boolean;
+  overview?: TOverview;
+}> {
+  const client = createConvexClient();
+  return (await client.query("community:resolvePublicCommunityMemoryOverviewBySlug" as any, {
+    communitySlug: params.communitySlug,
+  })) as {
+    ok?: boolean;
+    overview?: TOverview;
+  };
+}
+
 export async function recordCloudPublicFunnelVisit<SessionT>(
   params: CloudPublicFunnelParams<SessionT> & {
     session?: SessionT | null;

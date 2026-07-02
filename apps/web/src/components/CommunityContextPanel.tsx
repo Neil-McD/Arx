@@ -77,6 +77,9 @@ type CommunityContextPanelProps = {
   lockedSections?: { members?: boolean; memory?: boolean } | null;
   onLockedSectionActivate?: (section: "members" | "memory") => void;
   memoryCountLabelOverride?: string | null;
+  /* Visitor mode: up to 5 real faces render above the frost; everyone else
+     is a glassed glimpse plus a true count. */
+  membersPreview?: CommunityPresenceFace[] | null;
   onOpenMemberSettings?: (member: CommunityRailMember) => void;
   onOpenMemberProfile?: (userId: string) => void;
   onMessageMember?: (userId: string) => void;
@@ -452,7 +455,24 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <div className="community-context-memory-head">
           <div className="community-context-section">{memorySectionLabel}</div>
         </div>
-        {lockedMemory ? (
+        {lockedMemory && memoryOverview ? (
+          <div className="community-context-memory-summary">
+            <div
+              className="community-context-memory-preview community-context-memory-inert"
+              aria-label="Community memory graph preview"
+            >
+              <CommunityMemoryGraphPreview overview={memoryOverview} />
+            </div>
+            <button
+              type="button"
+              className="community-context-locked-hint"
+              onClick={() => props.onLockedSectionActivate?.("memory")}
+            >
+              <Lock size={12} strokeWidth={2} aria-hidden="true" />
+              <span>Everything this community has learned. Unlocks when you join.</span>
+            </button>
+          </div>
+        ) : lockedMemory ? (
           <button
             type="button"
             className="community-context-locked"
@@ -573,7 +593,48 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             ) : null}
           </div>
         ) : null}
-        {lockedMembers ? (
+        {lockedMembers && (props.membersPreview?.length ?? 0) > 0 ? (
+          <button
+            type="button"
+            className="community-context-members-glass"
+            onClick={() => props.onLockedSectionActivate?.("members")}
+          >
+            {(props.membersPreview ?? []).map((face) => {
+              const name = (face.display_name ?? "").trim() || "Member";
+              return (
+                <span key={face.user_id} className="community-context-member community-context-member-inert">
+                  <span
+                    className="community-context-member-avatar"
+                    style={!face.avatar_url && face.avatar_color ? { color: face.avatar_color } : undefined}
+                  >
+                    {face.avatar_url ? (
+                      <img src={face.avatar_url} alt="" />
+                    ) : (
+                      <span>{face.initials ?? props.getInitials(name)}</span>
+                    )}
+                  </span>
+                  <span className="community-context-member-name">{name}</span>
+                </span>
+              );
+            })}
+            {knownMemberCount !== null && knownMemberCount > (props.membersPreview?.length ?? 0) ? (
+              <span className="community-context-members-frost" aria-hidden="true">
+                {Array.from({ length: Math.min(3, knownMemberCount - (props.membersPreview?.length ?? 0)) }).map(
+                  (_, index) => (
+                    <span key={index} className="community-context-member community-context-member-ghost">
+                      <span className="community-context-member-avatar" />
+                      <span className="community-context-member-ghost-bar" />
+                    </span>
+                  ),
+                )}
+                <span className="community-context-members-frost-more">
+                  <Lock size={12} strokeWidth={2} aria-hidden="true" />+
+                  {knownMemberCount - (props.membersPreview?.length ?? 0)} more when you&apos;re in
+                </span>
+              </span>
+            ) : null}
+          </button>
+        ) : lockedMembers ? (
           <button
             type="button"
             className="community-context-locked"
