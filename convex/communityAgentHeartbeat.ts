@@ -258,12 +258,26 @@ export const runCommunityMemorySweepInternal = internalAction({
           internalRefs.communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
           {
             communityId: target.communityId,
+            trigger: "sweep",
           },
         )) as Record<string, any>;
         if (Number(metabolizerResult.settled_node_count ?? 0) > 0) metabolized += 1;
-      } catch {
+      } catch (error) {
         // Score settlement is mechanical memory metabolism; it should not
         // block the heartbeat's evidence gate or role cycle.
+        try {
+          await ctx.runMutation(
+            internalRefs.communityMemoryMetabolizer.recordCommunityMemoryMetabolizerErrorRunInternal,
+            {
+              communityId: target.communityId,
+              trigger: "sweep",
+              errorCode: error instanceof Error ? error.message.slice(0, 120) : "community_metabolizer_error",
+              errorMessage: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+            },
+          );
+        } catch {
+          // Error ledger failure must not block the heartbeat either.
+        }
       }
       await ctx.runMutation(internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal, {
         communityId: target.communityId,

@@ -1530,6 +1530,9 @@ Rules:
 - It does not bump node `version` or `updatedAt`; derived telemetry must not stale pending content change requests.
 - Its node update cap limits actual settled nodes, not noisy signal inspection.
 - It writes a `communityIntelligenceMutations` audit row with before/after snapshots for every changed node.
+- It writes a compact `communityMemoryMetabolizerRuns` ledger row for every successful settlement attempt, including `noop` runs where no node changed.
+- Sweep-triggered settlement errors are recorded as `communityMemoryMetabolizerRuns` rows with `status = error`; failed settlement mutations remain rollback-safe and do not commit partial score updates.
+- The metabolizer run ledger is same-community scoped and manager-readable; it is the truth surface for "ran vs no-op vs failed."
 - It does not call an LLM. Metabolizer v0 is mechanical metabolism, not a new agent role.
 
 ## Twenty-Second Implementation Slice
@@ -1549,7 +1552,7 @@ Rules:
 - Settlement runs for the same explicit `communityId` as the sweep target.
 - Digest refresh still runs before score settlement so the compiler window is fresh before the knock.
 - Metabolizer failure does not block the delayed heartbeat; derived score settlement is learning pressure, not the source of truth or the wake gate.
-- The sweep returns compact `metabolized` diagnostics, but canonical audit remains the `communityIntelligenceMutations` rows written by the metabolizer itself.
+- The sweep returns compact `metabolized` diagnostics. Changed-node audit remains in `communityIntelligenceMutations`; run/no-op/error audit lives in `communityMemoryMetabolizerRuns`.
 
 ## What Not To Build Yet
 

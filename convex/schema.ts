@@ -2941,6 +2941,34 @@ export default defineSchema({
     .index("by_community_workflow", ["communityId", "workflowId"])
     .index("by_community_observedAt", ["communityId", "observedAt"]),
 
+  communityMemoryMetabolizerRuns: defineTable({
+    communityId: v.id("communities"),
+    status: v.union(
+      v.literal("settled"),
+      v.literal("noop"),
+      v.literal("error"),
+    ),
+    trigger: v.union(
+      v.literal("sweep"),
+      v.literal("manual"),
+      v.literal("internal"),
+    ),
+    inspectedRetrievalLogCount: v.number(),
+    inspectedOutcomeCount: v.number(),
+    signalNodeCount: v.number(),
+    inspectedNodeCount: v.number(),
+    settledNodeCount: v.number(),
+    nodeUpdateLimit: v.number(),
+    changedNodeIds: v.array(v.id("communityIntelligenceNodes")),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    startedAt: v.number(),
+    finishedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_community_finishedAt", ["communityId", "finishedAt"])
+    .index("by_finishedAt", ["finishedAt"]),
+
   communityCompilerDigests: defineTable({
     communityId: v.id("communities"),
     dedupeKey: v.string(),

@@ -1,6 +1,11 @@
-import { internalMutation } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { normalizeIdValue } from "./communityCore";
+import {
+  normalizeIdValue,
+  requireCommunityManager,
+  resolveUserIdForAuthenticatedRequest,
+  toIsoString,
+} from "./communityCore";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type EvidenceStrength = "none" | "anecdotal" | "observed" | "measured" | "validated";
@@ -15,6 +20,8 @@ type NodeStatus =
   | "deprecated"
   | "archived";
 type OutcomeResultStatus = "worked" | "failed" | "mixed" | "unknown";
+type MetabolizerRunStatus = "settled" | "noop" | "error";
+type MetabolizerTrigger = "sweep" | "manual" | "internal";
 
 type IntelligenceNodeRow = {
   _id: any;
@@ -85,6 +92,10 @@ const METABOLIZER_NODE_UPDATE_LIMIT = 200;
 const METABOLIZER_SCORE_EPSILON = 0.005;
 const METABOLIZER_EXCLUDED_AGENT_KEYS = new Set(["community_agent"]);
 
+function boundedText(raw: unknown, maxLength: number): string {
+  return String(raw ?? "").trim().slice(0, maxLength);
+}
+
 function clampScore(raw: unknown, fallback = 0): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return fallback;
@@ -95,6 +106,11 @@ function boundedMetabolizerLimit(raw: unknown, fallback: number, max: number): n
   const parsed = Math.floor(Number(raw ?? fallback));
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.max(1, Math.min(max, parsed));
+}
+
+function normalizeMetabolizerTrigger(raw: unknown): MetabolizerTrigger {
+  if (raw === "sweep" || raw === "manual" || raw === "internal") return raw;
+  return "internal";
 }
 
 function retrievalLogNodeIds(log: RetrievalLogRow): any[] {
@@ -279,9 +295,86 @@ async function insertMetabolizerMutationLog(args: {
   });
 }
 
+async function insertMetabolizerRunLedger(args: {
+  ctx: any;
+  communityId: any;
+  status: MetabolizerRunStatus;
+  trigger: MetabolizerTrigger;
+  inspectedRetrievalLogCount: number;
+  inspectedOutcomeCount: number;
+  signalNodeCount: number;
+  inspectedNodeCount: number;
+  settledNodeCount: number;
+  nodeUpdateLimit: number;
+  changedNodeIds: any[];
+  errorCode?: string;
+  errorMessage?: string;
+  startedAt: number;
+  finishedAt: number;
+}): Promise<any> {
+  return await args.ctx.db.insert("communityMemoryMetabolizerRuns" as any, {
+    communityId: args.communityId,
+    status: args.status,
+    trigger: args.trigger,
+    inspectedRetrievalLogCount: Math.max(0, Math.floor(args.inspectedRetrievalLogCount)),
+    inspectedOutcomeCount: Math.max(0, Math.floor(args.inspectedOutcomeCount)),
+    signalNodeCount: Math.max(0, Math.floor(args.signalNodeCount)),
+    inspectedNodeCount: Math.max(0, Math.floor(args.inspectedNodeCount)),
+    settledNodeCount: Math.max(0, Math.floor(args.settledNodeCount)),
+    nodeUpdateLimit: Math.max(0, Math.floor(args.nodeUpdateLimit)),
+    changedNodeIds: args.changedNodeIds,
+    errorCode: boundedText(args.errorCode, 120) || undefined,
+    errorMessage: boundedText(args.errorMessage, 500) || undefined,
+    startedAt: args.startedAt,
+    finishedAt: args.finishedAt,
+    createdAt: args.finishedAt,
+  });
+}
+
+export const recordCommunityMemoryMetabolizerErrorRunInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    trigger: v.optional(v.union(v.literal("sweep"), v.literal("manual"), v.literal("internal"))),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    if (!community) throw new Error("community_metabolizer_community_not_found");
+    const startedAt = args.startedAt ?? args.finishedAt ?? Date.now();
+    const finishedAt = Math.max(startedAt, args.finishedAt ?? Date.now());
+    const runId = await insertMetabolizerRunLedger({
+      ctx,
+      communityId: args.communityId,
+      status: "error",
+      trigger: normalizeMetabolizerTrigger(args.trigger),
+      inspectedRetrievalLogCount: 0,
+      inspectedOutcomeCount: 0,
+      signalNodeCount: 0,
+      inspectedNodeCount: 0,
+      settledNodeCount: 0,
+      nodeUpdateLimit: 0,
+      changedNodeIds: [],
+      errorCode: args.errorCode,
+      errorMessage: args.errorMessage,
+      startedAt,
+      finishedAt,
+    });
+    return {
+      ok: true,
+      run_id: normalizeIdValue(runId),
+      community_id: normalizeIdValue(args.communityId),
+      status: "error",
+    };
+  },
+});
+
 export const settleCommunityMemorySignalsInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
+    trigger: v.optional(v.union(v.literal("sweep"), v.literal("manual"), v.literal("internal"))),
     retrievalLogLimit: v.optional(v.number()),
     outcomeLimit: v.optional(v.number()),
     nodeUpdateLimit: v.optional(v.number()),
@@ -307,6 +400,8 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
       METABOLIZER_NODE_UPDATE_LIMIT,
     );
     const nowMs = args.nowMs ?? Date.now();
+    const startedAt = nowMs;
+    const trigger = normalizeMetabolizerTrigger(args.trigger);
 
     const [retrievalLogs, outcomes] = await Promise.all([
       ctx.db
@@ -360,6 +455,7 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
     }
 
     const changedNodes: Array<{
+      id: any;
       node_id: string;
       title: string;
       staleness_score: number;
@@ -407,6 +503,7 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
         nowMs,
       });
       changedNodes.push({
+        id: updated._id,
         node_id: normalizeIdValue(updated._id),
         title: updated.title,
         staleness_score: updated.stalenessScore,
@@ -416,16 +513,82 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
       if (changedNodes.length >= nodeUpdateLimit) break;
     }
 
+    const finishedAt = Math.max(startedAt, Date.now());
+    const runId = await insertMetabolizerRunLedger({
+      ctx,
+      communityId: args.communityId,
+      status: changedNodes.length > 0 ? "settled" : "noop",
+      trigger,
+      inspectedRetrievalLogCount: retrievalLogs.length,
+      inspectedOutcomeCount: outcomes.length,
+      signalNodeCount: signals.size,
+      inspectedNodeCount: inspectedNodes,
+      settledNodeCount: changedNodes.length,
+      nodeUpdateLimit,
+      changedNodeIds: changedNodes.map((node) => node.id),
+      startedAt,
+      finishedAt,
+    });
+
     return {
       ok: true,
+      run_id: normalizeIdValue(runId),
       community_id: normalizeIdValue(args.communityId),
+      status: changedNodes.length > 0 ? "settled" : "noop",
       inspected_retrieval_log_count: retrievalLogs.length,
       inspected_outcome_count: outcomes.length,
       signal_node_count: signals.size,
       inspected_node_count: inspectedNodes,
       settled_node_count: changedNodes.length,
       node_update_limit: nodeUpdateLimit,
-      changed_nodes: changedNodes,
+      changed_nodes: changedNodes.map((node) => ({
+        node_id: node.node_id,
+        title: node.title,
+        staleness_score: node.staleness_score,
+        retrieval_usefulness_score: node.retrieval_usefulness_score,
+        outcome_impact_score: node.outcome_impact_score,
+      })),
     };
+  },
+});
+
+export const listCommunityMemoryMetabolizerRuns = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 25)));
+    const rows = (await ctx.db
+      .query("communityMemoryMetabolizerRuns" as any)
+      .withIndex("by_community_finishedAt", (q: any) => q.eq("communityId", args.communityId))
+      .order("desc")
+      .take(limit)) as Array<Record<string, any>>;
+    return rows.map((row) => ({
+      id: normalizeIdValue(row._id),
+      community_id: normalizeIdValue(row.communityId),
+      status: row.status,
+      trigger: row.trigger,
+      inspected_retrieval_log_count: row.inspectedRetrievalLogCount,
+      inspected_outcome_count: row.inspectedOutcomeCount,
+      signal_node_count: row.signalNodeCount,
+      inspected_node_count: row.inspectedNodeCount,
+      settled_node_count: row.settledNodeCount,
+      node_update_limit: row.nodeUpdateLimit,
+      changed_node_ids: (row.changedNodeIds ?? []).map(normalizeIdValue),
+      error_code: row.errorCode ?? null,
+      error_message: row.errorMessage ?? null,
+      started_at: toIsoString(row.startedAt),
+      finished_at: toIsoString(row.finishedAt),
+      created_at: toIsoString(row.createdAt),
+    }));
   },
 });

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
+const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const metabolizer = readFileSync(join(root, "convex/communityMemoryMetabolizer.ts"), "utf8");
 const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -33,6 +34,11 @@ assert.match(
   "metabolizer should explicitly exclude the canonical community agent from self-authored outcome evidence",
 );
 assert.match(
+  schema,
+  /communityMemoryMetabolizerRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("noop"\)[\s\S]*v\.literal\("error"\)[\s\S]*trigger: v\.union\([\s\S]*v\.literal\("sweep"\)[\s\S]*v\.literal\("manual"\)[\s\S]*v\.literal\("internal"\)[\s\S]*changedNodeIds: v\.array\(v\.id\("communityIntelligenceNodes"\)\)[\s\S]*\.index\("by_community_finishedAt", \["communityId", "finishedAt"\]\)/,
+  "schema should include a same-community metabolizer run ledger with settled/noop/error statuses",
+);
+assert.match(
   metabolizer,
   /function metabolizedRetrievalUsefulnessScore[\s\S]*function hasMetabolizerRetrievalSignal[\s\S]*function metabolizedOutcomeImpactScore[\s\S]*function hasMetabolizerOutcomeSignal[\s\S]*function metabolizedStalenessScore/,
   "metabolizer should compute the three derived learning scores deterministically",
@@ -44,6 +50,8 @@ assert.match(
 );
 
 const block = exportedFunctionBlock(metabolizer, "settleCommunityMemorySignalsInternal");
+const errorBlock = exportedFunctionBlock(metabolizer, "recordCommunityMemoryMetabolizerErrorRunInternal");
+const listRunsBlock = exportedFunctionBlock(metabolizer, "listCommunityMemoryMetabolizerRuns");
 assert.match(
   block,
   /export const settleCommunityMemorySignalsInternal = internalMutation/,
@@ -53,6 +61,11 @@ assert.match(
   block,
   /communityId: v\.id\("communities"\)/,
   "metabolizer settlement must be scoped to one explicit community",
+);
+assert.match(
+  block,
+  /trigger: v\.optional\(v\.union\(v\.literal\("sweep"\), v\.literal\("manual"\), v\.literal\("internal"\)\)\)/,
+  "metabolizer settlement should record the source trigger for the run ledger",
 );
 assert.match(
   block,
@@ -96,6 +109,16 @@ assert.match(
 );
 assert.match(
   block,
+  /insertMetabolizerRunLedger\(\{[\s\S]*status: changedNodes\.length > 0 \? "settled" : "noop"[\s\S]*inspectedRetrievalLogCount: retrievalLogs\.length[\s\S]*inspectedOutcomeCount: outcomes\.length[\s\S]*signalNodeCount: signals\.size[\s\S]*inspectedNodeCount: inspectedNodes[\s\S]*settledNodeCount: changedNodes\.length[\s\S]*changedNodeIds: changedNodes\.map\(\(node\) => node\.id\)/,
+  "metabolizer should write a compact run ledger for both settled and noop runs",
+);
+assert.match(
+  block,
+  /run_id: normalizeIdValue\(runId\)[\s\S]*status: changedNodes\.length > 0 \? "settled" : "noop"/,
+  "settlement response should expose the ledger run id and status",
+);
+assert.match(
+  block,
   /changedNodes\.push\(\{[\s\S]*outcome_impact_score: updated\.outcomeImpactScore[\s\S]*\}\);[\s\S]*if \(changedNodes\.length >= nodeUpdateLimit\) break/,
   "nodeUpdateLimit should cap actual settled nodes, not noisy signal inspection",
 );
@@ -121,6 +144,11 @@ assert.match(
   "metabolizer score settlement should still write an audit mutation with before/after snapshots",
 );
 assert.match(
+  metabolizer,
+  /insertMetabolizerRunLedger[\s\S]*ctx\.db\.insert\("communityMemoryMetabolizerRuns"/,
+  "metabolizer should write run/noop/error audit rows to the dedicated run ledger",
+);
+assert.match(
   block,
   /if \(outcome\.nodeId\)[\s\S]*else if \(outcome\.retrievalLogId\)[\s\S]*retrievalLogNodeIds\(retrievalLog\)/,
   "outcomes should apply directly to nodeId when present and otherwise fall back to retrieved nodes from retrieval provenance",
@@ -130,11 +158,36 @@ assert.match(
   /for \(const outcome of outcomes\) \{[\s\S]*METABOLIZER_EXCLUDED_AGENT_KEYS\.has\(String\(outcome\.observedByAgentKey \?\? ""\)\)[\s\S]*continue/,
   "metabolizer should skip community-agent-authored outcome observations before applying outcome signal",
 );
+assert.match(
+  errorBlock,
+  /export const recordCommunityMemoryMetabolizerErrorRunInternal = internalMutation/,
+  "error run recording should be internal-only",
+);
+assert.match(
+  errorBlock,
+  /const community = await ctx\.db\.get\(args\.communityId\)[\s\S]*community_metabolizer_community_not_found[\s\S]*status: "error"[\s\S]*changedNodeIds: \[\]/,
+  "error run recording should fail closed on missing community and never invent changed nodes",
+);
+assert.match(
+  heartbeat,
+  /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId[\s\S]*trigger: "sweep"[\s\S]*recordCommunityMemoryMetabolizerErrorRunInternal[\s\S]*status|settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId[\s\S]*trigger: "sweep"[\s\S]*recordCommunityMemoryMetabolizerErrorRunInternal/,
+  "memory sweep should pass the sweep trigger and record error runs without blocking the heartbeat",
+);
+assert.match(
+  listRunsBlock,
+  /export const listCommunityMemoryMetabolizerRuns = query/,
+  "metabolizer run ledger should expose a manager-readable query",
+);
+assert.match(
+  listRunsBlock,
+  /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\)[\s\S]*query\("communityMemoryMetabolizerRuns"[\s\S]*withIndex\("by_community_finishedAt"[\s\S]*q\.eq\("communityId", args\.communityId\)[\s\S]*\.take\(limit\)/,
+  "metabolizer run query should be manager-gated, same-community scoped, and bounded",
+);
 
 assert.match(
   docs,
-  /Metabolizer v0[\s\S]*deterministic score settlement[\s\S]*settles persistent derived scores for nodes touched by recent bounded evidence[\s\S]*no-signal nodes are left unchanged[\s\S]*node update cap limits actual settled nodes/,
-  "architecture doc should describe the metabolizer v0 boundary",
+  /Metabolizer v0[\s\S]*deterministic score settlement[\s\S]*settles persistent derived scores for nodes touched by recent bounded evidence[\s\S]*no-signal nodes are left unchanged[\s\S]*communityMemoryMetabolizerRuns[\s\S]*noop[\s\S]*manager-readable/,
+  "architecture doc should describe the metabolizer v0 boundary and run ledger",
 );
 
 console.log("community_metabolizer_contract_proof: ok");
