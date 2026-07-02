@@ -2441,7 +2441,7 @@ export default function App() {
   const communityInteractionRepliesRequestIdRef = useRef<Record<string, number>>({});
   activeCommunityInteractionCommunityIdRef.current = activeCommunityId;
   const [communityMessageInput, setCommunityMessageInput] = useState("");
-  const [communityMessageMentions, setCommunityMessageMentions] = useState<{ userId: string; displayName: string }[]>([]);
+  const [communityMessageMentions, setCommunityMessageMentions] = useState<{ userId: string; displayName: string; token?: string }[]>([]);
   useEffect(() => {
     if (!communityMessageInput) setCommunityMessageMentions([]);
   }, [communityMessageInput]);

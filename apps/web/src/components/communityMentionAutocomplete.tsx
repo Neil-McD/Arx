@@ -14,6 +14,10 @@ export type MentionCandidate = {
 export type CommittedMention = {
   userId: string;
   displayName: string;
+  /** The exact text inserted into the composer (e.g. "@rashidk") — handles
+   * are the ground truth for user tokens; display names collide and drift.
+   * Optional only for drafts committed before tokens existed. */
+  token?: string;
   kind?: "user" | "community_agent";
   agentKey?: string;
 };
@@ -114,7 +118,12 @@ export function useMentionAutocomplete(params: {
       const caret = textarea.selectionStart ?? value.length;
       const before = value.slice(0, active.atIndex);
       const after = value.slice(caret);
-      const token = `@${candidate.displayName}`;
+      // Users tokenize by handle (unique, stable); the agent has no handle
+      // and tokenizes by its display name, disambiguated by the AGENT badge.
+      const token =
+        candidate.kind === "community_agent" || !candidate.handle
+          ? `@${candidate.displayName}`
+          : `@${candidate.handle}`;
       const needsSpace = !after.startsWith(" ");
       const nextValue = `${before}${token}${needsSpace ? " " : ""}${after}`;
       const nextCaret = before.length + token.length + 1;
@@ -123,6 +132,7 @@ export function useMentionAutocomplete(params: {
       onCommitMention({
         userId: candidate.userId,
         displayName: candidate.displayName,
+        token,
         kind: candidate.kind ?? "user",
         ...(candidate.kind === "community_agent" ? { agentKey: "community_agent" } : {}),
       });

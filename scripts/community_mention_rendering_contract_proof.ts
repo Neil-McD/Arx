@@ -109,6 +109,34 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     /suppressBlurRef/,
     "the dead suppressBlurRef guard must not return; focus retention is the real fix",
   );
+  // Handles are the ground truth for user mention tokens (unique, stable);
+  // display names collide and drift. The agent has no handle and keeps its
+  // display-name token, disambiguated by the AGENT badge.
+  assert.match(
+    menuSource,
+    /candidate\.kind === "community_agent" \|\| !candidate\.handle[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{candidate\.handle\}`/,
+    "picker must insert @handle for users and fall back to display name only for the agent or handle-less users",
+  );
+}
+
+// The feed must resolve chips handle-first with a display-name fallback, so
+// messages written before handle tokens — or after a rename — still chip.
+{
+  const { readFileSync } = await import("node:fs");
+  const feedSource = readFileSync(
+    new URL("../apps/web/src/components/communityInteractionFeed.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    feedSource,
+    /key: `\$\{mention\.id\}:handle`,\s*label: handle,/,
+    "feed must emit a handle label for user mentions",
+  );
+  assert.match(
+    feedSource,
+    /if \(profileName && profileName !== handle\) \{[\s\S]*?key: `\$\{mention\.id\}:name`,/,
+    "feed must keep the display-name label as a fallback",
+  );
 }
 
 console.log("community_mention_rendering_contract_proof: ok");
