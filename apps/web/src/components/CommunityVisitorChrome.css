@@ -163,6 +163,57 @@
   height: 15px;
 }
 
+/* Ghost thread: the conversation's silhouette. Shapes only — no names,
+   no text, nothing fabricated. */
+.cvs-ghost-thread {
+  position: absolute;
+  inset: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+  filter: blur(2.5px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.cvs-ghost-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.cvs-ghost-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-card, rgba(255, 255, 255, 0.07));
+  border: 1px solid var(--border-default, #26262b);
+}
+
+.cvs-ghost-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 3px;
+}
+
+.cvs-ghost-name {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border-strong, #35353b);
+}
+
+.cvs-ghost-line {
+  height: 9px;
+  border-radius: 5px;
+  background: var(--border-default, #26262b);
+  max-width: 520px;
+}
+
 .cvs-frost-chip:hover {
   color: var(--text-primary);
   border-color: var(--border-strong, var(--border-default));

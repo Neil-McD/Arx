@@ -24,6 +24,7 @@ import {
 import {
   CommunityVisitorChatFrostChip,
   CommunityVisitorGate,
+  CommunityVisitorGhostThread,
   CommunityVisitorJoinRope,
 } from "./CommunityVisitorChrome";
 import { WebCommunityInteractionProjection } from "./WebCommunityInteractionProjection";
@@ -189,21 +190,21 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     if (!shell) return;
     const measure = () => {
       const feedScroll = shell.querySelector(".community-interaction-feed-scroll");
-      const firstGroup = shell.querySelector(".community-interaction-group");
-      if (!feedScroll || !firstGroup) {
+      if (!feedScroll) {
         setFrostRect(null);
         return;
       }
       const shellRect = shell.getBoundingClientRect();
       const feedRect = feedScroll.getBoundingClientRect();
-      const groupRect = firstGroup.getBoundingClientRect();
-      const top = Math.max(feedRect.top, groupRect.bottom + 6) - shellRect.top;
-      /* With nothing behind the glass (pinned post only), the frost is a
-         boundary band, not an ocean — it hugs the post. With featured rows
-         under it, it covers them fully. */
-      const groupCount = shell.querySelectorAll(".community-interaction-group").length;
-      const fullHeight = feedRect.bottom - shellRect.top - top;
-      const height = groupCount <= 1 ? Math.min(fullHeight, 140) : fullHeight;
+      /* No pinned post → the whole feed area is the glass. */
+      const firstGroup = shell.querySelector(".community-interaction-group");
+      const groupBottom = firstGroup
+        ? firstGroup.getBoundingClientRect().bottom + 6
+        : feedRect.top;
+      const top = Math.max(feedRect.top, groupBottom) - shellRect.top;
+      /* The frost fills everything below the pinned post — real featured
+         rows behind it when they exist, the ghost thread when they don't. */
+      const height = feedRect.bottom - shellRect.top - top;
       if (height < 48) {
         setFrostRect(null);
         return;
@@ -296,6 +297,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
                 }}
                 onClick={reopenGate}
               >
+                {roots.length <= 1 ? <CommunityVisitorGhostThread /> : null}
                 <CommunityVisitorChatFrostChip
                   messagesTodayCount={stats.messagesTodayCount}
                   onActivate={reopenGate}

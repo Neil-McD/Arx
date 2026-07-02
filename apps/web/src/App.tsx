@@ -286,6 +286,7 @@ import {
   buildAppRoutePath,
   buildCommunityFunnelPath,
   buildCommunityTabPath,
+  buildSettingsPath,
   buildCommunityFunnelPreviewPath,
   buildCommunityFunnelPreviewHistoryState,
   buildWorkspaceDraftPath,
@@ -12210,7 +12211,12 @@ export default function App() {
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
     handleOpenDirectMessages,
-    handleOpenDiscover,
+    /* Rail bridge: on the visitor route, app state changes don't render
+       (publicRoute stays "community_funnel"), so shell verbs must really
+       NAVIGATE — the rail is real, its clicks must be too. */
+    handleOpenDiscover: isVisitorCommunitySurface
+      ? () => navigateTo("/discover")
+      : handleOpenDiscover,
     openMobileCreateCommunity,
     hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
     openCommunityCreateFlow: openCommunityLaunchCreateFlow,
@@ -12219,12 +12225,18 @@ export default function App() {
     communityRailAttentionById,
     isLoadingCommunities,
     selectedActiveCommunitySlug,
-    handleSelectActiveCommunity: (community) => {
-      const nextCommunity =
-        railCommunities.find((candidate) => candidate.id === community.id) ??
-        communities.find((candidate) => candidate.id === community.id);
-      return nextCommunity ? handleSelectActiveCommunity(nextCommunity) : false;
-    },
+    handleSelectActiveCommunity: isVisitorCommunitySurface
+      ? (community) => {
+          const path = buildCommunityTabPath(community.slug ?? null, "chat");
+          if (path) navigateTo(path);
+          return false;
+        }
+      : (community) => {
+          const nextCommunity =
+            railCommunities.find((candidate) => candidate.id === community.id) ??
+            communities.find((candidate) => candidate.id === community.id);
+          return nextCommunity ? handleSelectActiveCommunity(nextCommunity) : false;
+        },
     openCommunityChat,
     communityInitials,
     showDesktopCommunityRail,
@@ -12235,7 +12247,9 @@ export default function App() {
     setCommunityRailListElement,
     getCommunityRailItemBindings,
     setIsFreeAccountInfoOpen,
-    handleToggleWorkspaceSettings,
+    handleToggleWorkspaceSettings: isVisitorCommunitySurface
+      ? () => navigateTo(buildSettingsPath("agent"))
+      : handleToggleWorkspaceSettings,
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,

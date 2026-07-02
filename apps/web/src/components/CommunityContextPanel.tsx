@@ -623,22 +623,22 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
                 </span>
               );
             })}
-            {knownMemberCount !== null && knownMemberCount > (props.membersPreview?.length ?? 0) ? (
-              <span className="community-context-members-frost" aria-hidden="true">
-                {Array.from({ length: Math.min(3, knownMemberCount - (props.membersPreview?.length ?? 0)) }).map(
-                  (_, index) => (
-                    <span key={index} className="community-context-member community-context-member-ghost">
-                      <span className="community-context-member-avatar" />
-                      <span className="community-context-member-ghost-bar" />
-                    </span>
-                  ),
-                )}
-                <span className="community-context-members-frost-more">
-                  <Lock size={12} strokeWidth={2} aria-hidden="true" />+
-                  {knownMemberCount - (props.membersPreview?.length ?? 0)} more when you&apos;re in
+            {/* Ghost seats: capacity, not census — silhouettes always render;
+                the count line only when real members sit behind the glass. */}
+            <span className="community-context-members-frost" aria-hidden="true">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <span key={index} className="community-context-member community-context-member-ghost">
+                  <span className="community-context-member-avatar" />
+                  <span className="community-context-member-ghost-bar" />
                 </span>
+              ))}
+              <span className="community-context-members-frost-more">
+                <Lock size={12} strokeWidth={2} aria-hidden="true" />
+                {knownMemberCount !== null && knownMemberCount > (props.membersPreview?.length ?? 0)
+                  ? `+${knownMemberCount - (props.membersPreview?.length ?? 0)} more when you're in`
+                  : "Members appear here as they join"}
               </span>
-            ) : null}
+            </span>
           </button>
         ) : lockedMembers ? (
           <button

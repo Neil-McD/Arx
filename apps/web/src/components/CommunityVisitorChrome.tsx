@@ -142,6 +142,33 @@ export function CommunityVisitorJoinRope(props: {
   );
 }
 
+/* Ghost thread: silhouette message rows — a conversation's shape without
+   claiming any particular one. Renders inside the frost when nothing real
+   sits behind the glass; real featured rows always win over ghosts. */
+export function CommunityVisitorGhostThread() {
+  const rows = [
+    { name: 44, lines: [78, 52] },
+    { name: 56, lines: [64] },
+    { name: 38, lines: [82, 40] },
+    { name: 50, lines: [58] },
+  ];
+  return (
+    <div className="cvs-ghost-thread" aria-hidden="true">
+      {rows.map((row, index) => (
+        <div key={index} className="cvs-ghost-row">
+          <span className="cvs-ghost-avatar" />
+          <span className="cvs-ghost-body">
+            <span className="cvs-ghost-name" style={{ width: `${row.name}px` }} />
+            {row.lines.map((width, lineIndex) => (
+              <span key={lineIndex} className="cvs-ghost-line" style={{ width: `${width}%` }} />
+            ))}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* The frost over the rest of the conversation: real rows behind glass,
    one lock chip floating on top. */
 export function CommunityVisitorChatFrostChip(props: {
