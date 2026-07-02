@@ -58,11 +58,16 @@ export function buildWebShellProjection(params: {
     params.activePage === "workspace" &&
     !isWorkspaceSettings;
   const isSessionsDrawerOpen = sessionsDrawerEnabled && params.userWantsSessions;
+  /* The visitor lens: /c/:slug renders the SAME community layout a member
+     sees — shell nav column included. Editor preview keeps its own frame. */
+  const showDesktopPublicFunnelNav =
+    params.publicRouteKind === "community_funnel" && params.shellVariant !== "mobile";
   const showDesktopCommunityNav =
-    isAppRoute &&
-    params.activePage === "community" &&
-    !showMobileAppShell &&
-    !showMobilePublicFunnel;
+    (isAppRoute &&
+      params.activePage === "community" &&
+      !showMobileAppShell &&
+      !showMobilePublicFunnel) ||
+    showDesktopPublicFunnelNav;
   const showDesktopCommunityRail = isAppRoute && !showMobileAppShell && !showMobilePublicFunnel;
   const shouldShowDesktopCommunityRail =
     showDesktopCommunityRail && !isPublicAppPage;

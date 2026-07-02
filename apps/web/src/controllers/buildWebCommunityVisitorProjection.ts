@@ -37,6 +37,7 @@ type BuildVisitorProjectionArgs = {
   aboutText: string;
   host: VisitorHostLike | null;
   featuredMessages: VisitorFeaturedMessageLike[] | null;
+  communityCreatedAt: string | null;
 };
 
 function markdownBlock(rootId: string, text: string): CommunityInteractionContentBlock {
@@ -123,16 +124,17 @@ export function buildWebCommunityVisitorProjection(args: BuildVisitorProjectionA
     .filter((value): value is string => Boolean(value))
     .sort()[0] ?? null;
 
+  const pinnedNoteAt = args.communityCreatedAt ?? oldestFeaturedAt ?? "";
   const aboutText = args.aboutText.trim();
-  if (aboutText) {
+  if (aboutText && pinnedNoteAt) {
     roots.push(
       visitorRoot({
         id: "visitor-pinned-note",
         kind: "announcement",
         actorUserId: VISITOR_HOST_USER_ID,
         body: aboutText,
-        createdAt: oldestFeaturedAt ?? "",
-        pinnedAt: oldestFeaturedAt ?? "",
+        createdAt: pinnedNoteAt,
+        pinnedAt: pinnedNoteAt,
         reactions: [],
       }),
     );

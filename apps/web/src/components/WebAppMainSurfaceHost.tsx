@@ -39,13 +39,19 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
       ) : props.activePage === "landing" ? (
         <WebLandingPage {...props.landingPageProps} />
       ) : props.showPublicCommunityFunnel ? (
-        <div className="community-body">
-          <div className="community-panel public-route-panel public-community-funnel-panel">
-            <div className="workspace-body public-route-body public-community-funnel-body">
-              <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
+        props.publicCommunityFunnelProps.isPreviewMode ? (
+          <div className="community-body">
+            <div className="community-panel public-route-panel public-community-funnel-panel">
+              <div className="workspace-body public-route-body public-community-funnel-body">
+                <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="community-body">
+            <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
+          </div>
+        )
       ) : props.activePage === "workspace" || props.activePage === "onboarding" ? (
         <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
       ) : props.showCommunitySurface ? (

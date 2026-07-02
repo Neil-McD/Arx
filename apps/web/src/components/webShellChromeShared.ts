@@ -67,6 +67,8 @@ export type WebCommunityShellProps = {
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  /* Visitor lens: tabs render locked instead of hidden. */
+  lockedCommunityNavTabs?: Partial<Record<CommunityTab, boolean>> | null;
   onSelectCommunityTab: (tab: CommunityTab) => void;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;

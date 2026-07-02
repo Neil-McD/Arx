@@ -70,6 +70,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           canViewActiveCommunityPolynet={props.communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={props.communityShell.canManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={props.communityShell.canViewActiveCommunityAnalytics}
+          lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
           buttonType="button"
           includeButtonTitles
           showPolynetItem={false}

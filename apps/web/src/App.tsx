@@ -7915,6 +7915,9 @@ export default function App() {
     loadPublicCommunity,
     navigateTo,
   });
+  /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
+     surface (nonce bump crosses the shell/surface boundary). */
+  const [visitorGateNonce, setVisitorGateNonce] = useState(0);
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
     .sort()
@@ -11873,6 +11876,7 @@ export default function App() {
       isMobile: showMobilePublicFunnel,
       shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
+      gateOpenNonce: visitorGateNonce,
       publicVisibilityLabel,
       selectedPublicCommunityPlanLabel: isPublicFunnelPreviewRoute
         ? null
@@ -12151,6 +12155,26 @@ export default function App() {
   if (activeCommunityId && localActiveCommunityChatAttention) {
     communityRailAttentionById[activeCommunityId] = true;
   }
+  /* The visitor lens on the shell: /c/:slug feeds the SAME nav the member
+     page uses — community identity from the public payload, every capability
+     false, gated tabs locked. One more lens, not another page. */
+  const isVisitorCommunitySurface = publicRoute.kind === "community_funnel";
+  const visitorShellActiveCommunity =
+    isVisitorCommunitySurface && resolvedPublicCommunity
+      ? {
+          id: `visitor:${resolvedPublicCommunity.slug ?? publicFunnelSlug ?? ""}`,
+          slug: resolvedPublicCommunity.slug ?? null,
+          name: resolvedPublicCommunity.name,
+          avatar_url: resolvedPublicCommunity.avatar_url ?? null,
+          avatar_focus_x: resolvedPublicCommunity.avatar_focus_x ?? null,
+          avatar_focus_y: resolvedPublicCommunity.avatar_focus_y ?? null,
+          avatar_zoom: resolvedPublicCommunity.avatar_zoom ?? null,
+          banner_url: resolvedPublicCommunity.banner_url ?? null,
+          banner_focus_x: resolvedPublicCommunity.banner_focus_x ?? null,
+          banner_focus_y: resolvedPublicCommunity.banner_focus_y ?? null,
+          banner_zoom: resolvedPublicCommunity.banner_zoom ?? null,
+        }
+      : null;
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showHeaderIslands,
     isSessionsDrawerOpen,
@@ -12168,7 +12192,7 @@ export default function App() {
     showMobileSettingsIndex,
     activePage,
     hasSelectedCommunity,
-    activeCommunity,
+    activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,
     openMobileDrawer,
     handleExitMobileSettings,
@@ -12191,14 +12215,23 @@ export default function App() {
     setUserWantsSessions,
     handleTopbarBackToWorkspace,
     workspaceShellPanels,
-    communityTab,
-    communityTabIndicators,
-    canViewMembersActiveCommunity,
-    canViewActiveCommunitySettings,
-    canViewActiveCommunityPolynet,
-    canManageMembersActiveCommunity,
-    canViewActiveCommunityAnalytics,
-    handleSelectCommunityTab,
+    communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
+    communityTabIndicators: isVisitorCommunitySurface
+      ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false }
+      : communityTabIndicators,
+    canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,
+    canViewActiveCommunitySettings: !isVisitorCommunitySurface && canViewActiveCommunitySettings,
+    canViewActiveCommunityPolynet: !isVisitorCommunitySurface && canViewActiveCommunityPolynet,
+    canManageMembersActiveCommunity: !isVisitorCommunitySurface && canManageMembersActiveCommunity,
+    canViewActiveCommunityAnalytics: !isVisitorCommunitySurface && canViewActiveCommunityAnalytics,
+    lockedCommunityNavTabs: isVisitorCommunitySurface
+      ? { ai_feed: true, resources: true, events: true }
+      : null,
+    handleSelectCommunityTab: isVisitorCommunitySurface
+      ? (tab) => {
+          if (tab !== "chat") setVisitorGateNonce((nonce) => nonce + 1);
+        }
+      : handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
     openMobileAgentSettings,
