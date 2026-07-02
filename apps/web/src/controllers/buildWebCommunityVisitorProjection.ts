@@ -38,6 +38,9 @@ type BuildVisitorProjectionArgs = {
   host: VisitorHostLike | null;
   featuredMessages: VisitorFeaturedMessageLike[] | null;
   communityCreatedAt: string | null;
+  /* Funnel-editor preview: always render the pinned-note root so the host
+     has an editable about even when it's empty. */
+  forcePinnedNote?: boolean;
 };
 
 function markdownBlock(rootId: string, text: string): CommunityInteractionContentBlock {
@@ -124,9 +127,10 @@ export function buildWebCommunityVisitorProjection(args: BuildVisitorProjectionA
     .filter((value): value is string => Boolean(value))
     .sort()[0] ?? null;
 
-  const pinnedNoteAt = args.communityCreatedAt ?? oldestFeaturedAt ?? "";
+  const pinnedNoteAt =
+    args.communityCreatedAt ?? oldestFeaturedAt ?? (args.forcePinnedNote ? "" : null);
   const aboutText = args.aboutText.trim();
-  if (aboutText && pinnedNoteAt) {
+  if ((aboutText || args.forcePinnedNote) && pinnedNoteAt !== null) {
     roots.push(
       visitorRoot({
         id: "visitor-pinned-note",

@@ -7,7 +7,6 @@ import {
   filterOnlineAvatarFaces,
 } from "../../../../shared/communityFunnelUi";
 import type { ComponentProps } from "react";
-import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
 import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
 
 type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
@@ -313,71 +312,11 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     );
   }
 
-  if (!isPreviewMode) {
-    return (
-      <WebCommunityVisitorSurface
-        title={communityName}
-        action={action}
-        host={publicCommunity?.host ?? null}
-        banner={
-          publicCommunity?.banner_url
-            ? {
-                url: publicCommunity.banner_url,
-                focusX: publicCommunity.banner_focus_x ?? null,
-                focusY: publicCommunity.banner_focus_y ?? null,
-                zoom: publicCommunity.banner_zoom ?? null,
-              }
-            : null
-        }
-        aboutText={aboutText}
-        communityCreatedAt={publicCommunity?.created_at ?? null}
-        heroMediaKind={funnel?.hero_media_kind ?? "image"}
-        heroMediaUrl={funnel?.hero_media_url ?? null}
-        heroArtImageUrl={actionCardArt.imageUrl}
-        heroArtImageStyle={actionCardArt.imageStyle ?? null}
-        featuredMessages={publicCommunity?.featured_messages ?? null}
-        stats={{
-          onlineCount,
-          onlineFaces,
-          memberCount,
-          memoryNoteCount: publicCommunity?.memory_note_count ?? null,
-          messagesTodayCount: publicCommunity?.messages_today_count ?? null,
-          memberFacesPreview: publicCommunity?.member_faces_preview ?? [],
-        }}
-        memoryOverview={
-          (publicCommunity?.memory_overview as ComponentProps<
-            typeof WebCommunityVisitorSurface
-          >["memoryOverview"]) ?? null
-        }
-        pricingLabel={pricingLabel}
-        isFreePricing={isFreePricing}
-        alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
-        gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
-        gateOpenNonce={gateOpenNonce}
-      />
-    );
-  }
-
   return (
-    <CommunityFunnelSurface
-      isMobile={isMobile}
+    <WebCommunityVisitorSurface
       title={communityName}
-      heroMediaKind={funnel?.hero_media_kind ?? "image"}
-      heroMediaUrl={funnel?.hero_media_url ?? null}
-      visibilityLabel={publicVisibilityLabel}
-      visibilityVariant={isPublishedVisibility ? "published" : "unlisted"}
-      memberCount={memberCount}
-      pricingLabel={pricingLabel}
-      isFreePricing={isFreePricing}
-      inlineAction={action}
-      sidebarAction={action}
-      heroArtImageUrl={actionCardArt.imageUrl}
-      heroArtImageStyle={actionCardArt.imageStyle ?? null}
-      aboutText={aboutText}
-      alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
-      showPoweredBy
+      action={action}
       host={publicCommunity?.host ?? null}
-      featuredMessages={publicCommunity?.featured_messages ?? null}
       banner={
         publicCommunity?.banner_url
           ? {
@@ -388,7 +327,32 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
             }
           : null
       }
+      aboutText={aboutText}
+      communityCreatedAt={publicCommunity?.created_at ?? null}
+      heroMediaKind={funnel?.hero_media_kind ?? "image"}
+      heroMediaUrl={funnel?.hero_media_url ?? null}
+      heroArtImageUrl={actionCardArt.imageUrl}
+      heroArtImageStyle={actionCardArt.imageStyle ?? null}
+      featuredMessages={publicCommunity?.featured_messages ?? null}
+      stats={{
+        onlineCount,
+        onlineFaces,
+        memberCount,
+        memoryNoteCount: publicCommunity?.memory_note_count ?? null,
+        messagesTodayCount: publicCommunity?.messages_today_count ?? null,
+        memberFacesPreview: publicCommunity?.member_faces_preview ?? [],
+      }}
+      memoryOverview={
+        (publicCommunity?.memory_overview as ComponentProps<
+          typeof WebCommunityVisitorSurface
+        >["memoryOverview"]) ?? null
+      }
+      pricingLabel={pricingLabel}
+      isFreePricing={isFreePricing}
+      alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
+      gateOpenNonce={gateOpenNonce}
+      previewMode={isPreviewMode}
     />
   );
 }

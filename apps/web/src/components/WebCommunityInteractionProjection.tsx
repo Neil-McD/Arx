@@ -126,6 +126,9 @@ export type WebCommunityInteractionProjectionProps = {
   onContextPanelLockedSectionActivate?: (section: "members" | "memory") => void;
   communityMemoryCountLabel?: string | null;
   contextPanelMembersPreview?: CommunityPresenceFace[] | null;
+  /* Preview-only (funnel editor): render a supplied node in place of a
+     specific root's body. Members never set this. */
+  rootBodyOverrides?: Record<string, ReactNode> | null;
   canViewMemberPlanDetails?: boolean;
   isActiveCommunityOwner?: boolean;
   communityInitials?: (value: string) => string;

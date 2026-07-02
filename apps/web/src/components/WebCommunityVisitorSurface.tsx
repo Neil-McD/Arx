@@ -5,7 +5,7 @@
    CommunityContextPanel — fed by the public data plane. On top: one gate
    (logo, banner, VSL, counts, one-liner, Join, "View it first") and the
    rope in the composer slot. Locks reopen the gate. */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import type { CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
@@ -65,6 +65,11 @@ type WebCommunityVisitorSurfaceProps = {
   gateSlugKey?: string | null;
   /** Bumped by the shell when a locked nav tab is tapped — reopens the gate. */
   gateOpenNonce?: number;
+  /* Funnel-editor preview: gate is shown contained (not viewport-fixed),
+     join is inert, and the VSL + pinned note carry inline edit affordances. */
+  previewMode?: boolean;
+  gateMediaOverride?: ReactNode;
+  pinnedNoteEditor?: ReactNode;
 };
 
 const NOOP = () => {};
@@ -96,18 +101,20 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     gateSlugKey = null,
   } = props;
 
-  const gateEligible = Boolean(gateSlugKey) && !action.isPreviewMode;
+  const previewMode = Boolean(props.previewMode);
+  const gateEligible = previewMode || (Boolean(gateSlugKey) && !action.isPreviewMode);
   const [gateOpen, setGateOpen] = useState(false);
   const [gateMounted, setGateMounted] = useState(false);
   const lastGateNonceRef = useRef(props.gateOpenNonce ?? 0);
 
   /* The gate shows on EVERY arrival — "View it first" dismisses for this
-     visit only; a fresh load brings the front door back. */
+     visit only; a fresh load brings the front door back. In preview it shows
+     contained so the host can edit the VSL inside it. */
   useEffect(() => {
-    if (!gateEligible || !gateSlugKey) return;
+    if (!gateEligible) return;
     setGateMounted(true);
     setGateOpen(true);
-  }, [gateEligible, gateSlugKey]);
+  }, [gateEligible]);
 
   const dismissGate = () => {
     setGateOpen(false);
@@ -115,10 +122,11 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
   };
 
   const reopenGate = () => {
-    if (action.isPreviewMode) return;
     setGateMounted(true);
     window.setTimeout(() => setGateOpen(true), 20);
   };
+
+  const onFeedVerb = previewMode ? NOOP : reopenGate;
 
   useEffect(() => {
     const nonce = props.gateOpenNonce ?? 0;
@@ -136,6 +144,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     playHint: "Watch the intro",
   });
 
+  const forcePinnedNote = previewMode && Boolean(props.pinnedNoteEditor);
   const { roots, profilesByUserId } = useMemo(
     () =>
       buildWebCommunityVisitorProjection({
@@ -144,8 +153,9 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
         host,
         featuredMessages: props.featuredMessages,
         communityCreatedAt: props.communityCreatedAt,
+        forcePinnedNote,
       }),
-    [title, aboutText, host, props.featuredMessages, props.communityCreatedAt],
+    [title, aboutText, host, props.featuredMessages, props.communityCreatedAt, forcePinnedNote],
   );
 
   const presenceFaces = useMemo(
@@ -227,7 +237,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
   }, [roots]);
 
   return (
-    <>
+    <div className={`cvs-surface-root${previewMode ? " is-preview" : ""}`}>
       <div className="community-chat cvs-chat">
         <div className="workspace-body chat-feed">
           {alertMessages.length > 0 ? (
@@ -249,9 +259,14 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
               isLoadingReplies={false}
               error={null}
               repliesError={null}
-              onSelectRoot={reopenGate}
-              onToggleReaction={reopenGate}
+              onSelectRoot={onFeedVerb}
+              onToggleReaction={onFeedVerb}
               onCloseDrawer={NOOP}
+              rootBodyOverrides={
+                previewMode && props.pinnedNoteEditor
+                  ? { "visitor-pinned-note": props.pinnedNoteEditor }
+                  : null
+              }
               onRetryRoots={NOOP}
               onRetryReplies={NOOP}
               profilesByUserId={profilesByUserId}
@@ -267,7 +282,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
                   ropePrompt={ropePrompt}
                   pricingLabel={pricingLabel}
                   isFreePricing={isFreePricing}
-                  onRopeFieldActivate={reopenGate}
+                  onRopeFieldActivate={onFeedVerb}
                 />
               }
               presenceSummary={{
@@ -277,7 +292,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
               }}
               communityMemberCount={stats.memberCount}
               contextPanelLockedSections={{ members: true, memory: true }}
-              onContextPanelLockedSectionActivate={reopenGate}
+              onContextPanelLockedSectionActivate={onFeedVerb}
               communityMemoryCountLabel={
                 typeof stats.memoryNoteCount === "number" && stats.memoryNoteCount > 0
                   ? formatCompactStat(stats.memoryNoteCount)
@@ -295,12 +310,12 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
                   width: frostRect.width,
                   height: frostRect.height,
                 }}
-                onClick={reopenGate}
+                onClick={onFeedVerb}
               >
                 {roots.length <= 1 ? <CommunityVisitorGhostThread /> : null}
                 <CommunityVisitorChatFrostChip
                   messagesTodayCount={stats.messagesTodayCount}
-                  onActivate={reopenGate}
+                  onActivate={onFeedVerb}
                 />
               </div>
             ) : null}
@@ -310,7 +325,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
 
       {gateMounted ? (
         <div
-          className={`cfg-gate cvs-gate${gateOpen ? "" : " off"}`}
+          className={`cfg-gate cvs-gate${gateOpen ? "" : " off"}${previewMode ? " cvs-gate-contained" : ""}`}
           onClick={(event) => {
             if (event.target === event.currentTarget) dismissGate();
           }}
@@ -321,12 +336,12 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
             isFreePricing={isFreePricing}
             bannerUrl={bannerUrl}
             bannerStyle={banner?.url ? null : props.heroArtImageStyle ?? null}
-            media={gateMediaNode}
+            media={props.gateMediaOverride ?? gateMediaNode}
             isMediaPlaying={isVslPlaying}
             onViewFirst={dismissGate}
           />
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

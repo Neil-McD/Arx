@@ -14,7 +14,10 @@ import {
   formatCommunityLink,
 } from "../../../../shared/communityFunnelUi";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
-import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
+import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
+
+/* Stable placeholder date for the editor's pinned-note preview row. */
+const editorPreviewCreatedAt = new Date().toISOString();
 
 type PreviewCommunityLike = {
   slug?: string | null;
@@ -119,6 +122,9 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [videoUrlDraft, setVideoUrlDraft] = useState("");
   const [videoUrlError, setVideoUrlError] = useState<string | null>(null);
   const [isAboutEditing, setIsAboutEditing] = useState(false);
+  /* Bumped to re-open the join popup in the preview so the host can edit the
+     VSL after dismissing it to reach the about note behind it. */
+  const [gatePreviewNonce, setGatePreviewNonce] = useState(0);
   const videoUrlInputRef = useRef<HTMLInputElement | null>(null);
   const aboutTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
@@ -266,6 +272,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       <div className="settings-section-title">Public funnel</div>
 
       <div className="agent-preview-actions">
+        <button
+          type="button"
+          onClick={() => setGatePreviewNonce((nonce) => nonce + 1)}
+          disabled={isSaving}
+        >
+          Show popup
+        </button>
         {isDirty ? (
           <button type="button" onClick={handleReset} disabled={isSaving}>
             Cancel
@@ -289,11 +302,47 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       {communityFunnelSaveError ? <div className="auth-error">{communityFunnelSaveError}</div> : null}
 
       <div className="funnel-editor-preview">
-        <CommunityFunnelSurface
+        <WebCommunityVisitorSurface
           title={previewCommunity.name}
+          action={previewAction}
+          host={{
+            display_name: previewCommunity.name,
+            avatar_url: previewCommunity.avatar_url ?? null,
+            avatar_focus_x: previewCommunity.avatar_focus_x ?? null,
+            avatar_focus_y: previewCommunity.avatar_focus_y ?? null,
+            avatar_zoom: previewCommunity.avatar_zoom ?? null,
+          }}
+          banner={
+            previewCommunity.banner_url
+              ? {
+                  url: previewCommunity.banner_url,
+                  focusX: previewCommunity.banner_focus_x ?? null,
+                  focusY: previewCommunity.banner_focus_y ?? null,
+                  zoom: previewCommunity.banner_zoom ?? null,
+                }
+              : null
+          }
+          aboutText={aboutText}
+          communityCreatedAt={editorPreviewCreatedAt}
           heroMediaKind={communityFunnelConfig.hero_media_kind}
           heroMediaUrl={mediaPreviewUrl}
-          renderHeroMedia={() => (
+          heroArtImageUrl={actionCardArt.imageUrl}
+          heroArtImageStyle={actionCardArt.imageStyle ?? null}
+          featuredMessages={null}
+          stats={{
+            onlineCount: previewOnlineCount,
+            onlineFaces: previewFaces,
+            memberCount: typeof previewMemberCount === "number" ? previewMemberCount : null,
+            memoryNoteCount: null,
+            messagesTodayCount: null,
+            memberFacesPreview: [],
+          }}
+          memoryOverview={null}
+          pricingLabel={pricingLabel}
+          isFreePricing={isFreePricing}
+          previewMode
+          gateOpenNonce={gatePreviewNonce}
+          gateMediaOverride={
             <div
               className="public-funnel-media-placeholder funnel-editor-media-dropzone"
               role="button"
@@ -339,19 +388,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                 {mediaPreviewUrl ? "Click to replace" : "Video link"}
               </div>
             </div>
-          )}
-          visibilityLabel={previewVisibilityLabel}
-          visibilityVariant={isPublishedVisibility ? "published" : "unlisted"}
-          memberCount={typeof previewMemberCount === "number" ? previewMemberCount : null}
-          pricingLabel={pricingLabel}
-          isFreePricing={isFreePricing}
-          inlineAction={previewAction}
-          sidebarAction={previewAction}
-          heroArtImageUrl={actionCardArt.imageUrl}
-          heroArtImageStyle={actionCardArt.imageStyle ?? null}
-          aboutText={aboutText}
-          aboutContent={renderAboutEditor()}
-          inlineActionClassName="public-funnel-inline-cta funnel-editor-inline-cta"
+          }
+          pinnedNoteEditor={renderAboutEditor()}
         />
       </div>
 
