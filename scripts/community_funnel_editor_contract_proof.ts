@@ -16,7 +16,9 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 const app = read("apps/web/src/App.tsx");
 const baseCss = read("apps/web/src/base.css");
 const funnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
-const funnelSurface = read("apps/web/src/components/CommunityFunnelSurface.tsx");
+const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
+const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
+const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const governanceController = read("shared/useCommunitySettingsGovernanceController.ts");
 const saveFunnelAboutSlice = sliceBetween(
   app,
@@ -29,6 +31,36 @@ const resetFunnelAboutSlice = sliceBetween(
   "const handleSaveCommunityFunnelAbout",
 );
 
+// --- The editor previews the REAL visitor page, not a separate scaffold ---
+assert.match(
+  funnelEditor,
+  /import \{ WebCommunityVisitorSurface \} from "\.\/WebCommunityVisitorSurface"/,
+  "funnel editor must preview the live visitor surface, not a bespoke funnel scaffold",
+);
+assert.match(
+  funnelEditor,
+  /<WebCommunityVisitorSurface[\s\S]*previewMode/,
+  "funnel editor must render the visitor surface in preview mode",
+);
+assert.doesNotMatch(
+  funnelEditor,
+  /CommunityFunnelSurface/,
+  "funnel editor must not render the deleted guest-shell scaffold",
+);
+
+// --- Model A: VSL + About stay WYSIWYG-editable inside the previewed page ---
+assert.match(
+  funnelEditor,
+  /gateMediaOverride=\{[\s\S]*funnel-editor-media-dropzone[\s\S]*openVideoUrlModal/,
+  "the VSL must be edited by clicking the video inside the previewed gate",
+);
+assert.match(
+  funnelEditor,
+  /pinnedNoteEditor=\{renderAboutEditor\(\)\}/,
+  "About must be edited inline in the pinned host note of the previewed feed",
+);
+
+// --- About inline editor internals (unchanged intent) ---
 assert.match(
   funnelEditor,
   /funnelOneLiner: string;[\s\S]*funnelAbout: string;[\s\S]*setFunnelAbout: \(value: string\) => void;/,
@@ -38,11 +70,6 @@ assert.doesNotMatch(
   funnelEditor,
   /setFunnelOneLiner|funnel-editor-copy-fields/,
   "funnel editor must not add a separate one-liner/about copy form above the actual funnel",
-);
-assert.match(
-  funnelEditor,
-  /isFunnelAboutDirty: boolean;[\s\S]*handleSaveCommunityFunnelAbout: \(\) => Promise<boolean> \| boolean;/,
-  "funnel editor must track only inline About dirtiness through the focused save path",
 );
 assert.match(
   funnelEditor,
@@ -69,27 +96,25 @@ assert.doesNotMatch(
   /\.select\(\)/,
   "inline About editing must not select all text on open",
 );
+
+// --- The inline-edit seam: a surgical, member-safe override on the feed ---
 assert.match(
-  funnelEditor,
-  /aboutContent=\{renderAboutEditor\(\)\}/,
-  "funnel editor must inject inline About editing into the actual funnel surface",
+  projection,
+  /rootBodyOverrides\?: Record<string, ReactNode> \| null;/,
+  "the shared feed must accept an optional per-root body override for the editor",
 );
 assert.match(
-  funnelSurface,
-  /aboutContent\?: ReactNode;[\s\S]*aboutContent,?[\s\S]*\{aboutContent \?\? \(aboutText \?/,
-  "shared funnel surface must allow editor-only About content without changing public rendering",
+  feed,
+  /const bodyOverride = props\.rootBodyOverrides\?\.\[root\.id\] \?\? null;/,
+  "the feed renders the override in place of a root's body when supplied",
 );
 assert.match(
-  baseCss,
-  /\.settings-panel button:not\(\.funnel-editor-about-trigger\):not\(\.platform-save-button\)/,
-  "generic settings button styling must not apply to the inline Funnel About resting state",
-);
-assert.match(
-  baseCss,
-  /\.funnel-editor-about-trigger,\s*[\s\S]*\.funnel-editor-about-input \{[\s\S]*background: transparent;/,
-  "Funnel About resting and editing states should share native transparent styling",
+  visitorSurface,
+  /rootBodyOverrides=\{[\s\S]*previewMode && props\.pinnedNoteEditor[\s\S]*"visitor-pinned-note": props\.pinnedNoteEditor/,
+  "the visitor surface only overrides the pinned-note body, and only in preview",
 );
 
+// --- App-side About save wiring (unchanged truth) ---
 assert.match(
   app,
   /const isCommunityFunnelAboutDirty =[\s\S]*Boolean\(activeCommunity\) && communitySettingsAbout !== \(activeCommunity\?\.about \?\? ""\);/,
@@ -131,4 +156,16 @@ assert.doesNotMatch(
   "full community settings save must not be repurposed as Funnel About's save result transport",
 );
 
-console.log("PASS: community Funnel editor edits About inline inside the actual funnel preview.");
+// --- CSS: the inline About resting/editing state keeps native styling ---
+assert.match(
+  baseCss,
+  /\.settings-panel button:not\(\.funnel-editor-about-trigger\):not\(\.platform-save-button\)/,
+  "generic settings button styling must not apply to the inline Funnel About resting state",
+);
+assert.match(
+  baseCss,
+  /\.funnel-editor-about-trigger,\s*[\s\S]*\.funnel-editor-about-input \{[\s\S]*background: transparent;/,
+  "Funnel About resting and editing states should share native transparent styling",
+);
+
+console.log("PASS: community Funnel editor previews the live visitor surface and edits VSL + About inline.");
