@@ -369,7 +369,7 @@ function GuestInertRow(props: {
       replyTarget={null}
       reactionEmojis={[]}
       getInitials={getInitialsFromLabel}
-      displayName={() => senderLabel}
+      displayName={(userId: string) => (userId === "guest-inert-sender" ? senderLabel : "Member")}
       parseReplyPrefix={() => null}
       truncateReplyPreview={(value: string) => value}
       renderTextWithLinks={renderTextWithLinks}

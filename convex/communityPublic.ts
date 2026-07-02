@@ -208,7 +208,7 @@ async function resolvePublicFeaturedMessages(ctx: any, communityId: any) {
     const reactionRows = await ctx.db
       .query("communityMessageReactions")
       .withIndex("by_message", (q: any) => q.eq("messageId", row.messageId))
-      .collect();
+      .take(200);
     const counts: Record<string, number> = {};
     for (const reaction of reactionRows) {
       const emoji = String(reaction.emoji ?? "").trim();
