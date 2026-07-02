@@ -90,4 +90,25 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   assert.equal((chips[0] as { mention: ResolvedMentionForRendering }).mention.kind, "community_agent");
 }
 
+// Typeahead click-pick: the menu must preventDefault on mousedown so the
+// textarea keeps focus — otherwise its blur closes the menu before the row's
+// click can land, and clicking a suggestion silently does nothing.
+{
+  const { readFileSync } = await import("node:fs");
+  const menuSource = readFileSync(
+    new URL("../apps/web/src/components/communityMentionAutocomplete.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    menuSource,
+    /onMouseDown=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?\}\}/,
+    "mention menu must keep textarea focus on mousedown so click-pick lands",
+  );
+  assert.doesNotMatch(
+    menuSource,
+    /suppressBlurRef/,
+    "the dead suppressBlurRef guard must not return; focus retention is the real fix",
+  );
+}
+
 console.log("community_mention_rendering_contract_proof: ok");

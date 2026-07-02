@@ -1,5 +1,5 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 export type MentionCandidate = {
   userId: string;
@@ -189,8 +189,6 @@ export function MentionAutocompleteMenu(props: {
 }) {
   const { autocomplete, getAvatarColor, getInitials } = props;
   const { isOpen, results, highlightedIndex, pick, setHighlightedIndex } = autocomplete;
-  // Suppress textarea blur so clicking a row doesn't close the menu before the pick lands.
-  const suppressBlurRef = useRef(false);
 
   if (!isOpen) return null;
 
@@ -198,8 +196,10 @@ export function MentionAutocompleteMenu(props: {
     <div
       className="mention-autocomplete"
       role="listbox"
-      onMouseDown={() => {
-        suppressBlurRef.current = true;
+      onMouseDown={(event) => {
+        // Keep focus in the textarea: if the mousedown steals it, the textarea's
+        // blur closes the menu before the row's click can land.
+        event.preventDefault();
       }}
     >
       {results.map((candidate, index) => (
@@ -210,10 +210,7 @@ export function MentionAutocompleteMenu(props: {
           aria-selected={index === highlightedIndex}
           className={`mention-autocomplete-row${index === highlightedIndex ? " is-active" : ""}${candidate.kind === "community_agent" ? " is-agent" : ""}`}
           onMouseEnter={() => setHighlightedIndex(index)}
-          onClick={() => {
-            pick(candidate);
-            suppressBlurRef.current = false;
-          }}
+          onClick={() => pick(candidate)}
         >
           <span
             className="mention-autocomplete-avatar"
