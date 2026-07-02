@@ -123,14 +123,19 @@
 .cvs-frost-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   border: 1px solid var(--border-default);
   border-radius: 999px;
   background: var(--bg-card, rgba(23, 23, 26, 0.9));
   color: var(--text-secondary);
-  font-size: 12px;
-  padding: 8px 14px;
+  font-size: 13.5px;
+  padding: 11px 20px;
   cursor: pointer;
+}
+
+.cvs-frost-chip svg {
+  width: 15px;
+  height: 15px;
 }
 
 .cvs-frost-chip:hover {

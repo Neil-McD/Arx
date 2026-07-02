@@ -460,19 +460,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <div className="community-context-memory-head">
           <div className="community-context-section">{memorySectionLabel}</div>
         </div>
-        {showLockedEmptyMemory ? (
-          <div className="community-context-memory-empty">
-            <svg viewBox="0 0 32 32" width="22" height="22" fill="none" aria-hidden="true">
-              <line x1="8" y1="10" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
-              <line x1="24" y1="9" x2="16" y2="20" stroke="currentColor" strokeWidth="1.4" />
-              <line x1="8" y1="10" x2="24" y2="9" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="8" cy="10" r="2.2" fill="currentColor" />
-              <circle cx="24" cy="9" r="2.2" fill="currentColor" />
-              <circle cx="16" cy="20" r="3" fill="currentColor" />
-            </svg>
-            <span>Builds as the room shares knowledge</span>
-          </div>
-        ) : lockedMemory && memoryOverview ? (
+        {lockedMemory && memoryOverview ? (
           <div className="community-context-memory-summary">
             <div
               className="community-context-memory-preview community-context-memory-inert"
@@ -480,14 +468,20 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             >
               <CommunityMemoryGraphPreview overview={memoryOverview} />
             </div>
-            <button
-              type="button"
-              className="community-context-locked-hint"
-              onClick={() => props.onLockedSectionActivate?.("memory")}
-            >
-              <Lock size={12} strokeWidth={2} aria-hidden="true" />
-              <span>Everything this community has learned. Unlocks when you join.</span>
-            </button>
+            {showLockedEmptyMemory ? (
+              <div className="community-context-memory-status">
+                <span>Builds as the room shares knowledge</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="community-context-locked-hint"
+                onClick={() => props.onLockedSectionActivate?.("memory")}
+              >
+                <Lock size={12} strokeWidth={2} aria-hidden="true" />
+                <span>Everything this community has learned. Unlocks when you join.</span>
+              </button>
+            )}
           </div>
         ) : lockedMemory ? (
           <button
