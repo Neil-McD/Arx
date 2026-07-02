@@ -7873,7 +7873,10 @@ export default function App() {
     publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
     myPublicCommunityJoinRequest: publicCommunityUi.myPublicCommunityJoinRequest,
     isSignedIn: Boolean(session),
-    sessionDependency: session,
+    /* Re-fire the funnel load only when signed-in status flips — not on every
+       session object identity change, which re-hammered the load (and the
+       expensive stats query) and blinked the right panel. */
+    sessionDependency: Boolean(session),
     loadPublicCommunity,
   });
   /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel

@@ -403,11 +403,24 @@ export function useWebPublicFunnelActions<
         ];
         await preloadImageUrls(revealImageUrls, { maxUrls: 8, timeoutMs: 1500 });
 
-        const resolvedSlug = payload.community.slug;
-        current.setPublicCommunity({
-          ...payload.community,
-          visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
-        } as PublicCommunityT);
+        const loadedCommunity = payload.community;
+        const resolvedSlug = loadedCommunity.slug;
+        /* Merge into the same community, never replace it: the memory graph and
+           stats are folded in by the async fetches below, and a bare replace on
+           any re-fire would drop them for a beat — that is the panel flicker.
+           (Same additive pattern the stats/memory merges use.) */
+        current.setPublicCommunity((prev) =>
+          prev && prev.slug === resolvedSlug
+            ? ({
+                ...prev,
+                ...loadedCommunity,
+                visibility: toCanonicalCommunityVisibility(loadedCommunity.visibility, "unlisted"),
+              } as PublicCommunityT)
+            : ({
+                ...loadedCommunity,
+                visibility: toCanonicalCommunityVisibility(loadedCommunity.visibility, "unlisted"),
+              } as PublicCommunityT),
+        );
         current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
         current.setIsLoadingPublicCommunity(false);
 
