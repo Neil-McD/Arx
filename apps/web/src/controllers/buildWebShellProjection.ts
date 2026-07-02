@@ -68,7 +68,9 @@ export function buildWebShellProjection(params: {
       !showMobileAppShell &&
       !showMobilePublicFunnel) ||
     showDesktopPublicFunnelNav;
-  const showDesktopCommunityRail = isAppRoute && !showMobileAppShell && !showMobilePublicFunnel;
+  const showDesktopCommunityRail =
+    (isAppRoute && !showMobileAppShell && !showMobilePublicFunnel) ||
+    showDesktopPublicFunnelNav;
   const shouldShowDesktopCommunityRail =
     showDesktopCommunityRail && !isPublicAppPage;
   const hasLeftPanel =

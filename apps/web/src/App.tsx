@@ -12211,10 +12211,15 @@ export default function App() {
     hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
     openCommunityCreateFlow: openCommunityLaunchCreateFlow,
     communities,
-    railCommunities,
+    railCommunities:
+      isVisitorCommunitySurface && visitorShellActiveCommunity
+        ? [visitorShellActiveCommunity]
+        : railCommunities,
     communityRailAttentionById,
     isLoadingCommunities,
-    selectedActiveCommunitySlug,
+    selectedActiveCommunitySlug: isVisitorCommunitySurface
+      ? visitorShellActiveCommunity?.slug ?? null
+      : selectedActiveCommunitySlug,
     handleSelectActiveCommunity: (community) => {
       const nextCommunity =
         railCommunities.find((candidate) => candidate.id === community.id) ??
@@ -12225,7 +12230,9 @@ export default function App() {
     communityInitials,
     showDesktopCommunityRail,
     showDesktopCommunityNav,
-    hasCommunityRailMiddleContent,
+    hasCommunityRailMiddleContent: isVisitorCommunitySurface
+      ? Boolean(visitorShellActiveCommunity)
+      : hasCommunityRailMiddleContent,
     canReorderCommunities,
     draggingCommunityId,
     setCommunityRailListElement,
