@@ -371,7 +371,7 @@ export function useWebPublicFunnelActions<
   );
 
   const loadPublicCommunity = useCallback(
-    async (slug: string): Promise<void> => {
+    async (slug: string, opts?: { recordVisit?: boolean }): Promise<void> => {
       const requestedSlug = slug.trim();
       if (!requestedSlug) return;
       const current = argsRef.current;
@@ -411,12 +411,14 @@ export function useWebPublicFunnelActions<
         current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
         current.setIsLoadingPublicCommunity(false);
 
-        void recordCloudPublicFunnelVisit<AuthSession>({
-          session: current.getSession(),
-          communitySlug: resolvedSlug,
-        }).catch((error) => {
-          console.warn("Failed to record public funnel visit:", error);
-        });
+        if (opts?.recordVisit !== false) {
+          void recordCloudPublicFunnelVisit<AuthSession>({
+            session: current.getSession(),
+            communitySlug: resolvedSlug,
+          }).catch((error) => {
+            console.warn("Failed to record public funnel visit:", error);
+          });
+        }
 
         void fetchCloudPublicFunnelStats<AuthSession, Record<string, unknown>>({
           communitySlug: resolvedSlug,

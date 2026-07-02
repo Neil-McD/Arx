@@ -288,7 +288,6 @@ import {
   buildCommunityTabPath,
   buildSettingsPath,
   buildCommunityFunnelPreviewPath,
-  buildCommunityFunnelPreviewHistoryState,
   buildWorkspaceDraftPath,
   isRootAppRoutePath,
   readAppRouteFromLocation,
@@ -7852,7 +7851,6 @@ export default function App() {
   const {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
-    publicFunnelPreviewDraft,
     checkoutSuccessSessionId,
     claimTokenParam,
     isPublicCommunityFunnel,
@@ -7868,7 +7866,6 @@ export default function App() {
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
-    memberCountOverride,
   } = useWebPublicCommunityRouteController<PublicCommunityRecord, MyCommunityJoinRequest>({
     publicRoute: shellPublicRoute,
     publicCommunity: publicCommunityUi.publicCommunity,
@@ -7878,7 +7875,6 @@ export default function App() {
     isSignedIn: Boolean(session),
     sessionDependency: session,
     loadPublicCommunity,
-    navigateTo,
   });
   /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
      surface (nonce bump crosses the shell/surface boundary). */
@@ -9149,57 +9145,17 @@ export default function App() {
   const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary.memberCount === "number"
     ? communitySocialSummary.memberCount
     : null;
+  /* Save-then-preview: the Preview button is only shown in the saved state,
+     so it simply opens the LIVE visitor route for the owner. previewMode
+     forces the visitor lens + disables Join; no draft snapshot is carried. */
   const handlePreviewCommunityFunnel = useCallback(() => {
     const slug = String(activeCommunity?.slug ?? "").trim();
     if (!slug) return;
-    const currentFunnelPath = applyShellVariantToAppPath(buildCommunityTabPath(slug, "funnel") ?? "", shellVariant);
     const previewPath = applyShellVariantToPublicPath(buildCommunityFunnelPreviewPath(slug) ?? "", shellVariant);
-    if (!previewPath || !currentFunnelPath) return;
-    const currentRoutePath = readCurrentRoutePath();
-    if (currentRoutePath !== currentFunnelPath) {
-      window.history.replaceState(window.history.state ?? {}, document.title, currentFunnelPath);
-    }
-    const previewState = buildCommunityFunnelPreviewHistoryState({
-      slug,
-      community: {
-        slug,
-        name: activeCommunity?.name ?? "Community",
-        one_liner: activeCommunity?.one_liner ?? null,
-        about: communitySettingsAbout.trim() || activeCommunity?.about || null,
-        avatar_url: activeCommunity?.avatar_url ?? null,
-        avatar_focus_x: activeCommunity?.avatar_focus_x ?? null,
-        avatar_focus_y: activeCommunity?.avatar_focus_y ?? null,
-        avatar_zoom: activeCommunity?.avatar_zoom ?? null,
-        banner_url: activeCommunity?.banner_url ?? null,
-        banner_focus_x: activeCommunity?.banner_focus_x ?? null,
-        banner_focus_y: activeCommunity?.banner_focus_y ?? null,
-        banner_zoom: activeCommunity?.banner_zoom ?? null,
-        visibility: activeCommunity?.visibility ?? "unlisted",
-        admin_count: funnelPreviewAdminCount,
-        online_count: funnelPreviewOnlineCount,
-        online_faces: funnelPreviewOnlineFaces,
-      },
-      visibilityLabel: funnelPreviewVisibilityLabel,
-      memberCount: activeCommunitySocialMemberCount,
-      funnelAction: funnelPreviewAction,
-      one_liner: activeCommunity?.one_liner ?? null,
-      funnel: communityFunnelConfig,
-      savedAt: Date.now(),
-    });
+    if (!previewPath) return;
     pushNavSnapshot();
-    navigateTo(previewPath, { state: previewState });
-  }, [
-    activeCommunity,
-    activeCommunitySocialMemberCount,
-    communityFunnelConfig,
-    funnelPreviewAdminCount,
-    funnelPreviewAction,
-    funnelPreviewOnlineCount,
-    funnelPreviewOnlineFaces,
-    funnelPreviewVisibilityLabel,
-    readCurrentRoutePath,
-    shellVariant,
-  ]);
+    navigateTo(previewPath);
+  }, [activeCommunity?.slug, shellVariant, pushNavSnapshot, navigateTo]);
 
   useEffect(() => {
     if (!isSessionsDrawerOpen) return;
@@ -11847,14 +11803,10 @@ export default function App() {
       isPreviewMode: isPublicFunnelPreviewRoute,
       gateOpenNonce: visitorGateNonce,
       publicVisibilityLabel,
-      selectedPublicCommunityPlanLabel: isPublicFunnelPreviewRoute
-        ? null
-        : selectedPublicCommunityPlan
-          ? formatPlanPrice(selectedPublicCommunityPlan)
-          : null,
-      hasSelectedPublicCommunityPlan: isPublicFunnelPreviewRoute
-        ? false
-        : Boolean(selectedPublicCommunityPlan),
+      selectedPublicCommunityPlanLabel: selectedPublicCommunityPlan
+        ? formatPlanPrice(selectedPublicCommunityPlan)
+        : null,
+      hasSelectedPublicCommunityPlan: Boolean(selectedPublicCommunityPlan),
       isLoadingPublicCommunity: publicCommunityUi.isLoadingPublicCommunity,
       canEnterCommunity: canEnterPublicCommunity,
       canJoinForFree,
@@ -11875,8 +11827,7 @@ export default function App() {
       publicCommunityError: publicCommunityUi.publicCommunityError,
       publicJoinError: publicCommunityUi.publicJoinError,
       checkoutError,
-      showSignIn: isPublicFunnelPreviewRoute ? true : showPublicSignIn,
-      memberCountOverride,
+      showSignIn: showPublicSignIn,
     },
     communityHostProps: {
       communityTab,
@@ -12127,7 +12078,8 @@ export default function App() {
   /* The visitor lens on the shell: /c/:slug feeds the SAME nav the member
      page uses — community identity from the public payload, every capability
      false, gated tabs locked. One more lens, not another page. */
-  const isVisitorCommunitySurface = publicRoute.kind === "community_funnel";
+  const isVisitorCommunitySurface =
+    publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview";
   const visitorShellActiveCommunity =
     isVisitorCommunitySurface && resolvedPublicCommunity
       ? {

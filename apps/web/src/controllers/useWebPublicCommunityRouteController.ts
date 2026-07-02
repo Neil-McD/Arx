@@ -1,18 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import type { PublicPlanSummary } from "../../../../shared/communityTypes";
-import {
-  buildCommunityTabPath,
-  readCommunityFunnelPreviewHistoryState,
-  type CommunityFunnelPreviewRouteState,
-  type PublicRoute,
-} from "../../../../shared/webAppRouteState";
+import { type PublicRoute } from "../../../../shared/webAppRouteState";
 import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
 } from "../../../../shared/communityVisibility";
 import { deriveCommunityFunnelAction, type CommunityFunnelAction } from "../communityJoinPolicy";
-
-type NavigateFn = (path: string, opts?: { replace?: boolean; state?: unknown }) => void;
 
 type PublicCommunityLike = {
   slug: string;
@@ -45,89 +38,51 @@ export function useWebPublicCommunityRouteController<
   myPublicCommunityJoinRequest: TJoinRequest | null;
   isSignedIn: boolean;
   sessionDependency: unknown;
-  loadPublicCommunity: (slug: string) => Promise<void> | void;
-  navigateTo: NavigateFn;
+  loadPublicCommunity: (slug: string, opts?: { recordVisit?: boolean }) => Promise<void> | void;
 }) {
   const publicFunnelSlug =
     params.publicRoute.kind === "community_funnel" || params.publicRoute.kind === "community_funnel_preview"
       ? params.publicRoute.slug
       : null;
   const isPublicFunnelPreviewRoute = params.publicRoute.kind === "community_funnel_preview";
-  const publicFunnelPreviewDraft: CommunityFunnelPreviewRouteState | null = isPublicFunnelPreviewRoute
-    ? readCommunityFunnelPreviewHistoryState(publicFunnelSlug)
-    : null;
   const checkoutSuccessSessionId = params.publicRoute.kind === "checkout_success" ? params.publicRoute.sessionId : null;
   const claimTokenParam = params.publicRoute.kind === "claim" ? params.publicRoute.token : null;
   const isPublicCommunityFunnel =
     params.publicRoute.kind === "community_funnel" || params.publicRoute.kind === "community_funnel_preview";
 
-  useEffect(() => {
-    if (!isPublicFunnelPreviewRoute) return;
-    if (!publicFunnelSlug) return;
-    if (publicFunnelPreviewDraft) return;
-    const fallbackPath =
-      buildCommunityTabPath(publicFunnelSlug, "funnel") || `/c/${encodeURIComponent(publicFunnelSlug)}`;
-    params.navigateTo(fallbackPath, { replace: true });
-  }, [
-    isPublicFunnelPreviewRoute,
-    params.navigateTo,
-    publicFunnelPreviewDraft,
-    publicFunnelSlug,
-  ]);
-
+  /* One render path: /c/:slug and its /preview both load the LIVE public
+     data. Preview differs only in that the owner is forced into the visitor
+     lens (can_enter false → visitor CTA) and Join is disabled downstream. */
   useEffect(() => {
     if (!publicFunnelSlug) return;
-    if (isPublicFunnelPreviewRoute) return;
-    void params.loadPublicCommunity(publicFunnelSlug);
-  }, [
-    params.sessionDependency,
-    isPublicFunnelPreviewRoute,
-    publicFunnelSlug,
-    params.loadPublicCommunity,
-  ]);
+    void params.loadPublicCommunity(publicFunnelSlug, { recordVisit: !isPublicFunnelPreviewRoute });
+  }, [params.sessionDependency, publicFunnelSlug, params.loadPublicCommunity, isPublicFunnelPreviewRoute]);
 
-  const previewCommunityFallback = isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.community ?? null : null;
-  const publicCommunityForSurface = isPublicFunnelPreviewRoute
-    ? previewCommunityFallback ?? params.publicCommunity
-    : params.publicCommunity;
+  const resolvedPublicCommunity = params.publicCommunity;
   const selectedPublicCommunityPlan =
     params.publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
     params.publicCommunityPlans.find((plan) => plan.billing_period === "annual") ??
     params.publicCommunityPlans[0] ??
     null;
-  const publicVisibility = toCanonicalCommunityVisibility(publicCommunityForSurface?.visibility, "unlisted");
-  const publicVisibilityLabel = isPublicFunnelPreviewRoute
-    ? publicFunnelPreviewDraft?.visibilityLabel ?? formatCommunityVisibilityLabel(publicVisibility)
-    : formatCommunityVisibilityLabel(publicVisibility);
-  const resolvedPublicCommunity = useMemo(() => {
-    if (!publicCommunityForSurface) return null;
-    if (!publicFunnelPreviewDraft) return publicCommunityForSurface;
-    return {
-      ...publicCommunityForSurface,
-      one_liner:
-        publicFunnelPreviewDraft.one_liner ??
-        publicCommunityForSurface.one_liner ??
-        null,
-      about:
-        publicFunnelPreviewDraft.community.about ??
-        publicCommunityForSurface.about ??
-        null,
-      funnel: publicFunnelPreviewDraft.funnel,
-    } as TPublicCommunity;
-  }, [publicCommunityForSurface, publicFunnelPreviewDraft]);
-  const publicFunnelAction: CommunityFunnelAction | null = isPublicFunnelPreviewRoute
-    ? publicFunnelPreviewDraft?.funnelAction ?? null
-    : params.publicCommunity
-      ? deriveCommunityFunnelAction({
-          entry_policy: params.publicCommunity.entry_policy,
-        })
-      : null;
+  const publicVisibility = toCanonicalCommunityVisibility(params.publicCommunity?.visibility, "unlisted");
+  const publicVisibilityLabel = formatCommunityVisibilityLabel(publicVisibility);
+  const publicFunnelAction: CommunityFunnelAction | null = params.publicCommunity
+    ? deriveCommunityFunnelAction({
+        entry_policy: params.publicCommunity.entry_policy,
+      })
+    : null;
   const canJoinForFree = publicFunnelAction === "join";
   const canJoinWithApproval = publicFunnelAction === "request_access";
   const canJoinWithCheckout = publicFunnelAction === "checkout";
-  const canEnterPublicCommunity = Boolean(
-    params.publicCommunityAccess && (params.publicCommunityAccess.can_enter_community || params.publicCommunityAccess.is_owner),
-  );
+  /* Preview forces the visitor lens even for the owner: ignore their own
+     entitlement so the CTA reads as a visitor's (Join/Request/Checkout),
+     never "Enter community". */
+  const canEnterPublicCommunity = isPublicFunnelPreviewRoute
+    ? false
+    : Boolean(
+        params.publicCommunityAccess &&
+          (params.publicCommunityAccess.can_enter_community || params.publicCommunityAccess.is_owner),
+      );
   const myJoinRequestStatus = isPublicFunnelPreviewRoute
     ? ""
     : String(params.myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
@@ -155,7 +110,6 @@ export function useWebPublicCommunityRouteController<
   return {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
-    publicFunnelPreviewDraft,
     checkoutSuccessSessionId,
     claimTokenParam,
     isPublicCommunityFunnel,
@@ -171,6 +125,5 @@ export function useWebPublicCommunityRouteController<
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
-    memberCountOverride: isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.memberCount ?? null : null,
   };
 }

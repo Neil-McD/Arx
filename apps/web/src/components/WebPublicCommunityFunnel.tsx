@@ -101,8 +101,6 @@ type WebPublicCommunityFunnelProps = {
   publicJoinError: string | null;
   checkoutError: string | null;
   showSignIn: boolean;
-  funnelConfigOverride?: CommunityFunnelConfig | null;
-  memberCountOverride?: number | null;
   /** Bumped by the shell when a locked nav tab is tapped (visitor lens). */
   gateOpenNonce?: number;
 };
@@ -178,20 +176,14 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     publicJoinError,
     checkoutError,
     showSignIn,
-    funnelConfigOverride,
-    memberCountOverride,
     gateOpenNonce = 0,
   } = props;
 
   const communityName = publicCommunity?.name ?? publicRouteSlug ?? "Community";
-  const funnel = funnelConfigOverride ?? publicCommunity?.funnel ?? null;
+  const funnel = publicCommunity?.funnel ?? null;
   const aboutText = publicCommunity?.about?.trim() ?? "";
   const memberCount =
-    typeof memberCountOverride === "number"
-      ? memberCountOverride
-      : typeof publicCommunity?.member_count === "number"
-        ? publicCommunity.member_count
-        : null;
+    typeof publicCommunity?.member_count === "number" ? publicCommunity.member_count : null;
   const adminCount =
     typeof publicCommunity?.admin_count === "number" ? publicCommunity.admin_count : null;
   const onlineCount =

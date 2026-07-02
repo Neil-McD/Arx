@@ -19,6 +19,8 @@ const funnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx"
 const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 const surfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
+const funnelActions = read("apps/web/src/controllers/useWebPublicFunnelActions.ts");
+const routeController = read("apps/web/src/controllers/useWebPublicCommunityRouteController.ts");
 const governanceController = read("shared/useCommunitySettingsGovernanceController.ts");
 const saveFunnelAboutSlice = sliceBetween(
   app,
@@ -100,6 +102,18 @@ assert.match(
   shellProjection,
   /const isVisitorCommunityRoute =[\s\S]*"community_funnel"[\s\S]*"community_funnel_preview";/,
   "the shell must treat /c/:slug and its /preview as the same visitor route (rail + nav)",
+);
+
+// --- Honest analytics: the owner's own preview must not log a funnel visit ---
+assert.match(
+  funnelActions,
+  /if \(opts\?\.recordVisit !== false\) \{[\s\S]*recordCloudPublicFunnelVisit/,
+  "loadPublicCommunity must gate the funnel-visit record behind opts.recordVisit",
+);
+assert.match(
+  routeController,
+  /loadPublicCommunity\(publicFunnelSlug, \{ recordVisit: !isPublicFunnelPreviewRoute \}\)/,
+  "the route load effect must suppress the visit record on the /preview route",
 );
 
 // --- App-side About save wiring (unchanged truth) ---

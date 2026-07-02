@@ -10,7 +10,6 @@ import {
   type DiscoverTab,
   type SettingsPage,
 } from "./appShellNavigation";
-import type { CommunityFunnelConfig } from "./communityTypes";
 
 export type PublicRoute =
   | { kind: "app" }
@@ -233,115 +232,6 @@ export function buildCommunityFunnelPath(communitySlug: string | null | undefine
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
   return `/c/${encodeURIComponent(slug)}`;
-}
-
-export type CommunityFunnelPreviewRouteCommunity = {
-  slug?: string | null;
-  name: string;
-  one_liner: string | null;
-  about: string | null;
-  avatar_url?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-  visibility: string;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_faces?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  }> | null;
-};
-
-export type CommunityFunnelPreviewRouteState = {
-  slug: string;
-  community: CommunityFunnelPreviewRouteCommunity;
-  visibilityLabel: string;
-  memberCount: number | null;
-  funnelAction: "join" | "request_access" | "checkout";
-  one_liner: string | null;
-  funnel: CommunityFunnelConfig;
-  savedAt: number;
-};
-
-type HistoryStateWithPreview = {
-  communityFunnelPreview?: CommunityFunnelPreviewRouteState;
-};
-
-function normalizePreviewOneLiner(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
-  return trimmed ? trimmed : null;
-}
-
-function normalizePreviewAbout(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
-  return trimmed ? trimmed : null;
-}
-
-function normalizePreviewFunnelAction(raw: unknown): CommunityFunnelPreviewRouteState["funnelAction"] {
-  const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "checkout") return "checkout";
-  if (value === "join_approval" || value === "request_access") return "request_access";
-  return "join";
-}
-
-export function buildCommunityFunnelPreviewHistoryState(
-  draft: CommunityFunnelPreviewRouteState,
-): HistoryStateWithPreview {
-  return {
-    communityFunnelPreview: {
-      slug: String(draft.slug ?? "").trim(),
-      community: {
-        ...draft.community,
-        slug: String(draft.community.slug ?? draft.slug ?? "").trim() || null,
-        name: String(draft.community.name ?? "Community").trim() || "Community",
-        one_liner: normalizePreviewOneLiner(draft.community.one_liner),
-        about: normalizePreviewAbout(draft.community.about),
-        visibility: String(draft.community.visibility ?? "unlisted").trim() || "unlisted",
-      },
-      visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
-      memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-      funnelAction: normalizePreviewFunnelAction(draft.funnelAction),
-      one_liner: normalizePreviewOneLiner(draft.one_liner),
-      funnel: draft.funnel,
-      savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
-    },
-  };
-}
-
-export function readCommunityFunnelPreviewHistoryState(
-  communitySlug: string | null | undefined,
-): CommunityFunnelPreviewRouteState | null {
-  if (typeof window === "undefined") return null;
-  const slug = String(communitySlug ?? "").trim();
-  if (!slug) return null;
-  const state = (window.history.state ?? null) as HistoryStateWithPreview | null;
-  const draft = state?.communityFunnelPreview ?? null;
-  if (!draft || String(draft.slug ?? "").trim() !== slug) return null;
-  return {
-    slug,
-    community: {
-      ...draft.community,
-      slug: String(draft.community.slug ?? slug).trim() || slug,
-      name: String(draft.community.name ?? "Community").trim() || "Community",
-      one_liner: normalizePreviewOneLiner(draft.community.one_liner),
-      about: normalizePreviewAbout(draft.community.about),
-      visibility: String(draft.community.visibility ?? "unlisted").trim() || "unlisted",
-    },
-    visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
-    memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-    funnelAction: normalizePreviewFunnelAction(draft.funnelAction),
-    one_liner: normalizePreviewOneLiner(draft.one_liner),
-    funnel: draft.funnel,
-    savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
-  };
 }
 
 function splitPathSegments(pathname: string): string[] {
