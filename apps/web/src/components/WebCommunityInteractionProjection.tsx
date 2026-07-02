@@ -434,6 +434,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       onMessageUser: props.onMessageUser,
                       getAvatarColor: props.getAvatarColor,
                       getInitials: props.getInitials,
+                      communityAgentDisplayName: props.activeCommunityName,
                     }}
                   />
                   <InteractionAttachments attachments={selectedRoot.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
@@ -567,6 +568,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                                 onMessageUser: props.onMessageUser,
                                 getAvatarColor: props.getAvatarColor,
                                 getInitials: props.getInitials,
+                                communityAgentDisplayName: props.activeCommunityName,
                               }}
                             />
                             <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />

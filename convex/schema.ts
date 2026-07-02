@@ -1435,6 +1435,17 @@ export default defineSchema({
     .index("by_message_user_emoji", ["messageId", "userId", "emoji"])
     .index("by_user", ["userId"]),
 
+  /* Host-curated messages projected public-safely to visitors on the community
+     funnel (/c/:slug). Pointer table — never touches the message rows. */
+  communityFeaturedMessages: defineTable({
+    communityId: v.id("communities"),
+    messageId: v.id("communityChatMessages"),
+    featuredByUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_message", ["messageId"]),
+
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
@@ -1892,6 +1903,9 @@ export default defineSchema({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
+    // Owner-set display name for the agent's taggable identity; absent means
+    // the community's own name.
+    agentDisplayName: v.optional(v.string()),
     // Owner off-switch for the memory agent. Absent means enabled: the memory
     // system is on by default wherever the owner has a usable connection.
     agentEnabled: v.optional(v.boolean()),

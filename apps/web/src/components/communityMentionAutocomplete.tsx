@@ -6,11 +6,16 @@ export type MentionCandidate = {
   displayName: string;
   handle: string | null;
   avatarUrl: string | null;
+  // "community_agent" candidates tag the community's agent (by agent key, not
+  // user id) and render with the permanent AGENT badge.
+  kind?: "user" | "community_agent";
 };
 
 export type CommittedMention = {
   userId: string;
   displayName: string;
+  kind?: "user" | "community_agent";
+  agentKey?: string;
 };
 
 // Max characters we'll scan back from the caret as a mention query. Display names can
@@ -115,7 +120,12 @@ export function useMentionAutocomplete(params: {
       const nextCaret = before.length + token.length + 1;
 
       applyText(nextValue, textarea);
-      onCommitMention({ userId: candidate.userId, displayName: candidate.displayName });
+      onCommitMention({
+        userId: candidate.userId,
+        displayName: candidate.displayName,
+        kind: candidate.kind ?? "user",
+        ...(candidate.kind === "community_agent" ? { agentKey: "community_agent" } : {}),
+      });
       close();
 
       // Restore the caret after React re-renders the controlled value.
@@ -198,7 +208,7 @@ export function MentionAutocompleteMenu(props: {
           type="button"
           role="option"
           aria-selected={index === highlightedIndex}
-          className={`mention-autocomplete-row${index === highlightedIndex ? " is-active" : ""}`}
+          className={`mention-autocomplete-row${index === highlightedIndex ? " is-active" : ""}${candidate.kind === "community_agent" ? " is-agent" : ""}`}
           onMouseEnter={() => setHighlightedIndex(index)}
           onClick={() => {
             pick(candidate);
@@ -217,7 +227,9 @@ export function MentionAutocompleteMenu(props: {
           </span>
           <span className="mention-autocomplete-meta">
             <span className="mention-autocomplete-name">{candidate.displayName}</span>
-            {candidate.handle ? (
+            {candidate.kind === "community_agent" ? (
+              <span className="mention-autocomplete-agent-badge">AGENT</span>
+            ) : candidate.handle ? (
               <span className="mention-autocomplete-handle">@{candidate.handle}</span>
             ) : null}
           </span>

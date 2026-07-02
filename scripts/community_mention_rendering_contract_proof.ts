@@ -79,4 +79,15 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   { type: "plain", text: "text" },
 ]);
 
+// Agent mentions: kind community_agent, no userId — still chips by label.
+{
+  const segments = splitBodyIntoMentionSegments("asking @Polynet to pull it", [
+    mention({ label: "Polynet", kind: "community_agent", userId: null as unknown as string }),
+  ]);
+  const chips = segments.filter((segment) => segment.type === "mention");
+  assert.equal(chips.length, 1);
+  assert.equal(chips[0]!.text, "@Polynet");
+  assert.equal((chips[0] as { mention: ResolvedMentionForRendering }).mention.kind, "community_agent");
+}
+
 console.log("community_mention_rendering_contract_proof: ok");

@@ -395,7 +395,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   // Members available to @-mention: everyone we have a profile for, except yourself.
   const mentionCandidates = useMemo<MentionCandidate[]>(() => {
-    return Object.values(profilesByUserId)
+    const memberCandidates = Object.values(profilesByUserId)
       .filter((profile) => profile.user_id !== sessionUserId)
       .map((profile) => ({
         userId: profile.user_id,
@@ -405,6 +405,21 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       }))
       .filter((candidate) => candidate.displayName.trim().length > 0)
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    // The community agent is taggable like a member, pinned after humans and
+    // always badged. Default name = the community's own name.
+    const agentDisplayName = String(activeCommunity?.name ?? "").trim();
+    return agentDisplayName
+      ? [
+          ...memberCandidates,
+          {
+            userId: "community_agent",
+            displayName: agentDisplayName,
+            handle: "agent",
+            avatarUrl: null,
+            kind: "community_agent" as const,
+          },
+        ]
+      : memberCandidates;
   }, [profilesByUserId, sessionUserId, displayName]);
 
   const mainMention = useMentionAutocomplete({

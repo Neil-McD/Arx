@@ -17292,6 +17292,23 @@ button.chat-reply-quote:hover {
   text-overflow: ellipsis;
 }
 
+/* The community agent in the picker: pinned after humans, permanently badged —
+   never mistakable for a member (contract Amendment v1.1). */
+.mention-autocomplete-agent-badge {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+  border-radius: 4px;
+  padding: 1.5px 5px;
+}
+
+.mention-autocomplete-row.is-agent .mention-autocomplete-avatar {
+  background: linear-gradient(135deg, #a78bfa, var(--accent));
+  color: #fff;
+}
+
 .community-chat-profile-gate {
   display: flex;
   align-items: center;

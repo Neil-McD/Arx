@@ -41,7 +41,7 @@ export type CommunityMessageSendDraft<
 > = {
   text?: string;
   attachments?: AttachmentT[];
-  mentions?: { userId: string; displayName: string }[];
+  mentions?: { userId: string; displayName: string; kind?: "user" | "community_agent"; agentKey?: string }[];
   replyingToMessage?: CommunityReplyTarget<MessageT> | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
@@ -83,7 +83,7 @@ type UseCommunityChatMutationControllerArgs<
     text: string;
     rootId?: string | null;
     replyToMessageId?: string | null;
-    mentions?: { userId: string }[];
+    mentions?: { userId?: string; agentKey?: string }[];
     attachments?: unknown[];
   }) => Promise<RowT[]>;
   useCanonicalCommunityInteractions?: boolean;
@@ -122,7 +122,7 @@ type UseCommunityChatMutationControllerArgs<
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
   communityMessageInput: string;
-  communityMessageMentions?: { userId: string; displayName: string }[];
+  communityMessageMentions?: { userId: string; displayName: string; kind?: "user" | "community_agent"; agentKey?: string }[];
   communityMessages: MessageT[];
   messageReactions: ReactionT[];
   replyingToMessage: CommunityReplyTarget<MessageT> | null;
@@ -420,12 +420,16 @@ export function useCommunityChatMutationController<
 
     // Keep only mentions whose @DisplayName token still appears in the sent text (dedupe by user).
     const mentionDraft = draft?.mentions ?? current.communityMessageMentions ?? [];
-    const mentionsToSend: { userId: string }[] = [];
+    const mentionsToSend: { userId?: string; agentKey?: string }[] = [];
     const seenMentionUserIds = new Set<string>();
     for (const mention of mentionDraft) {
       if (!mention.userId || seenMentionUserIds.has(mention.userId)) continue;
       if (!bodyToSend.includes(`@${mention.displayName}`)) continue;
       seenMentionUserIds.add(mention.userId);
+      if (mention.kind === "community_agent") {
+        mentionsToSend.push({ agentKey: mention.agentKey ?? "community_agent" });
+        continue;
+      }
       mentionsToSend.push({ userId: mention.userId });
     }
 

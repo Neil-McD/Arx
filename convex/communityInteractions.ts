@@ -1202,14 +1202,31 @@ async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
   return Math.max(0, Math.floor(last?.seq ?? 0)) + 1;
 }
 
+type InteractionMentionSpec =
+  | { kind: "user"; userId: any }
+  | { kind: "community_agent"; agentKey: string };
+
 async function resolveMentionedUserIdsForInteractionWrite(args: {
   ctx: any;
   communityId: any;
-  mentions: Array<{ userId: any }>;
-}): Promise<any[]> {
+  mentions: Array<{ userId?: any; agentKey?: any }>;
+}): Promise<InteractionMentionSpec[]> {
   const seen = new Set<string>();
-  const out: any[] = [];
+  const out: InteractionMentionSpec[] = [];
   for (const mention of args.mentions) {
+    // Community-agent mentions carry an agent key, never a user id. Only the
+    // canonical community agent is taggable.
+    if (!mention.userId && mention.agentKey) {
+      const agentKey = String(mention.agentKey ?? "").trim();
+      if (agentKey !== "community_agent") throw new Error("interaction_mention_agent_unknown");
+      if (seen.has(`agent:${agentKey}`)) continue;
+      seen.add(`agent:${agentKey}`);
+      if (out.length >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
+        throw new Error("interaction_mentions_limit_exceeded");
+      }
+      out.push({ kind: "community_agent", agentKey });
+      continue;
+    }
     const userId = mention.userId;
     const normalized = normalizeIdValue(userId);
     if (!normalized || seen.has(normalized)) continue;
@@ -1228,7 +1245,7 @@ async function resolveMentionedUserIdsForInteractionWrite(args: {
     } catch {
       throw new Error("interaction_mention_user_not_allowed");
     }
-    out.push(userId);
+    out.push({ kind: "user", userId });
   }
   return out;
 }
@@ -1238,20 +1255,17 @@ async function insertCommunityInteractionMentionRows(args: {
   communityId: any;
   rootId?: any;
   replyId?: any;
-  mentionedUserIds: any[];
+  mentionedUserIds: InteractionMentionSpec[];
   nowMs: number;
 }): Promise<void> {
-  const seen = new Set<string>();
-  for (const mentionedUserId of args.mentionedUserIds) {
-    const normalized = normalizeIdValue(mentionedUserId);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
+  for (const spec of args.mentionedUserIds) {
     await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
       ...(args.replyId ? { replyId: args.replyId } : {}),
-      mentionKind: "user",
-      mentionedUserId,
+      mentionKind: spec.kind,
+      ...(spec.kind === "user" ? { mentionedUserId: spec.userId } : {}),
+      ...(spec.kind === "community_agent" ? { mentionedAgentKey: spec.agentKey } : {}),
       notifyState: "pending",
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -1268,7 +1282,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     text: v.string(),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
-    mentions: v.optional(v.array(v.object({ userId: v.id("users") }))),
+    mentions: v.optional(v.array(v.object({ userId: v.optional(v.id("users")), agentKey: v.optional(v.string()) }))),
     attachments: v.optional(v.array(interactionAttachmentInputValidator)),
   },
   handler: async (ctx, args) => {

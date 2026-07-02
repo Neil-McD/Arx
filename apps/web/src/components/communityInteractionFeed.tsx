@@ -593,6 +593,8 @@ export type InteractionMentionContext = {
   onMessageUser?: (userId: string) => void;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
+  // Label for community_agent mentions (default policy: the community's name).
+  communityAgentDisplayName?: string;
 };
 
 export function interactionMentionsSelf(
@@ -606,19 +608,31 @@ export function interactionMentionsSelf(
 function resolveMentionsForRendering(
   context: InteractionMentionContext,
 ): ResolvedMentionForRendering[] {
-  return context.mentions
-    .filter((mention) => mention.mention_kind === "user" && mention.mentioned_user_id)
-    .map((mention) => {
+  const resolved: ResolvedMentionForRendering[] = [];
+  for (const mention of context.mentions) {
+    if (mention.mention_kind === "user" && mention.mentioned_user_id) {
       const userId = String(mention.mentioned_user_id);
       const profileName = context.profilesByUserId?.[userId]?.display_name?.trim();
-      return {
+      resolved.push({
         key: mention.id,
         label: profileName || context.displayName(userId),
         kind: mention.mention_kind,
         userId,
         isSelf: Boolean(context.currentUserId && userId === context.currentUserId),
-      };
-    });
+      });
+      continue;
+    }
+    if (mention.mention_kind === "community_agent") {
+      resolved.push({
+        key: mention.id,
+        label: String(context.communityAgentDisplayName ?? "").trim(),
+        kind: mention.mention_kind,
+        userId: null,
+        isSelf: false,
+      });
+    }
+  }
+  return resolved;
 }
 
 function MentionChipSpan(props: {
@@ -948,6 +962,7 @@ export function CommunityInteractionFeedList(
                                     onMessageUser: props.onMessageUser,
                                     getAvatarColor: props.getAvatarColor,
                                     getInitials: props.getInitials,
+                                    communityAgentDisplayName: props.activeCommunityName,
                                   }}
                                 />
                                 <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />

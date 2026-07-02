@@ -214,7 +214,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     text: string;
     rootId?: string | null;
     replyToMessageId?: string | null;
-    mentions?: { userId: string }[];
+    mentions?: { userId?: string; agentKey?: string }[];
     attachments?: unknown[];
   },
 ): Promise<TRow[]> {
