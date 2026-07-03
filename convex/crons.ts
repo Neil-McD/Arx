@@ -188,6 +188,16 @@ crons.interval(
   { limit: 25 },
 );
 
+// Concierge serve worker: accepted @Polynet mentions spend the asker's own
+// connection and answer in the source thread. This path is read-only with
+// respect to community memory.
+crons.interval(
+  "process queued community agent serve requests",
+  { minutes: 1 },
+  (internal as any).communityAgentServeWorker.processQueuedCommunityAgentServeRequestsInternal,
+  { limit: 3 },
+);
+
 // Mention email pings: mentions still "pending" after the in-app grace window
 // get one email each, preference-gated and deduped per mention.
 crons.interval(

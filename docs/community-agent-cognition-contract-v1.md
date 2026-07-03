@@ -1595,6 +1595,50 @@ Rules:
 - Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
 - Unexpected birth-time intake errors must not fail the chat write; the mention remains pending for the repair drain.
 
+## Twenty-Fifth Implementation Slice: Concierge Serve Worker v0
+
+Serve Worker v0 gives the taggable community agent a mouth without giving it
+memory authority.
+
+```txt
+communityAgentServeRequests[queued, accepted]
+  -> claim request
+  -> load same-community source thread
+  -> spend requester ChatGPT connection
+  -> insert one community-agent reply in that source thread
+  -> mark request responded/error
+```
+
+Rules:
+
+- This slice is serve only: it does not write source traces, compiler digests,
+  directory nodes, directory edges, change requests, mutations, retrieval logs,
+  outcomes, or community-agent runs.
+- The worker uses the requester's sponsor lane. `sponsorUserId` must equal
+  `requesterUserId`; there is no owner-funded fallback and no platform-funded
+  fallback for direct `@Polynet` answers.
+- The LLM call is plain completion, not the community-agent tool runtime. The
+  Concierge has zero filesystem or directory tools in v0.
+- The response is always a reply in the source thread:
+  - if the mention source is a root post, insert `communityInteractionReplies`
+    under that root
+  - if the mention source is a reply, insert `communityInteractionReplies`
+    under that root with `targetReplyId = sourceReplyId`
+  - never create `communityInteractionRoots`
+- Reply visibility is no wider than the captured response scope and current
+  source visibility.
+- Source visibility must be readable by the requester at serve time: community
+  and public scopes require chat access, private scope requires the source
+  author, and admin scope requires owner/admin manager access.
+- The source requester must still have community chat access at context-read
+  and finalization time.
+- Only live, same-community source roots/replies can be answered.
+- Reply insertion is idempotent by `community_agent_serve:<requestId>`.
+- Stale `running` serve requests can be retried; idempotent finalization
+  prevents duplicate visible answers.
+- The cron is a bounded worker. It processes a small number of queued requests
+  per tick and leaves product truth in `communityAgentServeRequests`.
+
 ## What Not To Build Yet
 
 Do not start with:

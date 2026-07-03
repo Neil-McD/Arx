@@ -50,6 +50,7 @@ import type * as communityAgentConciergeCore from "../communityAgentConciergeCor
 import type * as communityAgentFilesystem from "../communityAgentFilesystem.js";
 import type * as communityAgentHeartbeat from "../communityAgentHeartbeat.js";
 import type * as communityAgentRuntime from "../communityAgentRuntime.js";
+import type * as communityAgentServeWorker from "../communityAgentServeWorker.js";
 import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityAppMounts from "../communityAppMounts.js";
 import type * as communityArchive from "../communityArchive.js";
@@ -251,6 +252,7 @@ declare const fullApi: ApiFromModules<{
   communityAgentFilesystem: typeof communityAgentFilesystem;
   communityAgentHeartbeat: typeof communityAgentHeartbeat;
   communityAgentRuntime: typeof communityAgentRuntime;
+  communityAgentServeWorker: typeof communityAgentServeWorker;
   communityAiFeed: typeof communityAiFeed;
   communityAppMounts: typeof communityAppMounts;
   communityArchive: typeof communityArchive;
