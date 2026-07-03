@@ -17725,7 +17725,6 @@ button.chat-reply-quote:hover {
 
 .mention-composer-highlight-token {
   color: var(--accent-gold, var(--accent));
-  font-weight: 600;
 }
 
 .chat-input::placeholder {
