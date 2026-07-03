@@ -195,10 +195,54 @@ async function failServeRequest(ctx: any, request: ServeRequestRow, code: string
 
 export const claimNextCommunityAgentServeRequestInternal = internalMutation({
   args: {
+    requestId: v.optional(v.id("communityAgentServeRequests")),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    if (args.requestId) {
+      const request = (await ctx.db.get(args.requestId as any)) as ServeRequestRow | null;
+      if (!request || request.status === "responded" || request.status === "error" || request.status === "skipped") {
+        return {
+          ok: true,
+          requestId: null,
+        };
+      }
+      if (request.status === "running") {
+        if (nowMs - Math.floor(Number(request.updatedAt ?? request.createdAt ?? 0)) < SERVE_WORKER_STALE_RUNNING_MS) {
+          return {
+            ok: true,
+            requestId: null,
+          };
+        }
+        await ctx.db.patch(request._id as any, {
+          status: "queued",
+          updatedAt: nowMs,
+        });
+      }
+      if (!serveRequestIsClaimable(request)) {
+        await failServeRequest(
+          ctx,
+          request,
+          "community_agent_serve_request_invalid",
+          "Queued community-agent serve request failed invariant checks.",
+          nowMs,
+        );
+        return {
+          ok: true,
+          requestId: null,
+        };
+      }
+      await ctx.db.patch(request._id as any, {
+        status: "running",
+        updatedAt: nowMs,
+      });
+      return {
+        ok: true,
+        requestId: request._id,
+      };
+    }
+
     const staleRunning = (await ctx.db
       .query("communityAgentServeRequests" as any)
       .withIndex("by_status_createdAt", (q: any) => q.eq("status", "running"))
@@ -563,15 +607,20 @@ function buildServeMessages(context: any) {
 
 export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
   args: {
+    requestId: v.optional(v.id("communityAgentServeRequests")),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const limit = normalizeLimit(args.limit);
     const results: Array<Record<string, unknown>> = [];
-    for (let index = 0; index < limit; index += 1) {
+    const iterationLimit = args.requestId ? 1 : limit;
+    for (let index = 0; index < iterationLimit; index += 1) {
       const claim = await ctx.runMutation(
         internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
-        { nowMs: Date.now() },
+        {
+          ...(args.requestId ? { requestId: args.requestId } : {}),
+          nowMs: Date.now(),
+        },
       );
       if (!claim?.requestId) break;
 

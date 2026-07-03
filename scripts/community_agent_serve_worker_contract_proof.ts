@@ -35,6 +35,11 @@ assert.match(
 );
 assert.match(
   claimBlock,
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*ctx\.db\.get\(args\.requestId as any\)[\s\S]*status: "running"/,
+  "serve worker should support claiming one explicitly scheduled request",
+);
+assert.match(
+  claimBlock,
   /query\("communityAgentServeRequests" as any\)[\s\S]*q\.eq\("status", "running"\)[\s\S]*SERVE_WORKER_STALE_RUNNING_MS[\s\S]*status: "queued"/,
   "serve worker should retry stale running requests instead of leaving dead rows",
 );
@@ -77,7 +82,7 @@ assert.match(
 
 assert.match(
   actionBlock,
-  /internalAction[\s\S]*runChatgptCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID[\s\S]*messages: buildServeMessages\(context\)/,
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*requestId: args\.requestId[\s\S]*runChatgptCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID[\s\S]*messages: buildServeMessages\(context\)/,
   "serve action should spend the requester sponsor lane through plain ChatGPT completion",
 );
 assert.doesNotMatch(
@@ -145,7 +150,7 @@ assert.match(
 assert.match(
   crons,
   /"process queued community agent serve requests",\s*\{ minutes: 1 \},[\s\S]*communityAgentServeWorker\.processQueuedCommunityAgentServeRequestsInternal[\s\S]*\{ limit: 3 \}/,
-  "serve worker should run as a bounded cron",
+  "serve worker should keep a bounded cron repair drain",
 );
 assert.match(
   docs,
@@ -154,8 +159,8 @@ assert.match(
 );
 assert.match(
   docs,
-  /spend requester ChatGPT connection[\s\S]*insert one community-agent reply in that source thread/,
-  "architecture docs should describe the serve path",
+  /schedule immediate serve worker for that request[\s\S]*spend requester ChatGPT connection[\s\S]*insert one community-agent reply in that source thread/,
+  "architecture docs should describe the event-driven serve path",
 );
 assert.match(
   docs,
@@ -166,6 +171,11 @@ assert.match(
   docs,
   /Source visibility must be readable by the requester at serve time[\s\S]*private scope requires the source\s+author[\s\S]*admin scope requires owner\/admin manager access/,
   "architecture docs should describe source visibility checks",
+);
+assert.match(
+  docs,
+  /Serve is event-driven primary, cron-repaired secondary[\s\S]*schedule the serve worker immediately with `requestId`[\s\S]*leftover\/stale request drain/,
+  "architecture docs should state that cron is repair, not primary serve",
 );
 
 console.log("community_agent_serve_worker_contract_proof: ok");

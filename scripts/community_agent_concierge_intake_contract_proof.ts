@@ -118,6 +118,21 @@ assert.match(
   "Concierge intake should use mention notifyState only as the narrow drain marker",
 );
 assert.match(
+  conciergeCore,
+  /scheduleImmediateServeWorker[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*communityAgentServeWorker\.processQueuedCommunityAgentServeRequestsInternal[\s\S]*requestId: args\.requestId[\s\S]*limit: 1/,
+  "accepted Concierge intake should immediately schedule the serve worker for the exact request",
+);
+assert.match(
+  conciergeCore,
+  /catch \{[\s\S]*serve repair cron will drain it/,
+  "immediate serve scheduling failure should not fail the chat write",
+);
+assert.match(
+  conciergeCore,
+  /const requestId = await insertServeRequest\([\s\S]*status: "queued"[\s\S]*await settleMentionFromServeRequest[\s\S]*await scheduleImmediateServeWorker\(\{[\s\S]*requestId/,
+  "accepted intake should settle the mention and schedule serve after the queued request exists",
+);
+assert.match(
   crons,
   /"process pending community agent mentions",\s*\{ minutes: 5 \},[\s\S]*communityAgentConcierge\.consumePendingCommunityAgentMentionsInternal[\s\S]*\{ limit: 25 \}/,
   "Concierge repair drain should run as a bounded deterministic cron",

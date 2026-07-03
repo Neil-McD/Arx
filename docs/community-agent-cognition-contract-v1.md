@@ -1602,6 +1602,7 @@ memory authority.
 
 ```txt
 communityAgentServeRequests[queued, accepted]
+  -> schedule immediate serve worker for that request
   -> claim request
   -> load same-community source thread
   -> spend requester ChatGPT connection
@@ -1638,6 +1639,9 @@ Rules:
   prevents duplicate visible answers.
 - The cron is a bounded worker. It processes a small number of queued requests
   per tick and leaves product truth in `communityAgentServeRequests`.
+- Serve is event-driven primary, cron-repaired secondary. Fresh accepted
+  requests schedule the serve worker immediately with `requestId`; the cron is
+  only a leftover/stale request drain.
 
 ## What Not To Build Yet
 

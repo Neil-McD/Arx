@@ -188,9 +188,9 @@ crons.interval(
   { limit: 25 },
 );
 
-// Concierge serve worker: accepted @Polynet mentions spend the asker's own
-// connection and answer in the source thread. This path is read-only with
-// respect to community memory.
+// Concierge serve repair drain: accepted @Polynet mentions schedule an
+// immediate requester-funded worker at intake time. This cron only drains
+// leftover queued/stale requests.
 crons.interval(
   "process queued community agent serve requests",
   { minutes: 1 },

@@ -1,6 +1,9 @@
+import { internal } from "./_generated/api";
 import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+
+const internalRefs = internal as any;
 
 type VisibilityScope = "private" | "admin" | "community" | "public";
 export type ServeRequestStatus = "queued" | "skipped" | "running" | "responded" | "error";
@@ -97,6 +100,25 @@ async function settleMentionFromServeRequest(args: {
     toState: mentionSettledStateForServeStatus(args.status),
     nowMs: args.nowMs,
   });
+}
+
+async function scheduleImmediateServeWorker(args: {
+  ctx: any;
+  requestId: any;
+}): Promise<void> {
+  try {
+    await args.ctx.scheduler.runAfter(
+      0,
+      internalRefs.communityAgentServeWorker.processQueuedCommunityAgentServeRequestsInternal,
+      {
+        requestId: args.requestId,
+        limit: 1,
+      },
+    );
+  } catch {
+    // Chat writes should not fail because the immediate serve schedule failed;
+    // the queued request remains durable and the serve repair cron will drain it.
+  }
 }
 
 async function insertServeRequest(args: {
@@ -381,6 +403,10 @@ export async function intakeCommunityAgentMention(args: {
     mention: args.mention,
     status: "queued",
     nowMs: args.nowMs,
+  });
+  await scheduleImmediateServeWorker({
+    ctx: args.ctx,
+    requestId,
   });
   return {
     mention_id: normalizeIdValue(args.mention._id),
