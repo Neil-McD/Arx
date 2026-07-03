@@ -174,17 +174,21 @@ async function getLatestCommunityMentionOfUserCreatedAt(
   communityId: any,
   userId: any,
 ): Promise<number | null> {
-  const latest = (await ctx.db
-    .query("communityInteractionMentions" as any)
-    .withIndex("by_mentionedUser_community_createdAt", (q: any) =>
-      q.eq("mentionedUserId", userId).eq("communityId", communityId),
-    )
-    .order("desc")
-    .take(1)) as Array<{ createdAt?: number }>;
-  const createdAt = latest[0]?.createdAt;
-  return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
-    ? Math.floor(createdAt)
-    : null;
+  let latestCreatedAt: number | null = null;
+  for (const notifyState of ["pending", "sent", "read"] as const) {
+    const latest = (await ctx.db
+      .query("communityInteractionMentions" as any)
+      .withIndex("by_mentionedUser_community_notifyState_createdAt", (q: any) =>
+        q.eq("mentionedUserId", userId).eq("communityId", communityId).eq("notifyState", notifyState),
+      )
+      .order("desc")
+      .take(1)) as Array<{ createdAt?: number }>;
+    const createdAt = latest[0]?.createdAt;
+    if (typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0) {
+      latestCreatedAt = Math.max(latestCreatedAt ?? 0, Math.floor(createdAt));
+    }
+  }
+  return latestCreatedAt;
 }
 
 async function getCommunityAttentionRow(

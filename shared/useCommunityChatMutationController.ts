@@ -41,7 +41,7 @@ export type CommunityMessageSendDraft<
 > = {
   text?: string;
   attachments?: AttachmentT[];
-  mentions?: { userId: string; displayName: string; token?: string; kind?: "user" | "community_agent"; agentKey?: string }[];
+  mentions?: { userId: string; displayName: string; token: string; kind?: "user" | "community_agent"; agentKey?: string }[];
   replyingToMessage?: CommunityReplyTarget<MessageT> | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
@@ -122,7 +122,7 @@ type UseCommunityChatMutationControllerArgs<
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
   communityMessageInput: string;
-  communityMessageMentions?: { userId: string; displayName: string; token?: string; kind?: "user" | "community_agent"; agentKey?: string }[];
+  communityMessageMentions?: { userId: string; displayName: string; token: string; kind?: "user" | "community_agent"; agentKey?: string }[];
   communityMessages: MessageT[];
   messageReactions: ReactionT[];
   replyingToMessage: CommunityReplyTarget<MessageT> | null;
@@ -418,15 +418,15 @@ export function useCommunityChatMutationController<
     })();
     const bodyToSend = rawText;
 
-    // Keep only mentions whose inserted token still appears in the sent text
-    // (dedupe by user). Tokens are @handle for users; display-name fallback
-    // covers agent mentions and drafts committed before tokens existed.
+    // Keep only mentions whose exact inserted token still appears in the sent
+    // text (dedupe by user). User tokens are @handle; display names are never
+    // mention identity.
     const mentionDraft = draft?.mentions ?? current.communityMessageMentions ?? [];
     const mentionsToSend: { userId?: string; agentKey?: string }[] = [];
     const seenMentionUserIds = new Set<string>();
     for (const mention of mentionDraft) {
       if (!mention.userId || seenMentionUserIds.has(mention.userId)) continue;
-      if (!bodyToSend.includes(mention.token || `@${mention.displayName}`)) continue;
+      if (!bodyToSend.includes(mention.token)) continue;
       seenMentionUserIds.add(mention.userId);
       if (mention.kind === "community_agent") {
         mentionsToSend.push({ agentKey: mention.agentKey ?? "community_agent" });

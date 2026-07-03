@@ -259,6 +259,11 @@ assert.match(
   /normalizeId\("users" as any, rawUserId\)[\s\S]*withIndex\("by_authSubject"[\s\S]*interaction_mention_user_not_found[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId: user\._id[\s\S]*interaction_mention_user_not_allowed/,
   "mention resolver should resolve existing users by canonical id or auth subject and require community chat access",
 );
+assert.match(
+  mentionResolver,
+  /interactionTextContainsHandleMention\(args\.text, user\.handle \?\? user\.normalizedHandle\)[\s\S]*interaction_mention_token_missing/,
+  "mention resolver should reject user mentions whose @handle token is missing from final text",
+);
 
 const targetLoader = functionBlock(interactions, "loadCommunityInteractionTarget");
 assert.match(

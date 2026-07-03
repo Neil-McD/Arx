@@ -509,6 +509,44 @@ async function suppressPendingMentionRows(ctx: any, rows: Array<{ _id: any }>, n
   }
 }
 
+async function suppressPendingMentionsForInteractionSource(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  targetId: any;
+  nowMs: number;
+}): Promise<void> {
+  await suppressPendingMentionRows(
+    args.ctx,
+    args.targetType === "reply"
+      ? await listMentionsForReply(args.ctx, args.targetId)
+      : await listMentionsForRoot(args.ctx, args.targetId),
+    args.nowMs,
+  );
+}
+
+async function suppressPendingMentionsMissingFromInteractionText(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  targetId: any;
+  text: string;
+  nowMs: number;
+}): Promise<void> {
+  const rows =
+    args.targetType === "reply"
+      ? await listMentionsForReply(args.ctx, args.targetId)
+      : await listMentionsForRoot(args.ctx, args.targetId);
+  for (const row of rows) {
+    if (row.notifyState !== "pending") continue;
+    if (row.mentionKind === "user" && row.mentionedUserId) {
+      const user = (await args.ctx.db.get(row.mentionedUserId)) as { handle?: string; normalizedHandle?: string } | null;
+      if (user && interactionTextContainsHandleMention(args.text, user.handle ?? user.normalizedHandle)) {
+        continue;
+      }
+    }
+    await suppressPendingMentionRows(args.ctx, [row], args.nowMs);
+  }
+}
+
 async function suppressPendingMentionsForDeletedInteractionTarget(args: {
   ctx: any;
   targetType: "root" | "reply";
@@ -516,10 +554,10 @@ async function suppressPendingMentionsForDeletedInteractionTarget(args: {
   nowMs: number;
 }): Promise<void> {
   if (args.targetType === "reply") {
-    await suppressPendingMentionRows(args.ctx, await listMentionsForReply(args.ctx, args.targetId), args.nowMs);
+    await suppressPendingMentionsForInteractionSource(args);
     return;
   }
-  await suppressPendingMentionRows(args.ctx, await listMentionsForRoot(args.ctx, args.targetId), args.nowMs);
+  await suppressPendingMentionsForInteractionSource(args);
   const replies = (await args.ctx.db
     .query("communityInteractionReplies" as any)
     .withIndex("by_root_createdAt", (q: any) => q.eq("rootId", args.targetId))
@@ -1249,9 +1287,21 @@ type InteractionMentionSpec =
   | { kind: "user"; userId: any }
   | { kind: "community_agent"; agentKey: string };
 
+function escapeRegExp(raw: string): string {
+  return raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function interactionTextContainsHandleMention(text: string, handle: unknown): boolean {
+  const normalizedHandle = String(handle ?? "").trim().replace(/^@+/, "").toLowerCase();
+  if (!normalizedHandle) return false;
+  const pattern = new RegExp(`(^|\\s)@${escapeRegExp(normalizedHandle)}(?![A-Za-z0-9_-])`, "i");
+  return pattern.test(text);
+}
+
 export async function resolveMentionedUserIdsForInteractionWrite(args: {
   ctx: any;
   communityId: any;
+  text: string;
   mentions: Array<{ userId?: any; agentKey?: any }>;
 }): Promise<InteractionMentionSpec[]> {
   const seen = new Set<string>();
@@ -1285,6 +1335,9 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
     if (!user) throw new Error("interaction_mention_user_not_found");
     const normalized = normalizeIdValue(user._id);
     if (!normalized || seen.has(normalized)) continue;
+    if (!interactionTextContainsHandleMention(args.text, user.handle ?? user.normalizedHandle)) {
+      throw new Error("interaction_mention_token_missing");
+    }
     seen.add(normalized);
     if (out.length >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
       throw new Error("interaction_mentions_limit_exceeded");
@@ -1362,6 +1415,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     const mentionedUserIds = await resolveMentionedUserIdsForInteractionWrite({
       ctx,
       communityId: args.communityId,
+      text,
       mentions: args.mentions ?? [],
     });
     const nowMs = Date.now();
@@ -1778,6 +1832,13 @@ export const editCommunityInteractionMessage = mutation({
       contentSummary: contentSummary(blocks),
       editedAt: nowMs,
       updatedAt: nowMs,
+    });
+    await suppressPendingMentionsMissingFromInteractionText({
+      ctx,
+      targetType: args.targetType,
+      targetId: target._id,
+      text,
+      nowMs,
     });
     const legacyLink =
       args.targetType === "root"

@@ -393,17 +393,22 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     ingestAttachmentsFromFileList: onIngestCommunityAttachmentsFromFileList,
   });
 
-  // Members available to @-mention: everyone we have a profile for, except yourself.
+  // Members available to @-mention: members with handles, except yourself.
   const mentionCandidates = useMemo<MentionCandidate[]>(() => {
     const memberCandidates = Object.values(profilesByUserId)
       .filter((profile) => profile.user_id !== sessionUserId)
-      .map((profile) => ({
-        userId: profile.user_id,
-        displayName: displayName(profile.user_id),
-        handle: profile.handle ?? null,
-        avatarUrl: profile.avatar_url ?? null,
-      }))
-      .filter((candidate) => candidate.displayName.trim().length > 0)
+      .reduce<MentionCandidate[]>((candidates, profile) => {
+        const handle = String(profile.handle ?? "").trim();
+        if (!handle) return candidates;
+        const label = displayName(profile.user_id).trim() || handle;
+        candidates.push({
+          userId: profile.user_id,
+          displayName: label,
+          handle,
+          avatarUrl: profile.avatar_url ?? null,
+        });
+        return candidates;
+      }, [])
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
     // The community agent is taggable like a member, pinned after humans and
     // always badged. Default name = the community's own name.
@@ -420,7 +425,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           },
         ]
       : memberCandidates;
-  }, [profilesByUserId, sessionUserId, displayName]);
+  }, [activeCommunity?.name, profilesByUserId, sessionUserId, displayName]);
 
   const mainMention = useMentionAutocomplete({
     candidates: mentionCandidates,
@@ -709,8 +714,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     const text = drawerReplyInput.trim();
     const attachments = [...drawerReplyAttachmentsRef.current];
     if (!target || (!text && attachments.length === 0)) return;
-    // Only send mentions whose @DisplayName token still survives in the final text.
-    const mentions = drawerReplyMentions.filter((mention) => text.includes(`@${mention.displayName}`));
+    // Only send mentions whose exact inserted token still survives in the final text.
+    const mentions = drawerReplyMentions.filter((mention) => text.includes(mention.token));
     await onSendCommunityMessage({
       text,
       attachments,
