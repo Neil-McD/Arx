@@ -45,6 +45,7 @@ import {
   type CommittedMention,
   type MentionCandidate,
 } from "./communityMentionAutocomplete";
+import type { CloudCommunityAgentServeIssue } from "../../../../shared/cloudCommunityAgentConciergeGateway";
 
 type CommunityChatMessage = SharedCommunityChatMessage<CommunityMessageAttachment>;
 type CommunityActivityEvent = SharedCommunityActivityEvent;
@@ -172,6 +173,9 @@ export type WebCommunityChatPanelProps = {
   setCommunityMessageMentions: (
     update: CommittedMention[] | ((prev: CommittedMention[]) => CommittedMention[]),
   ) => void;
+  communityAgentServeIssue: CloudCommunityAgentServeIssue | null;
+  onDismissCommunityAgentServeIssue: (issueId: string) => void;
+  onConnectCommunityAgentServeProvider: () => void;
   isSendingCommunityMessage: boolean;
   communityChatError: string | null;
   isUserAtBottom: boolean;
@@ -313,6 +317,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     communityMessageInput,
     communityMessageMentions,
     setCommunityMessageMentions,
+    communityAgentServeIssue,
+    onDismissCommunityAgentServeIssue,
+    onConnectCommunityAgentServeProvider,
     isSendingCommunityMessage,
     communityChatError,
     isUserAtBottom,
@@ -835,6 +842,38 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     );
   };
 
+  const renderCommunityAgentServeNotice = () => {
+    if (!communityAgentServeIssue) return null;
+    return (
+      <div className="community-agent-serve-notice" role="status" aria-live="polite">
+        <div className="community-agent-serve-notice-copy">
+          <strong>Connect ChatGPT to use the community agent</strong>
+          <span>{communityAgentServeIssue.message}</span>
+        </div>
+        <div className="community-agent-serve-notice-actions">
+          <button
+            className="community-agent-serve-notice-primary"
+            type="button"
+            onClick={onConnectCommunityAgentServeProvider}
+          >
+            Connect ChatGPT
+          </button>
+          <button
+            className="community-agent-serve-notice-dismiss"
+            type="button"
+            onClick={() => onDismissCommunityAgentServeIssue(communityAgentServeIssue.id)}
+            title="Dismiss"
+            aria-label="Dismiss community agent connection notice"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const mainCommunityComposer = (
     <>
       {replyingToMessage && (
@@ -859,6 +898,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       )}
 
       {renderCommunityAttachmentsPreview(communityAttachments, onRemoveCommunityAttachment)}
+
+      {renderCommunityAgentServeNotice()}
 
       <div className="chat-input-bar">
         <MentionAutocompleteMenu
@@ -995,6 +1036,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         removeDrawerReplyAttachment,
         "community-attachments-preview community-interaction-reply-attachments-preview",
       )}
+      {renderCommunityAgentServeNotice()}
       <div className="chat-input-bar community-interaction-reply-input-bar">
         <MentionAutocompleteMenu
           autocomplete={drawerMention}

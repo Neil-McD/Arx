@@ -1771,7 +1771,8 @@ export default defineSchema({
     .index("by_sourceMention", ["sourceMentionId"])
     .index("by_status_createdAt", ["status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_requester_createdAt", ["requesterUserId", "createdAt"]),
+    .index("by_requester_createdAt", ["requesterUserId", "createdAt"])
+    .index("by_requester_community_createdAt", ["requesterUserId", "communityId", "createdAt"]),
 
   communityInteractionReactions: defineTable({
     communityId: v.id("communities"),

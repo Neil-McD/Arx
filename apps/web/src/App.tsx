@@ -116,6 +116,10 @@ import {
   type CloudCommunityChatLiveClient,
 } from "../../../shared/cloudCommunityChatGateway";
 import {
+  subscribeCloudCommunityAgentServeIssue,
+  type CloudCommunityAgentServeIssue,
+} from "../../../shared/cloudCommunityAgentConciergeGateway";
+import {
   createCloudCommunityInteractionComposerMessageRows,
   deleteCloudCommunityInteractionMessage,
   editCloudCommunityInteractionMessage,
@@ -2396,7 +2400,10 @@ export default function App() {
   const [isLoadingOlderCommunityInteractionRoots, setIsLoadingOlderCommunityInteractionRoots] = useState(false);
   const [communityInteractionRootChangeReason, setCommunityInteractionRootChangeReason] =
     useState<CommunityInteractionRootChangeReason>("reset");
+  const [communityAgentServeIssue, setCommunityAgentServeIssue] =
+    useState<CloudCommunityAgentServeIssue | null>(null);
   const communityInteractionRootsRef = useRef<CommunityInteractionRoot[]>([]);
+  const dismissedCommunityAgentServeIssueIdsRef = useRef<Set<string>>(new Set());
   const communityInteractionNextBeforeCreatedAtRef = useRef<number | null>(null);
   const isLoadingOlderCommunityInteractionRootsRef = useRef(false);
   communityInteractionRootsRef.current = communityInteractionRoots;
@@ -2834,6 +2841,57 @@ export default function App() {
       liveClient?.close();
     };
   }, [activeCommunityId, ensureUsableAuthSession, session]);
+
+  useEffect(() => {
+    if (
+      !COMMUNITY_INTERACTION_PROJECTION_ENABLED ||
+      activePage !== "community" ||
+      communityTab !== "chat" ||
+      !activeCommunityId ||
+      !session
+    ) {
+      setCommunityAgentServeIssue(null);
+      return;
+    }
+    let cancelled = false;
+    let liveClient: CloudCommunityChatLiveClient | null = null;
+    let unsubscribe: (() => void) | null = null;
+    void (async () => {
+      const usableSession = await ensureUsableAuthSession(session ?? undefined);
+      if (!usableSession || cancelled) return;
+      try {
+        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        unsubscribe = subscribeCloudCommunityAgentServeIssue({
+          liveClient,
+          communityId: activeCommunityId,
+          onUpdate: (issue) => {
+            if (cancelled) return;
+            if (issue && !dismissedCommunityAgentServeIssueIdsRef.current.has(issue.id)) {
+              setCommunityAgentServeIssue(issue);
+              return;
+            }
+            setCommunityAgentServeIssue(null);
+          },
+          onError: (error) => {
+            if (!cancelled) {
+              console.warn("community_agent_serve_issue_subscription_failed", error);
+              setCommunityAgentServeIssue(null);
+            }
+          },
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("community_agent_serve_issue_subscription_failed", error);
+          setCommunityAgentServeIssue(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      liveClient?.close();
+    };
+  }, [activeCommunityId, activePage, communityTab, ensureUsableAuthSession, session]);
 
   useEffect(() => {
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedCommunityInteractionRootId || !session) return;
@@ -7133,6 +7191,20 @@ export default function App() {
   });
   const { applyProviderConnectionLoadError } = providerConnectionUi;
 
+  const handleDismissCommunityAgentServeIssue = useCallback((issueId: string): void => {
+    const normalizedIssueId = String(issueId ?? "").trim();
+    if (normalizedIssueId) {
+      dismissedCommunityAgentServeIssueIdsRef.current.add(normalizedIssueId);
+    }
+    setCommunityAgentServeIssue((current) =>
+      current && current.id === normalizedIssueId ? null : current,
+    );
+  }, []);
+
+  const handleConnectCommunityAgentServeProvider = useCallback((): void => {
+    void providerConnectionUi.handleConnectChatgpt();
+  }, [providerConnectionUi]);
+
   const loadProviderConnections = useCallback(async (session: AuthSession): Promise<void> => {
     const usableSession = await ensureUsableAuthSession(session);
     if (!usableSession) return;
@@ -10856,6 +10928,9 @@ export default function App() {
       communityMessageInput,
       communityMessageMentions,
       setCommunityMessageMentions,
+      communityAgentServeIssue,
+      onDismissCommunityAgentServeIssue: handleDismissCommunityAgentServeIssue,
+      onConnectCommunityAgentServeProvider: handleConnectCommunityAgentServeProvider,
       isSendingCommunityMessage,
       communityChatError,
       copiedCommunityMessageId,

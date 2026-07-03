@@ -108,6 +108,9 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityMessageInput: WebCommunityChatPanelProps["communityMessageInput"];
   communityMessageMentions: WebCommunityChatPanelProps["communityMessageMentions"];
   setCommunityMessageMentions: WebCommunityChatPanelProps["setCommunityMessageMentions"];
+  communityAgentServeIssue: WebCommunityChatPanelProps["communityAgentServeIssue"];
+  onDismissCommunityAgentServeIssue: WebCommunityChatPanelProps["onDismissCommunityAgentServeIssue"];
+  onConnectCommunityAgentServeProvider: WebCommunityChatPanelProps["onConnectCommunityAgentServeProvider"];
   isSendingCommunityMessage: WebCommunityChatPanelProps["isSendingCommunityMessage"];
   communityChatError: WebCommunityChatPanelProps["communityChatError"];
   isUserAtBottom: WebCommunityChatPanelProps["isUserAtBottom"];
@@ -332,6 +335,9 @@ export function buildWebCommunitySurfaceProjection(
     communityMessageInput: params.communityMessageInput,
     communityMessageMentions: params.communityMessageMentions,
     setCommunityMessageMentions: params.setCommunityMessageMentions,
+    communityAgentServeIssue: params.communityAgentServeIssue,
+    onDismissCommunityAgentServeIssue: params.onDismissCommunityAgentServeIssue,
+    onConnectCommunityAgentServeProvider: params.onConnectCommunityAgentServeProvider,
     isSendingCommunityMessage: params.isSendingCommunityMessage,
     communityChatError: params.communityChatError,
     isUserAtBottom: params.isUserAtBottom,
