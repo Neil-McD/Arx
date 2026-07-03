@@ -245,7 +245,10 @@ export function MentionAutocompleteMenu(props: {
           <span className="mention-autocomplete-meta">
             <span className="mention-autocomplete-name">{candidate.displayName}</span>
             {candidate.kind === "community_agent" ? (
-              <span className="mention-autocomplete-agent-badge">AGENT</span>
+              <span className="mention-autocomplete-subline">
+                <span className="mention-autocomplete-handle">Community agent</span>
+                <span className="mention-autocomplete-agent-badge">AGENT</span>
+              </span>
             ) : candidate.kind === "role" ? (
               <span className="mention-autocomplete-agent-badge">ALL</span>
             ) : candidate.handle ? (

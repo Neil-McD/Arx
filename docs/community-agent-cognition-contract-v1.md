@@ -1560,7 +1560,7 @@ Concierge intake ledger turns community-agent mentions into auditable serve
 requests at birth-time intake:
 
 ```txt
-human posts @Polynet in community chat
+human mentions the community agent in community chat
   -> interaction root/reply is created
   -> communityInteractionMentions[pending, community_agent] is created
   -> validate source and requester
@@ -1617,9 +1617,14 @@ Rules:
   outcomes, or community-agent runs.
 - The worker uses the requester's sponsor lane. `sponsorUserId` must equal
   `requesterUserId`; there is no owner-funded fallback and no platform-funded
-  fallback for direct `@Polynet` answers.
+  fallback for direct community-agent answers.
 - The LLM call is plain completion, not the community-agent tool runtime. The
   Concierge has zero filesystem or directory tools in v0.
+- The base serve prompt is augmented by
+  `communityAgentConfigs.systemPrompt`, which is the Community-wide
+  instructions field in the AI Agent settings. These instructions shape the
+  answer, but do not grant write authority or override the serve/security
+  rules above.
 - The response is always a reply in the source thread:
   - if the mention source is a root post, insert `communityInteractionReplies`
     under that root

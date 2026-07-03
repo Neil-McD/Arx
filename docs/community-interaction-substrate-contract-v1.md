@@ -240,6 +240,8 @@ Rules:
 - composer text is normalized into typed canonical content blocks before storage
 - link blocks create pending `communityInteractionEmbeds`
 - user mentions are capped, deduped, resolved to existing users, and must pass community chat access
+- community-agent mentions store the canonical `community_agent` key, but v0
+  writes require the visible current-community-name token in the final text
 - mention rows create canonical `communityInteractionMentions`
 - prepared attachments create canonical `communityInteractionAttachments`
 - write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
@@ -305,7 +307,9 @@ Rules:
 - composer writes must not create `communityInteractionLegacyChatLinks`
 - composer writes may include bounded, already-prepared attachment metadata
 - composer attachment rows are written to `communityInteractionAttachments`
-- composer mentions are limited to existing users who can access the target community chat
+- composer user mentions are limited to existing users who can access the target community chat
+- composer community-agent mentions remain structural (`community_agent`) and
+  fail closed unless the visible current-community-name token is present
 - the mutation returns an empty legacy `rows` array; canonical projection completion depends on canonical mutation success and idempotency-key reconciliation
 - pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
 - drawer replies require a canonical `rootId`; optional reply targets may resolve through canonical reply ids or pre-existing legacy links

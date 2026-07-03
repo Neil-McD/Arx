@@ -66,6 +66,11 @@ assert.match(
 );
 assert.match(
   readBlock,
+  /agent:\s*\{[\s\S]*displayName: boundedText\(config\?\.agentDisplayName, 120\) \|\| "Polynet"[\s\S]*systemPrompt: boundedText\(config\?\.systemPrompt, 4_000\)/,
+  "serve context should load the AI Agent community-wide instructions from communityAgentConfigs.systemPrompt",
+);
+assert.match(
+  readBlock,
   /root\.status !== "live"[\s\S]*source_not_live[\s\S]*reply\.status !== "live"/,
   "serve context should fail closed on non-live source roots or replies",
 );
@@ -84,6 +89,21 @@ assert.match(
   actionBlock,
   /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*requestId: args\.requestId[\s\S]*runChatgptCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID[\s\S]*messages: buildServeMessages\(context\)/,
   "serve action should spend the requester sponsor lane through plain ChatGPT completion",
+);
+assert.match(
+  worker,
+  /communityWideInstructions[\s\S]*context\.agent\.systemPrompt[\s\S]*Community-wide instructions from the AI Agent settings:/,
+  "serve prompt should augment the base community-agent prompt with AI Agent community-wide instructions",
+);
+assert.match(
+  worker,
+  /direct community-agent mention request[\s\S]*member's community-agent mention request/,
+  "serve prompt should refer to the canonical community-agent mention rather than a legacy literal token",
+);
+assert.doesNotMatch(
+  worker,
+  /@Polynet/,
+  "serve prompt must not hard-code the legacy @Polynet visible token",
 );
 assert.doesNotMatch(
   worker,

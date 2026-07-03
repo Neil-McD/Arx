@@ -131,6 +131,11 @@ assert.match(
   /suppressPendingMentionsMissingFromInteractionText[\s\S]*row\.notifyState !== "pending"[\s\S]*interactionTextContainsHandleMention\(args\.text, user\.handle \?\? user\.normalizedHandle\)[\s\S]*continue;[\s\S]*suppressPendingMentionRows/,
   "editing an interaction source must preserve pending mentions whose @handle still appears in the edited text",
 );
+assert.match(
+  interactions,
+  /suppressPendingMentionsMissingFromInteractionText[\s\S]*row\.mentionKind === "community_agent"[\s\S]*row\.mentionedAgentKey === "community_agent"[\s\S]*interactionTextContainsCommunityAgentMention\(\{[\s\S]*communityId: row\.communityId[\s\S]*text: args\.text[\s\S]*continue;/,
+  "editing an interaction source must preserve pending community-agent mentions whose visible community-agent token still appears",
+);
 
 assert.match(
   interactions,

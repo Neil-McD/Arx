@@ -264,6 +264,11 @@ assert.match(
   /interactionTextContainsHandleMention\(args\.text, user\.handle \?\? user\.normalizedHandle\)[\s\S]*interaction_mention_token_missing/,
   "mention resolver should reject user mentions whose @handle token is missing from final text",
 );
+assert.match(
+  mentionResolver,
+  /agentKey !== "community_agent"[\s\S]*interactionTextContainsCommunityAgentMention\(\{[\s\S]*communityId: args\.communityId[\s\S]*text: args\.text[\s\S]*interaction_mention_token_missing[\s\S]*out\.push\(\{ kind: "community_agent", agentKey \}\)/,
+  "mention resolver should reject canonical community-agent mentions unless the community agent token is visible in final text",
+);
 
 const targetLoader = functionBlock(interactions, "loadCommunityInteractionTarget");
 assert.match(

@@ -17411,7 +17411,14 @@ button.chat-reply-quote:hover {
   text-overflow: ellipsis;
 }
 
-/* The community agent in the picker: pinned after humans, permanently badged —
+.mention-autocomplete-subline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The community agent in the picker: pinned first, permanently badged —
    never mistakable for a member (contract Amendment v1.1). */
 .mention-autocomplete-agent-badge {
   font-size: 9px;

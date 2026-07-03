@@ -429,23 +429,23 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           roleKey: "everybody" as const,
         }
       : null;
-    // The community agent is taggable like a member, pinned after humans and
-    // always badged. Default name = the community's own name.
+    // The community agent is taggable inside its own community, pinned first and
+    // always badged. V0 token/name = the community's own name; the backend stores
+    // the stable (communityId, community_agent) identity.
     const agentDisplayName = String(activeCommunity?.name ?? "").trim();
+    const agentCandidate: MentionCandidate | null = agentDisplayName
+      ? {
+          userId: "community_agent",
+          displayName: agentDisplayName,
+          handle: null,
+          avatarUrl: null,
+          kind: "community_agent" as const,
+        }
+      : null;
     return [
+      ...(agentCandidate ? [agentCandidate] : []),
       ...(everybodyCandidate ? [everybodyCandidate] : []),
       ...memberCandidates,
-      ...(agentDisplayName
-        ? [
-            {
-              userId: "community_agent",
-              displayName: agentDisplayName,
-              handle: "agent",
-              avatarUrl: null,
-              kind: "community_agent" as const,
-            },
-          ]
-        : []),
     ];
   }, [activeCommunity?.name, canMentionEverybody, profilesByUserId, sessionUserId, displayName]);
 

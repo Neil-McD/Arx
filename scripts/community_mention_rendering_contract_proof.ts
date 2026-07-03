@@ -151,6 +151,11 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     menuSource,
+    /candidate\.kind === "community_agent"[\s\S]*Community agent[\s\S]*mention-autocomplete-agent-badge[\s\S]*AGENT/,
+    "community-agent mention rows must explain that the candidate is the community agent and keep the AGENT badge",
+  );
+  assert.match(
+    menuSource,
     /kind\?: "user" \| "community_agent" \| "role"[\s\S]*roleKey\?: "everybody"/,
     "mention candidates and committed mentions must carry a first-class role mention shape",
   );
@@ -250,6 +255,11 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     chatPanelSource,
     /const everybodyCandidate: MentionCandidate \| null = canMentionEverybody[\s\S]*userId: "role:everybody"[\s\S]*displayName: "Everybody"[\s\S]*roleKey: "everybody"/,
     "owner/admin mention candidates must include a first-class @everybody role candidate",
+  );
+  assert.match(
+    chatPanelSource,
+    /const agentCandidate: MentionCandidate \| null = agentDisplayName[\s\S]*userId: "community_agent"[\s\S]*kind: "community_agent" as const[\s\S]*return \[[\s\S]*\.\.\.\(agentCandidate \? \[agentCandidate\] : \[\]\)[\s\S]*\.\.\.\(everybodyCandidate \? \[everybodyCandidate\] : \[\]\)[\s\S]*\.\.\.memberCandidates/,
+    "community-agent mention candidate must be pinned first on bare @ before roles and humans",
   );
   assert.match(
     senderSource,

@@ -188,7 +188,7 @@ crons.interval(
   { limit: 25 },
 );
 
-// Concierge serve repair drain: accepted @Polynet mentions schedule an
+// Concierge serve repair drain: accepted community-agent mentions schedule an
 // immediate requester-funded worker at intake time. This cron only drains
 // leftover queued/stale requests.
 crons.interval(

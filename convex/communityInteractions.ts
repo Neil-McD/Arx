@@ -562,6 +562,17 @@ async function suppressPendingMentionsMissingFromInteractionText(args: {
         continue;
       }
     }
+    if (
+      row.mentionKind === "community_agent" &&
+      row.mentionedAgentKey === "community_agent" &&
+      (await interactionTextContainsCommunityAgentMention({
+        ctx: args.ctx,
+        communityId: row.communityId,
+        text: args.text,
+      }))
+    ) {
+      continue;
+    }
     await suppressPendingMentionRows(args.ctx, [row], args.nowMs);
   }
 }
@@ -1335,6 +1346,15 @@ function interactionTextContainsRoleMention(text: string, roleKey: unknown): boo
   return interactionTextContainsAtToken(text, roleKey);
 }
 
+async function interactionTextContainsCommunityAgentMention(args: {
+  ctx: any;
+  communityId: any;
+  text: string;
+}): Promise<boolean> {
+  const community = (await args.ctx.db.get(args.communityId as any)) as { name?: string } | null;
+  return interactionTextContainsAtToken(args.text, community?.name);
+}
+
 async function resolveEverybodyMentionRecipientsForWrite(args: {
   ctx: any;
   communityId: any;
@@ -1442,6 +1462,15 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
       seenAgents.add(agentKey);
       if (directMentionCount >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
         throw new Error("interaction_mentions_limit_exceeded");
+      }
+      if (
+        !(await interactionTextContainsCommunityAgentMention({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          text: args.text,
+        }))
+      ) {
+        throw new Error("interaction_mention_token_missing");
       }
       directMentionCount += 1;
       out.push({ kind: "community_agent", agentKey });
