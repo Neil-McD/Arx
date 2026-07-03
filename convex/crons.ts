@@ -178,9 +178,9 @@ crons.interval(
   { limitCommunities: 500 },
 );
 
-// Concierge intake: deterministic, token-free drain from community-agent
-// mentions into asker-funded serve requests. The actual model response is a
-// separate queue consumer; this cron only proves sponsorship and access.
+// Concierge repair drain: fresh community-agent mentions are born into
+// asker-funded serve requests during the chat write. This deterministic,
+// token-free cron only repairs leftover pending mentions.
 crons.interval(
   "process pending community agent mentions",
   { minutes: 5 },

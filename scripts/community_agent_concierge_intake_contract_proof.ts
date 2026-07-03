@@ -5,6 +5,8 @@ import { join } from "node:path";
 const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const concierge = readFileSync(join(root, "convex/communityAgentConcierge.ts"), "utf8");
+const conciergeCore = readFileSync(join(root, "convex/communityAgentConciergeCore.ts"), "utf8");
+const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
@@ -38,72 +40,92 @@ const block = exportedFunctionBlock(concierge, "consumePendingCommunityAgentMent
 assert.match(
   block,
   /export const consumePendingCommunityAgentMentionsInternal = internalMutation/,
-  "Concierge intake should be internal-only",
+  "Concierge repair drain should be internal-only",
+);
+assert.match(
+  interactions,
+  /import \{ intakeCommunityAgentMention \} from "\.\/communityAgentConciergeCore"/,
+  "community interaction writes should use the shared Concierge intake core",
+);
+assert.match(
+  interactions,
+  /const mentionId = await args\.ctx\.db\.insert\("communityInteractionMentions" as any,[\s\S]*if \(spec\.kind === "community_agent"\) \{[\s\S]*await intakeCommunityAgentMention\(\{[\s\S]*mention:[\s\S]*_id: mentionId[\s\S]*communityId: args\.communityId[\s\S]*mentionedAgentKey: spec\.agentKey[\s\S]*notifyState: "pending"/,
+  "community-agent mentions should be born into Concierge intake immediately after mention insert",
+);
+assert.match(
+  interactions,
+  /catch \{[\s\S]*repair cron will retry the still-pending mention/,
+  "birth-time Concierge intake should not make chat posting fragile",
 );
 assert.match(
   block,
   /query\("communityInteractionMentions"[\s\S]*withIndex\("by_mentionKind_notifyState_createdAt"[\s\S]*q\.eq\("mentionKind", "community_agent"\)\.eq\("notifyState", "pending"\)[\s\S]*\.take\(limit\)/,
-  "Concierge intake should consume only bounded pending community-agent mentions",
+  "Concierge repair drain should consume only bounded leftover pending community-agent mentions",
 );
 assert.match(
-  concierge,
+  block,
+  /repair: true/,
+  "cron path should identify itself as a repair drain, not the primary product path",
+);
+assert.match(
+  conciergeCore,
   /existingServeRequestForMention[\s\S]*query\("communityAgentServeRequests"[\s\S]*withIndex\("by_sourceMention"[\s\S]*q\.eq\("sourceMentionId", mentionId\)/,
   "Concierge intake should lookup sourceMentionId before insert for retry idempotency",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /agentKey: CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*sourceMentionId: args\.mention\._id/,
   "serve request rows should bind to the canonical community agent and source mention",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /if \(args\.status === "queued"\) \{[\s\S]*normalizeIdValue\(sponsorUserId\) !== normalizeIdValue\(args\.requesterUserId\)[\s\S]*community_agent_serve_request_sponsor_must_equal_requester/,
   "queued serve requests must enforce sponsorUserId equals requesterUserId",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /source\.actorType !== "human"[\s\S]*intakeReason: "source_not_human"/,
   "Concierge intake should reject non-human source mentions to prevent agent loops",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.mention\.communityId[\s\S]*userId: source\.requesterUserId/,
   "Concierge intake should require requester chat access at processing time",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /latestCommunityAgentConfig[\s\S]*config\?\.agentEnabled === false[\s\S]*intakeReason: "agent_disabled"/,
   "Concierge intake should respect the community agent off switch",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /requesterHasChatgptConnection[\s\S]*query\("userProviderConnections"[\s\S]*withIndex\("by_user_provider"[\s\S]*q\.eq\("userId", requesterUserId\)\.eq\("provider", "chatgpt"\)[\s\S]*row\?\.encryptedSecretHex/,
   "Concierge intake should require the requester's own ChatGPT connection",
 );
 assert.doesNotMatch(
-  concierge,
+  concierge + conciergeCore,
   /community\.ownerId|getChatgptConnectionForUserInternal|runChatgptNativeToolCompletion|runNativeRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,
   "Concierge intake must not use owner funding, call an LLM, or create runtime runs",
 );
 assert.doesNotMatch(
-  concierge,
+  concierge + conciergeCore,
   /communityInteractionReplies"[\s\S]*insert|communityInteractionRoots"[\s\S]*insert|communitySourceTraces"[\s\S]*insert|communityIntelligenceNodes|communityIntelligenceChangeRequests|communityIntelligenceMutations/,
   "Concierge intake must not write chat replies, source traces, or memory truth",
 );
 assert.match(
-  concierge,
+  conciergeCore,
   /settleMentionRowInternal[\s\S]*toState: mentionSettledStateForServeStatus\(args\.status\)/,
   "Concierge intake should use mention notifyState only as the narrow drain marker",
 );
 assert.match(
   crons,
   /"process pending community agent mentions",\s*\{ minutes: 5 \},[\s\S]*communityAgentConcierge\.consumePendingCommunityAgentMentionsInternal[\s\S]*\{ limit: 25 \}/,
-  "Concierge intake should run as a bounded deterministic cron",
+  "Concierge repair drain should run as a bounded deterministic cron",
 );
 assert.match(
   docs,
-  /Concierge intake ledger[\s\S]*No LLM, no reply, no memory write[\s\S]*Owner funds sleep[\s\S]*asker funds serve[\s\S]*communityAgentServeRequests/,
-  "architecture docs should describe the first Concierge intake slice",
+  /birth-time intake[\s\S]*repair drain[\s\S]*No LLM, no reply, no memory write[\s\S]*Owner funds sleep[\s\S]*asker funds serve[\s\S]*communityAgentServeRequests/,
+  "architecture docs should describe birth-time Concierge intake plus repair drain",
 );
 
 console.log("community_agent_concierge_intake_contract_proof: ok");

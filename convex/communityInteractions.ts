@@ -35,6 +35,7 @@ import {
   requireSafeCommunitySourceUrl,
 } from "./communitySourceUrlPolicy";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
+import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -1493,7 +1494,7 @@ async function insertCommunityInteractionMentionRows(args: {
   nowMs: number;
 }): Promise<void> {
   for (const spec of args.mentionedUserIds) {
-    await args.ctx.db.insert("communityInteractionMentions" as any, {
+    const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
       ...(args.replyId ? { replyId: args.replyId } : {}),
@@ -1505,6 +1506,26 @@ async function insertCommunityInteractionMentionRows(args: {
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
+    if (spec.kind === "community_agent") {
+      try {
+        await intakeCommunityAgentMention({
+          ctx: args.ctx,
+          mention: {
+            _id: mentionId,
+            communityId: args.communityId,
+            ...(args.rootId ? { rootId: args.rootId } : {}),
+            ...(args.replyId ? { replyId: args.replyId } : {}),
+            mentionKind: spec.kind,
+            mentionedAgentKey: spec.agentKey,
+            notifyState: "pending",
+          },
+          nowMs: args.nowMs,
+        });
+      } catch {
+        // Chat writes should never fail because Concierge intake had a transient
+        // problem; the repair cron will retry the still-pending mention.
+      }
+    }
   }
 }
 

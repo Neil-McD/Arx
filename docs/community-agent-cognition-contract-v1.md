@@ -1557,14 +1557,23 @@ Rules:
 ## Twenty-Third Implementation Slice
 
 Concierge intake ledger turns community-agent mentions into auditable serve
-requests:
+requests at birth-time intake:
 
 ```txt
-communityInteractionMentions[pending, community_agent]
+human posts @Polynet in community chat
+  -> interaction root/reply is created
+  -> communityInteractionMentions[pending, community_agent] is created
   -> validate source and requester
   -> require requester access and requester inference connection
   -> insert communityAgentServeRequests
   -> settle mention as sent or suppressed
+```
+
+The cron is only a repair drain:
+
+```txt
+leftover communityInteractionMentions[pending, community_agent]
+  -> retry the same intake core
 ```
 
 Rules:
@@ -1578,11 +1587,13 @@ Rules:
   - `suppressed` = intake rejected/skipped it deterministically
   - `read` = user-mention lifecycle only
 - The serve lifecycle itself lives in `communityAgentServeRequests`, not in `notifyState`.
-- Intake consumes only pending canonical `community_agent` mentions through a bounded batch.
+- Fresh `community_agent` mentions are born into intake immediately after the mention row is inserted.
+- The bounded cron consumes only leftover pending canonical `community_agent` mentions as a repair drain, not as the primary product path.
 - `sourceMentionId` is the idempotency key; retries must lookup before insert.
 - Accepted requests require a live human-authored source interaction, current requester chat access, enabled community agent config, and the requester's own usable ChatGPT connection.
 - Source and response visibility scopes are captured at intake so the future response path cannot guess or widen the boundary.
 - Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
+- Unexpected birth-time intake errors must not fail the chat write; the mention remains pending for the repair drain.
 
 ## What Not To Build Yet
 
