@@ -257,6 +257,14 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     baseCss.includes("color: var(--accent-gold, var(--accent));"),
     "composer mention token color must use the theme accent that is pink in Polynet and white in default dark",
   );
+  const highlightTokenRule = baseCss.match(/\.mention-composer-highlight-token \{(?<body>[\s\S]*?)\}/)
+    ?.groups?.body ?? "";
+  assert.ok(highlightTokenRule.trim(), "composer mention token highlight rule must exist");
+  assert.doesNotMatch(
+    highlightTokenRule,
+    /(font-weight|letter-spacing|font-size|font-family|font-stretch):/,
+    "composer mention token highlighting must be metric-neutral so the native textarea caret stays aligned",
+  );
 }
 
 console.log("community_mention_rendering_contract_proof: ok");
