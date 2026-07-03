@@ -10,6 +10,7 @@ const RESERVED_PROFILE_HANDLES = new Set([
   "communities",
   "discover",
   "docs",
+  "everybody",
   "help",
   "home",
   "login",
@@ -45,4 +46,3 @@ export function validateProfileHandle(raw: unknown): ProfileHandleValidationResu
   if (RESERVED_PROFILE_HANDLES.has(normalizedHandle)) return { ok: false, reason: "reserved" };
   return { ok: true, handle: normalizedHandle, normalizedHandle };
 }
-

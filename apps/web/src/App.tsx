@@ -72,6 +72,7 @@ import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityA
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
 import { useWebCommunityResourceUiController } from "./controllers/useWebCommunityResourceUiController";
 import { useWebCommunityJoinRequestsController } from "./controllers/useWebCommunityJoinRequestsController";
+import type { CommittedMention } from "./components/communityMentionAutocomplete";
 import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMemoryUiController";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
@@ -2441,7 +2442,7 @@ export default function App() {
   const communityInteractionRepliesRequestIdRef = useRef<Record<string, number>>({});
   activeCommunityInteractionCommunityIdRef.current = activeCommunityId;
   const [communityMessageInput, setCommunityMessageInput] = useState("");
-  const [communityMessageMentions, setCommunityMessageMentions] = useState<{ userId: string; displayName: string; token: string }[]>([]);
+  const [communityMessageMentions, setCommunityMessageMentions] = useState<CommittedMention[]>([]);
   useEffect(() => {
     if (!communityMessageInput) setCommunityMessageMentions([]);
   }, [communityMessageInput]);
@@ -3084,6 +3085,7 @@ export default function App() {
     isUserAtBottomRef.current = false;
   }, [activeCommunityId, activePage, communityTab, hasResolvedCommunityChat]);
 
+  const canMentionEverybodyRef = useRef(false);
   const {
     handleToggleReaction,
     handleStartReply,
@@ -3094,6 +3096,7 @@ export default function App() {
     handleSendCommunityMessage,
   } = useCommunityChatMutationController({
     activeCommunityId,
+    canMentionEverybodyRef,
     session: session,
     sessionUserId: canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
@@ -3329,6 +3332,7 @@ export default function App() {
     session: session,
     ensureSession: ensureUsableAuthSession,
   });
+  canMentionEverybodyRef.current = canManageMembersActiveCommunity;
 
   useEffect(() => {
     if (activePage !== "community") return;

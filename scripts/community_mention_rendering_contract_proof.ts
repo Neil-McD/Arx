@@ -105,6 +105,18 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   assert.equal((chips[0] as { mention: ResolvedMentionForRendering }).mention.kind, "community_agent");
 }
 
+// Role mentions: @everybody is one visible token even though the backend fans
+// it out to per-recipient user mention rows.
+{
+  const segments = splitBodyIntoMentionSegments("heads up @everybody", [
+    mention({ label: "everybody", kind: "role", userId: null as unknown as string }),
+  ]);
+  const chips = segments.filter((segment) => segment.type === "mention");
+  assert.equal(chips.length, 1);
+  assert.equal(chips[0]!.text, "@everybody");
+  assert.equal((chips[0] as { mention: ResolvedMentionForRendering }).mention.kind, "role");
+}
+
 // Typeahead click-pick: the menu must preventDefault on mousedown so the
 // textarea keeps focus — otherwise its blur closes the menu before the row's
 // click can land, and clicking a suggestion silently does nothing.
@@ -129,13 +141,23 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   // display-label token, disambiguated by the AGENT badge.
   assert.match(
     menuSource,
-    /candidate\.kind !== "community_agent" && !candidate\.handle[\s\S]*?close\(\);[\s\S]*?return;/,
+    /\(candidate\.kind \?\? "user"\) === "user" && !candidate\.handle[\s\S]*?close\(\);[\s\S]*?return;/,
     "picker must refuse handle-less user mentions instead of falling back to display names",
   );
   assert.match(
     menuSource,
-    /const token = candidate\.kind === "community_agent" \? `@\$\{candidate\.displayName\}` : `@\$\{candidate\.handle\}`;/,
-    "picker must insert @handle for users and reserve display-label tokens for the community agent",
+    /candidate\.kind === "role"[\s\S]*?`@\$\{candidate\.roleKey \?\? "everybody"\}`[\s\S]*?candidate\.kind === "community_agent"[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{candidate\.handle\}`/,
+    "picker must insert @handle for users, @displayName for the community agent, and the canonical role token for @everybody",
+  );
+  assert.match(
+    menuSource,
+    /kind\?: "user" \| "community_agent" \| "role"[\s\S]*roleKey\?: "everybody"/,
+    "mention candidates and committed mentions must carry a first-class role mention shape",
+  );
+  assert.match(
+    menuSource,
+    /candidate\.kind === "role" \? \{ roleKey: candidate\.roleKey \?\? "everybody" \}/,
+    "committed @everybody mentions must preserve the role key for send serialization",
   );
 }
 
@@ -172,6 +194,18 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     new URL("../shared/useCommunityChatMutationController.ts", import.meta.url),
     "utf8",
   );
+  const appSource = readFileSync(
+    new URL("../apps/web/src/App.tsx", import.meta.url),
+    "utf8",
+  );
+  const projectionSource = readFileSync(
+    new URL("../apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts", import.meta.url),
+    "utf8",
+  );
+  const feedSource = readFileSync(
+    new URL("../apps/web/src/components/communityInteractionFeed.tsx", import.meta.url),
+    "utf8",
+  );
   assert.match(
     chatPanelSource,
     /drawerReplyMentions\.filter\(\(mention\) => textContainsMentionToken\(text, mention\.token\)\)/,
@@ -196,6 +230,51 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     senderSource,
     /mention\.token \|\| `@\$\{mention\.displayName\}`/,
     "shared sender must not fall back to display-name mention identity",
+  );
+  assert.match(
+    chatPanelSource,
+    /canMentionEverybody: boolean/,
+    "community chat panel must receive a dedicated owner-admin @everybody capability",
+  );
+  assert.match(
+    appSource,
+    /useState<CommittedMention\[\]>\(\[\]\)/,
+    "the App-level composer mention state must use the canonical committed mention type",
+  );
+  assert.match(
+    projectionSource,
+    /canMentionEverybody: params\.canManageMembersActiveCommunity/,
+    "@everybody UI exposure must come from the owner-admin member-management capability, not moderator content permissions",
+  );
+  assert.match(
+    chatPanelSource,
+    /const everybodyCandidate: MentionCandidate \| null = canMentionEverybody[\s\S]*userId: "role:everybody"[\s\S]*displayName: "Everybody"[\s\S]*roleKey: "everybody"/,
+    "owner/admin mention candidates must include a first-class @everybody role candidate",
+  );
+  assert.match(
+    senderSource,
+    /mention\.kind === "role"[\s\S]*mentionsToSend\.push\(\{ roleKey: mention\.roleKey \?\? "everybody" \}\)/,
+    "shared sender must serialize committed @everybody mentions as roleKey payloads",
+  );
+  assert.match(
+    appSource,
+    /const canMentionEverybodyRef = useRef\(false\)[\s\S]*useCommunityChatMutationController\(\{[\s\S]*canMentionEverybodyRef[\s\S]*canMentionEverybodyRef\.current = canManageMembersActiveCommunity/,
+    "manual @everybody detection must be gated by the same owner-admin capability as the UI candidate without stale closures",
+  );
+  assert.match(
+    senderSource,
+    /const hasCommittedEverybodyToken = mentionDraft\.some\([\s\S]*mention\.token\.trim\(\)\.toLowerCase\(\) === "@everybody"[\s\S]*textContainsMentionToken\(bodyToSend, mention\.token\)/,
+    "manual @everybody detection must not override a committed colliding user or agent token",
+  );
+  assert.match(
+    senderSource,
+    /current\.canMentionEverybodyRef\?\.current[\s\S]*!seenMentionKeys\.has\("role:everybody"\)[\s\S]*!hasCommittedEverybodyToken[\s\S]*textContainsMentionToken\(bodyToSend, "@everybody"\)[\s\S]*mentionsToSend\.push\(\{ roleKey: "everybody" \}\)/,
+    "owners/admins who literally type @everybody must send the canonical roleKey payload",
+  );
+  assert.match(
+    feedSource,
+    /const seenRoleKeys = new Set<string>\(\)[\s\S]*mentioned_role_key[\s\S]*roleKey === "everybody"[\s\S]*key: `role:\$\{roleKey\}`[\s\S]*kind: "role"/,
+    "feed rendering must dedupe broadcast recipient rows into one visible @everybody role chip",
   );
 }
 

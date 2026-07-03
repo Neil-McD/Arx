@@ -149,7 +149,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional[\s\S]*replyToMessageId: v\.optional[\s\S]*mentions: v\.optional\(v\.array\(v\.object\(\{ userId: v\.optional\(v\.string\(\)\), agentKey: v\.optional\(v\.string\(\)\) \}\)\)\)/,
+  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional[\s\S]*replyToMessageId: v\.optional[\s\S]*mentions: v\.optional\([\s\S]*userId: v\.optional\(v\.string\(\)\)[\s\S]*agentKey: v\.optional\(v\.string\(\)\)[\s\S]*roleKey: v\.optional\(v\.string\(\)\)[\s\S]*\)/,
   "composer bridge should expose only the canonical composer write shape",
 );
 assert.doesNotMatch(

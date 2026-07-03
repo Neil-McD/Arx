@@ -150,6 +150,7 @@ export type WebCommunityChatPanelProps = {
   canPostMessages: boolean;
   isProfileSetupComplete: boolean;
   canModerateMessages: boolean;
+  canMentionEverybody: boolean;
   isLoadingChat: boolean;
   hasResolvedCommunityChat: boolean;
   isLoadingMoreChat: boolean;
@@ -292,6 +293,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     canPostMessages,
     isProfileSetupComplete,
     canModerateMessages,
+    canMentionEverybody,
     isLoadingChat,
     hasResolvedCommunityChat,
     isLoadingMoreChat,
@@ -417,22 +419,35 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         return candidates;
       }, [])
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    const everybodyCandidate: MentionCandidate | null = canMentionEverybody
+      ? {
+          userId: "role:everybody",
+          displayName: "Everybody",
+          handle: "everybody",
+          avatarUrl: null,
+          kind: "role" as const,
+          roleKey: "everybody" as const,
+        }
+      : null;
     // The community agent is taggable like a member, pinned after humans and
     // always badged. Default name = the community's own name.
     const agentDisplayName = String(activeCommunity?.name ?? "").trim();
-    return agentDisplayName
-      ? [
-          ...memberCandidates,
-          {
-            userId: "community_agent",
-            displayName: agentDisplayName,
-            handle: "agent",
-            avatarUrl: null,
-            kind: "community_agent" as const,
-          },
-        ]
-      : memberCandidates;
-  }, [activeCommunity?.name, profilesByUserId, sessionUserId, displayName]);
+    return [
+      ...(everybodyCandidate ? [everybodyCandidate] : []),
+      ...memberCandidates,
+      ...(agentDisplayName
+        ? [
+            {
+              userId: "community_agent",
+              displayName: agentDisplayName,
+              handle: "agent",
+              avatarUrl: null,
+              kind: "community_agent" as const,
+            },
+          ]
+        : []),
+    ];
+  }, [activeCommunity?.name, canMentionEverybody, profilesByUserId, sessionUserId, displayName]);
 
   const mainMention = useMentionAutocomplete({
     candidates: mentionCandidates,

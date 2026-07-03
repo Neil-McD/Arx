@@ -251,7 +251,7 @@ assert.match(
 );
 assert.match(
   interactions,
-  /out\.push\(\{ kind: "user", userId: user\._id \}\)/,
+  /const spec: UserInteractionMentionSpec = \{ kind: "user", userId: user\._id \};[\s\S]*out\.push\(spec\)/,
   "mention rows must store the canonical users id, never the raw client value",
 );
 assert.match(

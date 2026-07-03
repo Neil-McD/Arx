@@ -312,6 +312,7 @@ export function buildWebCommunitySurfaceProjection(
     canPostMessages: params.canPostMessagesActiveCommunity,
     isProfileSetupComplete: params.isProfileSetupComplete,
     canModerateMessages: params.canModerateContentActiveCommunity,
+    canMentionEverybody: params.canManageMembersActiveCommunity,
     isLoadingChat: params.isLoadingChat,
     hasResolvedCommunityChat: params.hasResolvedCommunityChat,
     isLoadingMoreChat: params.isLoadingMoreChat,

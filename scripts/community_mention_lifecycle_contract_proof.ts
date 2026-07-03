@@ -116,8 +116,14 @@ assert.doesNotMatch(
 
 assert.match(
   interactions,
-  /suppressPendingMentionsForInteractionSource[\s\S]*listMentionsForReply[\s\S]*listMentionsForRoot/,
-  "interaction source mention settlement must cover root and reply mentions",
+  /suppressPendingMentionsForInteractionSource[\s\S]*listMentionRowsForInteractionLifecycle/,
+  "interaction source mention settlement must use the full lifecycle mention row reader",
+);
+
+assert.match(
+  interactions,
+  /for \(const reply of replies\) \{[\s\S]*listMentionRowsForInteractionLifecycle\(\{[\s\S]*targetType: "reply"[\s\S]*targetId: reply\._id/,
+  "root deletion must settle full reply mention fanout, not only the reply projection bundle",
 );
 
 assert.match(

@@ -609,7 +609,19 @@ function resolveMentionsForRendering(
   context: InteractionMentionContext,
 ): ResolvedMentionForRendering[] {
   const resolved: ResolvedMentionForRendering[] = [];
+  const seenRoleKeys = new Set<string>();
   for (const mention of context.mentions) {
+    const roleKey = String(mention.mentioned_role_key ?? "").trim();
+    if (roleKey === "everybody" && !seenRoleKeys.has(roleKey)) {
+      seenRoleKeys.add(roleKey);
+      resolved.push({
+        key: `role:${roleKey}`,
+        label: roleKey,
+        kind: "role",
+        userId: null,
+        isSelf: false,
+      });
+    }
     if (mention.mention_kind === "user" && mention.mentioned_user_id) {
       const userId = String(mention.mentioned_user_id);
       const handle = context.profilesByUserId?.[userId]?.handle?.trim();
@@ -645,8 +657,9 @@ function MentionChipSpan(props: {
   context: InteractionMentionContext;
 }) {
   const { mention, context } = props;
-  const isAgent = mention.kind !== "user";
-  const chipClassName = `community-mention-chip${mention.isSelf ? " is-self" : ""}${isAgent ? " is-agent" : ""}`;
+  const isAgent = mention.kind === "community_agent";
+  const isRole = mention.kind === "role";
+  const chipClassName = `community-mention-chip${mention.isSelf ? " is-self" : ""}${isAgent ? " is-agent" : ""}${isRole ? " is-role" : ""}`;
   if (!mention.userId || !context.onOpenProfile) {
     return <span className={chipClassName}>{props.text}</span>;
   }

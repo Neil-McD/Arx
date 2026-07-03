@@ -42,7 +42,14 @@ export type CommunityMessageSendDraft<
 > = {
   text?: string;
   attachments?: AttachmentT[];
-  mentions?: { userId: string; displayName: string; token: string; kind?: "user" | "community_agent"; agentKey?: string }[];
+  mentions?: {
+    userId: string;
+    displayName: string;
+    token: string;
+    kind?: "user" | "community_agent" | "role";
+    agentKey?: string;
+    roleKey?: "everybody";
+  }[];
   replyingToMessage?: CommunityReplyTarget<MessageT> | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
@@ -72,6 +79,7 @@ type UseCommunityChatMutationControllerArgs<
   },
 > = {
   activeCommunityId: string | null;
+  canMentionEverybodyRef?: MutableRefObject<boolean>;
   session: SessionT | null;
   sessionUserId: string | null;
   ensureSession?: EnsureSessionFn<SessionT>;
@@ -84,7 +92,7 @@ type UseCommunityChatMutationControllerArgs<
     text: string;
     rootId?: string | null;
     replyToMessageId?: string | null;
-    mentions?: { userId?: string; agentKey?: string }[];
+    mentions?: { userId?: string; agentKey?: string; roleKey?: string }[];
     attachments?: unknown[];
   }) => Promise<RowT[]>;
   useCanonicalCommunityInteractions?: boolean;
@@ -123,7 +131,14 @@ type UseCommunityChatMutationControllerArgs<
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
   communityMessageInput: string;
-  communityMessageMentions?: { userId: string; displayName: string; token: string; kind?: "user" | "community_agent"; agentKey?: string }[];
+  communityMessageMentions?: {
+    userId: string;
+    displayName: string;
+    token: string;
+    kind?: "user" | "community_agent" | "role";
+    agentKey?: string;
+    roleKey?: "everybody";
+  }[];
   communityMessages: MessageT[];
   messageReactions: ReactionT[];
   replyingToMessage: CommunityReplyTarget<MessageT> | null;
@@ -420,20 +435,42 @@ export function useCommunityChatMutationController<
     const bodyToSend = rawText;
 
     // Keep only mentions whose exact inserted token still appears as a real
-    // mention token in the sent text (dedupe by user). User tokens are
-    // @handle; display names are never mention identity.
+    // mention token in the sent text. User tokens are @handle; display names
+    // are never mention identity. Non-user mentions serialize by canonical key.
     const mentionDraft = draft?.mentions ?? current.communityMessageMentions ?? [];
-    const mentionsToSend: { userId?: string; agentKey?: string }[] = [];
-    const seenMentionUserIds = new Set<string>();
+    const mentionsToSend: { userId?: string; agentKey?: string; roleKey?: string }[] = [];
+    const seenMentionKeys = new Set<string>();
     for (const mention of mentionDraft) {
-      if (!mention.userId || seenMentionUserIds.has(mention.userId)) continue;
+      const mentionKey =
+        mention.kind === "role"
+          ? `role:${mention.roleKey ?? "everybody"}`
+          : mention.kind === "community_agent"
+            ? `agent:${mention.agentKey ?? "community_agent"}`
+            : `user:${mention.userId}`;
+      if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
       if (!textContainsMentionToken(bodyToSend, mention.token)) continue;
-      seenMentionUserIds.add(mention.userId);
+      seenMentionKeys.add(mentionKey);
+      if (mention.kind === "role") {
+        mentionsToSend.push({ roleKey: mention.roleKey ?? "everybody" });
+        continue;
+      }
       if (mention.kind === "community_agent") {
         mentionsToSend.push({ agentKey: mention.agentKey ?? "community_agent" });
         continue;
       }
+      if (!mention.userId) continue;
       mentionsToSend.push({ userId: mention.userId });
+    }
+    const hasCommittedEverybodyToken = mentionDraft.some(
+      (mention) => mention.token.trim().toLowerCase() === "@everybody" && textContainsMentionToken(bodyToSend, mention.token),
+    );
+    if (
+      current.canMentionEverybodyRef?.current &&
+      !seenMentionKeys.has("role:everybody") &&
+      !hasCommittedEverybodyToken &&
+      textContainsMentionToken(bodyToSend, "@everybody")
+    ) {
+      mentionsToSend.push({ roleKey: "everybody" });
     }
 
     if (current.beforeSendValidate) {

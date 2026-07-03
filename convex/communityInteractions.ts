@@ -4,8 +4,10 @@ import { v } from "convex/values";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
+  communityMembershipRowIsActive,
   normalizeIdValue,
   requireCommunityChatAccess,
+  requireCommunityManager,
   requireCommunityModerator,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
@@ -181,6 +183,8 @@ const MAX_INTERACTION_EMBEDS_PER_BUNDLE = 24;
 const MAX_INTERACTION_MENTIONS_PER_BUNDLE = 24;
 const MAX_VIEWER_REACTIONS_PER_TARGET = 24;
 const MAX_INTERACTION_MENTIONS_PER_WRITE = 24;
+const MAX_EVERYBODY_MENTION_RECIPIENTS = 100;
+const EVERYBODY_MENTION_ROLE_KEY = "everybody";
 
 const rootKindValidator = v.union(
   v.literal("discussion"),
@@ -498,6 +502,19 @@ async function listMentionsForReply(ctx: any, replyId: any): Promise<MentionRow[
     .take(MAX_INTERACTION_MENTIONS_PER_BUNDLE)) as MentionRow[];
 }
 
+async function listMentionRowsForInteractionLifecycle(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  targetId: any;
+}): Promise<MentionRow[]> {
+  return (await args.ctx.db
+    .query("communityInteractionMentions" as any)
+    .withIndex(args.targetType === "reply" ? "by_reply" : "by_root", (q: any) =>
+      q.eq(args.targetType === "reply" ? "replyId" : "rootId", args.targetId),
+    )
+    .collect()) as MentionRow[];
+}
+
 async function suppressPendingMentionRows(ctx: any, rows: Array<{ _id: any }>, nowMs: number): Promise<void> {
   for (const row of rows) {
     await settleMentionRowInternal({
@@ -517,9 +534,7 @@ async function suppressPendingMentionsForInteractionSource(args: {
 }): Promise<void> {
   await suppressPendingMentionRows(
     args.ctx,
-    args.targetType === "reply"
-      ? await listMentionsForReply(args.ctx, args.targetId)
-      : await listMentionsForRoot(args.ctx, args.targetId),
+    await listMentionRowsForInteractionLifecycle(args),
     args.nowMs,
   );
 }
@@ -531,12 +546,15 @@ async function suppressPendingMentionsMissingFromInteractionText(args: {
   text: string;
   nowMs: number;
 }): Promise<void> {
-  const rows =
-    args.targetType === "reply"
-      ? await listMentionsForReply(args.ctx, args.targetId)
-      : await listMentionsForRoot(args.ctx, args.targetId);
+  const rows = await listMentionRowsForInteractionLifecycle(args);
   for (const row of rows) {
     if (row.notifyState !== "pending") continue;
+    if (
+      row.mentionedRoleKey === EVERYBODY_MENTION_ROLE_KEY &&
+      interactionTextContainsRoleMention(args.text, EVERYBODY_MENTION_ROLE_KEY)
+    ) {
+      continue;
+    }
     if (row.mentionKind === "user" && row.mentionedUserId) {
       const user = (await args.ctx.db.get(row.mentionedUserId)) as { handle?: string; normalizedHandle?: string } | null;
       if (user && interactionTextContainsHandleMention(args.text, user.handle ?? user.normalizedHandle)) {
@@ -563,7 +581,15 @@ async function suppressPendingMentionsForDeletedInteractionTarget(args: {
     .withIndex("by_root_createdAt", (q: any) => q.eq("rootId", args.targetId))
     .take(500)) as InteractionReplyRow[];
   for (const reply of replies) {
-    await suppressPendingMentionRows(args.ctx, await listMentionsForReply(args.ctx, reply._id), args.nowMs);
+    await suppressPendingMentionRows(
+      args.ctx,
+      await listMentionRowsForInteractionLifecycle({
+        ctx: args.ctx,
+        targetType: "reply",
+        targetId: reply._id,
+      }),
+      args.nowMs,
+    );
   }
 }
 
@@ -1283,40 +1309,140 @@ async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
   return Math.max(0, Math.floor(last?.seq ?? 0)) + 1;
 }
 
+type UserInteractionMentionSpec = { kind: "user"; userId: any; sourceRoleKey?: string };
+
 type InteractionMentionSpec =
-  | { kind: "user"; userId: any }
+  | UserInteractionMentionSpec
   | { kind: "community_agent"; agentKey: string };
 
 function escapeRegExp(raw: string): string {
   return raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function interactionTextContainsHandleMention(text: string, handle: unknown): boolean {
-  const normalizedHandle = String(handle ?? "").trim().replace(/^@+/, "").toLowerCase();
-  if (!normalizedHandle) return false;
-  const pattern = new RegExp(`(^|\\s)@${escapeRegExp(normalizedHandle)}(?![A-Za-z0-9_-])`, "i");
+function interactionTextContainsAtToken(text: string, tokenLabel: unknown): boolean {
+  const normalizedLabel = String(tokenLabel ?? "").trim().replace(/^@+/, "").toLowerCase();
+  if (!normalizedLabel) return false;
+  const pattern = new RegExp(`(^|\\s)@${escapeRegExp(normalizedLabel)}(?![A-Za-z0-9_-])`, "i");
   return pattern.test(text);
+}
+
+function interactionTextContainsHandleMention(text: string, handle: unknown): boolean {
+  return interactionTextContainsAtToken(text, handle);
+}
+
+function interactionTextContainsRoleMention(text: string, roleKey: unknown): boolean {
+  return interactionTextContainsAtToken(text, roleKey);
+}
+
+async function resolveEverybodyMentionRecipientsForWrite(args: {
+  ctx: any;
+  communityId: any;
+  actorUserId: any;
+  userSpecsById: Map<string, UserInteractionMentionSpec>;
+}): Promise<UserInteractionMentionSpec[]> {
+  const { community } = await requireCommunityManager({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.actorUserId,
+  });
+  const actorKey = normalizeIdValue(args.actorUserId);
+  const resolved: UserInteractionMentionSpec[] = [];
+  const broadcastRecipientKeys = new Set<string>();
+
+  const addRecipient = async (targetUserId: any): Promise<void> => {
+    const recipientKey = normalizeIdValue(targetUserId);
+    if (!recipientKey || recipientKey === actorKey) return;
+    if (broadcastRecipientKeys.has(recipientKey)) return;
+    const existing = args.userSpecsById.get(recipientKey);
+    if (existing) {
+      if (broadcastRecipientKeys.size >= MAX_EVERYBODY_MENTION_RECIPIENTS) {
+        throw new Error("interaction_mention_everybody_limit_exceeded");
+      }
+      existing.sourceRoleKey = EVERYBODY_MENTION_ROLE_KEY;
+      broadcastRecipientKeys.add(recipientKey);
+      return;
+    }
+    try {
+      await requireCommunityChatAccess({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        userId: targetUserId,
+      });
+    } catch {
+      return;
+    }
+    if (broadcastRecipientKeys.size >= MAX_EVERYBODY_MENTION_RECIPIENTS) {
+      throw new Error("interaction_mention_everybody_limit_exceeded");
+    }
+    const spec: UserInteractionMentionSpec = {
+      kind: "user",
+      userId: targetUserId,
+      sourceRoleKey: EVERYBODY_MENTION_ROLE_KEY,
+    };
+    args.userSpecsById.set(recipientKey, spec);
+    resolved.push(spec);
+    broadcastRecipientKeys.add(recipientKey);
+  };
+
+  await addRecipient(community.ownerId);
+  const rows = (await args.ctx.db
+    .query("communityMemberships" as any)
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+    .order("asc")
+    .collect()) as Array<{ userId?: any }>;
+  for (const row of rows) {
+    if (!communityMembershipRowIsActive(row as any)) continue;
+    await addRecipient(row.userId);
+  }
+  if (broadcastRecipientKeys.size === 0) {
+    throw new Error("interaction_mention_everybody_no_recipients");
+  }
+  return resolved;
 }
 
 export async function resolveMentionedUserIdsForInteractionWrite(args: {
   ctx: any;
   communityId: any;
+  actorUserId: any;
   text: string;
-  mentions: Array<{ userId?: any; agentKey?: any }>;
+  mentions: Array<{ userId?: any; agentKey?: any; roleKey?: any }>;
 }): Promise<InteractionMentionSpec[]> {
-  const seen = new Set<string>();
+  const seenAgents = new Set<string>();
+  const seenRoles = new Set<string>();
+  const userSpecsById = new Map<string, UserInteractionMentionSpec>();
   const out: InteractionMentionSpec[] = [];
+  let directMentionCount = 0;
   for (const mention of args.mentions) {
+    if (mention.roleKey) {
+      if (mention.userId || mention.agentKey) throw new Error("interaction_mention_payload_ambiguous");
+      const roleKey = String(mention.roleKey ?? "").trim().replace(/^@+/, "").toLowerCase();
+      if (roleKey !== EVERYBODY_MENTION_ROLE_KEY) throw new Error("interaction_mention_role_unknown");
+      if (seenRoles.has(roleKey)) continue;
+      if (!interactionTextContainsRoleMention(args.text, roleKey)) {
+        throw new Error("interaction_mention_token_missing");
+      }
+      seenRoles.add(roleKey);
+      out.push(
+        ...(await resolveEverybodyMentionRecipientsForWrite({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          actorUserId: args.actorUserId,
+          userSpecsById,
+        })),
+      );
+      continue;
+    }
     // Community-agent mentions carry an agent key, never a user id. Only the
     // canonical community agent is taggable.
     if (!mention.userId && mention.agentKey) {
       const agentKey = String(mention.agentKey ?? "").trim();
       if (agentKey !== "community_agent") throw new Error("interaction_mention_agent_unknown");
-      if (seen.has(`agent:${agentKey}`)) continue;
-      seen.add(`agent:${agentKey}`);
-      if (out.length >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
+      if (seenAgents.has(agentKey)) continue;
+      seenAgents.add(agentKey);
+      if (directMentionCount >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
         throw new Error("interaction_mentions_limit_exceeded");
       }
+      directMentionCount += 1;
       out.push({ kind: "community_agent", agentKey });
       continue;
     }
@@ -1334,14 +1460,14 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
           .first();
     if (!user) throw new Error("interaction_mention_user_not_found");
     const normalized = normalizeIdValue(user._id);
-    if (!normalized || seen.has(normalized)) continue;
+    if (!normalized || userSpecsById.has(normalized)) continue;
     if (!interactionTextContainsHandleMention(args.text, user.handle ?? user.normalizedHandle)) {
       throw new Error("interaction_mention_token_missing");
     }
-    seen.add(normalized);
-    if (out.length >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
+    if (directMentionCount >= MAX_INTERACTION_MENTIONS_PER_WRITE) {
       throw new Error("interaction_mentions_limit_exceeded");
     }
+    directMentionCount += 1;
     try {
       await requireCommunityChatAccess({
         ctx: args.ctx,
@@ -1351,7 +1477,9 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
     } catch {
       throw new Error("interaction_mention_user_not_allowed");
     }
-    out.push({ kind: "user", userId: user._id });
+    const spec: UserInteractionMentionSpec = { kind: "user", userId: user._id };
+    userSpecsById.set(normalized, spec);
+    out.push(spec);
   }
   return out;
 }
@@ -1372,6 +1500,7 @@ async function insertCommunityInteractionMentionRows(args: {
       mentionKind: spec.kind,
       ...(spec.kind === "user" ? { mentionedUserId: spec.userId } : {}),
       ...(spec.kind === "community_agent" ? { mentionedAgentKey: spec.agentKey } : {}),
+      ...(spec.kind === "user" && spec.sourceRoleKey ? { mentionedRoleKey: spec.sourceRoleKey } : {}),
       notifyState: "pending",
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -1390,7 +1519,15 @@ export const createCommunityInteractionComposerMessage = mutation({
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
     // userId accepts a canonical users id OR an auth subject — the profiles
     // projection (the composer's member source) only knows the latter.
-    mentions: v.optional(v.array(v.object({ userId: v.optional(v.string()), agentKey: v.optional(v.string()) }))),
+    mentions: v.optional(
+      v.array(
+        v.object({
+          userId: v.optional(v.string()),
+          agentKey: v.optional(v.string()),
+          roleKey: v.optional(v.string()),
+        }),
+      ),
+    ),
     attachments: v.optional(v.array(interactionAttachmentInputValidator)),
   },
   handler: async (ctx, args) => {
@@ -1415,6 +1552,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     const mentionedUserIds = await resolveMentionedUserIdsForInteractionWrite({
       ctx,
       communityId: args.communityId,
+      actorUserId: userId,
       text,
       mentions: args.mentions ?? [],
     });

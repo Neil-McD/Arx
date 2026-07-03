@@ -10,9 +10,9 @@ export type MentionCandidate = {
   displayName: string;
   handle: string | null;
   avatarUrl: string | null;
-  // "community_agent" candidates tag the community's agent (by agent key, not
-  // user id) and render with the permanent AGENT badge.
-  kind?: "user" | "community_agent";
+  // Non-user candidates tag canonical server-side identities by key, not user id.
+  kind?: "user" | "community_agent" | "role";
+  roleKey?: "everybody";
 };
 
 export type CommittedMention = {
@@ -21,8 +21,9 @@ export type CommittedMention = {
   /** The exact text inserted into the composer (e.g. "@rashidk"). Handles are
    * the only user mention tokens; display names are presentation only. */
   token: string;
-  kind?: "user" | "community_agent";
+  kind?: "user" | "community_agent" | "role";
   agentKey?: string;
+  roleKey?: "everybody";
 };
 
 // Max characters we'll scan back from the caret as a mention query. Display names can
@@ -121,13 +122,17 @@ export function useMentionAutocomplete(params: {
       const caret = textarea.selectionStart ?? value.length;
       const before = value.slice(0, active.atIndex);
       const after = value.slice(caret);
-      // Users tokenize by handle only. The community agent is the one exception:
-      // it is not a user, so it tokenizes by the community display label.
-      if (candidate.kind !== "community_agent" && !candidate.handle) {
+      // Users tokenize by handle only. Non-user candidates use canonical role/agent labels.
+      if ((candidate.kind ?? "user") === "user" && !candidate.handle) {
         close();
         return;
       }
-      const token = candidate.kind === "community_agent" ? `@${candidate.displayName}` : `@${candidate.handle}`;
+      const token =
+        candidate.kind === "role"
+          ? `@${candidate.roleKey ?? "everybody"}`
+          : candidate.kind === "community_agent"
+            ? `@${candidate.displayName}`
+            : `@${candidate.handle}`;
       const needsSpace = !after.startsWith(" ");
       const nextValue = `${before}${token}${needsSpace ? " " : ""}${after}`;
       const nextCaret = before.length + token.length + 1;
@@ -139,6 +144,7 @@ export function useMentionAutocomplete(params: {
         token,
         kind: candidate.kind ?? "user",
         ...(candidate.kind === "community_agent" ? { agentKey: "community_agent" } : {}),
+        ...(candidate.kind === "role" ? { roleKey: candidate.roleKey ?? "everybody" } : {}),
       });
       close();
 
@@ -222,7 +228,7 @@ export function MentionAutocompleteMenu(props: {
           type="button"
           role="option"
           aria-selected={index === highlightedIndex}
-          className={`mention-autocomplete-row${index === highlightedIndex ? " is-active" : ""}${candidate.kind === "community_agent" ? " is-agent" : ""}`}
+          className={`mention-autocomplete-row${index === highlightedIndex ? " is-active" : ""}${candidate.kind === "community_agent" ? " is-agent" : ""}${candidate.kind === "role" ? " is-role" : ""}`}
           onMouseEnter={() => setHighlightedIndex(index)}
           onClick={() => pick(candidate)}
         >
@@ -240,6 +246,8 @@ export function MentionAutocompleteMenu(props: {
             <span className="mention-autocomplete-name">{candidate.displayName}</span>
             {candidate.kind === "community_agent" ? (
               <span className="mention-autocomplete-agent-badge">AGENT</span>
+            ) : candidate.kind === "role" ? (
+              <span className="mention-autocomplete-agent-badge">ALL</span>
             ) : candidate.handle ? (
               <span className="mention-autocomplete-handle">@{candidate.handle}</span>
             ) : null}
@@ -261,7 +269,7 @@ function resolveCommittedMentionsForComposer(
       key: `${mention.kind ?? "user"}:${mention.userId}:${mention.agentKey ?? ""}:${token}:${index}`,
       label,
       kind: mention.kind ?? "user",
-      userId: mention.kind === "community_agent" ? null : mention.userId,
+      userId: mention.kind === "community_agent" || mention.kind === "role" ? null : mention.userId,
       isSelf: false,
     });
     return resolved;
