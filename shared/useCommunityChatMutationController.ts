@@ -9,6 +9,7 @@ import {
 } from "./cloudCommunityChatGateway";
 import { resolveAuthSubject } from "./authSession";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
+import { textContainsMentionToken } from "./communityMentionRendering";
 
 type SessionLike = {
   user: { id: string };
@@ -418,15 +419,15 @@ export function useCommunityChatMutationController<
     })();
     const bodyToSend = rawText;
 
-    // Keep only mentions whose exact inserted token still appears in the sent
-    // text (dedupe by user). User tokens are @handle; display names are never
-    // mention identity.
+    // Keep only mentions whose exact inserted token still appears as a real
+    // mention token in the sent text (dedupe by user). User tokens are
+    // @handle; display names are never mention identity.
     const mentionDraft = draft?.mentions ?? current.communityMessageMentions ?? [];
     const mentionsToSend: { userId?: string; agentKey?: string }[] = [];
     const seenMentionUserIds = new Set<string>();
     for (const mention of mentionDraft) {
       if (!mention.userId || seenMentionUserIds.has(mention.userId)) continue;
-      if (!bodyToSend.includes(mention.token)) continue;
+      if (!textContainsMentionToken(bodyToSend, mention.token)) continue;
       seenMentionUserIds.add(mention.userId);
       if (mention.kind === "community_agent") {
         mentionsToSend.push({ agentKey: mention.agentKey ?? "community_agent" });

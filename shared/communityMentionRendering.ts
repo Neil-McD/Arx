@@ -1,15 +1,14 @@
-// Pure tokenizer that re-matches a message's mention rows against the plain
-// `@Display Name` tokens the composer inserted into the body text. Mentions
-// arrive as separate rows (they do not carry the inserted label), so rendering
-// chips means resolving each mentioned user's current display name and finding
-// its `@` occurrences. Graceful by construction: anything that fails to match
-// (renamed user, missing profile) stays plain text, and messages with no
-// mentions render exactly as before.
+// Pure tokenizer that re-matches mention rows against the visible `@token`
+// text in a message body. User mentions resolve to handles; non-user mentions
+// can resolve to their display label. Graceful by construction: anything that
+// fails to match stays plain text, and messages with no mentions render exactly
+// as before.
 
 export type ResolvedMentionForRendering = {
   // Stable key for React rendering (mention row id).
   key: string;
-  // The label to match after "@" — the mentioned user's display name.
+  // The label to match after "@" — user handle for users, display label for
+  // community-agent mentions.
   label: string;
   kind: string;
   userId: string | null;
@@ -20,13 +19,33 @@ export type MentionBodySegment =
   | { type: "plain"; text: string }
   | { type: "mention"; text: string; mention: ResolvedMentionForRendering };
 
-function isWordChar(char: string | undefined): boolean {
-  return typeof char === "string" && /[A-Za-z0-9_]/.test(char);
+function isHandleChar(char: string | undefined): boolean {
+  return typeof char === "string" && /[A-Za-z0-9_-]/.test(char);
+}
+
+function hasMentionStartBoundary(text: string, index: number): boolean {
+  return index === 0 || /\s/.test(text[index - 1] ?? "");
+}
+
+export function textContainsMentionToken(text: string, token: string): boolean {
+  const body = String(text ?? "");
+  const mentionToken = String(token ?? "").trim();
+  if (!body || !mentionToken.startsWith("@") || mentionToken.length <= 1) return false;
+  let searchFrom = 0;
+  while (searchFrom < body.length) {
+    const index = body.indexOf(mentionToken, searchFrom);
+    if (index < 0) return false;
+    const end = index + mentionToken.length;
+    if (hasMentionStartBoundary(body, index) && !isHandleChar(body[end])) return true;
+    searchFrom = index + 1;
+  }
+  return false;
 }
 
 // Split `text` into plain and mention segments. Longest labels match first so
 // "@Samantha Jones" can never be claimed by a shorter "@Sam"; a boundary check
-// prevents a mentioned "Sam" from matching inside an unmentioned "@Samantha".
+// prevents a mentioned "Sam" from matching inside an unmentioned "@Samantha"
+// or handle-like "@Sam-test".
 // Every occurrence of a mentioned label becomes a chip (tagging someone twice
 // highlights both), and claimed ranges never overlap.
 export function splitBodyIntoMentionSegments(
@@ -53,7 +72,7 @@ export function splitBodyIntoMentionSegments(
       const index = body.indexOf(token, searchFrom);
       if (index < 0) break;
       const end = index + token.length;
-      const boundaryOk = !isWordChar(body[end]);
+      const boundaryOk = hasMentionStartBoundary(body, index) && !isHandleChar(body[end]);
       if (boundaryOk && !overlaps(index, end)) {
         claimed.push({ start: index, end, mention });
       }

@@ -27,6 +27,7 @@ import {
   type CommunityMessageAttachment,
   type ReplyPrefix,
 } from "../../../../shared/communityMessageParsing";
+import { textContainsMentionToken } from "../../../../shared/communityMentionRendering";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
@@ -39,6 +40,7 @@ import {
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 import {
   MentionAutocompleteMenu,
+  MentionComposerHighlight,
   useMentionAutocomplete,
   type CommittedMention,
   type MentionCandidate,
@@ -131,6 +133,10 @@ const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
 
 const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
+
+function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
+  textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
+}
 
 export type WebCommunityChatPanelProps = {
   activeCommunity: { id: string; name: string; owner_id?: string | null } | null;
@@ -303,6 +309,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     replyingToMessage,
     communityAttachments,
     communityMessageInput,
+    communityMessageMentions,
     setCommunityMessageMentions,
     isSendingCommunityMessage,
     communityChatError,
@@ -714,8 +721,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     const text = drawerReplyInput.trim();
     const attachments = [...drawerReplyAttachmentsRef.current];
     if (!target || (!text && attachments.length === 0)) return;
-    // Only send mentions whose exact inserted token still survives in the final text.
-    const mentions = drawerReplyMentions.filter((mention) => text.includes(mention.token));
+    // Only send mentions whose exact inserted token still survives as a real
+    // mention token in the final text.
+    const mentions = drawerReplyMentions.filter((mention) => textContainsMentionToken(text, mention.token));
     await onSendCommunityMessage({
       text,
       attachments,
@@ -871,45 +879,53 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           style={{ display: "none" }}
           onChange={onCommunityFileInputChange}
         />
-        <textarea
-          ref={(node) => {
-            chatInputRef.current = node;
-          }}
-          className="chat-input"
-          placeholder={
-            !hasSession
-              ? "Sign in to chat..."
-              : isAuthRecoveringSignedIn
-                ? "Restoring your account..."
-                : isResolvingSelectedCommunity
-                  ? "Loading community..."
-                  : !activeCommunity
-                    ? "Select a community to chat..."
-                    : isProfileSetupGateActive
-                      ? "Finish your profile to chat..."
-                      : !canPostMessages
-                        ? "Join this community to chat..."
-                        : "Message the community..."
-          }
-          value={communityMessageInput}
-          onChange={(event) => {
-            onCommunityMessageInputChange(event.target.value, event.target);
-            mainMention.syncFromTextarea(event.target);
-          }}
-          onClick={(event) => mainMention.syncFromTextarea(event.currentTarget)}
-          onBlur={() => mainMention.close()}
-          onPaste={onCommunityAttachmentPaste}
-          onKeyDown={(event) => {
-            if (mainMention.handleKeyDown(event)) return;
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              if (isAuthRecoveringSignedIn) return;
-              void onSendCommunityMessage();
+        <div className="mention-composer-field">
+          <MentionComposerHighlight
+            value={communityMessageInput}
+            mentions={communityMessageMentions}
+          />
+          <textarea
+            ref={(node) => {
+              chatInputRef.current = node;
+            }}
+            className="chat-input"
+            placeholder={
+              !hasSession
+                ? "Sign in to chat..."
+                : isAuthRecoveringSignedIn
+                  ? "Restoring your account..."
+                  : isResolvingSelectedCommunity
+                    ? "Loading community..."
+                    : !activeCommunity
+                      ? "Select a community to chat..."
+                      : isProfileSetupGateActive
+                        ? "Finish your profile to chat..."
+                        : !canPostMessages
+                          ? "Join this community to chat..."
+                          : "Message the community..."
             }
-          }}
-          disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
-          rows={1}
-        />
+            value={communityMessageInput}
+            onChange={(event) => {
+              onCommunityMessageInputChange(event.target.value, event.target);
+              mainMention.syncFromTextarea(event.target);
+              syncMentionComposerHighlightScroll(event.target);
+            }}
+            onClick={(event) => mainMention.syncFromTextarea(event.currentTarget)}
+            onBlur={() => mainMention.close()}
+            onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
+            onPaste={onCommunityAttachmentPaste}
+            onKeyDown={(event) => {
+              if (mainMention.handleKeyDown(event)) return;
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (isAuthRecoveringSignedIn) return;
+                void onSendCommunityMessage();
+              }
+            }}
+            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
+            rows={1}
+          />
+        </div>
         <VoiceInputButton {...voiceButtonProps} />
         <button
           className="chat-send ask-send-btn ask-send-btn-v2"
@@ -998,31 +1014,39 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           style={{ display: "none" }}
           onChange={handleDrawerReplyFileInputChange}
         />
-        <textarea
-          ref={(node) => {
-            drawerReplyInputRef.current = node;
-          }}
-          className="chat-input"
-          placeholder="Reply..."
-          value={drawerReplyInput}
-          onChange={(event) => {
-            handleDrawerReplyInputChange(event.target.value, event.target);
-            drawerMention.syncFromTextarea(event.target);
-          }}
-          onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
-          onBlur={() => drawerMention.close()}
-          onPaste={handleDrawerReplyAttachmentPaste}
-          onKeyDown={(event) => {
-            if (drawerMention.handleKeyDown(event)) return;
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              if (isAuthRecoveringSignedIn) return;
-              void handleSendDrawerReply();
-            }
-          }}
-          disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
-          rows={1}
-        />
+        <div className="mention-composer-field">
+          <MentionComposerHighlight
+            value={drawerReplyInput}
+            mentions={drawerReplyMentions}
+          />
+          <textarea
+            ref={(node) => {
+              drawerReplyInputRef.current = node;
+            }}
+            className="chat-input"
+            placeholder="Reply..."
+            value={drawerReplyInput}
+            onChange={(event) => {
+              handleDrawerReplyInputChange(event.target.value, event.target);
+              drawerMention.syncFromTextarea(event.target);
+              syncMentionComposerHighlightScroll(event.target);
+            }}
+            onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
+            onBlur={() => drawerMention.close()}
+            onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
+            onPaste={handleDrawerReplyAttachmentPaste}
+            onKeyDown={(event) => {
+              if (drawerMention.handleKeyDown(event)) return;
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (isAuthRecoveringSignedIn) return;
+                void handleSendDrawerReply();
+              }
+            }}
+            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
+            rows={1}
+          />
+        </div>
         <VoiceInputButton
           {...drawerVoiceButtonProps}
           onClick={() => onCommunityVoiceInputClick(drawerVoiceTranscriptTarget, "drawer")}
