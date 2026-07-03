@@ -1,5 +1,9 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
 import { useCallback, useMemo, useState } from "react";
+import {
+  splitBodyIntoMentionSegments,
+  type ResolvedMentionForRendering,
+} from "../../../../shared/communityMentionRendering";
 
 export type MentionCandidate = {
   userId: string;
@@ -242,6 +246,57 @@ export function MentionAutocompleteMenu(props: {
           </span>
         </button>
       ))}
+    </div>
+  );
+}
+
+function resolveCommittedMentionsForComposer(
+  mentions: readonly CommittedMention[],
+): ResolvedMentionForRendering[] {
+  return mentions.reduce<ResolvedMentionForRendering[]>((resolved, mention, index) => {
+    const token = String(mention.token ?? "").trim();
+    const label = token.replace(/^@+/, "").trim();
+    if (!label) return resolved;
+    resolved.push({
+      key: `${mention.kind ?? "user"}:${mention.userId}:${mention.agentKey ?? ""}:${token}:${index}`,
+      label,
+      kind: mention.kind ?? "user",
+      userId: mention.kind === "community_agent" ? null : mention.userId,
+      isSelf: false,
+    });
+    return resolved;
+  }, []);
+}
+
+export function MentionComposerHighlight(props: {
+  value: string;
+  mentions: readonly CommittedMention[];
+}) {
+  const resolvedMentions = useMemo(
+    () => resolveCommittedMentionsForComposer(props.mentions),
+    [props.mentions],
+  );
+  const segments = useMemo(
+    () => splitBodyIntoMentionSegments(props.value, resolvedMentions),
+    [props.value, resolvedMentions],
+  );
+
+  return (
+    <div className="mention-composer-highlight" aria-hidden="true">
+      <span className="mention-composer-highlight-content">
+        {segments.map((segment, index) =>
+          segment.type === "mention" ? (
+            <span
+              key={`m:${index}:${segment.mention.key}`}
+              className="mention-composer-highlight-token"
+            >
+              {segment.text}
+            </span>
+          ) : (
+            <span key={`p:${index}`}>{segment.text}</span>
+          ),
+        )}
+      </span>
     </div>
   );
 }

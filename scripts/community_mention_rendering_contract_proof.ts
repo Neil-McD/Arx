@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   splitBodyIntoMentionSegments,
+  textContainsMentionToken,
   type ResolvedMentionForRendering,
 } from "../shared/communityMentionRendering.ts";
 
@@ -50,6 +51,20 @@ function mention(overrides: Partial<ResolvedMentionForRendering> & { label: stri
 {
   const segments = splitBodyIntoMentionSegments("cc @Samantha about it", [mention({ label: "Sam" })]);
   assert.deepEqual(segments, [{ type: "plain", text: "cc @Samantha about it" }]);
+}
+
+// Mention boundaries match the server's handle-token contract: not embedded in
+// another token before "@", and not followed by handle-safe punctuation.
+{
+  assert.deepEqual(splitBodyIntoMentionSegments("email x@Sam about it", [mention({ label: "Sam" })]), [
+    { type: "plain", text: "email x@Sam about it" },
+  ]);
+  assert.deepEqual(splitBodyIntoMentionSegments("cc @Sam-test about it", [mention({ label: "Sam" })]), [
+    { type: "plain", text: "cc @Sam-test about it" },
+  ]);
+  assert.equal(textContainsMentionToken("email x@Sam about it", "@Sam"), false);
+  assert.equal(textContainsMentionToken("cc @Sam-test about it", "@Sam"), false);
+  assert.equal(textContainsMentionToken("cc @Sam, please", "@Sam"), true);
 }
 
 // Every occurrence chips: tagging the same person twice highlights both.
@@ -159,7 +174,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     chatPanelSource,
-    /drawerReplyMentions\.filter\(\(mention\) => text\.includes\(mention\.token\)\)/,
+    /drawerReplyMentions\.filter\(\(mention\) => textContainsMentionToken\(text, mention\.token\)\)/,
     "drawer replies must preserve committed mentions by exact @handle token",
   );
   assert.doesNotMatch(
@@ -169,13 +184,78 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     senderSource,
-    /bodyToSend\.includes\(mention\.token\)/,
+    /textContainsMentionToken\(bodyToSend, mention\.token\)/,
     "shared sender must keep mentions by exact inserted token",
+  );
+  assert.doesNotMatch(
+    senderSource,
+    /bodyToSend\.includes\(mention\.token\)/,
+    "shared sender must not use substring checks for mention survival",
   );
   assert.doesNotMatch(
     senderSource,
     /mention\.token \|\| `@\$\{mention\.displayName\}`/,
     "shared sender must not fall back to display-name mention identity",
+  );
+}
+
+// Composer highlights are presentation only: the textarea stays native for
+// typing/caret/selection, while a non-interactive mirror colors committed
+// mention tokens with the theme accent.
+{
+  const { readFileSync } = await import("node:fs");
+  const menuSource = readFileSync(
+    new URL("../apps/web/src/components/communityMentionAutocomplete.tsx", import.meta.url),
+    "utf8",
+  );
+  const chatPanelSource = readFileSync(
+    new URL("../apps/web/src/components/WebCommunityChatPanel.tsx", import.meta.url),
+    "utf8",
+  );
+  const baseCss = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+  assert.match(
+    menuSource,
+    /export function MentionComposerHighlight/,
+    "composer mention highlighting must live with the mention autocomplete contract",
+  );
+  assert.match(
+    menuSource,
+    /splitBodyIntoMentionSegments\(props\.value, resolvedMentions\)/,
+    "composer highlighting must use the same boundary-aware mention splitter as message rendering",
+  );
+  assert.equal(
+    (chatPanelSource.match(/className="mention-composer-field"/g) ?? []).length,
+    2,
+    "both main and drawer community composers must use the mention highlight field wrapper",
+  );
+  assert.match(
+    chatPanelSource,
+    /<MentionComposerHighlight[\s\S]*?value=\{communityMessageInput\}[\s\S]*?mentions=\{communityMessageMentions\}/,
+    "main composer must highlight committed main-message mentions",
+  );
+  assert.match(
+    chatPanelSource,
+    /<MentionComposerHighlight[\s\S]*?value=\{drawerReplyInput\}[\s\S]*?mentions=\{drawerReplyMentions\}/,
+    "drawer composer must highlight committed drawer-reply mentions",
+  );
+  assert.match(
+    chatPanelSource,
+    /onScroll=\{\(event\) => syncMentionComposerHighlightScroll\(event\.currentTarget\)\}/,
+    "composer highlight mirror must stay aligned when long text scrolls",
+  );
+  assert.match(
+    baseCss,
+    /\.mention-composer-field \.chat-input \{[\s\S]*?color: transparent;[\s\S]*?caret-color: var\(--text-primary\);[\s\S]*?\}/,
+    "textarea text must be visually delegated to the mirror while preserving a native caret",
+  );
+  assert.match(
+    baseCss,
+    /\.mention-composer-highlight \{[\s\S]*?pointer-events: none;[\s\S]*?white-space: pre-wrap;[\s\S]*?\}/,
+    "composer highlight mirror must be inert and preserve textarea whitespace",
+  );
+  assert.ok(
+    baseCss.includes("color: var(--accent-gold, var(--accent));"),
+    "composer mention token color must use the theme accent that is pink in Polynet and white in default dark",
   );
 }
 

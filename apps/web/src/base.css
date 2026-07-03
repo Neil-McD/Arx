@@ -17677,6 +17677,57 @@ button.chat-reply-quote:hover {
   min-width: 0;
 }
 
+.mention-composer-field {
+  --mention-composer-scroll-top: 0px;
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mention-composer-field .chat-input {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  color: transparent;
+  caret-color: var(--text-primary);
+}
+
+.mention-composer-field .chat-input::placeholder {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+
+.mention-composer-field .chat-input:disabled {
+  color: transparent;
+}
+
+.mention-composer-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  min-height: 24px;
+  padding: 2px 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mention-composer-highlight-content {
+  display: block;
+  transform: translateY(calc(var(--mention-composer-scroll-top) * -1));
+}
+
+.mention-composer-highlight-token {
+  color: var(--accent-gold, var(--accent));
+  font-weight: 600;
+}
+
 .chat-input::placeholder {
   color: var(--text-muted);
 }
@@ -30106,6 +30157,12 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .community-chat .chat-input {
+  font-size: 15px;
+  min-height: 28px;
+  padding-inline: 4px;
+}
+
+.app-root.mobile-shell .community-chat .mention-composer-highlight {
   font-size: 15px;
   min-height: 28px;
   padding-inline: 4px;
