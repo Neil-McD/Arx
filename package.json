@@ -204,6 +204,7 @@
     "check:community-compiler-evidence-diet-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_evidence_diet_contract_proof.ts",
     "check:community-metabolizer-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_metabolizer_contract_proof.ts",
     "check:community-agent-filesystem-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_filesystem_contract_proof.ts",
+    "check:community-agent-concierge-intake-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_concierge_intake_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts",
     "generate:product-docs-index": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate_product_docs_index.ts",

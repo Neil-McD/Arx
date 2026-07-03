@@ -178,6 +178,16 @@ crons.interval(
   { limitCommunities: 500 },
 );
 
+// Concierge intake: deterministic, token-free drain from community-agent
+// mentions into asker-funded serve requests. The actual model response is a
+// separate queue consumer; this cron only proves sponsorship and access.
+crons.interval(
+  "process pending community agent mentions",
+  { minutes: 5 },
+  (internal as any).communityAgentConcierge.consumePendingCommunityAgentMentionsInternal,
+  { limit: 25 },
+);
+
 // Mention email pings: mentions still "pending" after the in-app grace window
 // get one email each, preference-gated and deduped per mention.
 crons.interval(

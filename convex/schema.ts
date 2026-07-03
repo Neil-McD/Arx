@@ -1714,6 +1714,65 @@ export default defineSchema({
     .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
     .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"]),
 
+  communityAgentServeRequests: defineTable({
+    communityId: v.id("communities"),
+    agentKey: v.string(),
+    sourceMentionId: v.id("communityInteractionMentions"),
+    sourceRootId: v.optional(v.id("communityInteractionRoots")),
+    sourceReplyId: v.optional(v.id("communityInteractionReplies")),
+    requesterUserId: v.optional(v.id("users")),
+    sponsorUserId: v.optional(v.id("users")),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("skipped"),
+      v.literal("running"),
+      v.literal("responded"),
+      v.literal("error"),
+    ),
+    intakeReason: v.union(
+      v.literal("accepted"),
+      v.literal("duplicate"),
+      v.literal("invalid_agent"),
+      v.literal("source_missing"),
+      v.literal("source_not_live"),
+      v.literal("source_not_human"),
+      v.literal("requester_missing"),
+      v.literal("requester_access_missing"),
+      v.literal("agent_disabled"),
+      v.literal("requester_connection_missing"),
+    ),
+    sourceVisibilityScope: v.optional(
+      v.union(
+        v.literal("private"),
+        v.literal("admin"),
+        v.literal("community"),
+        v.literal("public"),
+      ),
+    ),
+    responseVisibilityScope: v.optional(
+      v.union(
+        v.literal("private"),
+        v.literal("admin"),
+        v.literal("community"),
+        v.literal("public"),
+      ),
+    ),
+    responseRootId: v.optional(v.id("communityInteractionRoots")),
+    responseReplyId: v.optional(v.id("communityInteractionReplies")),
+    runId: v.optional(v.id("communityAgentRuns")),
+    sourceTraceId: v.optional(v.id("communitySourceTraces")),
+    skipReason: v.optional(v.string()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    respondedAt: v.optional(v.number()),
+  })
+    .index("by_sourceMention", ["sourceMentionId"])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_requester_createdAt", ["requesterUserId", "createdAt"]),
+
   communityInteractionReactions: defineTable({
     communityId: v.id("communities"),
     targetType: v.union(v.literal("root"), v.literal("reply")),

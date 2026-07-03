@@ -1554,6 +1554,36 @@ Rules:
 - Metabolizer failure does not block the delayed heartbeat; derived score settlement is learning pressure, not the source of truth or the wake gate.
 - The sweep returns compact `metabolized` diagnostics. Changed-node audit remains in `communityIntelligenceMutations`; run/no-op/error audit lives in `communityMemoryMetabolizerRuns`.
 
+## Twenty-Third Implementation Slice
+
+Concierge intake ledger turns community-agent mentions into auditable serve
+requests:
+
+```txt
+communityInteractionMentions[pending, community_agent]
+  -> validate source and requester
+  -> require requester access and requester inference connection
+  -> insert communityAgentServeRequests
+  -> settle mention as sent or suppressed
+```
+
+Rules:
+
+- This slice is intake only: No LLM, no reply, no memory write.
+- Owner funds sleep; asker funds serve. A queued serve request must have `sponsorUserId == requesterUserId`.
+- There is no owner-funded fallback and no platform-funded fallback for member-triggered tags.
+- `communityInteractionMentions.notifyState` is only the narrow drain marker for agent mentions:
+  - `pending` = intake has not processed this mention
+  - `sent` = intake accepted it into `communityAgentServeRequests`
+  - `suppressed` = intake rejected/skipped it deterministically
+  - `read` = user-mention lifecycle only
+- The serve lifecycle itself lives in `communityAgentServeRequests`, not in `notifyState`.
+- Intake consumes only pending canonical `community_agent` mentions through a bounded batch.
+- `sourceMentionId` is the idempotency key; retries must lookup before insert.
+- Accepted requests require a live human-authored source interaction, current requester chat access, enabled community agent config, and the requester's own usable ChatGPT connection.
+- Source and response visibility scopes are captured at intake so the future response path cannot guess or widen the boundary.
+- Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
+
 ## What Not To Build Yet
 
 Do not start with:
