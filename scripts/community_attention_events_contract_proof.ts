@@ -115,13 +115,18 @@ assert.doesNotMatch(
 );
 
 // Mentions surface (M2): an unseen mention-of-me is its own attention marker,
-// derived from a single indexed latest-mention read, cleared by opening the
+// derived from indexed non-suppressed mention states, cleared by opening the
 // community chat (which also flips the mention ledger rows to "read"), and
 // rendered as the accent variant of the chat nav dot plus the rail OR.
 assert.match(
   backend,
-  /getLatestCommunityMentionOfUserCreatedAt[\s\S]*by_mentionedUser_community_createdAt/,
-  "mention attention must derive from one indexed latest-mention read",
+  /for \(const notifyState of \["pending", "sent", "read"\] as const\)[\s\S]*by_mentionedUser_community_notifyState_createdAt/,
+  "mention attention must derive from indexed non-suppressed mention reads",
+);
+assert.doesNotMatch(
+  backend,
+  /by_mentionedUser_community_createdAt/,
+  "mention attention must not treat suppressed mention rows as unseen mentions",
 );
 assert.match(
   backend,

@@ -110,12 +110,17 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     "the dead suppressBlurRef guard must not return; focus retention is the real fix",
   );
   // Handles are the ground truth for user mention tokens (unique, stable);
-  // display names collide and drift. The agent has no handle and keeps its
-  // display-name token, disambiguated by the AGENT badge.
+  // display names collide and drift. The agent is not a user and keeps its
+  // display-label token, disambiguated by the AGENT badge.
   assert.match(
     menuSource,
-    /candidate\.kind === "community_agent" \|\| !candidate\.handle[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{candidate\.handle\}`/,
-    "picker must insert @handle for users and fall back to display name only for the agent or handle-less users",
+    /candidate\.kind !== "community_agent" && !candidate\.handle[\s\S]*?close\(\);[\s\S]*?return;/,
+    "picker must refuse handle-less user mentions instead of falling back to display names",
+  );
+  assert.match(
+    menuSource,
+    /const token = candidate\.kind === "community_agent" \? `@\$\{candidate\.displayName\}` : `@\$\{candidate\.handle\}`;/,
+    "picker must insert @handle for users and reserve display-label tokens for the community agent",
   );
 }
 
@@ -137,6 +142,40 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     feedSource,
     /key: `\$\{mention\.id\}:name`/,
     "the display-name chip fallback must not return — handles are the ground truth",
+  );
+}
+
+// Send path: committed user mentions survive only by their exact inserted
+// @handle token. Display-name reconstruction must not be an active fallback.
+{
+  const { readFileSync } = await import("node:fs");
+  const chatPanelSource = readFileSync(
+    new URL("../apps/web/src/components/WebCommunityChatPanel.tsx", import.meta.url),
+    "utf8",
+  );
+  const senderSource = readFileSync(
+    new URL("../shared/useCommunityChatMutationController.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    chatPanelSource,
+    /drawerReplyMentions\.filter\(\(mention\) => text\.includes\(mention\.token\)\)/,
+    "drawer replies must preserve committed mentions by exact @handle token",
+  );
+  assert.doesNotMatch(
+    chatPanelSource,
+    /text\.includes\(`@\$\{mention\.displayName\}`\)/,
+    "drawer replies must not identify mentions by display name",
+  );
+  assert.match(
+    senderSource,
+    /bodyToSend\.includes\(mention\.token\)/,
+    "shared sender must keep mentions by exact inserted token",
+  );
+  assert.doesNotMatch(
+    senderSource,
+    /mention\.token \|\| `@\$\{mention\.displayName\}`/,
+    "shared sender must not fall back to display-name mention identity",
   );
 }
 

@@ -96,6 +96,18 @@ assert.match(
   "opening chat must settle pending user mentions through the guarded primitive",
 );
 
+assert.match(
+  attention,
+  /for \(const notifyState of \["pending", "sent", "read"\] as const\)[\s\S]*by_mentionedUser_community_notifyState_createdAt/,
+  "mention attention must ignore suppressed mention rows",
+);
+
+assert.doesNotMatch(
+  attention,
+  /by_mentionedUser_community_createdAt/,
+  "suppressed mentions must not remain visible to mention attention",
+);
+
 assert.doesNotMatch(
   attention,
   /if \(Object\.keys\(patch\)\.length === 1\) return \{ ok: true \};/,
@@ -104,14 +116,32 @@ assert.doesNotMatch(
 
 assert.match(
   interactions,
-  /suppressPendingMentionsForDeletedInteractionTarget[\s\S]*listMentionsForReply[\s\S]*listMentionsForRoot[\s\S]*by_root_createdAt/,
-  "deleting an interaction target must suppress pending mentions for that source",
+  /suppressPendingMentionsForInteractionSource[\s\S]*listMentionsForReply[\s\S]*listMentionsForRoot/,
+  "interaction source mention settlement must cover root and reply mentions",
+);
+
+assert.match(
+  interactions,
+  /suppressPendingMentionsMissingFromInteractionText[\s\S]*row\.notifyState !== "pending"[\s\S]*interactionTextContainsHandleMention\(args\.text, user\.handle \?\? user\.normalizedHandle\)[\s\S]*continue;[\s\S]*suppressPendingMentionRows/,
+  "editing an interaction source must preserve pending mentions whose @handle still appears in the edited text",
 );
 
 assert.match(
   interactions,
   /suppressPendingMentionRows[\s\S]*toState: "suppressed"/,
   "deleted-source mention settlement must suppress pending mention rows",
+);
+
+assert.match(
+  interactions,
+  /editCommunityInteractionMessage[\s\S]*suppressPendingMentionsMissingFromInteractionText/,
+  "editing an interaction source must suppress only stale pending mention notifications",
+);
+
+assert.match(
+  interactions,
+  /suppressPendingMentionsForDeletedInteractionTarget[\s\S]*suppressPendingMentionsForInteractionSource[\s\S]*by_root_createdAt/,
+  "deleting an interaction root must also suppress pending mentions in child replies",
 );
 
 assert.match(

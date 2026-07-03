@@ -14,10 +14,9 @@ export type MentionCandidate = {
 export type CommittedMention = {
   userId: string;
   displayName: string;
-  /** The exact text inserted into the composer (e.g. "@rashidk") — handles
-   * are the ground truth for user tokens; display names collide and drift.
-   * Optional only for drafts committed before tokens existed. */
-  token?: string;
+  /** The exact text inserted into the composer (e.g. "@rashidk"). Handles are
+   * the only user mention tokens; display names are presentation only. */
+  token: string;
   kind?: "user" | "community_agent";
   agentKey?: string;
 };
@@ -118,12 +117,13 @@ export function useMentionAutocomplete(params: {
       const caret = textarea.selectionStart ?? value.length;
       const before = value.slice(0, active.atIndex);
       const after = value.slice(caret);
-      // Users tokenize by handle (unique, stable); the agent has no handle
-      // and tokenizes by its display name, disambiguated by the AGENT badge.
-      const token =
-        candidate.kind === "community_agent" || !candidate.handle
-          ? `@${candidate.displayName}`
-          : `@${candidate.handle}`;
+      // Users tokenize by handle only. The community agent is the one exception:
+      // it is not a user, so it tokenizes by the community display label.
+      if (candidate.kind !== "community_agent" && !candidate.handle) {
+        close();
+        return;
+      }
+      const token = candidate.kind === "community_agent" ? `@${candidate.displayName}` : `@${candidate.handle}`;
       const needsSpace = !after.startsWith(" ");
       const nextValue = `${before}${token}${needsSpace ? " " : ""}${after}`;
       const nextCaret = before.length + token.length + 1;
