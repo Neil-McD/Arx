@@ -330,7 +330,8 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
 
 // Composer highlights are presentation only: the textarea stays native for
 // typing/caret/selection, while a non-interactive mirror colors committed
-// mention tokens with the theme accent.
+// mention tokens with the theme accent, except the canonical community agent
+// which keeps the fixed agent purple used in feed chips and picker badges.
 {
   const { readFileSync } = await import("node:fs");
   const menuSource = readFileSync(
@@ -351,6 +352,11 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     menuSource,
     /splitBodyIntoMentionSegments\(props\.value, resolvedMentions\)/,
     "composer highlighting must use the same boundary-aware mention splitter as message rendering",
+  );
+  assert.match(
+    menuSource,
+    /mention-composer-highlight-token\$\{segment\.mention\.kind === "community_agent" \? " is-agent" : ""\}/,
+    "composer highlight tokens must distinguish the canonical community agent from theme-accent user mentions",
   );
   assert.equal(
     (chatPanelSource.match(/className="mention-composer-field"/g) ?? []).length,
@@ -384,7 +390,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.ok(
     baseCss.includes("color: var(--accent-gold, var(--accent));"),
-    "composer mention token color must use the theme accent that is pink in Polynet and white in default dark",
+    "non-agent composer mention token color must use the theme accent that is pink in Polynet and white in default dark",
   );
   const highlightTokenRule = baseCss.match(/\.mention-composer-highlight-token \{(?<body>[\s\S]*?)\}/)
     ?.groups?.body ?? "";
@@ -393,6 +399,19 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     highlightTokenRule,
     /(font-weight|letter-spacing|font-size|font-family|font-stretch):/,
     "composer mention token highlighting must be metric-neutral so the native textarea caret stays aligned",
+  );
+  const agentHighlightTokenRule =
+    baseCss.match(/\.mention-composer-highlight-token\.is-agent \{(?<body>[\s\S]*?)\}/)?.groups
+      ?.body ?? "";
+  assert.match(
+    agentHighlightTokenRule,
+    /color:\s*#c4b5fd;/,
+    "community agent composer mention token must use the fixed agent purple, not the theme accent",
+  );
+  assert.doesNotMatch(
+    agentHighlightTokenRule,
+    /(font-weight|letter-spacing|font-size|font-family|font-stretch):/,
+    "community agent composer highlighting must stay metric-neutral so the native textarea caret stays aligned",
   );
 }
 

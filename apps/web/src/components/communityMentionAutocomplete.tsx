@@ -329,7 +329,7 @@ export function MentionComposerHighlight(props: {
           segment.type === "mention" ? (
             <span
               key={`m:${index}:${segment.mention.key}`}
-              className="mention-composer-highlight-token"
+              className={`mention-composer-highlight-token${segment.mention.kind === "community_agent" ? " is-agent" : ""}`}
             >
               {segment.text}
             </span>

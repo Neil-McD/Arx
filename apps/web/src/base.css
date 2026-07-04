@@ -17845,6 +17845,10 @@ button.chat-reply-quote:hover {
   color: var(--accent-gold, var(--accent));
 }
 
+.mention-composer-highlight-token.is-agent {
+  color: #c4b5fd;
+}
+
 .chat-input::placeholder {
   color: var(--text-muted);
 }
