@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, GripVertical } from "lucide-react";
 import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type {
@@ -31,6 +32,11 @@ type CommunityResourcesPanelProps = {
 };
 
 const LEGACY_RESOURCE_MODULE_ID = "__legacy_resources__";
+const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
+const RESOURCE_DRAG_MIME = "application/x-polynet-community-resource";
+const RESOURCE_CATEGORY_DRAG_MIME = "application/x-polynet-community-resource-category";
+
+type ReorderDirection = "up" | "down" | "top" | "bottom";
 
 type ResourceModuleView = CommunityResourceModule & {
   is_virtual?: boolean;
@@ -101,6 +107,24 @@ function compareResources(a: CommunityResource, b: CommunityResource): number {
     return Boolean(a.pinned) ? -1 : 1;
   }
   return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+}
+
+function moveOrderedId(ids: string[], id: string, direction: ReorderDirection): string[] | null {
+  const fromIndex = ids.indexOf(id);
+  if (fromIndex < 0) return null;
+  const toIndex =
+    direction === "top"
+      ? 0
+      : direction === "bottom"
+        ? ids.length - 1
+        : direction === "up"
+          ? fromIndex - 1
+          : fromIndex + 1;
+  if (toIndex < 0 || toIndex >= ids.length || toIndex === fromIndex) return null;
+  const nextIds = ids.slice();
+  const [movedId] = nextIds.splice(fromIndex, 1);
+  nextIds.splice(toIndex, 0, movedId);
+  return nextIds;
 }
 
 function PlayIcon() {
@@ -181,6 +205,7 @@ function ResourceCategorySection(props: {
   onSetStatus: (status: "draft" | "live") => void;
   onDelete: () => void;
   onAddPage: () => void;
+  onMove: (direction: ReorderDirection) => void;
   isAddingPage: boolean;
   onSelectCategory: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
@@ -190,6 +215,8 @@ function ResourceCategorySection(props: {
   onDragEnd: () => void;
   canManage: boolean;
   canReorder: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   isDragging: boolean;
   isDropTarget: boolean;
   children: ReactNode;
@@ -201,6 +228,7 @@ function ResourceCategorySection(props: {
     onSetStatus,
     onDelete,
     onAddPage,
+    onMove,
     isAddingPage,
     onSelectCategory,
     onDragStart,
@@ -210,6 +238,8 @@ function ResourceCategorySection(props: {
     onDragEnd,
     canManage,
     canReorder,
+    canMoveUp,
+    canMoveDown,
     isDragging,
     isDropTarget,
     children,
@@ -244,6 +274,9 @@ function ResourceCategorySection(props: {
         isDropTarget ? "is-drop-target" : "",
       ].filter(Boolean).join(" ")}
       onMouseLeave={() => setIsMenuOpen(false)}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <div
         className="knowledge-category-header"
@@ -253,12 +286,14 @@ function ResourceCategorySection(props: {
         draggable={canReorder}
         onClick={onSelectCategory}
         onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
         onDragEnd={onDragEnd}
         onKeyDown={handleKeyDown}
       >
+        {canReorder ? (
+          <span className="knowledge-category-drag-handle" title="Drag to reorder category" aria-hidden="true">
+            <GripVertical strokeWidth={1.9} />
+          </span>
+        ) : null}
         <div className="knowledge-category-copy">
           <div className="knowledge-category-title-row">
             <span className="knowledge-category-title">{module.name}</span>
@@ -291,6 +326,51 @@ function ResourceCategorySection(props: {
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >
+              {canReorder && canMoveUp ? (
+                <>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("up"))}
+                  >
+                    <ArrowUp />
+                    <span>Move up</span>
+                  </button>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("top"))}
+                  >
+                    <ChevronsUp />
+                    <span>Move to top</span>
+                  </button>
+                </>
+              ) : null}
+              {canReorder && canMoveDown ? (
+                <>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("down"))}
+                  >
+                    <ArrowDown />
+                    <span>Move down</span>
+                  </button>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("bottom"))}
+                  >
+                    <ChevronsDown />
+                    <span>Move to bottom</span>
+                  </button>
+                </>
+              ) : null}
+              {canReorder && (canMoveUp || canMoveDown) ? <div className="web-floating-menu-separator" /> : null}
               <button
                 className="web-floating-menu-item"
                 type="button"
@@ -369,6 +449,7 @@ function ResourceRailItem(props: {
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onMove: (direction: ReorderDirection) => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDragLeave: () => void;
@@ -376,6 +457,8 @@ function ResourceRailItem(props: {
   onDragEnd: () => void;
   canManage: boolean;
   canReorder: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   isDragging: boolean;
   isDropTarget: boolean;
 }) {
@@ -385,6 +468,7 @@ function ResourceRailItem(props: {
     onSelect,
     onEdit,
     onDelete,
+    onMove,
     onDragStart,
     onDragOver,
     onDragLeave,
@@ -392,6 +476,8 @@ function ResourceRailItem(props: {
     onDragEnd,
     canManage,
     canReorder,
+    canMoveUp,
+    canMoveDown,
     isDragging,
     isDropTarget,
   } = props;
@@ -441,6 +527,11 @@ function ResourceRailItem(props: {
       onKeyDown={handleItemKeyDown}
       onMouseLeave={() => setIsMenuOpen(false)}
     >
+      {canReorder ? (
+        <span className="knowledge-resource-drag-handle" title="Drag to reorder page" aria-hidden="true">
+          <GripVertical strokeWidth={1.9} />
+        </span>
+      ) : null}
       <div className="knowledge-resource-item-icon" aria-hidden="true">
         <ResourceKindIcon resource={resource} />
       </div>
@@ -472,6 +563,51 @@ function ResourceRailItem(props: {
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >
+              {canReorder && canMoveUp ? (
+                <>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("up"))}
+                  >
+                    <ArrowUp />
+                    <span>Move up</span>
+                  </button>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("top"))}
+                  >
+                    <ChevronsUp />
+                    <span>Move to top</span>
+                  </button>
+                </>
+              ) : null}
+              {canReorder && canMoveDown ? (
+                <>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("down"))}
+                  >
+                    <ArrowDown />
+                    <span>Move down</span>
+                  </button>
+                  <button
+                    className="web-floating-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={(event) => closeAndRun(event, () => onMove("bottom"))}
+                  >
+                    <ChevronsDown />
+                    <span>Move to bottom</span>
+                  </button>
+                </>
+              ) : null}
+              {canReorder && (canMoveUp || canMoveDown) ? <div className="web-floating-menu-separator" /> : null}
               <button
                 className="web-floating-menu-item"
                 type="button"
@@ -515,6 +651,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [draggingResourceId, setDraggingResourceId] = useState<string | null>(null);
   const [draggingResourceModuleId, setDraggingResourceModuleId] = useState<string | null>(null);
   const [dropTargetResourceId, setDropTargetResourceId] = useState<string | null>(null);
+  const draggingModuleIdRef = useRef<string | null>(null);
+  const draggingResourceIdRef = useRef<string | null>(null);
+  const draggingResourceModuleIdRef = useRef<string | null>(null);
   const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
@@ -826,14 +965,17 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       event.preventDefault();
       return;
     }
+    draggingModuleIdRef.current = module.id;
     setDraggingModuleId(module.id);
     setDropTargetModuleId(null);
     event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(MODULE_DRAG_MIME, module.id);
     event.dataTransfer.setData("text/plain", module.id);
   };
 
   const handleModuleDragOver = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
-    if (!draggingModuleId || module.is_virtual || module.id === draggingModuleId) return;
+    const draggedId = draggingModuleIdRef.current || draggingModuleId || event.dataTransfer.getData(MODULE_DRAG_MIME);
+    if (!draggedId || module.is_virtual || module.id === draggedId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropTargetModuleId(module.id);
@@ -841,7 +983,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   const handleModuleDrop = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
     event.preventDefault();
-    const draggedId = draggingModuleId ?? event.dataTransfer.getData("text/plain");
+    const draggedId =
+      draggingModuleIdRef.current ||
+      draggingModuleId ||
+      event.dataTransfer.getData(MODULE_DRAG_MIME) ||
+      event.dataTransfer.getData("text/plain");
+    draggingModuleIdRef.current = null;
     setDraggingModuleId(null);
     setDropTargetModuleId(null);
     if (!draggedId || module.is_virtual || draggedId === module.id) return;
@@ -855,8 +1002,15 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleModuleDragEnd = () => {
+    draggingModuleIdRef.current = null;
     setDraggingModuleId(null);
     setDropTargetModuleId(null);
+  };
+
+  const handleMoveModule = (moduleId: string, direction: ReorderDirection) => {
+    const nextIds = moveOrderedId(reorderableModuleIds, moduleId, direction);
+    if (!nextIds) return;
+    void actions.handleReorderModules(nextIds);
   };
 
   const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
@@ -866,16 +1020,26 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       event.preventDefault();
       return;
     }
+    draggingResourceIdRef.current = resource.id;
+    draggingResourceModuleIdRef.current = categoryId;
     setDraggingResourceId(resource.id);
     setDraggingResourceModuleId(categoryId);
     setDropTargetResourceId(null);
     event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(RESOURCE_DRAG_MIME, resource.id);
+    event.dataTransfer.setData(RESOURCE_CATEGORY_DRAG_MIME, categoryId);
     event.dataTransfer.setData("text/plain", resource.id);
   };
 
   const handleResourceDragOver = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
     const categoryId = getResourceCategoryId(resource);
-    if (!draggingResourceId || draggingResourceModuleId !== categoryId || resource.id === draggingResourceId) return;
+    const draggedId =
+      draggingResourceIdRef.current || draggingResourceId || event.dataTransfer.getData(RESOURCE_DRAG_MIME);
+    const draggedCategoryId =
+      draggingResourceModuleIdRef.current ||
+      draggingResourceModuleId ||
+      event.dataTransfer.getData(RESOURCE_CATEGORY_DRAG_MIME);
+    if (!draggedId || draggedCategoryId !== categoryId || resource.id === draggedId) return;
     if (getResourceRole(resource) !== "page") return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
@@ -884,12 +1048,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   const handleResourceDrop = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
     event.preventDefault();
-    const draggedId = draggingResourceId ?? event.dataTransfer.getData("text/plain");
+    const draggedId =
+      draggingResourceIdRef.current ||
+      draggingResourceId ||
+      event.dataTransfer.getData(RESOURCE_DRAG_MIME) ||
+      event.dataTransfer.getData("text/plain");
+    const draggedCategoryId =
+      draggingResourceModuleIdRef.current ||
+      draggingResourceModuleId ||
+      event.dataTransfer.getData(RESOURCE_CATEGORY_DRAG_MIME);
     const categoryId = getResourceCategoryId(resource);
+    draggingResourceIdRef.current = null;
+    draggingResourceModuleIdRef.current = null;
     setDraggingResourceId(null);
     setDraggingResourceModuleId(null);
     setDropTargetResourceId(null);
-    if (!draggedId || draggingResourceModuleId !== categoryId || draggedId === resource.id) return;
+    if (!draggedId || draggedCategoryId !== categoryId || draggedId === resource.id) return;
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
     const fromIndex = reorderableIds.indexOf(draggedId);
     const toIndex = reorderableIds.indexOf(resource.id);
@@ -902,9 +1076,19 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleResourceDragEnd = () => {
+    draggingResourceIdRef.current = null;
+    draggingResourceModuleIdRef.current = null;
     setDraggingResourceId(null);
     setDraggingResourceModuleId(null);
     setDropTargetResourceId(null);
+  };
+
+  const handleMoveResource = (categoryId: string, resourceId: string, direction: ReorderDirection) => {
+    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    const nextIds = moveOrderedId(reorderableIds, resourceId, direction);
+    if (!nextIds) return;
+    const moduleId = categoryId === LEGACY_RESOURCE_MODULE_ID ? null : categoryId;
+    void actions.handleReorderResources(moduleId, nextIds);
   };
 
   const handleSelectCategory = (module: ResourceModuleView) => {
@@ -958,6 +1142,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const renderResourceRailItem = (resource: CommunityResource) => {
     const categoryId = getResourceCategoryId(resource);
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    const resourceOrderIndex = reorderableIds.indexOf(resource.id);
     const canReorderResource =
       canManageResources && getResourceRole(resource) === "page" && reorderableIds.length > 1;
 
@@ -969,6 +1154,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         onSelect={() => handleSelectResource(resource)}
         onEdit={() => startResourceInlineEdit(resource, "body")}
         onDelete={() => setPendingDeleteResourceId(resource.id)}
+        onMove={(direction) => handleMoveResource(categoryId, resource.id, direction)}
         onDragStart={(event) => handleResourceDragStart(event, resource)}
         onDragOver={(event) => handleResourceDragOver(event, resource)}
         onDragLeave={() => {
@@ -978,6 +1164,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         onDragEnd={handleResourceDragEnd}
         canManage={canManageResources}
         canReorder={canReorderResource}
+        canMoveUp={canReorderResource && resourceOrderIndex > 0}
+        canMoveDown={canReorderResource && resourceOrderIndex >= 0 && resourceOrderIndex < reorderableIds.length - 1}
         isDragging={draggingResourceId === resource.id}
         isDropTarget={dropTargetResourceId === resource.id}
       />
@@ -1141,32 +1329,39 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           <div className="knowledge-workspace">
             <aside className="knowledge-resource-rail" aria-label="Resources">
               <div className="knowledge-resource-list">
-                {categorySections.map((section) => (
-                  <ResourceCategorySection
-                    key={section.module.id}
-                    module={section.module}
-                    isActive={selectedModule?.id === section.module.id}
-                    onSelectCategory={() => handleSelectCategory(section.module)}
-                    onEdit={() => actions.handleEditModule(section.module)}
-                    onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
-                    onDelete={() => void actions.handleDeleteModule(section.module.id)}
-                    onAddPage={() => void handleAddPageDraft(section.module.id)}
-                    isAddingPage={isCreatingPageDraft}
-                    canManage={canManageResources && !section.module.is_virtual}
-                    canReorder={canReorderModules && !section.module.is_virtual}
-                    isDragging={draggingModuleId === section.module.id}
-                    isDropTarget={dropTargetModuleId === section.module.id}
-                    onDragStart={(event) => handleModuleDragStart(event, section.module)}
-                    onDragOver={(event) => handleModuleDragOver(event, section.module)}
-                    onDragLeave={() => {
-                      if (dropTargetModuleId === section.module.id) setDropTargetModuleId(null);
-                    }}
-                    onDrop={(event) => handleModuleDrop(event, section.module)}
-                    onDragEnd={handleModuleDragEnd}
-                  >
-                    {section.pageResources.map(renderResourceRailItem)}
-                  </ResourceCategorySection>
-                ))}
+                {categorySections.map((section) => {
+                  const moduleOrderIndex = reorderableModuleIds.indexOf(section.module.id);
+                  const canMoveModule = canReorderModules && !section.module.is_virtual && moduleOrderIndex >= 0;
+                  return (
+                    <ResourceCategorySection
+                      key={section.module.id}
+                      module={section.module}
+                      isActive={selectedModule?.id === section.module.id}
+                      onSelectCategory={() => handleSelectCategory(section.module)}
+                      onEdit={() => actions.handleEditModule(section.module)}
+                      onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
+                      onDelete={() => void actions.handleDeleteModule(section.module.id)}
+                      onAddPage={() => void handleAddPageDraft(section.module.id)}
+                      onMove={(direction) => handleMoveModule(section.module.id, direction)}
+                      isAddingPage={isCreatingPageDraft}
+                      canManage={canManageResources && !section.module.is_virtual}
+                      canReorder={canReorderModules && !section.module.is_virtual}
+                      canMoveUp={canMoveModule && moduleOrderIndex > 0}
+                      canMoveDown={canMoveModule && moduleOrderIndex < reorderableModuleIds.length - 1}
+                      isDragging={draggingModuleId === section.module.id}
+                      isDropTarget={dropTargetModuleId === section.module.id}
+                      onDragStart={(event) => handleModuleDragStart(event, section.module)}
+                      onDragOver={(event) => handleModuleDragOver(event, section.module)}
+                      onDragLeave={() => {
+                        if (dropTargetModuleId === section.module.id) setDropTargetModuleId(null);
+                      }}
+                      onDrop={(event) => handleModuleDrop(event, section.module)}
+                      onDragEnd={handleModuleDragEnd}
+                    >
+                      {section.pageResources.map(renderResourceRailItem)}
+                    </ResourceCategorySection>
+                  );
+                })}
                 {canManageResources ? (
                   <button
                     className="knowledge-category-inline-add"

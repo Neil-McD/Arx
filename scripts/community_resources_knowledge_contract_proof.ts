@@ -22,6 +22,7 @@ const resourceModal = read("apps/web/src/components/WebCommunityResourceModal.ts
 const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
+const baseCss = read("apps/web/src/base.css");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
 const resourceEditorController = read("shared/useCommunityResourceEditorController.ts");
@@ -621,6 +622,56 @@ assert.match(
   resourcesPanel,
   /actions\.handleSetModuleStatus\(selectedModule, selectedModuleNextStatus\)/,
   "resources panel must expose category-level live/draft changes through the canonical module status action",
+);
+assert.match(
+  resourcesPanel,
+  /MODULE_DRAG_MIME[\s\S]*RESOURCE_DRAG_MIME[\s\S]*RESOURCE_CATEGORY_DRAG_MIME/,
+  "resources panel drag/drop must use explicit internal drag metadata, not only a generic text payload",
+);
+assert.match(
+  resourcesPanel,
+  /draggingModuleIdRef[\s\S]*draggingResourceIdRef[\s\S]*draggingResourceModuleIdRef/,
+  "resources panel drag/drop must keep ref-backed drag state so owner reorder does not depend only on async React state",
+);
+assert.match(
+  resourcesPanel,
+  /knowledge-category-drag-handle[\s\S]*GripVertical[\s\S]*knowledge-resource-drag-handle/,
+  "resources panel must expose visible grab handles for category and page reordering",
+);
+assert.match(
+  resourcesPanel,
+  /function moveOrderedId\(ids: string\[\], id: string, direction: ReorderDirection\)/,
+  "resources panel must provide non-drag reorder commands for touch and keyboard-adjacent owner workflows",
+);
+assert.match(
+  resourcesPanel,
+  /handleMoveModule[\s\S]*moveOrderedId\(reorderableModuleIds, moduleId, direction\)[\s\S]*actions\.handleReorderModules\(nextIds\)/,
+  "category move commands must reuse the canonical shared module reorder action",
+);
+assert.match(
+  resourcesPanel,
+  /handleMoveResource[\s\S]*moveOrderedId\(reorderableIds, resourceId, direction\)[\s\S]*actions\.handleReorderResources\(moduleId, nextIds\)/,
+  "page move commands must reuse the canonical shared page reorder action",
+);
+assert.match(
+  resourcesPanel,
+  />Move up<[\s\S]*>Move to top<[\s\S]*>Move down<[\s\S]*>Move to bottom</,
+  "owner menus must expose reliable non-drag reorder controls",
+);
+assert.match(
+  resourcesPanel,
+  /reorderableResourceIdsByModule[\s\S]*section\.pageResources\.map\(\(resource\) => resource\.id\)/,
+  "resources panel reorder payload must be page-only because sources are intake material, not member-facing page order",
+);
+assert.match(
+  resources,
+  /export const reorderCommunityResources[\s\S]*resourceModuleIdentity\(row\.moduleId\) === targetModuleIdentity[\s\S]*normalizeResourceRole\(row\.role\) === "page"[\s\S]*const existingIds = new Set\(scopedRows\.map/,
+  "resource reorder validation must match the page-only UI payload and ignore source inbox rows",
+);
+assert.match(
+  baseCss,
+  /\.knowledge-category-section\.can-reorder \.knowledge-category-header[\s\S]*grid-template-columns: 14px minmax\(0, 1fr\) auto/,
+  "category reorder handles must have a stable rail column",
 );
 assert.match(
   resourceController,

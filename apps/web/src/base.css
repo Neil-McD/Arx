@@ -14582,6 +14582,10 @@ button.chat-reply-quote:hover {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+.knowledge-category-section.can-reorder .knowledge-category-header {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
+
 .knowledge-category-header:hover,
 .knowledge-category-section.is-active .knowledge-category-header {
   background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
@@ -14595,10 +14599,36 @@ button.chat-reply-quote:hover {
 
 .knowledge-category-section.can-reorder .knowledge-category-header {
   cursor: grab;
+  user-select: none;
 }
 
 .knowledge-category-section.can-reorder .knowledge-category-header:active {
   cursor: grabbing;
+}
+
+.knowledge-category-drag-handle,
+.knowledge-resource-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--text-muted) 82%, transparent);
+  cursor: grab;
+  touch-action: none;
+}
+
+.knowledge-category-drag-handle {
+  width: 14px;
+  height: 18px;
+}
+
+.knowledge-category-drag-handle svg,
+.knowledge-resource-drag-handle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.knowledge-category-section.can-reorder .knowledge-category-header:hover .knowledge-category-drag-handle,
+.knowledge-resource-item.can-reorder:hover .knowledge-resource-drag-handle {
+  color: color-mix(in srgb, var(--text-primary) 72%, var(--text-muted));
 }
 
 .knowledge-category-copy {
@@ -14744,6 +14774,12 @@ button.chat-reply-quote:hover {
 .web-floating-menu-item:hover {
   background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
   color: var(--text-primary);
+}
+
+.web-floating-menu-separator {
+  height: 1px;
+  margin: 3px 2px;
+  background: color-mix(in srgb, var(--border-default) 70%, transparent);
 }
 
 .web-floating-menu-item:disabled {
@@ -14908,11 +14944,24 @@ button.chat-reply-quote:hover {
 }
 
 .knowledge-resource-item.can-reorder {
+  grid-template-columns: 14px 30px minmax(0, 1fr) auto;
   cursor: grab;
+  user-select: none;
 }
 
 .knowledge-resource-item.can-reorder:active {
   cursor: grabbing;
+}
+
+.knowledge-category-pages .knowledge-resource-item.can-reorder,
+.knowledge-source-inbox-section .knowledge-resource-item.can-reorder {
+  grid-template-columns: 14px 18px minmax(0, 1fr) auto;
+}
+
+.knowledge-resource-drag-handle {
+  width: 14px;
+  min-height: 18px;
+  align-self: center;
 }
 
 .knowledge-resource-item.is-dragging {

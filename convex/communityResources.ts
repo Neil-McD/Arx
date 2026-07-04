@@ -10504,7 +10504,11 @@ export const reorderCommunityResources = mutation({
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect()) as CommunityResourceLike[];
     const targetModuleIdentity = resourceModuleIdentity(moduleId);
-    const scopedRows = rows.filter((row) => resourceModuleIdentity(row.moduleId) === targetModuleIdentity);
+    const scopedRows = rows.filter(
+      (row) =>
+        resourceModuleIdentity(row.moduleId) === targetModuleIdentity &&
+        normalizeResourceRole(row.role) === "page",
+    );
     const existingIds = new Set(scopedRows.map((row) => normalizeIdValue(row._id)));
     const requestedIds = args.resourceIds.map((id) => normalizeIdValue(id));
     const requestedIdSet = new Set(requestedIds);
