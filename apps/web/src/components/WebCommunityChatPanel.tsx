@@ -143,6 +143,8 @@ const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
 const COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
+const COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS = 6500;
+const COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
@@ -184,6 +186,20 @@ function isCommunityComposerTransferSource(
   refs: Array<MutableRefObject<HTMLTextAreaElement | null>> | undefined,
 ): boolean {
   return Boolean(refs?.some((ref) => ref.current && activeElement === ref.current));
+}
+
+function buildCommunityComposerIdeaPlaceholders(params: {
+  activeCommunityName?: string | null;
+  canMentionEverybody: boolean;
+}): string[] {
+  const agentName = String(params.activeCommunityName ?? "").trim();
+  return [
+    "Ask the community a question...",
+    "Share what you are working on...",
+    "Type @ to tag a member...",
+    ...(agentName ? [`Tag @${agentName} to ask the community agent...`] : []),
+    ...(params.canMentionEverybody ? ["Use @everybody for updates everyone should see..."] : []),
+  ];
 }
 
 function mentionCandidateKey(candidate: MentionCandidate): string {
@@ -492,6 +508,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [isDesktopCommunityFocusViewport, setIsDesktopCommunityFocusViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY).matches,
   );
+  const [shouldReduceCommunityComposerPlaceholderMotion, setShouldReduceCommunityComposerPlaceholderMotion] = useState(
+    () =>
+      typeof window === "undefined"
+        ? false
+        : window.matchMedia(COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY).matches,
+  );
+  const [communityComposerIdeaPlaceholderIndex, setCommunityComposerIdeaPlaceholderIndex] = useState(0);
   const [mainMentionQuery, setMainMentionQuery] = useState<string | null>(null);
   const [drawerMentionQuery, setDrawerMentionQuery] = useState<string | null>(null);
   const [remoteMentionSearch, setRemoteMentionSearch] = useState<{
@@ -535,6 +558,20 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     };
     applyViewport(mediaQuery.matches);
     const listener = (event: MediaQueryListEvent) => applyViewport(event.matches);
+    mediaQuery.addEventListener("change", listener);
+    return () => {
+      mediaQuery.removeEventListener("change", listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY);
+    const applyPreference = (matches: boolean) => {
+      setShouldReduceCommunityComposerPlaceholderMotion(matches);
+    };
+    applyPreference(mediaQuery.matches);
+    const listener = (event: MediaQueryListEvent) => applyPreference(event.matches);
     mediaQuery.addEventListener("change", listener);
     return () => {
       mediaQuery.removeEventListener("change", listener);
@@ -593,6 +630,52 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     });
     return true;
   }, [isDesktopCommunityFocusViewport]);
+
+  const mainComposerIdeaPlaceholders = useMemo(
+    () =>
+      buildCommunityComposerIdeaPlaceholders({
+        activeCommunityName: activeCommunity?.name,
+        canMentionEverybody,
+      }),
+    [activeCommunity?.name, canMentionEverybody],
+  );
+  const canShowMainComposerIdeaPlaceholder = Boolean(
+    hasSession &&
+      activeCommunity &&
+      canUseComposer &&
+      canPostMessages &&
+      !isAuthRecoveringSignedIn &&
+      !isResolvingSelectedCommunity &&
+      communityMessageInput.trim().length === 0 &&
+      !replyingToMessage,
+  );
+  const mainCommunityComposerIdeaPlaceholder =
+    mainComposerIdeaPlaceholders[
+      (shouldReduceCommunityComposerPlaceholderMotion ? 0 : communityComposerIdeaPlaceholderIndex) %
+        Math.max(mainComposerIdeaPlaceholders.length, 1)
+    ] ?? "Message the community...";
+
+  useEffect(() => {
+    setCommunityComposerIdeaPlaceholderIndex(0);
+  }, [activeCommunity?.id, activeCommunity?.name, canMentionEverybody]);
+
+  useEffect(() => {
+    if (
+      !canShowMainComposerIdeaPlaceholder ||
+      shouldReduceCommunityComposerPlaceholderMotion ||
+      mainComposerIdeaPlaceholders.length <= 1
+    ) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setCommunityComposerIdeaPlaceholderIndex((index) => (index + 1) % mainComposerIdeaPlaceholders.length);
+    }, COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [
+    canShowMainComposerIdeaPlaceholder,
+    mainComposerIdeaPlaceholders.length,
+    shouldReduceCommunityComposerPlaceholderMotion,
+  ]);
 
   const activeMentionOwner: "main" | "drawer" | null =
     mainMentionQuery !== null ? "main" : drawerMentionQuery !== null ? "drawer" : null;
@@ -1218,6 +1301,22 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     );
   };
 
+  const mainCommunityComposerPlaceholder = !hasSession
+    ? "Sign in to chat..."
+    : isAuthRecoveringSignedIn
+      ? "Restoring your account..."
+      : isResolvingSelectedCommunity
+        ? "Loading community..."
+        : !activeCommunity
+          ? "Select a community to chat..."
+          : isProfileSetupGateActive
+            ? "Finish your profile to chat..."
+            : !canPostMessages
+              ? "Join this community to chat..."
+              : canShowMainComposerIdeaPlaceholder
+                ? mainCommunityComposerIdeaPlaceholder
+                : "Message the community...";
+
   const mainCommunityComposer = (
     <>
       {replyingToMessage && (
@@ -1289,21 +1388,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               chatInputRef.current = node;
             }}
             className="chat-input"
-            placeholder={
-              !hasSession
-                ? "Sign in to chat..."
-                : isAuthRecoveringSignedIn
-                  ? "Restoring your account..."
-                  : isResolvingSelectedCommunity
-                    ? "Loading community..."
-                    : !activeCommunity
-                      ? "Select a community to chat..."
-                      : isProfileSetupGateActive
-                        ? "Finish your profile to chat..."
-                        : !canPostMessages
-                          ? "Join this community to chat..."
-                          : "Message the community..."
-            }
+            placeholder={mainCommunityComposerPlaceholder}
             value={communityMessageInput}
             onChange={(event) => {
               onCommunityMessageInputChange(event.target.value, event.target);
