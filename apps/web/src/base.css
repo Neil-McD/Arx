@@ -10684,8 +10684,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   align-items: center;
   padding: 1px 6px;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  /* Agent purple, fixed across both themes — matches the mention-picker AGENT
+     badge (never the theme accent, which is rose in the polynet theme). */
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
