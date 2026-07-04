@@ -136,7 +136,7 @@
 .app-topbar .topbar-right.topbar-right-island {
   padding: 6px 8px;
   border-radius: 12px;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 70%, transparent));
+  border: 1px solid transparent;
   background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
@@ -179,7 +179,7 @@
   gap: 8px;
   padding: 6px 8px;
   border-radius: 12px;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 70%, transparent));
+  border: 1px solid transparent;
   background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
@@ -191,7 +191,7 @@
 /* Community drawer context controls use the same glass material as top chrome. */
 .community-interaction-drawer-back {
   padding: 2px;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 70%, transparent));
+  border: 1px solid transparent;
   border-radius: 13px;
   background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
   box-shadow:
