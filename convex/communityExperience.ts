@@ -57,6 +57,7 @@ export {
   writeCommunityResourceBuilderResource,
   deleteCommunityResourceModule,
   createCommunityResourcePageDraftFromSource,
+  moveCommunityResourceToModule,
   reorderCommunityResourceModules,
   reorderCommunityResources,
   saveCommunityResourceModule,

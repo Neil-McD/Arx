@@ -71,6 +71,11 @@ export type CommunityResourcesActions = {
   handleDeleteModule: (moduleId: string) => Promise<boolean> | boolean;
   handleReorderModules: (moduleIds: string[]) => Promise<boolean> | boolean;
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean> | boolean;
+  handleMoveResourceToModule: (
+    resourceId: string,
+    targetModuleId: string | null,
+    beforeResourceId?: string | null,
+  ) => Promise<boolean> | boolean;
   openNewResourceModal: (moduleId?: string | null) => void;
   openNewSourceModal: (moduleId?: string | null) => void;
   resourceEditor: {

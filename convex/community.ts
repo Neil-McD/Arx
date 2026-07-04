@@ -144,6 +144,7 @@ import {
   resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   resolvePublicFunnelStatsBySlug as resolvePublicFunnelStatsBySlugImpl,
+  moveCommunityResourceToModule as moveCommunityResourceToModuleImpl,
   reorderCommunityResourceModules as reorderCommunityResourceModulesImpl,
   reorderCommunityResources as reorderCommunityResourcesImpl,
   readCommunityResourceBuilderResource as readCommunityResourceBuilderResourceImpl,
@@ -257,6 +258,7 @@ export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
 export const createCommunityResourcePageDraftFromSource = createCommunityResourcePageDraftFromSourceImpl;
 export const saveCommunityResourceModule = saveCommunityResourceModuleImpl;
+export const moveCommunityResourceToModule = moveCommunityResourceToModuleImpl;
 export const reorderCommunityResourceModules = reorderCommunityResourceModulesImpl;
 export const reorderCommunityResources = reorderCommunityResourcesImpl;
 export const deleteCommunityResource = deleteCommunityResourceImpl;

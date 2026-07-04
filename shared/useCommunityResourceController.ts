@@ -7,6 +7,7 @@ import {
   deleteCloudCommunityResourceModule,
   listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
+  moveCloudCommunityResourceToModule,
   reorderCloudCommunityResourceModules,
   reorderCloudCommunityResources,
   saveCloudCommunityResource,
@@ -460,6 +461,36 @@ export function useCommunityResourceController<
     }
   }, [loadCommunityResources]);
 
+  const handleMoveCommunityResourceToModule = useCallback(
+    async (resourceId: string, targetModuleId: string | null, beforeResourceId?: string | null) => {
+      const current = argsRef.current;
+      const session = await resolveUsableSession(current.session, current.ensureSession);
+      if (!session || !current.activeCommunityId) return false;
+
+      current.setResourceError(null);
+      try {
+        await moveCloudCommunityResourceToModule({
+          session,
+          communityId: current.activeCommunityId,
+          resourceId,
+          targetModuleId,
+          beforeResourceId: beforeResourceId ?? null,
+        });
+        await loadCommunityResources(current.activeCommunityId, session);
+        return true;
+      } catch (error) {
+        const message = typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to move resource.";
+        current.setResourceError(message);
+        return false;
+      }
+    },
+    [loadCommunityResources],
+  );
+
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -558,6 +589,7 @@ export function useCommunityResourceController<
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
     handleReorderCommunityResources,
+    handleMoveCommunityResourceToModule,
     handleSaveCommunityResource,
     handleDeleteResource,
     handleCreatePageDraftFromSource,

@@ -392,9 +392,19 @@ assert.match(
   "community experience barrel must expose source-to-page draft creation",
 );
 assert.match(
+  communityExperience,
+  /moveCommunityResourceToModule/,
+  "community experience barrel must expose cross-category page moves",
+);
+assert.match(
   communityBarrel,
   /createCommunityResourcePageDraftFromSource/,
   "community Convex barrel must expose source-to-page draft creation",
+);
+assert.match(
+  communityBarrel,
+  /moveCommunityResourceToModule/,
+  "community Convex barrel must expose cross-category page moves",
 );
 assert.match(
   resourceContracts,
@@ -667,6 +677,46 @@ assert.match(
   resources,
   /export const reorderCommunityResources[\s\S]*resourceModuleIdentity\(row\.moduleId\) === targetModuleIdentity[\s\S]*normalizeResourceRole\(row\.role\) === "page"[\s\S]*const existingIds = new Set\(scopedRows\.map/,
   "resource reorder validation must match the page-only UI payload and ignore source inbox rows",
+);
+assert.match(
+  resources,
+  /export const moveCommunityResourceToModule[\s\S]*normalizeResourceRole\(resource\.role\) !== "page"[\s\S]*community_resource_move_requires_page/,
+  "cross-category resource moves must be page-only and must not move source inbox rows",
+);
+assert.match(
+  resources,
+  /export const moveCommunityResourceToModule[\s\S]*requireValidResourceModule[\s\S]*destinationRows[\s\S]*resourceModuleIdentity\(row\.moduleId\) === targetModuleIdentity[\s\S]*normalizeResourceRole\(row\.role\) === "page"[\s\S]*beforeResourceId/,
+  "cross-category resource moves must validate the target module and insert only within the target page list",
+);
+assert.match(
+  resourceGateway,
+  /moveCloudCommunityResourceToModule[\s\S]*community:moveCommunityResourceToModule[\s\S]*targetModuleId[\s\S]*beforeResourceId/,
+  "web gateway must call the canonical cross-category resource move mutation",
+);
+assert.match(
+  resourceController,
+  /handleMoveCommunityResourceToModule[\s\S]*moveCloudCommunityResourceToModule[\s\S]*loadCommunityResources/,
+  "shared resource controller must expose cross-category moves through the canonical reload path",
+);
+assert.match(
+  resourceContracts,
+  /handleMoveResourceToModule: \([\s\S]*resourceId: string[\s\S]*targetModuleId: string \| null[\s\S]*beforeResourceId\?: string \| null/,
+  "resource panel action contract must include cross-category page moves",
+);
+assert.match(
+  webResourceController,
+  /handleMoveResourceToModule: handleMoveCommunityResourceToModule/,
+  "web resource UI controller must wire cross-category page moves into panel actions",
+);
+assert.match(
+  resourcesPanel,
+  /handleResourceDrop[\s\S]*draggedCategoryId !== categoryId[\s\S]*actions\.handleMoveResourceToModule\(draggedId, moduleId, resource\.id\)/,
+  "dropping a page on a page in another category must move it before that target page",
+);
+assert.match(
+  resourcesPanel,
+  /handleModuleDrop[\s\S]*draggedResourceId[\s\S]*actions\.handleMoveResourceToModule\(draggedResourceId, targetModuleId, null\)/,
+  "dropping a page on a category section must append it to that category",
 );
 assert.match(
   baseCss,

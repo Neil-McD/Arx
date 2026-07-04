@@ -528,7 +528,7 @@ function ResourceRailItem(props: {
       onMouseLeave={() => setIsMenuOpen(false)}
     >
       {canReorder ? (
-        <span className="knowledge-resource-drag-handle" title="Drag to reorder page" aria-hidden="true">
+        <span className="knowledge-resource-drag-handle" title="Drag to move page" aria-hidden="true">
           <GripVertical strokeWidth={1.9} />
         </span>
       ) : null}
@@ -974,6 +974,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleModuleDragOver = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
+    const draggedResourceId =
+      draggingResourceIdRef.current || draggingResourceId || event.dataTransfer.getData(RESOURCE_DRAG_MIME);
+    if (draggedResourceId) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      setDropTargetResourceId(null);
+      setDropTargetModuleId(module.id);
+      return;
+    }
+
     const draggedId = draggingModuleIdRef.current || draggingModuleId || event.dataTransfer.getData(MODULE_DRAG_MIME);
     if (!draggedId || module.is_virtual || module.id === draggedId) return;
     event.preventDefault();
@@ -983,6 +993,37 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   const handleModuleDrop = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
     event.preventDefault();
+    const draggedResourceId =
+      draggingResourceIdRef.current ||
+      draggingResourceId ||
+      event.dataTransfer.getData(RESOURCE_DRAG_MIME);
+    if (draggedResourceId) {
+      event.stopPropagation();
+      const draggedCategoryId =
+        draggingResourceModuleIdRef.current ||
+        draggingResourceModuleId ||
+        event.dataTransfer.getData(RESOURCE_CATEGORY_DRAG_MIME);
+      draggingResourceIdRef.current = null;
+      draggingResourceModuleIdRef.current = null;
+      setDraggingResourceId(null);
+      setDraggingResourceModuleId(null);
+      setDropTargetResourceId(null);
+      setDropTargetModuleId(null);
+      const targetModuleId = module.is_virtual || module.id === LEGACY_RESOURCE_MODULE_ID ? null : module.id;
+      if (draggedCategoryId === module.id) {
+        const reorderableIds = reorderableResourceIdsByModule.get(module.id) ?? [];
+        const fromIndex = reorderableIds.indexOf(draggedResourceId);
+        if (fromIndex >= 0 && fromIndex < reorderableIds.length - 1) {
+          const nextIds = reorderableIds.filter((id) => id !== draggedResourceId);
+          nextIds.push(draggedResourceId);
+          void actions.handleReorderResources(targetModuleId, nextIds);
+        }
+        return;
+      }
+      void actions.handleMoveResourceToModule(draggedResourceId, targetModuleId, null);
+      return;
+    }
+
     const draggedId =
       draggingModuleIdRef.current ||
       draggingModuleId ||
@@ -1015,8 +1056,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
     const categoryId = getResourceCategoryId(resource);
-    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
-    if (!canManageResources || getResourceRole(resource) !== "page" || reorderableIds.length < 2) {
+    if (!canManageResources || getResourceRole(resource) !== "page") {
       event.preventDefault();
       return;
     }
@@ -1032,22 +1072,20 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleResourceDragOver = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
-    const categoryId = getResourceCategoryId(resource);
     const draggedId =
       draggingResourceIdRef.current || draggingResourceId || event.dataTransfer.getData(RESOURCE_DRAG_MIME);
-    const draggedCategoryId =
-      draggingResourceModuleIdRef.current ||
-      draggingResourceModuleId ||
-      event.dataTransfer.getData(RESOURCE_CATEGORY_DRAG_MIME);
-    if (!draggedId || draggedCategoryId !== categoryId || resource.id === draggedId) return;
+    if (!draggedId || resource.id === draggedId) return;
     if (getResourceRole(resource) !== "page") return;
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
+    setDropTargetModuleId(null);
     setDropTargetResourceId(resource.id);
   };
 
   const handleResourceDrop = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
     event.preventDefault();
+    event.stopPropagation();
     const draggedId =
       draggingResourceIdRef.current ||
       draggingResourceId ||
@@ -1063,7 +1101,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setDraggingResourceId(null);
     setDraggingResourceModuleId(null);
     setDropTargetResourceId(null);
-    if (!draggedId || draggedCategoryId !== categoryId || draggedId === resource.id) return;
+    setDropTargetModuleId(null);
+    if (!draggedId || draggedId === resource.id) return;
+    if (getResourceRole(resource) !== "page") return;
+    const moduleId = categoryId === LEGACY_RESOURCE_MODULE_ID ? null : categoryId;
+    if (draggedCategoryId !== categoryId) {
+      void actions.handleMoveResourceToModule(draggedId, moduleId, resource.id);
+      return;
+    }
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
     const fromIndex = reorderableIds.indexOf(draggedId);
     const toIndex = reorderableIds.indexOf(resource.id);
@@ -1071,7 +1116,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     const nextIds = reorderableIds.slice();
     const [movedId] = nextIds.splice(fromIndex, 1);
     nextIds.splice(toIndex, 0, movedId);
-    const moduleId = categoryId === LEGACY_RESOURCE_MODULE_ID ? null : categoryId;
     void actions.handleReorderResources(moduleId, nextIds);
   };
 
@@ -1081,6 +1125,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setDraggingResourceId(null);
     setDraggingResourceModuleId(null);
     setDropTargetResourceId(null);
+    setDropTargetModuleId(null);
   };
 
   const handleMoveResource = (categoryId: string, resourceId: string, direction: ReorderDirection) => {
@@ -1143,8 +1188,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     const categoryId = getResourceCategoryId(resource);
     const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
     const resourceOrderIndex = reorderableIds.indexOf(resource.id);
+    const canMoveAcrossCategories = moduleViews.some((module) => module.id !== categoryId);
     const canReorderResource =
-      canManageResources && getResourceRole(resource) === "page" && reorderableIds.length > 1;
+      canManageResources &&
+      getResourceRole(resource) === "page" &&
+      (reorderableIds.length > 1 || canMoveAcrossCategories);
 
     return (
       <ResourceRailItem

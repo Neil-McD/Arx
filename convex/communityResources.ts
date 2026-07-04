@@ -10539,6 +10539,88 @@ export const reorderCommunityResources = mutation({
   },
 });
 
+export const moveCommunityResourceToModule = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    resourceId: v.id("communityResources"),
+    targetModuleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
+    beforeResourceId: v.optional(v.union(v.id("communityResources"), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+
+    const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+    if (!resource || String(resource.communityId) !== String(args.communityId)) {
+      throw new Error("community_resource_not_found");
+    }
+    if (normalizeResourceRole(resource.role) !== "page") {
+      throw new Error("community_resource_move_requires_page");
+    }
+
+    const targetModuleId = await requireValidResourceModule({
+      ctx,
+      communityId: args.communityId,
+      moduleId: normalizeOptionalModuleId(args.targetModuleId ?? null),
+    });
+    const targetModuleIdentity = resourceModuleIdentity(targetModuleId);
+    const resourceId = normalizeIdValue(resource._id);
+    const beforeResourceId = args.beforeResourceId ? normalizeIdValue(args.beforeResourceId) : null;
+
+    const rows = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceLike[];
+    const destinationRows = rows
+      .filter(
+        (row) =>
+          normalizeIdValue(row._id) !== resourceId &&
+          resourceModuleIdentity(row.moduleId) === targetModuleIdentity &&
+          normalizeResourceRole(row.role) === "page",
+      )
+      .sort(compareCommunityResources);
+
+    const insertIndex = beforeResourceId
+      ? destinationRows.findIndex((row) => normalizeIdValue(row._id) === beforeResourceId)
+      : -1;
+    if (beforeResourceId && insertIndex < 0) {
+      throw new Error("community_resource_move_before_not_found");
+    }
+
+    const orderedRows = destinationRows.slice();
+    orderedRows.splice(insertIndex >= 0 ? insertIndex : orderedRows.length, 0, resource);
+    const nowMs = Date.now();
+
+    await Promise.all(
+      orderedRows.map((row, index) => {
+        const rowId = normalizeIdValue(row._id);
+        return ctx.db.patch(row._id as any, {
+          ...(rowId === resourceId
+            ? targetModuleId
+              ? { moduleId: targetModuleId }
+              : { moduleId: undefined }
+            : {}),
+          sortOrder: (index + 1) * 1000,
+          updatedAt: nowMs,
+        });
+      }),
+    );
+
+    return { ok: true };
+  },
+});
+
 export const deleteCommunityResource = mutation({
   args: {
     userId: v.optional(v.id("users")),
