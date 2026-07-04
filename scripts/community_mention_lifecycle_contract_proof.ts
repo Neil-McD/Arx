@@ -117,13 +117,13 @@ assert.doesNotMatch(
 assert.match(
   interactions,
   /suppressPendingMentionsForInteractionSource[\s\S]*listMentionRowsForInteractionLifecycle/,
-  "interaction source mention settlement must use the full lifecycle mention row reader",
+  "interaction source mention settlement must use the lifecycle mention row reader",
 );
 
 assert.match(
   interactions,
-  /for \(const reply of replies\) \{[\s\S]*listMentionRowsForInteractionLifecycle\(\{[\s\S]*targetType: "reply"[\s\S]*targetId: reply\._id/,
-  "root deletion must settle full reply mention fanout, not only the reply projection bundle",
+  /MAX_INTERACTION_MENTION_LIFECYCLE_ROWS[\s\S]*\.take\(MAX_INTERACTION_MENTION_LIFECYCLE_ROWS\)/,
+  "source lifecycle scans must stay bounded so mass-mention fanout cannot make edit/delete unbounded",
 );
 
 assert.match(
@@ -151,8 +151,8 @@ assert.match(
 
 assert.match(
   interactions,
-  /suppressPendingMentionsForDeletedInteractionTarget[\s\S]*suppressPendingMentionsForInteractionSource[\s\S]*by_root_createdAt/,
-  "deleting an interaction root must also suppress pending mentions in child replies",
+  /suppressPendingMentionsForDeletedInteractionTarget[\s\S]*cancelEverybodyMentionBroadcastsForInteractionSource[\s\S]*includeReplySources: args\.targetType === "root"[\s\S]*by_root_createdAt/,
+  "deleting an interaction root must cancel source broadcasts and also suppress pending direct mentions in child replies",
 );
 
 assert.match(

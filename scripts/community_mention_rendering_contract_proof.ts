@@ -161,8 +161,8 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     menuSource,
-    /candidate\.kind === "role" \? \{ roleKey: candidate\.roleKey \?\? "everybody" \}/,
-    "committed @everybody mentions must preserve the role key for send serialization",
+    /candidate\.kind === "role"[\s\S]*roleKey: candidate\.roleKey \?\? "everybody"[\s\S]*emailMode: candidate\.emailMode \?\? null/,
+    "committed @everybody mentions must preserve the role key and email warning metadata for send serialization",
   );
 }
 
@@ -303,13 +303,18 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     senderSource,
-    /const hasCommittedEverybodyToken = mentionDraft\.some\([\s\S]*mention\.token\.trim\(\)\.toLowerCase\(\) === "@everybody"[\s\S]*textContainsMentionToken\(bodyToSend, mention\.token\)/,
-    "manual @everybody detection must not override a committed colliding user or agent token",
+    /const committedEverybodyMention = mentionDraft\.find\([\s\S]*mentionTokenIsEverybody\(mention\.token\)[\s\S]*textContainsMentionToken\(bodyToSend, mention\.token\)/,
+    "manual @everybody/@everyone detection must not override a committed colliding user or agent token",
   );
   assert.match(
     senderSource,
-    /current\.canMentionEverybodyRef\?\.current[\s\S]*!seenMentionKeys\.has\("role:everybody"\)[\s\S]*!hasCommittedEverybodyToken[\s\S]*textContainsMentionToken\(bodyToSend, "@everybody"\)[\s\S]*mentionsToSend\.push\(\{ roleKey: "everybody" \}\)/,
-    "owners/admins who literally type @everybody must send the canonical roleKey payload",
+    /current\.canMentionEverybodyRef\?\.current[\s\S]*!seenMentionKeys\.has\(`role:\$\{EVERYBODY_MENTION_ROLE_KEY\}`\)[\s\S]*!committedEverybodyMention[\s\S]*textContainsEverybodyMentionToken\(bodyToSend\)[\s\S]*mentionsToSend\.push\(\{ roleKey: EVERYBODY_MENTION_ROLE_KEY \}\)/,
+    "owners/admins who literally type @everybody or @everyone must send the canonical roleKey payload",
+  );
+  assert.match(
+    appSource,
+    /confirmEverybodyMentionSend[\s\S]*Unread members may also get an email after 15 minutes[\s\S]*once every 72 hours/,
+    "@everybody sends must show the mass-email warning before the message is committed",
   );
   assert.match(
     feedSource,

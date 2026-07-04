@@ -3,6 +3,10 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { v } from "convex/values";
 import { communityMembershipRowIsActive, normalizeIdValue } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
+import {
+  EVERYBODY_MENTION_ROLE_KEY,
+  mentionBroadcastAllowsEmail,
+} from "./communityMentionBroadcasts";
 
 // M2b: the mention email ping. In-app attention (the accent dot) is the
 // primary signal; email is the fallback for people who are not around. A
@@ -89,6 +93,7 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       mentionerName: string;
       snippet: string;
       urlPath: string;
+      emailSkipped?: boolean;
     }> = [];
     const suppressOnlyJob = (mention: Record<string, any>) => {
       jobs.push({
@@ -113,6 +118,35 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         continue;
       }
       if (Number(mention.createdAt ?? 0) > dueBefore) continue;
+      const isBroadcastCreatedMention =
+        mention.sourceBroadcastId &&
+        mention.mentionKind === "user" &&
+        mention.mentionedRoleKey === EVERYBODY_MENTION_ROLE_KEY &&
+        typeof mention.emailEligible === "boolean";
+      if (
+        isBroadcastCreatedMention &&
+        !(await mentionBroadcastAllowsEmail({
+          ctx,
+          broadcastId: mention.sourceBroadcastId,
+        }))
+      ) {
+        suppressOnlyJob(mention);
+        continue;
+      }
+      if (mention.emailEligible === false) {
+        jobs.push({
+          mentionId: normalizeIdValue(mention._id),
+          recipientUserId: normalizeIdValue(mention.mentionedUserId),
+          suppressed: false,
+          collapsed: false,
+          emailSkipped: true,
+          communityName: "",
+          mentionerName: "",
+          snippet: "",
+          urlPath: "/",
+        });
+        continue;
+      }
       const source = mention.replyId
         ? ((await ctx.db.get(mention.replyId)) as Record<string, any> | null)
         : mention.rootId
@@ -242,12 +276,19 @@ export const processPendingMentionEmailsInternal = internalAction({
       mentionerName: string;
       snippet: string;
       urlPath: string;
+      emailSkipped?: boolean;
     }>;
     let enqueued = 0;
     let suppressed = 0;
     let collapsed = 0;
+    let emailSkipped = 0;
     const updates: Array<{ mentionId: string; notifyState: "sent" | "suppressed" }> = [];
     for (const job of jobs) {
+      if (job.emailSkipped) {
+        emailSkipped += 1;
+        updates.push({ mentionId: job.mentionId, notifyState: "sent" });
+        continue;
+      }
       if (job.suppressed) {
         suppressed += 1;
         updates.push({ mentionId: job.mentionId, notifyState: "suppressed" });
@@ -280,6 +321,6 @@ export const processPendingMentionEmailsInternal = internalAction({
         updates: updates as any,
       });
     }
-    return { ok: true, considered: jobs.length, enqueued, suppressed, collapsed };
+    return { ok: true, considered: jobs.length, enqueued, suppressed, collapsed, emailSkipped };
   },
 });

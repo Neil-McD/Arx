@@ -21,7 +21,7 @@ assert.match(
   "only user avatars may take a generated fill — role/agent tiles are CSS-styled so the theme accent can take hold",
 );
 
-// --- Alias triggers: @all / @everyone / @here must surface everybody ---
+// --- Alias triggers: only aliases that serialize end-to-end should surface everybody ---
 assert.match(
   autocomplete,
   /candidate\.matchAliases\?\.some/,
@@ -29,15 +29,15 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /matchAliases: \["everyone", "all", "here"\]/,
-  "everybody must be triggerable by everyone / all / here, not just 'everybody'",
+  /matchAliases: \["everyone"\]/,
+  "everybody must advertise only aliases supported end-to-end",
 );
 
-// --- The subtitle shows the REAL member count, never a guess ---
+// --- The local fallback subtitle stays truthful: backend decides exact email mode ---
 assert.match(
   chatPanel,
-  /Notifies all \$\{everybodyMemberCount[\s\S]{0,40}\} members/,
-  "the everybody subtitle must render the authoritative member count",
+  /Notifies \$\{everybodyMemberCount\.toLocaleString\(\)\}; email mode checked on send/,
+  "the fallback everybody subtitle must not promise stale email semantics before backend hydration",
 );
 
 // --- The tile flows from the theme accent token (both platform themes) ---
@@ -47,4 +47,4 @@ assert.match(
   "the role tile must derive from --accent-gold so dark + polynet themes are handled without per-theme code",
 );
 
-console.log("everybody mention row contract proof passed: themed non-person tile, real count, alias triggers.");
+console.log("everybody mention row contract proof passed: themed non-person tile, real count, truthful aliases.");

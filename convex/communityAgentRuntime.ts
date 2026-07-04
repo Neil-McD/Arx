@@ -82,6 +82,9 @@ type CommunityAgentRunView = {
   stop_reason: string | null;
   tool_step_count: number;
   candidate_proposal_ids: string[];
+  accepted_change_request_ids: string[];
+  rejected_change_request_ids: string[];
+  applied_change_request_ids: string[];
   error_code: string | null;
   error_message: string | null;
   started_at: string;
@@ -97,6 +100,9 @@ type CommunityAgentRuntimeResult = {
   stop_reason: string;
   tool_step_count: number;
   candidate_proposal_ids: string[];
+  accepted_change_request_ids: string[];
+  rejected_change_request_ids: string[];
+  applied_change_request_ids: string[];
 };
 
 type CommunityAgentCreateRunResult = {
@@ -177,6 +183,32 @@ function collectCandidateProposalIdFromToolOutput(outputText: string, out: Set<s
   const parsed = safeParseObject(outputText);
   const id = boundedText(parsed?.result?.proposal?.id, 128);
   if (id) out.add(id);
+}
+
+function collectWriteActionIdsFromToolOutput(args: {
+  outputText: string;
+  candidateProposalIds: Set<string>;
+  acceptedChangeRequestIds: Set<string>;
+  rejectedChangeRequestIds: Set<string>;
+  appliedChangeRequestIds: Set<string>;
+}): void {
+  const parsed = safeParseObject(args.outputText);
+  const operation = boundedText(parsed?.operation, 120);
+  if (operation === "propose_directory_candidate_from_digest_item") {
+    collectCandidateProposalIdFromToolOutput(args.outputText, args.candidateProposalIds);
+    return;
+  }
+  const id = boundedText(parsed?.result?.id, 128);
+  if (!id) return;
+  if (operation === "decide_change_request") {
+    const status = boundedText(parsed?.result?.status, 40);
+    if (status === "accepted") args.acceptedChangeRequestIds.add(id);
+    if (status === "rejected") args.rejectedChangeRequestIds.add(id);
+    return;
+  }
+  if (operation === "apply_accepted_change_request") {
+    args.appliedChangeRequestIds.add(id);
+  }
 }
 
 function isCommunityAgentToolName(value: unknown): value is CommunityAgentToolName {
@@ -411,6 +443,15 @@ function mapRun(row: Record<string, any>): CommunityAgentRunView {
     stop_reason: row.stopReason ?? null,
     tool_step_count: row.toolStepCount,
     candidate_proposal_ids: Array.isArray(row.candidateProposalIds) ? row.candidateProposalIds.map(String) : [],
+    accepted_change_request_ids: Array.isArray(row.acceptedChangeRequestIds)
+      ? row.acceptedChangeRequestIds.map(String)
+      : [],
+    rejected_change_request_ids: Array.isArray(row.rejectedChangeRequestIds)
+      ? row.rejectedChangeRequestIds.map(String)
+      : [],
+    applied_change_request_ids: Array.isArray(row.appliedChangeRequestIds)
+      ? row.appliedChangeRequestIds.map(String)
+      : [],
     error_code: row.errorCode ?? null,
     error_message: row.errorMessage ?? null,
     started_at: toIsoString(row.startedAt),
@@ -607,6 +648,9 @@ export const createCommunityAgentRunInternal = internalMutation({
       status: "running",
       toolStepCount: 0,
       candidateProposalIds: [],
+      acceptedChangeRequestIds: [],
+      rejectedChangeRequestIds: [],
+      appliedChangeRequestIds: [],
       startedAt: nowMs,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -657,6 +701,9 @@ export const recordCommunityAgentSkippedRunInternal = internalMutation({
       stopReason: wakeReason,
       toolStepCount: 0,
       candidateProposalIds: [],
+      acceptedChangeRequestIds: [],
+      rejectedChangeRequestIds: [],
+      appliedChangeRequestIds: [],
       startedAt: nowMs,
       finishedAt: nowMs,
       createdAt: nowMs,
@@ -675,6 +722,9 @@ export const finishCommunityAgentRunInternal = internalMutation({
     stopReason: v.optional(v.string()),
     toolStepCount: v.number(),
     candidateProposalIds: v.array(v.string()),
+    acceptedChangeRequestIds: v.array(v.string()),
+    rejectedChangeRequestIds: v.array(v.string()),
+    appliedChangeRequestIds: v.array(v.string()),
     errorCode: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     nowMs: v.optional(v.number()),
@@ -690,6 +740,18 @@ export const finishCommunityAgentRunInternal = internalMutation({
       stopReason: boundedText(args.stopReason, 120) || undefined,
       toolStepCount: Math.max(0, Math.floor(args.toolStepCount)),
       candidateProposalIds: args.candidateProposalIds
+        .map((id) => boundedText(id, 128))
+        .filter(Boolean)
+        .slice(0, 20),
+      acceptedChangeRequestIds: args.acceptedChangeRequestIds
+        .map((id) => boundedText(id, 128))
+        .filter(Boolean)
+        .slice(0, 20),
+      rejectedChangeRequestIds: args.rejectedChangeRequestIds
+        .map((id) => boundedText(id, 128))
+        .filter(Boolean)
+        .slice(0, 20),
+      appliedChangeRequestIds: args.appliedChangeRequestIds
         .map((id) => boundedText(id, 128))
         .filter(Boolean)
         .slice(0, 20),
@@ -798,6 +860,9 @@ export const runCommunityAgentLoopInternal = internalAction({
         stop_reason: createdRun.skipped_reason ?? "running_run_exists",
         tool_step_count: createdRun.run.tool_step_count,
         candidate_proposal_ids: createdRun.run.candidate_proposal_ids,
+        accepted_change_request_ids: createdRun.run.accepted_change_request_ids,
+        rejected_change_request_ids: createdRun.run.rejected_change_request_ids,
+        applied_change_request_ids: createdRun.run.applied_change_request_ids,
       };
     }
     const runId = createdRun.run.id;
@@ -808,6 +873,9 @@ export const runCommunityAgentLoopInternal = internalAction({
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
     };
     const candidateProposalIds = new Set<string>();
+    const acceptedChangeRequestIds = new Set<string>();
+    const rejectedChangeRequestIds = new Set<string>();
+    const appliedChangeRequestIds = new Set<string>();
     // Sequential run-event log. Persistence failures are swallowed: the audit
     // trail must never be the reason a memory run dies.
     let eventSeq = 0;
@@ -944,7 +1012,13 @@ export const runCommunityAgentLoopInternal = internalAction({
           }),
         onToolStepFinish: async ({ step, toolResult }) => {
           if (step.toolName === "write" && toolResult.status === "ok") {
-            collectCandidateProposalIdFromToolOutput(toolResult.outputText, candidateProposalIds);
+            collectWriteActionIdsFromToolOutput({
+              outputText: toolResult.outputText,
+              candidateProposalIds,
+              acceptedChangeRequestIds,
+              rejectedChangeRequestIds,
+              appliedChangeRequestIds,
+            });
           }
           await emitRunEvents([
             {
@@ -988,6 +1062,9 @@ export const runCommunityAgentLoopInternal = internalAction({
         stopReason: result.stopReason,
         toolStepCount: result.stepCount,
         candidateProposalIds: [...candidateProposalIds],
+        acceptedChangeRequestIds: [...acceptedChangeRequestIds],
+        rejectedChangeRequestIds: [...rejectedChangeRequestIds],
+        appliedChangeRequestIds: [...appliedChangeRequestIds],
         errorCode: result.ok ? undefined : result.code,
         errorMessage: result.ok ? undefined : result.message,
       });
@@ -998,6 +1075,9 @@ export const runCommunityAgentLoopInternal = internalAction({
         stop_reason: result.stopReason,
         tool_step_count: result.stepCount,
         candidate_proposal_ids: [...candidateProposalIds],
+        accepted_change_request_ids: [...acceptedChangeRequestIds],
+        rejected_change_request_ids: [...rejectedChangeRequestIds],
+        applied_change_request_ids: [...appliedChangeRequestIds],
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1010,6 +1090,9 @@ export const runCommunityAgentLoopInternal = internalAction({
         stopReason: "runtime_exception",
         toolStepCount: 0,
         candidateProposalIds: [...candidateProposalIds],
+        acceptedChangeRequestIds: [...acceptedChangeRequestIds],
+        rejectedChangeRequestIds: [...rejectedChangeRequestIds],
+        appliedChangeRequestIds: [...appliedChangeRequestIds],
         errorCode: "community_agent_runtime_exception",
         errorMessage: message,
       });
@@ -1020,6 +1103,9 @@ export const runCommunityAgentLoopInternal = internalAction({
         stop_reason: "runtime_exception",
         tool_step_count: 0,
         candidate_proposal_ids: [...candidateProposalIds],
+        accepted_change_request_ids: [...acceptedChangeRequestIds],
+        rejected_change_request_ids: [...rejectedChangeRequestIds],
+        applied_change_request_ids: [...appliedChangeRequestIds],
       };
     }
   },
@@ -1053,7 +1139,9 @@ export const runCommunityAgentCycleInternal = internalAction({
       stop_reason: string | null;
       tool_step_count: number;
       candidate_proposal_ids: string[];
-      auto_apply?: unknown;
+      accepted_change_request_ids: string[];
+      rejected_change_request_ids: string[];
+      applied_change_request_ids: string[];
     }> = [];
     let endedEarly: string | null = null;
     for (const roleKey of COMMUNITY_AGENT_CYCLE_ROLES) {
@@ -1072,6 +1160,9 @@ export const runCommunityAgentCycleInternal = internalAction({
         stop_reason: result.stop_reason ?? null,
         tool_step_count: result.tool_step_count,
         candidate_proposal_ids: result.candidate_proposal_ids,
+        accepted_change_request_ids: result.accepted_change_request_ids,
+        rejected_change_request_ids: result.rejected_change_request_ids,
+        applied_change_request_ids: result.applied_change_request_ids,
       });
       // Budget exhaustion is a soft end: the role's notes are already banked in
       // the ledger, so the next role should judge what exists. Only hard
@@ -1079,25 +1170,6 @@ export const runCommunityAgentCycleInternal = internalAction({
       if (!result.ok && result.stop_reason !== "tool_budget_exhausted") {
         endedEarly = `${roleKey}_failed`;
         break;
-      }
-      // Steward auto-apply: only THIS cycle's own proposals — never a sweep of
-      // older pending candidates (those stay for owner curation).
-      if (roleKey === "steward" && result.candidate_proposal_ids.length > 0) {
-        try {
-          const outcome = await ctx.runMutation(internalRefs.communityIntelligenceDirectory.autoApplyCommunityAgentProposalsInternal as any, {
-            communityId: args.communityId,
-            changeRequestIds: result.candidate_proposal_ids,
-          });
-          roleResults[roleResults.length - 1] = {
-            ...roleResults[roleResults.length - 1]!,
-            auto_apply: outcome,
-          } as (typeof roleResults)[number];
-        } catch (error) {
-          roleResults[roleResults.length - 1] = {
-            ...roleResults[roleResults.length - 1]!,
-            auto_apply: { ok: false, error: error instanceof Error ? error.message : String(error) },
-          } as (typeof roleResults)[number];
-        }
       }
       if (roleKey === "observer") {
         let notes: Array<{ content: string }> = [];

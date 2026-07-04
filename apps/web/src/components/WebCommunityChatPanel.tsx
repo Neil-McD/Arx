@@ -182,6 +182,10 @@ function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): Menti
     kind === "role" ? "Everybody" : kind === "community_agent" ? "Community agent" : ""
   );
   if (!displayName) return null;
+  const emailMode =
+    row.email_mode === "in_app_only" || row.email_mode === "in_app_and_email"
+      ? row.email_mode
+      : null;
   return {
     userId,
     displayName,
@@ -189,6 +193,7 @@ function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): Menti
     avatarUrl: String(row.avatar_url ?? "").trim() || null,
     kind,
     ...(kind === "role" ? { roleKey: "everybody" as const } : {}),
+    ...(kind === "role" ? { emailMode, emailCooldownUntil: row.email_cooldown_until ?? null } : {}),
     ...(row.subtitle ? { subtitle: row.subtitle } : {}),
     ...(Array.isArray(row.match_aliases) ? { matchAliases: row.match_aliases } : {}),
   };
@@ -512,9 +517,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           roleKey: "everybody" as const,
           subtitle:
             typeof everybodyMemberCount === "number" && everybodyMemberCount > 0
-              ? `Notifies all ${everybodyMemberCount.toLocaleString()} members`
-              : "Notify the whole community",
-          matchAliases: ["everyone", "all", "here"],
+              ? `Notifies ${everybodyMemberCount.toLocaleString()}; email mode checked on send`
+              : "Notifies everyone; email mode checked on send",
+          matchAliases: ["everyone"],
         }
       : null;
     // The community agent is taggable inside its own community, pinned first and

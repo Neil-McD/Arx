@@ -29,6 +29,8 @@ export type CloudCommunityMentionCandidateRow = {
   agent_key?: string | null;
   role_key?: "everybody" | string | null;
   subtitle?: string | null;
+  email_mode?: "in_app_only" | "in_app_and_email" | string | null;
+  email_cooldown_until?: string | null;
   match_aliases?: string[] | null;
 };
 

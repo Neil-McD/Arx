@@ -136,24 +136,41 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
       properties: {
         operation: {
           type: "string",
-          enum: ["propose_directory_candidate_from_digest_item"],
+          enum: [
+            "propose_directory_candidate_from_digest_item",
+            "decide_change_request",
+            "apply_accepted_change_request",
+          ],
         },
         payload: {
           type: "object",
           additionalProperties: false,
-          required: ["digestId", "itemIndex", "nodeType"],
+          required: ["digestId", "itemIndex", "nodeType", "changeRequestId", "decision", "reason"],
           properties: {
             digestId: {
-              type: "string",
+              type: ["string", "null"],
               minLength: 1,
               maxLength: 128,
             },
             itemIndex: {
-              type: "integer",
+              type: ["integer", "null"],
               minimum: 0,
               maximum: 100,
             },
             nodeType: NODE_TYPE_SCHEMA,
+            changeRequestId: {
+              type: ["string", "null"],
+              minLength: 1,
+              maxLength: 128,
+            },
+            decision: {
+              type: ["string", "null"],
+              enum: ["accepted", "rejected", null],
+            },
+            reason: {
+              type: ["string", "null"],
+              maxLength: 2000,
+            },
           },
         },
       },
@@ -198,6 +215,14 @@ function normalizeNodeType(raw: unknown): string | undefined {
   return value;
 }
 
+function normalizeDecision(raw: unknown): "accepted" | "rejected" {
+  const value = boundedString(raw, 40);
+  if (value !== "accepted" && value !== "rejected") {
+    throw new Error("community_agent_tool_decision_invalid");
+  }
+  return value;
+}
+
 // Role-filtered builder: pass a role's tool allowlist and only those schemas
 // are sent to the model. Authority by absence — a role that cannot write never
 // sees the write tool at all. No argument keeps the full legacy set.
@@ -237,10 +262,35 @@ export function normalizeCommunityAgentToolArguments(
   }
   if (toolName === "write") {
     const operation = requireNonEmptyString(args.operation, "operation", 120);
-    if (operation !== "propose_directory_candidate_from_digest_item") {
+    if (
+      operation !== "propose_directory_candidate_from_digest_item" &&
+      operation !== "decide_change_request" &&
+      operation !== "apply_accepted_change_request"
+    ) {
       throw new Error("community_agent_tool_operation_invalid");
     }
     const payload = payloadObject(args.payload);
+    if (operation === "decide_change_request") {
+      const reason = boundedString(payload.reason, 2000);
+      return {
+        operation,
+        payload: {
+          changeRequestId: requireNonEmptyString(payload.changeRequestId, "change_request_id", 128),
+          decision: normalizeDecision(payload.decision),
+          ...(reason ? { reason } : {}),
+        },
+      };
+    }
+    if (operation === "apply_accepted_change_request") {
+      const reason = boundedString(payload.reason, 2000);
+      return {
+        operation,
+        payload: {
+          changeRequestId: requireNonEmptyString(payload.changeRequestId, "change_request_id", 128),
+          ...(reason ? { reason } : {}),
+        },
+      };
+    }
     const itemIndex = Math.floor(Number(payload.itemIndex));
     if (!Number.isFinite(itemIndex) || itemIndex < 0 || itemIndex > 100) {
       throw new Error("community_agent_tool_item_index_invalid");

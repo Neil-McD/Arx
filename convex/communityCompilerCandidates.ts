@@ -469,6 +469,8 @@ function buildCandidatePayload(args: {
   itemIndex: number;
   nodeType: NodeType;
   sourceTraceResolution: SourceTraceResolution;
+  proposedByCommunityAgentRunId?: string;
+  proposedByCommunityAgentHeartbeatId?: string;
 }) {
   const sourceTraceIds = args.sourceTraceResolution.sourceTraceIds;
   const needsTraceResolution =
@@ -492,6 +494,12 @@ function buildCandidatePayload(args: {
     compilerDigestDedupeKey: args.digest.dedupeKey,
     digestItemIndex: args.itemIndex,
     digestItemCategory: args.item.category,
+    ...(args.proposedByCommunityAgentRunId
+      ? { proposedByCommunityAgentRunId: args.proposedByCommunityAgentRunId }
+      : {}),
+    ...(args.proposedByCommunityAgentHeartbeatId
+      ? { proposedByCommunityAgentHeartbeatId: args.proposedByCommunityAgentHeartbeatId }
+      : {}),
     digestWindowStartedAt: args.digest.windowStartedAt,
     digestWindowEndedAt: args.digest.windowEndedAt,
     digestSourceTypes: args.item.sourceTypes ?? [],
@@ -608,6 +616,8 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
   nodeType?: NodeType;
   actorType?: "compiler" | "agent";
   actorAgentKey?: string;
+  proposedByCommunityAgentRunId?: string;
+  proposedByCommunityAgentHeartbeatId?: string;
   nowMs?: number;
 }) {
   const digest = await getDigestOrThrow(args.ctx, args.digestId);
@@ -646,6 +656,8 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
     itemIndex,
     nodeType,
     sourceTraceResolution,
+    proposedByCommunityAgentRunId: args.proposedByCommunityAgentRunId,
+    proposedByCommunityAgentHeartbeatId: args.proposedByCommunityAgentHeartbeatId,
   });
   const proposal = await createTrustedCommunityIntelligenceChangeRequest({
     ctx: args.ctx,

@@ -11,6 +11,14 @@ import { resolveAuthSubject } from "./authSession";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { textContainsMentionToken } from "./communityMentionRendering";
 
+type EverybodyMentionEmailMode = "in_app_only" | "in_app_and_email";
+
+type EverybodyMentionSendConfirmation = {
+  text: string;
+  emailMode: EverybodyMentionEmailMode | null;
+  emailCooldownUntil: string | null;
+};
+
 type SessionLike = {
   user: { id: string };
 };
@@ -49,6 +57,8 @@ export type CommunityMessageSendDraft<
     kind?: "user" | "community_agent" | "role";
     agentKey?: string;
     roleKey?: "everybody";
+    emailMode?: EverybodyMentionEmailMode | null;
+    emailCooldownUntil?: string | null;
   }[];
   replyingToMessage?: CommunityReplyTarget<MessageT> | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
@@ -114,6 +124,7 @@ type UseCommunityChatMutationControllerArgs<
   parseReplyPrefix: (body: string) => ReplyPrefixLike | null;
   buildReplyPrefix: (sender: string, preview: string) => string;
   beforeSendValidate?: (text: string) => Promise<string | null>;
+  confirmEverybodyMentionSend?: (confirmation: EverybodyMentionSendConfirmation) => Promise<boolean> | boolean;
   prepareAttachmentsForSend?: (
     attachments: AttachmentT[],
     session: SessionT,
@@ -138,6 +149,8 @@ type UseCommunityChatMutationControllerArgs<
     kind?: "user" | "community_agent" | "role";
     agentKey?: string;
     roleKey?: "everybody";
+    emailMode?: EverybodyMentionEmailMode | null;
+    emailCooldownUntil?: string | null;
   }[];
   communityMessages: MessageT[];
   messageReactions: ReactionT[];
@@ -157,6 +170,18 @@ type UseCommunityChatMutationControllerArgs<
   setIsSendingCommunityMessage: Dispatch<SetStateAction<boolean>>;
   setCommunityChatError: Dispatch<SetStateAction<string | null>>;
 };
+
+const EVERYBODY_MENTION_ROLE_KEY = "everybody";
+const EVERYBODY_MENTION_TOKENS = ["@everybody", "@everyone"] as const;
+
+function mentionTokenIsEverybody(rawToken: unknown): boolean {
+  const token = String(rawToken ?? "").trim().toLowerCase();
+  return EVERYBODY_MENTION_TOKENS.some((candidate) => token === candidate);
+}
+
+function textContainsEverybodyMentionToken(text: string): boolean {
+  return EVERYBODY_MENTION_TOKENS.some((token) => textContainsMentionToken(text, token));
+}
 
 function isProfileSetupRequiredError(error: unknown): boolean {
   const message = typeof error === "string"
@@ -461,16 +486,19 @@ export function useCommunityChatMutationController<
       if (!mention.userId) continue;
       mentionsToSend.push({ userId: mention.userId });
     }
-    const hasCommittedEverybodyToken = mentionDraft.some(
-      (mention) => mention.token.trim().toLowerCase() === "@everybody" && textContainsMentionToken(bodyToSend, mention.token),
+    const committedEverybodyMention = mentionDraft.find(
+      (mention) =>
+        (mention.kind === "role" || mentionTokenIsEverybody(mention.token)) &&
+        (mention.roleKey ?? EVERYBODY_MENTION_ROLE_KEY) === EVERYBODY_MENTION_ROLE_KEY &&
+        textContainsMentionToken(bodyToSend, mention.token),
     );
     if (
       current.canMentionEverybodyRef?.current &&
-      !seenMentionKeys.has("role:everybody") &&
-      !hasCommittedEverybodyToken &&
-      textContainsMentionToken(bodyToSend, "@everybody")
+      !seenMentionKeys.has(`role:${EVERYBODY_MENTION_ROLE_KEY}`) &&
+      !committedEverybodyMention &&
+      textContainsEverybodyMentionToken(bodyToSend)
     ) {
-      mentionsToSend.push({ roleKey: "everybody" });
+      mentionsToSend.push({ roleKey: EVERYBODY_MENTION_ROLE_KEY });
     }
 
     if (current.beforeSendValidate) {
@@ -479,6 +507,17 @@ export function useCommunityChatMutationController<
         current.setCommunityChatError(validationError);
         return;
       }
+    }
+    if (
+      mentionsToSend.some((mention) => mention.roleKey === EVERYBODY_MENTION_ROLE_KEY) &&
+      current.confirmEverybodyMentionSend
+    ) {
+      const confirmed = await current.confirmEverybodyMentionSend({
+        text: bodyToSend,
+        emailMode: committedEverybodyMention?.emailMode ?? null,
+        emailCooldownUntil: committedEverybodyMention?.emailCooldownUntil ?? null,
+      });
+      if (!confirmed) return;
     }
 
     const optimisticId = `pending-${Date.now()}`;

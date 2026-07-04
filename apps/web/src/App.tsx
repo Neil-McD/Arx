@@ -3199,6 +3199,16 @@ export default function App() {
       }
       return null;
     },
+    confirmEverybodyMentionSend: async ({ emailMode }) => {
+      if (typeof window === "undefined") return true;
+      const message =
+        emailMode === "in_app_only"
+          ? "This @everybody mention will notify members in app only. The email blast is on cooldown."
+          : emailMode === "in_app_and_email"
+            ? "This @everybody mention will notify members in app. Unread members may also get an email after 15 minutes. Email blasts are limited to once every 72 hours."
+            : "This @everybody mention will notify members in app. If the email blast is available, unread members may also get an email after 15 minutes.";
+      return window.confirm(message);
+    },
     onProfileSetupRequired: openProfileSetup,
     prepareAttachmentsForSend: prepareCommunityAttachmentsForSend,
     serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,

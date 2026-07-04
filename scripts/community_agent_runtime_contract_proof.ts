@@ -28,7 +28,7 @@ assert.doesNotMatch(runtime, /agentKey: v\.(?:optional\()?string/, "runtime acti
 
 assert.match(
   schema,
-  /communityAgentRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*triggerType: v\.union\([\s\S]*v\.literal\("manual_internal"\)[\s\S]*v\.literal\("heartbeat"\)[\s\S]*v\.literal\("event"\)[\s\S]*heartbeatId: v\.optional\(v\.string\(\)\)[\s\S]*sponsorUserId: v\.id\("users"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("ok"\)[\s\S]*v\.literal\("error"\)[\s\S]*wakeReason: v\.optional\(v\.string\(\)\)[\s\S]*wakeEvidence: v\.optional\(v\.object[\s\S]*candidateProposalIds: v\.array\(v\.string\(\)\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
+  /communityAgentRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*triggerType: v\.union\([\s\S]*v\.literal\("manual_internal"\)[\s\S]*v\.literal\("heartbeat"\)[\s\S]*v\.literal\("event"\)[\s\S]*heartbeatId: v\.optional\(v\.string\(\)\)[\s\S]*sponsorUserId: v\.id\("users"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("ok"\)[\s\S]*v\.literal\("error"\)[\s\S]*wakeReason: v\.optional\(v\.string\(\)\)[\s\S]*wakeEvidence: v\.optional\(v\.object[\s\S]*candidateProposalIds: v\.array\(v\.string\(\)\)[\s\S]*acceptedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*rejectedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*appliedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
   "schema should include a single-community agent run ledger",
 );
 
@@ -72,7 +72,11 @@ assert.match(
   /buildCommunityAgentFunctionTools\([\s\S]*toolNames\?: readonly CommunityAgentToolName\[\]/,
   "tool builder should accept a role allowlist (authority by absence)",
 );
-assert.match(protocol, /operation:[\s\S]*enum: \["propose_directory_candidate_from_digest_item"\]/);
+assert.match(
+  protocol,
+  /operation:[\s\S]*enum: \[[\s\S]*"propose_directory_candidate_from_digest_item"[\s\S]*"decide_change_request"[\s\S]*"apply_accepted_change_request"/,
+  "write tool should support proposal, decision, and apply as operation values",
+);
 assert.doesNotMatch(protocol, /activity|communityId|authSubject|userId|crossCommunity|globalMemory/);
 
 assert.match(
@@ -96,7 +100,7 @@ assert.doesNotMatch(runtime, /listThreadMessages|listCommunityAiFeedBundle|listC
 
 assert.match(
   filesystem,
-  /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*operation: v\.union\(v\.literal\("propose_directory_candidate_from_digest_item"\)\)[\s\S]*proposeCommunityIntelligenceFromDigestItemCore/,
+  /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*operation: v\.union\([\s\S]*v\.literal\("propose_directory_candidate_from_digest_item"\)[\s\S]*v\.literal\("decide_change_request"\)[\s\S]*v\.literal\("apply_accepted_change_request"\)[\s\S]*proposeCommunityIntelligenceFromDigestItemCore/,
   "runtime write tool should land on the existing filesystem airlock",
 );
 assert.match(
@@ -172,45 +176,34 @@ assert.match(
   "a woken heartbeat should run the role cycle, not a single pass",
 );
 
-// Steward auto-apply policy (Amendment v1.1): the current cycle's own proposals
-// land at promising through the trusted airlock cores with an agent actor —
-// capped, title-deduped, visibility gated by privacy risk. Never a sweep of
-// older pending candidates.
+// Airlock decision ledger: successful write calls are collected into compact
+// action id arrays. Applying a change request is explicit filesystem behavior,
+// not an out-of-band same-cycle auto-apply helper.
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 assert.match(
-  directory,
-  /autoApplyCommunityAgentProposalsInternal = internalMutation/,
-  "steward auto-apply must be an internal mutation",
-);
-assert.match(
-  directory,
-  /STEWARD_AUTO_APPLY_LANDING_STATUS = "promising"/,
-  "agent proposals land at promising, never higher",
-);
-assert.match(
-  directory,
-  /STEWARD_AUTO_APPLY_MAX_PER_CYCLE = 3/,
-  "auto-apply is capped per cycle",
-);
-assert.match(
-  directory,
-  /privacyRisk <= STEWARD_AUTO_APPLY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK[\s\S]*"community"[\s\S]*"admin"/,
-  "privacy risk gates the visibility ceiling",
-);
-assert.match(
-  directory,
-  /duplicate_title/,
-  "auto-apply must dedupe against existing node titles",
-);
-assert.match(
-  directory,
-  /normalizePolicyDecisionActor\(\{[\s\S]*actorType: "agent",[\s\S]*actorAgentKey: "community_agent",/,
-  "auto-apply decisions are attributed to the community agent actor",
+  runtime,
+  /function collectWriteActionIdsFromToolOutput[\s\S]*propose_directory_candidate_from_digest_item[\s\S]*decide_change_request[\s\S]*acceptedChangeRequestIds[\s\S]*rejectedChangeRequestIds[\s\S]*apply_accepted_change_request[\s\S]*appliedChangeRequestIds/,
+  "runtime should collect proposal, decision, and apply ids from successful write results",
 );
 assert.match(
   runtime,
-  /roleKey === "steward" && result\.candidate_proposal_ids\.length > 0[\s\S]*autoApplyCommunityAgentProposalsInternal[\s\S]*changeRequestIds: result\.candidate_proposal_ids/,
-  "the cycle auto-applies only the steward's own proposals",
+  /acceptedChangeRequestIds: \[\][\s\S]*rejectedChangeRequestIds: \[\][\s\S]*appliedChangeRequestIds: \[\]/,
+  "new and skipped runs should initialize all action arrays",
+);
+assert.match(
+  runtime,
+  /finishCommunityAgentRunInternal[\s\S]*acceptedChangeRequestIds: v\.array\(v\.string\(\)\)[\s\S]*rejectedChangeRequestIds: v\.array\(v\.string\(\)\)[\s\S]*appliedChangeRequestIds: v\.array\(v\.string\(\)\)/,
+  "finished runs should persist accepted/rejected/applied ids",
+);
+assert.match(
+  runtime,
+  /roleResults[\s\S]*accepted_change_request_ids: string\[\][\s\S]*rejected_change_request_ids: string\[\][\s\S]*applied_change_request_ids: string\[\]/,
+  "cycle results should expose action arrays per role",
+);
+assert.doesNotMatch(
+  `${runtime}\n${directory}`,
+  /autoApplyCommunityAgentProposalsInternal|STEWARD_AUTO_APPLY|steward_auto_apply/,
+  "same-cycle auto-apply should not remain in runtime or directory code",
 );
 
 // Ignition (Amendment v1.1): the 6h sweep is triple-gated before spend —

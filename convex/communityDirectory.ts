@@ -17,6 +17,7 @@ import {
   resolveUserProfileDisplayProjection,
   resolveUserProfileDisplayProjectionForUser,
 } from "./userProfileProjection";
+import { readEverybodyMentionEmailAvailability } from "./communityMentionBroadcasts";
 
 const COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE = 25;
 const COMMUNITY_DIRECTORY_MAX_PAGE_SIZE = 100;
@@ -24,7 +25,7 @@ const COMMUNITY_MENTION_SEARCH_DEFAULT_LIMIT = 8;
 const COMMUNITY_MENTION_SEARCH_MAX_LIMIT = 12;
 const COMMUNITY_MENTION_SEARCH_MAX_RAW_QUERY_CHARS = 128;
 const COMMUNITY_MENTION_SEARCH_MAX_QUERY_CHARS = 40;
-const EVERYBODY_MENTION_ALIASES = ["everybody", "everyone", "all", "here"];
+const EVERYBODY_MENTION_ALIASES = ["everybody", "everyone"];
 
 type CommunityMentionUserRow = {
   _id: any;
@@ -216,7 +217,7 @@ export const searchCommunityMentionCandidates = query({
       }
     })();
 
-    const pushEverybodyCandidate = (memberCount: number) => {
+    const pushEverybodyCandidate = async (memberCount: number) => {
       if (!canMentionEverybody || out.length >= limit) return;
       if (
         queryText &&
@@ -224,6 +225,21 @@ export const searchCommunityMentionCandidates = query({
       ) {
         return;
       }
+      const emailAvailability = await readEverybodyMentionEmailAvailability({
+        ctx,
+        communityId: args.communityId,
+      });
+      const memberLabel = memberCount > 0
+        ? memberCount.toLocaleString()
+        : "the whole community";
+      const subtitle =
+        emailAvailability.emailMode === "in_app_and_email"
+          ? memberCount > 0
+            ? `Notifies ${memberLabel} in-app; emails unread members after 15 min`
+            : "Notifies in-app; emails unread members after 15 min"
+          : memberCount > 0
+            ? `Notifies ${memberLabel} in-app; email blast on cooldown`
+            : "Notifies in-app; email blast on cooldown";
       out.push({
         kind: "role",
         community_id: String(community._id),
@@ -232,9 +248,11 @@ export const searchCommunityMentionCandidates = query({
         handle: "everybody",
         avatar_url: null,
         role_key: "everybody",
-        subtitle: memberCount > 0
-          ? `Notifies all ${memberCount.toLocaleString()} members`
-          : "Notify the whole community",
+        subtitle,
+        email_mode: emailAvailability.emailMode,
+        email_cooldown_until: emailAvailability.cooldownUntil
+          ? toIsoString(emailAvailability.cooldownUntil)
+          : null,
         match_aliases: EVERYBODY_MENTION_ALIASES.filter((alias) => alias !== "everybody"),
       });
     };
@@ -246,7 +264,7 @@ export const searchCommunityMentionCandidates = query({
       communityId: args.communityId,
       community,
     });
-    pushEverybodyCandidate(countCanonicalCommunityMembersFromRows(canonicalRows.rows));
+    await pushEverybodyCandidate(countCanonicalCommunityMembersFromRows(canonicalRows.rows));
 
     const addUserCandidate = async (targetUserId: any, role: string) => {
       if (out.length >= limit) return;

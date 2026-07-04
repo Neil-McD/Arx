@@ -1685,6 +1685,7 @@ export default defineSchema({
     communityId: v.id("communities"),
     rootId: v.optional(v.id("communityInteractionRoots")),
     replyId: v.optional(v.id("communityInteractionReplies")),
+    sourceBroadcastId: v.optional(v.id("communityMentionBroadcasts")),
     mentionKind: v.union(
       v.literal("user"),
       v.literal("personal_agent"),
@@ -1694,6 +1695,8 @@ export default defineSchema({
     mentionedUserId: v.optional(v.id("users")),
     mentionedAgentKey: v.optional(v.string()),
     mentionedRoleKey: v.optional(v.string()),
+    // Absent means email-eligible for historical/direct mention rows.
+    emailEligible: v.optional(v.boolean()),
     notifyState: v.union(
       v.literal("pending"),
       v.literal("sent"),
@@ -1705,6 +1708,8 @@ export default defineSchema({
   })
     .index("by_root", ["rootId"])
     .index("by_reply", ["replyId"])
+    .index("by_root_mentionedUser", ["rootId", "mentionedUserId"])
+    .index("by_reply_mentionedUser", ["replyId", "mentionedUserId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_mentionedUser_createdAt", ["mentionedUserId", "createdAt"])
     .index("by_mentionedUser_community_createdAt", ["mentionedUserId", "communityId", "createdAt"])
@@ -1712,7 +1717,53 @@ export default defineSchema({
     .index("by_notifyState_createdAt", ["notifyState", "createdAt"])
     .index("by_mentionKind_notifyState_createdAt", ["mentionKind", "notifyState", "createdAt"])
     .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
-    .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"]),
+    .index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"])
+    .index("by_sourceBroadcast", ["sourceBroadcastId"])
+    .index("by_sourceBroadcast_user", ["sourceBroadcastId", "mentionedUserId"]),
+
+  communityMentionBroadcasts: defineTable({
+    communityId: v.id("communities"),
+    roleKey: v.string(),
+    actorUserId: v.id("users"),
+    sourceRootId: v.optional(v.id("communityInteractionRoots")),
+    sourceReplyId: v.optional(v.id("communityInteractionReplies")),
+    sourceMentionId: v.id("communityInteractionMentions"),
+    sourceCreatedAt: v.number(),
+    emailMode: v.union(
+      v.literal("in_app_only"),
+      v.literal("in_app_and_email"),
+    ),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("draining"),
+      v.literal("complete"),
+      v.literal("canceled"),
+      v.literal("error"),
+    ),
+    ownerProcessed: v.optional(v.boolean()),
+    membershipCursor: v.optional(v.string()),
+    cleanupState: v.optional(v.union(
+      v.literal("queued"),
+      v.literal("complete"),
+    )),
+    cleanupCursor: v.optional(v.string()),
+    cleanupCount: v.optional(v.number()),
+    cleanupCompletedAt: v.optional(v.number()),
+    processedCount: v.number(),
+    recipientCount: v.number(),
+    skippedCount: v.number(),
+    errorCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    canceledAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_updatedAt", ["status", "updatedAt"])
+    .index("by_sourceMention", ["sourceMentionId"])
+    .index("by_sourceRoot", ["sourceRootId"])
+    .index("by_sourceReply", ["sourceReplyId"])
+    .index("by_cleanupState_updatedAt", ["cleanupState", "updatedAt"])
+    .index("by_community_role_emailMode_createdAt", ["communityId", "roleKey", "emailMode", "createdAt"]),
 
   communityAgentServeRequests: defineTable({
     communityId: v.id("communities"),
@@ -2009,6 +2060,9 @@ export default defineSchema({
     stopReason: v.optional(v.string()),
     toolStepCount: v.number(),
     candidateProposalIds: v.array(v.string()),
+    acceptedChangeRequestIds: v.optional(v.array(v.string())),
+    rejectedChangeRequestIds: v.optional(v.array(v.string())),
+    appliedChangeRequestIds: v.optional(v.array(v.string())),
     errorCode: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     startedAt: v.number(),

@@ -117,6 +117,9 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
         stop_reason: wakeEvidence.reason,
         tool_step_count: 0,
         candidate_proposal_ids: [],
+        accepted_change_request_ids: [],
+        rejected_change_request_ids: [],
+        applied_change_request_ids: [],
         wake_reason: wakeEvidence.reason,
         wake_evidence: wakeEvidence,
       };

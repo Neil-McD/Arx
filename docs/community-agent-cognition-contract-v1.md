@@ -1727,17 +1727,26 @@ notes; Questioner reads them and appends reflections; Steward reads both and
 acts. Every role can see the compiler window, the directory, and each other's
 notes. Nothing is hidden between roles; the ledger persists with the run record.
 
-### Promotion Policy (supersedes one-tap accept)
+### Promotion Policy (airlock, not same-cycle auto-apply)
 
-Agent-proposed create_node candidates are auto-decided and auto-applied at
-status "promising" in the same cycle, with guardrails:
+Agent-proposed `create_node` candidates are not auto-decided in the same runtime
+run that created them. They remain compiler-derived change requests until a later
+steward pass explicitly acts through the same filesystem `write` tool:
 
-- per-cycle cap on applied nodes
-- duplicate check against the existing directory before apply
-- "repetition is not evidence" lint: high-frequency, low-outcome claims are
-  flagged, not promoted
-- person provenance edges are written at apply time (node -> contributing
-  members, derived from source traces)
+```txt
+decide_change_request
+apply_accepted_change_request
+```
+
+Guardrails:
+
+- only compiler-derived candidates are eligible
+- same-run self-review fails closed
+- duplicate and weak-evidence discipline stays in the steward prompt
+- accepted candidates apply through the trusted directory apply core
+- applied compiler candidates land no higher than `promising`
+- applied compiler candidates become community-visible only when privacy risk is
+  low enough; otherwise they remain admin-visible
 
 Promotion above "promising" is earned, not clicked: validated by outcome
 evidence, canonical by sustained validation. Owners retain curation verbs

@@ -14,6 +14,8 @@ export type MentionCandidate = {
   // Non-user candidates tag canonical server-side identities by key, not user id.
   kind?: "user" | "community_agent" | "role";
   roleKey?: "everybody";
+  emailMode?: "in_app_only" | "in_app_and_email" | null;
+  emailCooldownUntil?: string | null;
   /** Description shown in place of a handle/badge (e.g. "Notifies 79 in-app"). */
   subtitle?: string;
   /** Extra query tokens that also surface this candidate (e.g. "all", "everyone"). */
@@ -29,6 +31,8 @@ export type CommittedMention = {
   kind?: "user" | "community_agent" | "role";
   agentKey?: string;
   roleKey?: "everybody";
+  emailMode?: "in_app_only" | "in_app_and_email" | null;
+  emailCooldownUntil?: string | null;
 };
 
 // Max characters we'll scan back from the caret as a mention query. Display names can
@@ -154,7 +158,13 @@ export function useMentionAutocomplete(params: {
         token,
         kind: candidate.kind ?? "user",
         ...(candidate.kind === "community_agent" ? { agentKey: "community_agent" } : {}),
-        ...(candidate.kind === "role" ? { roleKey: candidate.roleKey ?? "everybody" } : {}),
+        ...(candidate.kind === "role"
+          ? {
+              roleKey: candidate.roleKey ?? "everybody",
+              emailMode: candidate.emailMode ?? null,
+              emailCooldownUntil: candidate.emailCooldownUntil ?? null,
+            }
+          : {}),
       });
       close();
 

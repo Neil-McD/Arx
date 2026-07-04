@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
-  communityMembershipRowIsActive,
   normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityManager,
@@ -36,6 +35,12 @@ import {
 } from "./communitySourceUrlPolicy";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
+import {
+  EVERYBODY_MENTION_ROLE_KEY,
+  cancelEverybodyMentionBroadcastsForInteractionSource,
+  scheduleEverybodyMentionBroadcast,
+  textContainsEverybodyMentionToken,
+} from "./communityMentionBroadcasts";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -184,8 +189,7 @@ const MAX_INTERACTION_EMBEDS_PER_BUNDLE = 24;
 const MAX_INTERACTION_MENTIONS_PER_BUNDLE = 24;
 const MAX_VIEWER_REACTIONS_PER_TARGET = 24;
 const MAX_INTERACTION_MENTIONS_PER_WRITE = 24;
-const MAX_EVERYBODY_MENTION_RECIPIENTS = 100;
-const EVERYBODY_MENTION_ROLE_KEY = "everybody";
+const MAX_INTERACTION_MENTION_LIFECYCLE_ROWS = MAX_INTERACTION_MENTIONS_PER_WRITE + 8;
 
 const rootKindValidator = v.union(
   v.literal("discussion"),
@@ -508,12 +512,14 @@ async function listMentionRowsForInteractionLifecycle(args: {
   targetType: "root" | "reply";
   targetId: any;
 }): Promise<MentionRow[]> {
+  // Source/direct mention rows are bounded at write time. Broadcast recipient
+  // rows are unbounded fanout projections and are cleaned by sourceBroadcastId.
   return (await args.ctx.db
     .query("communityInteractionMentions" as any)
     .withIndex(args.targetType === "reply" ? "by_reply" : "by_root", (q: any) =>
       q.eq(args.targetType === "reply" ? "replyId" : "rootId", args.targetId),
     )
-    .collect()) as MentionRow[];
+    .take(MAX_INTERACTION_MENTION_LIFECYCLE_ROWS)) as MentionRow[];
 }
 
 async function suppressPendingMentionRows(ctx: any, rows: Array<{ _id: any }>, nowMs: number): Promise<void> {
@@ -547,6 +553,16 @@ async function suppressPendingMentionsMissingFromInteractionText(args: {
   text: string;
   nowMs: number;
 }): Promise<void> {
+  if (!textContainsEverybodyMentionToken(args.text)) {
+    await cancelEverybodyMentionBroadcastsForInteractionSource({
+      ctx: args.ctx,
+      targetType: args.targetType,
+      targetId: args.targetId,
+      nowMs: args.nowMs,
+      includeReplySources: false,
+      errorCode: "source_mention_removed",
+    });
+  }
   const rows = await listMentionRowsForInteractionLifecycle(args);
   for (const row of rows) {
     if (row.notifyState !== "pending") continue;
@@ -583,6 +599,14 @@ async function suppressPendingMentionsForDeletedInteractionTarget(args: {
   targetId: any;
   nowMs: number;
 }): Promise<void> {
+  await cancelEverybodyMentionBroadcastsForInteractionSource({
+    ctx: args.ctx,
+    targetType: args.targetType,
+    targetId: args.targetId,
+    nowMs: args.nowMs,
+    includeReplySources: args.targetType === "root",
+    errorCode: "source_deleted",
+  });
   if (args.targetType === "reply") {
     await suppressPendingMentionsForInteractionSource(args);
     return;
@@ -1325,7 +1349,8 @@ type UserInteractionMentionSpec = { kind: "user"; userId: any; sourceRoleKey?: s
 
 type InteractionMentionSpec =
   | UserInteractionMentionSpec
-  | { kind: "community_agent"; agentKey: string };
+  | { kind: "community_agent"; agentKey: string }
+  | { kind: "role"; roleKey: string };
 
 function escapeRegExp(raw: string): string {
   return raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1343,6 +1368,9 @@ function interactionTextContainsHandleMention(text: string, handle: unknown): bo
 }
 
 function interactionTextContainsRoleMention(text: string, roleKey: unknown): boolean {
+  if (String(roleKey ?? "").trim().replace(/^@+/, "").toLowerCase() === EVERYBODY_MENTION_ROLE_KEY) {
+    return textContainsEverybodyMentionToken(text);
+  }
   return interactionTextContainsAtToken(text, roleKey);
 }
 
@@ -1355,70 +1383,16 @@ async function interactionTextContainsCommunityAgentMention(args: {
   return interactionTextContainsAtToken(args.text, community?.name);
 }
 
-async function resolveEverybodyMentionRecipientsForWrite(args: {
+async function validateEverybodyMentionForWrite(args: {
   ctx: any;
   communityId: any;
   actorUserId: any;
-  userSpecsById: Map<string, UserInteractionMentionSpec>;
-}): Promise<UserInteractionMentionSpec[]> {
-  const { community } = await requireCommunityManager({
+}): Promise<void> {
+  await requireCommunityManager({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.actorUserId,
   });
-  const actorKey = normalizeIdValue(args.actorUserId);
-  const resolved: UserInteractionMentionSpec[] = [];
-  const broadcastRecipientKeys = new Set<string>();
-
-  const addRecipient = async (targetUserId: any): Promise<void> => {
-    const recipientKey = normalizeIdValue(targetUserId);
-    if (!recipientKey || recipientKey === actorKey) return;
-    if (broadcastRecipientKeys.has(recipientKey)) return;
-    const existing = args.userSpecsById.get(recipientKey);
-    if (existing) {
-      if (broadcastRecipientKeys.size >= MAX_EVERYBODY_MENTION_RECIPIENTS) {
-        throw new Error("interaction_mention_everybody_limit_exceeded");
-      }
-      existing.sourceRoleKey = EVERYBODY_MENTION_ROLE_KEY;
-      broadcastRecipientKeys.add(recipientKey);
-      return;
-    }
-    try {
-      await requireCommunityChatAccess({
-        ctx: args.ctx,
-        communityId: args.communityId,
-        userId: targetUserId,
-      });
-    } catch {
-      return;
-    }
-    if (broadcastRecipientKeys.size >= MAX_EVERYBODY_MENTION_RECIPIENTS) {
-      throw new Error("interaction_mention_everybody_limit_exceeded");
-    }
-    const spec: UserInteractionMentionSpec = {
-      kind: "user",
-      userId: targetUserId,
-      sourceRoleKey: EVERYBODY_MENTION_ROLE_KEY,
-    };
-    args.userSpecsById.set(recipientKey, spec);
-    resolved.push(spec);
-    broadcastRecipientKeys.add(recipientKey);
-  };
-
-  await addRecipient(community.ownerId);
-  const rows = (await args.ctx.db
-    .query("communityMemberships" as any)
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-    .order("asc")
-    .collect()) as Array<{ userId?: any }>;
-  for (const row of rows) {
-    if (!communityMembershipRowIsActive(row as any)) continue;
-    await addRecipient(row.userId);
-  }
-  if (broadcastRecipientKeys.size === 0) {
-    throw new Error("interaction_mention_everybody_no_recipients");
-  }
-  return resolved;
 }
 
 export async function resolveMentionedUserIdsForInteractionWrite(args: {
@@ -1443,14 +1417,12 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
         throw new Error("interaction_mention_token_missing");
       }
       seenRoles.add(roleKey);
-      out.push(
-        ...(await resolveEverybodyMentionRecipientsForWrite({
-          ctx: args.ctx,
-          communityId: args.communityId,
-          actorUserId: args.actorUserId,
-          userSpecsById,
-        })),
-      );
+      await validateEverybodyMentionForWrite({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        actorUserId: args.actorUserId,
+      });
+      out.push({ kind: "role", roleKey });
       continue;
     }
     // Community-agent mentions carry an agent key, never a user id. Only the
@@ -1520,9 +1492,13 @@ async function insertCommunityInteractionMentionRows(args: {
   rootId?: any;
   replyId?: any;
   mentionedUserIds: InteractionMentionSpec[];
+  actorUserId: any;
   nowMs: number;
 }): Promise<void> {
-  for (const spec of args.mentionedUserIds) {
+  const orderedMentionSpecs = args.mentionedUserIds
+    .slice()
+    .sort((left, right) => (left.kind === "role" ? -1 : 0) - (right.kind === "role" ? -1 : 0));
+  for (const spec of orderedMentionSpecs) {
     const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
@@ -1531,10 +1507,22 @@ async function insertCommunityInteractionMentionRows(args: {
       ...(spec.kind === "user" ? { mentionedUserId: spec.userId } : {}),
       ...(spec.kind === "community_agent" ? { mentionedAgentKey: spec.agentKey } : {}),
       ...(spec.kind === "user" && spec.sourceRoleKey ? { mentionedRoleKey: spec.sourceRoleKey } : {}),
+      ...(spec.kind === "role" ? { mentionedRoleKey: spec.roleKey } : {}),
       notifyState: "pending",
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
+    if (spec.kind === "role" && spec.roleKey === EVERYBODY_MENTION_ROLE_KEY) {
+      await scheduleEverybodyMentionBroadcast({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        rootId: args.rootId,
+        replyId: args.replyId,
+        actorUserId: args.actorUserId,
+        sourceMentionId: mentionId,
+        nowMs: args.nowMs,
+      });
+    }
     if (spec.kind === "community_agent") {
       try {
         await intakeCommunityAgentMention({
@@ -1641,6 +1629,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           communityId: args.communityId,
           rootId,
           mentionedUserIds,
+          actorUserId: userId,
           nowMs,
         });
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
@@ -1723,6 +1712,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         communityId: root.communityId,
         replyId,
         mentionedUserIds,
+        actorUserId: userId,
         nowMs,
       });
       await ctx.db.patch(root._id as any, {
