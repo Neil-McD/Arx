@@ -142,9 +142,48 @@ const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 
 const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
+const COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
+}
+
+function isCommunityComposerEditableElement(element: Element | null): boolean {
+  if (!element) return false;
+  const selector = [
+    "input",
+    "textarea",
+    "select",
+    "[contenteditable='true']",
+    "[contenteditable='plaintext-only']",
+  ].join(",");
+  return Boolean(element.closest(selector));
+}
+
+function shouldPreserveCommunityComposerFocus(activeElement: Element | null, input: HTMLTextAreaElement): boolean {
+  if (!activeElement) return false;
+  if (activeElement === input) return true;
+  if (activeElement === document.body || activeElement === document.documentElement) return false;
+  if (isCommunityComposerEditableElement(activeElement)) return true;
+  return Boolean(
+    activeElement.closest(
+      [
+        ".modal",
+        ".modal-overlay",
+        "[role='dialog']",
+        ".chat-edit-form",
+        ".community-interaction-edit",
+        ".community-profile-panel",
+      ].join(","),
+    ),
+  );
+}
+
+function isCommunityComposerTransferSource(
+  activeElement: Element,
+  refs: Array<MutableRefObject<HTMLTextAreaElement | null>> | undefined,
+): boolean {
+  return Boolean(refs?.some((ref) => ref.current && activeElement === ref.current));
 }
 
 function mentionCandidateKey(candidate: MentionCandidate): string {
@@ -449,6 +488,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const drawerReplyAttachmentsRef = useRef<CommunityMessageAttachment[]>([]);
   const drawerReplyFileInputRef = useRef<HTMLInputElement | null>(null);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastCommunityComposerFocusTargetRef = useRef<string | null>(null);
+  const [isDesktopCommunityFocusViewport, setIsDesktopCommunityFocusViewport] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia(COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY).matches,
+  );
   const [mainMentionQuery, setMainMentionQuery] = useState<string | null>(null);
   const [drawerMentionQuery, setDrawerMentionQuery] = useState<string | null>(null);
   const [remoteMentionSearch, setRemoteMentionSearch] = useState<{
@@ -483,6 +526,73 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     setError: onCommunityAttachmentError,
     ingestAttachmentsFromFileList: onIngestCommunityAttachmentsFromFileList,
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY);
+    const applyViewport = (matches: boolean) => {
+      setIsDesktopCommunityFocusViewport(matches);
+    };
+    applyViewport(mediaQuery.matches);
+    const listener = (event: MediaQueryListEvent) => applyViewport(event.matches);
+    mediaQuery.addEventListener("change", listener);
+    return () => {
+      mediaQuery.removeEventListener("change", listener);
+    };
+  }, []);
+
+  const focusCommunityComposerSafely = useCallback((
+    inputRef: MutableRefObject<HTMLTextAreaElement | null>,
+    options?: {
+      force?: boolean;
+      maxHeightPx?: number;
+      transferFromRefs?: Array<MutableRefObject<HTMLTextAreaElement | null>>;
+    },
+  ) => {
+    if (typeof window === "undefined" || typeof document === "undefined") return false;
+    if (!isDesktopCommunityFocusViewport) return false;
+    const input = inputRef.current;
+    if (!input || input.disabled || input.readOnly) return false;
+
+    if (!options?.force) {
+      const activeElement = document.activeElement;
+      if (activeElement instanceof Element) {
+        if (
+          !isCommunityComposerTransferSource(activeElement, options?.transferFromRefs) &&
+          shouldPreserveCommunityComposerFocus(activeElement, input)
+        ) {
+          return activeElement === input;
+        }
+      }
+    }
+
+    window.requestAnimationFrame(() => {
+      if (!input.isConnected || input.disabled || input.readOnly) return;
+      if (!options?.force) {
+        const activeElement = document.activeElement;
+        if (
+          activeElement instanceof Element &&
+          !isCommunityComposerTransferSource(activeElement, options?.transferFromRefs) &&
+          shouldPreserveCommunityComposerFocus(activeElement, input) &&
+          activeElement !== input
+        ) {
+          return;
+        }
+      }
+      input.style.height = "auto";
+      if (options?.maxHeightPx) {
+        input.style.height = `${Math.min(input.scrollHeight, options.maxHeightPx)}px`;
+      }
+      input.focus({ preventScroll: true });
+      const end = input.value.length;
+      try {
+        input.setSelectionRange(end, end);
+      } catch {
+        // Some platform-managed textarea states can reject selection updates.
+      }
+    });
+    return true;
+  }, [isDesktopCommunityFocusViewport]);
 
   const activeMentionOwner: "main" | "drawer" | null =
     mainMentionQuery !== null ? "main" : drawerMentionQuery !== null ? "drawer" : null;
@@ -792,11 +902,45 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     hasResolvedCommunityChat &&
     !isLoadingChat,
   );
+  const communityComposerFocusTargetKey = (() => {
+    if (
+      !activeCommunity?.id ||
+      !hasAuthenticatedPresentation ||
+      isAuthRecoveringSignedIn ||
+      !canUseComposer ||
+      !hasResolvedCommunityChat ||
+      isLoadingChat ||
+      profilePanelUserId
+    ) {
+      return null;
+    }
+    if (showInteractionProjection && selectedInteractionRootId && drawerReplyTarget) {
+      return `thread:${selectedInteractionRootId}`;
+    }
+    return `main:${activeCommunity.id}`;
+  })();
 
   useEffect(() => {
     setProfilePanelUserId(null);
     setProfileCommunityContextByUserId({});
   }, [activeCommunity?.id]);
+
+  useEffect(() => {
+    if (!communityComposerFocusTargetKey) {
+      lastCommunityComposerFocusTargetRef.current = null;
+      return;
+    }
+    if (lastCommunityComposerFocusTargetRef.current === communityComposerFocusTargetKey) return;
+    lastCommunityComposerFocusTargetRef.current = communityComposerFocusTargetKey;
+    const isThreadTarget = communityComposerFocusTargetKey.startsWith("thread:");
+    const inputRef = isThreadTarget
+      ? drawerReplyInputRef
+      : chatInputRef;
+    focusCommunityComposerSafely(inputRef, {
+      maxHeightPx: 120,
+      transferFromRefs: isThreadTarget ? [chatInputRef] : [drawerReplyInputRef],
+    });
+  }, [chatInputRef, communityComposerFocusTargetKey, focusCommunityComposerSafely]);
 
   useEffect(() => {
     setDrawerReplyTarget(rootReplyTarget);
@@ -912,7 +1056,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     if (!input) return;
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
-    input.focus();
+    input.focus({ preventScroll: true });
+    const end = input.value.length;
+    try {
+      input.setSelectionRange(end, end);
+    } catch {
+      // Selection can fail for platform-managed textarea states; focus still succeeded.
+    }
   }, []);
 
   const appendDrawerVoiceTranscript = useCallback((transcript: string) => {
@@ -1389,7 +1539,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 renderTextWithLinks={renderTextWithLinks}
                 onStartRootReply={(message) => {
                   setDrawerReplyTarget(message);
-                  setTimeout(() => drawerReplyInputRef.current?.focus(), 0);
+                  setTimeout(() => {
+                    focusCommunityComposerSafely(drawerReplyInputRef, {
+                      maxHeightPx: 120,
+                      transferFromRefs: [chatInputRef],
+                    });
+                  }, 0);
                 }}
                 onOpenProfile={setProfilePanelUserId}
                 onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}

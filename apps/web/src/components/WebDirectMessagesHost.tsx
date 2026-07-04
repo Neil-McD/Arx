@@ -88,6 +88,36 @@ const MAX_DM_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_DM_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
 const MAX_DM_IMAGE_DATA_URL_CHARS = 600_000;
+const DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
+
+function isDirectMessageComposerEditableElement(element: Element | null): boolean {
+  if (!element) return false;
+  const selector = [
+    "input",
+    "textarea",
+    "select",
+    "[contenteditable='true']",
+    "[contenteditable='plaintext-only']",
+  ].join(",");
+  return Boolean(element.closest(selector));
+}
+
+function shouldPreserveDirectMessageComposerFocus(activeElement: Element | null, input: HTMLTextAreaElement): boolean {
+  if (!activeElement) return false;
+  if (activeElement === input) return true;
+  if (activeElement === document.body || activeElement === document.documentElement) return false;
+  if (isDirectMessageComposerEditableElement(activeElement)) return true;
+  return Boolean(
+    activeElement.closest(
+      [
+        ".modal",
+        ".modal-overlay",
+        "[role='dialog']:not(.community-dm-panel)",
+        ".community-dm-recipient-search",
+      ].join(","),
+    ),
+  );
+}
 
 function createDirectAttachmentId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -295,14 +325,32 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const typingInputHadTextRef = useRef(false);
   const sessionRef = useRef<SessionT | null>(session);
   const directMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastDirectMessageFocusConversationRef = useRef<string | null>(null);
   const voiceConversationIdRef = useRef<string | null>(null);
   const pendingVoiceTranscriptConversationIdRef = useRef<string | null>(null);
+  const [isDesktopDirectMessageFocusViewport, setIsDesktopDirectMessageFocusViewport] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia(DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY).matches,
+  );
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
 
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY);
+    const applyViewport = (matches: boolean) => {
+      setIsDesktopDirectMessageFocusViewport(matches);
+    };
+    applyViewport(mediaQuery.matches);
+    const listener = (event: MediaQueryListEvent) => applyViewport(event.matches);
+    mediaQuery.addEventListener("change", listener);
+    return () => {
+      mediaQuery.removeEventListener("change", listener);
+    };
+  }, []);
 
   const showDirectVoiceMessage = useCallback(
     (message: string) => {
@@ -342,13 +390,53 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     });
   }, []);
 
-  const focusDirectMessageInput = useCallback(() => {
+  const focusDirectMessageInput = useCallback((options?: { force?: boolean }) => {
+    if (typeof window === "undefined" || typeof document === "undefined") return false;
+    if (!isDesktopDirectMessageFocusViewport) return false;
     const input = directMessageInputRef.current;
-    if (!input) return;
-    input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 96)}px`;
-    input.focus();
-  }, []);
+    if (!input || input.disabled || input.readOnly) return false;
+
+    if (!options?.force) {
+      const activeElement = document.activeElement;
+      if (activeElement instanceof Element) {
+        if (shouldPreserveDirectMessageComposerFocus(activeElement, input)) return activeElement === input;
+      }
+    }
+
+    window.requestAnimationFrame(() => {
+      if (!input.isConnected || input.disabled || input.readOnly) return;
+      if (!options?.force) {
+        const activeElement = document.activeElement;
+        if (
+          activeElement instanceof Element &&
+          shouldPreserveDirectMessageComposerFocus(activeElement, input) &&
+          activeElement !== input
+        ) {
+          return;
+        }
+      }
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 96)}px`;
+      input.focus({ preventScroll: true });
+      const end = input.value.length;
+      try {
+        input.setSelectionRange(end, end);
+      } catch {
+        // Selection can fail for platform-managed textarea states; focus still succeeded.
+      }
+    });
+    return true;
+  }, [isDesktopDirectMessageFocusViewport]);
+
+  useEffect(() => {
+    if (!isOpen || !activeConversationId) {
+      lastDirectMessageFocusConversationRef.current = null;
+      return;
+    }
+    if (lastDirectMessageFocusConversationRef.current === activeConversationId) return;
+    lastDirectMessageFocusConversationRef.current = activeConversationId;
+    focusDirectMessageInput({ force: true });
+  }, [activeConversationId, focusDirectMessageInput, isOpen]);
 
   const {
     directMessageVoiceIntent,
@@ -1087,6 +1175,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             }
           : previous,
       );
+      window.setTimeout(() => {
+        focusDirectMessageInput();
+      }, 0);
     } catch (error) {
       setDirectMessagePanel((previous) =>
         previous?.conversation.id === current.conversation.id
@@ -1098,7 +1189,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           : previous,
       );
     }
-  }, [clearDirectTypingForConversation, directMessagePanel, ensureSession, session]);
+  }, [clearDirectTypingForConversation, directMessagePanel, ensureSession, focusDirectMessageInput, session]);
 
   const handleDirectAttachmentFilesSelected = useCallback(
     async (files: DirectMessageAttachmentFileInput) => {
