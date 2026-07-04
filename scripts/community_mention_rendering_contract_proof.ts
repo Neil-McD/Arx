@@ -242,9 +242,39 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     "community chat panel must receive a dedicated owner-admin @everybody capability",
   );
   assert.match(
+    chatPanelSource,
+    /mentionableCommunityMembers: CommunityMentionMember\[\]/,
+    "community chat panel must receive an active-community directory allowlist for member mention candidates",
+  );
+  assert.match(
+    appSource,
+    /mentionableCommunityMembers: communityDirectoryMembers/,
+    "App must source member mention candidates from the active community directory, not the global profile cache",
+  );
+  assert.match(
+    projectionSource,
+    /mentionableCommunityMembers: params\.mentionableCommunityMembers/,
+    "community surface projection must pass the scoped mention member allowlist through to chat",
+  );
+  assert.match(
+    chatPanelSource,
+    /const seenMemberIds = new Set<string>\(\)[\s\S]*const memberCandidates = mentionableCommunityMembers[\s\S]*const userId = String\(member\.user_id \?\? ""\)\.trim\(\)[\s\S]*const profile = profilesByUserId\[userId\]/,
+    "member mention candidates must be allowlisted by active community directory rows before profile hydration",
+  );
+  assert.doesNotMatch(
+    chatPanelSource,
+    /const memberCandidates = Object\.values\(profilesByUserId\)/,
+    "member mention candidates must not be generated from the global cached profile map",
+  );
+  assert.match(
     appSource,
     /useState<CommittedMention\[\]>\(\[\]\)/,
     "the App-level composer mention state must use the canonical committed mention type",
+  );
+  assert.match(
+    appSource,
+    /useEffect\(\(\) => \{[\s\S]*setCommunityChatError\(null\);[\s\S]*setCommunityMessageMentions\(\[\]\);[\s\S]*\}, \[activeCommunityId,/,
+    "switching active communities must drop committed mention payloads so stale cross-community tokens become plain text",
   );
   assert.match(
     projectionSource,

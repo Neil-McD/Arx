@@ -54,6 +54,9 @@ type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
 type UserProfile = SharedUserProfile;
 type ProfileCommunityContext = SharedProfileCommunityContext;
+type CommunityMentionMember = {
+  user_id?: string | null;
+};
 type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
   interaction_root_id?: string | null;
   legacy_message_id?: string | null;
@@ -152,6 +155,8 @@ export type WebCommunityChatPanelProps = {
   isProfileSetupComplete: boolean;
   canModerateMessages: boolean;
   canMentionEverybody: boolean;
+  /** Authoritative community member count for the @everybody row copy. */
+  everybodyMemberCount: number | null;
   isLoadingChat: boolean;
   hasResolvedCommunityChat: boolean;
   isLoadingMoreChat: boolean;
@@ -163,6 +168,7 @@ export type WebCommunityChatPanelProps = {
   typingPresence: CommunityTypingPresenceBundle;
   onThreadTypingSignal?: (rootId: string) => void;
   profilesByUserId: Record<string, UserProfile>;
+  mentionableCommunityMembers: CommunityMentionMember[];
   editingMessageId: string | null;
   editingMessageText: string;
   reactionPickerMessageId: string | null;
@@ -298,6 +304,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     isProfileSetupComplete,
     canModerateMessages,
     canMentionEverybody,
+    everybodyMemberCount,
     isLoadingChat,
     hasResolvedCommunityChat,
     isLoadingMoreChat,
@@ -309,6 +316,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     typingPresence,
     onThreadTypingSignal,
     profilesByUserId,
+    mentionableCommunityMembers,
     editingMessageId,
     editingMessageText,
     reactionPickerMessageId,
@@ -409,16 +417,21 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     ingestAttachmentsFromFileList: onIngestCommunityAttachmentsFromFileList,
   });
 
-  // Members available to @-mention: members with handles, except yourself.
+  // Members available to @-mention: active community directory members with handles, except yourself.
   const mentionCandidates = useMemo<MentionCandidate[]>(() => {
-    const memberCandidates = Object.values(profilesByUserId)
-      .filter((profile) => profile.user_id !== sessionUserId)
-      .reduce<MentionCandidate[]>((candidates, profile) => {
+    const seenMemberIds = new Set<string>();
+    const memberCandidates = mentionableCommunityMembers
+      .reduce<MentionCandidate[]>((candidates, member) => {
+        const userId = String(member.user_id ?? "").trim();
+        if (!userId || userId === sessionUserId || seenMemberIds.has(userId)) return candidates;
+        seenMemberIds.add(userId);
+        const profile = profilesByUserId[userId];
+        if (!profile) return candidates;
         const handle = String(profile.handle ?? "").trim();
         if (!handle) return candidates;
-        const label = displayName(profile.user_id).trim() || handle;
+        const label = displayName(userId).trim() || handle;
         candidates.push({
-          userId: profile.user_id,
+          userId,
           displayName: label,
           handle,
           avatarUrl: profile.avatar_url ?? null,
@@ -434,6 +447,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           avatarUrl: null,
           kind: "role" as const,
           roleKey: "everybody" as const,
+          subtitle:
+            typeof everybodyMemberCount === "number" && everybodyMemberCount > 0
+              ? `Notifies all ${everybodyMemberCount.toLocaleString()} members`
+              : "Notify the whole community",
+          matchAliases: ["everyone", "all", "here"],
         }
       : null;
     // The community agent is taggable inside its own community, pinned first and
@@ -454,7 +472,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       ...(everybodyCandidate ? [everybodyCandidate] : []),
       ...memberCandidates,
     ];
-  }, [activeCommunity?.name, canMentionEverybody, profilesByUserId, sessionUserId, displayName]);
+  }, [
+    activeCommunity?.name,
+    canMentionEverybody,
+    displayName,
+    everybodyMemberCount,
+    mentionableCommunityMembers,
+    profilesByUserId,
+    sessionUserId,
+  ]);
 
   const mainMention = useMentionAutocomplete({
     candidates: mentionCandidates,

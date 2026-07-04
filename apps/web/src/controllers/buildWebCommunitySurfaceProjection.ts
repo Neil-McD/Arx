@@ -66,6 +66,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onBackToCommunityChat: WebCommunitySecondaryPanelsProps["polynet"]["onBackToChat"];
   aiAgentHasSession: WebCommunitySecondaryPanelsProps["aiAgent"]["hasSession"];
   canManageMembersActiveCommunity: WebCommunitySecondaryPanelsProps["aiAgent"]["canManageMembersActiveCommunity"];
+  communityMemberCount: number | null;
   aiAgentPreferredTab: WebCommunitySecondaryPanelsProps["aiAgent"]["preferredTab"];
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
@@ -100,6 +101,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   typingPresence: WebCommunityChatPanelProps["typingPresence"];
   onThreadTypingSignal: WebCommunityChatPanelProps["onThreadTypingSignal"];
   profilesByUserId: WebCommunityChatPanelProps["profilesByUserId"];
+  mentionableCommunityMembers: WebCommunityChatPanelProps["mentionableCommunityMembers"];
   editingMessageId: WebCommunityChatPanelProps["editingMessageId"];
   editingMessageText: WebCommunityChatPanelProps["editingMessageText"];
   reactionPickerMessageId: WebCommunityChatPanelProps["reactionPickerMessageId"];
@@ -316,6 +318,7 @@ export function buildWebCommunitySurfaceProjection(
     isProfileSetupComplete: params.isProfileSetupComplete,
     canModerateMessages: params.canModerateContentActiveCommunity,
     canMentionEverybody: params.canManageMembersActiveCommunity,
+    everybodyMemberCount: params.communityMemberCount,
     isLoadingChat: params.isLoadingChat,
     hasResolvedCommunityChat: params.hasResolvedCommunityChat,
     isLoadingMoreChat: params.isLoadingMoreChat,
@@ -327,6 +330,7 @@ export function buildWebCommunitySurfaceProjection(
     typingPresence: params.typingPresence,
     onThreadTypingSignal: params.onThreadTypingSignal,
     profilesByUserId: params.profilesByUserId,
+    mentionableCommunityMembers: params.mentionableCommunityMembers,
     editingMessageId: params.editingMessageId,
     editingMessageText: params.editingMessageText,
     reactionPickerMessageId: params.reactionPickerMessageId,

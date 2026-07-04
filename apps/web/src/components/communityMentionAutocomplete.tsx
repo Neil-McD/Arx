@@ -1,5 +1,6 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
 import { useCallback, useMemo, useState } from "react";
+import { Users } from "lucide-react";
 import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
@@ -13,6 +14,10 @@ export type MentionCandidate = {
   // Non-user candidates tag canonical server-side identities by key, not user id.
   kind?: "user" | "community_agent" | "role";
   roleKey?: "everybody";
+  /** Description shown in place of a handle/badge (e.g. "Notifies all 79 members"). */
+  subtitle?: string;
+  /** Extra query tokens that also surface this candidate (e.g. "all", "everyone"). */
+  matchAliases?: string[];
 };
 
 export type CommittedMention = {
@@ -64,6 +69,7 @@ function matchesQuery(candidate: MentionCandidate, query: string): boolean {
   const needle = query.toLowerCase();
   if (candidate.displayName.toLowerCase().includes(needle)) return true;
   if (candidate.handle && candidate.handle.toLowerCase().includes(needle)) return true;
+  if (candidate.matchAliases?.some((alias) => alias.toLowerCase().includes(needle))) return true;
   return false;
 }
 
@@ -237,10 +243,18 @@ export function MentionAutocompleteMenu(props: {
             style={
               candidate.avatarUrl
                 ? { backgroundImage: `url(${candidate.avatarUrl})` }
-                : { backgroundColor: getAvatarColor(candidate.userId) }
+                : // Only user avatars take a generated fill; role/agent tiles are
+                  // styled by their CSS class so the theme accent can take hold.
+                  (candidate.kind ?? "user") === "user"
+                  ? { backgroundColor: getAvatarColor(candidate.userId) }
+                  : undefined
             }
           >
-            {candidate.avatarUrl ? null : getInitials(candidate.displayName)}
+            {candidate.avatarUrl ? null : candidate.kind === "role" ? (
+              <Users size={16} aria-hidden="true" />
+            ) : (
+              getInitials(candidate.displayName)
+            )}
           </span>
           <span className="mention-autocomplete-meta">
             <span className="mention-autocomplete-name">{candidate.displayName}</span>
@@ -249,8 +263,8 @@ export function MentionAutocompleteMenu(props: {
                 <span className="mention-autocomplete-handle">Community agent</span>
                 <span className="mention-autocomplete-agent-badge">AGENT</span>
               </span>
-            ) : candidate.kind === "role" ? (
-              <span className="mention-autocomplete-agent-badge">ALL</span>
+            ) : candidate.subtitle ? (
+              <span className="mention-autocomplete-handle">{candidate.subtitle}</span>
             ) : candidate.handle ? (
               <span className="mention-autocomplete-handle">@{candidate.handle}</span>
             ) : null}

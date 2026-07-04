@@ -6633,6 +6633,7 @@ export default function App() {
     setEditingMessageId(null);
     setEditingMessageText("");
     setEditingMessagePrefix(null);
+    setCommunityMessageMentions([]);
     setReactionPickerMessageId(null);
     setUnreadCount(0);
     setIsUserAtBottom(true);
@@ -10606,6 +10607,7 @@ export default function App() {
       hasResolvedCommunities,
       isLoadingCommunities,
       sessionUserId: canonicalSessionUserId,
+      communityMemberCount: communityDirectoryMemberCount ?? activeCommunitySocialMemberCount,
       canViewActiveCommunitySettings,
       communitySettingsLayer,
       communitySettingsPane,
@@ -10920,6 +10922,7 @@ export default function App() {
       typingPresence: communityTypingUsers,
       onThreadTypingSignal: signalThreadTyping,
       profilesByUserId: savedProfilesByUserId,
+      mentionableCommunityMembers: communityDirectoryMembers,
       editingMessageId,
       editingMessageText,
       reactionPickerMessageId,
