@@ -10,6 +10,7 @@
   --mobile-topbar-side-inset: 12px;
   --mobile-topbar-top-offset: 8px;
   --mobile-topbar-clearance: calc(env(safe-area-inset-top, 0px) + 54px);
+  --mobile-left-panel-width: min(74vw, 304px);
   --web-rail-width: 72px;
   --web-rail-control-size: 44px;
   --web-rail-anchor-inset: calc((var(--web-rail-width) - var(--web-rail-control-size)) / 2);
@@ -2543,6 +2544,9 @@
 
 .mobile-root-surface {
   min-height: 100dvh;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .mobile-root-page-shell {
@@ -2554,8 +2558,14 @@
 }
 
 .mobile-threads-root-shell {
-  padding: var(--mobile-topbar-clearance) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  width: var(--mobile-left-panel-width);
+  max-width: 100%;
+  min-height: 100dvh;
+  padding: var(--mobile-topbar-clearance) 14px calc(env(safe-area-inset-bottom, 0px) + 14px);
   gap: 10px;
+  background: var(--surface-nav, var(--surface-panel));
+  border-right: 1px solid var(--stroke-divider-accent);
+  box-shadow: var(--panel-shadow, inset 0 1px 3px rgba(0, 0, 0, 0.15));
 }
 
 .mobile-threads-root-shell .thread-sidebar-panel {
@@ -2684,7 +2694,7 @@
 
 .mobile-drawer.mobile-agent-drawer,
 .mobile-drawer.mobile-community-drawer {
-  width: min(74vw, 304px);
+  width: var(--mobile-left-panel-width);
 }
 
 .mobile-drawer-left {

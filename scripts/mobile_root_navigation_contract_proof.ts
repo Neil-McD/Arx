@@ -107,6 +107,11 @@ assert.match(
   /\.mobile-topbar-center \{[\s\S]*grid-template-columns: repeat\(2, auto\);[\s\S]*border-radius: 999px;[\s\S]*\.mobile-topbar-mode\.active/,
   "mobile topbar CSS should preserve the previous two-option segmented slider styling",
 );
+assert.match(
+  indexCss,
+  /--mobile-left-panel-width: min\(74vw, 304px\);[\s\S]*\.mobile-threads-root-shell \{[\s\S]*width: var\(--mobile-left-panel-width\);[\s\S]*background: var\(--surface-nav, var\(--surface-panel\)\);[\s\S]*border-right: 1px solid var\(--stroke-divider-accent\);[\s\S]*\.mobile-drawer\.mobile-agent-drawer,[\s\S]*\.mobile-drawer\.mobile-community-drawer \{[\s\S]*width: var\(--mobile-left-panel-width\);/,
+  "mobile Threads root and mobile drawers should share the same left-panel geometry",
+);
 assert.doesNotMatch(
   indexCss,
   /mobile-root-pager|mobile-topbar-root-title/,
@@ -116,6 +121,11 @@ assert.match(
   baseCss,
   /\.app-root\.mobile-shell \.community-mobile-members-root/,
   "mobile Members root should override the hidden desktop context rail layout",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell \.community-mobile-members-root \.mobile-members-root-body \{[\s\S]*flex: 0 0 var\(--mobile-left-panel-width\);[\s\S]*width: var\(--mobile-left-panel-width\);[\s\S]*background: var\(--surface-nav, var\(--surface-panel\)\);[\s\S]*border-right: 1px solid var\(--stroke-divider-accent\);[\s\S]*\.app-root\.mobile-shell \.community-mobile-members-root \.mobile-members-root-panel \{[\s\S]*background: transparent;/,
+  "mobile Members root should use the same left-panel geometry and let the container own the surface",
 );
 assert.match(
   packageJson,
