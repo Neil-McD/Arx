@@ -28,6 +28,11 @@ assert.match(
   /onStartRootReply=\{\(message\) => \{[\s\S]*const seededMention = buildUserMentionFromProfile\([\s\S]*message\.sender_id,[\s\S]*profilesByUserId\[message\.sender_id\][\s\S]*setDrawerReplyTarget\(message\);[\s\S]*if \(seededMention && canSeedMention\) \{[\s\S]*setDrawerReplyInput\(`\$\{seededMention\.token\} `\);[\s\S]*setDrawerReplyMentions\(\[seededMention\]\);/,
   "clicking reply on a thread reply should seed @handle when the drawer composer can accept an auto seed",
 );
+assert.doesNotMatch(
+  chatPanel,
+  /community-interaction-reply-composer-context|community-interaction-reply-composer-copy|isQuotingDrawerReply/,
+  "thread drawer reply composer should rely on the seeded @handle instead of a separate Replying to context row",
+);
 assert.match(
   chatPanel,
   /const drawerReplyAutoSeedTokenRef = useRef<string \| null>\(null\);[\s\S]*value\.trim\(\) !== autoSeedToken[\s\S]*drawerReplyAutoSeedTokenRef\.current = null;[\s\S]*const canReplaceAutoSeed = Boolean\(autoSeedToken && drawerReplyInput\.trim\(\) === autoSeedToken\);[\s\S]*drawerReplyAutoSeedTokenRef\.current = seededMention\.token;[\s\S]*else if \(!seededMention && canReplaceAutoSeed\) \{[\s\S]*setDrawerReplyInput\(""\);[\s\S]*setDrawerReplyMentions\(\[\]\);[\s\S]*drawerReplyAutoSeedTokenRef\.current = null;/,
@@ -75,8 +80,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   baseCss,
-  /community-interaction-quote/,
-  "deleted canonical quote-chip styles should stay deleted",
+  /community-interaction-quote|community-interaction-reply-composer-context|community-interaction-reply-composer-copy/,
+  "deleted canonical quote-chip and drawer reply-context styles should stay deleted",
 );
 assert.match(
   packageJson,
