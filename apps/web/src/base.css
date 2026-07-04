@@ -17502,9 +17502,13 @@ button.chat-reply-quote:hover {
   padding: 1.5px 5px;
 }
 
+/* The community agent: a flat squared tile with the hollow lucide Sparkles in
+   the agent purple (same token as the @agent chip + AGENT badge) — never a
+   round person avatar, never initials, never a gradient. */
 .mention-autocomplete-row.is-agent .mention-autocomplete-avatar {
-  background: linear-gradient(135deg, #a78bfa, var(--accent));
-  color: #fff;
+  border-radius: 9px;
+  background: rgba(167, 139, 250, 0.16);
+  color: #a78bfa;
 }
 
 /* The @everybody row: a squared tile with the theme accent — never a round

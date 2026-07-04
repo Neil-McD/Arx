@@ -1,6 +1,6 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
 import { useCallback, useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { Sparkles, Users } from "lucide-react";
 import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
@@ -14,7 +14,7 @@ export type MentionCandidate = {
   // Non-user candidates tag canonical server-side identities by key, not user id.
   kind?: "user" | "community_agent" | "role";
   roleKey?: "everybody";
-  /** Description shown in place of a handle/badge (e.g. "Notifies all 79 members"). */
+  /** Description shown in place of a handle/badge (e.g. "Notifies 79 in-app"). */
   subtitle?: string;
   /** Extra query tokens that also surface this candidate (e.g. "all", "everyone"). */
   matchAliases?: string[];
@@ -256,6 +256,8 @@ export function MentionAutocompleteMenu(props: {
           >
             {candidate.avatarUrl ? null : candidate.kind === "role" ? (
               <Users size={16} aria-hidden="true" />
+            ) : candidate.kind === "community_agent" ? (
+              <Sparkles size={16} aria-hidden="true" />
             ) : (
               getInitials(candidate.displayName)
             )}
