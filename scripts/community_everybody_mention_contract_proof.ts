@@ -13,6 +13,8 @@ const crons = read("convex/crons.ts");
 const directory = read("convex/communityDirectory.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const profileHandle = read("shared/profileHandle.ts");
+const sender = read("shared/useCommunityChatMutationController.ts");
+const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 
 assert.match(
   mentionBroadcasts,
@@ -66,6 +68,16 @@ assert.match(
   /validateEverybodyMentionForWrite[\s\S]*requireCommunityManager\(\{[\s\S]*userId: args\.actorUserId/,
   "@everybody must validate the owner/admin manager boundary at write time",
 );
+assert.match(
+  interactions,
+  /validateEverybodyMentionForWrite[\s\S]*targetKind: "root" \| "reply"[\s\S]*args\.targetKind !== "root"[\s\S]*interaction_mention_everybody_reply_not_allowed/,
+  "@everybody writes must be root-post-only at the backend authority point",
+);
+assert.match(
+  interactions,
+  /createCommunityInteractionComposerMessage[\s\S]*args\.rootId && textContainsEverybodyMentionToken\(text\)[\s\S]*interaction_mention_everybody_reply_not_allowed/,
+  "reply writes must reject visible @everybody text even without a hidden role payload",
+);
 
 assert.doesNotMatch(
   interactions.match(/async function validateEverybodyMentionForWrite[\s\S]*?\n\}/)?.[0] ?? "",
@@ -88,6 +100,23 @@ assert.match(
   interactions,
   /scheduleEverybodyMentionBroadcast\(\{[\s\S]*actorUserId: args\.actorUserId[\s\S]*sourceMentionId: mentionId/,
   "the source role mention must create the durable broadcast request inside the chat write",
+);
+const scheduleEverybodyMentionBroadcastFn =
+  mentionBroadcasts.match(/export async function scheduleEverybodyMentionBroadcast[\s\S]*?return \{ broadcastId, emailMode: availability\.emailMode \};\n\}/)?.[0] ?? "";
+assert.match(
+  scheduleEverybodyMentionBroadcastFn,
+  /if \(!args\.rootId\)[\s\S]*interaction_mention_broadcast_source_required/,
+  "the broadcast scheduler must require a root source for all new @everybody broadcasts",
+);
+assert.doesNotMatch(
+  scheduleEverybodyMentionBroadcastFn,
+  /replyId/,
+  "new @everybody broadcasts must not be scheduled from reply sources",
+);
+assert.match(
+  mentionBroadcasts,
+  /sourceIsStillBroadcastable[\s\S]*broadcast\.sourceReplyId[\s\S]*broadcast\.sourceRootId/,
+  "old reply-sourced broadcast rows must remain drainable/cleanable while new rows are root-only",
 );
 
 assert.match(
@@ -177,6 +206,11 @@ assert.match(
   "edit/delete invalidation must cancel the durable broadcast row instead of relying on recipient scans",
 );
 assert.match(
+  interactions,
+  /editCommunityInteractionMessage[\s\S]*textContainsEverybodyMentionToken\(text\)[\s\S]*args\.targetType === "reply"[\s\S]*interaction_mention_everybody_reply_not_allowed[\s\S]*previousText[\s\S]*interaction_mention_everybody_edit_create_not_allowed/,
+  "edits must not introduce @everybody and replies must not retain @everybody",
+);
+assert.match(
   mentionBroadcasts,
   /processCanceledCommunityMentionBroadcastCleanupsInternal[\s\S]*withIndex\("by_sourceBroadcast"[\s\S]*paginate\(\{[\s\S]*cleanupCursor[\s\S]*notifyState: "suppressed"/,
   "canceled broadcast cleanup must force-suppress projected recipient rows in bounded batches",
@@ -215,6 +249,27 @@ assert.match(
   interactions,
   /row\.mentionedRoleKey === EVERYBODY_MENTION_ROLE_KEY[\s\S]*interactionTextContainsRoleMention\(args\.text, EVERYBODY_MENTION_ROLE_KEY\)[\s\S]*continue;/,
   "@everybody-origin pending rows must survive edits that keep the visible @everybody token",
+);
+
+assert.match(
+  sender,
+  /isReplySend[\s\S]*textContainsEverybodyMentionToken\(bodyToSend\)[\s\S]*@everybody can only be used in top-level community posts/,
+  "the client must block manual @everybody tokens in reply sends before optimistic insertion",
+);
+assert.match(
+  sender,
+  /current\.canMentionEverybodyRef\?\.current[\s\S]*!isReplySend[\s\S]*textContainsEverybodyMentionToken\(bodyToSend\)/,
+  "manual @everybody serialization must only happen for root sends",
+);
+assert.match(
+  chatPanel,
+  /activeMentionIncludesRoles = activeMentionOwner === "main" && !replyingToMessage/,
+  "the main composer must hide @everybody while it is replying",
+);
+assert.match(
+  chatPanel,
+  /drawerMentionCandidates[\s\S]*localReplyMentionCandidates/,
+  "the drawer reply composer must use the reply-only mention candidate list",
 );
 
 console.log("community_everybody_mention_contract_proof: ok");

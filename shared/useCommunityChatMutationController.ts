@@ -217,6 +217,12 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
   if (message.includes("community_interaction_writer_missing")) {
     return "Community chat is unavailable. Refresh and try again.";
   }
+  if (message.includes("interaction_mention_everybody_reply_not_allowed")) {
+    return "@everybody can only be used in top-level community posts.";
+  }
+  if (message.includes("interaction_mention_everybody_edit_create_not_allowed")) {
+    return "Create a new top-level post to notify everybody.";
+  }
   return message;
 }
 
@@ -404,7 +410,8 @@ export function useCommunityChatMutationController<
           ...(serializedAttachments.length > 0 ? { attachments: serializedAttachments } : {}),
         },
       });
-    } catch {
+    } catch (error) {
+      current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
       if (current.activeCommunityId) {
         await current.loadCommunityChat(current.activeCommunityId, session);
       }
@@ -458,6 +465,11 @@ export function useCommunityChatMutationController<
       return replyRootId ? null : replyToId;
     })();
     const bodyToSend = rawText;
+    const isReplySend = Boolean(replySnapshot);
+    if (isReplySend && textContainsEverybodyMentionToken(bodyToSend)) {
+      current.setCommunityChatError("@everybody can only be used in top-level community posts.");
+      return;
+    }
 
     // Keep only mentions whose exact inserted token still appears as a real
     // mention token in the sent text. User tokens are @handle; display names
@@ -494,6 +506,7 @@ export function useCommunityChatMutationController<
     );
     if (
       current.canMentionEverybodyRef?.current &&
+      !isReplySend &&
       !seenMentionKeys.has(`role:${EVERYBODY_MENTION_ROLE_KEY}`) &&
       !committedEverybodyMention &&
       textContainsEverybodyMentionToken(bodyToSend)

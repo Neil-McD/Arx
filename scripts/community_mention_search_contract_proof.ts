@@ -46,6 +46,11 @@ assert.match(
 );
 assert.match(
   communityDirectory,
+  /includeRoles: v\.optional\(v\.boolean\(\)\)[\s\S]*const includeRoles = args\.includeRoles !== false[\s\S]*const canMentionEverybody = includeRoles && await/,
+  "@everybody search exposure must be explicitly suppressible for reply composers",
+);
+assert.match(
+  communityDirectory,
   /kind: "community_agent"[\s\S]*agent_key: "community_agent"/,
   "community-agent candidates must use the canonical scoped agent key",
 );
@@ -57,8 +62,8 @@ assert.match(
 
 assert.match(
   gateway,
-  /export async function searchCloudCommunityMentionCandidates[\s\S]*community:searchCommunityMentionCandidates/,
-  "web gateway must call the scoped backend mention search query",
+  /export async function searchCloudCommunityMentionCandidates[\s\S]*includeRoles\?: boolean[\s\S]*community:searchCommunityMentionCandidates[\s\S]*includeRoles: params\.includeRoles \?\? true/,
+  "web gateway must call the scoped backend mention search query with an explicit role-row flag",
 );
 assert.match(
   autocomplete,
@@ -72,8 +77,13 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /mergeMentionCandidates\(remoteMentionCandidates, localMentionCandidates\)/,
-  "remote scoped candidates must take precedence while loaded-directory candidates remain fallback",
+  /activeMentionIncludesRoles = activeMentionOwner === "main" && !replyingToMessage[\s\S]*includeRoles/,
+  "chat panel must only request role mention candidates for the non-reply main composer",
+);
+assert.match(
+  chatPanel,
+  /mergeMentionCandidates\(remoteMainMentionCandidates, localMainMentionCandidates\)[\s\S]*mergeMentionCandidates\(remoteDrawerMentionCandidates, localReplyMentionCandidates\)/,
+  "remote scoped candidates must take precedence while loaded-directory candidates remain fallback per composer surface",
 );
 assert.doesNotMatch(
   chatPanel,

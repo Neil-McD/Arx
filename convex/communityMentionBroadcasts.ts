@@ -238,28 +238,14 @@ export async function readEverybodyMentionEmailAvailability(args: {
 export async function scheduleEverybodyMentionBroadcast(args: {
   ctx: any;
   communityId: any;
-  rootId?: any;
-  replyId?: any;
+  rootId: any;
   actorUserId: any;
   sourceMentionId: any;
   nowMs: number;
 }): Promise<{ broadcastId: any; emailMode: BroadcastEmailMode }> {
-  if (!args.rootId && !args.replyId) {
+  if (!args.rootId) {
     throw new Error("interaction_mention_broadcast_source_required");
   }
-  let sourceRootId = args.rootId;
-  if (args.replyId) {
-    const reply = (await args.ctx.db.get(args.replyId)) as InteractionReplyRow | null;
-    if (!reply) throw new Error("interaction_mention_broadcast_source_required");
-    if (
-      sourceRootId &&
-      normalizeIdValue(sourceRootId) !== normalizeIdValue(reply.rootId)
-    ) {
-      throw new Error("interaction_mention_broadcast_source_mismatch");
-    }
-    sourceRootId = reply.rootId;
-  }
-  if (!sourceRootId) throw new Error("interaction_mention_broadcast_source_required");
   const availability = await readEverybodyMentionEmailAvailability({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -269,8 +255,7 @@ export async function scheduleEverybodyMentionBroadcast(args: {
     communityId: args.communityId,
     roleKey: EVERYBODY_MENTION_ROLE_KEY,
     actorUserId: args.actorUserId,
-    sourceRootId,
-    ...(args.replyId ? { sourceReplyId: args.replyId } : {}),
+    sourceRootId: args.rootId,
     sourceMentionId: args.sourceMentionId,
     sourceCreatedAt: args.nowMs,
     emailMode: availability.emailMode,

@@ -85,6 +85,7 @@ export async function searchCloudCommunityMentionCandidates<SessionT>(
     communityId: string;
     query: string;
     limit?: number;
+    includeRoles?: boolean;
   },
 ): Promise<CloudCommunityMentionCandidateRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -93,6 +94,7 @@ export async function searchCloudCommunityMentionCandidates<SessionT>(
     communityId: params.communityId,
     query: params.query,
     limit: params.limit ?? 8,
+    includeRoles: params.includeRoles ?? true,
   });
   return coerceGatewayRows<CloudCommunityMentionCandidateRow>(payload);
 }

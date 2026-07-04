@@ -1387,7 +1387,11 @@ async function validateEverybodyMentionForWrite(args: {
   ctx: any;
   communityId: any;
   actorUserId: any;
+  targetKind: "root" | "reply";
 }): Promise<void> {
+  if (args.targetKind !== "root") {
+    throw new Error("interaction_mention_everybody_reply_not_allowed");
+  }
   await requireCommunityManager({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -1399,6 +1403,7 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
   ctx: any;
   communityId: any;
   actorUserId: any;
+  targetKind: "root" | "reply";
   text: string;
   mentions: Array<{ userId?: any; agentKey?: any; roleKey?: any }>;
 }): Promise<InteractionMentionSpec[]> {
@@ -1421,6 +1426,7 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
         ctx: args.ctx,
         communityId: args.communityId,
         actorUserId: args.actorUserId,
+        targetKind: args.targetKind,
       });
       out.push({ kind: "role", roleKey });
       continue;
@@ -1498,6 +1504,15 @@ async function insertCommunityInteractionMentionRows(args: {
   const orderedMentionSpecs = args.mentionedUserIds
     .slice()
     .sort((left, right) => (left.kind === "role" ? -1 : 0) - (right.kind === "role" ? -1 : 0));
+  const hasEverybodyRoleMention = orderedMentionSpecs.some(
+    (spec) => spec.kind === "role" && spec.roleKey === EVERYBODY_MENTION_ROLE_KEY,
+  );
+  if (hasEverybodyRoleMention && args.replyId) {
+    throw new Error("interaction_mention_everybody_reply_not_allowed");
+  }
+  if (hasEverybodyRoleMention && !args.rootId) {
+    throw new Error("interaction_mention_broadcast_source_required");
+  }
   for (const spec of orderedMentionSpecs) {
     const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
@@ -1517,7 +1532,6 @@ async function insertCommunityInteractionMentionRows(args: {
         ctx: args.ctx,
         communityId: args.communityId,
         rootId: args.rootId,
-        replyId: args.replyId,
         actorUserId: args.actorUserId,
         sourceMentionId: mentionId,
         nowMs: args.nowMs,
@@ -1580,6 +1594,9 @@ export const createCommunityInteractionComposerMessage = mutation({
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
     const attachments = normalizeInteractionAttachmentInputs(args.attachments ?? []);
     if (!text && attachments.length === 0) throw new Error("interaction_content_required");
+    if (args.rootId && textContainsEverybodyMentionToken(text)) {
+      throw new Error("interaction_mention_everybody_reply_not_allowed");
+    }
     const contentBlocks: NormalizedContentBlock[] = text
       ? [
           { blockType: "markdown_text", text },
@@ -1591,6 +1608,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       ctx,
       communityId: args.communityId,
       actorUserId: userId,
+      targetKind: args.rootId ? "reply" : "root",
       text,
       mentions: args.mentions ?? [],
     });
@@ -1997,6 +2015,18 @@ export const editCommunityInteractionMessage = mutation({
       args.targetType === "root"
         ? await listContentBlocksForRoot(ctx, target._id)
         : await listContentBlocksForReply(ctx, target._id);
+    if (textContainsEverybodyMentionToken(text)) {
+      if (args.targetType === "reply") {
+        throw new Error("interaction_mention_everybody_reply_not_allowed");
+      }
+      const previousText = existingBlocks
+        .filter((block) => block.blockType === "markdown_text")
+        .map((block) => block.text)
+        .join("\n\n");
+      if (!textContainsEverybodyMentionToken(previousText)) {
+        throw new Error("interaction_mention_everybody_edit_create_not_allowed");
+      }
+    }
     for (const block of existingBlocks) await ctx.db.delete(block._id);
     await insertContentBlocksForTarget({
       ctx,

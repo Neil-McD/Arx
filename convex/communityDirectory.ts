@@ -169,6 +169,7 @@ export const searchCommunityMentionCandidates = query({
     communityId: v.id("communities"),
     query: v.optional(v.string()),
     limit: v.optional(v.number()),
+    includeRoles: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { community, userId } = await resolveCommunityDirectoryContext({
@@ -179,6 +180,7 @@ export const searchCommunityMentionCandidates = query({
     });
     const queryText = normalizeMentionSearchQuery(args.query);
     const limit = normalizeMentionSearchLimit(args.limit);
+    const includeRoles = args.includeRoles !== false;
     const out: any[] = [];
     const userIdCache = new Map<string, string | null>();
 
@@ -204,7 +206,7 @@ export const searchCommunityMentionCandidates = query({
       });
     };
 
-    const canMentionEverybody = await (async () => {
+    const canMentionEverybody = includeRoles && await (async () => {
       try {
         await requireCommunityManager({
           ctx,

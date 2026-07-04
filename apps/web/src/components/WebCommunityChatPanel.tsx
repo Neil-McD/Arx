@@ -453,7 +453,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [drawerMentionQuery, setDrawerMentionQuery] = useState<string | null>(null);
   const [remoteMentionSearch, setRemoteMentionSearch] = useState<{
     communityId: string;
+    owner: "main" | "drawer";
     query: string;
+    includeRoles: boolean;
     candidates: MentionCandidate[];
   } | null>(null);
   const mentionSearchSeqRef = useRef(0);
@@ -482,11 +484,18 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     ingestAttachmentsFromFileList: onIngestCommunityAttachmentsFromFileList,
   });
 
+  const activeMentionOwner: "main" | "drawer" | null =
+    mainMentionQuery !== null ? "main" : drawerMentionQuery !== null ? "drawer" : null;
   const activeMentionQuery = mainMentionQuery ?? drawerMentionQuery;
+  const activeMentionIncludesRoles = activeMentionOwner === "main" && !replyingToMessage;
 
   // Fast fallback while the backend search hydrates: already-loaded active
   // community directory members with handles, except yourself.
-  const localMentionCandidates = useMemo<MentionCandidate[]>(() => {
+  const localMentionCandidateParts = useMemo<{
+    agentCandidate: MentionCandidate | null;
+    everybodyCandidate: MentionCandidate | null;
+    memberCandidates: MentionCandidate[];
+  }>(() => {
     const seenMemberIds = new Set<string>();
     const memberCandidates = mentionableCommunityMembers
       .reduce<MentionCandidate[]>((candidates, member) => {
@@ -535,11 +544,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           kind: "community_agent" as const,
         }
       : null;
-    return [
-      ...(agentCandidate ? [agentCandidate] : []),
-      ...(everybodyCandidate ? [everybodyCandidate] : []),
-      ...memberCandidates,
-    ];
+    return { agentCandidate, everybodyCandidate, memberCandidates };
   }, [
     activeCommunity?.name,
     canMentionEverybody,
@@ -549,6 +554,23 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     profilesByUserId,
     sessionUserId,
   ]);
+  const localMainMentionCandidates = useMemo<MentionCandidate[]>(
+    () => [
+      ...(localMentionCandidateParts.agentCandidate ? [localMentionCandidateParts.agentCandidate] : []),
+      ...(!replyingToMessage && localMentionCandidateParts.everybodyCandidate
+        ? [localMentionCandidateParts.everybodyCandidate]
+        : []),
+      ...localMentionCandidateParts.memberCandidates,
+    ],
+    [localMentionCandidateParts, replyingToMessage],
+  );
+  const localReplyMentionCandidates = useMemo<MentionCandidate[]>(
+    () => [
+      ...(localMentionCandidateParts.agentCandidate ? [localMentionCandidateParts.agentCandidate] : []),
+      ...localMentionCandidateParts.memberCandidates,
+    ],
+    [localMentionCandidateParts],
+  );
 
   useEffect(() => {
     mentionSearchSeqRef.current += 1;
@@ -559,12 +581,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     const communityId = String(activeCommunity?.id ?? "").trim();
-    if (!session || !communityId || activeMentionQuery === null || !canUseComposer) {
+    if (!session || !communityId || activeMentionOwner === null || activeMentionQuery === null || !canUseComposer) {
       mentionSearchSeqRef.current += 1;
       setRemoteMentionSearch(null);
       return;
     }
     const query = activeMentionQuery;
+    const owner = activeMentionOwner;
+    const includeRoles = activeMentionIncludesRoles;
     const seq = (mentionSearchSeqRef.current += 1);
     const timeout = window.setTimeout(() => {
       void (async () => {
@@ -574,11 +598,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             communityId,
             query,
             limit: 8,
+            includeRoles,
           });
           if (mentionSearchSeqRef.current !== seq) return;
           setRemoteMentionSearch({
             communityId,
+            owner,
             query,
+            includeRoles,
             candidates: rows
               .map(mapCloudMentionCandidate)
               .filter((candidate): candidate is MentionCandidate => Boolean(candidate)),
@@ -591,21 +618,38 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       })();
     }, query.trim() ? 120 : 0);
     return () => window.clearTimeout(timeout);
-  }, [activeCommunity?.id, activeMentionQuery, canUseComposer, session]);
+  }, [
+    activeCommunity?.id,
+    activeMentionIncludesRoles,
+    activeMentionOwner,
+    activeMentionQuery,
+    canUseComposer,
+    session,
+  ]);
 
-  const remoteMentionCandidates =
+  const activeRemoteMentionCandidates =
     remoteMentionSearch &&
     activeCommunity?.id === remoteMentionSearch.communityId &&
+    activeMentionOwner === remoteMentionSearch.owner &&
+    activeMentionIncludesRoles === remoteMentionSearch.includeRoles &&
     activeMentionQuery === remoteMentionSearch.query
       ? remoteMentionSearch.candidates
       : EMPTY_MENTION_CANDIDATES;
-  const mentionCandidates = useMemo(
-    () => mergeMentionCandidates(remoteMentionCandidates, localMentionCandidates),
-    [localMentionCandidates, remoteMentionCandidates],
+  const remoteMainMentionCandidates =
+    activeMentionOwner === "main" ? activeRemoteMentionCandidates : EMPTY_MENTION_CANDIDATES;
+  const remoteDrawerMentionCandidates =
+    activeMentionOwner === "drawer" ? activeRemoteMentionCandidates : EMPTY_MENTION_CANDIDATES;
+  const mainMentionCandidates = useMemo(
+    () => mergeMentionCandidates(remoteMainMentionCandidates, localMainMentionCandidates),
+    [localMainMentionCandidates, remoteMainMentionCandidates],
+  );
+  const drawerMentionCandidates = useMemo(
+    () => mergeMentionCandidates(remoteDrawerMentionCandidates, localReplyMentionCandidates),
+    [localReplyMentionCandidates, remoteDrawerMentionCandidates],
   );
 
   const mainMention = useMentionAutocomplete({
-    candidates: mentionCandidates,
+    candidates: mainMentionCandidates,
     textareaRef: chatInputRef,
     applyText: (value, textarea) => onCommunityMessageInputChange(value, textarea),
     onActiveQueryChange: setMainMentionQuery,
@@ -853,7 +897,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   }, [selectedInteractionRootId, onThreadTypingSignal]);
 
   const drawerMention = useMentionAutocomplete({
-    candidates: mentionCandidates,
+    candidates: drawerMentionCandidates,
     textareaRef: drawerReplyInputRef,
     applyText: (value, textarea) => handleDrawerReplyInputChange(value, textarea),
     onActiveQueryChange: setDrawerMentionQuery,

@@ -288,8 +288,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     chatPanelSource,
-    /const agentCandidate: MentionCandidate \| null = agentDisplayName[\s\S]*userId: "community_agent"[\s\S]*kind: "community_agent" as const[\s\S]*return \[[\s\S]*\.\.\.\(agentCandidate \? \[agentCandidate\] : \[\]\)[\s\S]*\.\.\.\(everybodyCandidate \? \[everybodyCandidate\] : \[\]\)[\s\S]*\.\.\.memberCandidates/,
-    "community-agent mention candidate must be pinned first on bare @ before roles and humans",
+    /const agentCandidate: MentionCandidate \| null = agentDisplayName[\s\S]*userId: "community_agent"[\s\S]*kind: "community_agent" as const[\s\S]*const localMainMentionCandidates = useMemo<MentionCandidate\[\]>\([\s\S]*localMentionCandidateParts\.agentCandidate[\s\S]*!replyingToMessage && localMentionCandidateParts\.everybodyCandidate[\s\S]*localMentionCandidateParts\.memberCandidates/,
+    "root composer mention candidates must pin the community agent before @everybody and humans",
+  );
+  assert.match(
+    chatPanelSource,
+    /const localReplyMentionCandidates = useMemo<MentionCandidate\[\]>\([\s\S]*localMentionCandidateParts\.agentCandidate[\s\S]*localMentionCandidateParts\.memberCandidates[\s\S]*const mainMentionCandidates/,
+    "reply composer mention candidates must keep the community agent and humans without @everybody",
   );
   assert.match(
     senderSource,
