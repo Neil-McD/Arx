@@ -20,8 +20,13 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /function buildCommunityComposerIdeaPlaceholders\([\s\S]*"Ask the community a question\.\.\."[\s\S]*"Share what you are working on\.\.\."[\s\S]*"Type @ to tag a member\.\.\."[\s\S]*`Tag @\$\{agentName\} to ask the community agent\.\.\.`[\s\S]*"Use @everybody for updates everyone should see\.\.\."/,
-  "placeholder ideas must include chat, member tag, agent tag, and conditional @everybody prompts",
+  /function buildCommunityComposerIdeaPlaceholders\([\s\S]*"Ask the community a question\.\.\."[\s\S]*"Share what you are working on\.\.\."[\s\S]*"Type @ to tag a member\.\.\."[\s\S]*`Tag @\$\{agentName\} to ask the community agent\.\.\.`/,
+  "placeholder ideas must include chat, member tag, and agent tag prompts",
+);
+assert.doesNotMatch(
+  chatPanel,
+  /Use @everybody for updates everyone should see/,
+  "main composer idea placeholders must not promote @everybody",
 );
 assert.match(
   chatPanel,
@@ -35,7 +40,7 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /shouldReduceCommunityComposerPlaceholderMotion \? 0 : communityComposerIdeaPlaceholderIndex[\s\S]*\}, \[activeCommunity\?\.id, activeCommunity\?\.name, canMentionEverybody\]\);/,
+  /shouldReduceCommunityComposerPlaceholderMotion \? 0 : communityComposerIdeaPlaceholderIndex[\s\S]*\}, \[activeCommunity\?\.id, activeCommunity\?\.name\]\);/,
   "reduced-motion users should see the first prompt and community prompt changes should reset the cycle",
 );
 assert.match(
@@ -50,8 +55,13 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /placeholder="Reply\.\.\."/,
-  "thread reply composer placeholder must remain unchanged",
+  /const drawerReplyPlaceholder = drawerReplyTarget\?\.sender_id[\s\S]*`Reply to \$\{displayName\(drawerReplyTarget\.sender_id\)\.trim\(\) \|\| "this message"\}\.\.\.`[\s\S]*: "Reply\.\.\.";/,
+  "thread reply composer placeholder must include the target display name with a Reply fallback",
+);
+assert.match(
+  chatPanel,
+  /placeholder=\{drawerReplyPlaceholder\}/,
+  "thread reply composer textarea must use the computed reply target placeholder",
 );
 assert.match(
   packageJson,

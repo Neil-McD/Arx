@@ -190,7 +190,6 @@ function isCommunityComposerTransferSource(
 
 function buildCommunityComposerIdeaPlaceholders(params: {
   activeCommunityName?: string | null;
-  canMentionEverybody: boolean;
 }): string[] {
   const agentName = String(params.activeCommunityName ?? "").trim();
   return [
@@ -198,7 +197,6 @@ function buildCommunityComposerIdeaPlaceholders(params: {
     "Share what you are working on...",
     "Type @ to tag a member...",
     ...(agentName ? [`Tag @${agentName} to ask the community agent...`] : []),
-    ...(params.canMentionEverybody ? ["Use @everybody for updates everyone should see..."] : []),
   ];
 }
 
@@ -635,9 +633,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     () =>
       buildCommunityComposerIdeaPlaceholders({
         activeCommunityName: activeCommunity?.name,
-        canMentionEverybody,
       }),
-    [activeCommunity?.name, canMentionEverybody],
+    [activeCommunity?.name],
   );
   const canShowMainComposerIdeaPlaceholder = Boolean(
     hasSession &&
@@ -657,7 +654,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     setCommunityComposerIdeaPlaceholderIndex(0);
-  }, [activeCommunity?.id, activeCommunity?.name, canMentionEverybody]);
+  }, [activeCommunity?.id, activeCommunity?.name]);
 
   useEffect(() => {
     if (
@@ -1438,6 +1435,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const isQuotingDrawerReply = Boolean(
     drawerReplyTarget && rootReplyTarget && drawerReplyTarget.id !== rootReplyTarget.id,
   );
+  const drawerReplyPlaceholder = drawerReplyTarget?.sender_id
+    ? `Reply to ${displayName(drawerReplyTarget.sender_id).trim() || "this message"}...`
+    : "Reply...";
   const drawerReplyComposer = drawerReplyTarget ? (
     <div className="community-interaction-reply-composer-panel">
       {isQuotingDrawerReply ? (
@@ -1510,7 +1510,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               drawerReplyInputRef.current = node;
             }}
             className="chat-input"
-            placeholder="Reply..."
+            placeholder={drawerReplyPlaceholder}
             value={drawerReplyInput}
             onChange={(event) => {
               handleDrawerReplyInputChange(event.target.value, event.target);
