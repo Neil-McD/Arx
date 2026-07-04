@@ -10982,34 +10982,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   word-break: break-all;
 }
 
-.community-interaction-quote {
-  margin: 4px 0 3px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.community-interaction-quote-author {
-  flex: 0 0 auto;
-  color: var(--text-primary);
-  font-weight: 700;
-}
-
-.community-interaction-quote-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
    side-by-side, the drawer takes over the area (back arrow returns to chat).
    Keyed to the projection's own width (container query) so it triggers based on

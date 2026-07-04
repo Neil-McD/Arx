@@ -860,7 +860,7 @@ function buildOptimisticReplyBundle(p: PendingCanonicalInteraction): CommunityIn
       actor_type: "human",
       actor_user_id: p.senderId,
       actor_agent_key: null,
-      target_reply_id: null,
+      target_reply_id: p.replyToMessageId,
       status: "active",
       visibility_scope: "community",
       content_summary: p.text,

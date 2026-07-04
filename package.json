@@ -55,6 +55,7 @@
     "check:workspace-composer-focus-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_composer_focus_policy_proof.ts",
     "check:community-composer-focus-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_composer_focus_policy_proof.ts",
     "check:community-composer-placeholder-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_composer_placeholder_policy_proof.ts",
+    "check:community-thread-reply-mention-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_thread_reply_mention_policy_proof.ts",
     "check:no-builder-plan-infra": "bash scripts/no_builder_plan_infra_guard.sh",
     "check:account-community-limit-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_community_limit_contract_proof.ts",
     "check:builder-partner-program-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_partner_program_contract_proof.ts",

@@ -37,6 +37,7 @@ type CommunityReplyTarget<
   },
 > = Pick<MessageT, "id" | "sender_id" | "body"> & {
   interaction_root_id?: string | null;
+  interaction_reply_id?: string | null;
   legacy_message_id?: string | null;
 };
 
@@ -459,11 +460,13 @@ export function useCommunityChatMutationController<
       : current.replyingToMessage;
     const replyToId = replySnapshot ? replySnapshot.id : null;
     const replyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
-    const legacyReplyToId = (() => {
+    const interactionReplyToId = String(replySnapshot?.interaction_reply_id ?? "").trim() || null;
+    const legacyReplyToMessageId = (() => {
       const legacyId = String(replySnapshot?.legacy_message_id ?? "").trim();
       if (legacyId) return legacyId;
       return replyRootId ? null : replyToId;
     })();
+    const canonicalReplyToMessageId = interactionReplyToId ?? legacyReplyToMessageId;
     const bodyToSend = rawText;
     const isReplySend = Boolean(replySnapshot);
     if (isReplySend && textContainsEverybodyMentionToken(bodyToSend)) {
@@ -541,7 +544,7 @@ export function useCommunityChatMutationController<
       sender_id: sessionUserId,
       body: bodyToSend,
       attachments: attachmentsToSend,
-      reply_to_id: legacyReplyToId,
+      reply_to_id: legacyReplyToMessageId,
       created_at: optimisticCreatedAt,
       seq: Number.MAX_SAFE_INTEGER,
     } as MessageT;
@@ -597,7 +600,7 @@ export function useCommunityChatMutationController<
           communityId: activeCommunityId,
           kind: sendRoute.rootId ? "reply" : "root",
           rootId: sendRoute.rootId,
-          replyToMessageId: legacyReplyToId,
+          replyToMessageId: canonicalReplyToMessageId,
           text: bodyToSend,
           attachments: preparedAttachments,
           serializedAttachments,
@@ -614,7 +617,7 @@ export function useCommunityChatMutationController<
           idempotencyKey: sendRoute.idempotencyKey,
           text: bodyToSend,
           rootId: sendRoute.rootId,
-          replyToMessageId: legacyReplyToId,
+          replyToMessageId: canonicalReplyToMessageId,
           mentions: mentionsToSend,
           attachments: serializedAttachments,
         });
@@ -634,7 +637,7 @@ export function useCommunityChatMutationController<
         threadId,
         text: bodyToSend,
         attachments: serializedAttachments,
-        replyToId: legacyReplyToId,
+        replyToId: legacyReplyToMessageId,
       });
       const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;
       if (!record) {

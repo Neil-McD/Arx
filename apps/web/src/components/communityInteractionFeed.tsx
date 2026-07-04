@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  CornerUpLeft,
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
@@ -16,7 +15,6 @@ import type {
   CommunityInteractionContentBlock,
   CommunityInteractionEmbed,
   CommunityInteractionMention,
-  CommunityInteractionReplyBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import {
   splitBodyIntoMentionSegments,
@@ -298,26 +296,6 @@ export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
           </a>
         );
       })}
-    </div>
-  );
-}
-
-export function QuoteChip(props: {
-  quoted: CommunityInteractionReplyBundle | undefined;
-  displayName: (userId: string) => string;
-}) {
-  const label = props.quoted ? actorLabel(props.quoted.reply, props.displayName) : "a reply";
-  const snippet = props.quoted
-    ? bundleText(props.quoted.content_blocks, props.quoted.reply.content_summary)
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 80)
-    : "";
-  return (
-    <div className="community-interaction-quote" aria-label={`In reply to ${label}`}>
-      <CornerUpLeft size={12} aria-hidden="true" />
-      <span className="community-interaction-quote-author">{label}</span>
-      {snippet ? <span className="community-interaction-quote-text">{snippet}</span> : null}
     </div>
   );
 }

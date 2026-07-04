@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  CornerUpLeft,
   MessageCircle,
   MessageSquare,
   Pencil,
@@ -57,6 +56,7 @@ export type WebCommunityInteractionProjectionProps = {
     sender_id: string;
     body: string;
     interaction_root_id: string;
+    interaction_reply_id?: string | null;
     legacy_message_id?: string | null;
   }) => void;
   mainComposer?: ReactNode;
@@ -145,7 +145,6 @@ import {
   MessageActions,
   OverflowMenu,
   ProfileHoverCard,
-  QuoteChip,
   TypingIndicator,
   actorLabel,
   agentBadgeLabel,
@@ -498,6 +497,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                               sender_id: reply.actor_user_id,
                               body,
                               interaction_root_id: reply.root_id,
+                              interaction_reply_id: reply.id,
                               legacy_message_id: reply.legacy_message_id ?? null,
                             });
                           }}
@@ -548,9 +548,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                           <span>{props.formatChatTime(reply.created_at)}</span>
                         </div>
-                        {reply.target_reply_id ? (
-                          <QuoteChip quoted={replyById.get(reply.target_reply_id)} displayName={props.displayName} />
-                        ) : null}
                         {isEditingReply ? (
                           <EditForm
                             value={editText}

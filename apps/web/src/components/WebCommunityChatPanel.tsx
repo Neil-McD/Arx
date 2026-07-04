@@ -63,6 +63,7 @@ type CommunityMentionMember = {
 };
 type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
   interaction_root_id?: string | null;
+  interaction_reply_id?: string | null;
   legacy_message_id?: string | null;
 };
 
@@ -219,6 +220,23 @@ function mergeMentionCandidates(
     merged.push(candidate);
   }
   return merged;
+}
+
+function buildUserMentionFromProfile(
+  userId: string,
+  profile: UserProfile | null,
+  fallbackDisplayName: string,
+): CommittedMention | null {
+  const normalizedUserId = String(userId ?? "").trim();
+  const handle = String(profile?.handle ?? "").trim().replace(/^@+/, "");
+  if (!normalizedUserId || !handle) return null;
+  const displayName = String(profile?.display_name ?? fallbackDisplayName ?? "").trim() || handle;
+  return {
+    userId: normalizedUserId,
+    displayName,
+    token: `@${handle}`,
+    kind: "user",
+  };
 }
 
 function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): MentionCandidate | null {
@@ -500,6 +518,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [drawerReplyMentions, setDrawerReplyMentions] = useState<CommittedMention[]>([]);
   const [drawerReplyAttachments, setDrawerReplyAttachments] = useState<CommunityMessageAttachment[]>([]);
   const drawerReplyAttachmentsRef = useRef<CommunityMessageAttachment[]>([]);
+  const drawerReplyAutoSeedTokenRef = useRef<string | null>(null);
   const drawerReplyFileInputRef = useRef<HTMLInputElement | null>(null);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastCommunityComposerFocusTargetRef = useRef<string | null>(null);
@@ -862,6 +881,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       sender_id: root.actor_user_id,
       body: root.content_summary ?? "",
       interaction_root_id: root.id,
+      interaction_reply_id: null,
       legacy_message_id: root.legacy_message_id ?? null,
     };
   }, [
@@ -1026,6 +1046,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     setDrawerReplyTarget(rootReplyTarget);
     setDrawerReplyInput("");
     setDrawerReplyMentions([]);
+    drawerReplyAutoSeedTokenRef.current = null;
     setDrawerReplyAttachmentsAndRef([]);
     if (drawerReplyInputRef.current) {
       drawerReplyInputRef.current.style.height = "auto";
@@ -1113,6 +1134,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   const handleDrawerReplyInputChange = useCallback((value: string, textarea: HTMLTextAreaElement) => {
     setDrawerReplyInput(value);
+    const autoSeedToken = drawerReplyAutoSeedTokenRef.current;
+    if (autoSeedToken && value.trim() !== autoSeedToken) {
+      drawerReplyAutoSeedTokenRef.current = null;
+    }
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     if (value.trim() && selectedInteractionRootId) {
@@ -1148,6 +1173,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const appendDrawerVoiceTranscript = useCallback((transcript: string) => {
     const normalized = transcript.trim();
     if (!normalized) return;
+    drawerReplyAutoSeedTokenRef.current = null;
     setDrawerReplyInput((previous) => mergeVoiceTranscript(previous, normalized));
     if (selectedInteractionRootId) {
       onThreadTypingSignal?.(selectedInteractionRootId);
@@ -1179,12 +1205,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       clearDraft: () => {
         setDrawerReplyInput("");
         setDrawerReplyMentions([]);
+        drawerReplyAutoSeedTokenRef.current = null;
         setDrawerReplyAttachmentsAndRef([]);
       },
       restoreDraft: () => {
         setDrawerReplyTarget(target);
         setDrawerReplyInput(text);
         setDrawerReplyMentions(mentions);
+        drawerReplyAutoSeedTokenRef.current = null;
         setDrawerReplyAttachmentsAndRef(attachments);
       },
     });
@@ -1623,7 +1651,27 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 formatChatTime={formatChatTime}
                 renderTextWithLinks={renderTextWithLinks}
                 onStartRootReply={(message) => {
+                  const seededMention = buildUserMentionFromProfile(
+                    message.sender_id,
+                    profilesByUserId[message.sender_id] ?? null,
+                    displayName(message.sender_id),
+                  );
+                  const autoSeedToken = drawerReplyAutoSeedTokenRef.current;
+                  const canReplaceAutoSeed = Boolean(autoSeedToken && drawerReplyInput.trim() === autoSeedToken);
+                  const canSeedMention = Boolean(
+                    seededMention &&
+                    (drawerReplyInput.trim().length === 0 || canReplaceAutoSeed),
+                  );
                   setDrawerReplyTarget(message);
+                  if (seededMention && canSeedMention) {
+                    setDrawerReplyInput(`${seededMention.token} `);
+                    setDrawerReplyMentions([seededMention]);
+                    drawerReplyAutoSeedTokenRef.current = seededMention.token;
+                  } else if (!seededMention && canReplaceAutoSeed) {
+                    setDrawerReplyInput("");
+                    setDrawerReplyMentions([]);
+                    drawerReplyAutoSeedTokenRef.current = null;
+                  }
                   setTimeout(() => {
                     focusCommunityComposerSafely(drawerReplyInputRef, {
                       maxHeightPx: 120,
