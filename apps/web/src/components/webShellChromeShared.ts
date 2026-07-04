@@ -13,6 +13,7 @@ import type {
 } from "../../../../shared/appShellNavigation";
 
 export type MobileOverlay = "agent" | "community" | "community_selector" | null;
+export type MobileRootPage = "threads" | "agent" | "community" | "members";
 
 export type CommunityLike = {
   id: string;

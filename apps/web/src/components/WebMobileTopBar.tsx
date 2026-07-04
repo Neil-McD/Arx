@@ -1,11 +1,15 @@
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import type { MobileRootPage } from "./webShellChromeShared";
 
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community";
+  rootPage: MobileRootPage;
   secondaryMode: "discover" | "community";
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
+  showMembersRoot: boolean;
+  forceCommunityRoot?: boolean;
   activeCommunityName: string | null;
   activeCommunityAvatarUrl: string | null;
   activeCommunityAvatarFocusX?: number | null;
@@ -16,16 +20,18 @@ type WebMobileTopBarProps = {
   onOpenDrawer: () => void;
   onBack?: (() => void) | null;
   onStartNewThread?: (() => void) | null;
-  onSelectMode: (mode: "agent" | "discover" | "community") => void;
+  onSelectRootPage: (page: MobileRootPage) => void;
   onOpenCommunitySelector: () => void;
 };
 
 export function WebMobileTopBar({
-  mode,
+  rootPage,
   secondaryMode,
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
+  showMembersRoot,
+  forceCommunityRoot = false,
   activeCommunityName,
   activeCommunityAvatarUrl,
   activeCommunityAvatarFocusX,
@@ -36,12 +42,36 @@ export function WebMobileTopBar({
   onOpenDrawer,
   onBack = null,
   onStartNewThread = null,
-  onSelectMode,
+  onSelectRootPage,
   onOpenCommunitySelector,
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
   const rightModeLabel = secondaryMode === "discover" ? "Discover" : "Community";
-  const isRightModeActive = mode === "discover" || mode === "community";
+  const rootPageLabel =
+    rootPage === "threads"
+      ? "Threads"
+      : rootPage === "agent"
+        ? "Agent"
+        : rootPage === "members"
+          ? "Members"
+          : rightModeLabel;
+  const getRootPagerLabel = (page: MobileRootPage) => {
+    if (page === "threads") return "Threads";
+    if (page === "agent") return "Agent";
+    if (page === "members") return "Members";
+    return rightModeLabel;
+  };
+  const rootPages: MobileRootPage[] = forceCommunityRoot
+    ? ["community"]
+    : showMembersRoot
+      ? ["threads", "agent", "community", "members"]
+      : ["threads", "agent", "community"];
+  const drawerLabel =
+    rootPage === "threads"
+      ? "Back to agent"
+      : rootPage === "community" || rootPage === "members"
+        ? "Open community panel"
+        : "Open threads";
 
   return (
     <header className="mobile-topbar">
@@ -62,8 +92,8 @@ export function WebMobileTopBar({
           <button
             type="button"
             className="mobile-topbar-icon"
-            aria-label={mode === "community" ? "Open community panel" : "Open threads panel"}
-            title={mode === "community" ? "Open community panel" : "Open threads panel"}
+            aria-label={drawerLabel}
+            title={drawerLabel}
             onClick={onOpenDrawer}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -71,7 +101,7 @@ export function WebMobileTopBar({
             </svg>
           </button>
         ) : null}
-        {mode === "agent" && onStartNewThread ? (
+        {rootPage === "agent" && onStartNewThread ? (
           <button
             type="button"
             className="new-session-header-btn mobile-topbar-new-thread"
@@ -87,25 +117,24 @@ export function WebMobileTopBar({
         ) : null}
       </div>
 
-      <div className="mobile-topbar-center" role="tablist" aria-label="View mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "agent"}
-          className={`mobile-topbar-mode${mode === "agent" ? " active" : ""}`}
-          onClick={() => onSelectMode("agent")}
-        >
-          Agent
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isRightModeActive}
-          className={`mobile-topbar-mode${isRightModeActive ? " active" : ""}`}
-          onClick={() => onSelectMode(secondaryMode)}
-        >
-          {rightModeLabel}
-        </button>
+      <div className="mobile-topbar-center mobile-topbar-root" aria-label="Mobile pages">
+        <div className="mobile-topbar-root-title">{rootPageLabel}</div>
+        <div className="mobile-root-pager" role="tablist" aria-label="Mobile page">
+          {rootPages.map((page) => {
+            const label = getRootPagerLabel(page);
+            return (
+              <button
+                key={page}
+                type="button"
+                role="tab"
+                aria-label={label}
+                aria-selected={rootPage === page}
+                className={`mobile-root-pager-dot${rootPage === page ? " active" : ""}`}
+                onClick={() => onSelectRootPage(page)}
+              />
+            );
+          })}
+        </div>
       </div>
 
       <div className="mobile-topbar-right">

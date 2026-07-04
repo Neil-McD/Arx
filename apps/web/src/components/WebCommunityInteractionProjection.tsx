@@ -159,17 +159,12 @@ import {
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
 
-
-export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const isNearBottomRef = useRef(true);
-  const requestedOlderRootsRef = useRef(false);
-  const pendingOlderAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
-  const seenReplyIds = useRef<Set<string>>(new Set());
-  const repliesLoadedOnce = useRef(false);
-  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
-  const [editText, setEditText] = useState("");
+export function CommunityInteractionContextPanelSurface(
+  props: WebCommunityInteractionProjectionProps & {
+    containerClassName?: string;
+    ariaLabel?: string;
+  },
+) {
   const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
   const selectedCommunityMember = useMemo(() => {
     if (!selectedCommunityMemberId) return null;
@@ -198,6 +193,96 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     if (selectedCommunityMember) return;
     setSelectedCommunityMemberId(null);
   }, [canManageCommunityMembers, selectedCommunityMember, selectedCommunityMemberId]);
+
+  return (
+    <>
+      <aside
+        className={props.containerClassName ?? "community-interaction-drawer community-context-panel"}
+        aria-label={props.ariaLabel ?? "Community"}
+      >
+        <CommunityContextPanel
+          communityName={props.activeCommunityName}
+          onlineFaces={props.presenceSummary?.online_faces ?? null}
+          onlineCount={props.presenceSummary?.online_count ?? null}
+          memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
+          members={props.communityMembers ?? null}
+          membersHasMore={props.communityMembersHasMore}
+          isLoadingMembers={props.isLoadingCommunityMembers}
+          isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
+          membersLoadError={props.communityMembersLoadError}
+          onLoadMoreMembers={props.onLoadMoreCommunityMembers}
+          onlineUserIds={props.onlineUserIds ?? null}
+          ownerId={props.communityOwnerId ?? null}
+          canManageMembers={canManageCommunityMembers}
+          entryPolicy={props.communityEntryPolicy ?? null}
+          canSetFreeAccessMode={props.canSetCommunityFreeAccessMode}
+          isSettingFreeAccessMode={props.isSettingCommunityFreeAccessMode}
+          freeAccessModeError={props.communityFreeAccessModeError}
+          onSetFreeAccessMode={props.onSetCommunityFreeAccessMode}
+          canReviewJoinRequests={props.canReviewCommunityJoinRequests}
+          joinReviewMode={props.communityJoinReviewMode}
+          pendingJoinRequests={props.communityJoinRequests ?? null}
+          isLoadingJoinRequests={props.isLoadingCommunityJoinRequests}
+          joinRequestsError={props.communityJoinRequestsError}
+          decidingJoinRequestId={props.decidingCommunityJoinRequestId}
+          onApproveJoinRequest={props.onApproveCommunityJoinRequest}
+          onDenyJoinRequest={props.onDenyCommunityJoinRequest}
+          memoryOverview={props.communityMemoryOverview ?? null}
+          isLoadingMemory={props.isLoadingCommunityMemory}
+          memoryLoadError={props.communityMemoryError}
+          onRefreshMemory={props.onRefreshCommunityMemory}
+          onOpenMemory={props.onOpenCommunityMemory}
+          lockedSections={props.contextPanelLockedSections ?? null}
+          onLockedSectionActivate={props.onContextPanelLockedSectionActivate}
+          memoryCountLabelOverride={props.communityMemoryCountLabel ?? null}
+          membersPreview={props.contextPanelMembersPreview ?? null}
+          onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
+          onOpenMemberProfile={props.onOpenProfile}
+          onMessageMember={props.onMessageUser}
+          currentUserId={props.currentUserId}
+          displayName={props.displayName}
+          getInitials={props.getInitials}
+          getAvatarColor={props.getAvatarColor}
+        />
+      </aside>
+      <CommunityMemberSettingsDialog
+        member={selectedCommunityMember}
+        activeCommunity={communityMemberSettingsCommunity}
+        canManageMembers={canManageCommunityMembers}
+        canViewMemberPlanDetails={Boolean(props.canViewMemberPlanDetails)}
+        isActiveCommunityOwner={Boolean(props.isActiveCommunityOwner)}
+        onClose={() => setSelectedCommunityMemberId(null)}
+        displayName={props.displayName}
+        getInitials={props.getInitials}
+        communityInitials={props.communityInitials ?? props.getInitials}
+        handleSetCommunityMemberRole={(membershipId, role) =>
+          props.onSetCommunityMemberRole?.(membershipId, role)
+        }
+        handleRemoveCommunityMember={(membershipId) =>
+          props.onRemoveCommunityMember?.(membershipId)
+        }
+        handleBanCommunityMember={(membershipId) =>
+          props.onBanCommunityMember?.(membershipId)
+        }
+        loadMemberBillingHistory={(membershipId) =>
+          props.loadMemberBillingHistory?.(membershipId) ?? Promise.resolve(null)
+        }
+      />
+    </>
+  );
+}
+
+
+export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isNearBottomRef = useRef(true);
+  const requestedOlderRootsRef = useRef(false);
+  const pendingOlderAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  const seenReplyIds = useRef<Set<string>>(new Set());
+  const repliesLoadedOnce = useRef(false);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
+  const [editText, setEditText] = useState("");
 
   const startEdit = (type: "root" | "reply", id: string, body: string) => {
     setEditing({ type, id });
@@ -624,77 +709,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           ) : null}
         </aside>
       ) : (
-        <aside className="community-interaction-drawer community-context-panel" aria-label="Community">
-          <CommunityContextPanel
-            communityName={props.activeCommunityName}
-            onlineFaces={props.presenceSummary?.online_faces ?? null}
-            onlineCount={props.presenceSummary?.online_count ?? null}
-            memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
-            members={props.communityMembers ?? null}
-            membersHasMore={props.communityMembersHasMore}
-            isLoadingMembers={props.isLoadingCommunityMembers}
-            isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
-            membersLoadError={props.communityMembersLoadError}
-            onLoadMoreMembers={props.onLoadMoreCommunityMembers}
-            onlineUserIds={props.onlineUserIds ?? null}
-            ownerId={props.communityOwnerId ?? null}
-            canManageMembers={canManageCommunityMembers}
-            entryPolicy={props.communityEntryPolicy ?? null}
-            canSetFreeAccessMode={props.canSetCommunityFreeAccessMode}
-            isSettingFreeAccessMode={props.isSettingCommunityFreeAccessMode}
-            freeAccessModeError={props.communityFreeAccessModeError}
-            onSetFreeAccessMode={props.onSetCommunityFreeAccessMode}
-            canReviewJoinRequests={props.canReviewCommunityJoinRequests}
-            joinReviewMode={props.communityJoinReviewMode}
-            pendingJoinRequests={props.communityJoinRequests ?? null}
-            isLoadingJoinRequests={props.isLoadingCommunityJoinRequests}
-            joinRequestsError={props.communityJoinRequestsError}
-            decidingJoinRequestId={props.decidingCommunityJoinRequestId}
-            onApproveJoinRequest={props.onApproveCommunityJoinRequest}
-            onDenyJoinRequest={props.onDenyCommunityJoinRequest}
-            memoryOverview={props.communityMemoryOverview ?? null}
-            isLoadingMemory={props.isLoadingCommunityMemory}
-            memoryLoadError={props.communityMemoryError}
-            onRefreshMemory={props.onRefreshCommunityMemory}
-            onOpenMemory={props.onOpenCommunityMemory}
-            lockedSections={props.contextPanelLockedSections ?? null}
-            onLockedSectionActivate={props.onContextPanelLockedSectionActivate}
-            memoryCountLabelOverride={props.communityMemoryCountLabel ?? null}
-            membersPreview={props.contextPanelMembersPreview ?? null}
-            onOpenMemberSettings={(member) => setSelectedCommunityMemberId(member.id)}
-            onOpenMemberProfile={props.onOpenProfile}
-            onMessageMember={props.onMessageUser}
-            currentUserId={props.currentUserId}
-            displayName={props.displayName}
-            getInitials={props.getInitials}
-            getAvatarColor={props.getAvatarColor}
-          />
-        </aside>
+        <CommunityInteractionContextPanelSurface {...props} />
       )}
     </div>
-    <CommunityMemberSettingsDialog
-      member={selectedCommunityMember}
-      activeCommunity={communityMemberSettingsCommunity}
-      canManageMembers={canManageCommunityMembers}
-      canViewMemberPlanDetails={Boolean(props.canViewMemberPlanDetails)}
-      isActiveCommunityOwner={Boolean(props.isActiveCommunityOwner)}
-      onClose={() => setSelectedCommunityMemberId(null)}
-      displayName={props.displayName}
-      getInitials={props.getInitials}
-      communityInitials={props.communityInitials ?? props.getInitials}
-      handleSetCommunityMemberRole={(membershipId, role) =>
-        props.onSetCommunityMemberRole?.(membershipId, role)
-      }
-      handleRemoveCommunityMember={(membershipId) =>
-        props.onRemoveCommunityMember?.(membershipId)
-      }
-      handleBanCommunityMember={(membershipId) =>
-        props.onBanCommunityMember?.(membershipId)
-      }
-      loadMemberBillingHistory={(membershipId) =>
-        props.loadMemberBillingHistory?.(membershipId) ?? Promise.resolve(null)
-      }
-    />
     </>
   );
 }

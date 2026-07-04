@@ -30,6 +30,8 @@ export function buildWebShellChromeHostProps(params: {
   handleMobileShellTouchEnd: TouchEventHandler<HTMLDivElement>;
   handleMobileShellTouchCancel: TouchEventHandler<HTMLDivElement>;
   mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
+  mobileRootPage: WebShellChromeHostProps["mobileTopBarProps"]["rootPage"];
+  forceMobileCommunityRoot: boolean;
   mobileSecondaryMode: WebShellChromeHostProps["mobileTopBarProps"]["secondaryMode"];
   showMobileSettingsIndex: boolean;
   activePage: AppPage;
@@ -39,7 +41,7 @@ export function buildWebShellChromeHostProps(params: {
   openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
   handleStartNewWorkspaceThreadFromShell: () => void;
-  handleSelectMobileMode: WebShellChromeHostProps["mobileTopBarProps"]["onSelectMode"];
+  handleSelectMobileRootPage: WebShellChromeHostProps["mobileTopBarProps"]["onSelectRootPage"];
   setMobileOverlay: (value: MobileOverlay) => void;
   isPublicCommunityFunnel: boolean;
   isPublicFunnelPreviewRoute: boolean;
@@ -119,11 +121,21 @@ export function buildWebShellChromeHostProps(params: {
       : undefined,
     mobileTopBarProps: {
       mode: params.showMobileSettingsShell ? "agent" : params.mobileShellMode,
+      rootPage: params.showMobileSettingsShell
+        ? "agent"
+        : params.forceMobileCommunityRoot
+          ? "community"
+          : params.mobileRootPage,
       secondaryMode: params.mobileSecondaryMode,
       showBackButton: params.showMobileSettingsIndex,
       showDrawerButton:
         !params.showMobileSettingsShell && params.activePage !== "discover",
-      hasActiveCommunity: params.hasSelectedCommunity,
+      hasActiveCommunity: Boolean(params.activeCommunity),
+      showMembersRoot:
+        !params.forceMobileCommunityRoot &&
+        params.hasSelectedCommunity &&
+        params.canViewMembersActiveCommunity,
+      forceCommunityRoot: params.forceMobileCommunityRoot,
       activeCommunityName: params.activeCommunity?.name ?? null,
       activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
       activeCommunityAvatarFocusX:
@@ -140,10 +152,12 @@ export function buildWebShellChromeHostProps(params: {
         ? params.handleExitMobileSettings
         : null,
       onStartNewThread:
-        !params.showMobileSettingsShell && params.mobileShellMode === "agent"
+        !params.showMobileSettingsShell &&
+        !params.forceMobileCommunityRoot &&
+        params.mobileShellMode === "agent"
           ? params.handleStartNewWorkspaceThreadFromShell
           : null,
-      onSelectMode: params.handleSelectMobileMode,
+      onSelectRootPage: params.handleSelectMobileRootPage,
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
     },
     desktopHeader: {

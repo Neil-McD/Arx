@@ -554,7 +554,11 @@ import {
   WebDirectMessagesHost,
   type DirectMessageOpenRequest,
 } from "./components/WebDirectMessagesHost";
-import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
+import {
+  WebMobileThreadsRootSurfaceHost,
+  WebWorkspaceShellPanelsHost,
+} from "./components/WebWorkspaceShellPanelsHost";
+import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
@@ -741,8 +745,6 @@ type UserMemorySettings = {
   agent_name: string;
   agent_soul: string;
 };
-
-type MobileOverlay = "agent" | "community" | "community_selector";
 
 type MessageAttachment = CommunityMessageAttachment & {
   file?: File | null;
@@ -2025,7 +2027,8 @@ export default function App() {
 
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(() => initialShellVariant);
-  const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay | null>(null);
+  const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
+  const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("agent");
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
 
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
@@ -10397,7 +10400,7 @@ export default function App() {
       }
     };
     const {
-      handleSelectMobileMode,
+      handleSelectMobileRootPage,
       openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
@@ -10410,12 +10413,18 @@ export default function App() {
       activeView,
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
-      mobileShellMode,
+      mobileRootPage,
       hasSelectedCommunity,
+      canViewMembersRoot: hasSelectedCommunity && canViewMembersActiveCommunity,
+      forceCommunityRoot:
+        showMobileShell &&
+        (shellPublicRoute.kind === "community_funnel" ||
+          shellPublicRoute.kind === "community_funnel_preview"),
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
       setMobileOverlay,
+      setMobileRootPage,
       setActivePage,
       setActiveView,
       setMobileSettingsView,
@@ -11580,6 +11589,43 @@ export default function App() {
     />
   );
 
+  const mobileThreadsRootSurface = (
+    <WebMobileThreadsRootSurfaceHost<ThreadRecord, CloudProjectRecord>
+      threads={threads}
+      projects={workspace.state.projects}
+      resolveThreadProjectId={resolveWorkspaceSidebarThreadProjectId}
+      getThreadSearchText={getWorkspaceSidebarThreadSearchText}
+      sessionsDrawerEnabled={sessionsDrawerEnabled}
+      isSessionsDrawerOpen={isSessionsDrawerOpen}
+      showMobileAppShell={showMobileAppShell}
+      showMobileShell={showMobileShell}
+      mobileOverlay={mobileOverlay}
+      setMobileOverlay={setMobileOverlay}
+      threadError={inlineThreadError}
+      displayedThreadError={displayedThreadError}
+      showGuestSignInAction={showGuestSignInAction}
+      session={session}
+      hasAuthenticatedPresentation={hasAuthenticatedAppShellPresentation}
+      isAuthRecoveringSignedIn={isAuthRecoveringSignedInAppShell}
+      authError={previewSidebarAuthError}
+      requireSignIn={() => requireSignIn()}
+      openMobileAgentSettings={openMobileAgentSettings}
+      activeThreadId={activeThreadId}
+      guestThreadId={GUEST_THREAD_ID}
+      guestThreadHasMessages={guestThreadHasMessages}
+      guestThreadPreview={guestThreadPreview}
+      renderProjectToolbarAction={renderCloudProjectCreateAction}
+      getThreadDisplayTitle={getThreadDisplayTitle}
+      selectThread={selectWorkspaceThread}
+      startDraftInProject={handleStartDraftInCloudProject}
+      editProject={projectUiController.openEditProjectModal}
+      deleteProject={(project) => void projectUiController.openDeleteProjectModal(project)}
+      applyGuestWorkspaceState={applyGuestWorkspaceState}
+      resetGuestThread={resetGuestThread}
+      onExitThreadsRoot={() => setMobileRootPage("agent")}
+    />
+  );
+
   const workspaceLandingProjection = buildWebWorkspaceLandingProjection({
     showGuestSignupRail: !hasAuthenticatedAppShellPresentation,
     activeCommunity: activeCommunity
@@ -11929,7 +11975,10 @@ export default function App() {
     },
     communityHostProps: {
       communityTab,
-      chatPanelProps: communityChatPanelProps,
+      chatPanelProps: {
+        ...communityChatPanelProps,
+        mobileContextOnly: showMobileShell && mobileRootPage === "members",
+      },
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
     discoverPanelProps: {
@@ -12147,11 +12196,14 @@ export default function App() {
       <div className="landing-auth-hold" aria-hidden="true" />
     </main>
   );
-  const mainSurface = (
-    <Suspense fallback={mainSurfaceFallback}>
-      <WebAppMainSurfaceHost {...mainSurfaceHostProps} />
-    </Suspense>
-  );
+  const mainSurface =
+    showMobileShell && mobileRootPage === "threads" ? (
+      mobileThreadsRootSurface
+    ) : (
+      <Suspense fallback={mainSurfaceFallback}>
+        <WebAppMainSurfaceHost {...mainSurfaceHostProps} />
+      </Suspense>
+    );
   const activeIndicators = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false, mentions: false })
     : { chat: false, ai_feed: false, resources: false, events: false, mentions: false };
@@ -12207,6 +12259,8 @@ export default function App() {
     handleMobileShellTouchEnd,
     handleMobileShellTouchCancel,
     mobileShellMode,
+    mobileRootPage,
+    forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
     mobileSecondaryMode,
     showMobileSettingsIndex,
     activePage,
@@ -12216,7 +12270,7 @@ export default function App() {
     openMobileDrawer,
     handleExitMobileSettings,
     handleStartNewWorkspaceThreadFromShell,
-    handleSelectMobileMode,
+    handleSelectMobileRootPage,
     setMobileOverlay,
     isPublicCommunityFunnel,
     isPublicFunnelPreviewRoute: publicRoute.kind === "community_funnel_preview",

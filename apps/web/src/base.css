@@ -30256,6 +30256,38 @@ button.message-citation-chip:hover {
   padding-top: calc(var(--mobile-topbar-clearance) + 62px);
 }
 
+.app-root.mobile-shell .community-mobile-members-root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-root.mobile-shell .community-mobile-members-root .mobile-members-root-body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--mobile-topbar-clearance) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  overflow: hidden;
+}
+
+.app-root.mobile-shell .community-mobile-members-root .mobile-members-root-panel {
+  display: flex;
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  height: 100%;
+  border-left: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-workspace) 88%, var(--bg-card) 12%);
+  box-shadow: none;
+}
+
+.app-root.mobile-shell .community-mobile-members-root .community-context-rail {
+  min-height: 0;
+}
+
 .app-root.mobile-shell .community-chat .community-interaction-root {
   grid-template-columns: 34px minmax(0, 1fr);
   padding: 10px 8px;

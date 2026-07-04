@@ -38,6 +38,7 @@ import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 import {
+  CommunityInteractionContextPanelSurface,
   WebCommunityInteractionProjection,
   type WebCommunityInteractionProjectionProps,
 } from "./WebCommunityInteractionProjection";
@@ -368,6 +369,7 @@ export type WebCommunityChatPanelProps = {
     owner: CommunityVoiceButtonOwner,
   ) => void;
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
+  mobileContextOnly?: boolean;
   interactionProjection?: Omit<
     WebCommunityInteractionProjectionProps,
     | "activeCommunityName"
@@ -509,6 +511,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     drawerVoiceButtonProps,
     onCommunityVoiceInputClick,
     lightboxModalProps,
+    mobileContextOnly = false,
     interactionProjection,
   } = props;
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
@@ -1132,7 +1135,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           : undefined
       }
       getInitials={getInitials}
-      docked={showInteractionProjection}
+      docked={showInteractionProjection || mobileContextOnly}
     />
   ) : null;
 
@@ -1605,6 +1608,41 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </div>
           </div>
         </div>
+        <WebCommunityChatLightboxModal {...lightboxModalProps} />
+      </>
+    );
+  }
+
+  if (mobileContextOnly) {
+    return (
+      <>
+        <div className="community-chat community-mobile-members-root">
+          <div className="workspace-body chat-feed mobile-members-root-body">
+            {showInteractionProjection && interactionProjection ? (
+              <CommunityInteractionContextPanelSurface
+                {...interactionProjection}
+                activeCommunityName={activeCommunity?.name ?? "Community"}
+                profilesByUserId={profilesByUserId}
+                displayName={displayName}
+                getAvatarColor={getAvatarColor}
+                getInitials={getInitials}
+                formatChatTime={formatChatTime}
+                renderTextWithLinks={renderTextWithLinks}
+                renderMarkdown={renderMarkdown}
+                onOpenProfile={setProfilePanelUserId}
+                onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}
+                containerClassName="community-interaction-drawer community-context-panel mobile-members-root-panel"
+              />
+            ) : (
+              <div className="chat-messages-state-shell mobile-members-root-state">
+                <div className="chat-empty">
+                  {activeCommunity ? "Loading community members..." : "Select a community to view members."}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        {profilePanelElement}
         <WebCommunityChatLightboxModal {...lightboxModalProps} />
       </>
     );

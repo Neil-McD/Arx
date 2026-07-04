@@ -2506,22 +2506,58 @@
 .mobile-topbar-center {
   min-width: 0;
   display: inline-grid;
-  grid-template-columns: repeat(2, auto);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
+  justify-items: center;
+  gap: 3px;
   position: absolute;
   left: 50%;
   top: calc(env(safe-area-inset-top, 0px) + var(--mobile-topbar-top-offset));
   transform: translateX(-50%);
   width: fit-content;
-  max-width: min(40vw, 152px);
-  padding: 2px;
-  border-radius: 999px;
+  min-width: 88px;
+  max-width: min(42vw, 160px);
+  padding: 4px 10px 5px;
+  border-radius: 14px;
   border: none;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
   box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
   z-index: 0;
+}
+
+.mobile-topbar-root-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.mobile-root-pager {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.mobile-root-pager-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary) 46%, transparent);
+  cursor: pointer;
+}
+
+.mobile-root-pager-dot.active {
+  width: 14px;
+  background: var(--text-primary);
 }
 
 .mobile-topbar-mode {
@@ -2540,6 +2576,36 @@
   background: var(--surface-selected);
   color: var(--text-selected);
   box-shadow: inset 0 0 0 1px var(--stroke-selected);
+}
+
+.mobile-root-surface {
+  min-height: 100dvh;
+}
+
+.mobile-root-page-shell {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-threads-root-shell {
+  padding: var(--mobile-topbar-clearance) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  gap: 10px;
+}
+
+.mobile-threads-root-shell .thread-sidebar-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: none;
+  background: transparent;
+}
+
+.mobile-threads-root-shell .session-list {
+  min-height: 0;
 }
 
 .mobile-community-trigger {
