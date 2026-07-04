@@ -10012,6 +10012,14 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow: hidden;
 }
 
+/* The community agent's message avatar: hollow purple Sparkles on a flat
+   squared tile, matching the mention picker — never round person initials. */
+.community-interaction-avatar.is-agent-avatar {
+  border-radius: 12px;
+  background: rgba(167, 139, 250, 0.16);
+  color: #a78bfa;
+}
+
 .community-interaction-avatar.has-image {
   background: var(--bg-card);
 }
