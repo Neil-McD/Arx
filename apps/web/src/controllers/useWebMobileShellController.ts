@@ -55,21 +55,20 @@ export function useWebMobileShellController(params: {
 
   const handleSelectMobileRootPage = useCallback(
     (nextRootPage: MobileRootPage) => {
-      params.setMobileOverlay(null);
-
       if (params.forceCommunityRoot) {
         params.setMobileRootPage("community");
+        params.setMobileOverlay(nextRootPage === "community" ? null : "community");
         return;
       }
 
       if (nextRootPage === "threads") {
-        params.setActivePage("workspace");
-        params.setActiveView("home");
-        params.setMobileRootPage("threads");
+        params.setMobileRootPage("agent");
+        params.setMobileOverlay("agent");
         return;
       }
 
       if (nextRootPage === "agent") {
+        params.setMobileOverlay(null);
         params.setMobileRootPage("agent");
         if (params.activeView === "settings") {
           params.setActiveView("home");
@@ -83,17 +82,20 @@ export function useWebMobileShellController(params: {
 
       if (nextRootPage === "members") {
         if (!params.canViewMembersRoot) {
+          params.setMobileOverlay(null);
           params.setMobileRootPage("community");
           openMobileCommunitySurface();
           return;
         }
-        params.setMobileRootPage("members");
+        params.setMobileRootPage("community");
         if (params.activePage !== "community") {
           openMobileCommunitySurface();
         }
+        params.setMobileOverlay("members");
         return;
       }
 
+      params.setMobileOverlay(null);
       params.setMobileRootPage("community");
       openMobileCommunitySurface();
     },
@@ -103,7 +105,6 @@ export function useWebMobileShellController(params: {
       params.canViewMembersRoot,
       params.forceCommunityRoot,
       params.handleTopbarBackToWorkspace,
-      params.setActivePage,
       params.setActiveView,
       params.setMobileOverlay,
       params.setMobileRootPage,
@@ -148,12 +149,8 @@ export function useWebMobileShellController(params: {
       params.setMobileOverlay("community");
       return;
     }
-    if (params.mobileRootPage === "threads") {
-      handleSelectMobileRootPage("agent");
-      return;
-    }
-    if (params.mobileRootPage === "agent") {
-      handleSelectMobileRootPage("threads");
+    if (params.mobileRootPage === "agent" || params.mobileRootPage === "threads") {
+      params.setMobileOverlay("agent");
       return;
     }
     params.setMobileOverlay(params.hasSelectedCommunity ? "community" : "community_selector");
@@ -162,7 +159,6 @@ export function useWebMobileShellController(params: {
     params.forceCommunityRoot,
     params.mobileRootPage,
     params.setMobileOverlay,
-    handleSelectMobileRootPage,
   ]);
 
   const handleMobileShellTouchStart = useCallback<TouchEventHandler<HTMLDivElement>>((event) => {
@@ -225,8 +221,11 @@ export function useWebMobileShellController(params: {
   useEffect(() => {
     if (params.mobileOverlay) {
       mobileShellSwipeStartRef.current = null;
+      if (params.mobileOverlay === "members" && params.mobileRootPage !== "community") {
+        params.setMobileRootPage("community");
+      }
     }
-  }, [params.mobileOverlay]);
+  }, [params.mobileOverlay, params.mobileRootPage, params.setMobileRootPage]);
 
   useEffect(() => {
     if (!params.showMobileSettingsShell) {

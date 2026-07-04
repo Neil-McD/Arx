@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  WebMobileThreadsRootSurface,
   WebWorkspaceShellPanels,
   type WebWorkspaceShellPanelsProps,
 } from "./WebWorkspaceShellPanels";
@@ -91,58 +90,6 @@ export function WebWorkspaceShellPanelsHost<
           deleteProject={props.deleteProject}
           applyGuestWorkspaceState={props.applyGuestWorkspaceState}
           resetGuestThread={props.resetGuestThread}
-        />
-      )}
-    </WebWorkspaceSidebarStateHost>
-  );
-}
-
-export function WebMobileThreadsRootSurfaceHost<
-  TThread extends ThreadLike,
-  TProject extends ProjectLike,
->(
-  props: WebWorkspaceShellPanelsHostProps<TThread, TProject> & {
-    onExitThreadsRoot: () => void;
-  },
-) {
-  return (
-    <WebWorkspaceSidebarStateHost<TThread, TProject>
-      threads={props.threads}
-      projects={props.projects}
-      resolveThreadProjectId={props.resolveThreadProjectId}
-      getThreadSearchText={props.getThreadSearchText}
-    >
-      {(sidebar) => (
-        <WebMobileThreadsRootSurface<TThread, TProject>
-          sessionsDrawerEnabled={props.sessionsDrawerEnabled}
-          isSessionsDrawerOpen={props.isSessionsDrawerOpen}
-          showMobileAppShell={props.showMobileAppShell}
-          showMobileShell={props.showMobileShell}
-          mobileOverlay={props.mobileOverlay}
-          setMobileOverlay={props.setMobileOverlay}
-          sidebar={sidebar}
-          threadError={props.threadError}
-          displayedThreadError={props.displayedThreadError}
-          showGuestSignInAction={props.showGuestSignInAction}
-          session={props.session}
-          hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
-          isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
-          authError={props.authError}
-          requireSignIn={props.requireSignIn}
-          openMobileAgentSettings={props.openMobileAgentSettings}
-          activeThreadId={props.activeThreadId}
-          guestThreadId={props.guestThreadId}
-          guestThreadHasMessages={props.guestThreadHasMessages}
-          guestThreadPreview={props.guestThreadPreview}
-          renderProjectToolbarAction={props.renderProjectToolbarAction}
-          getThreadDisplayTitle={props.getThreadDisplayTitle}
-          selectThread={props.selectThread}
-          startDraftInProject={props.startDraftInProject}
-          editProject={props.editProject}
-          deleteProject={props.deleteProject}
-          applyGuestWorkspaceState={props.applyGuestWorkspaceState}
-          resetGuestThread={props.resetGuestThread}
-          onExitThreadsRoot={props.onExitThreadsRoot}
         />
       )}
     </WebWorkspaceSidebarStateHost>

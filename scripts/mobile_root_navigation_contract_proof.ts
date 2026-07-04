@@ -20,7 +20,12 @@ const packageJson = read("package.json");
 assert.match(
   shared,
   /export type MobileRootPage = "threads" \| "agent" \| "community" \| "members";/,
-  "mobile root page should model the four root-level mobile pages explicitly",
+  "mobile root page should model the four root-level mobile destinations explicitly",
+);
+assert.match(
+  shared,
+  /export type MobileOverlay = "agent" \| "community" \| "community_selector" \| "members" \| null;/,
+  "mobile overlay state should include Members as a drawer overlay",
 );
 assert.match(
   app,
@@ -29,13 +34,8 @@ assert.match(
 );
 assert.match(
   app,
-  /showMobileShell && mobileRootPage === "threads" \? \([\s\S]*mobileThreadsRootSurface[\s\S]*\) : \(/,
-  "mobile Threads should render as a root surface instead of only as a drawer",
-);
-assert.match(
-  app,
-  /mobileContextOnly: showMobileShell && mobileRootPage === "members"/,
-  "mobile Members should render the community context rail as the root community surface",
+  /mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members"[\s\S]*onCloseMobileMembersOverlay: \(\) => setMobileOverlay\(null\)/,
+  "mobile Members should be rendered by the community chat panel as an overlay",
 );
 assert.match(
   app,
@@ -47,6 +47,11 @@ assert.match(
   /forceCommunityRoot:[\s\S]*showMobileShell[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*shellPublicRoute\.kind === "community_funnel_preview"/,
   "mobile public community routes should force the Community root instead of inheriting the Agent default",
 );
+assert.doesNotMatch(
+  app,
+  /mobileThreadsRootSurface|WebMobileThreadsRootSurfaceHost|mobileContextOnly|showMobileShell && mobileRootPage === "threads"/,
+  "Threads and Members should not replace the main mobile surface with standalone root-page content",
+);
 assert.match(
   controller,
   /const rootOrder: MobileRootPage\[\] = params\.forceCommunityRoot[\s\S]*\? \["community"\][\s\S]*: params\.canViewMembersRoot[\s\S]*\? \["threads", "agent", "community", "members"\][\s\S]*: \["threads", "agent", "community"\];/,
@@ -54,13 +59,18 @@ assert.match(
 );
 assert.match(
   controller,
-  /const openMobileCommunitySurface = useCallback\(\(\) => \{[\s\S]*params\.openCommunityChat\(nextCommunitySlug, \{ clearUnread: true \}\);[\s\S]*params\.handleOpenDiscover\(\);[\s\S]*if \(params\.forceCommunityRoot\) \{[\s\S]*params\.setMobileRootPage\("community"\);[\s\S]*return;[\s\S]*if \(nextRootPage === "members"\) \{[\s\S]*if \(!params\.canViewMembersRoot\) \{[\s\S]*params\.setMobileRootPage\("community"\);[\s\S]*openMobileCommunitySurface\(\);[\s\S]*params\.setMobileRootPage\("members"\);/,
-  "Members root should fail back to Community without a selected community and open the community surface otherwise",
+  /if \(nextRootPage === "threads"\) \{[\s\S]*params\.setMobileRootPage\("agent"\);[\s\S]*params\.setMobileOverlay\("agent"\);[\s\S]*return;/,
+  "mobile Threads should open the Agent-side thread drawer over the current Agent surface",
 );
 assert.match(
   controller,
-  /const openMobileDrawer = useCallback\(\(\) => \{[\s\S]*if \(params\.forceCommunityRoot\) \{[\s\S]*params\.setMobileOverlay\("community"\);[\s\S]*return;/,
-  "forced public-community roots should open the community panel instead of Agent or Threads drawer logic",
+  /if \(nextRootPage === "members"\) \{[\s\S]*if \(!params\.canViewMembersRoot\) \{[\s\S]*params\.setMobileOverlay\(null\);[\s\S]*params\.setMobileRootPage\("community"\);[\s\S]*openMobileCommunitySurface\(\);[\s\S]*params\.setMobileRootPage\("community"\);[\s\S]*params\.setMobileOverlay\("members"\);[\s\S]*return;/,
+  "mobile Members should open the community surface and then overlay the Members drawer",
+);
+assert.match(
+  controller,
+  /const openMobileDrawer = useCallback\(\(\) => \{[\s\S]*if \(params\.forceCommunityRoot\) \{[\s\S]*params\.setMobileOverlay\("community"\);[\s\S]*return;[\s\S]*if \(params\.mobileRootPage === "agent" \|\| params\.mobileRootPage === "threads"\) \{[\s\S]*params\.setMobileOverlay\("agent"\);[\s\S]*return;/,
+  "mobile drawer button should open the community drawer on forced community routes and the Agent drawer on Agent/Threads",
 );
 assert.match(
   topBar,
@@ -82,20 +92,30 @@ assert.match(
   /rootPage === "agent" && onStartNewThread/,
   "new workspace thread action should stay scoped to the Agent root page",
 );
-assert.match(
+assert.doesNotMatch(
   workspacePanels,
-  /export function WebMobileThreadsRootSurface[\s\S]*aria-label="Threads"[\s\S]*className="thread-sidebar-panel mobile-threads-root-panel"/,
-  "Threads root should reuse the workspace thread sidebar inside an explicit mobile root panel",
+  /WebMobileThreadsRootSurface|mobile-root-surface|mobile-threads-root/,
+  "workspace panels should not export or render a standalone mobile Threads page",
 );
-assert.match(
+assert.doesNotMatch(
   workspacePanelHost,
-  /export function WebMobileThreadsRootSurfaceHost/,
-  "Threads root should have a state host like the existing drawer shell",
+  /WebMobileThreadsRootSurface|onExitThreadsRoot/,
+  "workspace panel host should only host the drawer/sidebar state path",
 );
 assert.match(
   chatPanel,
-  /mobileContextOnly\?: boolean;[\s\S]*if \(mobileContextOnly\) \{[\s\S]*<CommunityInteractionContextPanelSurface/,
-  "community chat panel should support a mobile context-only Members root",
+  /mobileMembersOverlayOpen\?: boolean;[\s\S]*onCloseMobileMembersOverlay\?: \(\) => void;/,
+  "community chat panel should accept a Members overlay contract",
+);
+assert.match(
+  chatPanel,
+  /<WebMobileDrawer[\s\S]*ariaLabel="Community members"[\s\S]*className="mobile-members-drawer"[\s\S]*hideHeader[\s\S]*containerClassName="community-interaction-drawer community-context-panel mobile-members-overlay-panel"/,
+  "community chat panel should render Members inside a mobile drawer overlay",
+);
+assert.doesNotMatch(
+  chatPanel,
+  /mobileContextOnly|community-mobile-members-root|mobile-members-root-panel/,
+  "community chat panel should not keep the old mobile Members root-page path",
 );
 assert.match(
   interactionProjection,
@@ -109,23 +129,23 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /--mobile-left-panel-width: min\(74vw, 304px\);[\s\S]*\.mobile-threads-root-shell \{[\s\S]*width: var\(--mobile-left-panel-width\);[\s\S]*background: var\(--surface-nav, var\(--surface-panel\)\);[\s\S]*border-right: 1px solid var\(--stroke-divider-accent\);[\s\S]*\.mobile-drawer\.mobile-agent-drawer,[\s\S]*\.mobile-drawer\.mobile-community-drawer \{[\s\S]*width: var\(--mobile-left-panel-width\);/,
-  "mobile Threads root and mobile drawers should share the same left-panel geometry",
+  /--mobile-left-panel-width: min\(74vw, 304px\);[\s\S]*\.mobile-drawer\.mobile-agent-drawer,[\s\S]*\.mobile-drawer\.mobile-community-drawer,[\s\S]*\.mobile-drawer\.mobile-members-drawer \{[\s\S]*width: var\(--mobile-left-panel-width\);/,
+  "mobile drawers should share the same left-panel geometry",
+);
+assert.match(
+  indexCss,
+  /\.mobile-drawer\.mobile-members-drawer \.mobile-members-overlay-panel \{[\s\S]*height: 100%;[\s\S]*background: transparent;[\s\S]*box-shadow: none;/,
+  "mobile Members drawer should let the drawer own the surface chrome",
 );
 assert.doesNotMatch(
   indexCss,
-  /mobile-root-pager|mobile-topbar-root-title/,
-  "mobile topbar CSS should not keep the replacement root-page title/dot UI",
+  /mobile-root-pager|mobile-topbar-root-title|mobile-threads-root-shell|mobile-root-page-shell/,
+  "mobile CSS should not keep the replacement root-page title/dot UI or Threads page shell",
 );
-assert.match(
+assert.doesNotMatch(
   baseCss,
-  /\.app-root\.mobile-shell \.community-mobile-members-root/,
-  "mobile Members root should override the hidden desktop context rail layout",
-);
-assert.match(
-  baseCss,
-  /\.app-root\.mobile-shell \.community-mobile-members-root \.mobile-members-root-body \{[\s\S]*flex: 0 0 var\(--mobile-left-panel-width\);[\s\S]*width: var\(--mobile-left-panel-width\);[\s\S]*background: var\(--surface-nav, var\(--surface-panel\)\);[\s\S]*border-right: 1px solid var\(--stroke-divider-accent\);[\s\S]*\.app-root\.mobile-shell \.community-mobile-members-root \.mobile-members-root-panel \{[\s\S]*background: transparent;/,
-  "mobile Members root should use the same left-panel geometry and let the container own the surface",
+  /community-mobile-members-root|mobile-members-root-body|mobile-members-root-panel/,
+  "mobile Members should not keep standalone root-page CSS",
 );
 assert.match(
   packageJson,

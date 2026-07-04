@@ -4,7 +4,7 @@ import { WebThreadSidebarPanel } from "./WebThreadSidebarPanel";
 import type { WorkspaceSidebarState } from "./WebWorkspaceSidebarStateHost";
 import type { ProjectLike } from "./threadSidebarContracts";
 
-type MobileOverlay = "agent" | "community" | "community_selector" | null;
+type MobileOverlay = "agent" | "community" | "community_selector" | "members" | null;
 
 type ThreadLike = {
   id: string;
@@ -229,25 +229,6 @@ function WorkspaceThreadSidebarContent<TThread extends ThreadLike, TProject exte
             ? renderMobileGuestSidebar()
             : renderDesktopGuestSidebar()}
     </>
-  );
-}
-
-export function WebMobileThreadsRootSurface<TThread extends ThreadLike, TProject extends ProjectLike>(
-  props: WebWorkspaceShellPanelsProps<TThread, TProject> & { onExitThreadsRoot: () => void },
-) {
-  return (
-    <main className="workspace community-mode mobile-root-surface mobile-threads-root" aria-label="Threads">
-      <div className="mobile-root-page-shell mobile-threads-root-shell">
-        <div className="thread-sidebar-panel mobile-threads-root-panel">
-          <WorkspaceThreadSidebarContent
-            {...props}
-            closeOverlay={props.onExitThreadsRoot}
-            showWorkspaceToolbar={true}
-            guestVariant="mobile"
-          />
-        </div>
-      </div>
-    </main>
   );
 }
 

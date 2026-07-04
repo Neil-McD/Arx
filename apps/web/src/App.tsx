@@ -554,10 +554,7 @@ import {
   WebDirectMessagesHost,
   type DirectMessageOpenRequest,
 } from "./components/WebDirectMessagesHost";
-import {
-  WebMobileThreadsRootSurfaceHost,
-  WebWorkspaceShellPanelsHost,
-} from "./components/WebWorkspaceShellPanelsHost";
+import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -11589,43 +11586,6 @@ export default function App() {
     />
   );
 
-  const mobileThreadsRootSurface = (
-    <WebMobileThreadsRootSurfaceHost<ThreadRecord, CloudProjectRecord>
-      threads={threads}
-      projects={workspace.state.projects}
-      resolveThreadProjectId={resolveWorkspaceSidebarThreadProjectId}
-      getThreadSearchText={getWorkspaceSidebarThreadSearchText}
-      sessionsDrawerEnabled={sessionsDrawerEnabled}
-      isSessionsDrawerOpen={isSessionsDrawerOpen}
-      showMobileAppShell={showMobileAppShell}
-      showMobileShell={showMobileShell}
-      mobileOverlay={mobileOverlay}
-      setMobileOverlay={setMobileOverlay}
-      threadError={inlineThreadError}
-      displayedThreadError={displayedThreadError}
-      showGuestSignInAction={showGuestSignInAction}
-      session={session}
-      hasAuthenticatedPresentation={hasAuthenticatedAppShellPresentation}
-      isAuthRecoveringSignedIn={isAuthRecoveringSignedInAppShell}
-      authError={previewSidebarAuthError}
-      requireSignIn={() => requireSignIn()}
-      openMobileAgentSettings={openMobileAgentSettings}
-      activeThreadId={activeThreadId}
-      guestThreadId={GUEST_THREAD_ID}
-      guestThreadHasMessages={guestThreadHasMessages}
-      guestThreadPreview={guestThreadPreview}
-      renderProjectToolbarAction={renderCloudProjectCreateAction}
-      getThreadDisplayTitle={getThreadDisplayTitle}
-      selectThread={selectWorkspaceThread}
-      startDraftInProject={handleStartDraftInCloudProject}
-      editProject={projectUiController.openEditProjectModal}
-      deleteProject={(project) => void projectUiController.openDeleteProjectModal(project)}
-      applyGuestWorkspaceState={applyGuestWorkspaceState}
-      resetGuestThread={resetGuestThread}
-      onExitThreadsRoot={() => setMobileRootPage("agent")}
-    />
-  );
-
   const workspaceLandingProjection = buildWebWorkspaceLandingProjection({
     showGuestSignupRail: !hasAuthenticatedAppShellPresentation,
     activeCommunity: activeCommunity
@@ -11977,7 +11937,8 @@ export default function App() {
       communityTab,
       chatPanelProps: {
         ...communityChatPanelProps,
-        mobileContextOnly: showMobileShell && mobileRootPage === "members",
+        mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members",
+        onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       },
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
@@ -12196,14 +12157,11 @@ export default function App() {
       <div className="landing-auth-hold" aria-hidden="true" />
     </main>
   );
-  const mainSurface =
-    showMobileShell && mobileRootPage === "threads" ? (
-      mobileThreadsRootSurface
-    ) : (
-      <Suspense fallback={mainSurfaceFallback}>
-        <WebAppMainSurfaceHost {...mainSurfaceHostProps} />
-      </Suspense>
-    );
+  const mainSurface = (
+    <Suspense fallback={mainSurfaceFallback}>
+      <WebAppMainSurfaceHost {...mainSurfaceHostProps} />
+    </Suspense>
+  );
   const activeIndicators = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false, mentions: false })
     : { chat: false, ai_feed: false, resources: false, events: false, mentions: false };
