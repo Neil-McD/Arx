@@ -81,6 +81,7 @@ import type * as communityInteractionLegacyBridge from "../communityInteractionL
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
+import type * as communityMemoryHealth from "../communityMemoryHealth.js";
 import type * as communityMemoryMetabolizer from "../communityMemoryMetabolizer.js";
 import type * as communityMentionBroadcasts from "../communityMentionBroadcasts.js";
 import type * as communityMentionEmails from "../communityMentionEmails.js";
@@ -284,6 +285,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractions: typeof communityInteractions;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
+  communityMemoryHealth: typeof communityMemoryHealth;
   communityMemoryMetabolizer: typeof communityMemoryMetabolizer;
   communityMentionBroadcasts: typeof communityMentionBroadcasts;
   communityMentionEmails: typeof communityMentionEmails;
