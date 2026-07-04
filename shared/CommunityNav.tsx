@@ -26,8 +26,7 @@ type CommunityNavProps = {
   buttonType?: "button" | "submit" | "reset";
   includeButtonTitles?: boolean;
   showSettingsItem?: boolean;
-  // Desktop reaches memory through the right-rail preview (click -> full graph),
-  // so it hides this nav item; mobile keeps it until it has its own memory path.
+  // Memory belongs in the community context/right-panel path, not the left nav.
   showPolynetItem?: boolean;
   /** Guest mode (public funnel): subtitle line under the banner (the community's promise). */
   subtitle?: string | null;
@@ -68,7 +67,7 @@ export function CommunityNav({
   buttonType,
   includeButtonTitles = false,
   showSettingsItem = true,
-  showPolynetItem = true,
+  showPolynetItem = false,
   subtitle = null,
   lockedTabs = {},
 }: CommunityNavProps) {

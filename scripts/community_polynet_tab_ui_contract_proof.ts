@@ -20,13 +20,12 @@ function readCssRuleBody(css: string, selector: string): string {
   return css.match(new RegExp(`${escapedSelector}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
 }
 
-// Desktop reaches memory through the rail preview (click -> full graph), so its
-// left nav hides the Polynet item. Mobile has no right rail yet, so it keeps the
-// nav item as its only memory path until a mobile memory surface exists.
+// Memory belongs in the community context/right-panel path, so the left nav
+// should hide the Polynet item unless a caller explicitly opts into it.
 assert.match(
   communityNav,
-  /showPolynetItem = true/,
-  "CommunityNav should keep the Polynet item available by default (mobile path)",
+  /showPolynetItem = false/,
+  "CommunityNav should hide the Polynet item by default",
 );
 assert.match(
   communityNav,
@@ -38,10 +37,10 @@ assert.match(
   /showPolynetItem=\{false\}/,
   "Desktop community nav should hide the Polynet tab (memory opens from the rail preview)",
 );
-assert.doesNotMatch(
+assert.match(
   mobileShell,
   /showPolynetItem=\{false\}/,
-  "Mobile community nav must keep the Polynet item until mobile has a memory surface",
+  "Mobile community nav should hide the Polynet tab from the left panel",
 );
 
 assert.match(

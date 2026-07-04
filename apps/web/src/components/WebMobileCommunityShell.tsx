@@ -57,6 +57,7 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           lockedTabs={communityShell.lockedCommunityNavTabs ?? undefined}
           buttonType="button"
           includeButtonTitles
+          showPolynetItem={false}
           onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}
           onSelectTab={communityShell.onSelectCommunityTabFromMobile}
         />
