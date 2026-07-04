@@ -7,14 +7,32 @@ import {
   listCanonicalCommunityMemberMembershipRows,
   normalizeCommunityRoleForOutput,
   requireCommunityChatAccess,
+  requireCommunityManager,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { normalizeProfileHandle } from "../shared/profileHandle";
+import {
+  resolveUserProfileDisplayProjection,
+  resolveUserProfileDisplayProjectionForUser,
+} from "./userProfileProjection";
 
 const COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE = 25;
 const COMMUNITY_DIRECTORY_MAX_PAGE_SIZE = 100;
+const COMMUNITY_MENTION_SEARCH_DEFAULT_LIMIT = 8;
+const COMMUNITY_MENTION_SEARCH_MAX_LIMIT = 12;
+const COMMUNITY_MENTION_SEARCH_MAX_RAW_QUERY_CHARS = 128;
+const COMMUNITY_MENTION_SEARCH_MAX_QUERY_CHARS = 40;
+const EVERYBODY_MENTION_ALIASES = ["everybody", "everyone", "all", "here"];
+
+type CommunityMentionUserRow = {
+  _id: any;
+  displayName?: string;
+  handle?: string;
+  normalizedHandle?: string;
+  avatarUrl?: string;
+};
 
 function normalizeDirectoryPageSize(rawPageSize: number | undefined): number {
   return Math.max(
@@ -34,22 +52,56 @@ function normalizeDirectoryCursor(rawCursor: string | null | undefined): number 
   return Math.floor(parsed);
 }
 
+function normalizeMentionSearchLimit(rawLimit: number | undefined): number {
+  const limit = Number(rawLimit ?? COMMUNITY_MENTION_SEARCH_DEFAULT_LIMIT);
+  if (!Number.isFinite(limit)) return COMMUNITY_MENTION_SEARCH_DEFAULT_LIMIT;
+  return Math.max(
+    1,
+    Math.min(
+      COMMUNITY_MENTION_SEARCH_MAX_LIMIT,
+      Math.floor(limit),
+    ),
+  );
+}
+
+function normalizeMentionSearchQuery(rawQuery: unknown): string {
+  return String(rawQuery ?? "")
+    .slice(0, COMMUNITY_MENTION_SEARCH_MAX_RAW_QUERY_CHARS)
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .slice(0, COMMUNITY_MENTION_SEARCH_MAX_QUERY_CHARS);
+}
+
+function textMatchesMentionSearch(value: unknown, query: string): boolean {
+  if (!query) return true;
+  return String(value ?? "").trim().toLowerCase().includes(query);
+}
+
+function userMatchesMentionSearch(user: CommunityMentionUserRow, query: string): boolean {
+  if (!query) return true;
+  const normalizedHandle = normalizeProfileHandle(user.normalizedHandle ?? user.handle);
+  if (normalizedHandle.includes(normalizeProfileHandle(query))) return true;
+  return textMatchesMentionSearch(user.displayName, query);
+}
+
 async function resolveCommunityDirectoryContext(args: {
   ctx: any;
   userId?: any;
   authSubject?: string | null;
   communityId: any;
-}): Promise<{ community: CommunityLike }> {
+}): Promise<{ community: CommunityLike; userId: any }> {
   const userId = await resolveUserIdForAuthenticatedRequest({
     ctx: args.ctx,
     userId: args.userId,
     authSubject: args.authSubject ?? null,
   });
-  return await requireCommunityChatAccess({
+  const { community } = await requireCommunityChatAccess({
     ctx: args.ctx,
     communityId: args.communityId,
     userId,
   });
+  return { community, userId };
 }
 
 async function mapCommunityDirectoryOwnerRow(args: {
@@ -85,6 +137,141 @@ async function mapCommunityDirectoryMembershipRow(args: {
     created_at: toIsoString(args.row.createdAt),
   };
 }
+
+async function mapCommunityMentionUserCandidate(args: {
+  ctx: any;
+  community: CommunityLike;
+  user: CommunityMentionUserRow;
+  role: string;
+  userIdCache: Map<string, string | null>;
+}) {
+  const handle = normalizeProfileHandle(args.user.handle ?? args.user.normalizedHandle);
+  if (!handle) return null;
+  const projection = await resolveUserProfileDisplayProjectionForUser(args.ctx, args.user);
+  return {
+    kind: "user",
+    community_id: String(args.community._id),
+    user_id:
+      (await resolvePublicUserId(args.ctx, args.user._id, args.userIdCache)) ??
+      String(args.user._id),
+    display_name: projection.display_name ?? handle,
+    handle,
+    avatar_url: projection.avatar_url,
+    role: args.role,
+  };
+}
+
+export const searchCommunityMentionCandidates = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    query: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { community, userId } = await resolveCommunityDirectoryContext({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+      communityId: args.communityId,
+    });
+    const queryText = normalizeMentionSearchQuery(args.query);
+    const limit = normalizeMentionSearchLimit(args.limit);
+    const out: any[] = [];
+    const userIdCache = new Map<string, string | null>();
+
+    const pushAgentCandidate = () => {
+      if (out.length >= limit) return;
+      const communityName = String(community.name ?? "").trim();
+      if (!communityName) return;
+      if (
+        queryText &&
+        !textMatchesMentionSearch(communityName, queryText) &&
+        !textMatchesMentionSearch("community agent", queryText)
+      ) {
+        return;
+      }
+      out.push({
+        kind: "community_agent",
+        community_id: String(community._id),
+        user_id: "community_agent",
+        display_name: communityName,
+        handle: null,
+        avatar_url: null,
+        agent_key: "community_agent",
+      });
+    };
+
+    const canMentionEverybody = await (async () => {
+      try {
+        await requireCommunityManager({
+          ctx,
+          communityId: args.communityId,
+          userId,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+
+    const pushEverybodyCandidate = (memberCount: number) => {
+      if (!canMentionEverybody || out.length >= limit) return;
+      if (
+        queryText &&
+        !EVERYBODY_MENTION_ALIASES.some((alias) => alias.includes(queryText))
+      ) {
+        return;
+      }
+      out.push({
+        kind: "role",
+        community_id: String(community._id),
+        user_id: "role:everybody",
+        display_name: "Everybody",
+        handle: "everybody",
+        avatar_url: null,
+        role_key: "everybody",
+        subtitle: memberCount > 0
+          ? `Notifies all ${memberCount.toLocaleString()} members`
+          : "Notify the whole community",
+        match_aliases: EVERYBODY_MENTION_ALIASES.filter((alias) => alias !== "everybody"),
+      });
+    };
+
+    pushAgentCandidate();
+
+    const canonicalRows = await listCanonicalCommunityMemberMembershipRows({
+      ctx,
+      communityId: args.communityId,
+      community,
+    });
+    pushEverybodyCandidate(countCanonicalCommunityMembersFromRows(canonicalRows.rows));
+
+    const addUserCandidate = async (targetUserId: any, role: string) => {
+      if (out.length >= limit) return;
+      if (String(targetUserId) === String(userId)) return;
+      const user = (await ctx.db.get(targetUserId)) as CommunityMentionUserRow | null;
+      if (!user || !userMatchesMentionSearch(user, queryText)) return;
+      const candidate = await mapCommunityMentionUserCandidate({
+        ctx,
+        community,
+        user,
+        role,
+        userIdCache,
+      });
+      if (candidate) out.push(candidate);
+    };
+
+    await addUserCandidate(community.ownerId, "owner");
+    for (const row of canonicalRows.rows) {
+      if (out.length >= limit) break;
+      await addUserCandidate(row.userId, normalizeCommunityRoleForOutput(row.role) || "member");
+    }
+
+    return out;
+  },
+});
 
 export const countCommunityDirectoryMembers = query({
   args: {

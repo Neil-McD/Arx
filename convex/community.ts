@@ -27,6 +27,7 @@ import {
 import {
   countCommunityDirectoryMembers as countCommunityDirectoryMembersImpl,
   listCommunityDirectoryPage as listCommunityDirectoryPageImpl,
+  searchCommunityMentionCandidates as searchCommunityMentionCandidatesImpl,
 } from "./communityDirectory";
 import {
   getActiveCommunityAgentLanding as getActiveCommunityAgentLandingImpl,
@@ -219,6 +220,7 @@ export const syncCommunityMembershipCount = syncCommunityMembershipCountImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
 export const listCommunityDirectoryPage = listCommunityDirectoryPageImpl;
 export const countCommunityDirectoryMembers = countCommunityDirectoryMembersImpl;
+export const searchCommunityMentionCandidates = searchCommunityMentionCandidatesImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
 export const readCommunityRecentContext = readCommunityRecentContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;

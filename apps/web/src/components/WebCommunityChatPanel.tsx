@@ -22,6 +22,10 @@ import type {
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
 import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
+import {
+  searchCloudCommunityMentionCandidates,
+  type CloudCommunityMentionCandidateRow,
+} from "../../../../shared/cloudCommunityDirectoryGateway";
 import { formatDateSeparator } from "../../../../shared/chatUi";
 import {
   type CommunityMessageAttachment,
@@ -134,12 +138,60 @@ const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
   message_context_community_id: null,
   message_unavailable_reason: "no_mutual_community",
 };
+const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 
 const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
+}
+
+function mentionCandidateKey(candidate: MentionCandidate): string {
+  if (candidate.kind === "role") return `role:${candidate.roleKey ?? "everybody"}`;
+  if (candidate.kind === "community_agent") return "agent:community_agent";
+  return `user:${candidate.userId}`;
+}
+
+function mergeMentionCandidates(
+  primary: readonly MentionCandidate[],
+  fallback: readonly MentionCandidate[],
+): MentionCandidate[] {
+  const seen = new Set<string>();
+  const merged: MentionCandidate[] = [];
+  for (const candidate of [...primary, ...fallback]) {
+    const key = mentionCandidateKey(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(candidate);
+  }
+  return merged;
+}
+
+function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): MentionCandidate | null {
+  const kind =
+    row.kind === "community_agent" || row.kind === "role" || row.kind === "user"
+      ? row.kind
+      : "user";
+  const handle = String(row.handle ?? "").trim().replace(/^@+/, "") || null;
+  const userId = String(row.user_id ?? "").trim() || (
+    kind === "community_agent" ? "community_agent" : kind === "role" ? "role:everybody" : ""
+  );
+  if (!userId) return null;
+  const displayName = String(row.display_name ?? "").trim() || handle || (
+    kind === "role" ? "Everybody" : kind === "community_agent" ? "Community agent" : ""
+  );
+  if (!displayName) return null;
+  return {
+    userId,
+    displayName,
+    handle,
+    avatarUrl: String(row.avatar_url ?? "").trim() || null,
+    kind,
+    ...(kind === "role" ? { roleKey: "everybody" as const } : {}),
+    ...(row.subtitle ? { subtitle: row.subtitle } : {}),
+    ...(Array.isArray(row.match_aliases) ? { matchAliases: row.match_aliases } : {}),
+  };
 }
 
 export type WebCommunityChatPanelProps = {
@@ -392,6 +444,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const drawerReplyAttachmentsRef = useRef<CommunityMessageAttachment[]>([]);
   const drawerReplyFileInputRef = useRef<HTMLInputElement | null>(null);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [mainMentionQuery, setMainMentionQuery] = useState<string | null>(null);
+  const [drawerMentionQuery, setDrawerMentionQuery] = useState<string | null>(null);
+  const [remoteMentionSearch, setRemoteMentionSearch] = useState<{
+    communityId: string;
+    query: string;
+    candidates: MentionCandidate[];
+  } | null>(null);
+  const mentionSearchSeqRef = useRef(0);
 
   const setDrawerReplyAttachmentsAndRef = useCallback<
     Dispatch<SetStateAction<CommunityMessageAttachment[]>>
@@ -417,8 +477,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     ingestAttachmentsFromFileList: onIngestCommunityAttachmentsFromFileList,
   });
 
-  // Members available to @-mention: active community directory members with handles, except yourself.
-  const mentionCandidates = useMemo<MentionCandidate[]>(() => {
+  const activeMentionQuery = mainMentionQuery ?? drawerMentionQuery;
+
+  // Fast fallback while the backend search hydrates: already-loaded active
+  // community directory members with handles, except yourself.
+  const localMentionCandidates = useMemo<MentionCandidate[]>(() => {
     const seenMemberIds = new Set<string>();
     const memberCandidates = mentionableCommunityMembers
       .reduce<MentionCandidate[]>((candidates, member) => {
@@ -482,10 +545,65 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     sessionUserId,
   ]);
 
+  useEffect(() => {
+    mentionSearchSeqRef.current += 1;
+    setMainMentionQuery(null);
+    setDrawerMentionQuery(null);
+    setRemoteMentionSearch(null);
+  }, [activeCommunity?.id]);
+
+  useEffect(() => {
+    const communityId = String(activeCommunity?.id ?? "").trim();
+    if (!session || !communityId || activeMentionQuery === null || !canUseComposer) {
+      mentionSearchSeqRef.current += 1;
+      setRemoteMentionSearch(null);
+      return;
+    }
+    const query = activeMentionQuery;
+    const seq = (mentionSearchSeqRef.current += 1);
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const rows = await searchCloudCommunityMentionCandidates({
+            session,
+            communityId,
+            query,
+            limit: 8,
+          });
+          if (mentionSearchSeqRef.current !== seq) return;
+          setRemoteMentionSearch({
+            communityId,
+            query,
+            candidates: rows
+              .map(mapCloudMentionCandidate)
+              .filter((candidate): candidate is MentionCandidate => Boolean(candidate)),
+          });
+        } catch {
+          if (mentionSearchSeqRef.current === seq) {
+            setRemoteMentionSearch(null);
+          }
+        }
+      })();
+    }, query.trim() ? 120 : 0);
+    return () => window.clearTimeout(timeout);
+  }, [activeCommunity?.id, activeMentionQuery, canUseComposer, session]);
+
+  const remoteMentionCandidates =
+    remoteMentionSearch &&
+    activeCommunity?.id === remoteMentionSearch.communityId &&
+    activeMentionQuery === remoteMentionSearch.query
+      ? remoteMentionSearch.candidates
+      : EMPTY_MENTION_CANDIDATES;
+  const mentionCandidates = useMemo(
+    () => mergeMentionCandidates(remoteMentionCandidates, localMentionCandidates),
+    [localMentionCandidates, remoteMentionCandidates],
+  );
+
   const mainMention = useMentionAutocomplete({
     candidates: mentionCandidates,
     textareaRef: chatInputRef,
     applyText: (value, textarea) => onCommunityMessageInputChange(value, textarea),
+    onActiveQueryChange: setMainMentionQuery,
     onCommitMention: (mention) =>
       setCommunityMessageMentions((prev) =>
         prev.some((existing) => existing.userId === mention.userId) ? prev : [...prev, mention],
@@ -733,6 +851,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     candidates: mentionCandidates,
     textareaRef: drawerReplyInputRef,
     applyText: (value, textarea) => handleDrawerReplyInputChange(value, textarea),
+    onActiveQueryChange: setDrawerMentionQuery,
     onCommitMention: (mention) =>
       setDrawerReplyMentions((prev) =>
         prev.some((existing) => existing.userId === mention.userId) ? prev : [...prev, mention],

@@ -96,8 +96,10 @@ export function useMentionAutocomplete(params: {
   applyText: (value: string, textarea: HTMLTextAreaElement) => void;
   /** Record a mention pick so it can be sent with the message. */
   onCommitMention: (mention: CommittedMention) => void;
+  /** Report the active query so callers can hydrate scoped candidates remotely. */
+  onActiveQueryChange?: (query: string | null) => void;
 }): MentionAutocomplete {
-  const { candidates, textareaRef, applyText, onCommitMention } = params;
+  const { candidates, textareaRef, applyText, onCommitMention, onActiveQueryChange } = params;
   const [active, setActive] = useState<ActiveQuery | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
 
@@ -111,14 +113,16 @@ export function useMentionAutocomplete(params: {
   const close = useCallback(() => {
     setActive(null);
     setHighlightedIndex(0);
-  }, []);
+    onActiveQueryChange?.(null);
+  }, [onActiveQueryChange]);
 
   const syncFromTextarea = useCallback((textarea: HTMLTextAreaElement) => {
     const caret = textarea.selectionStart ?? textarea.value.length;
     const next = findActiveQuery(textarea.value, caret);
     setActive(next);
     setHighlightedIndex(0);
-  }, []);
+    onActiveQueryChange?.(next?.query ?? null);
+  }, [onActiveQueryChange]);
 
   const pick = useCallback(
     (candidate: MentionCandidate) => {

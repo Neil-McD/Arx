@@ -241,6 +241,7 @@
     "promote:daytona-codex-runtime-snapshot": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/daytona_codex_runtime_snapshot_promote.ts",
     "dev:polynet-codex-worker": "bash scripts/run_polynet_codex_worker_service_local.sh",
     "check:community-mention-rendering-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_rendering_contract_proof.ts",
+    "check:community-mention-search-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_search_contract_proof.ts",
     "check:community-mention-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_mention_lifecycle_contract_proof.ts",
     "check:community-everybody-mention-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_contract_proof.ts",
     "check:community-everybody-mention-row-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_row_contract_proof.ts"

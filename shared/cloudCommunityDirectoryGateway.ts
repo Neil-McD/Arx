@@ -18,6 +18,20 @@ export type CloudCommunityDirectoryPage = {
   isDone: boolean;
 };
 
+export type CloudCommunityMentionCandidateRow = {
+  kind: "user" | "community_agent" | "role";
+  community_id: string;
+  user_id: string;
+  display_name?: string | null;
+  handle?: string | null;
+  avatar_url?: string | null;
+  role?: string | null;
+  agent_key?: string | null;
+  role_key?: "everybody" | string | null;
+  subtitle?: string | null;
+  match_aliases?: string[] | null;
+};
+
 export async function listCloudCommunityDirectoryPage<SessionT>(
   params: {
     session: SessionT;
@@ -61,4 +75,22 @@ export async function countCloudCommunityDirectoryMembers<SessionT>(
     communityId: params.communityId,
   });
   return parseGatewayNumberLike(payload);
+}
+
+export async function searchCloudCommunityMentionCandidates<SessionT>(
+  params: {
+    session: SessionT;
+    communityId: string;
+    query: string;
+    limit?: number;
+  },
+): Promise<CloudCommunityMentionCandidateRow[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:searchCommunityMentionCandidates" as any, {
+    authSubject,
+    communityId: params.communityId,
+    query: params.query,
+    limit: params.limit ?? 8,
+  });
+  return coerceGatewayRows<CloudCommunityMentionCandidateRow>(payload);
 }
