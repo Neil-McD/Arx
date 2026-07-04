@@ -136,11 +136,13 @@
 .app-topbar .topbar-right.topbar-right-island {
   padding: 6px 8px;
   border-radius: 12px;
-  /* No card: sit transparent on the scene bg so the box is invisible (1:1 in both themes). */
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 70%, transparent));
+  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  box-shadow:
+    var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
+    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
 .app-topbar .topbar-right .community-btn:hover,
@@ -177,11 +179,30 @@
   gap: 8px;
   padding: 6px 8px;
   border-radius: 12px;
-  /* No card: sit transparent on the scene bg so the box is invisible (1:1 in both themes). */
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 70%, transparent));
+  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  box-shadow:
+    var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
+    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+}
+
+/* Community drawer context controls use the same glass material as top chrome. */
+.community-interaction-drawer-back {
+  padding: 2px;
+  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 70%, transparent));
+  border-radius: 13px;
+  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  box-shadow:
+    var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
+    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+}
+
+.community-interaction-drawer-back .back-to-workspace {
+  border-radius: 10px;
 }
 
 /* Web: no global header bar. Instead, pad the specific surfaces that place content
