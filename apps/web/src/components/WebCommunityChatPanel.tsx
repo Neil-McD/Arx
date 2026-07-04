@@ -1620,6 +1620,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     <WebMobileDrawer
       isOpen={mobileMembersOverlayOpen}
       ariaLabel="Community members"
+      side="right"
       className="mobile-members-drawer"
       hideHeader
       onClose={onCloseMobileMembersOverlay ?? (() => undefined)}

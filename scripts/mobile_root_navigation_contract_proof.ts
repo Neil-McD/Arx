@@ -109,8 +109,8 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /<WebMobileDrawer[\s\S]*ariaLabel="Community members"[\s\S]*className="mobile-members-drawer"[\s\S]*hideHeader[\s\S]*containerClassName="community-interaction-drawer community-context-panel mobile-members-overlay-panel"/,
-  "community chat panel should render Members inside a mobile drawer overlay",
+  /<WebMobileDrawer[\s\S]*ariaLabel="Community members"[\s\S]*side="right"[\s\S]*className="mobile-members-drawer"[\s\S]*hideHeader[\s\S]*containerClassName="community-interaction-drawer community-context-panel mobile-members-overlay-panel"/,
+  "community chat panel should render Members inside a right-side mobile drawer overlay",
 );
 assert.doesNotMatch(
   chatPanel,
