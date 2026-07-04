@@ -1605,7 +1605,7 @@ communityAgentServeRequests[queued, accepted]
   -> schedule immediate serve worker for that request
   -> claim request
   -> load same-community source thread
-  -> spend requester ChatGPT connection
+  -> spend requester ChatGPT connection through bounded read-only tool loop
   -> insert one community-agent reply in that source thread
   -> mark request responded/error
 ```
@@ -1618,8 +1618,18 @@ Rules:
 - The worker uses the requester's sponsor lane. `sponsorUserId` must equal
   `requesterUserId`; there is no owner-funded fallback and no platform-funded
   fallback for direct community-agent answers.
-- The LLM call is plain completion, not the community-agent tool runtime. The
-  Concierge has zero filesystem or directory tools in v0.
+- The LLM call is a bounded native tool loop with a Concierge-specific
+  read-only allowlist. The Concierge may use only:
+  - `search_product_docs`
+  - `get_product_doc`
+  - `community_resources_search`
+  - `community_resources_read`
+- Concierge tools are for retrieval only. They do not grant memory authority,
+  filesystem authority, workflow authority, community write authority, web
+  research, MCP access, or directory mutation.
+- Community resource tools execute under the requester/sponsor user and the
+  single serve-request community. They must preserve the same requester access
+  and resource visibility boundaries as normal active-community resource tools.
 - The base serve prompt is augmented by
   `communityAgentConfigs.systemPrompt`, which is the Community-wide
   instructions field in the AI Agent settings. These instructions shape the
