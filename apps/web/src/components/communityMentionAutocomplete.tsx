@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Sparkles, Users } from "lucide-react";
 import {
   splitBodyIntoMentionSegments,
+  textContainsMentionToken,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
 
@@ -41,6 +42,11 @@ export type CommittedMention = {
 const MAX_QUERY_LENGTH = 40;
 const MAX_RESULTS = 8;
 
+type CommittedMentionRange = {
+  start: number;
+  end: number;
+};
+
 type ActiveQuery = {
   atIndex: number;
   query: string;
@@ -75,6 +81,109 @@ function matchesQuery(candidate: MentionCandidate, query: string): boolean {
   if (candidate.handle && candidate.handle.toLowerCase().includes(needle)) return true;
   if (candidate.matchAliases?.some((alias) => alias.toLowerCase().includes(needle))) return true;
   return false;
+}
+
+function isHandleChar(char: string | undefined): boolean {
+  return typeof char === "string" && /[A-Za-z0-9_-]/.test(char);
+}
+
+function hasMentionStartBoundary(text: string, index: number): boolean {
+  return index === 0 || /\s/.test(text[index - 1] ?? "");
+}
+
+function findCommittedMentionRanges(
+  text: string,
+  mentions: readonly CommittedMention[],
+): CommittedMentionRange[] {
+  const body = String(text ?? "");
+  if (!body || mentions.length === 0) return [];
+
+  const ranges: CommittedMentionRange[] = [];
+  const overlaps = (start: number, end: number): boolean =>
+    ranges.some((range) => start < range.end && end > range.start);
+
+  const candidates = mentions
+    .filter((mention) => String(mention.token ?? "").trim().startsWith("@"))
+    .slice()
+    .sort((a, b) => String(b.token ?? "").trim().length - String(a.token ?? "").trim().length);
+
+  for (const mention of candidates) {
+    const token = String(mention.token ?? "").trim();
+    if (token.length <= 1) continue;
+    let searchFrom = 0;
+    while (searchFrom < body.length) {
+      const start = body.indexOf(token, searchFrom);
+      if (start < 0) break;
+      const end = start + token.length;
+      if (hasMentionStartBoundary(body, start) && !isHandleChar(body[end]) && !overlaps(start, end)) {
+        ranges.push({ start, end });
+      }
+      searchFrom = start + 1;
+    }
+  }
+
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function findMentionRangeForBackspace(
+  text: string,
+  selectionStart: number,
+  selectionEnd: number,
+  mentions: readonly CommittedMention[],
+): CommittedMentionRange | null {
+  const ranges = findCommittedMentionRanges(text, mentions);
+  if (ranges.length === 0) return null;
+
+  if (selectionStart === selectionEnd) {
+    const caret = selectionStart;
+    return (
+      ranges.find((range) => caret > range.start && caret <= range.end) ??
+      ranges.find((range) => caret > 0 && /\s/.test(text[caret - 1] ?? "") && range.end === caret - 1) ??
+      null
+    );
+  }
+
+  return (
+    ranges.find((range) => selectionStart === range.start && selectionEnd === range.end) ??
+    ranges.find((range) => selectionStart < range.end && selectionEnd > range.start) ??
+    null
+  );
+}
+
+export function handleMentionTokenBackspace(params: {
+  event: KeyboardEvent<HTMLTextAreaElement>;
+  mentions: readonly CommittedMention[];
+  applyText: (value: string, textarea: HTMLTextAreaElement) => void;
+  setMentions: (updater: (prev: CommittedMention[]) => CommittedMention[]) => void;
+}): boolean {
+  const { event, mentions, applyText, setMentions } = params;
+  if (event.key !== "Backspace" || event.altKey || event.ctrlKey || event.metaKey) return false;
+
+  const textarea = event.currentTarget;
+  const value = textarea.value;
+  const selectionStart = textarea.selectionStart ?? 0;
+  const selectionEnd = textarea.selectionEnd ?? selectionStart;
+  const range = findMentionRangeForBackspace(value, selectionStart, selectionEnd, mentions);
+  if (!range) return false;
+
+  event.preventDefault();
+
+  if (selectionStart !== range.start || selectionEnd !== range.end) {
+    textarea.setSelectionRange(range.start, range.end);
+    return true;
+  }
+
+  const deleteEnd = value[range.end] === " " ? range.end + 1 : range.end;
+  const nextValue = `${value.slice(0, range.start)}${value.slice(deleteEnd)}`;
+  applyText(nextValue, textarea);
+  setMentions((prev) => prev.filter((mention) => textContainsMentionToken(nextValue, mention.token)));
+
+  requestAnimationFrame(() => {
+    textarea.focus();
+    textarea.setSelectionRange(range.start, range.start);
+  });
+
+  return true;
 }
 
 export type MentionAutocomplete = {

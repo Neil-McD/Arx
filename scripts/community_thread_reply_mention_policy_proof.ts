@@ -6,6 +6,7 @@ function read(relativePath: string): string {
 }
 
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const mentionAutocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const baseCss = read("apps/web/src/base.css");
@@ -32,6 +33,26 @@ assert.doesNotMatch(
   chatPanel,
   /community-interaction-reply-composer-context|community-interaction-reply-composer-copy|isQuotingDrawerReply/,
   "thread drawer reply composer should rely on the seeded @handle instead of a separate Replying to context row",
+);
+assert.match(
+  mentionAutocomplete,
+  /export function handleMentionTokenBackspace\([\s\S]*event\.key !== "Backspace"[\s\S]*findMentionRangeForBackspace[\s\S]*textarea\.setSelectionRange\(range\.start, range\.end\)[\s\S]*const deleteEnd = value\[range\.end\] === " " \? range\.end \+ 1 : range\.end;[\s\S]*setMentions\(\(prev\) => prev\.filter\(\(mention\) => textContainsMentionToken\(nextValue, mention\.token\)\)\);/,
+  "committed mentions should backspace like chips: first select the whole token, then delete it and its inserted spacer",
+);
+assert.equal(
+  (chatPanel.match(/handleMentionTokenBackspace\(\{/g) ?? []).length,
+  2,
+  "both main and drawer composers should use the committed-mention backspace handler",
+);
+assert.match(
+  chatPanel,
+  /handleMentionTokenBackspace\(\{[\s\S]*mentions: communityMessageMentions,[\s\S]*applyText: onCommunityMessageInputChange,[\s\S]*setMentions: setCommunityMessageMentions,/,
+  "main community composer must select/delete committed mention tokens on Backspace",
+);
+assert.match(
+  chatPanel,
+  /handleMentionTokenBackspace\(\{[\s\S]*mentions: drawerReplyMentions,[\s\S]*applyText: handleDrawerReplyInputChange,[\s\S]*setMentions: setDrawerReplyMentions,/,
+  "thread drawer composer must select/delete committed mention tokens on Backspace",
 );
 assert.match(
   chatPanel,

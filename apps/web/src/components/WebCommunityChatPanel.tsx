@@ -45,6 +45,7 @@ import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 import {
   MentionAutocompleteMenu,
   MentionComposerHighlight,
+  handleMentionTokenBackspace,
   useMentionAutocomplete,
   type CommittedMention,
   type MentionCandidate,
@@ -1426,6 +1427,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             onPaste={onCommunityAttachmentPaste}
             onKeyDown={(event) => {
               if (mainMention.handleKeyDown(event)) return;
+              if (
+                handleMentionTokenBackspace({
+                  event,
+                  mentions: communityMessageMentions,
+                  applyText: onCommunityMessageInputChange,
+                  setMentions: setCommunityMessageMentions,
+                })
+              ) return;
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 if (isAuthRecoveringSignedIn) return;
@@ -1528,6 +1537,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             onPaste={handleDrawerReplyAttachmentPaste}
             onKeyDown={(event) => {
               if (drawerMention.handleKeyDown(event)) return;
+              if (
+                handleMentionTokenBackspace({
+                  event,
+                  mentions: drawerReplyMentions,
+                  applyText: handleDrawerReplyInputChange,
+                  setMentions: setDrawerReplyMentions,
+                })
+              ) return;
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 if (isAuthRecoveringSignedIn) return;
