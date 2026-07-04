@@ -349,6 +349,19 @@ export function ActorAvatar(props: {
   className?: string;
   online?: boolean;
 }) {
+  // The community agent (seed is its canonical agent key) wears the hollow
+  // purple Sparkles everywhere an avatar renders — feed root, replies, thread —
+  // never person initials. One chokepoint so no render path is missed.
+  if (props.seed === "community_agent") {
+    return (
+      <span
+        className={`${props.className ?? "community-interaction-avatar"} is-agent-avatar`}
+        aria-hidden="true"
+      >
+        <Sparkles aria-hidden="true" />
+      </span>
+    );
+  }
   const avatar = (
     <UserAvatar
       className={props.className ?? "community-interaction-avatar"}
@@ -877,23 +890,17 @@ export function CommunityInteractionFeedList(
                     {dividerBefore}
                     <div className={`community-interaction-group${badge ? " is-agent" : ""}`}>
                     <div className="community-interaction-group-gutter">
-                      {first.root.actor_type === "community_agent" ? (
-                        <span className="community-interaction-avatar is-agent-avatar" aria-hidden="true">
-                          <Sparkles size={24} strokeWidth={2} />
-                        </span>
-                      ) : (
-                        <ProfileHoverCard
-                          userId={first.root.actor_user_id}
-                          label={label}
-                          seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
-                          profile={profile}
-                          getAvatarColor={props.getAvatarColor}
-                          getInitials={props.getInitials}
-                          currentUserId={props.currentUserId}
-                          onOpenProfile={props.onOpenProfile}
-                          onMessageUser={props.onMessageUser}
-                        />
-                      )}
+                      <ProfileHoverCard
+                        userId={first.root.actor_user_id}
+                        label={label}
+                        seed={first.root.actor_user_id ?? first.root.actor_agent_key ?? first.root.id}
+                        profile={profile}
+                        getAvatarColor={props.getAvatarColor}
+                        getInitials={props.getInitials}
+                        currentUserId={props.currentUserId}
+                        onOpenProfile={props.onOpenProfile}
+                        onMessageUser={props.onMessageUser}
+                      />
                     </div>
                     <div className="community-interaction-group-body">
                       <div className="community-interaction-meta-row">

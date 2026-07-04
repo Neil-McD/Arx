@@ -10013,11 +10013,22 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 /* The community agent's message avatar: hollow purple Sparkles on a flat
-   squared tile, matching the mention picker — never round person initials. */
-.community-interaction-avatar.is-agent-avatar {
-  border-radius: 12px;
+   squared tile, matching the mention picker — never round person initials.
+   Standalone class so it works at any avatar size (feed root, reply, thread). */
+.is-agent-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 30%;
   background: rgba(167, 139, 250, 0.16);
   color: #a78bfa;
+  overflow: hidden;
+}
+.is-agent-avatar > svg {
+  width: 58%;
+  height: 58%;
+  stroke-width: 2;
 }
 
 .community-interaction-avatar.has-image {
