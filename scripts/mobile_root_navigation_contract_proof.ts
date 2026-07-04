@@ -64,13 +64,18 @@ assert.match(
 );
 assert.match(
   topBar,
-  /const rootPages: MobileRootPage\[\] = forceCommunityRoot[\s\S]*\? \["community"\][\s\S]*: showMembersRoot[\s\S]*\? \["threads", "agent", "community", "members"\][\s\S]*: \["threads", "agent", "community"\];/,
-  "mobile topbar pager should expose Members only when there is an active community",
+  /const isAgentModeActive = rootPage === "agent" \|\| rootPage === "threads";[\s\S]*const isRightModeActive = forceCommunityRoot \|\| rootPage === "community" \|\| rootPage === "members";/,
+  "mobile topbar should keep the old Agent/Community segmented slider while mapping Threads to Agent and Members to Community",
 );
 assert.match(
   topBar,
-  /hasActiveCommunity: boolean;[\s\S]*showMembersRoot: boolean;[\s\S]*forceCommunityRoot\?: boolean;/,
-  "mobile topbar should separate community identity, Members access, and forced public-community roots",
+  /<div className="mobile-topbar-center" role="tablist" aria-label="View mode">[\s\S]*className=\{`mobile-topbar-mode\$\{isAgentModeActive \? " active" : ""\}`\}[\s\S]*Agent[\s\S]*className=\{`mobile-topbar-mode\$\{isRightModeActive \? " active" : ""\}`\}[\s\S]*\{rightModeLabel\}/,
+  "mobile topbar center should render the previous two-button segmented control, not the root-page dot pager",
+);
+assert.doesNotMatch(
+  topBar,
+  /mobile-root-pager|mobile-topbar-root-title/,
+  "mobile topbar should not render the replacement root-page title/dot UI",
 );
 assert.match(
   topBar,
@@ -99,8 +104,13 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-root-pager-dot\.active/,
-  "mobile root pager should expose an active indicator",
+  /\.mobile-topbar-center \{[\s\S]*grid-template-columns: repeat\(2, auto\);[\s\S]*border-radius: 999px;[\s\S]*\.mobile-topbar-mode\.active/,
+  "mobile topbar CSS should preserve the previous two-option segmented slider styling",
+);
+assert.doesNotMatch(
+  indexCss,
+  /mobile-root-pager|mobile-topbar-root-title/,
+  "mobile topbar CSS should not keep the replacement root-page title/dot UI",
 );
 assert.match(
   baseCss,

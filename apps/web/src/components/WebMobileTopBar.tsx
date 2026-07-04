@@ -8,7 +8,6 @@ type WebMobileTopBarProps = {
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
-  showMembersRoot: boolean;
   forceCommunityRoot?: boolean;
   activeCommunityName: string | null;
   activeCommunityAvatarUrl: string | null;
@@ -30,7 +29,6 @@ export function WebMobileTopBar({
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
-  showMembersRoot,
   forceCommunityRoot = false,
   activeCommunityName,
   activeCommunityAvatarUrl,
@@ -47,25 +45,8 @@ export function WebMobileTopBar({
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
   const rightModeLabel = secondaryMode === "discover" ? "Discover" : "Community";
-  const rootPageLabel =
-    rootPage === "threads"
-      ? "Threads"
-      : rootPage === "agent"
-        ? "Agent"
-        : rootPage === "members"
-          ? "Members"
-          : rightModeLabel;
-  const getRootPagerLabel = (page: MobileRootPage) => {
-    if (page === "threads") return "Threads";
-    if (page === "agent") return "Agent";
-    if (page === "members") return "Members";
-    return rightModeLabel;
-  };
-  const rootPages: MobileRootPage[] = forceCommunityRoot
-    ? ["community"]
-    : showMembersRoot
-      ? ["threads", "agent", "community", "members"]
-      : ["threads", "agent", "community"];
+  const isAgentModeActive = rootPage === "agent" || rootPage === "threads";
+  const isRightModeActive = forceCommunityRoot || rootPage === "community" || rootPage === "members";
   const drawerLabel =
     rootPage === "threads"
       ? "Back to agent"
@@ -117,24 +98,25 @@ export function WebMobileTopBar({
         ) : null}
       </div>
 
-      <div className="mobile-topbar-center mobile-topbar-root" aria-label="Mobile pages">
-        <div className="mobile-topbar-root-title">{rootPageLabel}</div>
-        <div className="mobile-root-pager" role="tablist" aria-label="Mobile page">
-          {rootPages.map((page) => {
-            const label = getRootPagerLabel(page);
-            return (
-              <button
-                key={page}
-                type="button"
-                role="tab"
-                aria-label={label}
-                aria-selected={rootPage === page}
-                className={`mobile-root-pager-dot${rootPage === page ? " active" : ""}`}
-                onClick={() => onSelectRootPage(page)}
-              />
-            );
-          })}
-        </div>
+      <div className="mobile-topbar-center" role="tablist" aria-label="View mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isAgentModeActive}
+          className={`mobile-topbar-mode${isAgentModeActive ? " active" : ""}`}
+          onClick={() => onSelectRootPage("agent")}
+        >
+          Agent
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isRightModeActive}
+          className={`mobile-topbar-mode${isRightModeActive ? " active" : ""}`}
+          onClick={() => onSelectRootPage("community")}
+        >
+          {rightModeLabel}
+        </button>
       </div>
 
       <div className="mobile-topbar-right">

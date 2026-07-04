@@ -131,10 +131,6 @@ export function buildWebShellChromeHostProps(params: {
       showDrawerButton:
         !params.showMobileSettingsShell && params.activePage !== "discover",
       hasActiveCommunity: Boolean(params.activeCommunity),
-      showMembersRoot:
-        !params.forceMobileCommunityRoot &&
-        params.hasSelectedCommunity &&
-        params.canViewMembersActiveCommunity,
       forceCommunityRoot: params.forceMobileCommunityRoot,
       activeCommunityName: params.activeCommunity?.name ?? null,
       activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
