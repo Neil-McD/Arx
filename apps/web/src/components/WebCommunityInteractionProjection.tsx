@@ -69,6 +69,7 @@ export type WebCommunityInteractionProjectionProps = {
   getInitials: (value: string) => string;
   formatChatTime: (value: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
+  renderMarkdown: (text: string) => ReactNode;
   onToggleReaction?: (targetType: "root" | "reply", targetId: string, emoji: string) => void;
   currentUserId?: string | null;
   onEditMessage?: (targetType: "root" | "reply", targetId: string, text: string) => void;
@@ -152,6 +153,7 @@ import {
   bundleText,
   formatRelativeTime,
   hostnameOf,
+  interactionBodyRenderModeForActor,
   kindChipLabel,
   sortedBlocks,
   stripSharedAttachmentSummary,
@@ -428,6 +430,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   <InteractionBody
                     text={selectedRootText}
                     renderTextWithLinks={props.renderTextWithLinks}
+                    renderMarkdown={props.renderMarkdown}
+                    renderMode={interactionBodyRenderModeForActor(selectedRoot.root.actor_type)}
                     mentionContext={{
                       mentions: selectedRoot.mentions ?? [],
                       displayName: props.displayName,
@@ -560,6 +564,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             <InteractionBody
                               text={body}
                               renderTextWithLinks={props.renderTextWithLinks}
+                              renderMarkdown={props.renderMarkdown}
+                              renderMode={interactionBodyRenderModeForActor(reply.actor_type)}
                               mentionContext={{
                                 mentions: bundle.mentions ?? [],
                                 displayName: props.displayName,

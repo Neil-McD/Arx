@@ -12,6 +12,7 @@ const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
 const communityNav = read("shared/CommunityNav.tsx");
@@ -104,6 +105,36 @@ assert.match(
   chatPanel,
   /WebCommunityInteractionProjection[\s\S]*profilesByUserId=\{profilesByUserId\}/,
   "chat panel should pass hydrated profile rows into the canonical projection",
+);
+assert.match(
+  app,
+  /renderTextWithLinks,[\s\S]*renderMarkdown,[\s\S]*onScrollToReplyMessage: scrollToCommunityMessage/,
+  "App should pass the shared markdown renderer into the community chat panel",
+);
+assert.match(
+  chatPanel,
+  /renderTextWithLinks: \(text: string\) => ReactNode;[\s\S]*renderMarkdown: \(text: string\) => ReactNode;[\s\S]*WebCommunityInteractionProjection[\s\S]*renderMarkdown=\{renderMarkdown\}/,
+  "chat panel should thread the shared markdown renderer into the canonical projection",
+);
+assert.match(
+  surfaceProjection,
+  /renderMarkdown: WebCommunityChatPanelProps\["renderMarkdown"\];[\s\S]*renderMarkdown: params\.renderMarkdown,/,
+  "community surface projection builder should carry the markdown renderer into chat panel props",
+);
+assert.match(
+  visitorSurface,
+  /import \{ renderMarkdown \} from "\.\.\/\.\.\/\.\.\/\.\.\/shared\/markdownUi";[\s\S]*WebCommunityInteractionProjection[\s\S]*renderMarkdown=\{renderMarkdown\}/,
+  "visitor community preview should pass markdown rendering into the shared projection component",
+);
+assert.match(
+  projection,
+  /renderMarkdown: \(text: string\) => ReactNode;[\s\S]*InteractionBody[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(selectedRoot\.root\.actor_type\)\}[\s\S]*InteractionBody[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(reply\.actor_type\)\}/,
+  "projection should render agent-authored root and reply bodies through compact markdown mode",
+);
+assert.match(
+  feed,
+  /export function interactionBodyRenderModeForActor\(actorType: string\)[\s\S]*actorType === "community_agent" \|\| actorType === "personal_agent" \? "compact_markdown" : "plain"[\s\S]*props\.renderMode === "compact_markdown" && props\.renderMarkdown[\s\S]*community-interaction-body community-interaction-markdown[\s\S]*props\.renderMarkdown\(text\)/,
+  "interaction body should reserve markdown rendering for agent-authored messages while preserving plain chat rendering by default",
 );
 assert.match(
   communityAccessViewModel,
@@ -649,6 +680,11 @@ assert.match(
   baseCss,
   /\.community-interaction-avatar-image\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*object-fit:\s*cover;/,
   "projection avatar images should fill the avatar clipping box",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-body\.community-interaction-markdown\s*\{[\s\S]*display:\s*block;[\s\S]*\.community-interaction-markdown \.md-header\s*\{[\s\S]*font-size:\s*1em;[\s\S]*\.community-interaction-markdown \.md-list\s*\{[\s\S]*padding-left:\s*1\.36em;/,
+  "projection markdown should use compact chat-thread typography for agent replies",
 );
 assert.match(
   baseCss,

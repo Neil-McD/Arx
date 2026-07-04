@@ -349,6 +349,7 @@ export type WebCommunityChatPanelProps = {
   parseReplyPrefix: (body: string) => ReplyPrefix | null;
   truncateReplyPreview: (value: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
+  renderMarkdown: (text: string) => ReactNode;
   onScrollToReplyMessage: (replyMessageId: string) => void;
   onOpenCommunityChatLightbox: (images: CommunityChatMediaImage[], index: number) => void;
   onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
@@ -376,6 +377,7 @@ export type WebCommunityChatPanelProps = {
     | "getInitials"
     | "formatChatTime"
     | "renderTextWithLinks"
+    | "renderMarkdown"
   > & {
     enabled: boolean;
   };
@@ -491,6 +493,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     parseReplyPrefix,
     truncateReplyPreview,
     renderTextWithLinks,
+    renderMarkdown,
     onScrollToReplyMessage,
     onOpenCommunityChatLightbox,
     onToggleReaction,
@@ -1644,6 +1647,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 getInitials={getInitials}
                 formatChatTime={formatChatTime}
                 renderTextWithLinks={renderTextWithLinks}
+                renderMarkdown={renderMarkdown}
                 onStartRootReply={(message) => {
                   const seededMention = buildUserMentionFromProfile(
                     message.sender_id,

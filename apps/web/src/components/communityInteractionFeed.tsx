@@ -673,12 +673,29 @@ function MentionChipSpan(props: {
   );
 }
 
+export type InteractionBodyRenderMode = "plain" | "compact_markdown";
+
+export function interactionBodyRenderModeForActor(actorType: string): InteractionBodyRenderMode {
+  return actorType === "community_agent" || actorType === "personal_agent" ? "compact_markdown" : "plain";
+}
+
 export function InteractionBody(props: {
   text: string;
   renderTextWithLinks: (text: string) => ReactNode;
+  renderMarkdown?: (text: string) => ReactNode;
+  renderMode?: InteractionBodyRenderMode;
   mentionContext?: InteractionMentionContext;
 }) {
-  const parts = props.text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+  const text = props.text.trim();
+  if (!text) return null;
+  if (props.renderMode === "compact_markdown" && props.renderMarkdown) {
+    return (
+      <div className="community-interaction-body community-interaction-markdown">
+        {props.renderMarkdown(text)}
+      </div>
+    );
+  }
+  const parts = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   if (parts.length === 0) return null;
   const resolvedMentions =
     props.mentionContext && props.mentionContext.mentions.length > 0
@@ -962,6 +979,8 @@ export function CommunityInteractionFeedList(
                                 <InteractionBody
                                   text={body}
                                   renderTextWithLinks={props.renderTextWithLinks}
+                                  renderMarkdown={props.renderMarkdown}
+                                  renderMode={interactionBodyRenderModeForActor(root.actor_type)}
                                   mentionContext={{
                                     mentions: bundle.mentions ?? [],
                                     displayName: props.displayName,

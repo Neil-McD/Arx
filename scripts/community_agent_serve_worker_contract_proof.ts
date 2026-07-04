@@ -126,6 +126,11 @@ assert.match(
   /direct community-agent mention request[\s\S]*member's community-agent mention request/,
   "serve prompt should refer to the canonical community-agent mention rather than a legacy literal token",
 );
+assert.match(
+  worker,
+  /Format for a narrow chat thread:[\s\S]*compact Markdown is okay[\s\S]*2-5 short bullets[\s\S]*avoid tables and large headings/,
+  "serve prompt should keep community-agent replies formatted for compact thread markdown",
+);
 assert.doesNotMatch(
   worker,
   /@Polynet/,
