@@ -552,8 +552,18 @@ assert.match(
 );
 assert.match(
   communityDirectory,
-  /query\("communityPresence" as any\)[\s\S]*withIndex\("by_community_user"[\s\S]*last_active_at: args\.lastActiveAt/,
-  "directory backend should project community-scoped last active timestamps from presence rows",
+  /query\("communityPresence" as any\)[\s\S]*withIndex\("by_community_lastSeenAt"[\s\S]*\.order\("desc"\)[\s\S]*const lastSeenAtByUserId = new Map<string, number>/,
+  "directory backend should read community-scoped presence ordered by last seen",
+);
+assert.match(
+  communityDirectory,
+  /const orderedCandidates = \[ownerCandidate, \.\.\.memberCandidates\][\s\S]*\.sort\(compareCommunityDirectoryCandidates\);[\s\S]*const selectedCandidates = orderedCandidates\.slice\(offset, offset \+ pageSize\);/,
+  "directory backend should order all candidates by activity before pagination",
+);
+assert.doesNotMatch(
+  communityDirectory,
+  /includeOwner|memberTake|selectedMemberRows|readCommunityDirectoryLastActiveAt/,
+  "directory backend should not page by owner-first membership order before activity sorting",
 );
 assert.match(
   memberPresenceSummaryQuery,

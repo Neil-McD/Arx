@@ -36,8 +36,24 @@ type CommunityMentionUserRow = {
 };
 
 type CommunityPresenceRow = {
+  userId?: any;
   lastSeenAt?: number | null;
 };
+
+type CommunityDirectoryCandidate =
+  | {
+      kind: "owner";
+      userId: any;
+      createdAt: number;
+      lastSeenAt: number | null;
+    }
+  | {
+      kind: "membership";
+      row: CommunityMembershipLike;
+      userId: any;
+      createdAt: number;
+      lastSeenAt: number | null;
+    };
 
 function normalizeDirectoryPageSize(rawPageSize: number | undefined): number {
   return Math.max(
@@ -83,6 +99,26 @@ function textMatchesMentionSearch(value: unknown, query: string): boolean {
   return String(value ?? "").trim().toLowerCase().includes(query);
 }
 
+function normalizePresenceLastSeenAt(rawLastSeenAt: unknown): number | null {
+  const lastSeenAt = Number(rawLastSeenAt ?? 0);
+  return Number.isFinite(lastSeenAt) && lastSeenAt > 0 ? lastSeenAt : null;
+}
+
+function formatCommunityDirectoryLastActiveAt(lastSeenAt: number | null | undefined): string | null {
+  return lastSeenAt ? toIsoString(lastSeenAt) : null;
+}
+
+function compareCommunityDirectoryCandidates(
+  a: CommunityDirectoryCandidate,
+  b: CommunityDirectoryCandidate,
+): number {
+  const aLastSeenAt = a.lastSeenAt ?? 0;
+  const bLastSeenAt = b.lastSeenAt ?? 0;
+  if (aLastSeenAt !== bLastSeenAt) return bLastSeenAt - aLastSeenAt;
+  if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+  return String(a.userId ?? "").localeCompare(String(b.userId ?? ""));
+}
+
 function userMatchesMentionSearch(user: CommunityMentionUserRow, query: string): boolean {
   if (!query) return true;
   const normalizedHandle = normalizeProfileHandle(user.normalizedHandle ?? user.handle);
@@ -109,19 +145,24 @@ async function resolveCommunityDirectoryContext(args: {
   return { community, userId };
 }
 
-async function readCommunityDirectoryLastActiveAt(args: {
+async function readCommunityDirectoryLastSeenAtByUserId(args: {
   ctx: any;
   communityId: any;
-  userId: any;
-}): Promise<string | null> {
-  const row = (await args.ctx.db
+}): Promise<Map<string, number>> {
+  const rows = (await args.ctx.db
     .query("communityPresence" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", args.communityId).eq("userId", args.userId),
-    )
-    .first()) as CommunityPresenceRow | null;
-  const lastSeenAt = Number(row?.lastSeenAt ?? 0);
-  return Number.isFinite(lastSeenAt) && lastSeenAt > 0 ? toIsoString(lastSeenAt) : null;
+    .withIndex("by_community_lastSeenAt", (q: any) => q.eq("communityId", args.communityId))
+    .order("desc")
+    .collect()) as CommunityPresenceRow[];
+  const lastSeenAtByUserId = new Map<string, number>();
+  for (const row of rows) {
+    const userId = String(row.userId ?? "").trim();
+    const lastSeenAt = normalizePresenceLastSeenAt(row.lastSeenAt);
+    if (!userId || lastSeenAt === null) continue;
+    const currentLastSeenAt = lastSeenAtByUserId.get(userId) ?? 0;
+    if (lastSeenAt > currentLastSeenAt) lastSeenAtByUserId.set(userId, lastSeenAt);
+  }
+  return lastSeenAtByUserId;
 }
 
 async function mapCommunityDirectoryOwnerRow(args: {
@@ -363,42 +404,44 @@ export const listCommunityDirectoryPage = query({
     const activeRows = canonicalRows.rows;
     const totalCount = countCanonicalCommunityMembersFromRows(activeRows);
     const userIdCache = new Map<string, string | null>();
-    const includeOwner = offset === 0;
-    const memberStart = Math.max(0, offset - 1);
-    const memberTake = includeOwner ? pageSize - 1 : pageSize;
-    const selectedMemberRows =
-      memberTake > 0
-        ? activeRows.slice(memberStart, memberStart + memberTake)
-        : [];
-    const ownerRows = includeOwner
-      ? [
-          await mapCommunityDirectoryOwnerRow({
+    const lastSeenAtByUserId = await readCommunityDirectoryLastSeenAtByUserId({
+      ctx,
+      communityId: args.communityId,
+    });
+    const ownerCandidate: CommunityDirectoryCandidate = {
+      kind: "owner",
+      userId: community.ownerId,
+      createdAt: Number(community.createdAt ?? 0),
+      lastSeenAt: lastSeenAtByUserId.get(String(community.ownerId)) ?? null,
+    };
+    const memberCandidates: CommunityDirectoryCandidate[] = activeRows.map((row) => ({
+      kind: "membership",
+      row,
+      userId: row.userId,
+      createdAt: Number(row.createdAt ?? 0),
+      lastSeenAt: lastSeenAtByUserId.get(String(row.userId)) ?? null,
+    }));
+    const orderedCandidates = [ownerCandidate, ...memberCandidates]
+      .sort(compareCommunityDirectoryCandidates);
+    const selectedCandidates = orderedCandidates.slice(offset, offset + pageSize);
+    const page = await Promise.all(
+      selectedCandidates.map((candidate) => {
+        if (candidate.kind === "owner") {
+          return mapCommunityDirectoryOwnerRow({
             ctx,
             community,
             userIdCache,
-            lastActiveAt: await readCommunityDirectoryLastActiveAt({
-              ctx,
-              communityId: community._id,
-              userId: community.ownerId,
-            }),
-          }),
-        ]
-      : [];
-    const memberRows = await Promise.all(
-      selectedMemberRows.map(async (row) =>
-        mapCommunityDirectoryMembershipRow({
+            lastActiveAt: formatCommunityDirectoryLastActiveAt(candidate.lastSeenAt),
+          });
+        }
+        return mapCommunityDirectoryMembershipRow({
           ctx,
-          row,
+          row: candidate.row,
           userIdCache,
-          lastActiveAt: await readCommunityDirectoryLastActiveAt({
-            ctx,
-            communityId: args.communityId,
-            userId: row.userId,
-          }),
-        }),
-      ),
+          lastActiveAt: formatCommunityDirectoryLastActiveAt(candidate.lastSeenAt),
+        });
+      }),
     );
-    const page = [...ownerRows, ...memberRows];
     const nextOffset = Math.min(totalCount, offset + page.length);
     const isDone = nextOffset >= totalCount;
     return {
