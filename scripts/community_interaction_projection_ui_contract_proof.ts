@@ -8,6 +8,14 @@ function read(relativePath: string): string {
   return readFileSync(join(root, relativePath), "utf8");
 }
 
+function sectionBetween(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `missing section start: ${start}`);
+  const endIndex = source.indexOf(end, startIndex);
+  assert.notEqual(endIndex, -1, `missing section end: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
 const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
@@ -27,12 +35,24 @@ const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const directoryController = read("shared/useCommunityDirectoryController.ts");
+const activeCommunityShellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
 const communityDirectory = read("convex/communityDirectory.ts");
+const communityPublic = read("convex/communityPublic.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
+const publicCommunityStatsMapper = sectionBetween(
+  communityPublic,
+  "function mapPublicCommunityStats",
+  "const PUBLIC_FEATURED_MESSAGE_LIMIT",
+);
+const memberPresenceSummaryQuery = sectionBetween(
+  communityPublic,
+  "export const getCommunityPresenceSummary",
+  "export const listPublicDiscoverCommunities",
+);
 
 assert.match(
   packageJson,
@@ -502,6 +522,11 @@ assert.match(
 );
 assert.match(
   directoryGateway,
+  /last_active_at\?: string \| null;/,
+  "directory gateway member rows should expose member-gated last active timestamps",
+);
+assert.match(
+  directoryGateway,
   /client\.query\("community:countCommunityDirectoryMembers" as any/,
   "directory gateway should expose a read-only member-facing count query",
 );
@@ -525,10 +550,55 @@ assert.match(
   /listCanonicalCommunityMemberMembershipRows[\s\S]*countCanonicalCommunityMembersFromRows/,
   "directory backend should use the canonical member count and row helpers",
 );
+assert.match(
+  communityDirectory,
+  /query\("communityPresence" as any\)[\s\S]*withIndex\("by_community_user"[\s\S]*last_active_at: args\.lastActiveAt/,
+  "directory backend should project community-scoped last active timestamps from presence rows",
+);
+assert.match(
+  memberPresenceSummaryQuery,
+  /online_last_active_at_by_user_id: stats\.onlineLastActiveAtByUserId/,
+  "member-gated presence summary should include fresh online last-active timestamps",
+);
+assert.match(
+  activeCommunityShellController,
+  /type ScopedPresenceSummary = \{[\s\S]*communityId: string;[\s\S]*summary: PresenceSummary \| null;[\s\S]*useState<ScopedPresenceSummary \| null>[\s\S]*activeCommunityIdRef\.current === communityId[\s\S]*setActiveCommunityPresenceSummaryState\(\{[\s\S]*communityId,[\s\S]*summary: summary \?\? null,[\s\S]*activeCommunityPresenceSummaryState\?\.communityId !== communityId\) return null;/,
+  "active community shell controller should scope presence summaries to the active community",
+);
 assert.doesNotMatch(
   communityDirectory,
   /mutation\(|syncCommunityMembershipCount|viewerCanManageMembers|community_forbidden/,
   "directory backend must stay read-only and member-facing",
+);
+assert.doesNotMatch(
+  publicCommunityStatsMapper,
+  /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
+  "public community funnel payloads must not expose per-member last active timestamps",
+);
+assert.match(
+  contextPanel,
+  /last_active_at\?: string \| null;[\s\S]*onlineLastActiveAtByUserId\?: Record<string, string> \| null;/,
+  "context panel member types should include directory and presence-summary last-active fields",
+);
+assert.match(
+  contextPanel,
+  /formatMemberActivityLabel[\s\S]*Active now[\s\S]*Active \$\{relative\}/,
+  "context panel should format online and relative member activity labels",
+);
+assert.match(
+  contextPanel,
+  /observedActivity\.scopeKey === activityScopeKey[\s\S]*setObservedActivity\(\{ scopeKey: activityScopeKey, byUserId: \{\} \}\)[\s\S]*props\.onlineLastActiveAtByUserId[\s\S]*latestObservedLastActiveAt \?\? member\.last_active_at[\s\S]*community-context-member-activity/,
+  "context panel should render last-active status as a member-row hover label",
+);
+assert.match(
+  projection,
+  /online_last_active_at_by_user_id\?: Record<string, string> \| null;[\s\S]*onlineLastActiveAtByUserId=\{props\.presenceSummary\?\.online_last_active_at_by_user_id \?\? null\}/,
+  "interaction projection should pass fresh member-gated presence timestamps into the context panel",
+);
+assert.match(
+  baseCss,
+  /\.community-context-member:hover \.community-context-member-activity,[\s\S]*\.community-context-member:focus-within \.community-context-member-activity/,
+  "member activity labels should reveal on hover and keyboard focus",
 );
 
 assert.match(

@@ -94,6 +94,7 @@ export type WebCommunityInteractionProjectionProps = {
     admin_count?: number | null;
     online_count?: number | null;
     online_faces?: CommunityPresenceFace[] | null;
+    online_last_active_at_by_user_id?: Record<string, string> | null;
   } | null;
   communityMemberCount?: number | null;
   communityMembers?: CommunityRailMember[] | null;
@@ -212,6 +213,8 @@ export function CommunityInteractionContextPanelSurface(
           membersLoadError={props.communityMembersLoadError}
           onLoadMoreMembers={props.onLoadMoreCommunityMembers}
           onlineUserIds={props.onlineUserIds ?? null}
+          onlineLastActiveAtByUserId={props.presenceSummary?.online_last_active_at_by_user_id ?? null}
+          activityScopeKey={props.communityId ?? null}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
           entryPolicy={props.communityEntryPolicy ?? null}

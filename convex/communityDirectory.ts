@@ -35,6 +35,10 @@ type CommunityMentionUserRow = {
   avatarUrl?: string;
 };
 
+type CommunityPresenceRow = {
+  lastSeenAt?: number | null;
+};
+
 function normalizeDirectoryPageSize(rawPageSize: number | undefined): number {
   return Math.max(
     1,
@@ -105,10 +109,26 @@ async function resolveCommunityDirectoryContext(args: {
   return { community, userId };
 }
 
+async function readCommunityDirectoryLastActiveAt(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<string | null> {
+  const row = (await args.ctx.db
+    .query("communityPresence" as any)
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    )
+    .first()) as CommunityPresenceRow | null;
+  const lastSeenAt = Number(row?.lastSeenAt ?? 0);
+  return Number.isFinite(lastSeenAt) && lastSeenAt > 0 ? toIsoString(lastSeenAt) : null;
+}
+
 async function mapCommunityDirectoryOwnerRow(args: {
   ctx: any;
   community: CommunityLike;
   userIdCache: Map<string, string | null>;
+  lastActiveAt: string | null;
 }) {
   return {
     id: `owner:${String(args.community._id)}`,
@@ -119,6 +139,7 @@ async function mapCommunityDirectoryOwnerRow(args: {
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.community.ownerId)),
     role: "owner",
     created_at: toIsoString(args.community.createdAt),
+    last_active_at: args.lastActiveAt,
   };
 }
 
@@ -126,6 +147,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
   ctx: any;
   row: CommunityMembershipLike;
   userIdCache: Map<string, string | null>;
+  lastActiveAt: string | null;
 }) {
   return {
     id: String(args.row._id),
@@ -136,6 +158,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.row.userId)),
     role: normalizeCommunityRoleForOutput(args.row.role) || "member",
     created_at: toIsoString(args.row.createdAt),
+    last_active_at: args.lastActiveAt,
   };
 }
 
@@ -353,15 +376,25 @@ export const listCommunityDirectoryPage = query({
             ctx,
             community,
             userIdCache,
+            lastActiveAt: await readCommunityDirectoryLastActiveAt({
+              ctx,
+              communityId: community._id,
+              userId: community.ownerId,
+            }),
           }),
         ]
       : [];
     const memberRows = await Promise.all(
-      selectedMemberRows.map((row) =>
+      selectedMemberRows.map(async (row) =>
         mapCommunityDirectoryMembershipRow({
           ctx,
           row,
           userIdCache,
+          lastActiveAt: await readCommunityDirectoryLastActiveAt({
+            ctx,
+            communityId: args.communityId,
+            userId: row.userId,
+          }),
         }),
       ),
     );

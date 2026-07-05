@@ -9492,6 +9492,34 @@ button.community-launch-knowledge-integration-chip:disabled {
   text-overflow: ellipsis;
 }
 
+.community-context-member-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.community-context-member-activity {
+  flex: 0 0 auto;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    max-width 0.14s ease,
+    opacity 0.12s ease;
+}
+
+.community-context-member:hover .community-context-member-activity,
+.community-context-member:focus-within .community-context-member-activity {
+  max-width: 128px;
+  opacity: 1;
+}
+
 .community-context-member-name.is-admin {
   color: var(--accent-gold);
   font-weight: 500;

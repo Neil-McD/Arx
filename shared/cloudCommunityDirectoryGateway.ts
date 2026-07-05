@@ -9,6 +9,7 @@ export type CloudCommunityDirectoryMemberRow = {
   avatar_url?: string | null;
   role: string;
   created_at: string;
+  last_active_at?: string | null;
 };
 
 export type CloudCommunityDirectoryPage = {

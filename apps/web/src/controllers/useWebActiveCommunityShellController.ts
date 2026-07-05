@@ -27,6 +27,12 @@ type PresenceSummary = {
   online_count?: number | null;
   online_faces?: PresenceFace[] | null;
   online_user_ids?: string[] | null;
+  online_last_active_at_by_user_id?: Record<string, string> | null;
+};
+
+type ScopedPresenceSummary = {
+  communityId: string;
+  summary: PresenceSummary | null;
 };
 
 export function useWebActiveCommunityShellController<SessionT>(params: {
@@ -36,7 +42,8 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
 }) {
   const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
   const [isLoadingCommunityAccess, setIsLoadingCommunityAccess] = useState(false);
-  const [activeCommunityPresenceSummary, setActiveCommunityPresenceSummary] = useState<PresenceSummary | null>(null);
+  const [activeCommunityPresenceSummaryState, setActiveCommunityPresenceSummaryState] =
+    useState<ScopedPresenceSummary | null>(null);
   const accessSeqRef = useRef(0);
   const activeCommunityIdRef = useRef(params.activeCommunityId);
 
@@ -112,11 +119,11 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
 
   useEffect(() => {
     if (!params.session || !params.activeCommunityId) {
-      setActiveCommunityPresenceSummary(null);
+      setActiveCommunityPresenceSummaryState(null);
       return;
     }
     let cancelled = false;
-    const communityId = params.activeCommunityId;
+    const communityId = String(params.activeCommunityId ?? "").trim();
     const refresh = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
       try {
@@ -126,8 +133,11 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
           session: usableSession,
           communityId,
         });
-        if (!cancelled) {
-          setActiveCommunityPresenceSummary(summary ?? null);
+        if (!cancelled && activeCommunityIdRef.current === communityId) {
+          setActiveCommunityPresenceSummaryState({
+            communityId,
+            summary: summary ?? null,
+          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -145,12 +155,23 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     };
   }, [params.activeCommunityId, params.session, params.ensureSession]);
 
+  useEffect(() => {
+    setActiveCommunityPresenceSummaryState(null);
+  }, [params.activeCommunityId]);
+
   const currentActiveCommunityAccess = useMemo(() => {
     const communityId = String(params.activeCommunityId ?? "").trim();
     if (!communityId) return null;
     if (activeCommunityAccess?.community_id !== communityId) return null;
     return activeCommunityAccess;
   }, [activeCommunityAccess, params.activeCommunityId]);
+
+  const activeCommunityPresenceSummary = useMemo(() => {
+    const communityId = String(params.activeCommunityId ?? "").trim();
+    if (!communityId) return null;
+    if (activeCommunityPresenceSummaryState?.communityId !== communityId) return null;
+    return activeCommunityPresenceSummaryState.summary;
+  }, [activeCommunityPresenceSummaryState, params.activeCommunityId]);
 
   const communityAccessCapabilities = useMemo(
     () => deriveCommunityAccessCapabilities(currentActiveCommunityAccess),

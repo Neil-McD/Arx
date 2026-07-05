@@ -180,6 +180,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   onlineCount: number;
   onlineFaces: PublicCommunityFace[];
   onlineUserIds: string[];
+  onlineLastActiveAtByUserId: Record<string, string>;
   joinedLast30dCount: number;
   memberFacesPreview: PublicCommunityFace[];
 }> {
@@ -209,7 +210,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     lastSeenAt: number;
   }>;
 
-  const onlineUserIds: any[] = [];
+  const onlineUserEntries: Array<{ userId: any; lastSeenAt: number }> = [];
   const seenOnlineUserIds = new Set<string>();
   const userIdCache = new Map<string, string | null>();
   for (const row of recentPresenceRows) {
@@ -218,12 +219,12 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
       continue;
     }
     seenOnlineUserIds.add(normalizedUserId);
-    onlineUserIds.push(row.userId);
+    onlineUserEntries.push({ userId: row.userId, lastSeenAt: row.lastSeenAt });
   }
 
   const onlineFaces = (
     await Promise.all(
-      onlineUserIds.slice(0, 8).map(async (userId): Promise<PublicCommunityFace | null> => {
+      onlineUserEntries.slice(0, 8).map(async ({ userId }): Promise<PublicCommunityFace | null> => {
         const user = await ctx.db.get(userId);
         if (!user) return null;
         return {
@@ -234,13 +235,14 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     )
   ).filter(Boolean) as PublicCommunityFace[];
 
-  const onlineUserPublicIds = (
-    await Promise.all(
-      onlineUserIds.map(
-        async (userId) => (await resolvePublicUserId(ctx, userId, userIdCache)) ?? String(userId),
-      ),
-    )
-  ).filter(Boolean) as string[];
+  const onlineUserPublicIds: string[] = [];
+  const onlineLastActiveAtByUserId: Record<string, string> = {};
+  for (const entry of onlineUserEntries) {
+    const publicUserId = (await resolvePublicUserId(ctx, entry.userId, userIdCache)) ?? String(entry.userId);
+    if (!publicUserId) continue;
+    onlineUserPublicIds.push(publicUserId);
+    onlineLastActiveAtByUserId[publicUserId] = toIsoString(entry.lastSeenAt);
+  }
 
   const joinedSinceMs = Date.now() - PUBLIC_JOINED_RECENTLY_WINDOW_MS;
   const joinedLast30dCount = activeMemberships.reduce(
@@ -277,9 +279,10 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   return {
     memberCount,
     adminCount: adminUserIds.size,
-    onlineCount: onlineUserIds.length,
+    onlineCount: onlineUserEntries.length,
     onlineFaces,
     onlineUserIds: onlineUserPublicIds,
+    onlineLastActiveAtByUserId,
     joinedLast30dCount,
     memberFacesPreview,
   };
@@ -583,7 +586,10 @@ export const getCommunityPresenceSummary = query({
       userId,
     });
     const stats = await resolvePublicCommunityStats(ctx, community);
-    return mapPublicCommunityStats(stats);
+    return {
+      ...mapPublicCommunityStats(stats),
+      online_last_active_at_by_user_id: stats.onlineLastActiveAtByUserId,
+    };
   },
 });
 

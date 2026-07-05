@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
 import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type {
   CloudCommunityPolynetOverview,
@@ -24,6 +25,7 @@ export type CommunityRailMember = {
   avatar_url?: string | null;
   role: string;
   created_at?: string | null;
+  last_active_at?: string | null;
 };
 
 export type CommunityAdmissionEntryPolicy = "open" | "approval" | "paid_subscription";
@@ -52,6 +54,8 @@ type CommunityContextPanelProps = {
   membersLoadError?: string | null;
   onLoadMoreMembers?: () => void;
   onlineUserIds?: Set<string> | null;
+  onlineLastActiveAtByUserId?: Record<string, string> | null;
+  activityScopeKey?: string | null;
   ownerId?: string | null;
   canManageMembers?: boolean;
   entryPolicy?: CommunityAdmissionEntryPolicy | null;
@@ -116,6 +120,14 @@ function formatMemoryCount(overview: CloudCommunityPolynetOverview | null): stri
   return `${count}${overview.memory.node_counts_are_lower_bound ? "+" : ""}`;
 }
 
+function formatMemberActivityLabel(lastActiveAt: string | null | undefined, isOnline: boolean): string | null {
+  if (isOnline) return "Active now";
+  const normalized = String(lastActiveAt ?? "").trim();
+  if (!normalized) return null;
+  const relative = formatRelativeTimeFromIso(normalized);
+  return relative ? `Active ${relative}` : null;
+}
+
 function isDirectoryMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
   return node.kind === "directory_node";
 }
@@ -126,6 +138,13 @@ function isDirectoryMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean
 export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const online = props.onlineUserIds ?? new Set<string>();
   const members = props.members ?? [];
+  const activityScopeKey = props.activityScopeKey ?? null;
+  const [observedActivity, setObservedActivity] = useState<{
+    scopeKey: string | null;
+    byUserId: Record<string, string>;
+  }>(() => ({ scopeKey: activityScopeKey, byUserId: {} }));
+  const observedLastActiveAtByUserId =
+    observedActivity.scopeKey === activityScopeKey ? observedActivity.byUserId : {};
   const faces = (props.onlineFaces ?? []).slice(0, FACE_LIMIT);
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
@@ -221,6 +240,25 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   useEffect(() => {
     if (!canShowJoinRequests) setJoinRequestsExpanded(false);
   }, [canShowJoinRequests]);
+
+  useEffect(() => {
+    setObservedActivity({ scopeKey: activityScopeKey, byUserId: {} });
+  }, [activityScopeKey]);
+
+  useEffect(() => {
+    const latest = props.onlineLastActiveAtByUserId ?? {};
+    const entries = Object.entries(latest).filter((entry): entry is [string, string] =>
+      Boolean(entry[0]) && Boolean(entry[1]),
+    );
+    if (entries.length === 0) return;
+    setObservedActivity((previous) => ({
+      scopeKey: activityScopeKey,
+      byUserId: {
+        ...(previous.scopeKey === activityScopeKey ? previous.byUserId : {}),
+        ...Object.fromEntries(entries),
+      },
+    }));
+  }, [activityScopeKey, props.onlineLastActiveAtByUserId]);
 
   const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
     if (!props.membersHasMore) return;
@@ -323,6 +361,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
     const isOnline = online.has(member.user_id);
+    const latestObservedLastActiveAt = observedLastActiveAtByUserId[member.user_id];
+    const activityLabel = formatMemberActivityLabel(
+      latestObservedLastActiveAt ?? member.last_active_at,
+      isOnline,
+    );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
     const canOpenSettings = Boolean(
       props.canManageMembers &&
@@ -346,7 +389,12 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             {member.avatar_url ? <img src={member.avatar_url} alt="" /> : <span>{props.getInitials(name)}</span>}
             {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
           </span>
-          <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
+          <span className="community-context-member-copy">
+            <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
+            {activityLabel ? (
+              <span className="community-context-member-activity">{activityLabel}</span>
+            ) : null}
+          </span>
         </button>
         {canMessage ? (
           <button
