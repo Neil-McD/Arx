@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, MessageCircle, Paperclip, RotateCcw } from "lucide-react";
+import { ArrowLeft, Ban, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -351,6 +351,8 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const threadEntries = useMemo(() => {
     type ThreadEntry = {
       message: WebDirectMessagePanelMessage;
@@ -407,6 +409,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
 
   useEffect(() => {
     setIsConfirmingBlock(false);
+    setIsMenuOpen(false);
     return () => {
       if (confirmBlockTimeoutRef.current !== null) {
         window.clearTimeout(confirmBlockTimeoutRef.current);
@@ -414,6 +417,30 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       }
     };
   }, [props.conversation.id]);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuWrapRef.current?.contains(target)) return;
+      setIsMenuOpen(false);
+      setIsConfirmingBlock(false);
+    };
+    // Capture phase so Escape closes just the menu before the host's
+    // document-level listener closes the whole DM panel.
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setIsMenuOpen(false);
+      setIsConfirmingBlock(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [isMenuOpen]);
 
   const handleBlockActionClick = () => {
     if (!props.onToggleBlockPeer) return;
@@ -423,6 +450,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         confirmBlockTimeoutRef.current = null;
       }
       setIsConfirmingBlock(false);
+      setIsMenuOpen(false);
       void props.onToggleBlockPeer();
       return;
     }
@@ -589,22 +617,41 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           )}
         </div>
         {props.showBlockAction && props.onToggleBlockPeer ? (
-          <button
-            className={`community-dm-panel-block-button${isConfirmingBlock ? " is-confirming" : ""}${isPeerBlocked ? " is-blocked" : ""}`}
-            type="button"
-            onClick={handleBlockActionClick}
-            aria-label={
-              isPeerBlocked
-                ? `Unblock ${peerLabel}`
-                : isConfirmingBlock
-                  ? `Confirm block for ${peerLabel}`
-                  : `Block ${peerLabel}`
-            }
-            title={isPeerBlocked ? "Unblock" : isConfirmingBlock ? "Tap again to block" : "Block"}
-          >
-            <Ban aria-hidden="true" />
-            {isConfirmingBlock ? <span>Block?</span> : isPeerBlocked ? <span>Unblock</span> : null}
-          </button>
+          <div className="community-dm-panel-menu-wrap" ref={menuWrapRef}>
+            <button
+              className={`community-dm-panel-menu-button${isMenuOpen ? " is-open" : ""}`}
+              type="button"
+              onClick={() => {
+                setIsMenuOpen((current) => !current);
+                setIsConfirmingBlock(false);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+              aria-label="Conversation options"
+              title="Options"
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+            {isMenuOpen ? (
+              <div className="community-dm-panel-menu" role="menu">
+                <button
+                  className={`community-dm-panel-menu-item${isConfirmingBlock ? " is-confirming" : ""}`}
+                  type="button"
+                  role="menuitem"
+                  onClick={handleBlockActionClick}
+                >
+                  <Ban aria-hidden="true" />
+                  <span>
+                    {isPeerBlocked
+                      ? `Unblock ${peerLabel}`
+                      : isConfirmingBlock
+                        ? "Tap again to block"
+                        : `Block ${peerLabel}`}
+                  </span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
