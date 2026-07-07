@@ -309,6 +309,21 @@ assert.match(
   /const activeDaytonaRuntimeSubstrate =[\s\S]*executionSession\.getActiveDaytonaRuntimeSubstrate\(\);[\s\S]*const needsWorkspaceSession =[\s\S]*requiresSandboxSession\(toolName as RetrievalToolName\) &&[\s\S]*activeDaytonaRuntimeSubstrate\?\.provider !== "daytona";[\s\S]*activeDaytonaRuntimeSubstrate,\s*[\s\S]*executeDaytonaWorkspaceTool/,
   "PolyNet Daytona file and shell tools must bypass legacy workspace-session creation and execute against the shared Daytona substrate",
 );
+assert.match(
+  handlers,
+  /const polynetDaytonaRuntimeEnabled =[\s\S]*const creditKey = `workspace_compute:daytona:\$\{runId\}`;[\s\S]*reservePaidToolCredits\(\{[\s\S]*toolName: "workspace_compute"[\s\S]*vendor: "daytona"[\s\S]*harness: "polynet"[\s\S]*eventType: "polynet_daytona_runtime_credit_reserved"/,
+  "native PolyNet Daytona runs must reserve canonical workspace compute credits before direct Daytona tools run",
+);
+assert.match(
+  handlers,
+  /settlePolynetDaytonaRuntimeCreditsBestEffort[\s\S]*getDaytonaCodexRuntimeTargetByRunIdInternal[\s\S]*settleReservedCreditsStrict\(\{[\s\S]*creditKey: polynetDaytonaRuntimeCreditKey[\s\S]*vendor|provider: "daytona"[\s\S]*harness: "polynet"[\s\S]*eventType: "polynet_daytona_runtime_credit_settled"/,
+  "native PolyNet Daytona runs must settle canonical Daytona workspace compute credits through the credit ledger",
+);
+assert.match(
+  handlers,
+  /finishRunBestEffortRaw\(\{[\s\S]*contextSnapshot[\s\S]*\}\);[\s\S]*settlePolynetDaytonaRuntimeCreditsBestEffort\(/,
+  "native PolyNet Daytona accounting must run from the shared runtime finalization path",
+);
 assert.doesNotMatch(
   daytonaCodexRuntimeTargetActions,
   /^\s*"\| /m,

@@ -922,6 +922,10 @@ export async function handleRuntimeTurnRequest(args: {
     let polynetCodexRuntimeWorkerMachineId: string | null = null;
     let polynetCodexRuntimeTimingTotalMs: number | null = null;
     let polynetCodexRuntimeCreditsSettled = false;
+    let polynetDaytonaRuntimeCreditKey: string | null = null;
+    let polynetDaytonaRuntimeCreditsReserved = 0;
+    let polynetDaytonaRuntimeReserveStartedAtMs: number | null = null;
+    let polynetDaytonaRuntimeCreditsSettled = false;
     const settlePolynetCodexRuntimeCreditsBestEffort = async (
       terminalReason: string,
     ): Promise<void> => {
@@ -1000,6 +1004,116 @@ export async function handleRuntimeTurnRequest(args: {
         });
       }
     };
+    const settlePolynetDaytonaRuntimeCreditsBestEffort = async (
+      terminalReason: string,
+    ): Promise<void> => {
+      if (!polynetDaytonaRuntimeCreditKey || polynetDaytonaRuntimeCreditsSettled) return;
+      polynetDaytonaRuntimeCreditsSettled = true;
+
+      let target: Record<string, unknown> | null = null;
+      try {
+        target = (await ctx.runQuery(
+          (internal as any).daytonaCodexRuntimeTargets
+            .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
+          {
+            ownerId: actor.dbUserId,
+            runId,
+          },
+        )) as Record<string, unknown> | null;
+      } catch (error) {
+        logStructuredError("polynet_daytona_runtime_target_lookup_failed", {
+          error,
+          run_id: runId,
+          credit_key: polynetDaytonaRuntimeCreditKey,
+        });
+      }
+
+      const sandboxId = String(target?.sandboxId ?? "").trim();
+      const targetId = String(target?._id ?? "").trim();
+      const startedAtMs = polynetDaytonaRuntimeReserveStartedAtMs ?? runStartedAt;
+      const durationSeconds = Math.max(0, (Date.now() - startedAtMs) / 1000);
+      if (!target || !sandboxId || !(durationSeconds > 0)) {
+        await settleReservedCreditsBestEffort({
+          ctx,
+          creditKey: polynetDaytonaRuntimeCreditKey,
+          status: "refunded",
+          failureReason: target
+            ? "daytona_runtime_not_started"
+            : "daytona_runtime_target_not_created",
+          metadata: {
+            pricing_version: PAID_TOOL_PRICING_VERSION,
+            billing_product: "workspace_compute",
+            harness: "polynet",
+            provider: "daytona",
+            pricing_model: "daytona_runtime_seconds_estimate",
+            runtime_engine: "polynet",
+            worker_started: false,
+            terminal_reason: terminalReason,
+            target_id: targetId || null,
+            sandbox_id: sandboxId || null,
+          },
+        });
+        return;
+      }
+
+      const rawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
+        durationSeconds,
+      });
+      const creditsSettled = priceDaytonaWorkspaceComputeCredits({ durationSeconds });
+      try {
+        await settleReservedCreditsStrict({
+          ctx,
+          creditKey: polynetDaytonaRuntimeCreditKey,
+          status: "succeeded",
+          creditsSettled,
+          rawVendorCostUsd,
+          metadata: {
+            pricing_version: PAID_TOOL_PRICING_VERSION,
+            billing_product: "workspace_compute",
+            harness: "polynet",
+            target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+            provider: "daytona",
+            runtime_engine: "polynet",
+            pricing_model: "daytona_runtime_seconds_estimate",
+            provider_billing_reconciliation: "pending",
+            provider_billing_evidence: "estimated_from_runtime_duration",
+            daytona_workspace_compute_usd_per_second:
+              DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
+            duration_seconds: durationSeconds,
+            duration_source: "convex_observed_run_elapsed",
+            target_id: targetId || null,
+            sandbox_id: sandboxId,
+            reserved_credits: polynetDaytonaRuntimeCreditsReserved,
+            terminal_reason: terminalReason,
+          },
+        });
+      } catch (error) {
+        logStructuredError("polynet_daytona_runtime_credit_settlement_failed", {
+          error,
+          run_id: runId,
+          credit_key: polynetDaytonaRuntimeCreditKey,
+          duration_seconds: durationSeconds,
+        });
+        return;
+      }
+      try {
+        await appendRunEvent({
+          eventType: "polynet_daytona_runtime_credit_settled",
+          eventKey: `${runId}:polynet_daytona_runtime_credit_settled:1`,
+          payload: {
+            run_id: runId,
+            credit_key: polynetDaytonaRuntimeCreditKey,
+            credits_settled: creditsSettled,
+            raw_vendor_cost_usd: rawVendorCostUsd,
+            duration_seconds: durationSeconds,
+            target_id: targetId || null,
+            sandbox_id: sandboxId,
+          },
+        });
+      } catch {
+        // Settlement is authoritative; audit event persistence is best effort.
+      }
+    };
     const releasePolynetCodexWorkerLeaseBestEffort = async (
       reason: string,
     ): Promise<void> => {
@@ -1062,6 +1176,13 @@ export async function handleRuntimeTurnRequest(args: {
           contextSnapshot,
         });
       } finally {
+        await settlePolynetDaytonaRuntimeCreditsBestEffort(
+          params.status === "ok"
+            ? "completed"
+            : params.status === "cancelled"
+              ? "cancelled"
+              : params.errorCode || params.reason || "error",
+        );
         await settlePolynetCodexRuntimeCreditsBestEffort(
           params.status === "ok"
             ? "completed"
@@ -1319,6 +1440,88 @@ export async function handleRuntimeTurnRequest(args: {
       polynetAllowedToolNamesForRun.some((toolName) =>
         POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET.has(toolName),
       );
+    if (polynetDaytonaRuntimeEnabled) {
+      const reserveDurationSeconds =
+        POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS / 1000;
+      const reserveRawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
+        durationSeconds: reserveDurationSeconds,
+      });
+      const reserveCredits = priceDaytonaWorkspaceComputeCredits({
+        durationSeconds: reserveDurationSeconds,
+      });
+      const creditKey = `workspace_compute:daytona:${runId}`;
+      const reservation = await reservePaidToolCredits({
+        ctx,
+        creditKey,
+        userId: actor.dbUserId,
+        projectId: runtimeProjectId ?? undefined,
+        runId,
+        toolKind: "workspace_tools",
+        toolName: "workspace_compute",
+        action: "turn",
+        vendor: "daytona",
+        credits: reserveCredits,
+        rawVendorCostUsd: reserveRawVendorCostUsd,
+        polynetPriceUsd: creditsToUsd(reserveCredits),
+        metadata: {
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          billing_product: "workspace_compute",
+          harness: "polynet",
+          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+          provider: "daytona",
+          runtime_engine: "polynet",
+          pricing_model: "daytona_runtime_seconds_estimate",
+          provider_billing_reconciliation: "pending",
+          provider_billing_evidence: "estimated_from_runtime_duration",
+          daytona_workspace_compute_usd_per_second:
+            DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
+          reserve_duration_seconds: reserveDurationSeconds,
+          reserve_raw_vendor_cost_usd: reserveRawVendorCostUsd,
+        },
+      });
+      if (!reservation.ok) {
+        const billingMode =
+          String(reservation.details.paid_usage_billing_mode ?? "").trim() ||
+          "card_preferred";
+        await persistPartialAssistantMessageBestEffort({
+          content: "",
+          status: "error",
+          reason: reservation.code,
+          errorCode: reservation.code,
+          errorMessage: reservation.message,
+        });
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: reservation.code,
+          errorCode: reservation.code,
+          errorMessage: reservation.message,
+        });
+        return runtimeJsonResponse(402, {
+          ok: false,
+          code: reservation.code,
+          error: reservation.code,
+          message: reservation.message,
+          status: 402,
+          tool_kind: "workspace_tools",
+          required_credits: reserveCredits,
+          paid_usage_billing_mode: billingMode,
+        });
+      }
+      polynetDaytonaRuntimeCreditKey = creditKey;
+      polynetDaytonaRuntimeCreditsReserved = reserveCredits;
+      polynetDaytonaRuntimeReserveStartedAtMs = Date.now();
+      await appendRunEvent({
+        eventType: "polynet_daytona_runtime_credit_reserved",
+        eventKey: `${runId}:polynet_daytona_runtime_credit_reserved:1`,
+        payload: {
+          run_id: runId,
+          credit_key: creditKey,
+          reserved_credits: reserveCredits,
+          reserve_duration_seconds: reserveDurationSeconds,
+          reserve_raw_vendor_cost_usd: reserveRawVendorCostUsd,
+        },
+      });
+    }
     const shouldResolveDaytonaRuntimeSubstrate =
       usePolynetCodexWorkerBridge || polynetDaytonaRuntimeEnabled;
     const activeDaytonaRuntimeSubstrate = shouldResolveDaytonaRuntimeSubstrate

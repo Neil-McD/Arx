@@ -11802,6 +11802,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   white-space: nowrap;
 }
 
+/* Scroll edges sit flush against the header/composer dividers (negative
+   margins consume the panel gaps) so content dissolves at the chrome line. */
 .community-dm-panel-messages {
   flex: 1 1 auto;
   min-height: 0;
@@ -11809,20 +11811,20 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 0;
   overflow: auto;
-  margin-right: -12px;
-  padding: 10px 14px 14px 2px;
+  margin: -8px -12px -8px 0;
+  padding: 10px 14px 12px 2px;
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 20px,
-    #000 calc(100% - 24px),
+    #000 10px,
+    #000 calc(100% - 12px),
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 20px,
-    #000 calc(100% - 24px),
+    #000 10px,
+    #000 calc(100% - 12px),
     transparent 100%
   );
 }
@@ -12368,6 +12370,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   line-height: 1.3;
 }
 
+/* List runs to the panel's bottom edge (rounded corner clips it) and tucks
+   under the search bar; fades live at those true edges. */
 .community-dm-inbox-list {
   flex: 1 1 auto;
   min-height: 0;
@@ -12376,20 +12380,20 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
-  margin-right: -12px;
-  padding: 6px 14px 16px 2px;
+  margin: -10px -12px -14px 0;
+  padding: 10px 14px 14px 2px;
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 16px,
-    #000 calc(100% - 26px),
+    #000 10px,
+    #000 calc(100% - 12px),
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 16px,
-    #000 calc(100% - 26px),
+    #000 10px,
+    #000 calc(100% - 12px),
     transparent 100%
   );
 }
