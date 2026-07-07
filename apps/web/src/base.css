@@ -973,16 +973,23 @@ body {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  vertical-align: -2px;
+  vertical-align: -3px;
+  align-self: center;
 }
 
 .premium-member-badge svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Snug the badge toward the author name in chat meta rows. */
+.community-interaction-meta-row .premium-member-badge {
+  margin-left: -3px;
+  margin-top: 1px;
 }
 
 .premium-member-badge-label {

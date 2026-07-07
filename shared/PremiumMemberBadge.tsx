@@ -9,17 +9,15 @@ type PremiumMemberBadgeProps = {
 // Polynet. Custom SVG — deliberately not a stock icon-library mark. Exported
 // so every premium-labeled surface (pills, gates) uses this exact mark.
 export function PremiumNodeGlyph() {
-  // Bold small-size cut: filled, fattened edge nodes and thicker strokes so
-  // the mark stays crisp at 10-14px row sizes. Inline styles beat the
-  // surrounding badge/pill CSS (fill: none) on purpose.
-  const edgeNodeStyle = { fill: "currentColor", stroke: "none" } as const;
+  // Original fine cut, rendered larger (16px via CSS) rather than boldened —
+  // the hollow-node character is the mark; size does the legibility work.
   return (
-    <svg viewBox="0 0 24 24" strokeWidth="2.4" aria-hidden="true">
+    <svg viewBox="0 0 24 24" strokeWidth="2" aria-hidden="true">
       <path d="M5.931 6.936l1.275 4.249m5.607 5.609l4.251 1.275" />
       <path d="M11.683 12.317l5.759 -5.759" />
-      <circle cx="5.5" cy="5.5" r="2.3" style={edgeNodeStyle} />
-      <circle cx="18.5" cy="5.5" r="2.3" style={edgeNodeStyle} />
-      <circle cx="18.5" cy="18.5" r="2.3" style={edgeNodeStyle} />
+      <circle cx="5.5" cy="5.5" r="1.5" />
+      <circle cx="18.5" cy="5.5" r="1.5" />
+      <circle cx="18.5" cy="18.5" r="1.5" />
       <circle cx="8.5" cy="15.5" r="4.5" />
     </svg>
   );
