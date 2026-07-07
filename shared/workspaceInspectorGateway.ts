@@ -80,6 +80,53 @@ export type WorkspaceInspectorFailure = {
   retryAfterMs?: number | null;
 };
 
+export function isWorkspaceInspectorMissingCode(code: string | null | undefined): boolean {
+  return code === "background_sandbox_not_found" || code === "sandbox_not_found";
+}
+
+function isWorkspaceInspectorProviderWakePendingCode(code: string | null | undefined): boolean {
+  return (
+    code === "blaxel_sandbox_not_found" ||
+    code === "blaxel_sandbox_not_ready" ||
+    code === "blaxel_workspace_recreate_failed"
+  );
+}
+
+export function isWorkspaceInspectorStorageQuotaCode(code: string | null | undefined): boolean {
+  return (
+    code === "blaxel_volume_quota_exceeded" ||
+    code === "workspace_volume_limit_reached" ||
+    code === "workspace_provider_volume_quota_headroom_exhausted"
+  );
+}
+
+export function isWorkspaceInspectorWakeRetryableCode(code: string | null | undefined): boolean {
+  return isWorkspaceInspectorProviderWakePendingCode(code);
+}
+
+export function formatWorkspaceInspectorFailureMessage(result: WorkspaceInspectorFailure): string {
+  if (isWorkspaceInspectorMissingCode(result.code)) {
+    return "Open project files to wake the workspace.";
+  }
+  if (isWorkspaceInspectorProviderWakePendingCode(result.code)) {
+    return "Workspace is waking up. Try again in a moment.";
+  }
+  if (isWorkspaceInspectorStorageQuotaCode(result.code)) {
+    return "Workspace storage quota is full. Delete an unused project, then try again.";
+  }
+  if (result.code === "workspace_volume_funding_required") {
+    return "Open Billing before creating workspace storage.";
+  }
+  if (result.code === "workspace_card_required_for_additional_volume") {
+    return "Additional workspace storage requires a card on file.";
+  }
+  if (result.code === "workspace_uncollected_usage_blocked") {
+    return "Clear prior workspace usage before opening this project workspace.";
+  }
+  if (result.code === "workspace_credits_exhausted") return "Open project files to wake the workspace.";
+  return result.message;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

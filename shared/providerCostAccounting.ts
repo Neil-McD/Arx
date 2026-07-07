@@ -8,7 +8,7 @@ export const PROVIDER_COST_COMPONENTS = [
   "blaxel_standby_snapshot",
   "web_research_call",
   "web_crawl_provider_call",
-  "fly_crawler",
+  "web_screenshot_provider_call",
   "daytona_codex_runtime_active",
   "voice_transcription",
   "knowledge_model_inference",
@@ -27,6 +27,7 @@ export type ProviderCostEvidenceType = (typeof PROVIDER_COST_EVIDENCE_TYPES)[num
 export const PROVIDER_COST_BILLING_DISPOSITIONS = [
   "tracked_only",
   "rolled_into_user_usage",
+  "platform_absorbed",
 ] as const;
 
 export type ProviderCostBillingDisposition =

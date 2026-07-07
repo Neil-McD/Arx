@@ -1,9 +1,10 @@
-import { ArrowLeft, MessageCircle, Plus } from "lucide-react";
+import { MessageCircle, Search, UsersRound } from "lucide-react";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import type {
   DirectMessageConversation,
+  DirectMessageNetworkPerson,
   DirectMessageParticipant,
-  DirectMessageRecipient,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 
@@ -11,21 +12,21 @@ type WebDirectMessageInboxPanelProps = {
   conversations: DirectMessageConversation[];
   isLoading: boolean;
   error: string | null;
-  isNewMessageMode: boolean;
-  canStartConversation: boolean;
-  recipients: DirectMessageRecipient[];
-  recipientSearch: string;
-  isLoadingRecipients: boolean;
-  recipientError: string | null;
+  searchValue: string;
+  people: DirectMessageNetworkPerson[];
+  isLoadingPeople: boolean;
+  peopleError: string | null;
+  sourceCommunityCount: number | null;
+  canBrowsePeople: boolean;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
+  onSearchValueChange: (value: string) => void;
   onSelectConversation: (conversation: DirectMessageConversation) => void;
-  onOpenNewMessage: () => void;
-  onCloseNewMessage: () => void;
-  onRecipientSearchChange: (value: string) => void;
-  onSelectRecipient: (recipient: DirectMessageRecipient) => void | Promise<void>;
+  onSelectPerson: (person: DirectMessageNetworkPerson) => void | Promise<void>;
 };
+
+const ACTIVE_NOW_WINDOW_MS = 5 * 60 * 1000;
 
 function resolveDirectMessagePeer(
   conversation: DirectMessageConversation,
@@ -48,177 +49,201 @@ function formatInboxTime(value: string | null): string | null {
   return formatRelativeTimeFromIso(normalized);
 }
 
+function isActiveNow(lastActiveAt: string | null): boolean {
+  const normalized = String(lastActiveAt ?? "").trim();
+  if (!normalized) return false;
+  const ms = new Date(normalized).getTime();
+  return Number.isFinite(ms) && Date.now() - ms <= ACTIVE_NOW_WINDOW_MS;
+}
+
+function formatPersonPresenceLabel(person: DirectMessageNetworkPerson): string {
+  const communityName = String(person.community_name ?? "").trim() || "a shared community";
+  const lastActiveAt = String(person.last_active_at ?? "").trim();
+  if (!lastActiveAt) return `In ${communityName}`;
+  if (isActiveNow(person.last_active_at)) return `Active now · ${communityName}`;
+  const relative = formatRelativeTimeFromIso(lastActiveAt);
+  return relative ? `Active ${relative} · ${communityName}` : `In ${communityName}`;
+}
+
 export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProps) {
-  if (props.isNewMessageMode) {
-    const isInitialRecipientLoad = props.isLoadingRecipients && props.recipients.length === 0;
-    const hasRecipientSearch = props.recipientSearch.trim().length > 0;
-    const emptyRecipientLabel = hasRecipientSearch ? "No matches." : "No members found.";
-    return (
-      <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="New direct message">
-        <div className="community-dm-inbox-header">
-          <div className="community-dm-inbox-heading-row">
-            <button
-              className="community-dm-inbox-icon-button"
-              type="button"
-              onClick={props.onCloseNewMessage}
-              aria-label="Back to direct messages"
-              title="Direct messages"
-            >
-              <ArrowLeft aria-hidden="true" />
-            </button>
-            <div>
-              <div className="community-dm-inbox-title">New message</div>
-              <div className="community-dm-inbox-subtitle">Your communities</div>
-            </div>
-          </div>
-        </div>
+  const normalizedSearch = props.searchValue.trim().replace(/^@+/, "").toLowerCase();
+  const loadedConversationIds = new Set(props.conversations.map((conversation) => conversation.id));
 
-        <label className="community-dm-recipient-search">
-          <input
-            value={props.recipientSearch}
-            onChange={(event) => props.onRecipientSearchChange(event.target.value)}
-            aria-label="Search members"
-            placeholder="Search members..."
-            autoFocus
-          />
-        </label>
+  const filteredConversations = normalizedSearch
+    ? props.conversations.filter((conversation) => {
+        const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
+        const haystack = [
+          peer?.display_name,
+          peer?.user_id,
+          conversation.last_message_preview,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(normalizedSearch);
+      })
+    : props.conversations;
 
-        {props.recipientError ? <div className="community-dm-panel-error">{props.recipientError}</div> : null}
+  const visiblePeople = props.people.filter((person) => {
+    const existingConversationId = String(person.existing_conversation_id ?? "").trim();
+    if (existingConversationId && loadedConversationIds.has(existingConversationId)) return false;
+    return true;
+  });
 
-        <div className="community-dm-recipient-list">
-          {isInitialRecipientLoad ? (
-            <div className="community-dm-panel-empty">Loading members...</div>
-          ) : props.recipients.length === 0 ? (
-            <div className="community-dm-panel-empty">
-              <MessageCircle aria-hidden="true" />
-              <span>{emptyRecipientLabel}</span>
-            </div>
-          ) : (
-            props.recipients.map((recipient) => {
-              const displayName =
-                String(recipient.display_name ?? recipient.handle ?? recipient.user_id ?? "Member").trim() ||
-                "Member";
-              const handle = String(recipient.handle ?? "").trim().replace(/^@+/, "");
-              const avatarSeed = recipient.user_id ?? displayName;
-              const communityName = String(recipient.community_name ?? "").trim() || "a shared community";
-              const metaLabel = [
-                handle ? `@${handle}` : null,
-                `Shared in ${communityName}`,
-              ].filter(Boolean).join(" · ");
-              return (
-                <button
-                  key={`${recipient.community_id}:${recipient.user_id}`}
-                  type="button"
-                  className="community-dm-recipient-row"
-                  onClick={() => {
-                    void props.onSelectRecipient(recipient);
-                  }}
-                >
-                  <UserAvatar
-                    className="community-dm-inbox-avatar"
-                    readyClassName="has-image"
-                    name={displayName}
-                    imageUrl={recipient.avatar_url ?? null}
-                    focusX={recipient.avatar_focus_x ?? 0.5}
-                    focusY={recipient.avatar_focus_y ?? 0.5}
-                    zoom={recipient.avatar_zoom ?? 1}
-                    alt={displayName}
-                    fallback={<span>{props.getInitials(displayName)}</span>}
-                    fallbackStyle={{ backgroundColor: props.getAvatarColor(avatarSeed) }}
-                  />
-                  <span className="community-dm-inbox-row-body">
-                    <span className="community-dm-inbox-row-name">{displayName}</span>
-                    <span className="community-dm-inbox-row-meta">{metaLabel}</span>
-                  </span>
-                </button>
-              );
-            })
-          )}
-        </div>
-      </aside>
-    );
-  }
+  const hasZeroCommunities = props.sourceCommunityCount === 0 && !props.isLoadingPeople;
+  const isInitialInboxLoad = props.isLoading && props.conversations.length === 0;
+  const isInitialPeopleLoad = props.isLoadingPeople && visiblePeople.length === 0;
+  const hasAnyRows = filteredConversations.length > 0 || visiblePeople.length > 0;
 
   return (
     <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="Direct messages">
       <div className="community-dm-inbox-header">
         <div>
-          <div className="community-dm-inbox-title">Direct messages</div>
-          <div className="community-dm-inbox-subtitle">Private conversations from shared communities</div>
+          <div className="community-dm-inbox-title">Messages</div>
+          <div className="community-dm-inbox-subtitle">People from your communities</div>
         </div>
-        {props.canStartConversation ? (
-          <button
-            className="community-dm-inbox-icon-button"
-            type="button"
-            onClick={props.onOpenNewMessage}
-            aria-label="New direct message"
-            title="New direct message"
-          >
-            <Plus aria-hidden="true" />
-          </button>
-        ) : null}
       </div>
 
+      {props.canBrowsePeople ? (
+        <label className="community-dm-recipient-search community-dm-inbox-search">
+          <Search aria-hidden="true" />
+          <input
+            value={props.searchValue}
+            onChange={(event) => props.onSearchValueChange(event.target.value)}
+            aria-label="Search people and messages"
+            placeholder="Search people and messages"
+          />
+        </label>
+      ) : null}
+
       {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
+      {props.peopleError ? <div className="community-dm-panel-error">{props.peopleError}</div> : null}
 
       <div className="community-dm-inbox-list">
-        {props.isLoading ? (
-          <div className="community-dm-panel-empty">Loading direct messages...</div>
-        ) : props.conversations.length === 0 ? (
+        {hasZeroCommunities ? (
+          <div className="community-dm-discovery-card">
+            <UsersRound aria-hidden="true" />
+            <h4>Messaging works through communities</h4>
+            <p>Join a community and everyone in it becomes one tap away. Your messages live here.</p>
+          </div>
+        ) : null}
+
+        {isInitialInboxLoad ? (
+          <div className="community-dm-panel-empty">Loading messages...</div>
+        ) : null}
+
+        {filteredConversations.map((conversation) => {
+          const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
+          const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
+          const peerAvatarSeed = peer?.user_id ?? peerLabel;
+          const communityName = conversation.created_from_community?.name ?? "shared community";
+          const previewText =
+            String(conversation.last_message_preview ?? "").trim() || `Started in ${communityName}`;
+          const timeLabel = formatInboxTime(conversation.last_message_at ?? conversation.updated_at);
+          const unreadCount = Math.max(0, Math.floor(Number(conversation.unread_count ?? 0)));
+          const hasUnread = Boolean(conversation.has_unread || unreadCount > 0);
+          return (
+            <button
+              key={conversation.id}
+              type="button"
+              className={`community-dm-inbox-row${hasUnread ? " is-unread" : ""}`}
+              aria-label={`${peerLabel}, ${hasUnread ? "unread, " : ""}${previewText}`}
+              onClick={() => props.onSelectConversation(conversation)}
+            >
+              <UserAvatar
+                className="community-dm-inbox-avatar"
+                readyClassName="has-image"
+                name={peerLabel}
+                imageUrl={peer?.avatar_url ?? null}
+                focusX={peer?.avatar_focus_x ?? 0.5}
+                focusY={peer?.avatar_focus_y ?? 0.5}
+                zoom={peer?.avatar_zoom ?? 1}
+                alt={peerLabel}
+                fallback={<span>{props.getInitials(peerLabel)}</span>}
+                fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
+              />
+              <span className="community-dm-inbox-row-body">
+                <span className="community-dm-inbox-row-top">
+                  <span className="community-dm-inbox-row-name-line">
+                    <span className="community-dm-inbox-row-name">{peerLabel}</span>
+                    <PremiumMemberBadge badge={peer?.premium_badge ?? null} />
+                  </span>
+                  <span className="community-dm-inbox-row-meta-group">
+                    {timeLabel ? <span className="community-dm-inbox-row-time">{timeLabel}</span> : null}
+                    {hasUnread ? (
+                      <span
+                        className="community-dm-inbox-row-unread"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </span>
+                </span>
+                <span className="community-dm-inbox-row-meta">{previewText}</span>
+              </span>
+            </button>
+          );
+        })}
+
+        {props.canBrowsePeople && !hasZeroCommunities
+          ? visiblePeople.map((person) => {
+              const displayName =
+                String(person.display_name ?? person.handle ?? person.user_id ?? "Member").trim() || "Member";
+              const avatarSeed = person.user_id ?? displayName;
+              const presenceLabel = formatPersonPresenceLabel(person);
+              const activeNow = isActiveNow(person.last_active_at);
+              return (
+                <button
+                  key={`person:${person.user_id}`}
+                  type="button"
+                  className="community-dm-inbox-row is-person"
+                  aria-label={`Message ${displayName}, ${presenceLabel}`}
+                  onClick={() => {
+                    void props.onSelectPerson(person);
+                  }}
+                >
+                  <span className="community-dm-inbox-avatar-wrap">
+                    <UserAvatar
+                      className="community-dm-inbox-avatar"
+                      readyClassName="has-image"
+                      name={displayName}
+                      imageUrl={person.avatar_url ?? null}
+                      focusX={person.avatar_focus_x ?? 0.5}
+                      focusY={person.avatar_focus_y ?? 0.5}
+                      zoom={person.avatar_zoom ?? 1}
+                      alt={displayName}
+                      fallback={<span>{props.getInitials(displayName)}</span>}
+                      fallbackStyle={{ backgroundColor: props.getAvatarColor(avatarSeed) }}
+                    />
+                    <span
+                      className={`community-dm-inbox-presence-dot${activeNow ? " is-active-now" : ""}`}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="community-dm-inbox-row-body">
+                    <span className="community-dm-inbox-row-top">
+                      <span className="community-dm-inbox-row-name-line">
+                        <span className="community-dm-inbox-row-name">{displayName}</span>
+                        <PremiumMemberBadge badge={person.premium_badge ?? null} />
+                      </span>
+                    </span>
+                    <span className="community-dm-inbox-row-meta">{presenceLabel}</span>
+                  </span>
+                  <MessageCircle className="community-dm-inbox-row-go" aria-hidden="true" />
+                </button>
+              );
+            })
+          : null}
+
+        {isInitialPeopleLoad && !hasZeroCommunities ? (
+          <div className="community-dm-panel-empty community-dm-inbox-people-loading">Finding people...</div>
+        ) : null}
+
+        {!hasAnyRows && !isInitialInboxLoad && !isInitialPeopleLoad && !hasZeroCommunities ? (
           <div className="community-dm-panel-empty">
             <MessageCircle aria-hidden="true" />
-            <span>No direct messages yet.</span>
+            <span>{normalizedSearch ? "No matches." : "No one to show yet."}</span>
           </div>
-        ) : (
-          props.conversations.map((conversation) => {
-            const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
-            const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
-            const peerAvatarSeed = peer?.user_id ?? peerLabel;
-            const communityName = conversation.created_from_community?.name ?? "shared community";
-            const previewText =
-              String(conversation.last_message_preview ?? "").trim() || `Started in ${communityName}`;
-            const timeLabel = formatInboxTime(conversation.last_message_at ?? conversation.updated_at);
-            const unreadCount = Math.max(0, Math.floor(Number(conversation.unread_count ?? 0)));
-            const hasUnread = Boolean(conversation.has_unread || unreadCount > 0);
-            return (
-              <button
-                key={conversation.id}
-                type="button"
-                className={`community-dm-inbox-row${hasUnread ? " is-unread" : ""}`}
-                aria-label={`${peerLabel}, ${hasUnread ? "unread, " : ""}${previewText}`}
-                onClick={() => props.onSelectConversation(conversation)}
-              >
-                <UserAvatar
-                  className="community-dm-inbox-avatar"
-                  readyClassName="has-image"
-                  name={peerLabel}
-                  imageUrl={peer?.avatar_url ?? null}
-                  focusX={peer?.avatar_focus_x ?? 0.5}
-                  focusY={peer?.avatar_focus_y ?? 0.5}
-                  zoom={peer?.avatar_zoom ?? 1}
-                  alt={peerLabel}
-                  fallback={<span>{props.getInitials(peerLabel)}</span>}
-                  fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
-                />
-                <span className="community-dm-inbox-row-body">
-                  <span className="community-dm-inbox-row-top">
-                    <span className="community-dm-inbox-row-name">{peerLabel}</span>
-                    <span className="community-dm-inbox-row-meta-group">
-                      {timeLabel ? <span className="community-dm-inbox-row-time">{timeLabel}</span> : null}
-                      {hasUnread ? (
-                        <span
-                          className="community-dm-inbox-row-unread"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </span>
-                  </span>
-                  <span className="community-dm-inbox-row-meta">{previewText}</span>
-                </span>
-              </button>
-            );
-          })
-        )}
+        ) : null}
       </div>
     </aside>
   );

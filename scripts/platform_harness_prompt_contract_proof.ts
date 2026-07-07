@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  AUTHENTICATED_PLATFORM_CAPABILITIES,
+  AUTHENTICATED_FREE_PLATFORM_CAPABILITIES,
+  PREMIUM_PLATFORM_CAPABILITIES,
   resolveActiveCapabilityFamiliesFromEntitlements,
   resolveEntitledCapabilityFamiliesForGate,
   resolveHarnessProfileFromActiveCapabilities,
@@ -12,6 +13,12 @@ import {
   buildPlatformHarnessRuntimeSystemPrompt,
   composePlatformChatRuntimeSystemPrompt,
 } from "../shared/runtimePrompt.ts";
+import {
+  RUNTIME_ENGINE_CODEX,
+  RUNTIME_ENGINE_POLYNET,
+  canUseRuntimeEngineForTier,
+  getRuntimeEngineAccessLevel,
+} from "../shared/runtimeEngine.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
 const rootDir = process.cwd();
@@ -29,8 +36,41 @@ function assertSameArray(actual: readonly string[], expected: readonly string[],
 }
 
 function proveCapabilityContract() {
+  assert.equal(
+    getRuntimeEngineAccessLevel(RUNTIME_ENGINE_POLYNET),
+    "included",
+    "PolyNet must be the included/free agent runtime",
+  );
+  assert.equal(
+    getRuntimeEngineAccessLevel(RUNTIME_ENGINE_CODEX),
+    "premium",
+    "Codex must be a premium agent runtime",
+  );
+  assert.equal(
+    canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_POLYNET, accountTier: "free" }),
+    true,
+    "free accounts must be able to use the PolyNet runtime",
+  );
+  assert.equal(
+    canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_CODEX, accountTier: "free" }),
+    false,
+    "free accounts must not be able to use the Codex runtime",
+  );
+  assert.equal(
+    canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_CODEX, accountTier: "architect" }),
+    true,
+    "premium accounts must be able to use the Codex runtime",
+  );
   assertSameArray(
-    AUTHENTICATED_PLATFORM_CAPABILITIES,
+    AUTHENTICATED_FREE_PLATFORM_CAPABILITIES,
+    [
+      "product_docs",
+      "community_tools",
+    ],
+    "authenticated free capability constant should only contain free-safe capability families",
+  );
+  assertSameArray(
+    PREMIUM_PLATFORM_CAPABILITIES,
     [
       "product_docs",
       "community_tools",
@@ -38,24 +78,25 @@ function proveCapabilityContract() {
       "sandbox_tools",
       "workspace_tools",
     ],
-    "authenticated platform capability constant should be the single product-facing entitlement set",
+    "premium platform capability constant should contain the full paid tool entitlement set",
   );
-  const canonicalEntitlement = [...AUTHENTICATED_PLATFORM_CAPABILITIES];
+  const freeEntitlement = [...AUTHENTICATED_FREE_PLATFORM_CAPABILITIES];
+  const premiumEntitlement = [...PREMIUM_PLATFORM_CAPABILITIES];
   assertSameArray(
     resolveEntitledCapabilityFamiliesForGate({
       authState: "authenticated",
       tier: "free",
     }),
-    canonicalEntitlement,
-    "authenticated free should be entitled to the platform capability set",
+    freeEntitlement,
+    "authenticated free should receive only free-safe platform capabilities",
   );
   assertSameArray(
     resolveEntitledCapabilityFamiliesForGate({
       authState: "authenticated",
       tier: "architect",
     }),
-    canonicalEntitlement,
-    "architect should not fork the product-facing capability set",
+    premiumEntitlement,
+    "architect should receive the full premium platform capability set",
   );
   assertSameArray(
     resolveEntitledCapabilityFamiliesForGate({
@@ -68,39 +109,48 @@ function proveCapabilityContract() {
 
   assertSameArray(
     resolveActiveCapabilityFamiliesFromEntitlements({
-      entitledCapabilityFamilies: canonicalEntitlement as any,
+      entitledCapabilityFamilies: freeEntitlement as any,
+      hasCommunityContext: false,
+      hasProjectContext: false,
+    }),
+    ["product_docs"],
+    "without context, free users should activate product docs only",
+  );
+  assertSameArray(
+    resolveActiveCapabilityFamiliesFromEntitlements({
+      entitledCapabilityFamilies: freeEntitlement as any,
+      hasCommunityContext: true,
+      hasProjectContext: false,
+    }),
+    ["product_docs", "community_tools"],
+    "free community tools should activate only with a validated community lens",
+  );
+  assertSameArray(
+    resolveActiveCapabilityFamiliesFromEntitlements({
+      entitledCapabilityFamilies: freeEntitlement as any,
+      hasCommunityContext: false,
+      hasProjectContext: true,
+    }),
+    ["product_docs"],
+    "project context must not grant free users premium workspace tools",
+  );
+  assertSameArray(
+    resolveActiveCapabilityFamiliesFromEntitlements({
+      entitledCapabilityFamilies: premiumEntitlement as any,
       hasCommunityContext: false,
       hasProjectContext: false,
     }),
     ["product_docs", "web_research", "sandbox_tools"],
-    "without context, global authenticated capabilities and scratch sandbox tools should activate",
+    "premium users should receive global web and sandbox tools outside project context",
   );
   assertSameArray(
     resolveActiveCapabilityFamiliesFromEntitlements({
-      entitledCapabilityFamilies: canonicalEntitlement as any,
-      hasCommunityContext: true,
-      hasProjectContext: false,
-    }),
-    ["product_docs", "community_tools", "web_research", "sandbox_tools"],
-    "community tools should activate only with a validated community lens",
-  );
-  assertSameArray(
-    resolveActiveCapabilityFamiliesFromEntitlements({
-      entitledCapabilityFamilies: canonicalEntitlement as any,
-      hasCommunityContext: false,
-      hasProjectContext: true,
-    }),
-    ["product_docs", "web_research", "sandbox_tools", "workspace_tools"],
-    "project context should add workspace tools to global authenticated tools",
-  );
-  assertSameArray(
-    resolveActiveCapabilityFamiliesFromEntitlements({
-      entitledCapabilityFamilies: canonicalEntitlement as any,
+      entitledCapabilityFamilies: premiumEntitlement as any,
       hasCommunityContext: true,
       hasProjectContext: true,
     }),
-    canonicalEntitlement,
-    "community plus project context should activate the full platform harness set",
+    premiumEntitlement,
+    "premium community plus project context should activate the full platform harness set",
   );
   assert.equal(
     resolveHarnessProfileFromActiveCapabilities({
@@ -113,7 +163,7 @@ function proveCapabilityContract() {
   assert.equal(
     resolveHarnessProfileFromActiveCapabilities({
       authState: "authenticated",
-      activeCapabilityFamilies: canonicalEntitlement as any,
+      activeCapabilityFamilies: premiumEntitlement as any,
     }),
     "authenticated_cloud_tools",
     "authenticated tool runs should use the unified platform tool harness",
@@ -158,6 +208,7 @@ function provePromptEntrypoints() {
       "write",
       "bash",
     ],
+    accountPlan: "premium",
     harnessName: "chat_tools",
     communityId: "community_1",
     communityName: "Unified Community",
@@ -187,6 +238,8 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);
   assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_write,web_research,web_crawl,read,write,bash/);
+  assert.match(platformHarnessPrompt, /Account plan: Premium/);
+  assert.match(platformHarnessPrompt, /Premium tools are still limited to the listed allowed tools/);
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
   assert.match(platformHarnessPrompt, /Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL/);
   assert.match(platformHarnessPrompt, /Use get_active_community_context when the answer depends on the active community's identity/);
@@ -205,6 +258,26 @@ function provePromptEntrypoints() {
     /\bfree tier\b|\bbuilder tier\b|\bpro tier\b|builder_tier|canonicalTier|effectiveTier/i,
     "runtime prompt output must not describe a tier-specific prompt stack",
   );
+
+  const freeHarnessPrompt = buildPlatformHarnessRuntimeSystemPrompt({
+    loopBudget: {
+      maxToolSteps: 8,
+      maxRepeatedIdenticalCalls: 2,
+      maxConsecutiveFailures: 3,
+      maxNoProgressSteps: 3,
+    },
+    allowedToolNames: ["search_product_docs", "get_product_doc"],
+    accountPlan: "free",
+    harnessName: "chat_tools",
+    runtimeTurnContext,
+    currentDateTimeIso: "2026-05-07T12:00:00.000Z",
+    currentDateLabel: "Thursday, May 7, 2026 at 8:00:00 AM EDT",
+    currentTimeZone: "America/New_York",
+  });
+  assert.match(freeHarnessPrompt, /Account plan: Free/);
+  assert.match(freeHarnessPrompt, /Premium-only tools not available in this run/);
+  assert.match(freeHarnessPrompt, /requires Polynet Premium and direct them to Billing to upgrade/);
+  assert.doesNotMatch(freeHarnessPrompt, /Allowed tools: .*write/);
 
   const builderHarnessPrompt = buildPlatformHarnessRuntimeSystemPrompt({
     loopBudget: {
@@ -279,6 +352,7 @@ function provePromptEntrypoints() {
     communitySystemPrompt: "Answer through the community lens when relevant.",
     agentName: "James",
     agentSoul: "Keep the product simple.",
+    accountPlan: "free",
     currentDateTimeIso: "2026-05-07T12:00:00.000Z",
     currentDateLabel: "Thursday, May 7, 2026 at 8:00:00 AM EDT",
     currentTimeZone: "America/New_York",
@@ -286,6 +360,9 @@ function provePromptEntrypoints() {
   assert.match(platformChatPrompt, /This is a chat-only platform run/);
   assert.match(platformChatPrompt, /Configured agent name: James/);
   assert.match(platformChatPrompt, /No workspace tools are active in this run/);
+  assert.match(platformChatPrompt, /Account plan: Free/);
+  assert.match(platformChatPrompt, /Workspace app\/file\/shell\/browser tools and live web research\/crawl tools require Premium/);
+  assert.match(platformChatPrompt, /requires Polynet Premium and direct them to Billing to upgrade/);
   assert.doesNotMatch(platformChatPrompt, /This run can inspect and modify files/);
   assert.doesNotMatch(
     platformChatPrompt,
@@ -298,17 +375,28 @@ async function proveSourceContract() {
   const runtimePromptSource = await readRepoFile("shared/runtimePrompt.ts");
   const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
   const runtimeTurnHandlersSource = await readRepoFile("convex/runtimeTurnHandlers.ts");
+  const runtimeEngineSource = await readRepoFile("shared/runtimeEngine.ts");
+  const runtimeTurnPersistenceSource = await readRepoFile("convex/runtimeTurnPersistence.ts");
   const runtimeTurnResolutionSource = await readRepoFile("convex/runtimeTurnResolution.ts");
+  const polynetCodexWorkerBridgeSource = await readRepoFile("convex/polynetCodexWorkerBridge.ts");
+  const polynetCodexWorkerIngestSource = await readRepoFile("convex/polynetCodexWorkerIngest.ts");
+  const threadsSource = await readRepoFile("convex/threads.ts");
   const canonicalGateEngineSource = await readRepoFile("shared/canonicalGateEngine.ts");
   const schemaSource = await readRepoFile("convex/schema.ts");
   const runtimeHarnessCompositionSource = await readRepoFile("convex/runtimeHarnessComposition.ts");
   const communityAgentSource = await readRepoFile("convex/communityAgent.ts");
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
   const paidToolCreditReservationSource = await readRepoFile("convex/paidToolCreditReservation.ts");
-  const authCoreSource = await readRepoFile("shared/authCore.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
+  const messageMetadataUiSource = await readRepoFile("shared/messageMetadataUi.ts");
+  const workspaceSurfaceProjectionSource = await readRepoFile("apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx");
+  const workspaceThreadViewsSource = await readRepoFile("apps/web/src/components/webWorkspaceThreadViews.ts");
+  const workspaceThreadMessageListSource = await readRepoFile("apps/web/src/components/WebWorkspaceThreadMessageList.tsx");
+  const workspaceHostSource = await readRepoFile("apps/web/src/components/WebWorkspaceHost.tsx");
   const directMessagesHostSource = await readRepoFile("apps/web/src/components/WebDirectMessagesHost.tsx");
   const directMessagePanelSource = await readRepoFile("apps/web/src/components/WebDirectMessagePanel.tsx");
+  const freeAccountModalSource = await readRepoFile("shared/FreeAccountIncludedModal.tsx");
+  const accountSettingsSectionSource = await readRepoFile("apps/web/src/components/WebAccountSettingsSection.tsx");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
 
   assert.match(
@@ -363,8 +451,98 @@ async function proveSourceContract() {
   );
   assert.match(
     canonicalGateEngineSource,
-    /export const AUTHENTICATED_PLATFORM_CAPABILITIES[\s\S]*return \[\.\.\.AUTHENTICATED_PLATFORM_CAPABILITIES\]/,
-    "free and architect should resolve through one authenticated platform capability constant",
+    /export const AUTHENTICATED_FREE_PLATFORM_CAPABILITIES[\s\S]*export const PREMIUM_PLATFORM_CAPABILITIES[\s\S]*effectiveTier === "auth_free"[\s\S]*AUTHENTICATED_FREE_PLATFORM_CAPABILITIES[\s\S]*PREMIUM_PLATFORM_CAPABILITIES/,
+    "free and premium capability families must resolve through separate tier-aware entitlement constants",
+  );
+  assert.match(
+    runtimeEngineSource,
+    /getRuntimeEngineAccessLevel[\s\S]*RUNTIME_ENGINE_POLYNET \? "included" : "premium"/,
+    "shared runtime engine policy must keep PolyNet included and default other runtimes to premium",
+  );
+  assert.match(
+    runtimeTurnResolutionSource,
+    /canUseRuntimeEngineForTier[\s\S]*runtime_plan_required[\s\S]*Upgrade in Billing to use Codex and premium agent runtimes/,
+    "runtime turn resolution must block free Codex requests before engine execution",
+  );
+  assert.match(
+    polynetCodexWorkerBridgeSource,
+    /resolvePolynetRuntimeEngine\([\s\S]*accountPlan\?: RuntimeAccountPlan[\s\S]*runtime_plan_required[\s\S]*resolveExplicitCodexWorkerFailure/,
+    "Codex worker resolver must independently enforce premium runtime access",
+  );
+  assert.match(
+    runtimeTurnHandlersSource,
+    /resolvePolynetRuntimeEngine\(\{[\s\S]*accountPlan: runtimeAccountPlan[\s\S]*buildPolynetCodexWorkerTurnInputs\(\{[\s\S]*accountPlan: runtimeAccountPlan/,
+    "runtime handlers must pass account plan into Codex runtime resolution and prompt projection",
+  );
+  assert.match(
+    runtimeTurnHandlersSource,
+    /const runStartArgs: Record<string, unknown> = \{[\s\S]*capabilityFamilies: resolvedRuntimeCapabilityFamilies,[\s\S]*accountPlan: runtimeAccountPlan,/,
+    "runtime turn handlers must include account plan in run-start metadata",
+  );
+  assert.match(
+    threadsSource,
+    /ensureCloudRuntimeRunStarted[\s\S]*accountPlan: v\.optional\(v\.union\(v\.literal\("free"\), v\.literal\("premium"\)\)\)[\s\S]*const accountPlan = args\.accountPlan === "premium" \? "premium" : "free"[\s\S]*capabilityFamilies,[\s\S]*accountPlan,/,
+    "run-start mutation must validate, normalize, and persist account plan metadata",
+  );
+  assert.match(
+    schemaSource,
+    /runtimeRuns: defineTable\(\{[\s\S]*capabilityFamilies: v\.optional\(v\.array\(v\.string\(\)\)\),[\s\S]*accountPlan: v\.optional\(v\.union\(v\.literal\("free"\), v\.literal\("premium"\)\)\)/,
+    "runtime run schema must persist account plan metadata used by prompt and tool policy",
+  );
+  assert.match(
+    runtimeTurnPersistenceSource,
+    /buildPremiumUpgradeCtaForAssistantMessage[\s\S]*accountPlan !== "free"[\s\S]*premium_upgrade_cta/,
+    "assistant message persistence should attach premium upgrade CTA metadata only from free-plan premium-boundary responses",
+  );
+  assert.match(
+    runtimeTurnHandlersSource,
+    /persistRuntimeAssistantMessage\(\{[\s\S]*accountPlan: runtimeAccountPlan,[\s\S]*content:/,
+    "assistant persistence calls should pass the resolved runtime account plan",
+  );
+  assert.match(
+    polynetCodexWorkerIngestSource,
+    /accountPlan: runRow\.accountPlan === "premium" \? "premium" : "free"/,
+    "Codex worker ingest must persist assistant messages with the verified run row account plan",
+  );
+  assert.match(
+    messageMetadataUiSource,
+    /export type PremiumUpgradeCta[\s\S]*parsePremiumUpgradeCta[\s\S]*premium_upgrade_cta[\s\S]*premium_tools_required[\s\S]*open_billing/,
+    "web metadata parser should accept the durable premium upgrade CTA shape",
+  );
+  assert.match(
+    workspaceSurfaceProjectionSource,
+    /parsePremiumUpgradeCta[\s\S]*const premiumUpgradeCta = !isUser[\s\S]*premiumUpgradeCta,/,
+    "workspace projection should expose premium upgrade CTA metadata on assistant message views",
+  );
+  assert.match(
+    workspaceThreadViewsSource,
+    /PremiumUpgradeCta[\s\S]*premiumUpgradeCta: PremiumUpgradeCta \| null/,
+    "workspace message view model should include premium upgrade CTA metadata",
+  );
+  assert.match(
+    workspaceThreadMessageListSource,
+    /message\.premiumUpgradeCta[\s\S]*message-premium-upgrade-cta[\s\S]*onOpenPremiumBilling/,
+    "workspace message list should render premium upgrade CTA with the Billing action",
+  );
+  assert.match(
+    workspaceHostSource,
+    /onOpenPremiumBilling[\s\S]*<WebWorkspaceThreadMessageList[\s\S]*onOpenPremiumBilling=\{props\.onOpenPremiumBilling\}/,
+    "workspace host should thread the premium Billing action into assistant messages",
+  );
+  assert.match(
+    workspaceHostSource,
+    /WorkspaceRuntimeEngineSelector[\s\S]*getRuntimeEngineAccessLevel[\s\S]*Included[\s\S]*Premium[\s\S]*onOpenPremiumBilling/,
+    "workspace runtime picker should show included/premium runtime labels and route premium selection to Billing",
+  );
+  assert.match(
+    appSource,
+    /handleWorkspaceRuntimeEngineChange[\s\S]*canUseRuntimeEngineForTier[\s\S]*openWorkspacePremiumBilling[\s\S]*updateThreadRuntimeEngine/,
+    "app shell must not commit premium runtime selection for accounts without runtime access",
+  );
+  assert.match(
+    appSource,
+    /parsePremiumUpgradeCta[\s\S]*openWorkspacePremiumBilling[\s\S]*setActiveView\("settings"\)[\s\S]*setSettingsPage\("billing"\)[\s\S]*onOpenPremiumBilling: openWorkspacePremiumBilling/,
+    "app shell should route premium CTA clicks to Settings Billing",
   );
   assert.doesNotMatch(
     schemaSource,
@@ -432,6 +610,21 @@ async function proveSourceContract() {
     "voice controller should expose DM intent/state and cleanup without duplicating recorder logic",
   );
   assert.match(
+    voiceControllerSource,
+    /getBrowserSpeechRecognitionConstructor[\s\S]*SpeechRecognition[\s\S]*webkitSpeechRecognition[\s\S]*continuous = true[\s\S]*interimResults = true/,
+    "voice controller should use browser speech recognition for free voice input",
+  );
+  assert.match(
+    voiceControllerSource,
+    /(?=[\s\S]*Listening\.\.\. tap mic again when you're done\.)(?=[\s\S]*Stop voice input\.)(?=[\s\S]*Transcript inserted\.)/,
+    "voice controller should be a manual click-on/click-off flow",
+  );
+  assert.doesNotMatch(
+    voiceControllerSource,
+    /transcribeVoice|VoiceTranscriptionRequestError|onToolBalanceRequired|VoiceToolBalanceDetails|tool balance|Add balance|voice_transcribe/,
+    "voice controller must not route browser voice input through paid transcription or balance UX",
+  );
+  assert.match(
     httpVoiceSource,
     /surface !== "workspace" && surface !== "community" && surface !== "direct_message"/,
     "voice route should accept direct_message as first-party surface metadata",
@@ -458,12 +651,20 @@ async function proveSourceContract() {
     /tool_kind:\s*params\.toolKind[\s\S]*required_credits:\s*params\.requiredCredits/,
   );
   assert.match(runtimeAgentLoopSource, /tool_kind:\s*"workspace_tools"/);
-  assert.match(httpVoiceSource, /toolKind:\s*"voice_input"[\s\S]*toolName:\s*"voice_transcribe"/);
-  assert.match(authCoreSource, /class VoiceTranscriptionRequestError[\s\S]*toolKind[\s\S]*requiredCredits[\s\S]*paidUsageBillingMode/);
-  assert.match(
+  assert.doesNotMatch(
     appSource,
-    /toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"[\s\S]*requiredCredits:\s*details\?\.requiredCredits\s*\?\?\s*null[\s\S]*paidUsageBillingMode:\s*details\?\.paidUsageBillingMode\s*\?\?\s*null/,
-    "voice balance failures should open the billing modal with paid-tool metadata",
+    /onToolBalanceRequired|onVoiceToolBalanceRequired|toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"/,
+    "voice input must not open top-up or Billing from the browser UI",
+  );
+  assert.doesNotMatch(
+    directMessagesHostSource,
+    /onVoiceToolBalanceRequired|onToolBalanceRequired|Add balance to use voice input/,
+    "DM voice input must not route paid-tool balance failures",
+  );
+  assert.doesNotMatch(
+    `${freeAccountModalSource}\n${accountSettingsSectionSource}`,
+    /tool balance[^"\n]*voice input|voice input[^"\n]*tool balance/i,
+    "account billing copy must not describe voice input as tool-balance usage",
   );
 }
 
@@ -474,11 +675,11 @@ async function proveDocsContract() {
   const packageJson = await readRepoFile("package.json");
 
   assert.match(promptContextDoc, /There is one platform harness prompt stack/);
-  assert.match(promptContextDoc, /Free and internal architect labels must not select different prompt stacks/);
-  assert.match(promptContextDoc, /Tool balance is enforced when a paid tool executes/);
-  assert.match(contextModelDoc, /There is no free-vs-architect context branch/);
+  assert.match(promptContextDoc, /Free and Polynet Premium labels must not select different prompt stacks/);
+  assert.match(promptContextDoc, /Premium entitlement is enforced before premium tools are exposed or executed/);
+  assert.match(contextModelDoc, /There is no free-vs-premium context branch/);
   assert.match(accessMatrixDoc, /Prompt injection is not tiered/);
-  assert.match(accessMatrixDoc, /Tool balance must not hide paid tools from the harness/);
+  assert.match(accessMatrixDoc, /premium tools require Premium entitlement/i);
   assert.match(
     packageJson,
     /"check:platform-harness-prompt-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/platform_harness_prompt_contract_proof\.ts"/,

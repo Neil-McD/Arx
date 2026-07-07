@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -21,7 +21,7 @@ const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const sourceCrawler = read("shared/communitySourceCrawler.ts");
-const sourceCrawlerService = read("services/community-source-crawler/app.py");
+const sourceCrawlerServicePath = join(root, "services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
@@ -128,8 +128,8 @@ assert.match(
 );
 assert.match(
   schema,
-  /communitySourceCrawlJobs:[\s\S]*provider: v\.union\(v\.literal\("simple"\), v\.literal\("crawl4ai"\)\)[\s\S]*rootUrl: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("crawling"\)[\s\S]*v\.literal\("saving_sources"\)[\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*sourceResourceIds:[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
-  "source crawling should persist durable crawl job state with status, limits, counts, and saved source ids",
+  /communitySourceCrawlJobs:[\s\S]*provider: v\.union\(v\.literal\("simple"\), v\.literal\("crawl4ai"\), v\.literal\("firecrawl"\)\)[\s\S]*rootUrl: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("crawling"\)[\s\S]*v\.literal\("saving_sources"\)[\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*sourceResourceIds:[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
+  "source crawling should persist durable crawl job state, tolerate legacy firecrawl rows, and keep status, limits, counts, and saved source ids",
 );
 assert.match(
   schema,
@@ -166,10 +166,10 @@ assert.match(
   /buildCommunitySourceCrawlerUnitKey[\s\S]*communitySourceCrawlerUrlInRootScope[\s\S]*root\.origin !== candidate\.origin[\s\S]*rootPath === "\/"[\s\S]*candidatePath === rootPath \|\| candidatePath\.startsWith\(`\$\{rootPath\}\/`\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias[\s\S]*seenAliases[\s\S]*"existing_ready"[\s\S]*"update_existing"[\s\S]*summarizeCommunitySourceCrawlerPageSaveDecisions/,
   "source crawler save behavior should be covered by shared pure decision helpers",
 );
-assert.match(
-  sourceCrawlerService,
-  /extract_virtual_sections[\s\S]*"unit_kind": "virtual_section"[\s\S]*"capture_method": "clickable_navigation"[\s\S]*source_units[\s\S]*virtual_page_count/,
-  "SPA/course virtual navigation should return separate source units instead of only a merged page body",
+assert.equal(
+  existsSync(sourceCrawlerServicePath),
+  false,
+  "legacy Fly/Crawl4AI community-source-crawler service must be deleted from the repo",
 );
 assert.match(
   resources,
@@ -280,53 +280,28 @@ assert.match(
 );
 assert.match(
   sourceCrawler,
-  /export type CommunitySourceCrawlerProvider = "simple" \| "crawl4ai"[\s\S]*export type CommunitySourceCrawlJobStatus = "queued" \| "crawling" \| "saving_sources" \| "ready" \| "failed"[\s\S]*export type CommunitySourcePageResult = \{[\s\S]*requested_url: string[\s\S]*final_url: string[\s\S]*canonical_url: string[\s\S]*root_url: string[\s\S]*parent_url: string \| null[\s\S]*depth: number[\s\S]*markdown: string[\s\S]*links: CommunitySourcePageLink\[\][\s\S]*status: CommunitySourcePageStatus[\s\S]*error: string \| null/,
+  /export type CommunitySourceCrawlerProvider = "simple"[\s\S]*export type CommunitySourceCrawlJobStatus = "queued" \| "crawling" \| "saving_sources" \| "ready" \| "failed"[\s\S]*export type CommunitySourcePageResult = \{[\s\S]*requested_url: string[\s\S]*final_url: string[\s\S]*canonical_url: string[\s\S]*root_url: string[\s\S]*parent_url: string \| null[\s\S]*depth: number[\s\S]*markdown: string[\s\S]*links: CommunitySourcePageLink\[\][\s\S]*status: CommunitySourcePageStatus[\s\S]*error: string \| null/,
   "source crawling should use a stable Polynet-owned page result contract",
 );
 assert.match(
   resources,
-  /COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV = "ARX_SOURCE_CRAWLER_PROVIDER"[\s\S]*COMMUNITY_RESOURCE_CRAWL4AI_ENDPOINT_ENV = "ARX_CRAWL4AI_ENDPOINT"[\s\S]*COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV = "ARX_CRAWL4AI_TOKEN"/,
-  "source crawling should be configured through first-party provider and Crawl4AI env vars",
+  /COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 1[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 1[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 0[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 0/,
+  "source crawling should be bounded to simple one-page ingestion",
 );
 assert.match(
   resources,
-  /normalizeSourceCrawlerProvider[\s\S]*raw === "simple"[\s\S]*raw === "crawl4ai"[\s\S]*community_source_crawler_provider_invalid/,
-  "source crawler provider should default to simple and fail closed for unknown providers",
+  /normalizeSourceCrawlerProvider\(\): CommunitySourceCrawlerProvider \{[\s\S]*return "simple";[\s\S]*getCommunitySourceCrawlerStatusValue[\s\S]*provider: "simple" as const[\s\S]*configured: true[\s\S]*max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES[\s\S]*message: "Only the linked page will be read\."/,
+  "source crawler provider should be irreducibly simple and always use the first-party URL fetch broker",
 );
 assert.match(
   resources,
-  /getCommunitySourceCrawlerStatusValue[\s\S]*provider: "simple"[\s\S]*configured: true[\s\S]*full_site_crawl_available: false[\s\S]*default_max_pages: 1[\s\S]*max_depth: 0[\s\S]*provider: "crawl4ai"[\s\S]*configured[\s\S]*full_site_crawl_available: configured[\s\S]*default_max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES[\s\S]*max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES[\s\S]*community_source_crawl4ai_not_configured/,
-  "source crawler status should expose explicit configured/full-site-crawl/capacity truth without leaking secrets",
+  /crawlSourceRootWithConfiguredProvider[\s\S]*normalizeSourceCrawlerProvider\(\)[\s\S]*crawlSourceRootWithSimpleFetcher\(\{ rootUrl \}\)/,
+  "configured source crawling should execute only the simple brokered URL fetch path",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES = 10_000_000[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 75[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 100[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 3[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 4/,
-  "source crawler should use wiki-grade bounded defaults and a larger crawler response budget",
-);
-assert.match(
-  resources,
-  /resolveCrawl4AiEndpoint[\s\S]*community_source_crawl4ai_endpoint_not_configured[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_crawl4ai_endpoint_invalid[\s\S]*parsed\.port && parsed\.port !== "443"/,
-  "Crawl4AI adapter should require a configured HTTPS backend endpoint",
-);
-assert.match(
-  resources,
-  /crawl4AiHeaders[\s\S]*COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV[\s\S]*community_source_crawl4ai_token_not_configured[\s\S]*authorization: `Bearer \$\{token\}`/,
-  "Crawl4AI adapter should require backend bearer authentication",
-);
-assert.match(
-  resources,
-  /crawlSourceRootWithCrawl4AI[\s\S]*fetchSourceUrlViaConfiguredFetcher\(args\.rootUrl\)[\s\S]*crawlerRootUrl = requireSafeSourceIngestionUrl\(preflight\.finalUrl\)[\s\S]*sourceCrawlerEndpointUrl\("\/crawl"\)[\s\S]*urls: \[crawlerRootUrl\][\s\S]*"CrawlerRunConfig"[\s\S]*markdown_generator_options: \{ include_links: true \}[\s\S]*"BFSDeepCrawlStrategy"[\s\S]*max_depth: args\.maxDepth[\s\S]*max_pages: args\.maxPages[\s\S]*include_external: false/,
-  "Crawl4AI adapter should preflight the root through the safe fetch broker, then use bounded same-origin BFS crawling and markdown output behind the backend",
-);
-assert.match(
-  resources,
-  /community_source_crawl4ai_failed_\$\{response\.status\}[\s\S]*readResponseTextBounded\([\s\S]*response,[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES/,
-  "Crawl4AI adapter should allow larger bounded crawler payloads than single-page URL fetches",
-);
-assert.match(
-  resources,
-  /normalizeCrawl4AiLinks[\s\S]*communitySourceCrawlerUrlInRootScope\(\{[\s\S]*rootUrl,[\s\S]*candidateUrl: url,[\s\S]*normalizeUrl: maybeSafeSourceCrawlerUrl[\s\S]*normalizeCrawl4AiSourcePageResult[\s\S]*communitySourceCrawlerUrlInRootScope\(\{[\s\S]*rootUrl: args\.rootUrl,[\s\S]*candidateUrl: finalUrl,[\s\S]*parentUrl = communitySourceCrawlerUrlInRootScope/,
-  "Crawl4AI result normalization should enforce same-origin plus root-path scope for pages, parents, and links",
+  /ARX_SOURCE_CRAWLER_PROVIDER|ARX_CRAWL4AI|Crawl4AI|crawl4ai|resolveCrawl4AiEndpoint|crawl4AiHeaders|crawlSourceRootWithCrawl4AI|sourceCrawlerEndpointUrl|COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES/,
+  "source ingestion must not retain the deleted external Crawl4AI/Fly crawler adapter",
 );
 assert.match(
   resources,
@@ -704,8 +679,13 @@ assert.match(
 );
 assert.match(
   app,
-  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*!crawlerStatus\?\.full_site_crawl_available[\s\S]*community_source_full_site_crawl_not_configured[\s\S]*crawlMaxPages[\s\S]*crawlerStatus\.max_pages[\s\S]*crawlMaxDepth[\s\S]*crawlerStatus\.max_depth[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
-  "launch Knowledge Next should require real full-site crawler availability and use crawler-reported capacity before regular source ingestion",
+  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*crawlCloudCommunitySourceRoot\(\{[\s\S]*maxPages: 1[\s\S]*maxDepth: 0[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
+  "launch Knowledge Next should ingest saved links through simple one-page crawling without a full-site crawler gate",
+);
+assert.doesNotMatch(
+  app,
+  /getCloudCommunitySourceCrawlerStatus|full_site_crawl_available|community_source_full_site_crawl_not_configured/,
+  "launch Knowledge Next must not block saved-link ingestion on deleted full-site crawler availability",
 );
 assert.doesNotMatch(
   app,
@@ -734,7 +714,7 @@ assert.match(
 );
 assert.match(
   modal,
-  /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_crawl_failed[\s\S]*community_source_crawl_no_usable_sources[\s\S]*could not be crawled[\s\S]*community_source_crawl4ai_not_configured[\s\S]*community_source_full_site_crawl_not_configured[\s\S]*Full site crawling is not configured[\s\S]*community_source_crawler_provider_invalid[\s\S]*Source crawling is misconfigured/,
+  /formatKnowledgeIngestionFailureMessage[\s\S]*community_source_crawl_failed[\s\S]*community_source_crawl_no_usable_sources[\s\S]*could not be crawled[\s\S]*community_source_crawler_provider_invalid[\s\S]*Source crawling is misconfigured/,
   "launch Knowledge Next should map crawl failures to founder-readable copy",
 );
 assert.match(

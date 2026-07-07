@@ -2,7 +2,7 @@
 
 Status: active
 Last verified: 2026-05-07
-Scope: canonical web runtime, community monetization, provider-funded inference, and paid-tool balance
+Scope: canonical web runtime, community monetization, provider-funded inference, and premium-tool accounting
 
 ## 0) Current Account Ladder
 
@@ -12,18 +12,17 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - no community membership
    - no paid-tool balance
 2. `authenticated free`
-   - can own two communities
+   - can own one community
    - can join and use communities when membership/entitlement exists
    - can connect Stripe and monetize paid community access
    - pays the default 10% Polynet platform fee on paid community revenue
-   - uses ChatGPT or an OpenAI API key for personal inference
-   - uses tool balance for workspace tools, web research, and voice input
+   - uses the included Polynet runtime
 3. `architect`
-   - internal/dev-only access label
-   - not a product-facing subscription tier
-   - does not define the default monetization model
+   - internal account-tier value for Polynet Premium
+   - can own two communities
+   - unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage
 
-The product-facing model is a free authenticated account plus tool balance. The active account-tier contract is `free` plus the internal/dev-only `architect` label.
+The product-facing model is Free plus Polynet Premium. The internal account-tier enum remains `free | architect`; `architect` is the Premium entitlement label.
 
 ## 1) Irreducible Contract
 
@@ -31,14 +30,14 @@ The active system is defined by these inputs:
 
 1. Surface: `web`
 2. Auth state: `anonymous` | `authenticated`
-3. Account tier: product-facing `free`; internal/dev-only `architect`
+3. Account tier: product-facing Free or Polynet Premium; internal enum `free | architect`
 4. Requested funding source: `demo_public` | `platform` | `user_key` | `user_chatgpt` | `auto`
 5. Provider connection state: ChatGPT connected, OpenAI key connected, or neither
 6. Active community lens: absent | present and server-validated
 7. Active project context: absent | present
 8. Community access state: owner, active membership, approved entitlement, pending, blocked, or visitor
 9. Community billing state: open, approval-gated, paid subscription, checkout pending, provider verified, or unavailable
-10. Tool balance state: sufficient, exhausted, unavailable, reserved, settled, or released
+10. Premium usage ledger state: available, unavailable, reserved, settled, or released
 
 And these outputs:
 
@@ -71,62 +70,62 @@ Entitled capability families come from auth state and account status:
 | Auth state | Tier | Entitled capability families |
 |---|---|---|
 | anonymous | n/a | `[]` |
-| authenticated | `free` | `["product_docs","community_tools","web_research","sandbox_tools","workspace_tools"]` |
-| authenticated | internal `architect` | `["product_docs","community_tools","web_research","sandbox_tools","workspace_tools"]` |
+| authenticated | `free` | `["product_docs","community_tools"]` |
+| authenticated | Polynet Premium (`architect`) | `["product_docs","community_tools","web_research","sandbox_tools","workspace_tools"]` |
 
 Active capability families are narrower than entitled capability families:
 
 1. `product_docs` can be active for authenticated users.
 2. `community_tools` is active only when a community lens is present.
-3. `web_research` can be active when entitled, but execution still requires tool balance.
-4. `sandbox_tools` can be active for authenticated users and exposes run-scoped file/shell tools.
+3. `web_research` can be active when entitled.
+4. `sandbox_tools` can be active for Premium users and exposes run-scoped file/shell tools.
 5. `workspace_tools` is active only when entitled and a project context is present; it adds project-bound terminal/computer runtime controls.
 
-Tool exposure is not free usage. Project workspace tools, web research, and voice input must reserve and settle tool balance.
+Tool exposure is not free usage. Project workspace tools, web research, and other premium tools require Premium entitlement.
 
 ## 4) Prompt Context Rules
 
-Prompt injection is not tiered. Authenticated free and internal architect accounts use the same platform harness prompt stack.
+Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts use the same platform harness prompt stack.
 
 1. Community prompt context is injected only after backend community access validation.
 2. Workspace/project context is injected only when the thread has an active project context.
 3. Capability families decide active tools; account labels do not select a different prompt stack.
-4. Tool balance must not hide paid tools from the harness. Workspace tools, web research, and voice input can be requested with zero credits, then fail through the balance-required top-up flow when they execute.
-5. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
+4. Prompt code must not branch on Builder, Pro, or ad hoc paid-plan labels. It should consume normalized tier/capability context.
 
 ## 5) Community Money Rules
 
-1. Free authenticated users can create two communities.
-2. Community creation is limited by `max_communities`, not by requiring a new platform-plan checkout.
-3. Paid community checkout requires:
+1. Free authenticated users can create one community.
+2. Polynet Premium users can create two communities.
+3. Existing owned communities are preserved when limits change; `max_communities` only gates creating another community.
+4. Community creation is limited by `max_communities`, which is projected from backend entitlement state.
+5. Paid community checkout requires:
    - paid community entry policy
    - active price point
    - owner payout access
    - ready Stripe Connect account with charges and payouts enabled
-4. Stripe Checkout redirects are UX only.
-5. Stripe webhook/provider verification and backend checkout finalization are authoritative.
-6. Paid access becomes real only after backend entitlement, membership, claim, and subscription state agree.
-7. Payout readiness is separate from member entitlement.
-8. Community role is separate from paid access.
-9. The default platform fee for free-account community revenue is 10%.
-10. Legacy paid creator billing does not create or renew platform-plan access.
-11. Community creator revenue uses the Stripe Connect subscription path: Stripe routes creator revenue to the connected account and Polynet keeps the configured application fee. Polynet does not run a separate creator payout ledger or gestation period for community revenue.
-12. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
-13. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
-14. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
+6. Stripe Checkout redirects are UX only.
+7. Stripe webhook/provider verification and backend checkout finalization are authoritative.
+8. Paid access becomes real only after backend entitlement, membership, claim, and subscription state agree.
+9. Payout readiness is separate from member entitlement.
+10. Community role is separate from paid access.
+11. The default platform fee for free-account community revenue is 10%.
+12. Legacy paid creator billing does not create or renew Polynet Premium access.
+13. Community creator revenue uses the Stripe Connect subscription path: Stripe routes creator revenue to the connected account and Polynet keeps the configured application fee. Polynet does not run a separate creator payout ledger or gestation period for community revenue.
+14. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
+15. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
+16. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
 
-## 6) Paid-Tool Balance Rules
+## 6) Premium Tool Accounting Rules
 
-Tool balance is the product-facing meter for premium tools. Internally it is tracked as credit units.
+Polynet Premium entitlement is the product-facing access rule for premium tools. Internally, premium tool usage is still ledgered for provider-cost accounting.
 
-1. Tool balance is non-refundable.
-2. Tool balance top-ups use server-defined Stripe Checkout packs.
-3. Workspace tools reserve balance before workspace infrastructure is created or used.
-4. Workspace tools settle actual compute usage and release unused reserved credits back to tool balance.
-5. Web research reserves before the call and strictly settles on success.
-6. Voice input reserves before transcription and strictly settles on success.
-7. Failed tool calls should release reserved balance when no paid tool result was delivered.
-8. Expired reservations are reconciled by scheduled backend cleanup.
+1. Workspace tools should reserve accounting capacity before workspace infrastructure is created or used.
+2. Workspace tools settle actual compute usage and release unused reservations.
+3. Web research reserves before the call and strictly settles on success.
+4. Provider, raw cost, priced usage, and settlement evidence must stay auditable.
+5. Voice input reserves before transcription and strictly settles on success.
+6. Failed tool calls should release reserved balance when no paid tool result was delivered.
+7. Expired reservations are reconciled by scheduled backend cleanup.
 
 ## 7) Canonical Files
 
@@ -137,15 +136,15 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 - Creator commerce and Stripe Connect: `/Users/neilmcdevitt/code/arx/convex/creatorCommerce.ts`
 - Community checkout: `/Users/neilmcdevitt/code/arx/convex/communityCommerce.ts`
 - Stripe webhook handling: `/Users/neilmcdevitt/code/arx/convex/httpBilling.ts`
-- Tool-balance pricing: `/Users/neilmcdevitt/code/arx/shared/workspaceCredits.ts`
-- Tool-balance ledger: `/Users/neilmcdevitt/code/arx/convex/workspaceCredits.ts`
+- Premium tool accounting/pricing: `/Users/neilmcdevitt/code/arx/shared/workspaceCredits.ts`
+- Premium tool ledger: `/Users/neilmcdevitt/code/arx/convex/workspaceCredits.ts`
 - Workspace tool charge paths: `/Users/neilmcdevitt/code/arx/convex/workspaceRuntimeSession.ts`, `/Users/neilmcdevitt/code/arx/convex/workspaceTerminals.ts`
 - Web research charge path: `/Users/neilmcdevitt/code/arx/convex/runtimeAgentLoop.ts`
 - Voice charge path: `/Users/neilmcdevitt/code/arx/convex/httpVoice.ts`
 
 ## 8) Drift Policy
 
-Any change to tier semantics, runtime lane routing, paid community checkout, Stripe Connect payout authority, or paid-tool balance must:
+Any change to tier semantics, runtime lane routing, paid community checkout, Stripe Connect payout authority, or premium-tool accounting must:
 
 1. Update this matrix and product billing docs together.
 2. Regenerate product docs artifacts.

@@ -23,6 +23,7 @@ import {
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 
@@ -513,17 +514,20 @@ export function ProfileHoverCard(props: {
           </button>
         </div>
         <div className="chat-profile-hover-identity">
-          <button
-            type="button"
-            className="chat-profile-hover-name"
-            onClick={() => {
-              clearClose();
-              setOpen(false);
-              props.onOpenProfile?.(userId);
-            }}
-          >
-            {props.label}
-          </button>
+          <div className="chat-profile-hover-name-row">
+            <button
+              type="button"
+              className="chat-profile-hover-name"
+              onClick={() => {
+                clearClose();
+                setOpen(false);
+                props.onOpenProfile?.(userId);
+              }}
+            >
+              {props.label}
+            </button>
+            <PremiumMemberBadge badge={props.profile?.premium_badge ?? null} />
+          </div>
           {handleLabel ? <div className="chat-profile-hover-handle">{handleLabel}</div> : null}
         </div>
         {bio ? <div className="chat-profile-hover-bio">{bio}</div> : null}

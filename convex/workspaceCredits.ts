@@ -14,24 +14,18 @@ import {
   getUncollectedWorkspaceToolBalanceCredits,
   PAID_TOOL_LEDGER_TOOL_NAMES,
   priceWorkspaceUsageCredits,
-  resolveWorkspaceToolBalanceTopupPack,
   WORKSPACE_CARD_COLLECTION_MIN_CREDITS,
   WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   WORKSPACE_TOOL_BALANCE_TOPUP_CHECKOUT_TTL_MS,
 } from "../shared/workspaceCredits";
-import {
-  newOpaqueToken,
-  requireCanonicalCheckoutReturnUrl,
-} from "./billingCore";
 import { resolveAuthenticatedActor } from "./authActor";
 import {
   getStripeClient,
 } from "./stripeCore";
 import {
   attachStripeCustomerToUser,
-  ensureStripeCustomerForUser,
 } from "./stripeCustomers";
 import { requireOperatorRole } from "./operatorAccess";
 import { recordPaidToolUsagePartnerCommission } from "./builderPartners";
@@ -766,7 +760,7 @@ export const recordProviderCostInternal = internalMutation({
       v.literal("blaxel_standby_snapshot"),
       v.literal("web_research_call"),
       v.literal("web_crawl_provider_call"),
-      v.literal("fly_crawler"),
+      v.literal("web_screenshot_provider_call"),
       v.literal("daytona_codex_runtime_active"),
       v.literal("voice_transcription"),
       v.literal("knowledge_model_inference"),
@@ -786,6 +780,7 @@ export const recordProviderCostInternal = internalMutation({
     billingDisposition: v.union(
       v.literal("tracked_only"),
       v.literal("rolled_into_user_usage"),
+      v.literal("platform_absorbed"),
     ),
     linkedCreditKey: v.optional(v.union(v.string(), v.null())),
     metadata: v.optional(v.any()),
@@ -4112,16 +4107,6 @@ export const repairWorkspaceCreditBalanceForOperator = mutation({
   },
 });
 
-export const assertWorkspaceCreditBalanceReadyForTopupInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
-    return { ok: true };
-  },
-});
-
 export const getWorkspaceCreditTopupCheckoutSessionInternal = internalQuery({
   args: {
     sessionId: v.string(),
@@ -4133,84 +4118,6 @@ export const getWorkspaceCreditTopupCheckoutSessionInternal = internalQuery({
       .first();
     if (!row || row.mode !== "workspace_credit_topup") return null;
     return row;
-  },
-});
-
-export const createPendingWorkspaceCreditTopupCheckoutSessionInternal = internalMutation({
-  args: {
-    sessionId: v.string(),
-    ownerUserId: v.id("users"),
-    providerPriceId: v.optional(v.string()),
-    workspaceCreditsAmount: v.number(),
-    expiresAt: v.number(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    await readCanonicalWorkspaceCreditBalance(ctx, args.ownerUserId);
-    await ctx.db.insert("checkoutSessions", {
-      sessionId: args.sessionId,
-      mode: "workspace_credit_topup",
-      provider: "stripe",
-      providerPriceId: normalizeStripePriceId(args.providerPriceId),
-      ownerUserId: args.ownerUserId,
-      workspaceCreditsAmount: roundCredits(args.workspaceCreditsAmount),
-      status: "pending",
-      expiresAt: args.expiresAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-  },
-});
-
-export const attachWorkspaceCreditTopupStripeCheckoutSessionInternal = internalMutation({
-  args: {
-    sessionId: v.string(),
-    providerCheckoutSessionId: v.string(),
-    providerCustomerId: v.optional(v.union(v.string(), v.null())),
-    providerPriceId: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const row = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
-      .first();
-    if (!row) throw new Error("workspace_credit_topup_checkout_session_not_found");
-    if (row.mode !== "workspace_credit_topup") throw new Error("workspace_credit_topup_checkout_session_invalid");
-    await attachStripeCustomerToUser({
-      ctx,
-      userId: row.ownerUserId,
-      providerCustomerId: args.providerCustomerId,
-      nowMs,
-    });
-    await ctx.db.patch(row._id, {
-      provider: "stripe",
-      providerCheckoutSessionId: args.providerCheckoutSessionId,
-      providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
-      providerPriceId: normalizeStripePriceId(args.providerPriceId) ?? normalizeStripePriceId(row.providerPriceId),
-      updatedAt: nowMs,
-    });
-  },
-});
-
-export const expireWorkspaceCreditTopupCheckoutSessionInternal = internalMutation({
-  args: {
-    sessionId: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const row = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
-      .first();
-    if (!row || row.mode !== "workspace_credit_topup") return;
-    await ctx.db.patch(row._id, {
-      status: "expired",
-      updatedAt: nowMs,
-    });
   },
 });
 
@@ -5258,122 +5165,5 @@ export const reconcileExpiredCreditReservationsInternal = internalMutation({
       skippedBlaxelProjectWorkspaceLeases: skippedBlaxelWorkspaceReservations,
       skippedBlaxelWorkspaceReservations,
     };
-  },
-});
-
-export const startWorkspaceCreditTopupCheckout = action({
-  args: {
-    authSubject: v.optional(v.string()),
-    successUrl: v.string(),
-    cancelUrl: v.string(),
-    packId: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = Date.now();
-    const successUrl = requireCanonicalCheckoutReturnUrl(
-      args.successUrl,
-      "workspace_credit_topup_success_url_invalid",
-    );
-    const cancelUrl = requireCanonicalCheckoutReturnUrl(
-      args.cancelUrl,
-      "workspace_credit_topup_cancel_url_invalid",
-    );
-
-    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
-      authSubject: args.authSubject ?? null,
-    })) as { dbUserId?: unknown; email?: string | null };
-    const userId = actor?.dbUserId;
-    if (!userId) throw new Error("user_not_found");
-    await ctx.runQuery(
-      internal.workspaceCredits.assertWorkspaceCreditBalanceReadyForTopupInternal as any,
-      {
-        userId,
-      },
-    );
-    const stripeCustomerId = await ensureStripeCustomerForUser({
-      ctx,
-      userId,
-      email: actor?.email ?? null,
-      nowMs,
-    });
-
-    const sessionId = newOpaqueToken("credits");
-    const pack = resolveWorkspaceToolBalanceTopupPack(args.packId);
-    if (!pack) throw new Error("workspace_tool_balance_pack_invalid");
-    const workspaceCreditsAmount = pack.credits;
-    const expiresAt = nowMs + WORKSPACE_TOOL_BALANCE_TOPUP_CHECKOUT_TTL_MS;
-    await ctx.runMutation(
-      internal.workspaceCredits.createPendingWorkspaceCreditTopupCheckoutSessionInternal as any,
-      {
-        sessionId,
-        ownerUserId: userId,
-        workspaceCreditsAmount,
-        expiresAt,
-        nowMs,
-      },
-    );
-
-    try {
-      const stripe = getStripeClient();
-      const checkoutSession = await stripe.checkout.sessions.create({
-        mode: "payment",
-        customer: stripeCustomerId,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        expires_at: Math.floor(expiresAt / 1000),
-        client_reference_id: sessionId,
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              unit_amount: Math.round(pack.priceUsd * 100),
-              product_data: {
-                name: "Polynet tool balance",
-                description: `${formatWorkspaceToolBalanceUsdFromCredits(
-                  workspaceCreditsAmount,
-                )} for workspace tools, web research, and voice input.`,
-              },
-            },
-            quantity: 1,
-          },
-        ],
-        custom_text: {
-          submit: {
-            message:
-              "Tool balance is non-refundable and can only be used for Polynet premium tools.",
-          },
-        },
-        metadata: {
-          local_session_id: sessionId,
-          checkout_mode: "workspace_credit_topup",
-          workspace_tool_balance_pack_id: pack.id,
-          workspace_tool_balance_usd: String(pack.priceUsd),
-        },
-      });
-      const checkoutUrl = String(checkoutSession.url ?? "").trim();
-      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-      await ctx.runMutation(
-        internal.workspaceCredits.attachWorkspaceCreditTopupStripeCheckoutSessionInternal as any,
-        {
-          sessionId,
-          providerCheckoutSessionId: checkoutSession.id,
-          providerCustomerId:
-            typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-          nowMs: Date.now(),
-        },
-      );
-      return {
-        checkout_url: checkoutUrl,
-      };
-    } catch (error) {
-      await ctx.runMutation(
-        internal.workspaceCredits.expireWorkspaceCreditTopupCheckoutSessionInternal as any,
-        {
-          sessionId,
-          nowMs: Date.now(),
-        },
-      );
-      throw error;
-    }
   },
 });

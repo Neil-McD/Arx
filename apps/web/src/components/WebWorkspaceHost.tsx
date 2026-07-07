@@ -17,6 +17,7 @@ import {
   PointerEvent,
   SetStateAction,
 } from "react";
+import { Check, ChevronDown, Lock, Sparkles } from "lucide-react";
 import {
   getProjectWorkspaceTerminalPreviewUrl,
   listProjectWorkspaceTerminalSnapshot,
@@ -31,7 +32,9 @@ import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/aut
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import {
   ACTIVE_WORKSPACE_RUNTIME_ENGINES,
-  RUNTIME_ENGINE_CODEX,
+  canUseRuntimeEngineForTier,
+  getRuntimeEngineAccessLevel,
+  getRuntimeEngineDisplayName,
   RUNTIME_ENGINE_POLYNET,
   type RuntimeEngine,
 } from "../../../../shared/runtimeEngine";
@@ -81,6 +84,7 @@ import {
 } from "./workspaceRightPanelModel";
 import {
   resetWorkspaceFilesExpandedPreference,
+  type WorkspaceCommunityPreviewPanelDataProps,
   type WorkspaceUserDataPanelDataProps,
 } from "./WebWorkspaceUserDataPanel";
 import type {
@@ -360,6 +364,7 @@ export type WebWorkspaceHostProps = {
   showAppToastMessage: (message: string) => void;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  accountTier: string | null;
   activeRuntimeEngine: RuntimeEngine;
   onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
@@ -378,10 +383,12 @@ export type WebWorkspaceHostProps = {
   openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
   renderMarkdown: WorkspaceMarkdownRenderer;
   copyTextToClipboard: (text: string) => Promise<void> | void;
+  onOpenPremiumBilling: () => void;
   showWorkspaceRightPanel?: boolean;
   operatorRightPanelSession?: AuthSessionLike | null;
   builderPartnerProgramPanel?: WebBuilderPartnerProgramPanelProps | null;
   workspaceRightPanelOpen?: boolean;
+  workspaceCommunityPreviewPanel?: WorkspaceCommunityPreviewPanelDataProps | null;
   workspaceUserDataPanel?: WorkspaceUserDataPanelDataProps | null;
 };
 
@@ -809,6 +816,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   guestWorkspaceComposerPlaceholder: string;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  accountTier: string | null;
   activeRuntimeEngine: RuntimeEngine;
   onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
@@ -832,6 +840,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
   renderMarkdown: WorkspaceMarkdownRenderer;
   copyTextToClipboard: (text: string) => Promise<void> | void;
+  onOpenPremiumBilling: () => void;
   renderPreviewForRun: (runId: string | null) => ReactNode;
 }) {
   return (
@@ -884,6 +893,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   guestSignupRail={props.guestSignupRail}
                   activeModelLabel={props.activeModelLabel}
                   modelToggles={props.modelToggles}
+                  accountTier={props.accountTier}
                   activeRuntimeEngine={props.activeRuntimeEngine}
                   onRuntimeEngineChange={props.onRuntimeEngineChange}
                   workspaceVoiceUiState={props.workspaceVoiceUiState}
@@ -896,6 +906,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   onStopTerminal={() => {}}
                   onStopAllTerminals={() => {}}
                   onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
+                  onOpenPremiumBilling={props.onOpenPremiumBilling}
                 />
               </div>
               <div className="web-empty-thread-actions" role="list">
@@ -939,6 +950,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
         handleCopyMessage={props.handleCopyMessage}
         openMessageContextModal={props.openMessageContextModal}
         renderPreviewForRun={props.renderPreviewForRun}
+        onOpenPremiumBilling={props.onOpenPremiumBilling}
       />
       <WebWorkspaceStreamingMessage
         view={props.streamingMessageView}
@@ -958,6 +970,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasAuthenticatedPresentation !== next.hasAuthenticatedPresentation ||
     prev.isAuthRecoveringSignedIn !== next.isAuthRecoveringSignedIn ||
     prev.isAccountGraphHydratingCritical !== next.isAccountGraphHydratingCritical ||
+    prev.accountTier !== next.accountTier ||
     prev.activeRuntimeEngine !== next.activeRuntimeEngine ||
     prev.onRuntimeEngineChange !== next.onRuntimeEngineChange ||
     prev.renderPreviewForRun !== next.renderPreviewForRun ||
@@ -967,6 +980,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.openMessageContextModal !== next.openMessageContextModal ||
     prev.renderMarkdown !== next.renderMarkdown ||
     prev.copyTextToClipboard !== next.copyTextToClipboard ||
+    prev.onOpenPremiumBilling !== next.onOpenPremiumBilling ||
     !areWorkspaceThreadErrorViewsEqual(prev.threadErrorView, next.threadErrorView) ||
     !areWorkspaceThreadMessageViewsEqual(prev.threadMessageViews, next.threadMessageViews) ||
     !areWorkspaceStreamingMessageViewsEqual(
@@ -986,6 +1000,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasAuthenticatedPresentation === next.hasAuthenticatedPresentation &&
     prev.isAuthRecoveringSignedIn === next.isAuthRecoveringSignedIn &&
     prev.isAccountGraphHydratingCritical === next.isAccountGraphHydratingCritical &&
+    prev.accountTier === next.accountTier &&
     prev.activeRuntimeEngine === next.activeRuntimeEngine &&
     prev.onRuntimeEngineChange === next.onRuntimeEngineChange &&
     prev.isActiveWorkspaceThreadBusy === next.isActiveWorkspaceThreadBusy &&
@@ -1028,6 +1043,15 @@ function areWorkspaceThreadAttachmentViewsEqual(
   return true;
 }
 
+function areWorkspacePremiumUpgradeCtasEqual(
+  left: WorkspaceThreadMessageView["premiumUpgradeCta"],
+  right: WorkspaceThreadMessageView["premiumUpgradeCta"],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.action === right.action;
+}
+
 function areWorkspaceThreadMessageViewsEqual(
   left: WorkspaceThreadMessageView[],
   right: WorkspaceThreadMessageView[],
@@ -1046,6 +1070,7 @@ function areWorkspaceThreadMessageViewsEqual(
       a.requireLiveDesktop !== b.requireLiveDesktop ||
       a.modelLabel !== b.modelLabel ||
       a.contextPayload !== b.contextPayload ||
+      !areWorkspacePremiumUpgradeCtasEqual(a.premiumUpgradeCta, b.premiumUpgradeCta) ||
       a.runtimeEvents !== b.runtimeEvents ||
       !areWorkspaceThreadAttachmentViewsEqual(a.attachments, b.attachments)
     ) {
@@ -1113,43 +1138,126 @@ function WorkspaceAttachmentPreview(props: {
 function WorkspaceRuntimeEngineSelector(props: {
   value: RuntimeEngine;
   disabled: boolean;
+  accountTier: string | null;
   onChange: (engine: RuntimeEngine) => void;
+  onOpenPremiumBilling: () => void;
 }) {
-  const runtimeEngineLabels: Partial<Record<RuntimeEngine, string>> = {
-    polynet: "Polynet",
-    codex: "Codex",
-  };
+  const [isOpen, setIsOpen] = useState(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
   const options = ACTIVE_WORKSPACE_RUNTIME_ENGINES.map((value) => ({
     value,
-    label: runtimeEngineLabels[value] ?? value,
+    label: getRuntimeEngineDisplayName(value),
+    accessLevel: getRuntimeEngineAccessLevel(value),
   }));
   if (options.length <= 1) return null;
   const selectedValue = options.some((option) => option.value === props.value)
     ? props.value
     : RUNTIME_ENGINE_POLYNET;
-  const handleChange: ChangeEventHandler<HTMLSelectElement> = (event) => {
-    props.onChange(event.currentTarget.value as RuntimeEngine);
+  const selectedOption =
+    options.find((option) => option.value === selectedValue) ?? options[0];
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      const root = selectorRef.current;
+      if (!root || !event.target || root.contains(event.target as Node)) return;
+      setIsOpen(false);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const selectRuntimeEngine = (next: RuntimeEngine) => {
+    if (
+      !canUseRuntimeEngineForTier({
+        engine: next,
+        accountTier: props.accountTier,
+      })
+    ) {
+      setIsOpen(false);
+      props.onOpenPremiumBilling();
+      return;
+    }
+    setIsOpen(false);
+    props.onChange(next);
   };
 
   return (
-    <label className="ask-engine-selector" title="Choose runtime">
-      <select
-        className="ask-engine-select"
-        value={selectedValue}
+    <div
+      ref={selectorRef}
+      className="ask-engine-selector"
+      title="Polynet is included. Codex requires Polynet Premium."
+    >
+      <button
+        type="button"
+        className="ask-engine-trigger"
         disabled={props.disabled}
-        onChange={handleChange}
         aria-label="Choose runtime"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((value) => !value)}
       >
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <span className="ask-engine-trigger-label">{selectedOption.label}</span>
+        <ChevronDown size={14} strokeWidth={2.3} aria-hidden="true" />
+      </button>
+      {isOpen ? (
+        <div className="ask-engine-menu" role="listbox" aria-label="Choose runtime">
+          {options.map((option) => {
+            const isSelected = option.value === selectedValue;
+            const isPremium = option.accessLevel === "premium";
+            const isLocked =
+              isPremium &&
+              !canUseRuntimeEngineForTier({
+                engine: option.value,
+                accountTier: props.accountTier,
+              });
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                className={`ask-engine-option${isSelected ? " is-selected" : ""}${isPremium ? " is-premium" : ""}`}
+                onClick={() => selectRuntimeEngine(option.value)}
+              >
+                <span className="ask-engine-option-check" aria-hidden="true">
+                  {isSelected ? <Check size={13} strokeWidth={2.6} /> : null}
+                </span>
+                <span className="ask-engine-option-copy">
+                  <span className="ask-engine-option-name">
+                    {option.label}
+                    {isPremium ? (
+                      <span className="ask-engine-premium-pill ask-engine-premium-pill--menu">
+                        <Sparkles size={10} strokeWidth={2.2} aria-hidden="true" />
+                        Premium
+                      </span>
+                    ) : null}
+                  </span>
+                  {isPremium ? null : (
+                    <span className="ask-engine-option-subtitle">Included</span>
+                  )}
+                </span>
+                {isLocked ? (
+                  <Lock
+                    size={13}
+                    strokeWidth={2.2}
+                    className="ask-engine-option-lock"
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1173,6 +1281,7 @@ function WorkspaceComposer(props: {
   guestSignupRail: ReactNode;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  accountTier: string | null;
   activeRuntimeEngine: RuntimeEngine;
   onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
@@ -1185,6 +1294,7 @@ function WorkspaceComposer(props: {
   onStopTerminal: (terminalSessionId: string) => void;
   onStopAllTerminals: () => void;
   onWorkspaceVoiceClick: () => void;
+  onOpenPremiumBilling: () => void;
   showTerminalRail?: boolean;
 }) {
   const disableComposerActions =
@@ -1252,7 +1362,9 @@ function WorkspaceComposer(props: {
             <WorkspaceRuntimeEngineSelector
               value={props.activeRuntimeEngine}
               disabled={disableComposerActions}
+              accountTier={props.accountTier}
               onChange={props.onRuntimeEngineChange}
+              onOpenPremiumBilling={props.onOpenPremiumBilling}
             />
           ) : null}
         </div>
@@ -1413,6 +1525,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   });
   const showWorkspaceRightPanel = Boolean(props.showWorkspaceRightPanel && props.workspaceUserDataPanel);
   const isWorkspaceRightPanelVisible = Boolean(showWorkspaceRightPanel && props.workspaceRightPanelOpen);
+  const showCommunityTab = Boolean(props.workspaceCommunityPreviewPanel?.activeCommunity);
   const showPartnerTab = Boolean(props.builderPartnerProgramPanel?.builderPartnerProgram?.partner);
   const showOperatorTabs = Boolean(props.operatorRightPanelSession);
   const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
@@ -1424,11 +1537,19 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
+        communityLabel: props.workspaceCommunityPreviewPanel?.activeCommunity.name ?? null,
+        showCommunityTab,
         showPartnerTab,
         showOperatorTabs,
         mode: activeRightPanelMode,
       }),
-    [activeRightPanelMode, showOperatorTabs, showPartnerTab],
+    [
+      activeRightPanelMode,
+      props.workspaceCommunityPreviewPanel?.activeCommunity.name,
+      showCommunityTab,
+      showOperatorTabs,
+      showPartnerTab,
+    ],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const isOperatorRightPanelTabActive =
@@ -2345,6 +2466,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 guestWorkspaceComposerPlaceholder={props.guestWorkspaceComposerPlaceholder}
                 activeModelLabel={props.activeModelLabel}
                 modelToggles={props.modelToggles}
+                accountTier={props.accountTier}
                 activeRuntimeEngine={props.activeRuntimeEngine}
                 onRuntimeEngineChange={props.onRuntimeEngineChange}
                 workspaceVoiceUiState={props.workspaceVoiceUiState}
@@ -2380,6 +2502,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 openMessageContextModal={props.openMessageContextModal}
                 renderMarkdown={props.renderMarkdown}
                 copyTextToClipboard={props.copyTextToClipboard}
+                onOpenPremiumBilling={props.onOpenPremiumBilling}
                 renderPreviewForRun={renderPreviewForRun}
               />
             </div>
@@ -2441,6 +2564,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             guestSignupRail={props.guestSignupRail}
             activeModelLabel={props.activeModelLabel}
             modelToggles={props.modelToggles}
+            accountTier={props.accountTier}
             activeRuntimeEngine={props.activeRuntimeEngine}
             onRuntimeEngineChange={props.onRuntimeEngineChange}
             workspaceVoiceUiState={props.workspaceVoiceUiState}
@@ -2463,6 +2587,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
               void handleStopAllWorkspaceTerminals();
             }}
             onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
+            onOpenPremiumBilling={props.onOpenPremiumBilling}
             showTerminalRail={!isDesktopExpandedPreview}
           />
         </div>
@@ -2477,6 +2602,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebWorkspaceRightPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
+            workspaceCommunityPreviewPanel={props.workspaceCommunityPreviewPanel ?? null}
             workspaceFilesResetNonce={workspaceFilesResetNonce}
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}

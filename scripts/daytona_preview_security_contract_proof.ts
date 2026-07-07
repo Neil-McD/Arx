@@ -24,6 +24,7 @@ const daytonaCodexConfig = read("services/polynet-codex-worker/src/daytonaCodexC
 const workerServer = read("services/polynet-codex-worker/src/server.ts");
 const workerToolSpecs = read("services/polynet-codex-worker/src/workerToolSpecs.ts");
 const daytonaRuntimeAppPreview = read("apps/web/src/components/DaytonaRuntimeAppPreview.tsx");
+const runtimeRunLifecycle = read("apps/web/src/controllers/useWebRuntimeRunLifecycle.ts");
 const previewProxy = read("apps/preview-proxy/server.js");
 const previewProxySessionToken = read("apps/preview-proxy/previewProxySessionToken.js");
 const convexPreviewProxySessionToken = read("convex/previewProxySessionToken.ts");
@@ -60,6 +61,18 @@ assertMatch(
 
 assertMatch(
   threads,
+  /getDaytonaWorkspacePreviewReadyEventInternal = internalQuery[\s\S]*\.withIndex\("by_owner_run_seq"[\s\S]*\.collect\(\)[\s\S]*for \(const row of \[\.\.\.rows\]\.reverse\(\)\)/,
+  "Daytona preview evidence lookup must scan the exact run events newest-first instead of a latest-N window that can miss early preview events",
+);
+
+assertNotMatch(
+  threads,
+  /getDaytonaWorkspacePreviewReadyEventInternal[\s\S]*\.order\("desc"\)[\s\S]*\.take\(500\)/,
+  "Daytona preview evidence lookup must not use a latest-500 event window",
+);
+
+assertMatch(
+  threads,
   /const previewReadyEvent = \(await ctx\.runQuery\([\s\S]*getDaytonaWorkspacePreviewReadyEventInternal[\s\S]*if \(!previewReadyEvent\) \{[\s\S]*code: "daytona_preview_not_authorized"/,
   "public preview action must fail closed when run/port preview evidence is missing",
 );
@@ -80,20 +93,20 @@ assertMatch(
 
 assertMatch(
   cloudThreadsRead,
-  /preview_proxy_token: string;/,
-  "browser Daytona preview session type must explicitly model the preview gateway token",
+  /preview_proxy_token: string \| null;[\s\S]*preview_url: string \| null;/,
+  "browser Daytona preview session type must explicitly model gateway-token and direct signed-url transports",
 );
 
 assertMatch(
   cloudThreadsRead,
-  /const previewProxyToken = String\(payload\.preview_proxy_token \?\? ""\)\.trim\(\);[\s\S]*if \(!previewProxyToken/,
-  "browser Daytona preview parser must require a non-empty preview gateway token",
+  /const previewTransport =[\s\S]*const previewProxyToken = String\(payload\.preview_proxy_token \?\? ""\)\.trim\(\);[\s\S]*const previewUrl = String\(payload\.preview_url \?\? ""\)\.trim\(\);[\s\S]*previewTransport === "daytona_signed_direct" \? Boolean\(previewUrl\) : Boolean\(previewProxyToken\)/,
+  "browser Daytona preview parser must require a direct signed URL only for direct transport and a gateway token otherwise",
 );
 
 assertMatch(
   cloudThreadsRead,
-  /preview_transport: "polynet_preview_gateway" \| string \| null;/,
-  "browser Daytona preview session type must expose explicit preview transport",
+  /preview_transport: "polynet_preview_gateway" \| "daytona_signed_direct" \| string \| null;/,
+  "browser Daytona preview session type must expose explicit preview transport including the gated direct experiment",
 );
 
 assertMatch(
@@ -104,8 +117,14 @@ assertMatch(
 
 assertMatch(
   daytonaActions,
-  /sandboxState === "stopped"[\s\S]*providerTeardownState === "stopped"[\s\S]*daytona_sandbox_not_available[\s\S]*previewLeaseActive[\s\S]*activePreviewPorts\.includes\(port\)[\s\S]*providerSandboxState[\s\S]*preview_resolution_provider_state[\s\S]*getSignedPreviewUrl\(port, expiresInSeconds\)[\s\S]*mintPreviewProxySessionToken\([\s\S]*previewUrl[\s\S]*preview_proxy_token: minted\.token[\s\S]*preview_transport: "polynet_preview_gateway"/,
-  "Daytona preview resolver must reject stopped or inactive previews before minting gateway URLs",
+  /sandboxState === "stopped"[\s\S]*providerTeardownState === "stopped"[\s\S]*daytona_sandbox_not_available[\s\S]*previewLeaseActive[\s\S]*activePreviewPorts\.includes\(port\)[\s\S]*providerSandboxState[\s\S]*preview_resolution_provider_state[\s\S]*getSignedPreviewUrl\(port, expiresInSeconds\)[\s\S]*const previewTransport = readDaytonaAppPreviewTransport\(\);[\s\S]*previewTransport === "daytona_signed_direct"[\s\S]*preview_url: previewUrl[\s\S]*mintPreviewProxySessionToken\([\s\S]*previewUrl[\s\S]*preview_proxy_token: minted\.token[\s\S]*preview_transport: "polynet_preview_gateway"/,
+  "Daytona preview resolver must reject stopped or inactive previews before choosing direct or gateway transport",
+);
+
+assertMatch(
+  daytonaActions,
+  /function readDaytonaAppPreviewTransport\(\): DaytonaAppPreviewTransport[\s\S]*POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT[\s\S]*if \(value === "daytona_signed_direct"\) return "daytona_signed_direct";[\s\S]*return "polynet_preview_gateway";/,
+  "Daytona direct app preview transport must be opt-in and default to the Polynet preview gateway",
 );
 
 assertNotMatch(
@@ -117,13 +136,13 @@ assertNotMatch(
 assertMatch(
   daytonaActions,
   /resolveDaytonaCodexRuntimePreviewInternal[\s\S]*mintPreviewProxySessionToken/,
-  "Daytona app preview resolver must mint a preview gateway token so the gateway can skip Daytona's browser warning",
+  "Daytona app preview resolver must keep the preview gateway path so the gateway can skip Daytona's browser warning",
 );
 
 assertMatch(
   daytonaRuntimeAppPreview,
-  /buildWorkspacePreviewProxyUrl\(\{[\s\S]*previewProxyToken: result\.session\.preview_proxy_token/,
-  "Daytona preview UI must render through the preview gateway URL",
+  /buildDaytonaPreviewFrameUrl[\s\S]*preview_transport === "daytona_signed_direct"[\s\S]*new URL\(String\(session\.preview_url \?\? ""\)\)[\s\S]*buildWorkspacePreviewProxyUrl/,
+  "Daytona preview UI must use direct signed URLs only for direct transport and keep the gateway fallback",
 );
 
 assertMatch(
@@ -135,7 +154,13 @@ assertMatch(
 assertMatch(
   daytonaRuntimeAppPreview,
   /buildWorkspacePreviewProxyUrl/,
-  "Daytona preview UI must route app previews through the gateway that can send Daytona skip-warning headers",
+  "Daytona preview UI must retain the gateway path that can send Daytona skip-warning headers",
+);
+
+assertMatch(
+  runtimeRunLifecycle,
+  /const RUNTIME_EVENT_PAGE_LIMIT = 500;[\s\S]*const COMPLETED_RUNTIME_EVENT_MAX_ROWS = 2000;[\s\S]*async function listCompletedRuntimeRunEvents[\s\S]*while \(rows\.length < COMPLETED_RUNTIME_EVENT_MAX_ROWS\)[\s\S]*afterSeq[\s\S]*runtimeEventsIncludeFinished\(page\)/,
+  "completed workspace runs must page runtime events so preview anchors are not dropped by a short hydration window",
 );
 
 assertNotMatch(

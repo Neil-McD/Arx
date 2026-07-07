@@ -15,6 +15,7 @@ import type {
   HistoryUsedItem,
   MemorySuggestion,
   MemoryUsedItem,
+  PremiumUpgradeCta,
 } from "../../../../shared/messageMetadataUi";
 import type { CommunityEvidenceUsedV1 } from "../../../../shared/communityEvidence";
 import type {
@@ -75,6 +76,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   showAppToastMessage: (message: string) => void;
   activeModelLabel: string;
   modelToggles: ModelToggle[];
+  accountTier: string | null;
   activeRuntimeEngine: RuntimeEngine;
   onRuntimeEngineChange: (engine: RuntimeEngine) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
@@ -99,6 +101,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   parseMessageHistoryUsed: (contentJson: unknown) => HistoryUsedItem[];
   parseMessageMemorySuggestions: (contentJson: unknown) => MemorySuggestion[];
   parseMessageMemoryAdded: (contentJson: unknown) => MemoryUsedItem[];
+  parsePremiumUpgradeCta: (contentJson: unknown) => PremiumUpgradeCta | null;
   extractCommunityEvidenceUsedV1: (contentJson: unknown) => CommunityEvidenceUsedV1 | null;
   buildMessageContextModalPayload: (payload: {
     memoryUsed: MemoryUsedItem[];
@@ -126,6 +129,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
     text: string,
     options: { onCopyCode: (text: string) => Promise<void> | void },
   ) => ReactNode;
+  onOpenPremiumBilling: () => void;
 };
 
 export function buildWebWorkspaceSurfaceProjection(
@@ -178,6 +182,9 @@ export function buildWebWorkspaceSurfaceProjection(
         ? params.parseMessageMemorySuggestions(message.content_json)
         : [];
       const memoryAdded = !isUser ? params.parseMessageMemoryAdded(message.content_json) : [];
+      const premiumUpgradeCta = !isUser
+        ? params.parsePremiumUpgradeCta(message.content_json)
+        : null;
       const communityEvidence = !isUser
         ? params.extractCommunityEvidenceUsedV1(message.content_json)
         : null;
@@ -239,6 +246,7 @@ export function buildWebWorkspaceSurfaceProjection(
           requireLiveDesktop,
           modelLabel,
           contextPayload: hasContext ? contextPayload : null,
+          premiumUpgradeCta,
         },
       ];
     },
@@ -313,6 +321,7 @@ export function buildWebWorkspaceSurfaceProjection(
     showAppToastMessage: params.showAppToastMessage,
     activeModelLabel: params.activeModelLabel,
     modelToggles: params.modelToggles,
+    accountTier: params.accountTier,
     activeRuntimeEngine: params.activeRuntimeEngine,
     onRuntimeEngineChange: params.onRuntimeEngineChange,
     workspaceVoiceUiState: params.workspaceVoiceUiState,
@@ -332,6 +341,7 @@ export function buildWebWorkspaceSurfaceProjection(
       params.openMessageContextModal(payload, params.setContextModal),
     renderMarkdown: params.renderMarkdown,
     copyTextToClipboard: params.copyTextToClipboard,
+    onOpenPremiumBilling: params.onOpenPremiumBilling,
   };
 
   return { workspaceHostProps };

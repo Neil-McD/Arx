@@ -854,6 +854,70 @@ export function registerRuntimeBillingRoutes(
                 result,
               });
             }
+            const premiumCheckoutSession = await (ctx as any).runQuery(
+              (internal as any).premiumBilling
+                .getPremiumSubscriptionCheckoutSessionInternal,
+              {
+                sessionId: localSessionId,
+              },
+            );
+            if (premiumCheckoutSession) {
+              if (!readStripePaymentReady(session.payment_status)) {
+                return processedResponse({
+                  ok: true,
+                  ignored: true,
+                  event: event.type,
+                  reason: "premium_subscription_payment_pending",
+                }, "ignored");
+              }
+              const subscriptionId =
+                typeof session.subscription === "string"
+                  ? session.subscription
+                  : null;
+              if (!subscriptionId) {
+                return processedResponse({
+                  ok: true,
+                  ignored: true,
+                  event: event.type,
+                  reason: "premium_subscription_missing",
+                }, "ignored");
+              }
+              const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+              const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+              const { cycleStartedAt, cycleEndsAt } =
+                readStripeSubscriptionCycle(subscription);
+              const subscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
+                subscriptionStatus: subscription.status,
+                cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+              });
+              const result = await (ctx as any).runMutation(
+                (internal as any).premiumBilling
+                  .completePremiumSubscriptionCheckoutSessionInternal,
+                {
+                  localSessionId,
+                  providerCheckoutSessionId: session.id,
+                  providerCustomerId:
+                    typeof subscription.customer === "string"
+                      ? subscription.customer
+                      : typeof session.customer === "string"
+                        ? session.customer
+                        : null,
+                  providerSubscriptionId: subscription.id,
+                  providerPriceId,
+                  subscriptionStatus,
+                  currentPeriodStartAt: cycleStartedAt,
+                  currentPeriodEndAt: cycleEndsAt,
+                  cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                  nowMs: eventCreatedAt,
+                },
+              );
+              return processedResponse({
+                ok: true,
+                received: true,
+                event: event.type,
+                result,
+              });
+            }
           }
         }
 
@@ -1384,6 +1448,35 @@ export function registerRuntimeBillingRoutes(
               subscriptionStatus: subscription.status,
               cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
             });
+          const premiumSubscriptionResult = await (ctx as any).runMutation(
+            (internal as any).premiumBilling
+              .syncPremiumSubscriptionFromStripeInternal,
+            {
+              localSessionId,
+              providerCustomerId:
+                typeof subscription.customer === "string"
+                  ? subscription.customer
+                  : null,
+              providerSubscriptionId: subscription.id,
+              providerPriceId,
+              subscriptionStatus: normalizedCommunityStatus,
+              currentPeriodStartAt: cycleStartedAt,
+              currentPeriodEndAt: cycleEndsAt,
+              cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+              nowMs:
+                Number(event.created ?? 0) > 0
+                  ? Number(event.created) * 1000
+                  : Date.now(),
+            },
+          );
+          if (!premiumSubscriptionResult?.ignored) {
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              premiumSubscriptionResult,
+            });
+          }
           if (localSessionId) {
             const communityCheckoutSession = await (ctx as any).runQuery(
               internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,

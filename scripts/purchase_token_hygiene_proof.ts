@@ -112,17 +112,13 @@ assert.ok(
   "expected public community checkout cancel URL to be canonical-origin validated",
 );
 
-const startWorkspaceCreditTopupCheckoutBlock = sliceBetween(
-  workspaceCreditsSource,
-  "export const startWorkspaceCreditTopupCheckout = action({",
+assert.ok(
+  !workspaceCreditsSource.includes("export const startWorkspaceCreditTopupCheckout = action({"),
+  "workspace credit top-up checkout starter must stay deleted",
 );
 assert.ok(
-  startWorkspaceCreditTopupCheckoutBlock.includes("workspace_credit_topup_success_url_invalid"),
-  "expected workspace credit success URL to be validated",
-);
-assert.ok(
-  startWorkspaceCreditTopupCheckoutBlock.includes("workspace_credit_topup_cancel_url_invalid"),
-  "expected workspace credit cancel URL to be validated",
+  !workspaceCreditsSource.includes("stripe.checkout.sessions.create({\n        mode: \"payment\""),
+  "workspace credit top-up deletion must remove the direct Stripe payment checkout creator",
 );
 
 console.log("PASS: purchase token hygiene boundaries are enforced");

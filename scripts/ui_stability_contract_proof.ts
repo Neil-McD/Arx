@@ -103,8 +103,23 @@ assert.match(
 );
 assert.doesNotMatch(
   workspaceRightPanelModel,
-  /"community"/,
-  "workspace right panel tabs must not expose a duplicate community tab",
+  /const OPERATOR_INSIGHT_TABS:[\s\S]*= \[[^\]]*id: "community"/,
+  "workspace community preview tab must stay in user mode and not leak into operator tabs",
+);
+assert.match(
+  workspaceRightPanelModel,
+  /WorkspaceRightPanelTab = "workspace" \| "community" \| "partner" \| OperatorInsightTab/,
+  "workspace right panel should expose the restored community preview tab in user mode",
+);
+assert.match(
+  workspaceRightPanel,
+  /activeInsightTab === "community" && props\.workspaceCommunityPreviewPanel[\s\S]*<WorkspaceCommunityPreviewPanelContent/,
+  "workspace right panel shell should render the restored read-only community preview tab",
+);
+assert.match(
+  app,
+  /workspaceCommunityPreviewPanel[\s\S]*activeCommunity:[\s\S]*recentChatPreview: workspaceCommunityRecentChatPreview[\s\S]*onOpenCommunity: handleOpenWorkspacePanelCommunity/,
+  "App should project active community lens state into the workspace preview tab",
 );
 assert.doesNotMatch(
   workspaceRightPanel,

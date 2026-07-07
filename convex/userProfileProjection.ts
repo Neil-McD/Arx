@@ -1,3 +1,5 @@
+import { resolvePublicPremiumMemberBadgeForUserId } from "./premiumMemberBadge";
+
 type UserProfileProjectionUserRow = {
   _id: any;
   displayName?: string;
@@ -63,6 +65,7 @@ export async function resolveUserProfileDisplayProjectionForUser(
     avatar_focus_x: normalizeAvatarFocus(profile?.avatarFocusX),
     avatar_focus_y: normalizeAvatarFocus(profile?.avatarFocusY),
     avatar_zoom: normalizeAvatarZoom(profile?.avatarZoom),
+    premium_badge: await resolvePublicPremiumMemberBadgeForUserId(ctx, user._id),
   };
 }
 
@@ -76,6 +79,7 @@ export async function resolveUserProfileDisplayProjection(ctx: any, userId: any)
       avatar_focus_x: 0.5,
       avatar_focus_y: 0.5,
       avatar_zoom: 1,
+      premium_badge: null,
     };
   }
   return await resolveUserProfileDisplayProjectionForUser(ctx, user);

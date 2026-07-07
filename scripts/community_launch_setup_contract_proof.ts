@@ -690,8 +690,8 @@ assert.match(
 );
 assert.match(
   appShell,
-  /hasWorkspaceCardOnFile=\{[\s\S]*workspaceCardOnFileStatus[\s\S]*has_card_on_file === true[\s\S]*isStartingWorkspaceCardSetupCheckout=\{isStartingWorkspaceCardSetupCheckout\}[\s\S]*workspaceCardSetupError=\{workspaceCardSetupError\}[\s\S]*onStartWorkspaceCardSetupCheckout=\{startWorkspaceCardSetupCheckout\}/,
-  "app shell must pass workspace card truth and setup action into launch Knowledge for paid-link disclosure",
+  /accountTier=\{accountCommerceStatus\?\.account_tier \?\? null\}[\s\S]*onOpenPremiumBilling=\{openWorkspacePremiumBilling\}/,
+  "app shell must pass account tier and Billing navigation into launch Knowledge for premium-link disclosure",
 );
 assert.doesNotMatch(
   setupModal,
@@ -740,13 +740,18 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /hasWorkspaceCardOnFile\?: boolean \| null[\s\S]*workspaceCardSetupError\?: string \| null[\s\S]*showKnowledgeLinkPaidToolsPrompt[\s\S]*canPromptForKnowledgeLinkPaidTools[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*setShowKnowledgeLinkPaidToolsPrompt\(true\)[\s\S]*handleStartKnowledgeLinkCardSetup[\s\S]*onStartWorkspaceCardSetupCheckout\?\.\(\)[\s\S]*Link saved[\s\S]*Add a card if you want Polynet to read this link,[\s\S]*extract the useful material,[\s\S]*draft it into your[\s\S]*community Knowledge[\s\S]*Continue without premium tools[\s\S]*workspaceCardSetupError/,
-  "launch Knowledge must disclose paid link-reading capability after saving a link without blocking onboarding",
+  /accountTier\?: string \| null[\s\S]*onOpenPremiumBilling\?: \(\) => void[\s\S]*showKnowledgeLinkPremiumPrompt[\s\S]*isFreeAccountTier[\s\S]*canPromptForKnowledgeLinkPremium[\s\S]*await onAddKnowledgeLink\(\{ urls \}\)[\s\S]*setShowKnowledgeLinkPremiumPrompt\(true\)[\s\S]*handleOpenKnowledgeLinkPremiumBilling[\s\S]*onClose\(\)[\s\S]*onOpenPremiumBilling\?\.\(\)[\s\S]*Link saved[\s\S]*Importing links into community Knowledge requires[\s\S]*Polynet Premium[\s\S]*Open Billing[\s\S]*Keep link saved/,
+  "launch Knowledge must disclose premium link-reading capability after saving a link without blocking onboarding",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Add a card if you want Polynet to read this link|No charge today|Continue without premium tools|handleStartKnowledgeLinkCardSetup|onStartWorkspaceCardSetupCheckout|workspaceCardSetupError|showKnowledgeLinkPaidToolsPrompt|canPromptForKnowledgeLinkPaidTools/,
+  "launch Knowledge premium-link disclosure must not reintroduce the legacy card/prepaid upgrade path",
 );
 assert.match(
   baseCss,
-  /\.community-launch-knowledge-paid-tools-prompt[\s\S]*\.community-launch-knowledge-paid-tools-actions/,
-  "launch Knowledge paid-link disclosure must have compact in-modal styling",
+  /\.community-launch-knowledge-premium-prompt[\s\S]*\.community-launch-knowledge-premium-actions/,
+  "launch Knowledge premium-link disclosure must have compact in-modal styling",
 );
 assert.match(
   setupModal,

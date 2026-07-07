@@ -14,6 +14,8 @@ import {
   type CapabilityFamily,
 } from "../shared/canonicalGateEngine";
 import {
+  canUseRuntimeEngineForTier,
+  getRuntimeEngineDisplayName,
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
@@ -99,6 +101,7 @@ export type RuntimeTurnResolution = {
   maxTokens: number;
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+  runtimeAccountPlan: "free" | "premium";
   requestedRuntimeEngine: RuntimeEngine | null;
   providerApiKeyOverride: string | null;
   runtimeCommunityId: string | null;
@@ -429,6 +432,33 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         : lane === "public"
           ? "free"
           : "platform";
+  const runtimeAccountPlan: "free" | "premium" =
+    gateDecision.canonicalTier === "architect" ||
+    gateDecision.effectiveTier === "architect"
+      ? "premium"
+      : "free";
+  if (
+    requestedRuntimeEngine &&
+    !canUseRuntimeEngineForTier({
+      engine: requestedRuntimeEngine,
+      accountTier: runtimeAccountPlan,
+    })
+  ) {
+    const runtimeLabel = getRuntimeEngineDisplayName(requestedRuntimeEngine);
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "runtime_plan_required",
+        error: "runtime_plan_required",
+        message: `${runtimeLabel} requires Polynet Premium. Upgrade in Billing to use Codex and premium agent runtimes.`,
+        cta: "upgrade",
+        runtime_engine_requested: requestedRuntimeEngine,
+        runtime_engine_resolved: null,
+        required_plan: "premium",
+      }),
+    };
+  }
   let providerApiKeyOverride: string | null = null;
   if (gateDecision.fundingSource === "user_key") {
     const connectionRow = (await ctx.runQuery(
@@ -574,6 +604,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       maxTokens,
       stream,
       inferenceSource,
+      runtimeAccountPlan,
       requestedRuntimeEngine,
       providerApiKeyOverride,
       runtimeCommunityId,

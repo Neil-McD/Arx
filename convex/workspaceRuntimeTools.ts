@@ -1,6 +1,5 @@
 import {
   executeBlaxelWorkspaceCommand,
-  ensureBlaxelWorkspaceComputer,
   readBlaxelWorkspaceFile,
   stopBlaxelWorkspaceProcess,
   writeBlaxelWorkspaceFile,
@@ -250,17 +249,6 @@ async function raceWorkspaceToolWithAbort<T extends { ok: boolean }>(params: {
 async function reensureBlaxelRuntimeWorkspace(params: {
   session: Extract<RuntimeWorkspaceSession, { providerId: "blaxel" }>;
 }): Promise<{ ok: true } | WorkspaceRuntimeToolFailure> {
-  if (params.session.kind === "thread_scratch") {
-    const ensured = await ensureBlaxelWorkspaceComputer({
-      sandboxName: params.session.providerSandboxId,
-      workspaceRoot: params.session.workspaceRoot,
-      lifecycleIntent: "agent_run",
-      labels: {
-        purpose: "thread-scratch-sandbox",
-      },
-    });
-    return ensured.ok ? { ok: true } : mapBlaxelProviderFailure(ensured);
-  }
   const ensured = await reensureBlaxelWorkspaceComputerForPaidSession({
     providerSandboxId: params.session.providerSandboxId,
     projectVolumeId: params.session.projectVolumeId,

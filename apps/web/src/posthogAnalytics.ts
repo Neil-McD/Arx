@@ -17,13 +17,10 @@ type AnalyticsUiContext = {
 
 type PrimitiveValue = string | number | boolean | null | undefined;
 type EventProperties = Record<string, PrimitiveValue>;
-type PendingReturnMarkerName = "workspace_credit_topup";
 
 const posthogKey = String(import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? "").trim();
 const posthogHost = String(import.meta.env.VITE_PUBLIC_POSTHOG_HOST ?? "").trim();
 const analyticsEnabled = posthogKey.length > 0 && posthogHost.length > 0;
-const PENDING_RETURN_MARKER_PREFIX = "polynet-posthog-return:";
-const PENDING_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 let lastIdentifiedUserId: string | null = null;
 let currentUiContext: AnalyticsUiContext = {
@@ -77,77 +74,6 @@ function buildContextProperties(): Record<string, string | number | boolean> {
     thread_id: currentUiContext.threadId,
     run_id: currentUiContext.runId,
   });
-}
-
-type PendingReturnMarkerPayload = {
-  at: number;
-  properties: EventProperties;
-};
-
-function pendingReturnMarkerKey(name: PendingReturnMarkerName): string {
-  return `${PENDING_RETURN_MARKER_PREFIX}${name}`;
-}
-
-function readPendingReturnPayload(name: PendingReturnMarkerName): PendingReturnMarkerPayload | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(pendingReturnMarkerKey(name));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as {
-      at?: unknown;
-      properties?: unknown;
-    } | null;
-    const at = Number(parsed?.at ?? 0);
-    if (!Number.isFinite(at) || at <= 0 || Date.now() - at > PENDING_RETURN_MAX_AGE_MS) {
-      window.sessionStorage.removeItem(pendingReturnMarkerKey(name));
-      return null;
-    }
-    const properties =
-      parsed?.properties && typeof parsed.properties === "object" && !Array.isArray(parsed.properties)
-        ? (parsed.properties as EventProperties)
-        : {};
-    return { at, properties };
-  } catch {
-    return null;
-  }
-}
-
-export function markPendingAnalyticsReturn(
-  name: PendingReturnMarkerName,
-  properties: EventProperties = {},
-): void {
-  if (!analyticsEnabled || typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(
-      pendingReturnMarkerKey(name),
-      JSON.stringify({
-        at: Date.now(),
-        properties: compactProperties(properties),
-      }),
-    );
-  } catch {
-    // Best-effort marker only.
-  }
-}
-
-export function readPendingAnalyticsReturn(name: PendingReturnMarkerName): EventProperties | null {
-  return readPendingReturnPayload(name)?.properties ?? null;
-}
-
-export function clearPendingAnalyticsReturn(name: PendingReturnMarkerName): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(pendingReturnMarkerKey(name));
-  } catch {
-    // Best-effort marker only.
-  }
-}
-
-export function consumePendingAnalyticsReturn(name: PendingReturnMarkerName): EventProperties | null {
-  const payload = readPendingReturnPayload(name);
-  if (!payload) return null;
-  clearPendingAnalyticsReturn(name);
-  return payload.properties;
 }
 
 export function updatePosthogUiContext(context: AnalyticsUiContext): void {

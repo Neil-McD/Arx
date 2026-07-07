@@ -9,8 +9,59 @@ type ThreadMessageLike = {
   run_id: string | null;
 };
 
+const RUNTIME_EVENT_PAGE_LIMIT = 500;
+const COMPLETED_RUNTIME_EVENT_MAX_ROWS = 2000;
+
 function runtimeEventsIncludeFinished(rows: ThreadStreamingRuntimeEvent[] | undefined): boolean {
   return Array.isArray(rows) && rows.some((row) => row.event_type === "run_finished");
+}
+
+function mergeRuntimeEvents(
+  existing: ThreadStreamingRuntimeEvent[],
+  rows: ThreadStreamingRuntimeEvent[],
+): ThreadStreamingRuntimeEvent[] {
+  if (rows.length === 0) return existing;
+  const seenIds = new Set(existing.map((row) => row.id));
+  const merged = [...existing];
+  for (const row of rows) {
+    if (seenIds.has(row.id)) continue;
+    merged.push(row);
+    seenIds.add(row.id);
+  }
+  merged.sort((a, b) => a.seq - b.seq);
+  return merged;
+}
+
+async function listCompletedRuntimeRunEvents(
+  session: unknown,
+  runId: string,
+): Promise<ThreadStreamingRuntimeEvent[] | null> {
+  const rows: ThreadStreamingRuntimeEvent[] = [];
+  let afterSeq = 0;
+
+  while (rows.length < COMPLETED_RUNTIME_EVENT_MAX_ROWS) {
+    const page = await listConvexCloudRuntimeRunEvents({
+      session: session as any,
+      runId,
+      afterSeq,
+      limit: Math.min(
+        RUNTIME_EVENT_PAGE_LIMIT,
+        COMPLETED_RUNTIME_EVENT_MAX_ROWS - rows.length,
+      ),
+    });
+    if (!page) return null;
+    if (page.length === 0) break;
+
+    rows.push(...page);
+    afterSeq = page.reduce(
+      (maxSeq, row) => Math.max(maxSeq, Math.max(0, Math.floor(row.seq ?? 0))),
+      afterSeq,
+    );
+    if (runtimeEventsIncludeFinished(page)) break;
+    if (page.length < RUNTIME_EVENT_PAGE_LIMIT) break;
+  }
+
+  return rows;
 }
 
 export function useWebRuntimeRunLifecycle<
@@ -157,17 +208,9 @@ export function useWebRuntimeRunLifecycle<
               .sort((a, b) => b.seq - a.seq)[0] ?? null;
             params.setRuntimeEventsByRunId((prev) => {
               const existing = prev[runId] ?? [];
-              const seenIds = new Set(existing.map((row) => row.id));
-              const merged = [...existing];
-              for (const row of rows) {
-                if (seenIds.has(row.id)) continue;
-                merged.push(row);
-                seenIds.add(row.id);
-              }
-              merged.sort((a, b) => a.seq - b.seq);
               return {
                 ...prev,
-                [runId]: merged,
+                [runId]: mergeRuntimeEvents(existing, rows),
               };
             });
             params.setThreadStreamingStateById((prev) => {
@@ -257,17 +300,16 @@ export function useWebRuntimeRunLifecycle<
       if (runtimeEventsHydratedByRunIdRef.current[runId]) continue;
       if (runtimeEventsLoadingByRunIdRef.current[runId]) continue;
       runtimeEventsLoadingByRunIdRef.current[runId] = true;
-      void listConvexCloudRuntimeRunEvents({
-        session: params.session as any,
-        runId,
-        limit: 200,
-      })
+      void listCompletedRuntimeRunEvents(params.session, runId)
         .then((rows) => {
           if (!rows) return;
-          params.setRuntimeEventsByRunId((prev) => ({
-            ...prev,
-            [runId]: rows,
-          }));
+          params.setRuntimeEventsByRunId((prev) => {
+            const existing = prev[runId] ?? [];
+            return {
+              ...prev,
+              [runId]: mergeRuntimeEvents(existing, rows),
+            };
+          });
           runtimeEventsHydratedByRunIdRef.current[runId] = true;
         })
         .catch(() => null)

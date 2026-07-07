@@ -1892,9 +1892,8 @@ export const getDaytonaWorkspacePreviewReadyEventInternal = internalQuery({
     const rows = (await ctx.db
       .query("runtimeRunEvents")
       .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", runId))
-      .order("desc")
-      .take(500)) as RuntimeRunEventLike[];
-    for (const row of rows) {
+      .collect()) as RuntimeRunEventLike[];
+    for (const row of [...rows].reverse()) {
       if (row.eventType !== "workspace_preview_ready") continue;
       const payload = asRecord(row.payload);
       if (!payload) continue;
@@ -2026,6 +2025,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
     harnessProfile: v.optional(v.string()),
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
+    accountPlan: v.optional(v.union(v.literal("free"), v.literal("premium"))),
     latestUserText: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
@@ -2115,6 +2115,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
     const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
     const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
+    const accountPlan = args.accountPlan === "premium" ? "premium" : "free";
     const capabilityFamilies = Array.isArray(args.capabilityFamilies)
       ? args.capabilityFamilies
           .map((value) => String(value ?? "").trim())
@@ -2148,6 +2149,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
       harnessProfile,
       harnessProfileSource,
       capabilityFamilies,
+      accountPlan,
       workspaceSessionState: "none",
       runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
       workspaceSessionUpdatedAt: startedAt,
@@ -3165,6 +3167,8 @@ export const getCloudRuntimeRunDaytonaPreviewSession = action({
 
       return {
         ok: true,
+        preview_url:
+          typeof preview.preview_url === "string" ? preview.preview_url : null,
         preview_proxy_token: String(preview.preview_proxy_token ?? ""),
         preview_port: port,
         preview_path: typeof preview.preview_path === "string" ? preview.preview_path : null,

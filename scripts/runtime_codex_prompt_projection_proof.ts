@@ -83,6 +83,7 @@ const projection = buildRuntimeCodexPromptProjection({
     "Use a funny personality. Be light, witty, and playful when it helps, but never derail the work.",
   projectLabel: "Projection Project",
   projectDescription: "A project proving context packet projection.",
+  accountPlan: "free",
   runtimeTurnContext: buildRuntimeTurnContextPacket({
     latestUserText: "What is your name?",
     runtimeTurnEnvelope,
@@ -134,6 +135,11 @@ assert.match(
   projection.developerInstructions,
   /PLATFORM_HARNESS_CONTEXT[\s\S]*Projection Project[\s\S]*RUNTIME_TURN_ENVELOPE/,
   "projection must render project and runtime turn context",
+);
+assert.match(
+  projection.developerInstructions,
+  /Account plan: Free[\s\S]*Runtime available: PolyNet[\s\S]*Codex and other agent runtimes require Polynet Premium/,
+  "Codex projection must render the free-plan runtime entitlement boundary",
 );
 assert.match(
   projection.developerInstructions,

@@ -1,4 +1,4 @@
-export type CommunitySourceCrawlerProvider = "simple" | "crawl4ai";
+export type CommunitySourceCrawlerProvider = "simple";
 
 export type CommunitySourceCrawlJobStatus = "queued" | "crawling" | "saving_sources" | "ready" | "failed";
 

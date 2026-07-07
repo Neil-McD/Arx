@@ -200,13 +200,13 @@ assert.match(
 );
 assert.match(
   bridge,
-  /export type PolynetCodexWorkerTurnInputs = RuntimeCodexPromptProjection[\s\S]*buildPolynetCodexWorkerTurnInputs[\s\S]*return buildRuntimeCodexPromptProjection\(\{[\s\S]*allowedToolNames: params\.codexVisiblePolynetToolNames[\s\S]*harnessName: "chat_tools"[\s\S]*runtimeTurnContext: params\.runtimeTurnContext/,
-  "bridge must build Codex worker inputs through the PolyNet Codex prompt projection",
+  /export type PolynetCodexWorkerTurnInputs = RuntimeCodexPromptProjection[\s\S]*buildPolynetCodexWorkerTurnInputs[\s\S]*accountPlan\?: RuntimeAccountPlan[\s\S]*return buildRuntimeCodexPromptProjection\(\{[\s\S]*allowedToolNames: params\.codexVisiblePolynetToolNames[\s\S]*harnessName: "chat_tools"[\s\S]*runtimeTurnContext: params\.runtimeTurnContext[\s\S]*accountPlan: params\.accountPlan/,
+  "bridge must build Codex worker inputs through the PolyNet Codex prompt projection with account-plan awareness",
 );
 assert.match(
   handlers,
-  /const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope\(\{[\s\S]*allowedToolNames: codexVisiblePolynetToolNames[\s\S]*loadRuntimeTurnContextPacketForRun\(\{[\s\S]*runtimeTurnEnvelope: codexRuntimeTurnEnvelope[\s\S]*buildPolynetCodexWorkerTurnInputs\(\{[\s\S]*runtimeTurnContext: codexRuntimeTurnContext[\s\S]*codexVisiblePolynetToolNames/,
-  "runtime handler must bind Codex worker prompt inputs to the canonical runtime envelope and context packet",
+  /const codexRuntimeTurnEnvelope = buildRuntimeTurnEnvelope\(\{[\s\S]*allowedToolNames: codexVisiblePolynetToolNames[\s\S]*loadRuntimeTurnContextPacketForRun\(\{[\s\S]*runtimeTurnEnvelope: codexRuntimeTurnEnvelope[\s\S]*buildPolynetCodexWorkerTurnInputs\(\{[\s\S]*runtimeTurnContext: codexRuntimeTurnContext[\s\S]*codexVisiblePolynetToolNames[\s\S]*accountPlan: runtimeAccountPlan/,
+  "runtime handler must bind Codex worker prompt inputs to the canonical runtime envelope, context packet, and account plan",
 );
 assert.match(
   platformToolSurface,

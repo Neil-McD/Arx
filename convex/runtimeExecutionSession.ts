@@ -422,13 +422,6 @@ export function createPolynetExecutionSession(params: {
     refreshedTerminalCount?: number;
     errorMessage?: string | null;
   }> => {
-    if (session.kind === "thread_scratch") {
-      return {
-        ok: true,
-        shouldRelease: true,
-        reason: "scratch_sandbox_run_finished",
-      };
-    }
     try {
       const activeTerminalStatus = await params.ctx.runAction(
         internal.workspaceTerminals.refreshProjectSandboxActiveTerminalStatusInternal as any,
@@ -592,7 +585,7 @@ export function createPolynetExecutionSession(params: {
         };
       }
       const projectId = String(params.projectId ?? "").trim();
-      const source = projectId ? "project_background" : "thread_scratch";
+      const source = projectId ? "project_background" : "project_required";
       const createStartedAt = Date.now();
       await emitRunEvent(
         "workspace_session_create_started",

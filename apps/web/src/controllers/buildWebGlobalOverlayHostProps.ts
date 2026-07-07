@@ -1,9 +1,5 @@
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
 import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
-import type {
-  WorkspaceCreditTopupSurface,
-  WorkspaceToolBalanceTopupPackId,
-} from "../../../../shared/workspaceCredits";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
 type InferenceIssueModalState = NonNullable<
@@ -47,18 +43,10 @@ export function buildWebGlobalOverlayHostProps(params: {
   continuePreviewAccessGateAuth: () => void;
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
-  isStartingWorkspaceCreditTopupCheckout: boolean;
-  isStartingWorkspaceCardSetupCheckout: boolean;
-  workspaceCreditTopupError: string | null;
-  workspaceCardSetupError: string | null;
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
-  startWorkspaceCreditTopupCheckout: (
-    packId?: WorkspaceToolBalanceTopupPackId,
-    surface?: WorkspaceCreditTopupSurface,
-  ) => void | Promise<void>;
-  startWorkspaceCardSetupCheckout: () => void | Promise<void>;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
+  onOpenPremiumBilling: () => void;
   isFreeAccountInfoOpen: boolean;
   accountCommerceError: string | null;
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
@@ -119,13 +107,7 @@ export function buildWebGlobalOverlayHostProps(params: {
           hasSession: Boolean(params.session),
           inferenceIssueModal: params.inferenceIssueModal,
           isInferenceIssueModalRunning: params.isInferenceIssueModalRunning,
-          isStartingWorkspaceCreditTopupCheckout: params.isStartingWorkspaceCreditTopupCheckout,
-          isStartingWorkspaceCardSetupCheckout: params.isStartingWorkspaceCardSetupCheckout,
-          workspaceCreditTopupError: params.workspaceCreditTopupError,
-          workspaceCardSetupError: params.workspaceCardSetupError,
           onClose: () => params.setInferenceIssueModal(null),
-          onStartWorkspaceCreditTopupCheckout: params.startWorkspaceCreditTopupCheckout,
-          onStartWorkspaceCardSetupCheckout: params.startWorkspaceCardSetupCheckout,
           onOpenSettings: (reason) => {
             params.setInferenceIssueModal(null);
             params.setActiveView("settings");
@@ -139,6 +121,7 @@ export function buildWebGlobalOverlayHostProps(params: {
       isOpen: params.isFreeAccountInfoOpen,
       accountAccessError: params.accountCommerceError,
       onClose: () => params.setIsFreeAccountInfoOpen(false),
+      onOpenBilling: params.onOpenPremiumBilling,
     },
     communityModalHostProps: params.communityModalHostProps,
     appToast: params.appToast,

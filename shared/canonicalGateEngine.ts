@@ -16,13 +16,18 @@ export type CapabilityFamily =
   | "web_research"
   | "sandbox_tools"
   | "workspace_tools";
-export const AUTHENTICATED_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
+export const AUTHENTICATED_FREE_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
+  "product_docs",
+  "community_tools",
+];
+export const PREMIUM_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
   "product_docs",
   "community_tools",
   "web_research",
   "sandbox_tools",
   "workspace_tools",
 ];
+export const AUTHENTICATED_PLATFORM_CAPABILITIES = PREMIUM_PLATFORM_CAPABILITIES;
 export type RuntimeLane = "public" | "platform" | "chatgpt";
 export type GateCode =
   | "ok"
@@ -191,7 +196,10 @@ export function resolveEntitledCapabilityFamiliesForGate(input: {
     tier: input?.tier,
   });
   if (effectiveTier === "anon_free") return [];
-  return [...AUTHENTICATED_PLATFORM_CAPABILITIES];
+  if (effectiveTier === "auth_free") {
+    return [...AUTHENTICATED_FREE_PLATFORM_CAPABILITIES];
+  }
+  return [...PREMIUM_PLATFORM_CAPABILITIES];
 }
 
 export function resolveActiveCapabilityFamiliesForGate(

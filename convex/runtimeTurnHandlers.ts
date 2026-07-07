@@ -712,6 +712,7 @@ export async function handleRuntimeTurnRequest(args: {
       maxTokens,
       stream,
       inferenceSource,
+      runtimeAccountPlan,
       requestedRuntimeEngine,
       providerApiKeyOverride,
       runtimeCommunityId,
@@ -757,6 +758,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeExecutionMode,
       stream,
       inferenceSource,
+      accountPlan: runtimeAccountPlan,
     });
     if (!runtimeEngineResolution.ok) {
       return runtimeJsonResponse(runtimeEngineResolution.status, {
@@ -782,6 +784,7 @@ export async function handleRuntimeTurnRequest(args: {
       requestedModelId,
       lane,
       inferenceSource,
+      accountPlan: runtimeAccountPlan,
       requestedRuntimeEngine: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
       resolvedRuntimeEngine: runtimeEngineResolution.resolvedRuntimeEngine,
       executionMode: runtimeExecutionMode,
@@ -816,6 +819,7 @@ export async function handleRuntimeTurnRequest(args: {
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
+      accountPlan: runtimeAccountPlan,
       latestUserText,
       startedAt: runStartedAt,
       nowMs: runStartedAt,
@@ -1284,6 +1288,7 @@ export async function handleRuntimeTurnRequest(args: {
           inferenceLaneFallbacks:
             params.inferenceLaneFallbacksOverride ?? inferenceLaneFallbacks,
           runId,
+          accountPlan: runtimeAccountPlan,
           content: finalAnswer.content,
           partialRun:
             params.markPartialRun === false
@@ -1441,6 +1446,7 @@ export async function handleRuntimeTurnRequest(args: {
         runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
         runtime_engine_source: runtimeEngineResolution.runtimeEngineSource,
         engine_id: runtimeEngineId,
+        account_plan: runtimeAccountPlan,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
       },
@@ -1822,6 +1828,7 @@ export async function handleRuntimeTurnRequest(args: {
             agentSoul: runtimeAgentProfile.agentSoul,
             runtimeTurnContext: codexRuntimeTurnContext,
             codexVisiblePolynetToolNames,
+            accountPlan: runtimeAccountPlan,
             currentDateTimeIso: codexPromptGeneratedAt.toISOString(),
             currentDateLabel: new Intl.DateTimeFormat("en-US", {
               dateStyle: "full",
@@ -2460,6 +2467,7 @@ export async function handleRuntimeTurnRequest(args: {
                 lane,
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
+                accountPlan: runtimeAccountPlan,
                 content: streamedContent,
               }));
             } catch (error) {
@@ -2595,6 +2603,7 @@ export async function handleRuntimeTurnRequest(args: {
               projectId: runtimeProjectId,
               requestedModelId,
               inferenceSource,
+              accountPlan: runtimeAccountPlan,
               modelRef,
               messages: conversationMessages,
               maxTokens,
@@ -2804,6 +2813,7 @@ export async function handleRuntimeTurnRequest(args: {
                 lane,
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
+                accountPlan: runtimeAccountPlan,
                 content: streamedContent,
               }));
             } catch (error) {
@@ -2893,6 +2903,7 @@ export async function handleRuntimeTurnRequest(args: {
           projectId: runtimeProjectId,
           requestedModelId,
           inferenceSource,
+          accountPlan: runtimeAccountPlan,
           modelRef,
           messages: conversationMessages,
           maxTokens,
@@ -3087,6 +3098,7 @@ export async function handleRuntimeTurnRequest(args: {
             timeZone: runtimeTimeZone,
           }).format(now),
           currentTimeZone: runtimeTimeZone,
+          accountPlan: runtimeAccountPlan,
         });
       const chatMessages = [
         { role: "system" as const, content: authenticatedScopedSystemPrompt },
@@ -3294,6 +3306,7 @@ export async function handleRuntimeTurnRequest(args: {
                 lane,
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
+                accountPlan: runtimeAccountPlan,
                 content: streamedContent,
               }));
             } catch (error) {
@@ -3510,6 +3523,7 @@ export async function handleRuntimeTurnRequest(args: {
             lane,
             inferenceLaneFallbacks,
             runId,
+            accountPlan: runtimeAccountPlan,
             content,
           }));
       } catch (error) {

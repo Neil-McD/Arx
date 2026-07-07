@@ -1,23 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { blobToBase64 } from "./imageTransforms";
 import {
-  transcribeVoice,
-  VoiceTranscriptionRequestError,
-} from "./authCore";
-import { normalizePaidUsageFailureCode, type PaidUsageBillingMode } from "./paidUsageBilling";
-import { resolveUsableSession } from "./ensureUsableSession";
-import type { PaidToolKind } from "./workspaceCredits";
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import {
-  createWavBlobFromInt16Chunks,
-  floatToInt16Pcm,
-  getVoiceAudioContextConstructor,
   getVoiceLanguageHint,
-  getVoiceUserMedia,
   mergeVoiceTranscript,
-  normalizeVoiceTranscriptionMimeType,
-  selectVoiceCaptureMimeType,
-  VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
-  VOICE_TRANSCRIPTION_MAX_DURATION_MS,
 } from "./voiceCapture";
 
 export type VoiceSurface = "workspace" | "community" | "direct_message";
@@ -35,11 +27,44 @@ type VoiceInputIntent = {
   title: string;
 };
 
-export type VoiceToolBalanceDetails = {
-  toolKind?: PaidToolKind | null;
-  requiredCredits?: number | null;
-  paidUsageBillingMode?: PaidUsageBillingMode | null;
+type BrowserSpeechRecognitionAlternative = {
+  transcript?: string;
 };
+
+type BrowserSpeechRecognitionResult = {
+  isFinal: boolean;
+  readonly length: number;
+  [index: number]: BrowserSpeechRecognitionAlternative | undefined;
+};
+
+type BrowserSpeechRecognitionResultList = {
+  readonly length: number;
+  [index: number]: BrowserSpeechRecognitionResult | undefined;
+};
+
+type BrowserSpeechRecognitionEvent = Event & {
+  resultIndex?: number;
+  results?: BrowserSpeechRecognitionResultList;
+};
+
+type BrowserSpeechRecognitionErrorEvent = Event & {
+  error?: string;
+  message?: string;
+};
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
 
 type UseWebVoiceInputControllerArgs<SessionT> = {
   session: SessionT | null;
@@ -50,11 +75,6 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   canPostMessagesActiveCommunity?: boolean;
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
-  onToolBalanceRequired?: (
-    surface: VoiceSurface,
-    message: string,
-    details?: VoiceToolBalanceDetails,
-  ) => void;
   appendWorkspaceTranscript?: (transcript: string) => void;
   focusWorkspaceInput?: () => void;
   resolveCommunityTranscriptTarget?: () => {
@@ -67,24 +87,30 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   focusDirectMessageInput?: () => void;
 };
 
-function isToolBalanceError(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
-  return (
-    normalized.includes("credits_exhausted") ||
-    normalized.includes("credits_unavailable") ||
-    normalized.includes("workspace_credits_exhausted") ||
-    normalized.includes("workspace_credits_unavailable") ||
-    normalized.includes("add balance to use voice input") ||
-    normalized.includes("tool balance is unavailable")
-  );
+function getBrowserSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
+  const scope = globalThis as typeof globalThis & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  };
+  const ctor = scope.SpeechRecognition ?? scope.webkitSpeechRecognition;
+  return typeof ctor === "function" ? ctor : null;
 }
 
-function isVoiceToolBalanceError(error: unknown, message: string): boolean {
-  if (error instanceof VoiceTranscriptionRequestError) {
-    const code = normalizePaidUsageFailureCode(error.code);
-    if (code) return true;
+function normalizeSpeechTranscript(input: string): string {
+  return input.replace(/\s+/g, " ").trim();
+}
+
+function formatSpeechRecognitionError(error: BrowserSpeechRecognitionErrorEvent): string {
+  const code = String(error.error ?? "").trim().toLowerCase();
+  if (code === "not-allowed" || code === "service-not-allowed") {
+    return "Microphone permission is blocked.";
   }
-  return isToolBalanceError(message);
+  if (code === "audio-capture") return "No microphone was found.";
+  if (code === "network") return "Voice input is not available in this browser right now.";
+  if (code === "language-not-supported") return "Voice input is not available for this language.";
+  if (code === "bad-grammar") return "Voice input failed.";
+  const message = String(error.message ?? "").trim();
+  return message || "Voice input failed.";
 }
 
 function logVoiceInputDiagnostic(
@@ -100,19 +126,15 @@ function logVoiceInputDiagnostic(
   }
 }
 
-function readRoundedMegabytes(bytes: number): number {
-  return Math.max(1, Math.ceil(bytes / 1_000_000));
-}
-
 export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputControllerArgs<SessionT>) {
   const [activeVoiceSurface, setActiveVoiceSurface] = useState<VoiceSurface | null>(null);
   const [isVoiceTranscribing, setIsVoiceTranscribing] = useState(false);
-  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
-  const voiceStreamRef = useRef<MediaStream | null>(null);
-  const voiceChunksRef = useRef<BlobPart[]>([]);
-  const voiceStopCaptureRef = useRef<(() => Promise<Blob>) | null>(null);
-  const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
-  const voiceCaptureStartedAtRef = useRef<number | null>(null);
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const speechFinalTranscriptRef = useRef("");
+  const speechInterimTranscriptRef = useRef("");
+  const speechManualStopRef = useRef(false);
+  const speechStopResolveRef = useRef<((transcript: string) => void) | null>(null);
+  const speechLastErrorMessageRef = useRef<string | null>(null);
 
   function resolveVoiceInputIntent(surface: VoiceSurface): VoiceInputIntent {
     if (!args.session) {
@@ -149,7 +171,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     if (isVoiceTranscribing) {
       return {
         mode: "transcribing",
-        title: "Transcribing voice input...",
+        title: "Finishing voice input...",
       };
     }
     if (activeVoiceSurface && activeVoiceSurface !== surface) {
@@ -161,12 +183,12 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     if (activeVoiceSurface === surface) {
       return {
         mode: "stop_recording",
-        title: "Stop recording and transcribe.",
+        title: "Stop voice input.",
       };
     }
     return {
       mode: "start_recording",
-      title: "Start voice input (uses tool balance).",
+      title: "Start voice input.",
     };
   }
 
@@ -175,25 +197,32 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     return isVoiceTranscribing ? "transcribing" : "recording";
   }
 
+  function readCurrentSpeechTranscript(): string {
+    return normalizeSpeechTranscript(
+      [speechFinalTranscriptRef.current, speechInterimTranscriptRef.current]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
   const releaseVoiceCaptureResources = useCallback(() => {
-    const cleanupCapture = voiceCaptureCleanupRef.current;
-    if (cleanupCapture) {
+    speechManualStopRef.current = true;
+    const recognition = speechRecognitionRef.current;
+    speechRecognitionRef.current = null;
+    speechStopResolveRef.current = null;
+    speechFinalTranscriptRef.current = "";
+    speechInterimTranscriptRef.current = "";
+    speechLastErrorMessageRef.current = null;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
       try {
-        cleanupCapture();
+        recognition.abort();
       } catch {
         // ignore cleanup race
       }
     }
-    voiceCaptureCleanupRef.current = null;
-    voiceStopCaptureRef.current = null;
-    const stream = voiceStreamRef.current;
-    if (stream) {
-      for (const track of stream.getTracks()) track.stop();
-    }
-    voiceStreamRef.current = null;
-    voiceRecorderRef.current = null;
-    voiceChunksRef.current = [];
-    voiceCaptureStartedAtRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -242,251 +271,141 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     }, 0);
   }
 
-  async function transcribeVoiceBlob(
-    surface: VoiceSurface,
-    blob: Blob,
-    durationMs: number | null,
-  ): Promise<string> {
-    const mimeType = normalizeVoiceTranscriptionMimeType(blob.type || "audio/webm");
-    if (!mimeType) {
-      logVoiceInputDiagnostic("warn", "unsupported_audio_format", {
-        surface,
-        mime_type: blob.type || null,
-        audio_bytes: blob.size,
-        duration_ms: durationMs,
-      });
-      throw new VoiceTranscriptionRequestError({
-        message: "This browser recorded an unsupported audio format.",
-        status: 400,
-        code: "unsupported_audio_format",
-      });
+  function recordSpeechRecognitionResult(event: BrowserSpeechRecognitionEvent): void {
+    const results = event.results;
+    if (!results) return;
+    const startIndex = Math.max(0, Number(event.resultIndex ?? 0));
+    let nextInterim = "";
+    for (let index = startIndex; index < results.length; index += 1) {
+      const result = results[index];
+      const transcript = String(result?.[0]?.transcript ?? "").trim();
+      if (!transcript) continue;
+      if (result?.isFinal) {
+        speechFinalTranscriptRef.current = normalizeSpeechTranscript(
+          `${speechFinalTranscriptRef.current} ${transcript}`,
+        );
+      } else {
+        nextInterim = normalizeSpeechTranscript(`${nextInterim} ${transcript}`);
+      }
     }
-    if (blob.size > VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES) {
-      logVoiceInputDiagnostic("warn", "audio_too_large", {
-        surface,
-        mime_type: mimeType,
-        audio_bytes: blob.size,
-        max_audio_bytes: VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
-        duration_ms: durationMs,
+    speechInterimTranscriptRef.current = nextInterim;
+  }
+
+  function finishManualSpeechStop(): void {
+    const resolveStop = speechStopResolveRef.current;
+    speechStopResolveRef.current = null;
+    if (resolveStop) resolveStop(readCurrentSpeechTranscript());
+  }
+
+  function startRecognitionInstance(recognition: BrowserSpeechRecognition): boolean {
+    try {
+      recognition.start();
+      return true;
+    } catch (error) {
+      logVoiceInputDiagnostic("warn", "start_failed", {
+        message: error instanceof Error ? error.message : String(error),
       });
-      throw new VoiceTranscriptionRequestError({
-        message: `Voice clip is too large. Keep it under ${readRoundedMegabytes(
-          VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
-        )} MB and try again.`,
-        status: 413,
-        code: "audio_too_large",
-      });
+      return false;
     }
-    if (
-      typeof durationMs === "number" &&
-      Number.isFinite(durationMs) &&
-      durationMs > VOICE_TRANSCRIPTION_MAX_DURATION_MS
-    ) {
-      logVoiceInputDiagnostic("warn", "audio_too_long", {
-        surface,
-        mime_type: mimeType,
-        audio_bytes: blob.size,
-        duration_ms: durationMs,
-        max_duration_ms: VOICE_TRANSCRIPTION_MAX_DURATION_MS,
-      });
-      throw new VoiceTranscriptionRequestError({
-        message: "Voice clip is too long. Try a shorter recording.",
-        status: 413,
-        code: "audio_too_long",
-      });
-    }
-    logVoiceInputDiagnostic("info", "upload_start", {
-      surface,
-      mime_type: mimeType,
-      audio_bytes: blob.size,
-      duration_ms: durationMs,
-    });
-    const session = await resolveUsableSession(args.sessionRef.current ?? args.session, args.ensureSession);
-    if (!session) throw new Error("Sign in to use voice input.");
-    return await transcribeVoice({
-      session: session as unknown as { access_token: string },
-      audioBase64: await blobToBase64(blob),
-      mimeType,
-      language: getVoiceLanguageHint(),
-      surface,
-      preferPrimary: false,
-      durationMs,
-    });
   }
 
   async function startVoiceCapture(surface: VoiceSurface): Promise<void> {
-    const requestUserMedia = getVoiceUserMedia();
-    if (!requestUserMedia) {
-      args.showAppToastMessage("Voice input is not supported on this device.");
+    const SpeechRecognitionCtor = getBrowserSpeechRecognitionConstructor();
+    if (!SpeechRecognitionCtor) {
+      args.showAppToastMessage("Voice input is not available in this browser.");
       return;
     }
-    try {
-      const stream = await requestUserMedia({ audio: true });
-      if (typeof MediaRecorder === "undefined") {
-        const AudioContextCtor = getVoiceAudioContextConstructor();
-        if (!AudioContextCtor) throw new Error("voice_unsupported");
-        const audioContext = new AudioContextCtor();
-        await audioContext.resume().catch(() => undefined);
-        const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-        const silentSink = audioContext.createGain();
-        silentSink.gain.value = 0;
-        const pcmChunks: Int16Array[] = [];
-        let cleanedUp = false;
-        const cleanupCapture = () => {
-          if (cleanedUp) return;
-          cleanedUp = true;
-          processor.onaudioprocess = null;
-          try {
-            source.disconnect();
-          } catch {
-            // ignore disconnect race
-          }
-          try {
-            processor.disconnect();
-          } catch {
-            // ignore disconnect race
-          }
-          try {
-            silentSink.disconnect();
-          } catch {
-            // ignore disconnect race
-          }
-          void audioContext.close().catch(() => undefined);
-        };
-        processor.onaudioprocess = (event) => {
-          const samples = event.inputBuffer.getChannelData(0);
-          if (!samples || samples.length === 0) return;
-          pcmChunks.push(floatToInt16Pcm(samples));
-        };
-        source.connect(processor);
-        processor.connect(silentSink);
-        silentSink.connect(audioContext.destination);
-        voiceCaptureCleanupRef.current = cleanupCapture;
-        voiceStopCaptureRef.current = async () => {
-          cleanupCapture();
-          return createWavBlobFromInt16Chunks(pcmChunks, audioContext.sampleRate);
-        };
-        voiceStreamRef.current = stream;
-        voiceRecorderRef.current = null;
-        voiceChunksRef.current = [];
-        voiceCaptureStartedAtRef.current = Date.now();
-        setActiveVoiceSurface(surface);
-        args.showAppToastMessage("Listening... tap mic again to stop.");
+    releaseVoiceCaptureResources();
+    speechManualStopRef.current = false;
+    speechFinalTranscriptRef.current = "";
+    speechInterimTranscriptRef.current = "";
+    speechLastErrorMessageRef.current = null;
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    const language = getVoiceLanguageHint();
+    if (language) recognition.lang = language;
+    recognition.onresult = recordSpeechRecognitionResult;
+    recognition.onerror = (event) => {
+      const code = String(event.error ?? "").trim().toLowerCase();
+      if (code === "no-speech" || code === "aborted") return;
+      speechLastErrorMessageRef.current = formatSpeechRecognitionError(event);
+      logVoiceInputDiagnostic("warn", "recognition_error", {
+        surface,
+        code: code || null,
+        message: speechLastErrorMessageRef.current,
+      });
+    };
+    recognition.onend = () => {
+      if (speechRecognitionRef.current !== recognition) return;
+      if (speechManualStopRef.current) {
+        finishManualSpeechStop();
         return;
       }
-      const mimeType = selectVoiceCaptureMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      voiceChunksRef.current = [];
-      recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) {
-          voiceChunksRef.current.push(event.data);
-        }
-      };
-      recorder.onerror = () => {
+      if (speechLastErrorMessageRef.current) {
+        const message = speechLastErrorMessageRef.current;
         releaseVoiceCaptureResources();
-        setActiveVoiceSurface(null);
         setIsVoiceTranscribing(false);
-        args.showAppToastMessage("Microphone recording failed.");
-      };
-      voiceCaptureCleanupRef.current = () => {
-        try {
-          recorder.ondataavailable = null;
-          recorder.onerror = null;
-          if (recorder.state !== "inactive") recorder.stop();
-        } catch {
-          // ignore cleanup race
+        setActiveVoiceSurface(null);
+        args.showAppToastMessage(message);
+        return;
+      }
+      window.setTimeout(() => {
+        if (
+          speechRecognitionRef.current !== recognition ||
+          speechManualStopRef.current ||
+          speechLastErrorMessageRef.current
+        ) {
+          return;
         }
-      };
-      voiceStopCaptureRef.current = () =>
-        new Promise<Blob>((resolve, reject) => {
-          const handleStop = () => {
-            recorder.removeEventListener("stop", handleStop);
-            recorder.removeEventListener("error", handleError);
-            const blob = new Blob(voiceChunksRef.current, {
-              type: recorder.mimeType || "audio/webm",
-            });
-            resolve(blob);
-          };
-          const handleError = () => {
-            recorder.removeEventListener("stop", handleStop);
-            recorder.removeEventListener("error", handleError);
-            reject(new Error("recording_failed"));
-          };
-          recorder.addEventListener("stop", handleStop, { once: true });
-          recorder.addEventListener("error", handleError, { once: true });
-          if (recorder.state === "inactive") {
-            handleStop();
-            return;
-          }
-          recorder.stop();
-        });
-      voiceStreamRef.current = stream;
-      voiceRecorderRef.current = recorder;
-      voiceCaptureStartedAtRef.current = Date.now();
-      setActiveVoiceSurface(surface);
-      recorder.start(250);
-      args.showAppToastMessage("Listening... tap mic again to stop.");
-    } catch (error) {
-      const message =
-        error instanceof DOMException && error.name === "NotAllowedError"
-          ? "Microphone access was denied."
-          : error instanceof DOMException && error.name === "NotFoundError"
-            ? "No microphone was found."
-            : error instanceof Error && error.message === "voice_unsupported"
-              ? "Voice input is not supported on this device."
-              : "Could not start microphone capture.";
-      args.showAppToastMessage(message);
+        if (!startRecognitionInstance(recognition)) {
+          releaseVoiceCaptureResources();
+          setIsVoiceTranscribing(false);
+          setActiveVoiceSurface(null);
+          args.showAppToastMessage("Voice input is not available in this browser right now.");
+        }
+      }, 120);
+    };
+    speechRecognitionRef.current = recognition;
+    if (!startRecognitionInstance(recognition)) {
       releaseVoiceCaptureResources();
-      setActiveVoiceSurface(null);
-      setIsVoiceTranscribing(false);
+      args.showAppToastMessage("Voice input is not available in this browser.");
+      return;
     }
+    setActiveVoiceSurface(surface);
+    args.showAppToastMessage("Listening... tap mic again when you're done.");
   }
 
   async function stopVoiceCaptureAndTranscribe(surface: VoiceSurface): Promise<void> {
-    const stopCapture = voiceStopCaptureRef.current;
-    if (!stopCapture || activeVoiceSurface !== surface) return;
+    const recognition = speechRecognitionRef.current;
+    if (!recognition || activeVoiceSurface !== surface) return;
+    speechManualStopRef.current = true;
     setIsVoiceTranscribing(true);
     try {
-      const durationMs =
-        voiceCaptureStartedAtRef.current === null
-          ? null
-          : Math.max(0, Date.now() - voiceCaptureStartedAtRef.current);
-      const audioBlob = await stopCapture();
-      releaseVoiceCaptureResources();
-      if (audioBlob.size === 0) {
-        args.showAppToastMessage("No audio captured.");
-        return;
-      }
-      const transcript = await transcribeVoiceBlob(surface, audioBlob, durationMs);
+      const transcript = await new Promise<string>((resolve) => {
+        let settled = false;
+        const settle = (value: string) => {
+          if (settled) return;
+          settled = true;
+          if (speechStopResolveRef.current === settle) {
+            speechStopResolveRef.current = null;
+          }
+          resolve(value);
+        };
+        speechStopResolveRef.current = settle;
+        window.setTimeout(() => settle(readCurrentSpeechTranscript()), 1200);
+        try {
+          recognition.stop();
+        } catch {
+          settle(readCurrentSpeechTranscript());
+        }
+      });
       if (!transcript) {
         args.showAppToastMessage("No speech detected.");
         return;
       }
       applyVoiceTranscript(surface, transcript);
       args.showAppToastMessage("Transcript inserted.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (isVoiceToolBalanceError(error, message)) {
-        const details =
-          error instanceof VoiceTranscriptionRequestError
-            ? {
-                toolKind: error.toolKind ?? "voice_input",
-                requiredCredits: error.requiredCredits,
-                paidUsageBillingMode: error.paidUsageBillingMode,
-              }
-            : {
-                toolKind: "voice_input" as const,
-                requiredCredits: null,
-                paidUsageBillingMode: null,
-              };
-        args.onToolBalanceRequired?.(surface, message, details);
-        if (!args.onToolBalanceRequired) {
-          args.showAppToastMessage("Add balance to use voice input.");
-        }
-        return;
-      }
-      args.showAppToastMessage(message || "Voice transcription failed.");
     } finally {
       releaseVoiceCaptureResources();
       setIsVoiceTranscribing(false);

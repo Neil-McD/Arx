@@ -3,6 +3,7 @@ import type {
   HistoryUsedItem,
   MemorySuggestion,
   MemoryUsedItem,
+  PremiumUpgradeCta,
 } from "../../../../shared/messageMetadataUi";
 import type { MessageContextModalPayload } from "../../../../shared/messageContextUi";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
@@ -41,6 +42,7 @@ export type WorkspaceThreadMessageView = {
   requireLiveDesktop: boolean;
   modelLabel: string | null;
   contextPayload: WorkspaceThreadContextPayload | null;
+  premiumUpgradeCta: PremiumUpgradeCta | null;
 };
 
 export type WorkspaceStreamingMessageView = {

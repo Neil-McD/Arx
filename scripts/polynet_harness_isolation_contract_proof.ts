@@ -24,6 +24,8 @@ import {
   DEFAULT_ACTIVE_RUNTIME_ENGINE,
   RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
+  canUseRuntimeEngineForTier,
+  getRuntimeEngineAccessLevel,
   normalizeActiveWorkspaceRuntimeEngine,
 } from "../shared/runtimeEngine.ts";
 
@@ -81,8 +83,8 @@ assert.match(
 );
 assert.match(
   workspaceHost,
-  /runtimeEngineLabels[\s\S]*polynet: "Polynet"[\s\S]*codex: "Codex"/,
-  "the workspace composer must label both Polynet and Codex runtime options",
+  /WorkspaceRuntimeEngineSelector[\s\S]*getRuntimeEngineDisplayName[\s\S]*getRuntimeEngineAccessLevel[\s\S]*(?:Included[\s\S]*Premium|Premium[\s\S]*Included)/,
+  "the workspace composer must label both PolyNet and Codex runtime options with access state",
 );
 assert.match(
   workspaceHost,
@@ -100,6 +102,26 @@ assert.equal(
   "PolyNet must be the default active workspace runtime",
 );
 assert.equal(
+  getRuntimeEngineAccessLevel(RUNTIME_ENGINE_POLYNET),
+  "included",
+  "PolyNet must be the included runtime",
+);
+assert.equal(
+  getRuntimeEngineAccessLevel(RUNTIME_ENGINE_CODEX),
+  "premium",
+  "Codex must be a premium runtime",
+);
+assert.equal(
+  canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_CODEX, accountTier: "free" }),
+  false,
+  "free accounts must not be able to use Codex",
+);
+assert.equal(
+  canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_CODEX, accountTier: "architect" }),
+  true,
+  "premium accounts must be able to use Codex",
+);
+assert.equal(
   normalizeActiveWorkspaceRuntimeEngine(RUNTIME_ENGINE_POLYNET),
   RUNTIME_ENGINE_POLYNET,
   "PolyNet runtime selections must remain PolyNet",
@@ -111,8 +133,8 @@ assert.equal(
 );
 assert.match(
   runtimeEngine,
-  /DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_POLYNET[\s\S]*ACTIVE_WORKSPACE_RUNTIME_ENGINES = \[\s*RUNTIME_ENGINE_POLYNET,\s*RUNTIME_ENGINE_CODEX,\s*\]/,
-  "shared runtime-engine state must default to PolyNet and expose Codex as the second selectable harness",
+  /DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_POLYNET[\s\S]*ACTIVE_WORKSPACE_RUNTIME_ENGINES = \[\s*RUNTIME_ENGINE_POLYNET,\s*RUNTIME_ENGINE_CODEX,\s*\][\s\S]*getRuntimeEngineAccessLevel[\s\S]*"included"[\s\S]*"premium"/,
+  "shared runtime-engine state must default to PolyNet, expose Codex, and classify runtime access",
 );
 assert.match(
   webSendFlowCore,

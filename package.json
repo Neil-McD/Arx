@@ -214,6 +214,7 @@
     "check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_serve_worker_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts",
+    "check:premium-member-badge-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/premium_member_badge_contract_proof.ts",
     "generate:product-docs-index": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate_product_docs_index.ts",
     "check:product-docs-index-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/product_docs_index_proof.ts",
     "check:product-docs-runtime-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/product_docs_runtime_tool_proof.ts",

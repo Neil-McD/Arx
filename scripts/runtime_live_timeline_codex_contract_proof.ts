@@ -64,6 +64,8 @@ function codexFinished(params: {
   itemId: string;
   toolName: string;
   args: Record<string, unknown>;
+  status?: "ok" | "error";
+  success?: boolean;
   details?: Record<string, unknown>;
 }): ProofEvent {
   return event({
@@ -78,8 +80,8 @@ function codexFinished(params: {
       provider_call_id: params.itemId,
       tool_name: params.toolName,
       args: params.args,
-      status: "ok",
-      success: true,
+      status: params.status ?? "ok",
+      success: params.success ?? true,
       harness: { kind: "codex_worker" },
       ...(params.details ? { details: params.details } : {}),
     },
@@ -430,6 +432,30 @@ assert.match(nativeToolGroups[0]?.title ?? "", /Ran 1 command/);
 assert.equal(nativeToolGroups[0]?.calls[0]?.title, "Run rg -n \"runtime\" shared");
 assert.match(nativeToolGroups[1]?.title ?? "", /Changed 1 change/);
 assert.equal(nativeToolGroups[1]?.calls[0]?.title, "Change runtimeTimelineUi.ts");
+const failedWriteEntries = buildRuntimeLiveTimeline([
+  codexStarted(1, "item_failed_write", "write", {
+    path: "index.html",
+    content: "<main>Weather</main>",
+  }),
+  codexFinished({
+    seq: 2,
+    itemId: "item_failed_write",
+    toolName: "write",
+    args: {
+      path: "index.html",
+      content: "<main>Weather</main>",
+    },
+    status: "error",
+    success: false,
+    details: { code: "workspace_computer_disabled" },
+  }),
+]);
+const failedWriteGroup = failedWriteEntries.find(
+  (entry) => entry.kind === "tool_group",
+);
+assert.ok(failedWriteGroup && failedWriteGroup.kind === "tool_group");
+assert.match(failedWriteGroup.group.title, /Failed to change 1 change/);
+assert.equal(failedWriteGroup.group.status, "error");
 assert.equal(nativeToolGroups[2]?.calls[0]?.title, "MCP tool: openaiDeveloperDocs/fetch_openai_doc");
 assert.match(nativeToolGroups[3]?.title ?? "", /Researched 1 web step/);
 assert.equal(nativeToolGroups[3]?.calls[0]?.title, "Web search: OpenAI Codex app server items");

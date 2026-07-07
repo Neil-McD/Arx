@@ -153,6 +153,8 @@ import type * as polynetCodexWorkerIngest from "../polynetCodexWorkerIngest.js";
 import type * as polynetCodexWorkerRunToken from "../polynetCodexWorkerRunToken.js";
 import type * as polynetCodexWorkerTerminal from "../polynetCodexWorkerTerminal.js";
 import type * as polynetCodexWorkerTool from "../polynetCodexWorkerTool.js";
+import type * as premiumBilling from "../premiumBilling.js";
+import type * as premiumMemberBadge from "../premiumMemberBadge.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
 import type * as profileRelationshipCore from "../profileRelationshipCore.js";
@@ -357,6 +359,8 @@ declare const fullApi: ApiFromModules<{
   polynetCodexWorkerRunToken: typeof polynetCodexWorkerRunToken;
   polynetCodexWorkerTerminal: typeof polynetCodexWorkerTerminal;
   polynetCodexWorkerTool: typeof polynetCodexWorkerTool;
+  premiumBilling: typeof premiumBilling;
+  premiumMemberBadge: typeof premiumMemberBadge;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
   profileRelationshipCore: typeof profileRelationshipCore;

@@ -126,6 +126,10 @@ type DaytonaProviderTeardownTiming = {
   provider_teardown_ms: number;
 };
 
+type DaytonaAppPreviewTransport =
+  | "polynet_preview_gateway"
+  | "daytona_signed_direct";
+
 type DaytonaWorkspaceScanResult = {
   ok: boolean;
   changeState: "clean" | "dirty" | "scan_failed";
@@ -674,6 +678,12 @@ function readDaytonaTargetLifecycleMode(): DaytonaTargetLifecycleMode {
   if (explicit === "per_turn_ephemeral") return "per_turn_ephemeral";
   if (explicit === "thread_ephemeral") return "thread_ephemeral";
   return "thread_ephemeral";
+}
+
+function readDaytonaAppPreviewTransport(): DaytonaAppPreviewTransport {
+  const value = readEnv("POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT").toLowerCase();
+  if (value === "daytona_signed_direct") return "daytona_signed_direct";
+  return "polynet_preview_gateway";
 }
 
 function normalizeDaytonaTargetLifecycleMode(
@@ -1760,6 +1770,7 @@ export const resolveDaytonaCodexRuntimePreviewInternal = internalAction({
     ok: boolean;
     code?: string;
     message?: string;
+    preview_url?: string;
     preview_proxy_token?: string;
     preview_port?: number;
     preview_path?: string | null;
@@ -1767,7 +1778,7 @@ export const resolveDaytonaCodexRuntimePreviewInternal = internalAction({
     expires_at?: number;
     expires_in_seconds?: number;
     auth_mode?: "signed_url";
-    preview_transport?: "polynet_preview_gateway";
+    preview_transport?: DaytonaAppPreviewTransport;
   }> => {
     try {
       if (!hasDaytonaCredentials()) {
@@ -1912,6 +1923,21 @@ export const resolveDaytonaCodexRuntimePreviewInternal = internalAction({
       }
 
       const expiresAt = Date.now() + expiresInSeconds * 1000;
+      const previewTransport = readDaytonaAppPreviewTransport();
+      if (previewTransport === "daytona_signed_direct") {
+        return {
+          ok: true,
+          preview_url: previewUrl,
+          preview_port: port,
+          preview_path: null,
+          preview_label: `Daytona app :${port}`,
+          expires_at: expiresAt,
+          expires_in_seconds: expiresInSeconds,
+          auth_mode: "signed_url",
+          preview_transport: previewTransport,
+        };
+      }
+
       const minted = await mintPreviewProxySessionToken({
         kind: "workspace_preview",
         previewUrl,

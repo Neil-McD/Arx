@@ -3,8 +3,10 @@ import { MessageCircle } from "lucide-react";
 import { AttachmentChipButton } from "./AttachmentChipButton";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "./CommunityChatMediaPlayers";
+import { PremiumMemberBadge } from "./PremiumMemberBadge";
 import { UserAvatar } from "./UserAvatar";
 import { partitionCommunityAttachments } from "./communityAttachmentUi";
+import type { PremiumMemberBadgeSummary } from "./communityTypes";
 
 type CommunityMessageAttachment = {
   id: string;
@@ -46,6 +48,7 @@ type CommunityChatMessageRowProps = {
   senderLabel: string;
   senderHandle?: string | null;
   senderBio?: string | null;
+  senderPremiumBadge?: PremiumMemberBadgeSummary | null;
   avatarUrl: string | null;
   avatarFocusX?: number | null;
   avatarFocusY?: number | null;
@@ -92,6 +95,7 @@ function CommunityChatMessageRowComponent({
   senderLabel,
   senderHandle,
   senderBio,
+  senderPremiumBadge,
   avatarUrl,
   avatarFocusX,
   avatarFocusY,
@@ -297,7 +301,10 @@ function CommunityChatMessageRowComponent({
               </button>
             </div>
             <div className="chat-profile-hover-identity">
-              <div className="chat-profile-hover-name">{senderLabel}</div>
+              <div className="chat-profile-hover-name-row">
+                <div className="chat-profile-hover-name">{senderLabel}</div>
+                <PremiumMemberBadge badge={senderPremiumBadge} />
+              </div>
               {profileHandleLabel ? (
                 <div className="chat-profile-hover-handle">{profileHandleLabel}</div>
               ) : null}
@@ -321,6 +328,7 @@ function CommunityChatMessageRowComponent({
               onClick={openSenderProfile}
             >
               {senderLabel}
+              <PremiumMemberBadge badge={senderPremiumBadge} />
             </button>
             <span className="chat-time">{formattedTime}</span>
           </div>

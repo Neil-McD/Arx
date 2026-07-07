@@ -33,7 +33,7 @@ The stack above defines authority order. The runtime can also use explicit input
 - community skills and community workflow indexes
 - connected apps/MCP tools
 - runtime/tool policy
-- paid-tool balance state
+- premium entitlement and tool accounting state
 
 These inputs do not outrank the canonical context stack.
 
@@ -44,8 +44,8 @@ These inputs do not outrank the canonical context stack.
 - Long community profile/about content is not always-on doctrine; runtime prompts should carry compact identity and retrieve deeper active-community profile context through `get_active_community_context`, with archive/resource/activity lookup handled by `community_search`.
 - workspace snapshots are not the community lens.
 - Community evidence should be gathered or injected through explicit, bounded runtime paths.
-- There is no free-vs-architect context branch. Account labels normalize before runtime prompt composition.
-- Tool balance state is not a prompt authority layer; it is an execution and billing condition for paid tools.
+- There is no free-vs-premium context branch. Account labels normalize before runtime prompt composition.
+- Premium entitlement state is not a second doctrine layer; it gates premium capability exposure and execution.
 
 ## Rules
 

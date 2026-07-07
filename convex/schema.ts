@@ -54,6 +54,7 @@ export default defineSchema({
       v.literal("default"),
       v.literal("admin_override"),
       v.literal("manual_grant"),
+      v.literal("premium_subscription"),
     ),
     startsAt: v.number(),
     endsAt: v.optional(v.number()),
@@ -452,7 +453,7 @@ export default defineSchema({
       v.literal("blaxel_standby_snapshot"),
       v.literal("web_research_call"),
       v.literal("web_crawl_provider_call"),
-      v.literal("fly_crawler"),
+      v.literal("web_screenshot_provider_call"),
       v.literal("daytona_codex_runtime_active"),
       v.literal("voice_transcription"),
       v.literal("knowledge_model_inference"),
@@ -472,6 +473,7 @@ export default defineSchema({
     billingDisposition: v.union(
       v.literal("tracked_only"),
       v.literal("rolled_into_user_usage"),
+      v.literal("platform_absorbed"),
     ),
     linkedCreditKey: v.optional(v.string()),
     metadata: v.optional(v.any()),
@@ -682,6 +684,7 @@ export default defineSchema({
     sessionId: v.string(),
     mode: v.union(
       v.literal("community_join"),
+      v.literal("premium_subscription"),
       v.literal("workspace_credit_topup"),
     ),
     provider: v.optional(v.literal("stripe")),
@@ -1992,13 +1995,34 @@ export default defineSchema({
     senderType: v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
     senderUserId: v.optional(v.id("users")),
     senderAgentParticipantId: v.optional(v.id("dmParticipants")),
+    // Client-generated idempotency key; retries of a committed send return the
+    // original message instead of inserting a duplicate.
+    clientMessageId: v.optional(v.string()),
     contentJson: v.any(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_conversation_seq", ["conversationId", "seq"])
+    .index("by_conversation_clientMessageId", ["conversationId", "clientMessageId"])
     .index("by_senderUser", ["senderUserId"]),
+
+  dmBlocks: defineTable({
+    blockerUserId: v.id("users"),
+    blockedUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_blocker_blocked", ["blockerUserId", "blockedUserId"])
+    .index("by_blocked_blocker", ["blockedUserId", "blockerUserId"]),
+
+  dmRateCounters: defineTable({
+    userId: v.id("users"),
+    kind: v.union(v.literal("message"), v.literal("conversation")),
+    windowStartMs: v.number(),
+    count: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_kind", ["userId", "kind"]),
 
   dmTypingPresence: defineTable({
     conversationId: v.id("dmConversations"),
@@ -2515,7 +2539,7 @@ export default defineSchema({
   communitySourceCrawlJobs: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),
-    provider: v.union(v.literal("simple"), v.literal("crawl4ai")),
+    provider: v.union(v.literal("simple"), v.literal("crawl4ai"), v.literal("firecrawl")),
     rootUrl: v.string(),
     status: v.union(
       v.literal("queued"),
@@ -3275,6 +3299,31 @@ export default defineSchema({
     autoStopMinutes: v.optional(v.number()),
     autoArchiveMinutes: v.optional(v.number()),
     autoDeleteMinutes: v.optional(v.number()),
+    sandboxCpu: v.optional(v.number()),
+    sandboxMemoryGiB: v.optional(v.number()),
+    sandboxDiskGiB: v.optional(v.number()),
+    billingCreditKey: v.optional(v.string()),
+    billingReservedCredits: v.optional(v.number()),
+    billingIntervalStartedAt: v.optional(v.number()),
+    billingIntervalClosedAt: v.optional(v.number()),
+    billingIntervalSequence: v.optional(v.number()),
+    billingIntervalStartReason: v.optional(v.string()),
+    billingIntervalCloseReason: v.optional(v.string()),
+    billingIntervalResourceSource: v.optional(v.string()),
+    billingSettlementState: v.optional(v.string()),
+    billingSettlementReason: v.optional(v.string()),
+    billingSettlementAttemptCount: v.optional(v.number()),
+    billingSettlementCredits: v.optional(v.number()),
+    billingSettlementRawVendorCostUsd: v.optional(v.number()),
+    billingSettlementProviderCostKey: v.optional(v.string()),
+    billingSettlementCreditReservationKey: v.optional(v.string()),
+    billingSettlementCreditsDebited: v.optional(v.number()),
+    billingSettlementDurationSeconds: v.optional(v.number()),
+    billingSettlementMeasuredDurationSeconds: v.optional(v.number()),
+    billingSettlementProviderStandbyGraceSeconds: v.optional(v.number()),
+    billingSettlementErrorCode: v.optional(v.string()),
+    billingSettlementErrorMessage: v.optional(v.string()),
+    billingSettlementUpdatedAt: v.optional(v.number()),
     providerTeardownState: v.optional(
       v.union(
         v.literal("pending"),
@@ -3378,6 +3427,7 @@ export default defineSchema({
     harnessProfile: v.optional(v.string()),
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
+    accountPlan: v.optional(v.union(v.literal("free"), v.literal("premium"))),
     workspaceSessionState: v.optional(v.string()),
     runtimeHarnessTelemetrySummary: v.optional(v.any()),
     workspaceProviderSandboxId: v.optional(v.string()),

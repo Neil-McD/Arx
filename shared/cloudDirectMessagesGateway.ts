@@ -4,6 +4,8 @@ import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAu
 import type {
   DirectMessage,
   DirectMessageConversation,
+  DirectMessageNetworkPeopleBundle,
+  DirectMessageNetworkPerson,
   DirectMessageRecipient,
   DirectMessageTypingPresenceBundle,
 } from "./communityTypes";
@@ -21,6 +23,20 @@ export type CloudDirectMessagesLiveClient = {
   authSubject: string;
   close: () => void;
 };
+
+type SharedLiveClientEntry = {
+  key: string;
+  client: ConvexReactClient;
+  refCount: number;
+  sessionRef: { current: unknown };
+  closeTimer: ReturnType<typeof setTimeout> | null;
+};
+
+let sharedLiveClientEntry: SharedLiveClientEntry | null = null;
+
+// Effects release and immediately reacquire the client on session identity
+// refreshes; the linger keeps the websocket alive across those transients.
+const SHARED_LIVE_CLIENT_CLOSE_LINGER_MS = 1500;
 
 function coerceRows<TRow>(payload: unknown): TRow[] {
   if (Array.isArray(payload)) return payload as TRow[];
@@ -77,13 +93,50 @@ export function createCloudDirectMessagesLiveClient<SessionT>(
     throw new Error("convex_identity_token_required");
   }
 
-  const client = new ConvexReactClient(requireConvexUrl());
-  client.setAuth(async () => resolveSessionIdentityToken(params.session) || null);
+  const convexUrl = requireConvexUrl();
+  const key = `${convexUrl}::${authSubject}`;
+  let entry = sharedLiveClientEntry;
+  if (entry && entry.key === key) {
+    entry.refCount += 1;
+    entry.sessionRef.current = params.session;
+    if (entry.closeTimer !== null) {
+      clearTimeout(entry.closeTimer);
+      entry.closeTimer = null;
+    }
+  } else {
+    const sessionRef: { current: unknown } = { current: params.session };
+    const client = new ConvexReactClient(convexUrl);
+    client.setAuth(async () => resolveSessionIdentityToken(sessionRef.current) || null);
+    entry = {
+      key,
+      client,
+      refCount: 1,
+      sessionRef,
+      closeTimer: null,
+    };
+    sharedLiveClientEntry = entry;
+  }
+
+  const acquired = entry;
+  let isClosed = false;
   return {
-    client,
+    client: acquired.client,
     authSubject,
     close: () => {
-      client.close();
+      if (isClosed) return;
+      isClosed = true;
+      acquired.refCount -= 1;
+      if (acquired.refCount > 0) return;
+      if (acquired.closeTimer !== null) {
+        clearTimeout(acquired.closeTimer);
+      }
+      acquired.closeTimer = setTimeout(() => {
+        if (acquired.refCount > 0) return;
+        if (sharedLiveClientEntry === acquired) {
+          sharedLiveClientEntry = null;
+        }
+        void acquired.client.close();
+      }, SHARED_LIVE_CLIENT_CLOSE_LINGER_MS);
     },
   };
 }
@@ -147,6 +200,56 @@ export async function listCloudEligibleDirectMessageRecipientsForViewer<SessionT
     limit: params.limit ?? 20,
   });
   return coerceRows<DirectMessageRecipient>(payload);
+}
+
+export async function listCloudNetworkPeople<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    search?: string;
+    limit?: number;
+  },
+): Promise<DirectMessageNetworkPeopleBundle> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.query("directMessages:listNetworkPeopleForViewer" as any, {
+    authSubject,
+    search: params.search ?? "",
+    limit: params.limit ?? 20,
+  })) as DirectMessageNetworkPeopleBundle | null;
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.people)) {
+    return { people: [], source_community_count: 0 };
+  }
+  return {
+    people: payload.people as DirectMessageNetworkPerson[],
+    source_community_count: Math.max(0, Math.floor(Number(payload.source_community_count ?? 0))),
+  };
+}
+
+export async function sendCloudDirectMessageToUser<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    targetUserId: string;
+    communityId?: string | null;
+    text: string;
+    attachments?: unknown[];
+    clientMessageId?: string | null;
+  },
+): Promise<{ conversation: DirectMessageConversation; message: DirectMessage }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const communityId = String(params.communityId ?? "").trim();
+  const clientMessageId = String(params.clientMessageId ?? "").trim();
+  const payload = (await client.mutation("directMessages:sendDirectMessageToUser" as any, {
+    authSubject,
+    targetUserId: params.targetUserId,
+    ...(communityId ? { communityId } : null),
+    text: params.text,
+    attachments: params.attachments ?? [],
+    ...(clientMessageId ? { clientMessageId } : null),
+  })) as { conversation: DirectMessageConversation | null; message: DirectMessage | null } | null;
+  if (!payload?.conversation?.id || !payload?.message?.id) {
+    throw new Error("Failed to send direct message.");
+  }
+  return {
+    conversation: payload.conversation,
+    message: payload.message,
+  };
 }
 
 export async function markCloudDirectConversationRead<SessionT>(
@@ -237,17 +340,44 @@ export async function sendCloudDirectMessage<SessionT>(
     conversationId: string;
     text: string;
     attachments?: unknown[];
+    clientMessageId?: string | null;
   },
 ): Promise<DirectMessage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const clientMessageId = String(params.clientMessageId ?? "").trim();
   const payload = (await client.mutation("directMessages:sendDirectMessage" as any, {
     authSubject,
     conversationId: params.conversationId,
     text: params.text,
     attachments: params.attachments ?? [],
+    ...(clientMessageId ? { clientMessageId } : null),
   })) as DirectMessage | null;
   if (!payload?.id) throw new Error("Failed to send direct message.");
   return payload;
+}
+
+export async function blockCloudDirectMessageUser<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    targetUserId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("directMessages:blockDirectMessageUser" as any, {
+    authSubject,
+    targetUserId: params.targetUserId,
+  });
+}
+
+export async function unblockCloudDirectMessageUser<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    targetUserId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("directMessages:unblockDirectMessageUser" as any, {
+    authSubject,
+    targetUserId: params.targetUserId,
+  });
 }
 
 async function requestCloudDirectMessageAttachmentUploadUrl<SessionT>(
@@ -270,26 +400,20 @@ async function requestCloudDirectMessageAttachmentUploadUrl<SessionT>(
   return uploadUrl;
 }
 
-export async function uploadCloudDirectMessageAttachmentFile<SessionT>(
-  params: CloudDirectMessagesGatewayParams<SessionT> & {
-    conversationId: string;
-    file: File | Blob | DirectMessageUploadableFile;
-  },
+async function postDirectMessageAttachmentToUploadUrl(
+  uploadUrl: string,
+  file: File | Blob | DirectMessageUploadableFile,
 ): Promise<string> {
-  const uploadUrl = await requestCloudDirectMessageAttachmentUploadUrl({
-    session: params.session,
-    conversationId: params.conversationId,
-  });
   const contentType =
-    params.file && typeof params.file === "object" && "type" in params.file
-      ? String((params.file as DirectMessageUploadableFile).type ?? "").trim() || "application/octet-stream"
+    file && typeof file === "object" && "type" in file
+      ? String((file as DirectMessageUploadableFile).type ?? "").trim() || "application/octet-stream"
       : "application/octet-stream";
   const response = await fetch(uploadUrl, {
     method: "POST",
     headers: {
       "Content-Type": contentType,
     },
-    body: params.file as BodyInit,
+    body: file as BodyInit,
   });
   if (!response.ok) {
     throw new Error("Failed to upload attachment.");
@@ -300,6 +424,46 @@ export async function uploadCloudDirectMessageAttachmentFile<SessionT>(
     throw new Error("Failed to upload attachment.");
   }
   return storageId;
+}
+
+export async function uploadCloudDirectMessageAttachmentFile<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+    file: File | Blob | DirectMessageUploadableFile;
+  },
+): Promise<string> {
+  const uploadUrl = await requestCloudDirectMessageAttachmentUploadUrl({
+    session: params.session,
+    conversationId: params.conversationId,
+  });
+  return await postDirectMessageAttachmentToUploadUrl(uploadUrl, params.file);
+}
+
+export async function uploadCloudDirectMessageAttachmentFileForUser<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    targetUserId: string;
+    communityId?: string | null;
+    file: File | Blob | DirectMessageUploadableFile;
+  },
+): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const communityId = String(params.communityId ?? "").trim();
+  const payload = await client.mutation(
+    "directMessages:generateDirectMessageAttachmentUploadUrlForUser" as any,
+    {
+      authSubject,
+      targetUserId: params.targetUserId,
+      ...(communityId ? { communityId } : null),
+    },
+  );
+  const uploadUrl =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? String((payload as Record<string, unknown>).uploadUrl ?? "").trim()
+      : "";
+  if (!uploadUrl) {
+    throw new Error("Failed to start direct message attachment upload.");
+  }
+  return await postDirectMessageAttachmentToUploadUrl(uploadUrl, params.file);
 }
 
 export async function setCloudDirectTyping<SessionT>(

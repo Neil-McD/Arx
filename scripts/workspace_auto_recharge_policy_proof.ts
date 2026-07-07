@@ -21,8 +21,7 @@ const commerceGatewaySource = read("shared/cloudAccountCommerceGateway.ts");
 const autoRechargePolicySource = read("shared/workspaceAutoRecharge.ts");
 const appSource = read("apps/web/src/App.tsx");
 const settingsPanelsSource = read("apps/web/src/components/WebSettingsPanels.tsx");
-const billingSectionSource = read("apps/web/src/components/WebBillingSettingsSection.tsx");
-const payAsYouGoPanelSource = read("apps/web/src/components/WorkspacePayAsYouGoPanel.tsx");
+const billingSettingsSource = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 
 const defaults = buildDefaultWorkspaceAutoRechargeSettings();
 assert.equal(defaults.enabled, false);
@@ -200,27 +199,20 @@ assert.match(
   /validation\.value\.enabled[\s\S]*hasActiveWorkspaceAutoRechargePaymentMethod/,
   "backend must require an active saved card before enabling auto recharge",
 );
-assert.match(commerceGatewaySource, /loadCloudWorkspaceAutoRechargeSettings/);
-assert.match(commerceGatewaySource, /saveCloudWorkspaceAutoRechargeSettings/);
-assert.match(commerceGatewaySource, /disableCloudWorkspaceAutoRechargeSettings/);
-assert.match(commerceGatewaySource, /blockedReason/);
-assert.match(appSource, /loadCloudWorkspaceAutoRechargeSettings/);
-assert.match(appSource, /saveCloudWorkspaceAutoRechargeSettings/);
-assert.match(appSource, /disableCloudWorkspaceAutoRechargeSettings/);
-assert.match(appSource, /workspaceAutoRechargeSettings/);
-assert.match(settingsPanelsSource, /workspaceAutoRechargeSettings/);
-assert.match(settingsPanelsSource, /saveWorkspaceAutoRechargeSettings/);
-assert.match(settingsPanelsSource, /disableWorkspaceAutoRechargeSettings/);
-assert.match(billingSectionSource, /CloudWorkspaceAutoRechargeSettings/);
-assert.match(payAsYouGoPanelSource, /Edit auto recharge/);
-assert.match(payAsYouGoPanelSource, /saveWorkspaceAutoRechargeSettings/);
-assert.match(payAsYouGoPanelSource, /disableWorkspaceAutoRechargeSettings/);
-assert.match(payAsYouGoPanelSource, /Add a card before enabling auto recharge/);
-assert.match(payAsYouGoPanelSource, /Auto recharge needs review/);
-assert.match(payAsYouGoPanelSource, /duplicate settings were found/);
-assert.doesNotMatch(payAsYouGoPanelSource, /AutoRechargePreviewModal/);
-assert.doesNotMatch(payAsYouGoPanelSource, /aria-disabled="true"/);
-assert.doesNotMatch(payAsYouGoPanelSource, /saving is not active yet/);
+const publicAutoRechargeSurfacePattern =
+  /loadCloudWorkspaceAutoRechargeSettings|saveCloudWorkspaceAutoRechargeSettings|disableCloudWorkspaceAutoRechargeSettings|workspaceAutoRechargeSettings|saveWorkspaceAutoRechargeSettings|disableWorkspaceAutoRechargeSettings|Edit auto recharge|Set up auto recharge|Auto recharge needs review|auto recharge settings|auto-recharge/i;
+for (const [label, source] of [
+  ["Cloud account commerce gateway", commerceGatewaySource],
+  ["App shell", appSource],
+  ["Settings props", settingsPanelsSource],
+  ["Billing settings", billingSettingsSource],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    publicAutoRechargeSurfacePattern,
+    `${label} must not expose the deleted auto-recharge browser surface`,
+  );
+}
 assert.doesNotMatch(
   autoRechargePolicySource,
   /stripe|PaymentIntent|checkout\.sessions\.create/i,

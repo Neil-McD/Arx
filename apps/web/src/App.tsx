@@ -97,10 +97,6 @@ import {
 } from "./lib/workspaceInstrumentation";
 import {
   captureProductAnalyticsEvent,
-  clearPendingAnalyticsReturn,
-  consumePendingAnalyticsReturn,
-  markPendingAnalyticsReturn,
-  readPendingAnalyticsReturn,
   updatePosthogUiContext,
 } from "./posthogAnalytics";
 
@@ -167,7 +163,6 @@ import {
   finalizeCloudCommunityGoogleDriveSourceOAuth,
   finalizeCloudCommunityGitHubSourceOAuth,
   getCloudCommunitySourceCrawlJob,
-  getCloudCommunitySourceCrawlerStatus,
   importCloudCommunityGitHubSourceFiles,
   importCloudCommunityGoogleDriveSourceFiles,
   ingestCloudCommunitySources,
@@ -316,6 +311,7 @@ import {
   parseMessageMemorySuggestions,
   parseMessageMemoryUsed,
   parseMessageText,
+  parsePremiumUpgradeCta,
   type HistoryUsedItem,
   type MemorySuggestion,
   type MemoryUsedItem,
@@ -437,22 +433,16 @@ import {
 } from "../../../shared/builderPartnerProgramGateway";
 import type { WebBuilderPartnerProgramPanelProps } from "./components/WebBuilderPartnerProgramPanel";
 import {
-  disableCloudWorkspaceAutoRechargeSettings,
   loadCloudWorkspaceCardOnFileStatus,
-  loadCloudWorkspaceAutoRechargeSettings,
   refreshCloudWorkspaceCardOnFileStatus,
-  saveCloudWorkspaceAutoRechargeSettings,
+  startCloudPremiumSubscriptionCheckout,
   startCloudWorkspaceCardSetupCheckout,
-  startCloudWorkspaceCreditTopupCheckout,
-  type CloudWorkspaceAutoRechargeSettings,
   type CloudWorkspaceCardOnFileStatus,
 } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import {
-  loadWorkspaceBillingOverviewCanonical,
   loadWorkspaceCreditBalanceCanonical,
-  type WorkspaceBillingOverview,
   type WorkspaceCreditBalance,
 } from "../../../shared/workspaceCreditsGateway";
 import {
@@ -461,15 +451,7 @@ import {
   type WorkspaceComputerStartResult,
 } from "../../../shared/workspaceTerminalsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
-import {
-  getSpendableWorkspaceToolBalanceCredits,
-  getUncollectedWorkspaceToolBalanceCredits,
-} from "../../../shared/workspaceCredits";
-import type {
-  PaidToolKind,
-  WorkspaceCreditTopupSurface,
-  WorkspaceToolBalanceTopupPackId,
-} from "../../../shared/workspaceCredits";
+import type { PaidToolKind } from "../../../shared/workspaceCredits";
 import {
   paidUsageBillingModeForPaidToolFailure,
   paidUsageBillingModeForWorkspaceStorageAction,
@@ -528,6 +510,7 @@ import {
   DEFAULT_ACTIVE_RUNTIME_ENGINE,
   RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
+  canUseRuntimeEngineForTier,
   normalizeActiveWorkspaceRuntimeEngine,
   type RuntimeEngine,
 } from "../../../shared/runtimeEngine";
@@ -540,6 +523,10 @@ import {
 import {
   buildWorkspaceRightPanelUserData,
 } from "./components/workspaceRightPanelData";
+import {
+  bundleText,
+  stripSharedAttachmentSummary,
+} from "./components/communityInteractionFeed";
 import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
@@ -962,11 +949,8 @@ const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
-const WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY = "polynet-workspace-credit-topup-return";
 const WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY = "polynet-workspace-card-setup-return";
-const WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const WORKSPACE_CARD_SETUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-const WORKSPACE_CREDIT_TOPUP_RETURN_POLL_MAX_ATTEMPTS = 12;
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -1012,36 +996,6 @@ function storeGuestModelId(modelId: string): void {
   }
 }
 
-function markPendingWorkspaceCreditTopupReturn(): void {
-  try {
-    window.sessionStorage.setItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY, String(Date.now()));
-  } catch {
-    // Checkout return refresh is best-effort; Stripe/webhook truth remains server-side.
-  }
-}
-
-function hasPendingWorkspaceCreditTopupReturn(): boolean {
-  try {
-    const markedAt = Number(window.sessionStorage.getItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY) ?? "");
-    if (!Number.isFinite(markedAt) || markedAt <= 0) return false;
-    if (Date.now() - markedAt > WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS) {
-      window.sessionStorage.removeItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY);
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function clearPendingWorkspaceCreditTopupReturn(): void {
-  try {
-    window.sessionStorage.removeItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
 function markPendingWorkspaceCardSetupReturn(): void {
   try {
     window.sessionStorage.setItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY, String(Date.now()));
@@ -1072,16 +1026,13 @@ function clearPendingWorkspaceCardSetupReturn(): void {
   }
 }
 
-function buildWorkspaceCreditTopupReturnUrl(surface: WorkspaceCreditTopupSurface): string {
-  if (surface === "settings_agent") return `${window.location.origin}/settings/agent`;
-  if (surface === "settings_billing") return `${window.location.origin}/settings/billing`;
+function buildWorkspaceCardSetupReturnUrl(): string {
   const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
   return `${window.location.origin}${pathname}`;
 }
 
-function buildWorkspaceCardSetupReturnUrl(): string {
-  const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
-  return `${window.location.origin}${pathname}`;
+function buildPremiumSubscriptionReturnUrl(): string {
+  return `${window.location.origin}/settings/billing`;
 }
 
 function buildEmptyWorkspaceCreditBalance(session: AuthSession): WorkspaceCreditBalance {
@@ -1766,9 +1717,6 @@ export default function App() {
       setIsOnboardingModalOpen(false);
       setWorkspaceCreditBalance(null);
       setWorkspaceCreditBalanceError(null);
-      setWorkspaceBillingOverview(null);
-      setWorkspaceBillingOverviewError(null);
-      setIsLoadingWorkspaceBillingOverview(false);
       profileUi.setProfileSaveError(null);
       profileUi.setProfileSaveSuccess(false);
       emitWorkspaceEvent({
@@ -2201,7 +2149,6 @@ export default function App() {
   const billingUi = useWebBillingUiController<
     AccountCommerceStatus,
     WorkspaceCreditBalance,
-    WorkspaceBillingOverview,
     PendingPurchaseClaim
   >();
   const {
@@ -2217,6 +2164,7 @@ export default function App() {
     setPendingPurchasesSuccess,
     accountCommerceStatus,
     setAccountCommerceStatus,
+    isLoadingAccountCommerce,
     setIsLoadingAccountCommerce,
     accountCommerceError,
     setAccountCommerceError,
@@ -2226,13 +2174,6 @@ export default function App() {
     setIsLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError,
     setWorkspaceCreditBalanceError,
-    setWorkspaceBillingOverview,
-    setIsLoadingWorkspaceBillingOverview,
-    setWorkspaceBillingOverviewError,
-    isStartingWorkspaceCreditTopupCheckout,
-    setIsStartingWorkspaceCreditTopupCheckout,
-    workspaceCreditTopupError,
-    setWorkspaceCreditTopupError,
     isSettingDevAccountTier,
     setIsSettingDevAccountTier,
     devAccountTierError,
@@ -2268,14 +2209,8 @@ export default function App() {
   const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
-  const workspaceBillingOverviewLoadRequestIdRef = useRef(0);
   const workspaceCardOnFileLoadRequestIdRef = useRef(0);
-  const workspaceAutoRechargeLoadRequestIdRef = useRef(0);
   const workspaceCardSetupReturnRefreshInFlightRef = useRef(false);
-  const workspaceCreditTopupReturnPollRef = useRef<{ attempts: number; timeoutId: number | null }>({
-    attempts: 0,
-    timeoutId: null,
-  });
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
@@ -4628,14 +4563,6 @@ export default function App() {
   const [workspaceCardOnFileStatus, setWorkspaceCardOnFileStatus] =
     useState<CloudWorkspaceCardOnFileStatus | null>(null);
   const [workspaceCardOnFileError, setWorkspaceCardOnFileError] = useState<string | null>(null);
-  const [workspaceAutoRechargeSettings, setWorkspaceAutoRechargeSettings] =
-    useState<CloudWorkspaceAutoRechargeSettings | null>(null);
-  const [isLoadingWorkspaceAutoRechargeSettings, setIsLoadingWorkspaceAutoRechargeSettings] =
-    useState(false);
-  const [workspaceAutoRechargeSettingsError, setWorkspaceAutoRechargeSettingsError] =
-    useState<string | null>(null);
-  const [isSavingWorkspaceAutoRechargeSettings, setIsSavingWorkspaceAutoRechargeSettings] =
-    useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -5618,9 +5545,27 @@ export default function App() {
     maybeSetThreadTitleFromText,
     setThreadCommunityLens,
   } = workspaceCore.threadMutation;
+  const openWorkspacePremiumBilling = useCallback(() => {
+    pushNavSnapshot();
+    setActivePage("workspace");
+    setActiveView("settings");
+    setSettingsPage("billing");
+  }, [pushNavSnapshot]);
   const handleWorkspaceRuntimeEngineChange = useCallback(
     (next: RuntimeEngine): void => {
       const runtimeEngine = normalizeActiveWorkspaceRuntimeEngine(next);
+      const hasResolvedRuntimeAccessTier =
+        !sessionRef.current || accountCommerceStatus !== null || !isLoadingAccountCommerce;
+      if (
+        hasResolvedRuntimeAccessTier &&
+        !canUseRuntimeEngineForTier({
+          engine: runtimeEngine,
+          accountTier: accountCommerceStatus?.account_tier ?? null,
+        })
+      ) {
+        openWorkspacePremiumBilling();
+        return;
+      }
       setActiveRuntimeEngine(runtimeEngine);
       if (workspaceWantsNewChat || !activeThreadId) return;
       const session = sessionRef.current;
@@ -5636,6 +5581,10 @@ export default function App() {
     },
     [
       activeThreadId,
+      accountCommerceStatus?.account_tier,
+      accountCommerceStatus,
+      isLoadingAccountCommerce,
+      openWorkspacePremiumBilling,
       setActiveRuntimeEngine,
       setThreads,
       updateThreadRuntimeEngine,
@@ -5873,48 +5822,6 @@ export default function App() {
     [ensureUsableAuthSession],
   );
 
-  const loadWorkspaceBillingOverview = useCallback(
-    async (session: AuthSession): Promise<WorkspaceBillingOverview | null> => {
-      const requestId = ++workspaceBillingOverviewLoadRequestIdRef.current;
-      setIsLoadingWorkspaceBillingOverview(true);
-      setWorkspaceBillingOverviewError(null);
-      try {
-        const usableSession = await ensureUsableAuthSession(session);
-        if (!usableSession) {
-          if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
-            setWorkspaceBillingOverview(null);
-          }
-          return null;
-        }
-        const overview = await loadWorkspaceBillingOverviewCanonical({
-          session: usableSession,
-        });
-        if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
-          setWorkspaceBillingOverview(overview);
-          setWorkspaceBillingOverviewError(null);
-        }
-        return overview;
-      } catch (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to load workspace billing.";
-        console.warn("Workspace billing overview refresh failed:", error);
-        if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
-          setWorkspaceBillingOverviewError(message);
-        }
-        return null;
-      } finally {
-        if (requestId === workspaceBillingOverviewLoadRequestIdRef.current) {
-          setIsLoadingWorkspaceBillingOverview(false);
-        }
-      }
-    },
-    [ensureUsableAuthSession],
-  );
-
   const loadWorkspaceCardOnFileStatus = useCallback(
     async (session: AuthSession): Promise<CloudWorkspaceCardOnFileStatus | null> => {
       const requestId = ++workspaceCardOnFileLoadRequestIdRef.current;
@@ -5948,123 +5855,19 @@ export default function App() {
     [ensureUsableAuthSession],
   );
 
-  const loadWorkspaceAutoRechargeSettings = useCallback(
-    async (session: AuthSession): Promise<CloudWorkspaceAutoRechargeSettings | null> => {
-      const requestId = ++workspaceAutoRechargeLoadRequestIdRef.current;
-      setIsLoadingWorkspaceAutoRechargeSettings(true);
-      setWorkspaceAutoRechargeSettingsError(null);
-      try {
-        const usableSession = await ensureUsableAuthSession(session);
-        if (!usableSession) {
-          if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
-            setWorkspaceAutoRechargeSettings(null);
-          }
-          return null;
-        }
-        const settings = await loadCloudWorkspaceAutoRechargeSettings({
-          session: usableSession,
-        });
-        if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
-          setWorkspaceAutoRechargeSettings(settings);
-          setWorkspaceAutoRechargeSettingsError(null);
-        }
-        return settings;
-      } catch (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to load auto recharge settings.";
-        console.warn("Workspace auto recharge settings refresh failed:", error);
-        if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
-          setWorkspaceAutoRechargeSettingsError(message);
-        }
-        return null;
-      } finally {
-        if (requestId === workspaceAutoRechargeLoadRequestIdRef.current) {
-          setIsLoadingWorkspaceAutoRechargeSettings(false);
-        }
-      }
-    },
-    [ensureUsableAuthSession],
-  );
-
   useEffect(() => {
     if (!session) return;
-    const shouldLoadWorkspaceCredits =
-      activePage === "workspace" || (activeView === "settings" && settingsGroup === "billing");
-    const shouldLoadWorkspaceBillingOverview = activeView === "settings" && settingsGroup === "billing";
+    const shouldLoadWorkspaceCredits = activePage === "workspace";
     if (shouldLoadWorkspaceCredits) {
       void loadWorkspaceCreditBalance(session);
       void loadWorkspaceCardOnFileStatus(session);
     }
-    if (shouldLoadWorkspaceBillingOverview) {
-      void loadWorkspaceBillingOverview(session);
-      void loadWorkspaceAutoRechargeSettings(session);
-    }
   }, [
     activePage,
-    activeView,
     session,
-    loadWorkspaceAutoRechargeSettings,
-    loadWorkspaceBillingOverview,
     loadWorkspaceCardOnFileStatus,
     loadWorkspaceCreditBalance,
-    settingsGroup,
   ]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    const refreshPendingWorkspaceCreditTopup = () => {
-      if (!hasPendingWorkspaceCreditTopupReturn()) return;
-      const activeSession = sessionRef.current ?? session;
-      void loadWorkspaceCreditBalance(activeSession).then((balance) => {
-        const pending = readPendingAnalyticsReturn("workspace_credit_topup");
-        const baselineTotal = Math.max(0, Number(pending?.baseline_total_credits ?? 0) || 0);
-        const baselineUncollected = Math.max(0, Number(pending?.baseline_uncollected_credits ?? 0) || 0);
-        const currentTotal = getSpendableWorkspaceToolBalanceCredits(balance);
-        const currentUncollected = getUncollectedWorkspaceToolBalanceCredits(balance);
-        const hasConfirmedTopup = Boolean(
-          pending &&
-            (currentTotal > baselineTotal || currentUncollected < baselineUncollected)
-        );
-        if (hasConfirmedTopup || !pending) {
-          clearPendingWorkspaceCreditTopupReturn();
-          workspaceCreditTopupReturnPollRef.current.attempts = 0;
-          if (activeView === "settings" && settingsGroup === "billing") {
-            void loadWorkspaceBillingOverview(activeSession);
-          }
-          return;
-        }
-        workspaceCreditTopupReturnPollRef.current.attempts += 1;
-        if (workspaceCreditTopupReturnPollRef.current.attempts >= WORKSPACE_CREDIT_TOPUP_RETURN_POLL_MAX_ATTEMPTS) {
-          clearPendingWorkspaceCreditTopupReturn();
-          workspaceCreditTopupReturnPollRef.current.attempts = 0;
-          return;
-        }
-        const delayMs = Math.min(8000, 900 + workspaceCreditTopupReturnPollRef.current.attempts * 450);
-        if (workspaceCreditTopupReturnPollRef.current.timeoutId) {
-          window.clearTimeout(workspaceCreditTopupReturnPollRef.current.timeoutId);
-        }
-        workspaceCreditTopupReturnPollRef.current.timeoutId = window.setTimeout(refreshPendingWorkspaceCreditTopup, delayMs);
-      });
-    };
-    const handlePageShow = () => {
-      refreshPendingWorkspaceCreditTopup();
-    };
-
-    refreshPendingWorkspaceCreditTopup();
-    window.addEventListener("pageshow", handlePageShow);
-    return () => {
-      window.removeEventListener("pageshow", handlePageShow);
-      if (workspaceCreditTopupReturnPollRef.current.timeoutId) {
-        window.clearTimeout(workspaceCreditTopupReturnPollRef.current.timeoutId);
-        workspaceCreditTopupReturnPollRef.current.timeoutId = null;
-      }
-    };
-  }, [activeView, loadWorkspaceBillingOverview, loadWorkspaceCreditBalance, session, sessionRef, settingsGroup]);
 
   useEffect(() => {
     if (!session) return;
@@ -7487,53 +7290,6 @@ export default function App() {
     }
   }
 
-  const startWorkspaceCreditTopupCheckout = useCallback(async (
-    packId?: WorkspaceToolBalanceTopupPackId,
-    surface: WorkspaceCreditTopupSurface = "settings_agent",
-  ): Promise<void> => {
-    const session = await ensureUsableAuthSession();
-    if (!session) {
-      requireSignIn();
-      return;
-    }
-    setWorkspaceCreditTopupError(null);
-    setIsStartingWorkspaceCreditTopupCheckout(true);
-    try {
-      const baselineBalance = workspaceCreditBalance ?? await loadWorkspaceCreditBalance(session);
-      const returnUrl = buildWorkspaceCreditTopupReturnUrl(surface);
-      const data = await startCloudWorkspaceCreditTopupCheckout({
-        session,
-        successUrl: returnUrl,
-        cancelUrl: returnUrl,
-        packId,
-      });
-      const checkoutUrl =
-        data && typeof data === "object" && typeof (data as { checkout_url?: unknown }).checkout_url === "string"
-          ? String((data as { checkout_url?: unknown }).checkout_url).trim()
-          : "";
-      if (!checkoutUrl) throw new Error("Missing checkout_url.");
-      markPendingAnalyticsReturn("workspace_credit_topup", {
-        surface,
-        baseline_included_credits: baselineBalance?.includedCreditsBalance ?? 0,
-        baseline_purchased_credits: baselineBalance?.purchasedCreditsBalance ?? 0,
-        baseline_uncollected_credits: baselineBalance?.uncollectedCreditsBalance ?? 0,
-        baseline_total_credits: getSpendableWorkspaceToolBalanceCredits(baselineBalance),
-      });
-      markPendingWorkspaceCreditTopupReturn();
-      captureProductAnalyticsEvent("workspace credit topup started", {
-        surface,
-        pack_id: packId ?? null,
-      });
-      window.location.assign(checkoutUrl);
-    } catch (error) {
-      setWorkspaceCreditTopupError(
-        formatWorkspaceBillingCheckoutError(error, { kind: "manual_balance" }),
-      );
-    } finally {
-      setIsStartingWorkspaceCreditTopupCheckout(false);
-    }
-  }, [ensureUsableAuthSession, loadWorkspaceCreditBalance, requireSignIn, workspaceCreditBalance]);
-
   const startWorkspaceCardSetupCheckout = useCallback(async (): Promise<void> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
@@ -7568,86 +7324,34 @@ export default function App() {
     }
   }, [ensureUsableAuthSession, requireSignIn]);
 
-  const saveWorkspaceAutoRechargeSettings = useCallback(async (next: {
-    thresholdCredits: number;
-    restoreToCredits: number;
-    monthlyLimitCredits: number | null;
-  }): Promise<void> => {
+  const startPremiumSubscriptionCheckout = useCallback(async (): Promise<void> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
       requireSignIn();
       return;
     }
-    setWorkspaceAutoRechargeSettingsError(null);
-    setIsSavingWorkspaceAutoRechargeSettings(true);
     try {
-      const cardStatus = workspaceCardOnFileStatus ?? await loadWorkspaceCardOnFileStatus(session);
-      if (cardStatus?.has_card_on_file !== true) {
-        throw new Error("Add a card before enabling auto recharge.");
-      }
-      const settings = await saveCloudWorkspaceAutoRechargeSettings({
+      const returnUrl = buildPremiumSubscriptionReturnUrl();
+      const data = await startCloudPremiumSubscriptionCheckout({
         session,
-        enabled: true,
-        thresholdCredits: next.thresholdCredits,
-        restoreToCredits: next.restoreToCredits,
-        monthlyLimitCredits: next.monthlyLimitCredits,
+        successUrl: returnUrl,
+        cancelUrl: returnUrl,
       });
-      setWorkspaceAutoRechargeSettings(settings);
-      setWorkspaceAutoRechargeSettingsError(null);
-      captureProductAnalyticsEvent("workspace auto recharge settings saved", {
-        threshold_credits: next.thresholdCredits,
-        restore_to_credits: next.restoreToCredits,
-        monthly_limit_credits: next.monthlyLimitCredits,
+      const checkoutUrl =
+        data && typeof data === "object" && typeof (data as { checkout_url?: unknown }).checkout_url === "string"
+          ? String((data as { checkout_url?: unknown }).checkout_url).trim()
+          : "";
+      if (!checkoutUrl) throw new Error("Missing checkout_url.");
+      captureProductAnalyticsEvent("premium subscription checkout started", {
+        surface: "settings_billing",
       });
+      window.location.assign(checkoutUrl);
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save auto recharge settings.";
-      setWorkspaceAutoRechargeSettingsError(message);
-      throw error instanceof Error ? error : new Error(message);
-    } finally {
-      setIsSavingWorkspaceAutoRechargeSettings(false);
-    }
-  }, [
-    ensureUsableAuthSession,
-    loadWorkspaceCardOnFileStatus,
-    requireSignIn,
-    workspaceCardOnFileStatus,
-  ]);
-
-  const disableWorkspaceAutoRechargeSettings = useCallback(async (): Promise<void> => {
-    const session = await ensureUsableAuthSession();
-    if (!session) {
-      requireSignIn();
-      return;
-    }
-    setWorkspaceAutoRechargeSettingsError(null);
-    setIsSavingWorkspaceAutoRechargeSettings(true);
-    try {
-      const settings = await disableCloudWorkspaceAutoRechargeSettings({
-        session,
-      });
-      setWorkspaceAutoRechargeSettings(settings);
-      setWorkspaceAutoRechargeSettingsError(null);
-      captureProductAnalyticsEvent("workspace auto recharge settings disabled", {});
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to disable auto recharge settings.";
-      setWorkspaceAutoRechargeSettingsError(message);
-      throw error instanceof Error ? error : new Error(message);
-    } finally {
-      setIsSavingWorkspaceAutoRechargeSettings(false);
+      throw new Error(formatWorkspaceBillingCheckoutError(error, { kind: "premium_subscription" }));
     }
   }, [ensureUsableAuthSession, requireSignIn]);
 
-  const openWorkspaceCreditTopupModal = useCallback((params?: {
+  const openWorkspacePaidToolBillingModal = useCallback((params?: {
     toolKind?: PaidToolKind | null;
     message?: string | null;
     requiredCredits?: number | null;
@@ -7672,13 +7376,13 @@ export default function App() {
     message?: string | null;
     requiredCredits?: number | null;
   }) => {
-    openWorkspaceCreditTopupModal({
+    openWorkspacePaidToolBillingModal({
       toolKind: "workspace_tools",
       message: params.message ?? null,
       requiredCredits: params.requiredCredits ?? null,
       paidUsageBillingMode: paidUsageBillingModeForWorkspaceStorageAction(params.action),
     });
-  }, [openWorkspaceCreditTopupModal]);
+  }, [openWorkspacePaidToolBillingModal]);
 
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const isProfileSetupCompleteForPublicActions =
@@ -7907,7 +7611,7 @@ export default function App() {
     },
     onAccountSetupRequired: openProfileSetup,
     onOwnedCommunityLimitReached: () => {
-      showAppToastMessage("You've built the maximum number of communities");
+      setIsFreeAccountInfoOpen(true);
     },
     onCommunityCreated: (community) => {
       setCommunities((prev) => [community, ...prev]);
@@ -8476,26 +8180,61 @@ export default function App() {
   const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
-  const activeRuntimeEngineForWorkspace =
+  const requestedActiveRuntimeEngineForWorkspace =
     !workspaceWantsNewChat && activeThreadId
       ? normalizeActiveWorkspaceRuntimeEngine(
           threads.find((thread) => thread.id === activeThreadId)?.runtime_engine ??
             activeRuntimeEngine,
         )
       : activeRuntimeEngine;
+  const hasResolvedRuntimeAccessTier =
+    !session || accountCommerceStatus !== null || !isLoadingAccountCommerce;
+  const runtimePickerAccountTier = hasResolvedRuntimeAccessTier
+    ? accountCommerceStatus?.account_tier ?? null
+    : "architect";
+  const activeRuntimeEngineForWorkspace = !hasResolvedRuntimeAccessTier || canUseRuntimeEngineForTier({
+    engine: requestedActiveRuntimeEngineForWorkspace,
+    accountTier: runtimePickerAccountTier,
+  })
+    ? requestedActiveRuntimeEngineForWorkspace
+    : RUNTIME_ENGINE_POLYNET;
   useEffect(() => {
     if (workspaceWantsNewChat || !activeThreadId) return;
-    const threadRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(
+    if (!hasResolvedRuntimeAccessTier) return;
+    const normalizedThreadRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(
       threads.find((thread) => thread.id === activeThreadId)?.runtime_engine ??
         activeRuntimeEngine,
     );
+    const threadRuntimeEngine = canUseRuntimeEngineForTier({
+      engine: normalizedThreadRuntimeEngine,
+      accountTier: accountCommerceStatus?.account_tier ?? null,
+    })
+      ? normalizedThreadRuntimeEngine
+      : RUNTIME_ENGINE_POLYNET;
+    if (threadRuntimeEngine !== normalizedThreadRuntimeEngine) {
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === activeThreadId
+            ? { ...thread, runtime_engine: threadRuntimeEngine }
+            : thread,
+        ),
+      );
+      const session = sessionRef.current;
+      if (session) {
+        void updateThreadRuntimeEngine(activeThreadId, threadRuntimeEngine, session as AuthSession);
+      }
+    }
     if (!threadRuntimeEngine || threadRuntimeEngine === activeRuntimeEngine) return;
     setActiveRuntimeEngine(threadRuntimeEngine);
   }, [
     activeRuntimeEngine,
     activeThreadId,
+    accountCommerceStatus?.account_tier,
+    hasResolvedRuntimeAccessTier,
     setActiveRuntimeEngine,
+    setThreads,
     threads,
+    updateThreadRuntimeEngine,
     workspaceWantsNewChat,
   ]);
   const shouldShowAccountSetupCard =
@@ -8605,7 +8344,7 @@ export default function App() {
     modelToggles: platformModelToggles,
     userMemoryRememberEnabled:
       userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
-    accountTier: accountCommerceStatus?.account_tier ?? null,
+    accountTier: runtimePickerAccountTier,
     loadAccountCommerceStatus,
     hasUserKeyConnection,
     hasUserChatgptConnection,
@@ -8733,14 +8472,6 @@ export default function App() {
     canPostMessagesActiveCommunity,
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
-    onToolBalanceRequired: (_surface, message, details) => {
-      openWorkspaceCreditTopupModal({
-        message: message.trim() || null,
-        toolKind: details?.toolKind ?? "voice_input",
-        requiredCredits: details?.requiredCredits ?? null,
-        paidUsageBillingMode: details?.paidUsageBillingMode ?? null,
-      });
-    },
     appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),
     focusWorkspaceInput: focusWorkspaceComposer,
     resolveCommunityTranscriptTarget: () => communityVoiceTranscriptTargetRef.current,
@@ -8946,7 +8677,7 @@ export default function App() {
           result.code === "workspace_credits_unavailable" ||
           result.code === "workspace_uncollected_usage_blocked"
         ) {
-          openWorkspaceCreditTopupModal({
+          openWorkspacePaidToolBillingModal({
             toolKind: "workspace_tools",
             message: result.message,
             requiredCredits: result.required_credits,
@@ -8993,7 +8724,7 @@ export default function App() {
   }, [
     ensureUsableAuthSession,
     loadWorkspaceCreditBalance,
-    openWorkspaceCreditTopupModal,
+    openWorkspacePaidToolBillingModal,
     openWorkspaceStorageBillingModal,
     refreshCloudProjectStatuses,
     requireSignIn,
@@ -9370,31 +9101,6 @@ export default function App() {
       surface: publicRoute.kind === "app" ? activePage : publicRoute.kind,
     });
   }, [activePage, canonicalSessionUserId, publicRoute.kind]);
-
-  useEffect(() => {
-    const pending = readPendingAnalyticsReturn("workspace_credit_topup");
-    if (!pending || !workspaceCreditBalance) return;
-
-    const currentPurchased = Math.max(0, workspaceCreditBalance.purchasedCreditsBalance);
-    const currentUncollected = Math.max(0, workspaceCreditBalance.uncollectedCreditsBalance);
-    const currentTotal = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
-    const baselinePurchased = Math.max(0, Number(pending.baseline_purchased_credits ?? 0) || 0);
-    const baselineTotal = Math.max(0, Number(pending.baseline_total_credits ?? 0) || 0);
-    const baselineUncollected = Math.max(0, Number(pending.baseline_uncollected_credits ?? 0) || 0);
-    const surface = String(pending.surface ?? "").trim() || "unknown";
-    const purchasedDelta = currentPurchased - baselinePurchased;
-    const totalDelta = currentTotal - baselineTotal;
-    const uncollectedCleared = Math.max(0, baselineUncollected - currentUncollected);
-    if (purchasedDelta <= 0 && totalDelta <= 0 && uncollectedCleared <= 0) return;
-
-    clearPendingAnalyticsReturn("workspace_credit_topup");
-    captureProductAnalyticsEvent("workspace credit topup succeeded", {
-      purchased_credit_delta: Math.max(0, purchasedDelta),
-      total_credit_delta: Math.max(0, totalDelta),
-      uncollected_credit_delta: uncollectedCleared,
-      surface,
-    });
-  }, [workspaceCreditBalance]);
 
   const isActiveWorkspaceThreadBusy = session
     ? activeThreadId
@@ -9915,21 +9621,6 @@ export default function App() {
       }
       const crawlFailures: Array<{ title: string; url: string | null; message: string }> = [];
       if (crawlTargets.size > 0) {
-        const crawlerStatus = await getCloudCommunitySourceCrawlerStatus({
-          session,
-          communityId: community.id,
-        });
-        if (!crawlerStatus?.full_site_crawl_available) {
-          throw new Error(crawlerStatus?.code || "community_source_full_site_crawl_not_configured");
-        }
-        const crawlMaxPages = Math.min(
-          COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES,
-          crawlerStatus.max_pages || COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES,
-        );
-        const crawlMaxDepth = Math.min(
-          COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH,
-          crawlerStatus.max_depth || COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH,
-        );
         await Promise.all(
           Array.from(crawlTargets.entries())
             .slice(0, COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS)
@@ -9939,8 +9630,8 @@ export default function App() {
                   session,
                   communityId: community.id,
                   rootUrl,
-                  maxPages: crawlMaxPages,
-                  maxDepth: crawlMaxDepth,
+                  maxPages: 1,
+                  maxDepth: 0,
                 });
                 const crawlJobId = started?.job?.id ?? "";
                 if (!crawlJobId) {
@@ -10290,7 +9981,7 @@ export default function App() {
           return;
         }
         if (getOwnedCommunityCount() >= maxCommunities) {
-          showAppToastMessage("You've built the maximum number of communities");
+          setIsFreeAccountInfoOpen(true);
           return;
 	        }
 	        setCommunityLaunchSetupStatus(null);
@@ -10332,6 +10023,7 @@ export default function App() {
         throw new Error("Your account cannot create a community yet.");
       }
       if (getOwnedCommunityCount() >= maxCommunities) {
+        setIsFreeAccountInfoOpen(true);
         throw new Error("You've reached your community limit.");
       }
 
@@ -11315,18 +11007,7 @@ export default function App() {
     },
     billing: {
       session: session,
-      startWorkspaceCreditTopupCheckout,
-      workspaceCardOnFileStatus,
-      workspaceCardOnFileError,
-      isStartingWorkspaceCardSetupCheckout,
-      workspaceCardSetupError,
-      startWorkspaceCardSetupCheckout,
-      workspaceAutoRechargeSettings,
-      isLoadingWorkspaceAutoRechargeSettings,
-      workspaceAutoRechargeSettingsError,
-      isSavingWorkspaceAutoRechargeSettings,
-      saveWorkspaceAutoRechargeSettings,
-      disableWorkspaceAutoRechargeSettings,
+      startPremiumSubscriptionCheckout,
       billingUi,
     },
     integrations: {
@@ -11535,15 +11216,10 @@ export default function App() {
     continuePreviewAccessGateAuth,
     inferenceIssueModal,
     isInferenceIssueModalRunning,
-    isStartingWorkspaceCreditTopupCheckout,
-    workspaceCreditTopupError,
-    isStartingWorkspaceCardSetupCheckout,
-    workspaceCardSetupError,
     setInferenceIssueModal,
-    startWorkspaceCreditTopupCheckout,
-    startWorkspaceCardSetupCheckout,
     setActiveView,
     setSettingsPage,
+    onOpenPremiumBilling: openWorkspacePremiumBilling,
     isFreeAccountInfoOpen,
     accountCommerceError,
     communityModalHostProps: communityUi.modalHostProps,
@@ -11664,6 +11340,7 @@ export default function App() {
     showAppToastMessage,
     activeModelLabel: workspace.derived.activeModelLabel,
     modelToggles: platformModelToggles,
+    accountTier: accountCommerceStatus?.account_tier ?? null,
     activeRuntimeEngine: activeRuntimeEngineForWorkspace,
     onRuntimeEngineChange: handleWorkspaceRuntimeEngineChange,
     workspaceVoiceUiState,
@@ -11688,6 +11365,7 @@ export default function App() {
     parseMessageHistoryUsed,
     parseMessageMemorySuggestions,
     parseMessageMemoryAdded,
+    parsePremiumUpgradeCta,
     extractCommunityEvidenceUsedV1,
     buildMessageContextModalPayload: (payload) =>
       buildMessageContextModalPayload<MemoryUsedItem, HistoryUsedItem, MemorySuggestion>({
@@ -11705,6 +11383,7 @@ export default function App() {
     extractRuntimeEngineIdFromMessageContent,
     formatModelSignature,
     renderMarkdown,
+    onOpenPremiumBilling: openWorkspacePremiumBilling,
   });
   const {
     showControl: showWorkspaceRightPanelControl,
@@ -11746,8 +11425,6 @@ export default function App() {
     workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError,
-    workspaceCreditTopupError,
-    isStartingWorkspaceCreditTopupCheckout,
     hasWorkspaceCardOnFile:
       workspaceCardOnFileStatus === null
         ? null
@@ -11760,7 +11437,7 @@ export default function App() {
     activeProjectName: currentWorkspaceProjectName,
     activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
     activeModelLabel: workspace.derived.activeModelLabel,
-    onOpenWorkspaceCreditTopup: () => {
+    onOpenWorkspaceBilling: () => {
       pushNavSnapshot();
       setActivePage("workspace");
       setActiveView("settings");
@@ -11769,6 +11446,152 @@ export default function App() {
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
   });
+  const handleOpenWorkspacePanelCommunity = useCallback(() => {
+    const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+    if (!nextCommunitySlug) return;
+    openCommunityChat(nextCommunitySlug, { clearUnread: true });
+  }, [activeCommunity?.slug, openCommunityChat, selectedActiveCommunitySlug]);
+  const activeCommunityRoleLabel = useMemo(() => {
+    if (!activeCommunityId) return null;
+    const role = String(communityRoleById[activeCommunityId] ?? "").trim();
+    if (!role) return null;
+    return role
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }, [activeCommunityId, communityRoleById]);
+  const workspaceCommunityRecentChatPreview = useMemo<ReactNode>(() => {
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) {
+      return (
+        <div className="workspace-community-preview__empty">
+          Recent chat is unavailable for this community.
+        </div>
+      );
+    }
+
+    const roots = appendPendingRoots(
+      communityInteractionRoots,
+      pendingCanonicalInteractions,
+      activeCommunityId,
+    )
+      .filter((bundle) => bundle.root.community_id === activeCommunityId)
+      .slice(0, 6);
+
+    if (communityInteractionError && roots.length === 0) {
+      return (
+        <div className="workspace-community-preview__empty" role="alert">
+          <span>{communityInteractionError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!session) return;
+              void loadCommunityInteractionRoots(activeCommunityId, session);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (isLoadingCommunityInteractions && roots.length === 0) {
+      return (
+        <div className="workspace-community-preview__empty" aria-live="polite">
+          Loading recent chat...
+        </div>
+      );
+    }
+
+    if (roots.length === 0) {
+      return (
+        <div className="workspace-community-preview__empty">
+          No recent messages yet.
+        </div>
+      );
+    }
+
+    return (
+      <div className="workspace-community-preview__list">
+        {roots.map((bundle) => {
+          const root = bundle.root;
+          const body = stripSharedAttachmentSummary(
+            bundleText(bundle.content_blocks, root.content_summary),
+            bundle.attachments.length > 0,
+          );
+          const actorName = root.actor_user_id
+            ? displayName(root.actor_user_id)
+            : root.actor_agent_key
+              ? root.actor_agent_key.replace(/_/g, " ")
+              : root.actor_type === "community_agent"
+                ? "Community agent"
+                : "Member";
+          const createdAtLabel = formatChatTime(root.created_at);
+          return (
+            <button
+              key={root.id}
+              type="button"
+              className={`workspace-community-preview__message${bundle.pending ? " is-pending" : ""}`}
+              onClick={() => {
+                handleSelectCommunityInteractionRoot(root.id);
+                handleOpenWorkspacePanelCommunity();
+              }}
+            >
+              <span className="workspace-community-preview__message-meta">
+                <strong>{actorName}</strong>
+                <span>{createdAtLabel}</span>
+              </span>
+              <span className="workspace-community-preview__message-body">
+                {body || root.title || "Message"}
+              </span>
+              {root.reply_count > 0 ? (
+                <span className="workspace-community-preview__message-footer">
+                  {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }, [
+    activeCommunityId,
+    communityInteractionError,
+    communityInteractionRoots,
+    displayName,
+    formatChatTime,
+    handleOpenWorkspacePanelCommunity,
+    handleSelectCommunityInteractionRoot,
+    isLoadingCommunityInteractions,
+    loadCommunityInteractionRoots,
+    pendingCanonicalInteractions,
+    session,
+  ]);
+  const workspaceCommunityPreviewPanel = activeCommunity
+    ? {
+        activeCommunity: {
+          id: activeCommunity.id,
+          slug: activeCommunity.slug,
+          name: activeCommunity.name,
+          one_liner: activeCommunity.one_liner,
+          avatar_url: activeCommunity.avatar_url,
+          avatar_focus_x: activeCommunity.avatar_focus_x,
+          avatar_focus_y: activeCommunity.avatar_focus_y,
+          avatar_zoom: activeCommunity.avatar_zoom,
+        },
+        roleLabel: activeCommunityRoleLabel,
+        memberCount:
+          activeCommunityPresenceSummary?.member_count ??
+          communityDirectoryMemberCount ??
+          activeCommunitySocialMemberCount ??
+          null,
+        onlineCount:
+          activeCommunityPresenceSummary?.online_count ??
+          (activeCommunityOnlineUserIds.size > 0 ? activeCommunityOnlineUserIds.size : null),
+        recentChatPreview: workspaceCommunityRecentChatPreview,
+        onOpenCommunity: handleOpenWorkspacePanelCommunity,
+      }
+    : null;
 
   const workspaceRightPanelToggle = showWorkspaceRightPanelControl ? (
     <button
@@ -11886,6 +11709,7 @@ export default function App() {
         operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs ? session : null,
         builderPartnerProgramPanel: builderPartnerProgramPanelProps,
         workspaceRightPanelOpen: isWorkspaceRightPanelVisible,
+        workspaceCommunityPreviewPanel,
         workspaceUserDataPanel,
         onWorkspaceRightPanelLayoutChange: handleWorkspaceRightPanelLayoutChange,
       },
@@ -12041,14 +11865,6 @@ export default function App() {
         renderTextWithLinks={renderTextWithLinks}
         requireSignIn={() => requireSignIn()}
         showAppToastMessage={showAppToastMessage}
-        onVoiceToolBalanceRequired={(message, details) => {
-          openWorkspaceCreditTopupModal({
-            message: message.trim() || null,
-            toolKind: details?.toolKind ?? "voice_input",
-            requiredCredits: details?.requiredCredits ?? null,
-            paidUsageBillingMode: details?.paidUsageBillingMode ?? null,
-          });
-        }}
         onUnreadCountChange={setDirectMessagesUnreadCount}
         onClose={handleCloseDirectMessages}
       />
@@ -12110,14 +11926,8 @@ export default function App() {
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
-        hasWorkspaceCardOnFile={
-          workspaceCardOnFileStatus === null
-            ? null
-            : workspaceCardOnFileStatus.has_card_on_file === true
-        }
-        isStartingWorkspaceCardSetupCheckout={isStartingWorkspaceCardSetupCheckout}
-        workspaceCardSetupError={workspaceCardSetupError}
-        onStartWorkspaceCardSetupCheckout={startWorkspaceCardSetupCheckout}
+        accountTier={accountCommerceStatus?.account_tier ?? null}
+        onOpenPremiumBilling={openWorkspacePremiumBilling}
         onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
         onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
         onRemoveKnowledgeLinkSource={handleRemoveCommunityLaunchKnowledgeSource}

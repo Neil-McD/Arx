@@ -1,17 +1,32 @@
+import {
+  POLYNET_FREE_MAX_COMMUNITIES,
+  POLYNET_PREMIUM_MAX_COMMUNITIES,
+  POLYNET_PREMIUM_MONTHLY_PRICE_LABEL,
+  POLYNET_PREMIUM_PLAN_NAME,
+} from "./accountCommerce";
+
 type FreeAccountIncludedModalProps = {
   isOpen: boolean;
   accountAccessError: string | null;
   onClose: () => void;
+  onOpenBilling: () => void;
 };
 
 export function FreeAccountIncludedModal({
   isOpen,
   accountAccessError,
   onClose,
+  onOpenBilling,
 }: FreeAccountIncludedModalProps) {
   if (!isOpen) return null;
 
-  const accountInfoLead = "Free accounts can create two communities. Tool balance covers workspace tools, web research, and voice input.";
+  const accountInfoLead =
+    "Free accounts can create one community. Premium unlocks a second community, hosted tools, web research, and premium runtimes.";
+
+  const handleOpenBilling = () => {
+    onClose();
+    onOpenBilling();
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -38,26 +53,28 @@ export function FreeAccountIncludedModal({
                 <span className="plan-price-period">/mo</span>
               </div>
               <ul className="plan-points">
-                <li>Create two communities.</li>
+                <li>Create {POLYNET_FREE_MAX_COMMUNITIES} community.</li>
                 <li>Join and use communities.</li>
                 <li>Connect Stripe to monetize access.</li>
               </ul>
             </div>
 
-            <div className="plan-card tool-balance">
+            <div className="plan-card premium recommended">
               <div className="plan-card-header">
-                <div className="plan-name">Tool balance</div>
+                <div className="plan-name">{POLYNET_PREMIUM_PLAN_NAME}</div>
               </div>
               <div className="plan-price">
-                <span className="plan-price-amount">$5</span>
-                <span className="plan-price-period">to start</span>
+                <span className="plan-price-amount">{POLYNET_PREMIUM_MONTHLY_PRICE_LABEL}</span>
               </div>
               <ul className="plan-points">
-                <li>Use workspace tools.</li>
+                <li>Create {POLYNET_PREMIUM_MAX_COMMUNITIES} communities.</li>
+                <li>Use premium hosted tools.</li>
                 <li>Run web research.</li>
-                <li>Use voice input.</li>
-                <li>Bring your own ChatGPT or OpenAI inference.</li>
+                <li>Use Codex and future premium runtimes.</li>
               </ul>
+              <button className="plan-cta" type="button" onClick={handleOpenBilling}>
+                Open Billing
+              </button>
             </div>
           </div>
         </div>

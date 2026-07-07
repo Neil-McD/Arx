@@ -137,15 +137,9 @@ assert.equal(
 assert.equal(
   formatWorkspaceBillingCheckoutError(
     "Server Error: Uncaught Error: stripe_secret_key_missing at getStripeClient (../convex/stripeCore.ts:20:17)",
-    { kind: "manual_balance" },
+    { kind: "premium_subscription" },
   ),
-  "Manual balance checkout is temporarily unavailable. Please retry shortly.",
-);
-assert.equal(
-  formatWorkspaceBillingCheckoutError("workspace_tool_balance_pack_invalid", {
-    kind: "manual_balance",
-  }),
-  "That manual balance option is unavailable. Choose another amount.",
+  "Premium checkout is temporarily unavailable. Please retry shortly.",
 );
 
 assert.equal(resolveWorkspaceResourceAccountTier({}), "free");
@@ -652,7 +646,7 @@ assert.match(
   "central paid-tool reservation metadata must distinguish card-backed and prepaid funding",
 );
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
-const httpVoice = read("convex/httpVoice.ts");
+const voiceController = read("shared/useWebVoiceInputController.ts");
 assert.match(
   runtimeAgentLoop,
   /web_crawl[\s\S]*reservePaidToolCredits\([\s\S]*toolKind: "web_research"[\s\S]*toolName: "web_research"[\s\S]*action: "crawl"/,
@@ -664,9 +658,14 @@ assert.match(
   "web research must use card-aware premium-tool billing",
 );
 assert.match(
-  httpVoice,
-  /reservePaidToolCredits\([\s\S]*toolKind: "voice_input"[\s\S]*toolName: "voice_transcribe"/,
-  "voice input must use card-aware premium-tool billing",
+  voiceController,
+  /getBrowserSpeechRecognitionConstructor[\s\S]*SpeechRecognition[\s\S]*webkitSpeechRecognition/,
+  "browser voice input must use native speech recognition instead of paid transcription",
+);
+assert.doesNotMatch(
+  voiceController,
+  /reservePaidToolCredits|transcribeVoice|voice_transcribe|onToolBalanceRequired|tool balance|Add balance/,
+  "browser voice input must not route through paid-tool billing",
 );
 assert.match(
   blaxelWorkspaceWake,
@@ -983,7 +982,7 @@ assert.match(
 );
 assert.match(
   app,
-  /workspace_credits_exhausted[\s\S]*openWorkspaceCreditTopupModal\(\{[\s\S]*paidUsageBillingMode: result\.paidUsageBillingMode/,
+  /workspace_credits_exhausted[\s\S]*openWorkspacePaidToolBillingModal\(\{[\s\S]*paidUsageBillingMode: result\.paidUsageBillingMode/,
   "workspace computer credit failures must pass backend-selected billing mode into the modal",
 );
 assert.match(
@@ -1006,57 +1005,37 @@ assert.match(
   /refreshPendingWorkspaceCardSetup[\s\S]*catch\(\(error\) => \{[\s\S]*formatWorkspaceBillingCheckoutError\(error, \{ kind: "card_setup" \}\)[\s\S]*setWorkspaceCardSetupError\(message\)[\s\S]*setWorkspaceCardOnFileError\(message\)/,
   "card setup return-refresh failures must be sanitized before reaching billing UI",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /setWorkspaceCreditTopupError\(\s*formatWorkspaceBillingCheckoutError\(error, \{ kind: "manual_balance" \}\),\s*\)/,
-  "manual balance checkout failures must be sanitized before reaching the billing modal",
+  /setWorkspaceCreditTopupError|startWorkspaceCreditTopupCheckout|startCloudWorkspaceCreditTopupCheckout|manual_balance/,
+  "app shell must not reintroduce the deleted manual balance checkout path",
 );
 assert.match(
   appErrorMappings,
   /getWorkspaceBillingCheckoutFallback[\s\S]*Card setup is temporarily unavailable[\s\S]*formatWorkspaceBillingCheckoutError[\s\S]*stripe_secret_key_missing/,
   "workspace billing checkout formatter must hide raw Stripe configuration errors",
 );
+assert.doesNotMatch(
+  appErrorMappings,
+  /manual_balance|Manual balance|workspace_tool_balance_pack_invalid|workspace_credit_topup_success_url_invalid|workspace_credit_topup_cancel_url_invalid/,
+  "workspace billing checkout formatter must not preserve deleted manual-balance product copy",
+);
 
 const inferenceIssueModal = read("apps/web/src/components/WebInferenceIssueModal.tsx");
 assert.match(
   inferenceIssueModal,
-  /paidUsageBillingMode[\s\S]*card_required[\s\S]*Add card/,
-  "workspace billing modal must render an Add card path",
+  /Access to \$\{paidToolLabel\} requires Polynet Premium\.[\s\S]*Open Billing/,
+  "premium-tool billing modal must route users to the canonical Premium Billing path",
 );
 assert.match(
   inferenceIssueModal,
-  /manualBalanceAllowed[\s\S]*paidUsageBillingMode !== "card_required"[\s\S]*shouldShowToolBalancePacks[\s\S]*paidUsageBillingMode === "prepaid_required"[\s\S]*manualBalanceAllowed && showManualBalance/,
-  "card-required volume admission must not show prepaid packs as a workaround",
-);
-assert.match(
-  inferenceIssueModal,
-  /requiresWorkspaceCardSetup[\s\S]*paidUsageBillingMode === "card_required"[\s\S]*paidUsageBillingMode === "card_preferred"/,
-  "card setup must only render for explicit card billing modes",
-);
-assert.match(
-  inferenceIssueModal,
-  /Prefer prepaid balance\? Add balance manually\./,
-  "manual prepaid balance must be hidden behind an explicit secondary link",
-);
-assert.match(
-  inferenceIssueModal,
-  /paidToolUiLabel[\s\S]*workspace_tools[\s\S]*web_research[\s\S]*voice_input[\s\S]*Add a card to use \$\{paidToolLabel\}[\s\S]*No charge today[\s\S]*Usage is billed only when premium tools run\./,
-  "card-first paid-tool billing modal copy must stay short and tool-aware",
-);
-assert.match(
-  inferenceIssueModal,
-  /workspace-billing-trust-panel/,
-  "card-first workspace billing modal must render the billing truth in a dedicated readable panel",
-);
-assert.match(
-  inferenceIssueModal,
-  /!\s*requiresWorkspaceCardSetup\s*&&\s*\([\s\S]*<div className="modal-footer"/,
-  "card-first workspace billing modal should rely on the close icon instead of a duplicate Cancel footer",
+  /onOpenSettings\(inferenceIssueModal\.reason\)[\s\S]*workspace_credits[\s\S]*Open Billing/,
+  "workspace credit failures must use the modal settings route instead of starting checkout directly",
 );
 assert.doesNotMatch(
   inferenceIssueModal,
-  /Manual prepaid balance is still available below|Save a card so workspace tools can run/,
-  "card-first workspace billing modal must not reintroduce deleted explanatory copy",
+  /Add card|Prefer prepaid balance\? Add balance manually\.|No charge today|Usage is billed only when premium tools run|onStartWorkspaceCardSetupCheckout|onStartWorkspaceCreditTopupCheckout|WORKSPACE_TOOL_BALANCE_TOPUP_PACKS/,
+  "premium-tool billing modal must not reintroduce the legacy card/prepaid upgrade path",
 );
 assert.match(
   app,
@@ -1075,7 +1054,7 @@ assert.match(
 );
 assert.match(
   app,
-  /onOpenWorkspaceCreditTopup:[\s\S]*setActiveView\("settings"\)[\s\S]*setSettingsPage\("billing"\)/,
+  /onOpenWorkspaceBilling:[\s\S]*setActiveView\("settings"\)[\s\S]*setSettingsPage\("billing"\)/,
   "right-panel workspace billing action must open the canonical billing settings page",
 );
 

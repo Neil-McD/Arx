@@ -430,10 +430,15 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             );
             const max = status?.max_communities ?? 0;
             const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
+            const isOverIncludedCommunityLimit = max > 0 && ownedCount > max;
             const communitiesLabel =
-              max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
+              max > 0
+                ? isOverIncludedCommunityLimit
+                  ? `${ownedCount} owned · ${max} included`
+                  : `${ownedCount}/${max} owned ${communityWord}`
+                : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatAccountTierLabel(tier);
-            const accountStatusLabel = isAccountTierFree(tier) ? "Free account" : `${tierLabel} (internal)`;
+            const accountStatusLabel = isAccountTierFree(tier) ? "Free account" : tierLabel;
             const canMonetizeCommunities = Number(status?.platform_fee_bps ?? 0) > 0;
             const stripeConnectPresentation = buildStripeConnectPresentation({
               accountCommerceStatus: status,
@@ -454,7 +459,11 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     </strong>
                   </div>
                   <div className="auth-actions">
-                    <span className="auth-status">Tool balance covers premium tools like workspace tools, web research, and voice input. Connect ChatGPT or add an OpenAI API key here to bring your own inference.</span>
+                    <span className="auth-status">
+                      {isOverIncludedCommunityLimit
+                        ? "Existing communities stay active. Polynet Premium unlocks new community capacity, hosted workspace tools, web research, and premium runtimes."
+                        : "Polynet Premium unlocks hosted workspace tools, web research, and premium runtimes. Connect ChatGPT or add an OpenAI API key here to bring your own inference."}
+                    </span>
                   </div>
                 </div>
                 {canMonetizeCommunities ? (

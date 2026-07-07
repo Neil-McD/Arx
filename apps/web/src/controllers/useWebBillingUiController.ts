@@ -3,7 +3,6 @@ import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAc
 export type UseWebBillingUiControllerResult<
   BillingStatusT,
   WorkspaceCreditBalanceT,
-  WorkspaceBillingOverviewT,
   PendingPurchaseClaimT,
 > = {
   pendingPurchaseClaims: PendingPurchaseClaimT[];
@@ -28,16 +27,6 @@ export type UseWebBillingUiControllerResult<
   setIsLoadingWorkspaceCreditBalance: Dispatch<SetStateAction<boolean>>;
   workspaceCreditBalanceError: string | null;
   setWorkspaceCreditBalanceError: Dispatch<SetStateAction<string | null>>;
-  workspaceBillingOverview: WorkspaceBillingOverviewT | null;
-  setWorkspaceBillingOverview: Dispatch<SetStateAction<WorkspaceBillingOverviewT | null>>;
-  isLoadingWorkspaceBillingOverview: boolean;
-  setIsLoadingWorkspaceBillingOverview: Dispatch<SetStateAction<boolean>>;
-  workspaceBillingOverviewError: string | null;
-  setWorkspaceBillingOverviewError: Dispatch<SetStateAction<string | null>>;
-  isStartingWorkspaceCreditTopupCheckout: boolean;
-  setIsStartingWorkspaceCreditTopupCheckout: Dispatch<SetStateAction<boolean>>;
-  workspaceCreditTopupError: string | null;
-  setWorkspaceCreditTopupError: Dispatch<SetStateAction<string | null>>;
   isSettingDevAccountTier: boolean;
   setIsSettingDevAccountTier: Dispatch<SetStateAction<boolean>>;
   devAccountTierError: string | null;
@@ -62,9 +51,8 @@ export type UseWebBillingUiControllerResult<
 export function useWebBillingUiController<
   BillingStatusT,
   WorkspaceCreditBalanceT,
-  WorkspaceBillingOverviewT,
   PendingPurchaseClaimT,
->(): UseWebBillingUiControllerResult<BillingStatusT, WorkspaceCreditBalanceT, WorkspaceBillingOverviewT, PendingPurchaseClaimT> {
+>(): UseWebBillingUiControllerResult<BillingStatusT, WorkspaceCreditBalanceT, PendingPurchaseClaimT> {
   const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaimT[]>([]);
   const [isLoadingPendingPurchases, setIsLoadingPendingPurchases] = useState(false);
   const [pendingPurchasesError, setPendingPurchasesError] = useState<string | null>(null);
@@ -77,12 +65,6 @@ export function useWebBillingUiController<
   const [workspaceCreditBalance, setWorkspaceCreditBalance] = useState<WorkspaceCreditBalanceT | null>(null);
   const [isLoadingWorkspaceCreditBalance, setIsLoadingWorkspaceCreditBalance] = useState(false);
   const [workspaceCreditBalanceError, setWorkspaceCreditBalanceError] = useState<string | null>(null);
-  const [workspaceBillingOverview, setWorkspaceBillingOverview] =
-    useState<WorkspaceBillingOverviewT | null>(null);
-  const [isLoadingWorkspaceBillingOverview, setIsLoadingWorkspaceBillingOverview] = useState(false);
-  const [workspaceBillingOverviewError, setWorkspaceBillingOverviewError] = useState<string | null>(null);
-  const [isStartingWorkspaceCreditTopupCheckout, setIsStartingWorkspaceCreditTopupCheckout] = useState(false);
-  const [workspaceCreditTopupError, setWorkspaceCreditTopupError] = useState<string | null>(null);
   const [isSettingDevAccountTier, setIsSettingDevAccountTier] = useState(false);
   const [devAccountTierError, setDevAccountTierError] = useState<string | null>(null);
   const [isStartingStripeConnectOnboarding, setIsStartingStripeConnectOnboarding] = useState(false);
@@ -121,16 +103,6 @@ export function useWebBillingUiController<
     setIsLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError,
     setWorkspaceCreditBalanceError,
-    workspaceBillingOverview,
-    setWorkspaceBillingOverview,
-    isLoadingWorkspaceBillingOverview,
-    setIsLoadingWorkspaceBillingOverview,
-    workspaceBillingOverviewError,
-    setWorkspaceBillingOverviewError,
-    isStartingWorkspaceCreditTopupCheckout,
-    setIsStartingWorkspaceCreditTopupCheckout,
-    workspaceCreditTopupError,
-    setWorkspaceCreditTopupError,
     isSettingDevAccountTier,
     setIsSettingDevAccountTier,
     devAccountTierError,

@@ -3,9 +3,6 @@ import {
   ensureBillableBlaxelWorkspaceComputer,
 } from "./blaxelWorkspaceWake.ts";
 import {
-  ensureBlaxelWorkspaceComputer,
-} from "./blaxelWorkspaceComputerProvider.ts";
-import {
   buildBlaxelProjectWorkspaceNames,
 } from "./blaxelWorkspaceProjectNames.ts";
 import {
@@ -47,26 +44,7 @@ export type BlaxelRuntimeProjectWorkspaceSession = {
   lifecycleMode: "provider_standby";
 };
 
-export type BlaxelRuntimeScratchSession = {
-  kind: "thread_scratch";
-  providerId: "blaxel";
-  projectId: null;
-  projectVolumeId: null;
-  providerSandboxId: string;
-  workspaceRoot: string;
-  startedAt: number;
-  creditReservationKey?: null;
-  creditBudgetCredits?: undefined;
-  creditBudgetExpiresAt?: undefined;
-  sandboxCpu: number;
-  sandboxMemoryGiB: number;
-  sandboxDiskGiB: number;
-  lifecycleMode: "provider_standby";
-};
-
-export type BlaxelRuntimeWorkspaceSession =
-  | BlaxelRuntimeProjectWorkspaceSession
-  | BlaxelRuntimeScratchSession;
+export type BlaxelRuntimeWorkspaceSession = BlaxelRuntimeProjectWorkspaceSession;
 
 export type RuntimeWorkspaceSession = BlaxelRuntimeWorkspaceSession;
 
@@ -125,73 +103,6 @@ function mapProviderFailure(result: {
     code: String(result.code ?? "workspace_computer_unavailable"),
     message: String(result.message ?? "Workspace computer is unavailable."),
     details: result.details,
-  };
-}
-
-function normalizeBlaxelResourceSegment(value: unknown): string {
-  const normalized = String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return normalized || "runtime";
-}
-
-function buildBlaxelScratchSandboxName(params: {
-  userId: unknown;
-  threadId?: unknown;
-  runId?: unknown;
-}): string {
-  const userSegment = normalizeBlaxelResourceSegment(params.userId).slice(0, 12);
-  const threadSegment = normalizeBlaxelResourceSegment(params.threadId).slice(0, 12);
-  const runSegment = normalizeBlaxelResourceSegment(params.runId).slice(0, 16);
-  return `pn-s-${userSegment}-${threadSegment}-${runSegment}`.slice(0, 54);
-}
-
-async function createBlaxelRuntimeScratchSession(params: {
-  userId: any;
-  threadId?: string | null;
-  runId?: string | null;
-}): Promise<
-  | { ok: true; session: BlaxelRuntimeScratchSession }
-  | WorkspaceRuntimeSessionFailure
-> {
-  const sandboxName = buildBlaxelScratchSandboxName({
-    userId: params.userId,
-    threadId: params.threadId ?? null,
-    runId: params.runId ?? null,
-  });
-  const ensured = await ensureBlaxelWorkspaceComputer({
-    sandboxName,
-    lifecycleIntent: "agent_run",
-    labels: {
-      purpose: "thread-scratch-sandbox",
-      owner_id: String(params.userId ?? ""),
-      thread_id: String(params.threadId ?? ""),
-      run_id: String(params.runId ?? ""),
-    },
-  });
-  if (!ensured.ok) {
-    return mapProviderFailure(ensured);
-  }
-
-  return {
-    ok: true,
-    session: {
-      kind: "thread_scratch",
-      providerId: "blaxel",
-      projectId: null,
-      projectVolumeId: null,
-      providerSandboxId: ensured.providerSandboxId,
-      workspaceRoot: ensured.workspaceRoot,
-      startedAt: ensured.startedAt,
-      creditReservationKey: null,
-      sandboxCpu: 0,
-      sandboxMemoryGiB: 0,
-      sandboxDiskGiB: 0,
-      lifecycleMode: "provider_standby",
-    },
   };
 }
 
@@ -363,12 +274,12 @@ export async function createRuntimeSandboxSession(params: {
     });
   }
 
-  resolveWorkspaceComputerProviderFromServerEnv();
-  return await createBlaxelRuntimeScratchSession({
-    userId: params.userId,
-    threadId: params.threadId ?? null,
-    runId: params.runId ?? null,
-  });
+  return {
+    ok: false,
+    status: 400,
+    code: "project_required",
+    message: "Workspace tools require a bound computer workspace.",
+  };
 }
 
 export async function settleRuntimeWorkspaceSession(params: {
@@ -400,13 +311,6 @@ export async function settleRuntimeWorkspaceSession(params: {
       error: string;
     }
 > {
-  if (params.session.kind !== "project_workspace") {
-    return {
-      ok: true,
-      skipped: true,
-      creditReservationKey: null,
-    };
-  }
   const creditReservationKey = normalizeOptionalString(params.session.creditReservationKey);
   if (!creditReservationKey) {
     return {
@@ -520,9 +424,6 @@ export async function releaseRuntimeWorkspaceSessionAccountingIfCurrent(params: 
   session: RuntimeWorkspaceSession;
   endedAt?: number;
 }): Promise<{ ok: true; released: boolean; reason: string } | { ok: false; error: string }> {
-  if (params.session.kind !== "project_workspace") {
-    return { ok: true, released: false, reason: "scratch_sandbox_has_no_project_accounting" };
-  }
   const creditReservationKey = normalizeOptionalString(params.session.creditReservationKey);
   if (!creditReservationKey) {
     return { ok: true, released: false, reason: "missing_credit_reservation_key" };

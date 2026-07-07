@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronLeft,
@@ -8,7 +8,9 @@ import {
   FileText,
   Folder,
   LoaderCircle,
+  MessageSquare,
   RefreshCw,
+  Users,
 } from "lucide-react";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
@@ -19,8 +21,11 @@ import markdown from "highlight.js/lib/languages/markdown";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import type { AuthSessionLike } from "../../../../shared/authSession";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
+  formatWorkspaceInspectorFailureMessage,
+  isWorkspaceInspectorWakeRetryableCode,
   listWorkspaceDirectoryCanonical,
   readWorkspaceFilePreviewCanonical,
   type WorkspaceInspectorDirectoryEntry,
@@ -33,8 +38,6 @@ export type WorkspaceUserDataPanelDataProps = {
   workspaceCreditBalance: WorkspaceCreditBalance | null;
   isLoadingWorkspaceCreditBalance: boolean;
   workspaceCreditBalanceError: string | null;
-  workspaceCreditTopupError: string | null;
-  isStartingWorkspaceCreditTopupCheckout: boolean;
   hasWorkspaceCardOnFile?: boolean | null;
   isStartingWorkspaceComputer: boolean;
   isStoppingWorkspaceComputer: boolean;
@@ -44,9 +47,27 @@ export type WorkspaceUserDataPanelDataProps = {
   activeProjectName: string | null;
   activeThreadTitle: string | null;
   activeModelLabel: string | null;
-  onOpenWorkspaceCreditTopup: () => void;
+  onOpenWorkspaceBilling: () => void;
   onTurnOnComputer: () => Promise<WorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
+};
+
+export type WorkspaceCommunityPreviewPanelDataProps = {
+  activeCommunity: {
+    id: string;
+    slug?: string | null;
+    name: string;
+    one_liner?: string | null;
+    avatar_url?: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  };
+  roleLabel: string | null;
+  memberCount: number | null;
+  onlineCount: number | null;
+  recentChatPreview: ReactNode;
+  onOpenCommunity: () => void;
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
@@ -259,46 +280,6 @@ function WorkspaceTextPreview(props: {
   );
 }
 
-function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): string {
-  if (result.code === "background_sandbox_not_found" || result.code === "sandbox_not_found") {
-    return "Open project files to wake the workspace.";
-  }
-  if (
-    result.code === "blaxel_sandbox_not_found" ||
-    result.code === "blaxel_workspace_recreate_failed"
-  ) {
-    return "Workspace is waking up. Try again in a moment.";
-  }
-  if (result.code === "blaxel_volume_quota_exceeded") {
-    return "Workspace storage quota is full. Delete an unused project or volume, then try again.";
-  }
-  if (
-    result.code === "workspace_volume_limit_reached" ||
-    result.code === "workspace_provider_volume_quota_headroom_exhausted"
-  ) {
-    return "Workspace storage quota is full. Delete an unused project, then try again.";
-  }
-  if (result.code === "workspace_volume_funding_required") {
-    return "Add prepaid credits or a card before creating workspace storage.";
-  }
-  if (result.code === "workspace_card_required_for_additional_volume") {
-    return "Additional workspace storage requires a card on file.";
-  }
-  if (result.code === "workspace_uncollected_usage_blocked") {
-    return "Clear prior workspace usage before opening this project workspace.";
-  }
-  if (result.code === "workspace_credits_exhausted") return "Open project files to wake the workspace.";
-  return result.message;
-}
-
-function isWorkspaceInspectorWakeRetryableCode(code: string | null | undefined): boolean {
-  return (
-    code === "blaxel_sandbox_not_found" ||
-    code === "blaxel_sandbox_not_ready" ||
-    code === "blaxel_workspace_recreate_failed"
-  );
-}
-
 function workspaceInspectorRetryDelayMs(result: WorkspaceInspectorFailure): number {
   return result.retryAfterMs ?? WORKSPACE_INSPECTOR_WAKE_RETRY_DEFAULT_DELAY_MS;
 }
@@ -306,9 +287,7 @@ function workspaceInspectorRetryDelayMs(result: WorkspaceInspectorFailure): numb
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   filesResetNonce?: number;
 }) {
-  const workspaceBillingActionLabel = props.isStartingWorkspaceCreditTopupCheckout
-    ? "Opening"
-    : "Billing";
+  const workspaceBillingActionLabel = "Billing";
   const [filesExpanded, setFilesExpanded] = useState(() => loadFilesExpanded(props.activeProjectId));
   const [directoryRefreshNonce, setDirectoryRefreshNonce] = useState(0);
   const [directoryPath, setDirectoryPath] = useState(".");
@@ -320,7 +299,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   const [directoryIsCached, setDirectoryIsCached] = useState(false);
   const [directoryIsStale, setDirectoryIsStale] = useState(false);
   const [isComputerOnForFiles, setIsComputerOnForFiles] = useState(false);
-  const [workspaceFilesProviderId, setWorkspaceFilesProviderId] = useState<"blaxel" | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<WorkspaceInspectorFilePreview | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState(false);
@@ -357,7 +335,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryIsCached(false);
     setDirectoryIsStale(false);
     setIsComputerOnForFiles(false);
-    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -395,7 +372,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     setDirectoryCheckedAt(null);
     setDirectoryIsCached(false);
     setDirectoryIsStale(false);
-    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -421,13 +397,12 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         if (!isAlive) return;
         if (result.ok === false) {
           setDirectoryEntries([]);
-          setDirectoryError(formatWorkspaceInspectorFailure(result));
+          setDirectoryError(formatWorkspaceInspectorFailureMessage(result));
           setDirectoryErrorCode(result.code);
           setDirectoryCheckedAt(null);
           setDirectoryIsCached(false);
           setDirectoryIsStale(false);
           setIsComputerOnForFiles(false);
-          setWorkspaceFilesProviderId(null);
           if (isWorkspaceInspectorWakeRetryableCode(result.code)) {
             const now = Date.now();
             const startedAt = directoryWakeRetryStartedAtRef.current ?? now;
@@ -462,7 +437,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         setDirectoryIsCached(result.cached === true);
         setDirectoryIsStale(result.stale === true);
         setIsComputerOnForFiles(true);
-        setWorkspaceFilesProviderId(result.providerId);
       })
       .catch((error) => {
         if (!isAlive) return;
@@ -475,7 +449,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         directoryWakeRetryStartedAtRef.current = null;
         setIsDirectoryWakeRetrying(false);
         setIsComputerOnForFiles(false);
-        setWorkspaceFilesProviderId(null);
       })
       .finally(() => {
         if (isAlive) setIsLoadingDirectory(false);
@@ -515,7 +488,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           if (filePreviewRequestId.current !== requestId) return;
           if (result.ok === false) {
             setFilePreview(null);
-            setFilePreviewError(formatWorkspaceInspectorFailure(result));
+            setFilePreviewError(formatWorkspaceInspectorFailureMessage(result));
             return;
           }
           setFilePreview(result);
@@ -580,7 +553,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     directoryWakeRetryStartedAtRef.current = null;
     setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(false);
-    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -598,19 +570,17 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
       directoryWakeRetryStartedAtRef.current = null;
       setIsDirectoryWakeRetrying(false);
       setIsComputerOnForFiles(false);
-      setWorkspaceFilesProviderId(null);
       return;
     }
     if (result.ok === false) {
       setDirectoryEntries([]);
-      setDirectoryError(formatWorkspaceInspectorFailure(result));
+      setDirectoryError(formatWorkspaceInspectorFailureMessage(result));
       setDirectoryErrorCode(result.code);
       setDirectoryCheckedAt(null);
       setDirectoryIsCached(false);
       setDirectoryIsStale(false);
       directoryWakeRetryStartedAtRef.current = null;
       setIsDirectoryWakeRetrying(false);
-      setWorkspaceFilesProviderId(null);
       return;
     }
     setFilesExpandedForProject(true);
@@ -624,7 +594,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     directoryWakeRetryStartedAtRef.current = null;
     setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(true);
-    setWorkspaceFilesProviderId("blaxel");
     setDirectoryRefreshNonce((value) => value + 1);
   }, [canTurnOnComputer, props.onTurnOnComputer, setFilesExpandedForProject]);
 
@@ -642,7 +611,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     directoryWakeRetryStartedAtRef.current = null;
     setIsDirectoryWakeRetrying(false);
     setIsComputerOnForFiles(false);
-    setWorkspaceFilesProviderId(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -694,17 +662,13 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
               <button
                 type="button"
                 className="workspace-summary-credit-action"
-                onClick={props.onOpenWorkspaceCreditTopup}
-                disabled={props.isStartingWorkspaceCreditTopupCheckout}
+                onClick={props.onOpenWorkspaceBilling}
               >
                 {workspaceBillingActionLabel}
               </button>
             </dd>
           </div>
         </dl>
-        {props.workspaceCreditTopupError ? (
-          <p className="workspace-summary-note">{props.workspaceCreditTopupError}</p>
-        ) : null}
         {props.workspaceComputerStartError ? (
           <p className="workspace-summary-note">{props.workspaceComputerStartError}</p>
         ) : null}
@@ -814,7 +778,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
                   />
                 </button>
               ) : null}
-              {isComputerOnForFiles && workspaceFilesProviderId !== "blaxel" ? (
+              {isComputerOnForFiles ? (
                 <label
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
                     props.isStoppingWorkspaceComputer ? " is-disabled" : ""
@@ -900,6 +864,60 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export function WorkspaceCommunityPreviewPanelContent(props: WorkspaceCommunityPreviewPanelDataProps) {
+  const community = props.activeCommunity;
+  const memberLabel =
+    typeof props.memberCount === "number"
+      ? `${props.memberCount.toLocaleString()} ${props.memberCount === 1 ? "member" : "members"}`
+      : null;
+  const onlineLabel =
+    typeof props.onlineCount === "number"
+      ? `${props.onlineCount.toLocaleString()} online`
+      : null;
+  const meta = [props.roleLabel, memberLabel, onlineLabel].filter(Boolean).join(" · ");
+  const oneLiner = String(community.one_liner ?? "").trim();
+
+  return (
+    <div className="workspace-community-preview">
+      <section className="workspace-community-preview__hero">
+        <CommunityAvatar
+          className="workspace-community-preview__avatar"
+          imageUrl={community.avatar_url}
+          focusX={community.avatar_focus_x}
+          focusY={community.avatar_focus_y}
+          zoom={community.avatar_zoom}
+          name={community.name}
+          fallbackClassName="workspace-community-preview__avatar-fallback"
+        />
+        <div className="workspace-community-preview__identity">
+          <div className="workspace-community-preview__eyebrow">Community lens</div>
+          <h2>{community.name}</h2>
+          {oneLiner ? <p>{oneLiner}</p> : null}
+          {meta ? (
+            <div className="workspace-community-preview__meta">
+              <Users size={14} strokeWidth={1.8} aria-hidden="true" />
+              <span>{meta}</span>
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="workspace-community-preview__open"
+          onClick={props.onOpenCommunity}
+        >
+          <MessageSquare size={15} strokeWidth={2} aria-hidden="true" />
+          <span>Open chat</span>
+        </button>
+      </section>
+
+      <section className="workspace-community-preview__recent" aria-label="Recent community chat">
+        <div className="workspace-community-preview__section-title">Recent chat</div>
+        {props.recentChatPreview}
+      </section>
     </div>
   );
 }

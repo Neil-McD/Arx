@@ -160,7 +160,7 @@ export async function handlePolynetCodexWorkerIngest(
 
   // The signed run token proves Convex minted this short-lived ingest request;
   // the live run row still remains the authority for owner/thread/engine.
-  let runRow: { threadId?: unknown; engineId?: unknown } | null = null;
+  let runRow: { threadId?: unknown; engineId?: unknown; accountPlan?: unknown } | null = null;
   try {
     runRow = (await ctx.runQuery(
       (internal as any).threads.getRuntimeRunByOwnerRunIdInternal as any,
@@ -168,7 +168,7 @@ export async function handlePolynetCodexWorkerIngest(
         ownerId: context.owner_id,
         runId: context.run_id,
       },
-    )) as { threadId?: unknown; engineId?: unknown } | null;
+    )) as { threadId?: unknown; engineId?: unknown; accountPlan?: unknown } | null;
   } catch {
     runRow = null;
   }
@@ -232,6 +232,7 @@ export async function handlePolynetCodexWorkerIngest(
         inferenceSource: context.inference_source,
         lane: context.lane,
         runId: context.run_id,
+        accountPlan: runRow.accountPlan === "premium" ? "premium" : "free",
         content: assistantText,
         ...(status === "error" || status === "cancelled"
           ? {

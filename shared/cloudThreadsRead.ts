@@ -155,14 +155,15 @@ export type CloudRuntimeComputerUseScreenshotLookup =
     };
 
 export type CloudRuntimeDaytonaPreviewSession = {
-  preview_proxy_token: string;
+  preview_proxy_token: string | null;
+  preview_url: string | null;
   preview_port: number;
   preview_path: string | null;
   preview_label: string | null;
   expires_at: string;
   expires_in_seconds: number;
   auth_mode: string | null;
-  preview_transport: "polynet_preview_gateway" | string | null;
+  preview_transport: "polynet_preview_gateway" | "daytona_signed_direct" | string | null;
 };
 
 export type CloudRuntimeDaytonaPreviewSessionLookup =
@@ -675,10 +676,15 @@ export async function getConvexCloudRuntimeRunDaytonaPreviewSession(params: {
             code !== "auth_unavailable",
     };
   }
+  const previewTransport =
+    typeof payload.preview_transport === "string" ? payload.preview_transport : null;
   const previewProxyToken = String(payload.preview_proxy_token ?? "").trim();
+  const previewUrl = String(payload.preview_url ?? "").trim();
   const previewPort = Math.floor(toFiniteNumber(payload.preview_port, port));
   const expiresAtMs = Number(payload.expires_at ?? 0);
-  if (!previewProxyToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= 0) {
+  const hasExpectedTransportUrl =
+    previewTransport === "daytona_signed_direct" ? Boolean(previewUrl) : Boolean(previewProxyToken);
+  if (!hasExpectedTransportUrl || !Number.isFinite(expiresAtMs) || expiresAtMs <= 0) {
     return {
       ok: false,
       code: "daytona_preview_unavailable",
@@ -688,15 +694,15 @@ export async function getConvexCloudRuntimeRunDaytonaPreviewSession(params: {
   return {
     ok: true,
     session: {
-      preview_proxy_token: previewProxyToken,
+      preview_proxy_token: previewProxyToken || null,
+      preview_url: previewUrl || null,
       preview_port: previewPort,
       preview_path: typeof payload.preview_path === "string" ? payload.preview_path : null,
       preview_label: typeof payload.preview_label === "string" ? payload.preview_label : null,
       expires_at: toIsoStringFromMs(expiresAtMs),
       expires_in_seconds: Math.max(0, Math.floor(toFiniteNumber(payload.expires_in_seconds, 0))),
       auth_mode: typeof payload.auth_mode === "string" ? payload.auth_mode : null,
-      preview_transport:
-        typeof payload.preview_transport === "string" ? payload.preview_transport : null,
+      preview_transport: previewTransport,
     },
   };
 }

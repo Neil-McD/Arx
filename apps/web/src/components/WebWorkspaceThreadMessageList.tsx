@@ -24,6 +24,7 @@ type WebWorkspaceThreadMessageListProps = {
   handleCopyMessage: (messageId: string, text: string) => Promise<void> | void;
   openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
   renderPreviewForRun: (runId: string | null) => ReactNode;
+  onOpenPremiumBilling: () => void;
 };
 
 export function WebWorkspaceThreadMessageList(
@@ -64,6 +65,21 @@ export function WebWorkspaceThreadMessageList(
                 onCopyCode: props.copyTextToClipboard,
               })}
         </div>
+        {!isUser && message.premiumUpgradeCta ? (
+          <div className="message-premium-upgrade-cta" role="group" aria-label="Premium upgrade">
+            <div className="message-premium-upgrade-copy">
+              <span>Premium tools required</span>
+              <strong>Upgrade to continue with Polynet Premium.</strong>
+            </div>
+            <button
+              className="message-premium-upgrade-button"
+              type="button"
+              onClick={props.onOpenPremiumBilling}
+            >
+              Upgrade
+            </button>
+          </div>
+        ) : null}
         {message.attachments.length > 0 ? (
           <div className="attachments-preview message-attachments-preview">
             {message.attachments.map((attachment) => {

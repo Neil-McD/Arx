@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
 import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
+import type { PremiumMemberBadgeSummary } from "../../../../shared/communityTypes";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import type {
   CloudCommunityPolynetOverview,
@@ -23,6 +25,7 @@ export type CommunityRailMember = {
   user_id: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at?: string | null;
   last_active_at?: string | null;
@@ -391,6 +394,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           </span>
           <span className="community-context-member-copy">
             <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
+            <PremiumMemberBadge badge={member.premium_badge ?? null} />
             {activityLabel ? (
               <span className="community-context-member-activity">{activityLabel}</span>
             ) : null}

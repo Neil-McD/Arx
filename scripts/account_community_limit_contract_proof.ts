@@ -14,13 +14,13 @@ const builderQuickstart = read("docs/product/guides/builder-quickstart.md");
 
 assert.match(
   auth,
-  /if \(tier === "architect"\) \{[\s\S]*?maxCommunities: 3,/,
-  "architect tier should retain the internal three-community limit",
+  /POLYNET_PREMIUM_MAX_COMMUNITIES[\s\S]*if \(tier === "architect"\) \{[\s\S]*?maxCommunities: POLYNET_PREMIUM_MAX_COMMUNITIES,/,
+  "Premium tier should use the shared two-community limit",
 );
 assert.match(
   auth,
-  /return \{[\s\S]*?maxCommunities: 2,[\s\S]*?platformFeeBps: 1000,/,
-  "free account tier should allow two communities with the default 10% platform fee",
+  /POLYNET_FREE_MAX_COMMUNITIES[\s\S]*return \{[\s\S]*?maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*?platformFeeBps: 1000,/,
+  "free account tier should allow one community with the default 10% platform fee",
 );
 assert.match(
   auth,
@@ -53,9 +53,10 @@ for (const [label, contents] of [
   ["auth money access matrix", accountMatrix],
   ["builder quickstart", builderQuickstart],
 ] as const) {
-  assert.doesNotMatch(contents, /one communit(y|ies)/i, `${label} should not describe a one-community free limit`);
+  assert.doesNotMatch(contents, /free (authenticated )?(user|account)s? (can|may).*(own|create|build) two communit/i, `${label} should not describe a two-community free limit`);
 }
 
-assert.match(accountModal, /two communities/i, "free account modal must describe two communities");
-assert.match(accountMatrix, /two communities/i, "auth money access matrix must describe two communities");
-assert.match(builderQuickstart, /two communities/i, "builder quickstart must describe two communities");
+assert.match(accountModal, /Free accounts can create one community/i, "free account modal must describe one free community");
+assert.match(accountModal, /Premium unlocks a second community/i, "free account modal must describe Premium second-community unlock");
+assert.match(accountMatrix, /can own one community/i, "auth money access matrix must describe one free community");
+assert.match(builderQuickstart, /build one community/i, "builder quickstart must describe one free community");

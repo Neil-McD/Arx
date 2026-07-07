@@ -55,6 +55,7 @@ type DirectMessageLike = {
   senderType: "user" | "agent" | "system";
   senderUserId?: any;
   senderAgentParticipantId?: any;
+  clientMessageId?: string;
   contentJson: unknown;
   createdAt: number;
   updatedAt: number;
@@ -95,7 +96,34 @@ const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
 const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
 const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_ROWS = 150;
 const MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS = 150;
+const MAX_DM_NETWORK_PEOPLE_ROWS = 30;
+const MAX_DM_NETWORK_PRESENCE_ROWS_PER_COMMUNITY = 40;
+const MAX_DM_CLIENT_MESSAGE_ID_CHARS = 64;
+const MAX_DM_BLOCK_SCAN_ROWS = 200;
+const DM_MESSAGE_RATE_LIMIT = 25;
+const DM_MESSAGE_RATE_WINDOW_MS = 60 * 1000;
+const DM_NEW_CONVERSATION_RATE_LIMIT = 15;
+const DM_NEW_CONVERSATION_RATE_WINDOW_MS = 60 * 60 * 1000;
 const DIRECT_CONVERSATION_KIND = "direct" as const;
+
+type CommunityPresenceLike = {
+  userId: any;
+  lastSeenAt?: number | null;
+};
+
+type DirectMessageBlockLike = {
+  _id: any;
+  blockerUserId: any;
+  blockedUserId: any;
+};
+
+type DirectMessageRateCounterLike = {
+  _id: any;
+  userId: any;
+  kind: "message" | "conversation";
+  windowStartMs: number;
+  count: number;
+};
 
 function normalizePublicUserId(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -299,6 +327,100 @@ function buildDirectConversationCanonicalKey(leftUserId: any, rightUserId: any):
   return `dm:direct:v1:${left}:${right}`;
 }
 
+async function findDirectMessageBlockRow(
+  ctx: any,
+  blockerUserId: any,
+  blockedUserId: any,
+): Promise<DirectMessageBlockLike | null> {
+  return (await ctx.db
+    .query("dmBlocks" as any)
+    .withIndex("by_blocker_blocked", (q: any) =>
+      q.eq("blockerUserId", blockerUserId).eq("blockedUserId", blockedUserId),
+    )
+    .first()) as DirectMessageBlockLike | null;
+}
+
+async function directMessageBlockExistsBetween(
+  ctx: any,
+  leftUserId: any,
+  rightUserId: any,
+): Promise<boolean> {
+  const [leftBlocksRight, rightBlocksLeft] = await Promise.all([
+    findDirectMessageBlockRow(ctx, leftUserId, rightUserId),
+    findDirectMessageBlockRow(ctx, rightUserId, leftUserId),
+  ]);
+  return Boolean(leftBlocksRight || rightBlocksLeft);
+}
+
+async function listDirectMessageBlockedUserKeysForViewer(
+  ctx: any,
+  viewerUserId: any,
+): Promise<Set<string>> {
+  const [blockedByViewer, blockingViewer] = await Promise.all([
+    ctx.db
+      .query("dmBlocks" as any)
+      .withIndex("by_blocker_blocked", (q: any) => q.eq("blockerUserId", viewerUserId))
+      .take(MAX_DM_BLOCK_SCAN_ROWS) as Promise<DirectMessageBlockLike[]>,
+    ctx.db
+      .query("dmBlocks" as any)
+      .withIndex("by_blocked_blocker", (q: any) => q.eq("blockedUserId", viewerUserId))
+      .take(MAX_DM_BLOCK_SCAN_ROWS) as Promise<DirectMessageBlockLike[]>,
+  ]);
+  const keys = new Set<string>();
+  for (const row of blockedByViewer) {
+    const key = normalizeIdValue(row.blockedUserId);
+    if (key) keys.add(key);
+  }
+  for (const row of blockingViewer) {
+    const key = normalizeIdValue(row.blockerUserId);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+async function enforceDirectMessageRateLimit(args: {
+  ctx: any;
+  userId: any;
+  kind: "message" | "conversation";
+}): Promise<void> {
+  const limit = args.kind === "message" ? DM_MESSAGE_RATE_LIMIT : DM_NEW_CONVERSATION_RATE_LIMIT;
+  const windowMs =
+    args.kind === "message" ? DM_MESSAGE_RATE_WINDOW_MS : DM_NEW_CONVERSATION_RATE_WINDOW_MS;
+  const nowMs = Date.now();
+  const counter = (await args.ctx.db
+    .query("dmRateCounters" as any)
+    .withIndex("by_user_kind", (q: any) => q.eq("userId", args.userId).eq("kind", args.kind))
+    .first()) as DirectMessageRateCounterLike | null;
+  if (!counter) {
+    await args.ctx.db.insert("dmRateCounters" as any, {
+      userId: args.userId,
+      kind: args.kind,
+      windowStartMs: nowMs,
+      count: 1,
+      updatedAt: nowMs,
+    });
+    return;
+  }
+  const windowStartMs = Math.max(0, Math.floor(counter.windowStartMs ?? 0));
+  const isSameWindow = nowMs - windowStartMs < windowMs;
+  if (!isSameWindow) {
+    await args.ctx.db.patch(counter._id, {
+      windowStartMs: nowMs,
+      count: 1,
+      updatedAt: nowMs,
+    });
+    return;
+  }
+  const count = Math.max(0, Math.floor(counter.count ?? 0));
+  if (count >= limit) {
+    throw new Error("dm_rate_limited");
+  }
+  await args.ctx.db.patch(counter._id, {
+    count: count + 1,
+    updatedAt: nowMs,
+  });
+}
+
 async function requireDirectMessageRelationshipAccess(args: {
   ctx: any;
   viewerUserId: any;
@@ -306,6 +428,11 @@ async function requireDirectMessageRelationshipAccess(args: {
   preferredCommunityId?: any | null;
   requiredCommunityId?: any | null;
 }): Promise<string> {
+  // Blocks fail with the same error as a missing mutual community so a block
+  // is never revealed to the blocked side.
+  if (await directMessageBlockExistsBetween(args.ctx, args.viewerUserId, args.targetUserId)) {
+    throw new Error("dm_conversation_access_required");
+  }
   const relationship = await resolveViewerDirectMessageRelationship({
     ctx: args.ctx,
     viewerUserId: args.viewerUserId,
@@ -524,6 +651,7 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
       avatar_focus_x: 0.5,
       avatar_focus_y: 0.5,
       avatar_zoom: 1,
+      premium_badge: null,
       status: row.status,
       last_read_seq: Math.max(0, Math.floor(row.lastReadSeq ?? 0)),
     };
@@ -537,6 +665,7 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
         avatar_focus_x: 0.5,
         avatar_focus_y: 0.5,
         avatar_zoom: 1,
+        premium_badge: null,
       };
   return {
     id: String(row._id),
@@ -547,6 +676,7 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
     avatar_focus_y: profile.avatar_focus_y ?? 0.5,
     avatar_zoom: profile.avatar_zoom ?? 1,
+    premium_badge: profile.premium_badge ?? null,
     status: row.status,
     last_read_seq: Math.max(0, Math.floor(row.lastReadSeq ?? 0)),
   };
@@ -579,6 +709,19 @@ async function mapDirectConversation(
     : null;
   const viewerLastReadSeq = Math.max(0, Math.floor(viewerParticipant?.lastReadSeq ?? 0));
   const unreadCount = viewerParticipant ? Math.max(0, lastSeq - viewerLastReadSeq) : 0;
+  const peerParticipant = viewerUserKey
+    ? participants.find(
+        (participant) =>
+          participant.status === "active" &&
+          participant.participantType === "user" &&
+          normalizeIdValue(participant.userId) &&
+          normalizeIdValue(participant.userId) !== viewerUserKey,
+      ) ?? null
+    : null;
+  const viewerHasBlockedPeer =
+    viewerUserKey && peerParticipant?.userId
+      ? Boolean(await findDirectMessageBlockRow(ctx, opts?.viewerUserId, peerParticipant.userId))
+      : false;
   return {
     id: String(row._id),
     kind: row.kind,
@@ -593,6 +736,7 @@ async function mapDirectConversation(
     viewer_last_read_seq: viewerLastReadSeq,
     unread_count: unreadCount,
     has_unread: unreadCount > 0,
+    viewer_has_blocked_peer: viewerHasBlockedPeer,
     last_message_preview: lastMessage ? readDirectMessageTextPreview(lastMessage.contentJson) : null,
     last_message_at:
       typeof row.lastMessageAt === "number" && Number.isFinite(row.lastMessageAt)
@@ -611,6 +755,7 @@ async function mapDirectMessage(ctx: any, row: DirectMessageLike) {
     seq: Math.max(0, Math.floor(row.seq)),
     sender_type: row.senderType,
     sender_user_id: row.senderUserId ? await resolvePublicUserId(ctx, row.senderUserId) : null,
+    client_message_id: normalizeClientMessageId(row.clientMessageId),
     content_json: await mapDirectMessageContentJsonForRead(ctx, row.contentJson),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
@@ -628,6 +773,7 @@ async function mapDirectTypingPresence(ctx: any, row: DirectMessageTypingPresenc
         avatar_focus_x: 0.5,
         avatar_focus_y: 0.5,
         avatar_zoom: 1,
+        premium_badge: null,
       };
   return {
     user_id: publicUserId ?? normalizeIdValue(row.userId),
@@ -636,6 +782,7 @@ async function mapDirectTypingPresence(ctx: any, row: DirectMessageTypingPresenc
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
     avatar_focus_y: profile.avatar_focus_y ?? 0.5,
     avatar_zoom: profile.avatar_zoom ?? 1,
+    premium_badge: profile.premium_badge ?? null,
     display_until_ms: row.displayUntil,
     updated_at: toIsoString(row.updatedAt),
   };
@@ -687,6 +834,7 @@ async function mapEligibleDirectMessageRecipient(args: {
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
     avatar_focus_y: profile.avatar_focus_y ?? 0.5,
     avatar_zoom: profile.avatar_zoom ?? 1,
+    premium_badge: profile.premium_badge ?? null,
     community_id: String(args.community._id),
     community_name: args.community.name,
     existing_conversation_id: existingConversation ? String(existingConversation._id) : null,
@@ -793,6 +941,65 @@ async function listDirectMessageCandidateUserIdsForCommunity(args: {
   return userIds;
 }
 
+function normalizeClientMessageId(raw: unknown): string | null {
+  const normalized = String(raw ?? "").trim().slice(0, MAX_DM_CLIENT_MESSAGE_ID_CHARS);
+  return normalized || null;
+}
+
+async function appendDirectMessageFromUser(args: {
+  ctx: any;
+  conversation: DirectMessageConversationLike;
+  senderUserId: any;
+  senderParticipantId: any;
+  text: string;
+  attachments: unknown;
+  clientMessageId?: string | null;
+}): Promise<DirectMessageLike> {
+  const nowMs = Date.now();
+  const clientMessageId = normalizeClientMessageId(args.clientMessageId);
+  if (clientMessageId) {
+    const existing = (await args.ctx.db
+      .query("dmMessages" as any)
+      .withIndex("by_conversation_clientMessageId", (q: any) =>
+        q.eq("conversationId", args.conversation._id).eq("clientMessageId", clientMessageId),
+      )
+      .first()) as DirectMessageLike | null;
+    if (existing) return existing;
+  }
+  const seq = Math.max(0, Math.floor(args.conversation.lastSeq ?? 0)) + 1;
+  const text = normalizeDirectMessageText(args.text);
+  const attachments = normalizeStoredDirectMessageAttachments(args.attachments, {
+    enforceWritePolicy: true,
+  });
+  if (!text && attachments.length === 0) throw new Error("dm_message_payload_required");
+  const contentJson = attachments.length > 0 ? { text, attachments } : { text };
+  const messageId = await args.ctx.db.insert("dmMessages" as any, {
+    conversationId: args.conversation._id,
+    seq,
+    senderType: "user",
+    senderUserId: args.senderUserId,
+    ...(clientMessageId ? { clientMessageId } : null),
+    contentJson,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  await args.ctx.db.patch(args.conversation._id, {
+    lastSeq: seq,
+    lastMessageAt: nowMs,
+    updatedAt: nowMs,
+  });
+  await touchActiveConversationParticipantsActivity({
+    ctx: args.ctx,
+    conversationId: args.conversation._id,
+    nowMs,
+    senderParticipantId: args.senderParticipantId,
+    senderLastReadSeq: seq,
+  });
+  const message = (await args.ctx.db.get(messageId)) as DirectMessageLike | null;
+  if (!message) throw new Error("dm_message_create_failed");
+  return message;
+}
+
 export const ensureDirectConversationFromCommunity = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -825,6 +1032,7 @@ export const ensureDirectConversationFromCommunity = mutation({
     });
 
     if (isNewConversation) {
+      await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "conversation" });
       const conversationId = await ctx.db.insert("dmConversations" as any, {
         kind: DIRECT_CONVERSATION_KIND,
         canonicalKey,
@@ -931,6 +1139,125 @@ export const listEligibleDirectMessageRecipientsForViewer = query({
     }
 
     return recipients;
+  },
+});
+
+export const listNetworkPeopleForViewer = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const safeLimit = Math.max(1, Math.min(MAX_DM_NETWORK_PEOPLE_ROWS, Math.floor(args.limit ?? 20)));
+    const search = normalizeRecipientSearch(args.search);
+    const sourceCommunities = await listDirectMessageSourceCommunitiesForViewer(ctx, viewerUserId);
+    const viewerUserKey = normalizeIdValue(viewerUserId);
+    const blockedUserKeys = await listDirectMessageBlockedUserKeysForViewer(ctx, viewerUserId);
+
+    type NetworkCandidate = {
+      userId: any;
+      community: CommunityLike;
+      lastSeenAtMs: number | null;
+    };
+    const candidatesByUser = new Map<string, NetworkCandidate>();
+    const addCandidate = (userId: any, community: CommunityLike, lastSeenAtMs: number | null) => {
+      const userKey = normalizeIdValue(userId);
+      if (!userKey || userKey === viewerUserKey || blockedUserKeys.has(userKey)) return;
+      const existing = candidatesByUser.get(userKey);
+      if (existing && (existing.lastSeenAtMs ?? 0) >= (lastSeenAtMs ?? 0)) return;
+      candidatesByUser.set(userKey, { userId, community, lastSeenAtMs });
+    };
+
+    for (const community of sourceCommunities) {
+      const presenceRows = (await ctx.db
+        .query("communityPresence" as any)
+        .withIndex("by_community_lastSeenAt", (q: any) => q.eq("communityId", community._id))
+        .order("desc")
+        .take(MAX_DM_NETWORK_PRESENCE_ROWS_PER_COMMUNITY)) as CommunityPresenceLike[];
+      for (const row of presenceRows) {
+        const lastSeenAt = Number(row.lastSeenAt ?? 0);
+        addCandidate(
+          row.userId,
+          community,
+          Number.isFinite(lastSeenAt) && lastSeenAt > 0 ? lastSeenAt : null,
+        );
+      }
+      const memberUserIds = await listDirectMessageCandidateUserIdsForCommunity({
+        ctx,
+        community,
+        maxUserIds: MAX_DM_NETWORK_PRESENCE_ROWS_PER_COMMUNITY,
+      });
+      for (const userId of memberUserIds) {
+        const userKey = normalizeIdValue(userId);
+        if (!userKey || userKey === viewerUserKey || candidatesByUser.has(userKey)) continue;
+        addCandidate(userId, community, null);
+      }
+    }
+
+    const orderedCandidates = Array.from(candidatesByUser.values()).sort(
+      (left, right) => (right.lastSeenAtMs ?? 0) - (left.lastSeenAtMs ?? 0),
+    );
+
+    const seenUserIds = new Set<string>();
+    const people: Array<EligibleDirectMessageRecipient & { last_active_at: string | null }> = [];
+
+    if (search) {
+      const exactHandleUser = await findUserByNormalizedHandle(ctx, search);
+      const exactHandleUserKey = exactHandleUser ? normalizeIdValue(exactHandleUser._id) : "";
+      if (
+        exactHandleUser &&
+        exactHandleUserKey &&
+        exactHandleUserKey !== viewerUserKey &&
+        !blockedUserKeys.has(exactHandleUserKey)
+      ) {
+        for (const community of sourceCommunities) {
+          const recipient = await mapEligibleDirectMessageRecipient({
+            ctx,
+            community,
+            viewerUserId,
+            userId: exactHandleUser._id,
+            search,
+          });
+          if (!recipient) continue;
+          const candidate = candidatesByUser.get(exactHandleUserKey) ?? null;
+          seenUserIds.add(exactHandleUserKey);
+          people.push({
+            ...recipient,
+            last_active_at: candidate?.lastSeenAtMs ? toIsoString(candidate.lastSeenAtMs) : null,
+          });
+          break;
+        }
+      }
+    }
+
+    for (const candidate of orderedCandidates) {
+      if (people.length >= safeLimit) break;
+      const userKey = normalizeIdValue(candidate.userId);
+      if (!userKey || seenUserIds.has(userKey)) continue;
+      const recipient = await mapEligibleDirectMessageRecipient({
+        ctx,
+        community: candidate.community,
+        viewerUserId,
+        userId: candidate.userId,
+        search,
+      });
+      if (!recipient) continue;
+      seenUserIds.add(userKey);
+      people.push({
+        ...recipient,
+        last_active_at: candidate.lastSeenAtMs ? toIsoString(candidate.lastSeenAtMs) : null,
+      });
+    }
+
+    return {
+      people,
+      source_community_count: sourceCommunities.length,
+    };
   },
 });
 
@@ -1191,6 +1518,7 @@ export const sendDirectMessage = mutation({
     conversationId: v.id("dmConversations"),
     text: v.string(),
     attachments: v.optional(v.array(v.any())),
+    clientMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const viewerUserId = await resolveUserIdForAuthenticatedRequest({
@@ -1208,38 +1536,184 @@ export const sendDirectMessage = mutation({
       conversation,
       viewerUserId,
     });
+    await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
+
+    const message = await appendDirectMessageFromUser({
+      ctx,
+      conversation,
+      senderUserId: viewerUserId,
+      senderParticipantId: participant._id,
+      text: args.text,
+      attachments: args.attachments,
+      clientMessageId: args.clientMessageId ?? null,
+    });
+    return await mapDirectMessage(ctx, message);
+  },
+});
+
+export const sendDirectMessageToUser = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    targetUserId: v.string(),
+    communityId: v.optional(v.id("communities")),
+    text: v.string(),
+    attachments: v.optional(v.array(v.any())),
+    clientMessageId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const targetUser = await findUserByPublicId(ctx, args.targetUserId);
+    if (!targetUser) throw new Error("dm_target_not_found");
+    if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
+      throw new Error("dm_target_self");
+    }
+    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
+
+    const contextCommunityId = await requireDirectMessageRelationshipAccess({
+      ctx,
+      viewerUserId,
+      targetUserId: targetUser._id,
+      preferredCommunityId: args.communityId ?? null,
+      requiredCommunityId: null,
+    });
+
+    await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
 
     const nowMs = Date.now();
-    const seq = Math.max(0, Math.floor(conversation.lastSeq ?? 0)) + 1;
-    const text = normalizeDirectMessageText(args.text);
-    const attachments = normalizeStoredDirectMessageAttachments(args.attachments, {
-      enforceWritePolicy: true,
-    });
-    if (!text && attachments.length === 0) throw new Error("dm_message_payload_required");
-    const contentJson = attachments.length > 0 ? { text, attachments } : { text };
-    const messageId = await ctx.db.insert("dmMessages" as any, {
-      conversationId: conversation._id,
-      seq,
-      senderType: "user",
-      senderUserId: viewerUserId,
-      contentJson,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await ctx.db.patch(conversation._id, {
-      lastSeq: seq,
-      lastMessageAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await touchActiveConversationParticipantsActivity({
+    let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
+    const isNewConversation = !conversation;
+    if (!conversation) {
+      await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "conversation" });
+      const conversationId = await ctx.db.insert("dmConversations" as any, {
+        kind: DIRECT_CONVERSATION_KIND,
+        canonicalKey: buildDirectConversationCanonicalKey(viewerUserId, targetUser._id),
+        createdByUserId: viewerUserId,
+        createdFromCommunityId: contextCommunityId,
+        lastSeq: 0,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      conversation = (await ctx.db.get(conversationId)) as DirectMessageConversationLike | null;
+    }
+    if (!conversation) throw new Error("dm_conversation_create_failed");
+
+    await ensureUserParticipant({
       ctx,
       conversationId: conversation._id,
+      userId: viewerUserId,
       nowMs,
-      senderParticipantId: participant._id,
-      senderLastReadSeq: seq,
+      touchActivity: true,
     });
-    const message = (await ctx.db.get(messageId)) as DirectMessageLike | null;
-    if (!message) throw new Error("dm_message_create_failed");
-    return await mapDirectMessage(ctx, message);
+    await ensureUserParticipant({
+      ctx,
+      conversationId: conversation._id,
+      userId: targetUser._id,
+      nowMs,
+      touchActivity: isNewConversation,
+      fallbackActivityAt: conversation.updatedAt,
+    });
+
+    const { participant } = await requireActiveUserParticipant({
+      ctx,
+      conversationId: conversation._id,
+      userId: viewerUserId,
+    });
+    const message = await appendDirectMessageFromUser({
+      ctx,
+      conversation,
+      senderUserId: viewerUserId,
+      senderParticipantId: participant._id,
+      text: args.text,
+      attachments: args.attachments,
+      clientMessageId: args.clientMessageId ?? null,
+    });
+    const refreshedConversation = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
+    if (!refreshedConversation) throw new Error("dm_conversation_not_found");
+    return {
+      conversation: await mapDirectConversation(ctx, refreshedConversation, { viewerUserId }),
+      message: await mapDirectMessage(ctx, message),
+    };
+  },
+});
+
+export const blockDirectMessageUser = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    targetUserId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const targetUser = await findUserByPublicId(ctx, args.targetUserId);
+    if (!targetUser) throw new Error("dm_target_not_found");
+    if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
+      throw new Error("dm_target_self");
+    }
+    const nowMs = Date.now();
+    const existing = await findDirectMessageBlockRow(ctx, viewerUserId, targetUser._id);
+    if (!existing) {
+      await ctx.db.insert("dmBlocks" as any, {
+        blockerUserId: viewerUserId,
+        blockedUserId: targetUser._id,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+    return { ok: true, blocked: true };
+  },
+});
+
+export const unblockDirectMessageUser = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    targetUserId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const targetUser = await findUserByPublicId(ctx, args.targetUserId);
+    if (!targetUser) throw new Error("dm_target_not_found");
+    const existing = await findDirectMessageBlockRow(ctx, viewerUserId, targetUser._id);
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+    return { ok: true, blocked: false };
+  },
+});
+
+export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    targetUserId: v.string(),
+    communityId: v.optional(v.id("communities")),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const targetUser = await findUserByPublicId(ctx, args.targetUserId);
+    if (!targetUser) throw new Error("dm_target_not_found");
+    if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
+      throw new Error("dm_target_self");
+    }
+    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
+    await requireDirectMessageRelationshipAccess({
+      ctx,
+      viewerUserId,
+      targetUserId: targetUser._id,
+      preferredCommunityId: args.communityId ?? null,
+      requiredCommunityId: null,
+    });
+    return {
+      uploadUrl: await ctx.storage.generateUploadUrl(),
+    };
   },
 });

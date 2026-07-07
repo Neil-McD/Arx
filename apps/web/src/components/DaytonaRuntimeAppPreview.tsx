@@ -3,6 +3,7 @@ import type { AuthSessionLike } from "../../../../shared/authSession";
 import {
   getConvexCloudRuntimeRunDaytonaPreviewSession,
   stopConvexCloudRuntimeRunDaytonaPreview,
+  type CloudRuntimeDaytonaPreviewSession,
 } from "../../../../shared/cloudThreadsRead";
 import { buildWorkspacePreviewProxyUrl } from "../lib/workspacePreviewProxy";
 
@@ -52,6 +53,37 @@ function shouldHideUnavailableDaytonaPreview(code: string | null): boolean {
 
 function buildDaytonaPreviewVisibilityKey(anchor: DaytonaRuntimePreviewAnchor): string {
   return `${anchor.id}:${Math.floor(Number(anchor.updatedAt) || 0)}`;
+}
+
+function addPreviewFrameSearchParams(url: URL): void {
+  url.searchParams.set("polynet_preview", "inline");
+  url.searchParams.set("polynet_preview_contract", "surface-v1");
+}
+
+function appendPreviewPath(url: URL, previewPath: string | null): void {
+  const normalized = String(previewPath ?? "").trim().replace(/^\/+/, "");
+  if (!normalized) return;
+  const basePath = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+  url.pathname = `${basePath}${normalized}`;
+}
+
+function buildDaytonaPreviewFrameUrl(
+  session: CloudRuntimeDaytonaPreviewSession,
+): string {
+  if (session.preview_transport === "daytona_signed_direct") {
+    const url = new URL(String(session.preview_url ?? ""));
+    appendPreviewPath(url, session.preview_path);
+    addPreviewFrameSearchParams(url);
+    return url.toString();
+  }
+  return buildWorkspacePreviewProxyUrl({
+    previewProxyToken: String(session.preview_proxy_token ?? ""),
+    previewPath: session.preview_path,
+    searchParams: {
+      polynet_preview: "inline",
+      polynet_preview_contract: "surface-v1",
+    },
+  });
 }
 
 function DaytonaRuntimeAppPreviewCard(props: {
@@ -108,14 +140,7 @@ function DaytonaRuntimeAppPreviewCard(props: {
           );
           return;
         }
-        const frameUrl = buildWorkspacePreviewProxyUrl({
-          previewProxyToken: result.session.preview_proxy_token,
-          previewPath: result.session.preview_path,
-          searchParams: {
-            polynet_preview: "inline",
-            polynet_preview_contract: "surface-v1",
-          },
-        });
+        const frameUrl = buildDaytonaPreviewFrameUrl(result.session);
         setState((prev) =>
           prev.phase === "stopping" || prev.phase === "stopped"
             ? prev

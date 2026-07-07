@@ -765,14 +765,6 @@ function testBillingOverviewUsesCanonicalPaidToolLedger() {
     join(process.cwd(), "convex/workspaceCredits.ts"),
     "utf8",
   );
-  const workspaceCreditsGatewaySource = readFileSync(
-    join(process.cwd(), "shared/workspaceCreditsGateway.ts"),
-    "utf8",
-  );
-  const payAsYouGoPanelSource = readFileSync(
-    join(process.cwd(), "apps/web/src/components/WorkspacePayAsYouGoPanel.tsx"),
-    "utf8",
-  );
 
   const usageHelperStart = workspaceCreditsSource.indexOf(
     "function readCreditLedgerBillingUsageCredits",
@@ -819,14 +811,9 @@ function testBillingOverviewUsesCanonicalPaidToolLedger() {
   );
   assert.match(overviewSource, /creditLedgerEntriesTruncated/);
 
-  assert.match(workspaceCreditsGatewaySource, /creditLedgerEntriesTruncated: boolean/);
   assert.match(
-    workspaceCreditsGatewaySource,
-    /creditLedgerEntriesTruncated: scan\.creditLedgerEntriesTruncated === true/,
-  );
-  assert.match(
-    payAsYouGoPanelSource,
-    /workspaceBillingOverview\?\.scan\.creditLedgerEntriesTruncated/,
+    overviewSource,
+    /creditLedgerEntriesTruncated:\s*creditLedgerEntries\.length >= WORKSPACE_BILLING_OVERVIEW_ROW_LIMIT/,
   );
 }
 

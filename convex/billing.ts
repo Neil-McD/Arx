@@ -8,8 +8,8 @@ export {
 } from "./stripeCustomers";
 
 export {
-  startWorkspaceCreditTopupCheckout,
-} from "./workspaceCredits";
+  startPremiumSubscriptionCheckout,
+} from "./premiumBilling";
 
 export {
   syncCommunitySubscriptionLifecycleInternal,

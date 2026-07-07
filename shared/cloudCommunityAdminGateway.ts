@@ -180,7 +180,7 @@ export type CloudCommunitySourceCrawlJobStatus =
 export type CloudCommunitySourceCrawlJob = {
   id: string;
   community_id: string | null;
-  provider: "simple" | "crawl4ai";
+  provider: "simple";
   root_url: string;
   status: CloudCommunitySourceCrawlJobStatus;
   max_pages: number;
@@ -215,9 +215,8 @@ export type CloudCommunitySourceCrawlerStatus = {
   ok: boolean;
   kind: "community_source_crawler_status";
   community_id: string | null;
-  provider: "simple" | "crawl4ai";
+  provider: "simple";
   configured: boolean;
-  full_site_crawl_available: boolean;
   default_max_pages: number;
   default_max_depth: number;
   max_pages: number;
@@ -692,7 +691,7 @@ function normalizeCommunitySourceCrawlJob(payload: unknown): CloudCommunitySourc
   const record = (payload ?? null) as Record<string, unknown> | null;
   const id = typeof record?.id === "string" ? record.id.trim() : "";
   const rootUrl = typeof record?.root_url === "string" ? record.root_url.trim() : "";
-  const provider = record?.provider === "crawl4ai" ? "crawl4ai" : "simple";
+  const provider = "simple";
   const status =
     record?.status === "queued" ||
     record?.status === "crawling" ||
@@ -734,7 +733,6 @@ function normalizeCommunitySourceCrawlJob(payload: unknown): CloudCommunitySourc
 
 function normalizeCommunitySourceCrawlerStatus(payload: unknown): CloudCommunitySourceCrawlerStatus | null {
   const record = (payload ?? null) as Record<string, unknown> | null;
-  const provider = record?.provider === "crawl4ai" ? "crawl4ai" : "simple";
   if (!record || record.kind !== "community_source_crawler_status") return null;
   return {
     ok: record.ok !== false,
@@ -742,9 +740,8 @@ function normalizeCommunitySourceCrawlerStatus(payload: unknown): CloudCommunity
     community_id: typeof record.community_id === "string" && record.community_id.trim()
       ? record.community_id.trim()
       : null,
-    provider,
+    provider: "simple",
     configured: record.configured === true,
-    full_site_crawl_available: record.full_site_crawl_available === true,
     default_max_pages: Math.max(0, Math.floor(parseGatewayNumberLike(record.default_max_pages) ?? 0)),
     default_max_depth: Math.max(0, Math.floor(parseGatewayNumberLike(record.default_max_depth) ?? 0)),
     max_pages: Math.max(0, Math.floor(parseGatewayNumberLike(record.max_pages) ?? 0)),

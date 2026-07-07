@@ -7,11 +7,7 @@ import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
-import type {
-  PaidToolKind,
-  WorkspaceCreditTopupSurface,
-  WorkspaceToolBalanceTopupPackId,
-} from "../../../../shared/workspaceCredits";
+import type { PaidToolKind } from "../../../../shared/workspaceCredits";
 import type { PaidUsageBillingMode } from "../../../../shared/paidUsageBilling";
 
 type InferenceIssueReason =
@@ -50,17 +46,8 @@ type WebInferenceIssueModalProps = {
   hasSession: boolean;
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
-  isStartingWorkspaceCreditTopupCheckout?: boolean;
-  isStartingWorkspaceCardSetupCheckout?: boolean;
-  workspaceCreditTopupError?: string | null;
-  workspaceCardSetupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
-  onStartWorkspaceCreditTopupCheckout?: (
-    packId?: WorkspaceToolBalanceTopupPackId,
-    surface?: WorkspaceCreditTopupSurface,
-  ) => Promise<void> | void;
-  onStartWorkspaceCardSetupCheckout?: () => Promise<void> | void;
 };
 
 type PreviewAccessGateModalState = ComponentProps<

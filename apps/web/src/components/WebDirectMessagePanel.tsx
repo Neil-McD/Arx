@@ -1,4 +1,4 @@
-import { ArrowLeft, MessageCircle, Paperclip, RotateCcw } from "lucide-react";
+import { ArrowLeft, Ban, MessageCircle, Paperclip, RotateCcw } from "lucide-react";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -11,6 +11,7 @@ import type {
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -24,15 +25,24 @@ type DirectMessageComposerAttachment = DirectMessageAttachment & {
 
 type DirectMessageAttachmentFileInput = FileList | readonly File[];
 
+export type WebDirectMessagePanelMessage = DirectMessage & {
+  local_id?: string;
+  local_status?: "sending" | "sent" | "failed";
+  local_error?: string | null;
+};
+
 type WebDirectMessagePanelProps = {
   conversation: DirectMessageConversation;
-  messages: DirectMessage[];
+  messages: WebDirectMessagePanelMessage[];
   input: string;
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
   attachments: DirectMessageComposerAttachment[];
   typingPresence: DirectMessageTypingPresenceBundle;
+  isPeerBlocked?: boolean;
+  showBlockAction?: boolean;
+  onToggleBlockPeer?: () => void | Promise<void>;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
@@ -44,6 +54,8 @@ type WebDirectMessagePanelProps = {
   onAttachmentFilesSelected?: (files: DirectMessageAttachmentFileInput) => void | Promise<void>;
   onRetryAttachment?: (id: string) => void;
   onRemoveAttachment?: (id: string) => void;
+  onRetryLocalMessage?: (localId: string) => void;
+  onDiscardLocalMessage?: (localId: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
   onBackToInbox?: () => void;
@@ -296,6 +308,8 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+  const [isConfirmingBlock, setIsConfirmingBlock] = useState(false);
+  const confirmBlockTimeoutRef = useRef<number | null>(null);
   const peer = resolveDirectMessagePeer(props.conversation, props.sessionUserId);
   const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
   const peerAvatarSeed = peer?.user_id ?? peerLabel;
@@ -309,7 +323,37 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     (attachment) => getComposerAttachmentUploadStatus(attachment) !== "ready",
   );
   const hasComposerPayload = props.input.trim().length > 0 || props.attachments.length > 0;
-  const canSendDirectMessage = !props.isSending && hasComposerPayload && !hasAttachmentBlockers;
+  const isPeerBlocked = Boolean(props.isPeerBlocked);
+  const canSendDirectMessage =
+    !props.isSending && hasComposerPayload && !hasAttachmentBlockers && !isPeerBlocked;
+
+  useEffect(() => {
+    setIsConfirmingBlock(false);
+    return () => {
+      if (confirmBlockTimeoutRef.current !== null) {
+        window.clearTimeout(confirmBlockTimeoutRef.current);
+        confirmBlockTimeoutRef.current = null;
+      }
+    };
+  }, [props.conversation.id]);
+
+  const handleBlockActionClick = () => {
+    if (!props.onToggleBlockPeer) return;
+    if (isPeerBlocked || isConfirmingBlock) {
+      if (confirmBlockTimeoutRef.current !== null) {
+        window.clearTimeout(confirmBlockTimeoutRef.current);
+        confirmBlockTimeoutRef.current = null;
+      }
+      setIsConfirmingBlock(false);
+      void props.onToggleBlockPeer();
+      return;
+    }
+    setIsConfirmingBlock(true);
+    confirmBlockTimeoutRef.current = window.setTimeout(() => {
+      setIsConfirmingBlock(false);
+      confirmBlockTimeoutRef.current = null;
+    }, 3000);
+  };
 
   const scrollMessagesToBottom = useCallback(() => {
     const messagesElement = messagesRef.current;
@@ -332,7 +376,8 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     input.value = "";
   };
 
-  const canAcceptAttachmentDrop = Boolean(props.onAttachmentFilesSelected) && !props.isSending;
+  const canAcceptAttachmentDrop =
+    Boolean(props.onAttachmentFilesSelected) && !props.isSending && !isPeerBlocked;
 
   const onAttachmentDragEnter = (event: DragEvent<HTMLElement>) => {
     if (!canAcceptAttachmentDrop || !hasDragFiles(event)) return;
@@ -442,9 +487,30 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
         />
         <div className="community-dm-panel-title-block">
-          <div className="community-dm-panel-title">{peerLabel}</div>
+          <div className="community-dm-panel-title-row">
+            <div className="community-dm-panel-title">{peerLabel}</div>
+            <PremiumMemberBadge badge={peer?.premium_badge ?? null} />
+          </div>
           <div className="community-dm-panel-context">From {communityName}</div>
         </div>
+        {props.showBlockAction && props.onToggleBlockPeer ? (
+          <button
+            className={`community-dm-panel-block-button${isConfirmingBlock ? " is-confirming" : ""}${isPeerBlocked ? " is-blocked" : ""}`}
+            type="button"
+            onClick={handleBlockActionClick}
+            aria-label={
+              isPeerBlocked
+                ? `Unblock ${peerLabel}`
+                : isConfirmingBlock
+                  ? `Confirm block for ${peerLabel}`
+                  : `Block ${peerLabel}`
+            }
+            title={isPeerBlocked ? "Unblock" : isConfirmingBlock ? "Tap again to block" : "Block"}
+          >
+            <Ban aria-hidden="true" />
+            {isConfirmingBlock ? <span>Block?</span> : isPeerBlocked ? <span>Unblock</span> : null}
+          </button>
+        ) : null}
       </div>
 
       <div
@@ -477,11 +543,14 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             const hasAttachments = attachments.length > 0;
             const isMediaOnly = !hasText && attachments.some((attachment) => attachment.type === "image");
             const shouldSeparateAttachments = hasText && hasAttachments;
+            const isSendingEcho = message.local_status === "sending";
+            const isFailedEcho = message.local_status === "failed";
+            const echoLocalId = String(message.local_id ?? "").trim();
             if (!hasText && !hasAttachments) return null;
             return (
               <div
                 key={message.id}
-                className={`community-dm-panel-message${isOwn ? " is-own" : ""}${isMediaOnly ? " is-media-only" : ""}`}
+                className={`community-dm-panel-message${isOwn ? " is-own" : ""}${isMediaOnly ? " is-media-only" : ""}${isSendingEcho ? " is-sending" : ""}${isFailedEcho ? " is-send-failed" : ""}`}
               >
                 {isMediaOnly ? (
                   <div className="community-dm-panel-media-only">
@@ -502,6 +571,21 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                     <DirectMessageAttachmentViews attachments={attachments} />
                   </div>
                 )}
+                {isFailedEcho ? (
+                  <div className="community-dm-panel-message-send-failed" role="alert">
+                    <span>{String(message.local_error ?? "").trim() || "Not sent."}</span>
+                    {echoLocalId && props.onRetryLocalMessage ? (
+                      <button type="button" onClick={() => props.onRetryLocalMessage?.(echoLocalId)}>
+                        Retry
+                      </button>
+                    ) : null}
+                    {echoLocalId && props.onDiscardLocalMessage ? (
+                      <button type="button" onClick={() => props.onDiscardLocalMessage?.(echoLocalId)}>
+                        Discard
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             );
           })
@@ -516,6 +600,22 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       </div>
 
       {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
+
+      {isPeerBlocked ? (
+        <div className="community-dm-panel-blocked-notice">
+          <span>You blocked this person. Unblock to message them.</span>
+          {props.onToggleBlockPeer ? (
+            <button
+              type="button"
+              onClick={() => {
+                void props.onToggleBlockPeer?.();
+              }}
+            >
+              Unblock
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {props.attachments.length > 0 ? (
         <div className="community-dm-composer-attachments">
@@ -541,7 +641,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
           className="community-dm-panel-attach"
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={props.isSending}
+          disabled={props.isSending || isPeerBlocked}
           aria-label="Attach files"
           title="Attach files"
         >
@@ -564,9 +664,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               void props.onSend();
             }
           }}
-          placeholder={`Message ${peerLabel}`}
+          placeholder={isPeerBlocked ? "You blocked this person" : `Message ${peerLabel}`}
           rows={1}
-          disabled={props.isSending}
+          disabled={props.isSending || isPeerBlocked}
         />
         {props.voiceButtonProps ? <VoiceInputButton {...props.voiceButtonProps} /> : null}
         <button

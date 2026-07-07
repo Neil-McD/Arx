@@ -19,6 +19,17 @@ export type HistoryUsedItem = {
   snippet: string;
 };
 
+export type PremiumUpgradeCta = {
+  kind: "premium_tools_required";
+  action: "open_billing";
+};
+
+function readObjectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 export function communityInitials(name: string): string {
   const trimmed = (name ?? "").trim();
   if (!trimmed) return "AR";
@@ -144,6 +155,20 @@ export function parseMessageMemoryAdded(content: unknown): MemoryUsedItem[] {
     if (fromMeta.length > 0) return fromMeta;
   }
   return parseMemoryUsedArray(record.memory_added);
+}
+
+export function parsePremiumUpgradeCta(content: unknown): PremiumUpgradeCta | null {
+  const record = readObjectRecord(content);
+  if (!record) return null;
+  const meta = readObjectRecord(record.meta);
+  const raw = readObjectRecord(meta?.premium_upgrade_cta ?? record.premium_upgrade_cta);
+  if (!raw) return null;
+  if (raw.kind !== "premium_tools_required") return null;
+  if (raw.action !== "open_billing") return null;
+  return {
+    kind: "premium_tools_required",
+    action: "open_billing",
+  };
 }
 
 export function extractRememberIntent(text: string): string | null {

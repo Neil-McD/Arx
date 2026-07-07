@@ -389,6 +389,7 @@ function buildCallHref(toolName: string, args: Record<string, unknown> | null): 
 
 function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineToolCall[]): string {
   const running = calls.some((call) => call.status === "running");
+  const errored = calls.some((call) => call.status === "error");
   const reads = calls.filter((call) => call.toolName === "read").length;
   const lists = calls.filter((call) => call.toolName === "list_dir").length;
   const searches = calls.filter((call) => call.toolName === "glob" || call.toolName === "grep").length;
@@ -414,7 +415,9 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
         : category === "writes"
           ? running
             ? "Writing"
-            : "Changed"
+            : errored
+              ? "Failed to change"
+              : "Changed"
           : category === "shell"
             ? running
               ? "Running"

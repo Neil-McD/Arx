@@ -16,7 +16,7 @@ The prompt context model defines how platform, community, user, runtime, and too
 
 Documentation is the canonical product truth. Prompts reference and apply that truth. Prompts should not become the undocumented source of product behavior.
 
-There is one platform harness prompt stack. Free and internal architect labels must not select different prompt stacks. Runtime context decides what parts of the one stack are populated.
+There is one platform harness prompt stack. Free and Polynet Premium labels must not select different prompt stacks. Runtime context decides what parts of the one stack are populated.
 
 ## Authority Order
 
@@ -49,8 +49,8 @@ Prompt injection is contextual, not subscription-tiered:
 2. Authenticated users use the same platform harness stack.
 3. A backend-validated community lens adds compact community identity, community prompt, community app grants, and community workflow context.
 4. A project-bound thread adds workspace/project context and workspace tools.
-5. Web research can be exposed for authenticated runs, but execution still depends on tool balance.
-6. Tool balance is enforced when a paid tool executes. A zero-credit user can still see and request the tool; the tool call returns a balance-required error that drives the top-up modal.
+5. Web research can be exposed when Premium entitlement allows it.
+6. Premium entitlement is enforced before premium tools are exposed or executed. Free users should receive a clear upgrade path instead of a tool call attempt.
 
 ## Rules
 

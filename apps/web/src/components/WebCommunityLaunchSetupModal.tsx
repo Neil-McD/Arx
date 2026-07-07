@@ -494,10 +494,8 @@ type WebCommunityLaunchSetupModalProps = {
   onAddKnowledgeLink: (
     draft: CommunityLaunchKnowledgeLinkSaveDraft,
   ) => Promise<void>;
-  hasWorkspaceCardOnFile?: boolean | null;
-  isStartingWorkspaceCardSetupCheckout?: boolean;
-  workspaceCardSetupError?: string | null;
-  onStartWorkspaceCardSetupCheckout?: () => Promise<void> | void;
+  accountTier?: string | null;
+  onOpenPremiumBilling?: () => void;
   onAddKnowledgeFile?: (
     draft: CommunityLaunchKnowledgeFileSaveDraft,
   ) => Promise<void>;
@@ -737,20 +735,12 @@ function formatKnowledgeIngestionFailureMessage(message: unknown): string {
   }
   if (
     code === "community_source_crawl_failed" ||
-    code === "community_source_crawl_no_usable_sources" ||
-    code === "community_source_crawl4ai_no_results"
+    code === "community_source_crawl_no_usable_sources"
   ) {
     return "One source link could not be crawled. Remove it, try again, or add that material as a file.";
   }
   if (code === "community_source_crawl_status_unavailable") {
     return "Source crawling took too long. Try again in a moment.";
-  }
-  if (
-    code === "community_source_crawl4ai_not_configured" ||
-    code === "community_source_crawler_not_configured" ||
-    code === "community_source_full_site_crawl_not_configured"
-  ) {
-    return "Full site crawling is not configured yet.";
   }
   if (code === "community_source_crawler_provider_invalid") {
     return "Source crawling is misconfigured.";
@@ -841,10 +831,8 @@ export function WebCommunityLaunchSetupModal(
     onSaveProfile,
     onSaveAbout,
     onAddKnowledgeLink,
-    hasWorkspaceCardOnFile = null,
-    isStartingWorkspaceCardSetupCheckout = false,
-    workspaceCardSetupError = null,
-    onStartWorkspaceCardSetupCheckout,
+    accountTier = null,
+    onOpenPremiumBilling,
     onAddKnowledgeFile,
     onLoadKnowledgeSources,
     onRemoveKnowledgeLinkSource,
@@ -940,7 +928,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeGitHubFilesLoading, setKnowledgeGitHubFilesLoading] = useState(false);
   const [knowledgeGitHubDisconnecting, setKnowledgeGitHubDisconnecting] = useState(false);
   const [knowledgeHealthLoading, setKnowledgeHealthLoading] = useState(false);
-  const [showKnowledgeLinkPaidToolsPrompt, setShowKnowledgeLinkPaidToolsPrompt] = useState(false);
+  const [showKnowledgeLinkPremiumPrompt, setShowKnowledgeLinkPremiumPrompt] = useState(false);
   const [knowledgeView, setKnowledgeView] = useState<KnowledgeView>("collect");
   const [knowledgeAssemblyStage, setKnowledgeAssemblyStage] =
     useState<KnowledgeAssemblyStage>("idle");
@@ -949,7 +937,7 @@ export function WebCommunityLaunchSetupModal(
   const [knowledgeCompletedDuringSession, setKnowledgeCompletedDuringSession] =
     useState(false);
   const knowledgeProviderStateCommunityKeyRef = useRef<string | null>(null);
-  const knowledgeLinkPaidToolsDismissedCommunityKeysRef = useRef<Set<string>>(new Set());
+  const knowledgeLinkPremiumDismissedCommunityKeysRef = useRef<Set<string>>(new Set());
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -968,10 +956,11 @@ export function WebCommunityLaunchSetupModal(
     ? EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES
     : knowledgeGitHubSources;
   const communityPromptKey = community?.id ?? community?.slug ?? "new-community";
-  const canPromptForKnowledgeLinkPaidTools =
-    hasWorkspaceCardOnFile === false &&
-    Boolean(onStartWorkspaceCardSetupCheckout) &&
-    !knowledgeLinkPaidToolsDismissedCommunityKeysRef.current.has(communityPromptKey);
+  const isFreeAccountTier = String(accountTier ?? "").trim().toLowerCase() === "free";
+  const canPromptForKnowledgeLinkPremium =
+    isFreeAccountTier &&
+    Boolean(onOpenPremiumBilling) &&
+    !knowledgeLinkPremiumDismissedCommunityKeysRef.current.has(communityPromptKey);
   const knowledgeDriveMissingCredentialSources = useMemo(
     () => effectiveKnowledgeGoogleDriveSources.filter(sourceNeedsIntegrationReconnect),
     [effectiveKnowledgeGoogleDriveSources],
@@ -1055,14 +1044,14 @@ export function WebCommunityLaunchSetupModal(
     if (!isOpen) return;
     setStepOverride(requestedInitialStep);
     setActiveStep(requestedInitialStep ?? (isCreateMode ? "profile" : normalizeActiveStep(status)));
-    setShowKnowledgeLinkPaidToolsPrompt(false);
+    setShowKnowledgeLinkPremiumPrompt(false);
   }, [community?.id, isCreateMode, isOpen, requestedInitialStep]);
 
   useEffect(() => {
-    if (hasWorkspaceCardOnFile === true) {
-      setShowKnowledgeLinkPaidToolsPrompt(false);
+    if (!isFreeAccountTier) {
+      setShowKnowledgeLinkPremiumPrompt(false);
     }
-  }, [hasWorkspaceCardOnFile]);
+  }, [isFreeAccountTier]);
 
   useEffect(() => {
     if (!isOpen || stepOverride || requestedInitialStep) return;
@@ -1587,8 +1576,8 @@ export function WebCommunityLaunchSetupModal(
       await onAddKnowledgeLink({ urls });
       setKnowledgeLinkDrafts([""]);
       if (successMessage) setStepSuccess(successMessage);
-      if (canPromptForKnowledgeLinkPaidTools) {
-        setShowKnowledgeLinkPaidToolsPrompt(true);
+      if (canPromptForKnowledgeLinkPremium) {
+        setShowKnowledgeLinkPremiumPrompt(true);
       }
       return true;
     } catch (error) {
@@ -1611,13 +1600,16 @@ export function WebCommunityLaunchSetupModal(
     void saveKnowledgeLinkDrafts();
   };
 
-  const dismissKnowledgeLinkPaidToolsPrompt = () => {
-    knowledgeLinkPaidToolsDismissedCommunityKeysRef.current.add(communityPromptKey);
-    setShowKnowledgeLinkPaidToolsPrompt(false);
+  const dismissKnowledgeLinkPremiumPrompt = () => {
+    knowledgeLinkPremiumDismissedCommunityKeysRef.current.add(communityPromptKey);
+    setShowKnowledgeLinkPremiumPrompt(false);
   };
 
-  const handleStartKnowledgeLinkCardSetup = () => {
-    void onStartWorkspaceCardSetupCheckout?.();
+  const handleOpenKnowledgeLinkPremiumBilling = () => {
+    knowledgeLinkPremiumDismissedCommunityKeysRef.current.add(communityPromptKey);
+    setShowKnowledgeLinkPremiumPrompt(false);
+    onClose();
+    onOpenPremiumBilling?.();
   };
 
   const saveKnowledgeFiles = async (files: File[]): Promise<boolean> => {
@@ -2725,44 +2717,36 @@ export function WebCommunityLaunchSetupModal(
                     </button>
                   </div>
                 </form>
-                {showKnowledgeLinkPaidToolsPrompt ? (
+                {showKnowledgeLinkPremiumPrompt ? (
                   <div
-                    className="community-launch-knowledge-paid-tools-prompt"
+                    className="community-launch-knowledge-premium-prompt"
                     role="status"
                     aria-live="polite"
                   >
                     <div>
                       <strong>Link saved</strong>
                       <p>
-                        Add a card if you want Polynet to read this link,
-                        extract the useful material, and draft it into your
-                        community Knowledge.
+                        Importing links into community Knowledge requires
+                        Polynet Premium. Open Billing to upgrade, then retry
+                        this link.
                       </p>
-                      <span>No charge today.</span>
                     </div>
-                    <div className="community-launch-knowledge-paid-tools-actions">
+                    <div className="community-launch-knowledge-premium-actions">
                       <button
                         type="button"
                         className="polynet-onboarding-next"
-                        onClick={handleStartKnowledgeLinkCardSetup}
-                        disabled={isStartingWorkspaceCardSetupCheckout}
+                        onClick={handleOpenKnowledgeLinkPremiumBilling}
                       >
-                        {isStartingWorkspaceCardSetupCheckout ? "Opening..." : "Add card"}
+                        Open Billing
                       </button>
                       <button
                         type="button"
                         className="polynet-onboarding-back"
-                        onClick={dismissKnowledgeLinkPaidToolsPrompt}
-                        disabled={isStartingWorkspaceCardSetupCheckout}
+                        onClick={dismissKnowledgeLinkPremiumPrompt}
                       >
-                        Continue without premium tools
+                        Keep link saved
                       </button>
                     </div>
-                    {workspaceCardSetupError ? (
-                      <div className="community-launch-knowledge-paid-tools-error">
-                        {workspaceCardSetupError}
-                      </div>
-                    ) : null}
                   </div>
                 ) : null}
                 <ImportedKnowledgeSourceRows

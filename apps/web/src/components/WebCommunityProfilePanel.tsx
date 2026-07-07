@@ -1,5 +1,6 @@
 import { ExternalLink, MessageCircle } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import { SOCIAL_PROFILE_KINDS, type SocialProfileKind } from "../../../../shared/socialProfileLinks";
 import type { CommunityAvatarSummary, ProfileCommunityContext, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -123,7 +124,10 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
       </div>
 
       <div className="community-profile-panel-identity">
-        <div className="community-profile-panel-name">{displayName}</div>
+        <div className="community-profile-panel-name-row">
+          <div className="community-profile-panel-name">{displayName}</div>
+          <PremiumMemberBadge badge={profile?.premium_badge ?? null} />
+        </div>
         {handleLabel ? <div className="community-profile-panel-handle">{handleLabel}</div> : null}
       </div>
 

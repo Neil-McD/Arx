@@ -84,6 +84,7 @@ import {
 } from "../shared/toolRegistry";
 import {
   buildPlatformHarnessRuntimePromptBundle,
+  type RuntimeAccountPlan,
   type RuntimeCommunityPromptFields,
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
@@ -894,7 +895,7 @@ export async function executeRetrievalHarnessTool(params: {
       toolKind: "web_research",
       toolName: "web_research",
       action: "crawl",
-      vendor: "crawl4ai_or_simple_fetcher",
+      vendor: "source_url_fetcher",
       credits: webResearchCredits,
       rawVendorCostUsd: webResearchVendorCostUsd,
       polynetPriceUsd: creditsToUsd(webResearchCredits),
@@ -1337,6 +1338,7 @@ async function executeRetrievalAgentLoop(
     threadId?: string | null;
     requestedModelId: string;
     inferenceSource: RuntimeInferenceSource;
+    accountPlan?: RuntimeAccountPlan | null;
     modelRef: string;
     messages: InferenceMessage[];
     maxTokens: number;
@@ -1530,6 +1532,7 @@ async function executeRetrievalAgentLoop(
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
+    accountPlan: params.accountPlan,
   });
   const promptSuffix = executionSession.buildPromptSuffix();
   const systemPrompt = `${runtimePromptBundle.text}${promptSuffix}`;
@@ -2614,6 +2617,7 @@ async function executeChatToolsAgentLoop(
     projectId?: string | null;
     requestedModelId: string;
     inferenceSource: RuntimeInferenceSource;
+    accountPlan?: RuntimeAccountPlan | null;
     modelRef: string;
     messages: InferenceMessage[];
     maxTokens: number;

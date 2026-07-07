@@ -3,16 +3,8 @@ import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
-import type { CloudWorkspaceAutoRechargeSettings } from "../../../../shared/cloudAccountCommerceGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
-import type {
-  WorkspaceBillingOverview,
-  WorkspaceCreditBalance,
-} from "../../../../shared/workspaceCreditsGateway";
-import type {
-  WorkspaceCreditTopupSurface,
-  WorkspaceToolBalanceTopupPackId,
-} from "../../../../shared/workspaceCredits";
+import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
@@ -105,14 +97,13 @@ export type WebSettingsPanelsProps = {
     redeemPendingPurchases: () => Promise<void> | void;
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;
-    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
-    billingUi: UseWebBillingUiControllerResult<
-      AccountCommerceStatus,
-      WorkspaceCreditBalance,
-      WorkspaceBillingOverview,
-      PendingPurchaseClaim
-    >;
-  };
+	    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
+	    billingUi: UseWebBillingUiControllerResult<
+	      AccountCommerceStatus,
+	      WorkspaceCreditBalance,
+	      PendingPurchaseClaim
+	    >;
+	  };
   agent: {
     session: SessionLike;
     exportError: string | null;
@@ -148,39 +139,15 @@ export type WebSettingsPanelsProps = {
     loadPersonalMemoryItems: () => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
   };
-  billing: {
-    session: SessionLike;
-    startWorkspaceCreditTopupCheckout: (
-      packId?: WorkspaceToolBalanceTopupPackId,
-      surface?: WorkspaceCreditTopupSurface,
-    ) => Promise<void> | void;
-    workspaceCardOnFileStatus: {
-      has_card_on_file?: unknown;
-      payment_method_status?: unknown;
-      card_brand?: unknown;
-      card_last4?: unknown;
-    } | null;
-    workspaceCardOnFileError: string | null;
-    isStartingWorkspaceCardSetupCheckout: boolean;
-    workspaceCardSetupError: string | null;
-    startWorkspaceCardSetupCheckout: () => Promise<void> | void;
-    workspaceAutoRechargeSettings: CloudWorkspaceAutoRechargeSettings | null;
-    isLoadingWorkspaceAutoRechargeSettings: boolean;
-    workspaceAutoRechargeSettingsError: string | null;
-    isSavingWorkspaceAutoRechargeSettings: boolean;
-    saveWorkspaceAutoRechargeSettings: (next: {
-      thresholdCredits: number;
-      restoreToCredits: number;
-      monthlyLimitCredits: number | null;
-    }) => Promise<void> | void;
-    disableWorkspaceAutoRechargeSettings: () => Promise<void> | void;
-    billingUi: UseWebBillingUiControllerResult<
-      AccountCommerceStatus,
-      WorkspaceCreditBalance,
-      WorkspaceBillingOverview,
-      PendingPurchaseClaim
-    >;
-  };
+	  billing: {
+	    session: SessionLike;
+	    startPremiumSubscriptionCheckout: () => Promise<void> | void;
+	    billingUi: UseWebBillingUiControllerResult<
+	      AccountCommerceStatus,
+	      WorkspaceCreditBalance,
+	      PendingPurchaseClaim
+	    >;
+	  };
   integrations: {
     session: SessionLike;
     requireSignIn: () => void;
@@ -394,29 +361,13 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     handleCreatePersonalMemoryItem: agent.handleCreatePersonalMemoryItem,
   };
 
-  const billingSectionProps = {
-    session: billing.session,
-    workspaceCreditBalance: billing.billingUi.workspaceCreditBalance,
-    isLoadingWorkspaceCreditBalance: billing.billingUi.isLoadingWorkspaceCreditBalance,
-    workspaceCreditBalanceError: billing.billingUi.workspaceCreditBalanceError,
-    workspaceBillingOverview: billing.billingUi.workspaceBillingOverview,
-    isLoadingWorkspaceBillingOverview: billing.billingUi.isLoadingWorkspaceBillingOverview,
-    workspaceBillingOverviewError: billing.billingUi.workspaceBillingOverviewError,
-    isStartingWorkspaceCreditTopupCheckout: billing.billingUi.isStartingWorkspaceCreditTopupCheckout,
-    workspaceCreditTopupError: billing.billingUi.workspaceCreditTopupError,
-    workspaceCardOnFileStatus: billing.workspaceCardOnFileStatus,
-    workspaceCardOnFileError: billing.workspaceCardOnFileError,
-    isStartingWorkspaceCardSetupCheckout: billing.isStartingWorkspaceCardSetupCheckout,
-    workspaceCardSetupError: billing.workspaceCardSetupError,
-    startWorkspaceCreditTopupCheckout: billing.startWorkspaceCreditTopupCheckout,
-    startWorkspaceCardSetupCheckout: billing.startWorkspaceCardSetupCheckout,
-    workspaceAutoRechargeSettings: billing.workspaceAutoRechargeSettings,
-    isLoadingWorkspaceAutoRechargeSettings: billing.isLoadingWorkspaceAutoRechargeSettings,
-    workspaceAutoRechargeSettingsError: billing.workspaceAutoRechargeSettingsError,
-    isSavingWorkspaceAutoRechargeSettings: billing.isSavingWorkspaceAutoRechargeSettings,
-    saveWorkspaceAutoRechargeSettings: billing.saveWorkspaceAutoRechargeSettings,
-    disableWorkspaceAutoRechargeSettings: billing.disableWorkspaceAutoRechargeSettings,
-  };
+	  const billingSectionProps = {
+	    session: billing.session,
+	    accountCommerceStatus: billing.billingUi.accountCommerceStatus,
+	    isLoadingAccountCommerce: billing.billingUi.isLoadingAccountCommerce,
+	    accountCommerceError: billing.billingUi.accountCommerceError,
+	    startPremiumSubscriptionCheckout: billing.startPremiumSubscriptionCheckout,
+	  };
 
   const appearanceSectionProps = {
     appTheme: appearance.appTheme,

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
+import type { PremiumMemberBadgeSummary } from "../../../../shared/communityTypes";
 import type {
   CloudCommunityMemberBillingCurrentPlan,
   CloudCommunityMemberBillingHistory,
@@ -15,6 +17,7 @@ export type CommunityMemberSettingsMember = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
+  premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at?: string | null;
 };
@@ -25,6 +28,7 @@ export type CommunityMemberSettingsProfile = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
+  premium_badge?: PremiumMemberBadgeSummary | null;
 };
 
 type CommunityMemberSettingsCommunity = {
@@ -351,6 +355,7 @@ export function CommunityMemberSettingsDialog(props: CommunityMemberSettingsDial
               <div className="member-settings-summary-copy">
                 <div className="member-settings-summary-name-row">
                   <span className="member-settings-summary-name">{displayName}</span>
+                  <PremiumMemberBadge badge={props.profile?.premium_badge ?? member.premium_badge ?? null} />
                   <span className="member-settings-role-badge">
                     {memberIsOwner ? "Owner" : memberRole}
                   </span>

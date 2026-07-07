@@ -68,7 +68,6 @@ import type {
   CommunitySourceCrawlJobStatus,
   CommunitySourceCrawlerExistingSource,
   CommunitySourceCrawlerProvider,
-  CommunitySourcePageLink,
   CommunitySourcePageResult,
   CommunitySourceUnitKind,
   CommunitySourceUnitResult,
@@ -115,9 +114,7 @@ const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES = 2_500_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS = 50_000;
 const COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS = COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS;
 const COMMUNITY_SOURCE_UNIT_MAX_PER_PAGE = 100;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES = 10_000_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS = 12_000;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_TIMEOUT_MS = 90_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_REDIRECTS = 3;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS = 10;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES = 10;
@@ -125,13 +122,10 @@ const COMMUNITY_RESOURCE_SOURCE_INGESTION_USER_AGENT =
   "Polynet Community Source Ingestion/1.0";
 const COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV = "ARX_SOURCE_URL_FETCHER_ENDPOINT";
 const COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV = "ARX_SOURCE_CRAWLER_PROVIDER";
-const COMMUNITY_RESOURCE_CRAWL4AI_ENDPOINT_ENV = "ARX_CRAWL4AI_ENDPOINT";
-const COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV = "ARX_CRAWL4AI_TOKEN";
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 75;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 100;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 3;
-const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 4;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 1;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 1;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 0;
+const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 0;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS = 40_000;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS = 80_000;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS = 8_000;
@@ -1002,74 +996,22 @@ async function fetchSourceUrlViaConfiguredFetcher(rawUrl: string): Promise<{
 }
 
 function normalizeSourceCrawlerProvider(): CommunitySourceCrawlerProvider {
-  const raw = normalizeSourceIntegrationString(readEnv(COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV), 40)
-    .toLowerCase();
-  if (!raw || raw === "simple") return "simple";
-  if (raw === "crawl4ai") return "crawl4ai";
-  throw new Error("community_source_crawler_provider_invalid");
+  return "simple";
 }
 
 function getCommunitySourceCrawlerStatusValue() {
-  const providerRaw = normalizeSourceIntegrationString(readEnv(COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV), 40)
-    .toLowerCase();
-  if (providerRaw && providerRaw !== "simple" && providerRaw !== "crawl4ai") {
-    return {
-      ok: true,
-      kind: "community_source_crawler_status",
-      provider: "simple" as const,
-      configured: false,
-      full_site_crawl_available: false,
-      default_max_pages: 0,
-      default_max_depth: 0,
-      max_pages: 0,
-      max_depth: 0,
-      missing: [COMMUNITY_RESOURCE_SOURCE_CRAWLER_PROVIDER_ENV],
-      code: "community_source_crawler_provider_invalid",
-      message: "Source crawler provider is invalid.",
-    };
-  }
-  if (!providerRaw || providerRaw === "simple") {
-    return {
-      ok: true,
-      kind: "community_source_crawler_status",
-      provider: "simple" as const,
-      configured: true,
-      full_site_crawl_available: false,
-      default_max_pages: 1,
-      default_max_depth: 0,
-      max_pages: 1,
-      max_depth: 0,
-      missing: [] as string[],
-      code: null,
-      message: "Only the pasted page will be read.",
-    };
-  }
-
-  const missing: string[] = [];
-  try {
-    resolveCrawl4AiEndpoint();
-  } catch {
-    missing.push(COMMUNITY_RESOURCE_CRAWL4AI_ENDPOINT_ENV);
-  }
-  try {
-    crawl4AiHeaders();
-  } catch {
-    missing.push(COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV);
-  }
-  const configured = missing.length === 0;
   return {
     ok: true,
     kind: "community_source_crawler_status",
-    provider: "crawl4ai" as const,
-    configured,
-    full_site_crawl_available: configured,
+    provider: "simple" as const,
+    configured: true,
     default_max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES,
     default_max_depth: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH,
     max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES,
     max_depth: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH,
-    missing,
-    code: configured ? null : "community_source_crawl4ai_not_configured",
-    message: configured ? null : "Full site crawling is not configured.",
+    missing: [] as string[],
+    code: null,
+    message: "Only the linked page will be read.",
   };
 }
 
@@ -1079,319 +1021,12 @@ function normalizeSourceCrawlerLimit(raw: unknown, fallback: number, max: number
   return Math.min(value, max);
 }
 
-function resolveCrawl4AiEndpoint(): string {
-  const raw = normalizeSourceIntegrationString(readEnv(COMMUNITY_RESOURCE_CRAWL4AI_ENDPOINT_ENV), 2_000);
-  if (!raw) throw new Error("community_source_crawl4ai_endpoint_not_configured");
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new Error("community_source_crawl4ai_endpoint_invalid");
-  }
-  if (parsed.protocol !== "https:") throw new Error("community_source_crawl4ai_endpoint_invalid");
-  if (parsed.username || parsed.password || parsed.hash) {
-    throw new Error("community_source_crawl4ai_endpoint_invalid");
-  }
-  if (parsed.port && parsed.port !== "443") {
-    throw new Error("community_source_crawl4ai_endpoint_invalid");
-  }
-  parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-  return parsed.toString().replace(/\/+$/, "");
-}
-
-function crawl4AiHeaders(): Record<string, string> {
-  const token = normalizeSourceIntegrationString(readEnv(COMMUNITY_RESOURCE_CRAWL4AI_TOKEN_ENV), 4_000);
-  if (!token) throw new Error("community_source_crawl4ai_token_not_configured");
-  return {
-    "user-agent": COMMUNITY_RESOURCE_SOURCE_INGESTION_USER_AGENT,
-    accept: "application/json",
-    "content-type": "application/json",
-    authorization: `Bearer ${token}`,
-  };
-}
-
-function sourceCrawlerEndpointUrl(path: string): string {
-  return `${resolveCrawl4AiEndpoint()}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function firstCrawlerString(record: Record<string, unknown> | null, keys: string[]): string {
-  if (!record) return "";
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function normalizeCrawl4AiMarkdown(raw: unknown): string {
-  if (typeof raw === "string") {
-    return normalizeOptionalText(raw, COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS) ?? "";
-  }
-  const record = asRecord(raw);
-  return normalizeOptionalText(
-    firstCrawlerString(record, ["fit_markdown", "raw_markdown", "markdown", "text"]),
-    COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
-  ) ?? "";
-}
-
-function normalizeCrawl4AiSourceUnitMarkdown(raw: unknown): string {
-  if (typeof raw === "string") {
-    return normalizeOptionalText(raw, COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS + 1) ?? "";
-  }
-  const record = asRecord(raw);
-  return normalizeOptionalText(
-    firstCrawlerString(record, ["fit_markdown", "raw_markdown", "markdown", "text"]),
-    COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS + 1,
-  ) ?? "";
-}
-
 function maybeSafeSourceCrawlerUrl(raw: unknown): string | null {
   try {
     return requireSafeSourceIngestionUrl(raw);
   } catch {
     return null;
   }
-}
-
-function normalizeCrawl4AiLinks(raw: unknown, rootUrl: string): CommunitySourcePageLink[] {
-  const linksRecord = asRecord(raw);
-  const rawLinks = Array.isArray(raw)
-    ? raw
-    : [
-        ...(Array.isArray(linksRecord?.internal) ? linksRecord.internal : []),
-        ...(Array.isArray(linksRecord?.external) ? linksRecord.external : []),
-      ];
-  const links: CommunitySourcePageLink[] = [];
-  const seen = new Set<string>();
-  for (const entry of rawLinks) {
-    const record = asRecord(entry);
-    const rawUrl = typeof entry === "string"
-      ? entry
-      : firstCrawlerString(record, ["href", "url", "link"]);
-    let url: string;
-    try {
-      url = requireSafeSourceIngestionUrl(rawUrl);
-    } catch {
-      continue;
-    }
-    if (
-      !communitySourceCrawlerUrlInRootScope({
-        rootUrl,
-        candidateUrl: url,
-        normalizeUrl: maybeSafeSourceCrawlerUrl,
-      }) || seen.has(url)
-    ) continue;
-    seen.add(url);
-    links.push({
-      url,
-      title: normalizeOptionalText(firstCrawlerString(record, ["text", "title", "label"]), 240) ?? null,
-    });
-  }
-  return links.slice(0, COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES);
-}
-
-function extractCrawl4AiRows(payload: unknown): Record<string, unknown>[] {
-  const record = asRecord(payload);
-  const data = asRecord(record?.data);
-  const candidates = [
-    payload,
-    record?.results,
-    record?.result,
-    record?.data,
-    data?.results,
-    data?.result,
-  ];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate.map(asRecord).filter((row): row is Record<string, unknown> => Boolean(row));
-    const row = asRecord(candidate);
-    if (row && (row.url || row.final_url || row.markdown || row.success !== undefined)) return [row];
-  }
-  return [];
-}
-
-function normalizeCrawl4AiSourcePageResult(args: {
-  row: Record<string, unknown>;
-  rootUrl: string;
-  requestedUrl: string;
-  maxDepth: number;
-}): CommunitySourcePageResult | null {
-  const metadata = asRecord(args.row.metadata);
-  const rawRequestedUrl = firstCrawlerString(args.row, ["requested_url", "requestedUrl"]) || args.requestedUrl;
-  const rawFinalUrl = firstCrawlerString(args.row, ["final_url", "finalUrl", "url"]) || rawRequestedUrl;
-  let requestedUrl: string;
-  let finalUrl: string;
-  try {
-    requestedUrl = requireSafeSourceIngestionUrl(rawRequestedUrl);
-    finalUrl = requireSafeSourceIngestionUrl(rawFinalUrl);
-  } catch {
-    return null;
-  }
-  if (!communitySourceCrawlerUrlInRootScope({
-    rootUrl: args.rootUrl,
-    candidateUrl: finalUrl,
-    normalizeUrl: maybeSafeSourceCrawlerUrl,
-  })) return null;
-  const rawDepth = Number(metadata?.depth ?? args.row.depth ?? 0);
-  const depth = Number.isFinite(rawDepth)
-    ? Math.min(Math.max(0, Math.floor(rawDepth)), args.maxDepth)
-    : 0;
-  const rawVirtualPageCount = Number(metadata?.virtual_page_count ?? args.row.virtual_page_count ?? 0);
-  const virtualPageCount = Number.isFinite(rawVirtualPageCount)
-    ? Math.max(0, Math.floor(rawVirtualPageCount))
-    : 0;
-  const markdown = normalizeCrawl4AiMarkdown(args.row.markdown ?? args.row.text);
-  const success = args.row.success !== false && String(args.row.status ?? "").toLowerCase() !== "failed";
-  const error = normalizeOptionalText(
-    firstCrawlerString(args.row, ["error", "error_message", "message"]),
-    500,
-  ) ?? null;
-  let parentUrl: string | null = null;
-  const rawParentUrl = firstCrawlerString(args.row, ["parent_url", "parentUrl"]) ||
-    firstCrawlerString(metadata, ["parent_url", "parentUrl"]);
-  if (rawParentUrl) {
-    try {
-      const normalizedParentUrl = requireSafeSourceIngestionUrl(rawParentUrl);
-      parentUrl = communitySourceCrawlerUrlInRootScope({
-        rootUrl: args.rootUrl,
-        candidateUrl: normalizedParentUrl,
-        normalizeUrl: maybeSafeSourceCrawlerUrl,
-      })
-        ? normalizedParentUrl
-        : null;
-    } catch {
-      parentUrl = null;
-    }
-  }
-  const sourceUnits = normalizeCrawl4AiSourceUnitResults({
-    rawUnits: args.row.source_units,
-    rootUrl: args.rootUrl,
-    pageUrl: finalUrl,
-    maxDepth: args.maxDepth,
-  });
-  return {
-    requested_url: requestedUrl,
-    final_url: finalUrl,
-    canonical_url: finalUrl,
-    root_url: args.rootUrl,
-    parent_url: parentUrl,
-    depth,
-    title: normalizeOptionalText(
-      firstCrawlerString(args.row, ["title"]) || firstCrawlerString(metadata, ["title"]),
-      240,
-    ) ?? null,
-    markdown,
-    links: normalizeCrawl4AiLinks(args.row.links, args.rootUrl),
-    status: success && markdown ? "ready" : "failed",
-    error: success && markdown ? null : error ?? "community_source_crawl4ai_no_readable_content",
-    virtual_page_count: virtualPageCount,
-    virtual_page_strategy: normalizeOptionalText(
-      firstCrawlerString(args.row, ["virtual_page_strategy"]) || firstCrawlerString(metadata, ["virtual_page_strategy"]),
-      80,
-    ) ?? null,
-    ...(sourceUnits.length > 0 ? { source_units: sourceUnits } : {}),
-  };
-}
-
-function normalizeCrawl4AiSourceUnitResults(args: {
-  rawUnits: unknown;
-  rootUrl: string;
-  pageUrl: string;
-  maxDepth: number;
-}): CommunitySourceUnitResult[] {
-  const rows = Array.isArray(args.rawUnits)
-    ? args.rawUnits.map(asRecord).filter((row): row is Record<string, unknown> => Boolean(row))
-    : [];
-  const units: CommunitySourceUnitResult[] = [];
-  const seenKeys = new Set<string>();
-  for (const row of rows.slice(0, COMMUNITY_SOURCE_UNIT_MAX_PER_PAGE)) {
-    const unitKindRaw = String(row.unit_kind ?? row.unitKind ?? "").trim();
-    const unitKind: CommunitySourceUnitKind = unitKindRaw === "virtual_section" ? "virtual_section" : "page";
-    const rawSourceUrl = firstCrawlerString(row, ["source_url", "sourceUrl", "url"]) || args.pageUrl;
-    const rawRootUrl = firstCrawlerString(row, ["root_url", "rootUrl"]) || args.rootUrl;
-    let sourceUrl: string;
-    let rootUrl: string;
-    try {
-      sourceUrl = requireSafeSourceIngestionUrl(rawSourceUrl);
-      rootUrl = requireSafeSourceIngestionUrl(rawRootUrl);
-    } catch {
-      continue;
-    }
-    if (
-      !communitySourceCrawlerUrlInRootScope({
-        rootUrl: args.rootUrl,
-        candidateUrl: sourceUrl,
-        normalizeUrl: maybeSafeSourceCrawlerUrl,
-      }) ||
-      rootUrl !== args.rootUrl
-    ) continue;
-    const markdown = normalizeCrawl4AiSourceUnitMarkdown(row.markdown ?? row.text);
-    const statusRaw = String(row.status ?? "").toLowerCase();
-    const status: CommunitySourceUnitStatus =
-      statusRaw === "failed" || statusRaw === "skipped"
-        ? statusRaw
-        : "ready";
-    if (!markdown && status === "ready") continue;
-    const rawOrder = Number(row.order);
-    const order = Number.isFinite(rawOrder) ? Math.max(0, Math.floor(rawOrder)) : units.length + 1;
-    const rawDepth = Number(row.depth);
-    const depth = Number.isFinite(rawDepth)
-      ? Math.min(Math.max(0, Math.floor(rawDepth)), args.maxDepth)
-      : 0;
-    let parentUrl: string | null = null;
-    const rawParentUrl = firstCrawlerString(row, ["parent_url", "parentUrl"]);
-    if (rawParentUrl) {
-      try {
-        const normalizedParentUrl = requireSafeSourceIngestionUrl(rawParentUrl);
-        parentUrl = communitySourceCrawlerUrlInRootScope({
-          rootUrl: args.rootUrl,
-          candidateUrl: normalizedParentUrl,
-          normalizeUrl: maybeSafeSourceCrawlerUrl,
-        })
-          ? normalizedParentUrl
-          : null;
-      } catch {
-        parentUrl = null;
-      }
-    }
-    const title = normalizeOptionalText(firstCrawlerString(row, ["title"]) || firstCrawlerString(row, ["label"]), 240) ?? null;
-    const path = normalizeOptionalText(firstCrawlerString(row, ["path"]), 160) ?? normalizeCommunitySourceUnitPath(title);
-    const providedKey = normalizeOptionalText(firstCrawlerString(row, ["unit_key", "unitKey"]), 700);
-    const unitKey = providedKey ?? buildCommunitySourceCrawlerUnitKey({
-      rootUrl,
-      unitKind,
-      sourceUrl,
-      path,
-      title,
-      order,
-      normalizeUrl: maybeSafeSourceCrawlerUrl,
-    });
-    if (!unitKey || seenKeys.has(unitKey)) continue;
-    seenKeys.add(unitKey);
-    units.push({
-      unit_key: unitKey,
-      unit_kind: unitKind,
-      title,
-      source_url: sourceUrl,
-      root_url: rootUrl,
-      parent_url: parentUrl,
-      path,
-      order,
-      depth,
-      markdown,
-      status,
-      error: status === "ready"
-        ? null
-        : normalizeOptionalText(firstCrawlerString(row, ["error", "message"]), 500) ?? "community_source_unit_unreadable",
-      capture_method: normalizeOptionalText(firstCrawlerString(row, ["capture_method", "captureMethod"]), 80) ?? null,
-    });
-  }
-  return units;
 }
 
 async function crawlSourceRootWithSimpleFetcher(args: {
@@ -1418,112 +1053,22 @@ async function crawlSourceRootWithSimpleFetcher(args: {
   }];
 }
 
-async function crawlSourceRootWithCrawl4AI(args: {
-  rootUrl: string;
-  maxPages: number;
-  maxDepth: number;
-}): Promise<CommunitySourcePageResult[]> {
-  const preflight = await fetchSourceUrlViaConfiguredFetcher(args.rootUrl);
-  const crawlerRootUrl = requireSafeSourceIngestionUrl(preflight.finalUrl);
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(
-      sourceCrawlerEndpointUrl("/crawl"),
-      {
-        method: "POST",
-        headers: crawl4AiHeaders(),
-        body: JSON.stringify({
-          urls: [crawlerRootUrl],
-          browser_config: {
-            type: "BrowserConfig",
-            params: { headless: true },
-          },
-          crawler_config: {
-            type: "CrawlerRunConfig",
-            params: {
-              stream: false,
-              cache_mode: "bypass",
-              markdown_generator_options: { include_links: true },
-              deep_crawl_strategy: {
-                type: "BFSDeepCrawlStrategy",
-                params: {
-                  max_depth: args.maxDepth,
-                  max_pages: args.maxPages,
-                  include_external: false,
-                },
-              },
-            },
-          },
-        }),
-      },
-      COMMUNITY_RESOURCE_SOURCE_CRAWLER_TIMEOUT_MS,
-    );
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("community_source_crawl4ai_timeout");
-    }
-    throw error;
-  }
-  if (!response.ok) throw new Error(`community_source_crawl4ai_failed_${response.status}`);
-  const rawPayload = await readResponseTextBounded(
-    response,
-    COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES,
-  );
-  let payload: unknown;
-  try {
-    payload = JSON.parse(rawPayload);
-  } catch {
-    throw new Error("community_source_crawl4ai_invalid_response");
-  }
-  const payloadRecord = asRecord(payload);
-  if (payloadRecord?.task_id && !payloadRecord.results) {
-    throw new Error("community_source_crawl4ai_job_not_completed");
-  }
-  const pages = extractCrawl4AiRows(payload)
-    .map((row) => normalizeCrawl4AiSourcePageResult({
-      row,
-      rootUrl: crawlerRootUrl,
-      requestedUrl: args.rootUrl,
-      maxDepth: args.maxDepth,
-    }))
-    .filter((page): page is CommunitySourcePageResult => Boolean(page))
-    .filter((page) => page.depth <= args.maxDepth)
-    .slice(0, args.maxPages);
-  if (pages.length === 0) throw new Error("community_source_crawl4ai_no_results");
-  return pages;
-}
-
 async function crawlSourceRootWithConfiguredProvider(args: {
   rootUrl: string;
-  maxPages?: number;
-  maxDepth?: number;
-  provider?: CommunitySourceCrawlerProvider;
 }): Promise<{
   provider: CommunitySourceCrawlerProvider;
   pages: CommunitySourcePageResult[];
 }> {
   const rootUrl = requireSafeSourceIngestionUrl(args.rootUrl);
-  const maxPages = normalizeSourceCrawlerLimit(
-    args.maxPages,
-    COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES,
-    COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES,
-  );
-  const maxDepth = normalizeSourceCrawlerLimit(
-    args.maxDepth,
-    COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH,
-    COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH,
-  );
-  const provider = args.provider ?? normalizeSourceCrawlerProvider();
-  const pages = provider === "crawl4ai"
-    ? await crawlSourceRootWithCrawl4AI({ rootUrl, maxPages, maxDepth })
-    : await crawlSourceRootWithSimpleFetcher({ rootUrl });
+  const provider = normalizeSourceCrawlerProvider();
+  const pages = await crawlSourceRootWithSimpleFetcher({ rootUrl });
   return { provider, pages };
 }
 
 function normalizeWebCrawlStrategyProvider(raw: unknown): CommunitySourceCrawlerProvider | undefined {
   const strategy = normalizeSourceIntegrationString(raw, 20).toLowerCase();
   if (strategy === "simple") return "simple";
-  if (strategy === "crawl") return "crawl4ai";
+  if (strategy === "crawl") return "simple";
   return undefined;
 }
 
@@ -9322,7 +8867,7 @@ export const createCommunitySourceCrawlJobInternal = internalMutation({
     userId: v.id("users"),
     communityId: v.id("communities"),
     rootUrl: v.string(),
-    provider: v.union(v.literal("simple"), v.literal("crawl4ai")),
+    provider: v.literal("simple"),
     maxPages: v.number(),
     maxDepth: v.number(),
   },
@@ -9649,7 +9194,7 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
     communityId: v.id("communities"),
     userId: v.id("users"),
     rootUrl: v.string(),
-    provider: v.union(v.literal("simple"), v.literal("crawl4ai")),
+    provider: v.literal("simple"),
     pages: v.array(communitySourceCrawlerPageArg),
   },
   handler: async (ctx, args) => {
@@ -9854,9 +9399,6 @@ export const processCommunitySourceCrawlJobInternal = internalAction({
     try {
       const crawl = await crawlSourceRootWithConfiguredProvider({
         rootUrl: job.rootUrl,
-        maxPages: job.maxPages,
-        maxDepth: job.maxDepth,
-        provider: job.provider,
       });
       await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
         crawlJobId: args.crawlJobId,
@@ -9967,9 +9509,6 @@ export const crawlWebRoot: any = action({
     if (destination === "context") {
       const crawl = await crawlSourceRootWithConfiguredProvider({
         rootUrl,
-        maxPages,
-        maxDepth,
-        provider,
       });
       return buildWebCrawlContextPayload({
         rootUrl,
@@ -9999,9 +9538,6 @@ export const crawlWebRoot: any = action({
       });
       const crawl = await crawlSourceRootWithConfiguredProvider({
         rootUrl,
-        maxPages,
-        maxDepth,
-        provider,
       });
       await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
         crawlJobId,

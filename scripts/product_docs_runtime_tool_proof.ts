@@ -50,6 +50,21 @@ function proveDocsCapabilityGate() {
     true,
     "product docs tools should not require community or workspace context",
   );
+  assert.equal(
+    authenticatedFree.entitledCapabilityFamilies.includes("web_research"),
+    false,
+    "authenticated free users should not receive premium web research tools",
+  );
+  assert.equal(
+    authenticatedFree.entitledCapabilityFamilies.includes("sandbox_tools"),
+    false,
+    "authenticated free users should not receive premium sandbox tools",
+  );
+  assert.equal(
+    authenticatedFree.entitledCapabilityFamilies.includes("workspace_tools"),
+    false,
+    "authenticated free users should not receive premium workspace tools",
+  );
 
   const architect = resolveCanonicalGatePolicy({
     surface: "web",

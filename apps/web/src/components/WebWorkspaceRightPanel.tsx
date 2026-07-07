@@ -2,7 +2,9 @@ import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { OperatorCommunityRecord } from "../../../../shared/operatorTypes";
 import {
+  WorkspaceCommunityPreviewPanelContent,
   WorkspacePanelContent,
+  type WorkspaceCommunityPreviewPanelDataProps,
   type WorkspaceUserDataPanelDataProps,
 } from "./WebWorkspaceUserDataPanel";
 import {
@@ -36,6 +38,7 @@ export function clampWorkspaceRightPanelWidth(width: number): number {
 
 export function WebWorkspaceRightPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
+  workspaceCommunityPreviewPanel: WorkspaceCommunityPreviewPanelDataProps | null;
   workspaceFilesResetNonce: number;
   insightTabs: WorkspaceRightPanelTabItem[];
   state: OperatorDashboardState;
@@ -129,6 +132,8 @@ export function WebWorkspaceRightPanel(props: {
             {...props.workspaceUserDataPanel}
             filesResetNonce={props.workspaceFilesResetNonce}
           />
+        ) : activeInsightTab === "community" && props.workspaceCommunityPreviewPanel ? (
+          <WorkspaceCommunityPreviewPanelContent {...props.workspaceCommunityPreviewPanel} />
         ) : activeInsightTab === "partner" && props.builderPartnerProgramPanel ? (
           <WebBuilderPartnerProgramPanel
             {...props.builderPartnerProgramPanel}

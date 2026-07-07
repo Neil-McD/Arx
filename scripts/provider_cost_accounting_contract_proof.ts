@@ -44,12 +44,14 @@ assert.ok(PROVIDER_COST_COMPONENTS.includes("blaxel_volume_storage"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("blaxel_standby_snapshot"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("daytona_codex_runtime_active"));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("web_crawl_provider_call"));
-assert.ok(PROVIDER_COST_COMPONENTS.includes("fly_crawler"));
+assert.ok(PROVIDER_COST_COMPONENTS.includes("web_screenshot_provider_call"));
+assert.ok(!PROVIDER_COST_COMPONENTS.includes("fly_crawler" as never));
 assert.ok(PROVIDER_COST_COMPONENTS.includes("voice_transcription"));
 assert.deepEqual(PROVIDER_COST_EVIDENCE_TYPES, ["estimated", "provider_reported", "exact"]);
 assert.deepEqual(PROVIDER_COST_BILLING_DISPOSITIONS, [
   "tracked_only",
   "rolled_into_user_usage",
+  "platform_absorbed",
 ]);
 assert.ok(!PROVIDER_COST_BILLING_DISPOSITIONS.includes("charged" as never));
 assert.equal(BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND, 0.00000004629);
@@ -85,12 +87,17 @@ assert.match(
 );
 assert.match(
   schema,
-  /component: v\.union\([\s\S]*v\.literal\("blaxel_active_runtime"\)[\s\S]*v\.literal\("blaxel_volume_storage"\)[\s\S]*v\.literal\("blaxel_standby_snapshot"\)[\s\S]*v\.literal\("web_crawl_provider_call"\)[\s\S]*v\.literal\("fly_crawler"\)[\s\S]*v\.literal\("daytona_codex_runtime_active"\)[\s\S]*v\.literal\("voice_transcription"\)/,
-  "schema must include provider cost components for workspace, Daytona, crawl, and voice costs",
+  /component: v\.union\([\s\S]*v\.literal\("blaxel_active_runtime"\)[\s\S]*v\.literal\("blaxel_volume_storage"\)[\s\S]*v\.literal\("blaxel_standby_snapshot"\)[\s\S]*v\.literal\("web_crawl_provider_call"\)[\s\S]*v\.literal\("web_screenshot_provider_call"\)[\s\S]*v\.literal\("daytona_codex_runtime_active"\)[\s\S]*v\.literal\("voice_transcription"\)/,
+  "schema must include provider cost components for workspace, Daytona, crawl, screenshot, and voice costs without the deleted Fly crawler bucket",
+);
+assert.doesNotMatch(
+  schema,
+  /v\.literal\("fly_crawler"\)/,
+  "provider cost schema must not retain the deleted Fly crawler component",
 );
 assert.match(
   schema,
-  /billingDisposition: v\.union\([\s\S]*v\.literal\("tracked_only"\)[\s\S]*v\.literal\("rolled_into_user_usage"\)/,
+  /billingDisposition: v\.union\([\s\S]*v\.literal\("tracked_only"\)[\s\S]*v\.literal\("rolled_into_user_usage"\)[\s\S]*v\.literal\("platform_absorbed"\)/,
   "schema must distinguish tracked overhead from user-usage mirror rows",
 );
 assert.doesNotMatch(

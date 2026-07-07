@@ -59,8 +59,8 @@ assert.match(
 
 assert.match(
   schema,
-  /daytonaCodexRuntimeTargets: defineTable\(\{[\s\S]*scope: v\.union\([\s\S]*v\.literal\("run"\)[\s\S]*v\.literal\("thread"\)[\s\S]*provider: v\.literal\("daytona"\)[\s\S]*workerState: v\.union\([\s\S]*v\.literal\("creating"\)[\s\S]*v\.literal\("ready"\)[\s\S]*workerUrl: v\.optional\(v\.string\(\)\)[\s\S]*signedPreviewExpiresAt[\s\S]*lifecycleMode[\s\S]*providerEphemeral[\s\S]*providerTeardownState[\s\S]*workspaceChangeState[\s\S]*workspaceRetentionState[\s\S]*workspaceRetentionExpiresAt[\s\S]*activePreviewPorts[\s\S]*previewLeaseState[\s\S]*cleanupDecision/,
-  "schema must persist Daytona runtime targets with worker lifecycle, provider persistence, workspace retention, preview lease, and cleanup decision state",
+  /daytonaCodexRuntimeTargets: defineTable\(\{[\s\S]*scope: v\.union\([\s\S]*v\.literal\("run"\)[\s\S]*v\.literal\("thread"\)[\s\S]*provider: v\.literal\("daytona"\)[\s\S]*workerState: v\.union\([\s\S]*v\.literal\("creating"\)[\s\S]*v\.literal\("ready"\)[\s\S]*workerUrl: v\.optional\(v\.string\(\)\)[\s\S]*signedPreviewExpiresAt[\s\S]*lifecycleMode[\s\S]*providerEphemeral[\s\S]*sandboxCpu[\s\S]*sandboxMemoryGiB[\s\S]*sandboxDiskGiB[\s\S]*billingCreditKey[\s\S]*billingReservedCredits[\s\S]*billingIntervalStartedAt[\s\S]*billingIntervalClosedAt[\s\S]*billingIntervalSequence[\s\S]*billingIntervalResourceSource[\s\S]*billingSettlementState[\s\S]*billingSettlementCredits[\s\S]*billingSettlementRawVendorCostUsd[\s\S]*billingSettlementUpdatedAt[\s\S]*providerTeardownState[\s\S]*workspaceChangeState[\s\S]*workspaceRetentionState[\s\S]*workspaceRetentionExpiresAt[\s\S]*activePreviewPorts[\s\S]*previewLeaseState[\s\S]*cleanupDecision/,
+  "schema must persist Daytona runtime targets with worker lifecycle, provider persistence, billing settlement, workspace retention, preview lease, and cleanup decision state",
 );
 assert.match(
   schema,

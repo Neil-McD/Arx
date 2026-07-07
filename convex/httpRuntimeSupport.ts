@@ -16,6 +16,8 @@ type GateCode =
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "checkout";
 type GateLane = "public" | "platform" | "chatgpt";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
+type CanonicalTier = "free" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type CapabilityFamily =
   | "product_docs"
   | "community_tools"
@@ -28,6 +30,8 @@ type ResolvedGateDecision = {
   cta: GateCta;
   lane: GateLane | null;
   fundingSource: RequestedFundingSource | null;
+  canonicalTier: CanonicalTier | null;
+  effectiveTier: EffectiveTier | null;
   entitledCapabilityFamilies: CapabilityFamily[];
 };
 type InferenceMessage = {
@@ -145,6 +149,24 @@ function normalizeGateFundingSource(raw: unknown): RequestedFundingSource | null
   return null;
 }
 
+function normalizeCanonicalTier(raw: unknown): CanonicalTier | null {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (value === "free" || value === "architect") return value;
+  return null;
+}
+
+function normalizeEffectiveTier(raw: unknown): EffectiveTier | null {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (value === "anon_free" || value === "auth_free" || value === "architect") {
+    return value;
+  }
+  return null;
+}
+
 export function parseRequestedFundingSource(
   raw: unknown,
   fallback: RequestedFundingSource,
@@ -210,6 +232,8 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
     cta,
     lane: normalizeGateLane(raw?.lane),
     fundingSource: normalizeGateFundingSource(raw?.fundingSource),
+    canonicalTier: normalizeCanonicalTier(raw?.canonicalTier),
+    effectiveTier: normalizeEffectiveTier(raw?.effectiveTier),
     entitledCapabilityFamilies: Array.isArray(raw?.entitledCapabilityFamilies)
       ? raw.entitledCapabilityFamilies
           .map((value) => String(value ?? "").trim())

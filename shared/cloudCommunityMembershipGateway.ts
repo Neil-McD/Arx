@@ -1,5 +1,6 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, parseGatewayNumberLike } from "./cloudGateway";
+import type { PremiumMemberBadgeSummary } from "./communityTypes";
 
 type CloudCommunityMembershipGatewayParams<SessionT> = {
   session: SessionT;
@@ -37,6 +38,7 @@ export type CloudCommunityMembershipAdminRow = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
+  premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at: string;
 };

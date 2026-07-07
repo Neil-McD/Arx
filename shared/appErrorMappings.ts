@@ -162,7 +162,7 @@ export function formatProviderConnectionErrorMessage(error: unknown, fallback: s
   return text || fallback;
 }
 
-type WorkspaceBillingCheckoutKind = "card_setup" | "manual_balance";
+type WorkspaceBillingCheckoutKind = "card_setup" | "premium_subscription";
 
 function isRawServerErrorText(text: string): boolean {
   const lower = text.trim().toLowerCase();
@@ -180,9 +180,13 @@ function isRawServerErrorText(text: string): boolean {
 }
 
 function getWorkspaceBillingCheckoutFallback(kind: WorkspaceBillingCheckoutKind): string {
-  return kind === "card_setup"
-    ? "Card setup is temporarily unavailable. Please retry shortly."
-    : "Manual balance checkout is temporarily unavailable. Please retry shortly.";
+  if (kind === "card_setup") {
+    return "Card setup is temporarily unavailable. Please retry shortly.";
+  }
+  if (kind === "premium_subscription") {
+    return "Premium checkout is temporarily unavailable. Please retry shortly.";
+  }
+  return "Checkout is temporarily unavailable. Please retry shortly.";
 }
 
 function readWorkspaceBillingCheckoutCode(text: string): string | null {
@@ -193,13 +197,12 @@ function readWorkspaceBillingCheckoutCode(text: string): string | null {
     "stripe_secret_key_missing",
     "stripe_webhook_secret_missing",
     "stripe_checkout_url_missing",
+    "premium_stripe_price_id_missing",
     "workspace_card_setup_unavailable",
-    "workspace_credit_topup_unavailable",
+    "premium_subscription_success_url_invalid",
+    "premium_subscription_cancel_url_invalid",
     "workspace_card_setup_success_url_invalid",
     "workspace_card_setup_cancel_url_invalid",
-    "workspace_credit_topup_success_url_invalid",
-    "workspace_credit_topup_cancel_url_invalid",
-    "workspace_tool_balance_pack_invalid",
     "user_not_found",
   ];
   return knownCodes.find((code) => lower.includes(code)) ?? null;
@@ -222,21 +225,17 @@ export function formatWorkspaceBillingCheckoutError(
     code === "stripe_secret_key_missing" ||
     code === "stripe_webhook_secret_missing" ||
     code === "stripe_checkout_url_missing" ||
-    code === "workspace_card_setup_unavailable" ||
-    code === "workspace_credit_topup_unavailable"
+    code === "workspace_card_setup_unavailable"
   ) {
     return fallback;
   }
   if (
     code === "workspace_card_setup_success_url_invalid" ||
     code === "workspace_card_setup_cancel_url_invalid" ||
-    code === "workspace_credit_topup_success_url_invalid" ||
-    code === "workspace_credit_topup_cancel_url_invalid"
+    code === "premium_subscription_success_url_invalid" ||
+    code === "premium_subscription_cancel_url_invalid"
   ) {
     return fallback;
-  }
-  if (code === "workspace_tool_balance_pack_invalid") {
-    return "That manual balance option is unavailable. Choose another amount.";
   }
   if (code === "user_not_found") return "Session expired. Please sign in again.";
   if (isTransientServerCode(code) || isRawServerErrorText(text)) return fallback;
