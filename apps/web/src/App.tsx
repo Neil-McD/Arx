@@ -6373,6 +6373,10 @@ export default function App() {
         avatar_zoom: cloudHasProfileAvatar
           ? cloudProfile.avatar_zoom ?? 1
           : existingDisplayProfile?.avatar_zoom ?? 1,
+        premium_badge:
+          (cloudProfile as { premium_badge?: UserProfile["premium_badge"] }).premium_badge ??
+          existingDisplayProfile?.premium_badge ??
+          null,
       },
     } satisfies Record<string, UserProfile>;
   }, [canonicalSessionUserId, cloudProfile, profilesByUserId]);

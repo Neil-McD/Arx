@@ -6,8 +6,9 @@ type PremiumMemberBadgeProps = {
 };
 
 // Connected-nodes mark (network glyph): premium members are full nodes in the
-// Polynet. Custom SVG — deliberately not a stock icon-library mark.
-function PremiumNodeGlyph() {
+// Polynet. Custom SVG — deliberately not a stock icon-library mark. Exported
+// so every premium-labeled surface (pills, gates) uses this exact mark.
+export function PremiumNodeGlyph() {
   return (
     <svg viewBox="0 0 24 24" strokeWidth="2" aria-hidden="true">
       <path d="M5.931 6.936l1.275 4.249m5.607 5.609l4.251 1.275" />

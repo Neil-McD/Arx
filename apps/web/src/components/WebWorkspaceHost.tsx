@@ -17,7 +17,8 @@ import {
   PointerEvent,
   SetStateAction,
 } from "react";
-import { Check, ChevronDown, Lock, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Lock } from "lucide-react";
+import { PremiumNodeGlyph } from "../../../../shared/PremiumMemberBadge";
 import {
   getProjectWorkspaceTerminalPreviewUrl,
   listProjectWorkspaceTerminalSnapshot,
@@ -1235,7 +1236,7 @@ function WorkspaceRuntimeEngineSelector(props: {
                     {option.label}
                     {isPremium ? (
                       <span className="ask-engine-premium-pill ask-engine-premium-pill--menu">
-                        <Sparkles size={10} strokeWidth={2.2} aria-hidden="true" />
+                        <PremiumNodeGlyph />
                         Premium
                       </span>
                     ) : null}
